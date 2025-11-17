@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+ENV/
+build/
+dist/
+node_modules/
+.DS_Store
+.idea/
+.vscode/
+coverage/
+pytest_cache/
