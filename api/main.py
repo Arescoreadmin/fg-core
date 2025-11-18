@@ -4,25 +4,30 @@ from typing import Dict, Any, List
 from fastapi import FastAPI, Request, Header, Query
 from loguru import logger
 
-from .schemas import TelemetryInput, DefendResponse, ExplainBlock, MitigationAction
+from .schemas import TelemetryInput, DefendResponse, ExplainBlock
 from .config import settings
+from .logging_config import configure_logging
 from engine import evaluate_rules
 from tools.telemetry.loader import load_golden_samples
 
+# Configure logging before app starts
+configure_logging()
+
 app = FastAPI(
     title="FrostGate Core API",
-    version="0.3.0",
-    description="MVP defense API for FrostGate Core with rules engine and golden-sample tester.",
+    version="0.3.1",
+    description="MVP defense API for FrostGate Core with rules engine, golden-sample tester, and structured logging.",
 )
 
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("FrostGate Core API starting in env={}", settings.env)
+    logger.info("service_start", extra={"env": settings.env, "service": "frostgate-core"})
 
 
 @app.get("/health")
 async def health() -> Dict[str, Any]:
+    logger.debug("health_check")
     return {"status": "ok", "env": settings.env}
 
 
@@ -30,7 +35,7 @@ async def health() -> Dict[str, Any]:
 async def status() -> Dict[str, Any]:
     return {
         "service": "frostgate-core",
-        "version": "0.3.0",
+        "version": "0.3.1",
         "env": settings.env,
         "components": {
             "ensemble": "rules-only-mvp",
@@ -85,12 +90,16 @@ async def defend(
     )
 
     logger.info(
-        "defend decision",
+        "defend_decision",
         extra={
             "tenant_id": telemetry.tenant_id,
             "source": telemetry.source,
             "threat_level": threat_level,
             "rules": rules_triggered,
+            "anomaly_score": anomaly_score,
+            "ai_adv_score": ai_adv_score,
+            "pq_fallback": pq_fallback,
+            "clock_drift_ms": clock_drift_ms,
         },
     )
     return resp
@@ -151,6 +160,15 @@ async def defend_test(
                 "source": telemetry.source,
             }
         )
+
+    logger.info(
+        "defend_test_run",
+        extra={
+            "count": len(results),
+            "limit": limit,
+            "label_filter": label,
+        },
+    )
 
     return {
         "count": len(results),
