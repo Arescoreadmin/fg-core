@@ -1,4 +1,4 @@
-# Frost Gate Core — Buildout Blueprint (vNext Improvements)
+Frost Gate Core — Buildout Blueprint (vNext Improvements)
 
 *Drop this file into `/docs/FrostGateCore_Buildout_vNext.md`. It merges the current, locked blueprint with the latest upgrades so the team can implement immediately and stage heavier changes for V2.*
 
@@ -280,4 +280,3 @@ frostgatecore/
 - Foundry controller can trigger **Core → Spear → Core** replay cycles for adaptive hardening.
 
 *End of Frost Gate Core vNext Blueprint.*
-
