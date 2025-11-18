@@ -1,0 +1,29 @@
+replicaCount: 3
+
+image:
+  repository: ghcr.io/arescoreadmin/frostgate-core-api
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+
+resources:
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+
+env:
+  FG_ENV: "prod"
+  LOG_INDEXER_URL: "http://loki:3100"
+  PQ_FALLBACK_HEADER: "x-pq-fallback"
+
+podAnnotations: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

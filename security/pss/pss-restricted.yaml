@@ -1,0 +1,5 @@
+apiVersion: apiserver.config.k8s.io/v1
+kind: AdmissionConfiguration
+# Placeholder – later tie to OPA / PSA; for now it's just a marker file.
+metadata:
+  name: frostgate-pss-restricted

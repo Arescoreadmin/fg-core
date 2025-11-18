@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: frostgatecore-api
+  labels:
+    app: frostgatecore-api
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app: frostgatecore-api
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: 8080
+      protocol: TCP
+      name: http
