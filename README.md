@@ -6,6 +6,7 @@ This repository now ships with a minimal FastAPI backend so the team can start i
 - A `pyproject.toml` with runtime and development dependencies pinned for Python 3.11.
 - Basic pytest smoke tests that document the expected responses.
 - Documentation (`backend/README.md`) covering setup, running the dev server, and executing tests.
+- A living blueprint for the broader Frostgate Core platform stored at `docs/FrostGateCore_Buildout_vNext.md`.
 
 ## Repo layout
 
@@ -15,6 +16,8 @@ backend/
     main.py
     api/routes.py
   tests/
+docs/
+  FrostGateCore_Buildout_vNext.md
 README.md
 ```
 
