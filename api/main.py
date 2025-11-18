@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, Any, List
 
 from fastapi import FastAPI, Request, Header, Query
@@ -13,12 +14,15 @@ from tools.telemetry.loader import load_golden_samples
 # Configure logging before app starts
 configure_logging()
 
+STATE_DIR = Path(__file__).resolve().parents[1] / "state"
+ANCHOR_STATE_FILE = STATE_DIR / "merkle_anchor_status.json"
+
 app = FastAPI(
     title="FrostGate Core API",
-    version="0.5.0",
+    version="0.6.0",
     description=(
         "FrostGate Core MVP: rules engine, golden-sample tester, "
-        "structured logging, decision history, and enforcement modes."
+        "structured logging, decision history, enforcement modes, and Merkle anchor status."
     ),
 )
 
@@ -43,16 +47,26 @@ async def health() -> Dict[str, Any]:
 
 @app.get("/status")
 async def status() -> Dict[str, Any]:
+    anchor_status = None
+    if ANCHOR_STATE_FILE.exists():
+        try:
+            import json
+
+            anchor_status = json.loads(ANCHOR_STATE_FILE.read_text())
+        except Exception:
+            anchor_status = {"status": "unknown", "error": "failed_to_parse_state"}
+
     return {
         "service": "frostgate-core",
-        "version": "0.5.0",
+        "version": "0.6.0",
         "env": settings.env,
         "enforcement_mode": settings.enforcement_mode,
         "components": {
             "ensemble": "rules-only-mvp",
-            "merkle_anchor": "pending",
+            "merkle_anchor": "stub",
             "supervisor": "pending",
         },
+        "anchor": anchor_status,
     }
 
 
@@ -267,6 +281,30 @@ async def decisions(
         "tenant_id_filter": tenant_id,
         "results": items,
     }
+
+
+@app.get("/anchor/status")
+async def anchor_status() -> Dict[str, Any]:
+    """
+    Expose last Merkle anchor job status.
+
+    Backed by state/merkle_anchor_status.json written by the merkle-anchor job.
+    """
+    if not ANCHOR_STATE_FILE.exists():
+        logger.warning("anchor_status_missing", extra={"state_file": str(ANCHOR_STATE_FILE)})
+        return {"status": "unknown", "detail": "no_anchor_state"}
+
+    try:
+        import json
+
+        payload = json.loads(ANCHOR_STATE_FILE.read_text())
+        return payload
+    except Exception as exc:
+        logger.error(
+            "anchor_status_read_error",
+            extra={"state_file": str(ANCHOR_STATE_FILE), "error": str(exc)},
+        )
+        return {"status": "error", "detail": "failed_to_read_anchor_state"}
 
 
 if __name__ == "__main__":
