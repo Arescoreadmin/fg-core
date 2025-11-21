@@ -1,25 +1,23 @@
+version: "3.9"
+
 services:
-  core-api:
+  frostgate-core:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: frostgate-core-api
+    container_name: frostgate-core
     environment:
-      FG_ENV: dev
-      FG_ENFORCEMENT_MODE: ${FG_ENFORCEMENT_MODE:-enforce}
-      FG_API_KEY: ${FG_API_KEY:-}   # ← THIS is the missing piece
-    volumes:
-      - ./state:/app/state
+      # Base app config
+      FROSTGATE_ENV: "dev"
+      FROSTGATE_ENFORCEMENT_MODE: "observe"
+      FROSTGATE_LOG_LEVEL: "DEBUG"
+
+      # API key / tenant for local smoke
+      # This should match whatever your tools.tenants CLI emits if you want real multi-tenant auth.
+      FROSTGATE_API_KEY: "dev-local-supersecret"
     ports:
       - "8080:8080"
-
-  supervisor:
-    build:
-      context: ./supervisor-sidecar
-      dockerfile: Dockerfile
-    container_name: frostgate-supervisor
-    environment:
-      FG_CORE_BASE_URL: http://core-api:8080
-    ports:
-      - "9090:9090"
+    volumes:
+      # Persist anchor / chaos state
+      - ./state:/app/state
     restart: unless-stopped
