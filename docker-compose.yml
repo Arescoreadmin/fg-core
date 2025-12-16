@@ -2,63 +2,92 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: fg_user
-      POSTGRES_PASSWORD: STRONG_PASSWORD
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-STRONG_PASSWORD}
       POSTGRES_DB: frostgate
     ports:
       - "5432:5432"
     volumes:
       - fg_pgdata:/var/lib/postgresql/data
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fg_user -d frostgate"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
 
   frostgate-core:
     build:
       context: .
       dockerfile: Dockerfile
     image: frostgate-core:latest
-
-    # ✅ command goes here (service level), not under build
-    command: ["sh", "-lc", "python -m uvicorn api.main:app --host 0.0.0.0 --port 8080"]
-
-
+    restart: unless-stopped
     depends_on:
-      - redis
-      - postgres
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["sh", "-lc", "python -m uvicorn api.main:app --host 0.0.0.0 --port 8080"]
+    ports:
+      - "18080:8080"
+    env_file:
+      - .env
     environment:
       FG_ENV: prod
       FG_DEBUG: "false"
+      FG_LOG_LEVEL: "info"
 
-      FG_API_HOST: 0.0.0.0
-      FG_API_PORT: "8080"
+      FG_DB_URL: "postgresql+psycopg://fg_user:${POSTGRES_PASSWORD:-STRONG_PASSWORD}@postgres:5432/frostgate"
+      FG_REDIS_URL: "redis://redis:6379/0"
 
-      FG_DB_URL: "${FG_DB_URL}"
+      # MVP auth (api/auth.py)
+      FG_API_KEY: ${FG_API_KEY}
 
-      FG_API_KEYS: tenant-test=supersecret,tenant-a=supersecret,tenant-b=supersecret
-
+      # Rate limiting
       FG_RL_ENABLED: "true"
-      FG_RL_BACKEND: redis
-      FG_REDIS_URL: redis://redis:6379/0
-      FG_RL_SCOPE: tenant
-      FG_RL_PATHS: /defend
+      FG_RL_BACKEND: "redis"
+      FG_RL_SCOPE: "tenant"
+      FG_RL_PATHS: "/defend"
       FG_RL_RATE_PER_SEC: "2"
       FG_RL_BURST: "60"
-      FG_RL_PREFIX: fg:rl:prod
+      FG_RL_PREFIX: "fg:rl:prod"
       FG_RL_ALLOW_BYPASS_IN_PROD: "false"
-      FG_RL_DEMO_KEY_PREFIX: demo_
       FG_RL_FAIL_OPEN: "false"
 
-      FG_METRICS_ENABLED: "true"
-      FG_LOG_LEVEL: info
-
-    ports:
-      - "18080:8080"
     volumes:
       - ./state:/app/state
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health/live >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  frostgate-agent:
+    profiles: ["agent"]
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    image: frostgate-agent:latest
     restart: unless-stopped
+    depends_on:
+      frostgate-core:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      FG_CORE_BASE_URL: "http://frostgate-core:8080"
+      FG_AGENT_API_KEY: ${FG_API_KEY}
+      FG_AGENT_TIMEOUT_SECONDS: ${FG_AGENT_TIMEOUT_SECONDS:-2}
 
 volumes:
   fg_pgdata:

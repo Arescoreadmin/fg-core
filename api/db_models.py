@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import Boolean, Column, DateTime, Float, Index, Integer, String, Text
-from sqlalchemy.types import JSON  # portable JSON type across SQLite/Postgres
+from sqlalchemy.types import JSON  # portable JSON across SQLite/Postgres
 
 from api.db import Base
 
@@ -71,7 +71,6 @@ class DecisionRecord(Base):
     request_payload = Column(JSON, nullable=True)
     response_payload = Column(JSON, nullable=True)
 
-    # Helpful compound indexes for common queries
     __table_args__ = (
         Index("ix_decisions_tenant_created", "tenant_id", "created_at"),
         Index("ix_decisions_tenant_threat", "tenant_id", "threat_level"),
@@ -85,7 +84,6 @@ class DecisionRecord(Base):
         latency_ms: Optional[int] = None,
         enforcement_mode: Optional[str] = None,
     ) -> "DecisionRecord":
-        # Request bits
         tenant_id = getattr(request, "tenant_id", None)
         source = getattr(request, "source", None)
 
@@ -98,7 +96,6 @@ class DecisionRecord(Base):
 
         event_type = payload.get("event_type")
 
-        # Response bits
         threat_level = getattr(response, "threat_level", None) or "unknown"
         ai_adv_score = getattr(response, "ai_adversarial_score", None)
         pq_fallback = bool(getattr(response, "pq_fallback", False))
@@ -125,10 +122,6 @@ class DecisionRecord(Base):
         )
 
     def to_public(self) -> dict[str, Any]:
-        """
-        Lightweight shape for /decisions list views.
-        Keeps sensitive raw payloads out of the default response.
-        """
         rules = self.rules_triggered
         if rules is None:
             rules = []
