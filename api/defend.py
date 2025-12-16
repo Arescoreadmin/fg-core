@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from api.auth import verify_api_key
+from api.auth_scopes import require_scope
 from api.db import get_db
 from api.db_models import DecisionRecord
 from api.ratelimit import rate_limit_guard
@@ -17,7 +17,10 @@ from api.ratelimit import rate_limit_guard
 router = APIRouter(
     prefix="/defend",
     tags=["defend"],
-    dependencies=[Depends(verify_api_key), Depends(rate_limit_guard)],
+    dependencies=[
+        Depends(require_scope("defend:write")),
+        Depends(rate_limit_guard),
+    ],
 )
 
 # ---------- Models ----------

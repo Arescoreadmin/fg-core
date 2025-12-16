@@ -33,3 +33,4 @@ fg_pgdata/
 *.log
 logs/
 .env
+.env

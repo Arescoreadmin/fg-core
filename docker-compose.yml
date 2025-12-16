@@ -50,8 +50,9 @@ services:
       FG_DB_URL: "postgresql+psycopg://fg_user:${POSTGRES_PASSWORD:-STRONG_PASSWORD}@postgres:5432/frostgate"
       FG_REDIS_URL: "redis://redis:6379/0"
 
-      # MVP auth (api/auth.py)
-      FG_API_KEY: ${FG_API_KEY}
+      # Scoped auth (api/auth_scopes.py)
+      # Format: key|scope,scope;key2|scope
+      FG_API_KEYS: ${FG_API_KEYS}
 
       # Rate limiting
       FG_RL_ENABLED: "true"
@@ -86,8 +87,7 @@ services:
       - .env
     environment:
       FG_CORE_BASE_URL: "http://frostgate-core:8080"
-      FG_AGENT_API_KEY: ${FG_API_KEY}
-      FG_AGENT_TIMEOUT_SECONDS: ${FG_AGENT_TIMEOUT_SECONDS:-2}
+      FG_AGENT_API_KEY: ${FG_AGENT_KEY}
 
 volumes:
   fg_pgdata:
