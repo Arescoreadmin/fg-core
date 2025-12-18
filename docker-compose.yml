@@ -93,7 +93,10 @@ services:
       - .env
     environment:
       FG_CORE_BASE_URL: ${FG_CORE_BASE_URL:-http://frostgate-core:8080}
-      FG_AGENT_API_KEY: ${FG_AGENT_KEY}
+      FG_AGENT_API_KEY: ${FG_AGENT_API_KEY:-}
+      FG_AGENT_TENANT_ID: ${FG_AGENT_TENANT_ID:-local}
+      FG_AGENT_SOURCE: ${FG_AGENT_SOURCE:-agent}
+      FG_AGENT_INTERVAL_SEC: ${FG_AGENT_INTERVAL_SEC:-10}
 
 volumes:
   fg_pgdata:
