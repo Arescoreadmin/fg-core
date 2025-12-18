@@ -1,132 +1,186 @@
 from __future__ import annotations
 
-from datetime import datetime
+import json
+import logging
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import and_, func, or_
+from fastapi import APIRouter, Depends, Query, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
-from api.auth import verify_api_key
+from api.auth_scopes import require_scope, verify_api_key
 from api.db import get_db
 from api.db_models import DecisionRecord
+from api.ratelimit import rate_limit_guard
+
+log = logging.getLogger("frostgate.decisions")
 
 router = APIRouter(
     prefix="/decisions",
     tags=["decisions"],
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[
+        Depends(verify_api_key),
+        Depends(require_scope("decisions:read")),
+        Depends(rate_limit_guard),
+    ],
 )
 
-MAX_PAGE_SIZE = 100
+# -------------------------
+# Helpers
+# -------------------------
 
-
-def _clamp_page_size(n: int) -> int:
-    return max(1, min(MAX_PAGE_SIZE, n))
-
-
-def _parse_cursor(cursor: Optional[str]) -> Optional[tuple[datetime, str]]:
-    if not cursor:
+def _iso(dt: Any) -> Optional[str]:
+    if dt is None:
         return None
     try:
-        ts_str, id_str = cursor.split("|", 1)
-        ts = datetime.fromisoformat(ts_str)
-        return ts, id_str
+        return dt.isoformat()
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid cursor format. Expected '<iso>|<id>'")
+        return str(dt)
+
+def _loads_maybe(s: Optional[str]) -> Any:
+    if not s:
+        return None
+    try:
+        return json.loads(s)
+    except Exception:
+        return s  # keep raw string if it's not valid JSON
+
+# -------------------------
+# Response Models
+# -------------------------
+
+class DecisionOut(BaseModel):
+    id: int
+    created_at: Optional[str] = None
+
+    tenant_id: str
+    source: str
+    event_id: str
+    event_type: str
+
+    threat_level: str
+    anomaly_score: float
+    ai_adversarial_score: float
+    pq_fallback: bool
+
+    rules_triggered: Optional[Any] = None
+    explain_summary: Optional[str] = None
+    latency_ms: int = 0
+
+    request: Optional[Any] = None
+    response: Optional[Any] = None
 
 
-@router.get("")
+class DecisionsPage(BaseModel):
+    items: list[DecisionOut] = Field(default_factory=list)
+    limit: int
+    offset: int
+    total: int
+
+
+# -------------------------
+# Routes
+# -------------------------
+
+@router.get("", response_model=DecisionsPage)
 def list_decisions(
     db: Session = Depends(get_db),
-    cursor: Optional[str] = Query(None, description="Keyset cursor: '<iso_created_at>|<id>'"),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(25, ge=1, le=MAX_PAGE_SIZE),
-    tenant_id: Optional[str] = Query(None),
-    source: Optional[str] = Query(None),
-    event_type: Optional[str] = Query(None),
-    threat_level: Optional[str] = Query(None),
-    since: Optional[datetime] = Query(None),
-    until: Optional[datetime] = Query(None),
-) -> dict[str, Any]:
-    page_size = _clamp_page_size(page_size)
+    tenant_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    include_raw: bool = Query(default=False),
+) -> DecisionsPage:
+    try:
+        log.info("decisions.list start tenant_id=%s limit=%s offset=%s include_raw=%s", tenant_id, limit, offset, include_raw)
 
-    q = db.query(
-        DecisionRecord.id,
-        DecisionRecord.created_at,
-        DecisionRecord.tenant_id,
-        DecisionRecord.source,
-        DecisionRecord.event_type,
-        DecisionRecord.threat_level,
-        DecisionRecord.anomaly_score,
-        DecisionRecord.ai_adversarial_score,
-        DecisionRecord.pq_fallback,
-        DecisionRecord.rules_triggered,
-        DecisionRecord.explain_summary,
-        DecisionRecord.latency_ms,
-    )
+        # total count (fast and boring)
+        count_stmt = select(func.count()).select_from(DecisionRecord)
+        if tenant_id:
+            count_stmt = count_stmt.where(DecisionRecord.tenant_id == tenant_id)
+        total = int(db.execute(count_stmt).scalar_one())
 
-    filters = []
-    if tenant_id:
-        filters.append(DecisionRecord.tenant_id == tenant_id)
-    if source:
-        filters.append(DecisionRecord.source == source)
-    if event_type:
-        filters.append(DecisionRecord.event_type == event_type)
-    if threat_level:
-        filters.append(DecisionRecord.threat_level == threat_level)
-    if since:
-        filters.append(DecisionRecord.created_at >= since)
-    if until:
-        filters.append(DecisionRecord.created_at <= until)
+        # page items
+        stmt = select(DecisionRecord)
+        if tenant_id:
+            stmt = stmt.where(DecisionRecord.tenant_id == tenant_id)
 
-    if filters:
-        q = q.filter(and_(*filters))
-
-    total = db.query(func.count(DecisionRecord.id))
-    if filters:
-        total = total.filter(and_(*filters))
-    total_count = int(total.scalar() or 0)
-
-    q = q.order_by(DecisionRecord.created_at.desc(), DecisionRecord.id.desc())
-
-    cur = _parse_cursor(cursor)
-    if cur:
-        cur_ts, cur_id = cur
-        q = q.filter(
-            or_(
-                DecisionRecord.created_at < cur_ts,
-                and_(DecisionRecord.created_at == cur_ts, DecisionRecord.id < cur_id),
-            )
+        stmt = (
+            stmt.order_by(desc(DecisionRecord.created_at), desc(DecisionRecord.id))
+            .limit(limit)
+            .offset(offset)
         )
-        rows = q.limit(page_size).all()
-    else:
-        rows = q.offset((page - 1) * page_size).limit(page_size).all()
 
-    items = [{
-        "id": r.id,
-        "created_at": r.created_at.isoformat() if r.created_at else None,
-        "tenant_id": r.tenant_id,
-        "source": r.source,
-        "event_type": r.event_type,
-        "threat_level": r.threat_level,
-        "anomaly_score": r.anomaly_score,
-        "ai_adversarial_score": r.ai_adversarial_score,
-        "pq_fallback": bool(r.pq_fallback),
-        "rules_triggered": r.rules_triggered,
-        "explain_summary": r.explain_summary,
-        "latency_ms": r.latency_ms,
-    } for r in rows]
+        rows = db.execute(stmt).scalars().all()
 
-    next_cursor = None
-    if items:
-        last = items[-1]
-        if last["created_at"] and last["id"]:
-            next_cursor = f'{last["created_at"]}|{last["id"]}'
+        items: list[DecisionOut] = []
+        for r in rows:
+            out = DecisionOut(
+                id=int(r.id),
+                created_at=_iso(getattr(r, "created_at", None)),
+                tenant_id=r.tenant_id,
+                source=r.source,
+                event_id=r.event_id,
+                event_type=r.event_type,
+                threat_level=r.threat_level,
+                anomaly_score=float(r.anomaly_score or 0.0),
+                ai_adversarial_score=float(r.ai_adversarial_score or 0.0),
+                pq_fallback=bool(r.pq_fallback),
+                rules_triggered=_loads_maybe(getattr(r, "rules_triggered_json", None)),
+                explain_summary=getattr(r, "explain_summary", None),
+                latency_ms=int(getattr(r, "latency_ms", 0) or 0),
+            )
 
-    return {
-        "items": items,
-        "total": total_count,
-        "page": page,
-        "page_size": page_size,
-        "next_cursor": next_cursor,
-    }
+            if include_raw:
+                out.request = _loads_maybe(getattr(r, "request_json", None))
+                out.response = _loads_maybe(getattr(r, "response_json", None))
+
+            items.append(out)
+
+        log.info("decisions.list ok total=%s returned=%s", total, len(items))
+        return DecisionsPage(items=items, limit=limit, offset=offset, total=total)
+
+    except Exception:
+        log.exception("decisions.list FAILED")
+        # If this throws, it's a server bug. We want the stack trace in logs.
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+
+@router.get("/{decision_id}", response_model=DecisionOut)
+def get_decision(
+    decision_id: int,
+    db: Session = Depends(get_db),
+    include_raw: bool = Query(default=True),
+) -> DecisionOut:
+    try:
+        r = db.get(DecisionRecord, decision_id)
+        if r is None:
+            raise HTTPException(status_code=404, detail="Decision not found")
+
+        out = DecisionOut(
+            id=int(r.id),
+            created_at=_iso(getattr(r, "created_at", None)),
+            tenant_id=r.tenant_id,
+            source=r.source,
+            event_id=r.event_id,
+            event_type=r.event_type,
+            threat_level=r.threat_level,
+            anomaly_score=float(r.anomaly_score or 0.0),
+            ai_adversarial_score=float(r.ai_adversarial_score or 0.0),
+            pq_fallback=bool(r.pq_fallback),
+            rules_triggered=_loads_maybe(getattr(r, "rules_triggered_json", None)),
+            explain_summary=getattr(r, "explain_summary", None),
+            latency_ms=int(getattr(r, "latency_ms", 0) or 0),
+        )
+
+        if include_raw:
+            out.request = _loads_maybe(getattr(r, "request_json", None))
+            out.response = _loads_maybe(getattr(r, "response_json", None))
+
+        return out
+
+    except HTTPException:
+        raise
+    except Exception:
+        log.exception("decisions.get FAILED id=%s", decision_id)
+        raise HTTPException(status_code=500, detail="Internal Server Error")
