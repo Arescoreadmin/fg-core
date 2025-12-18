@@ -12,19 +12,22 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: fg_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-STRONG_PASSWORD}
-      POSTGRES_DB: frostgate
     ports:
       - "5432:5432"
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fg_user}
+      POSTGRES_DB: ${POSTGRES_DB:-frostgate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-STRONG_PASSWORD}
     volumes:
       - fg_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U fg_user -d frostgate"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h 127.0.0.1"]
       interval: 5s
       timeout: 3s
       retries: 30
+      start_period: 5s
 
   frostgate-core:
     build:
@@ -43,35 +46,38 @@ services:
     env_file:
       - .env
     environment:
-      FG_ENV: prod
-      FG_DEBUG: "false"
-      FG_LOG_LEVEL: "info"
+      FG_ENV: ${FG_ENV:-prod}
+      FG_DEBUG: ${FG_DEBUG:-false}
+      FG_LOG_LEVEL: ${FG_LOG_LEVEL:-info}
 
-      FG_DB_URL: "postgresql+psycopg://fg_user:${POSTGRES_PASSWORD:-STRONG_PASSWORD}@postgres:5432/frostgate"
-      FG_REDIS_URL: "redis://redis:6379/0"
+      # DB/Redis
+      FG_DB_URL: ${FG_DB_URL:-postgresql+psycopg://${POSTGRES_USER:-fg_user}:${POSTGRES_PASSWORD:-STRONG_PASSWORD}@postgres:5432/${POSTGRES_DB:-frostgate}}
+      FG_REDIS_URL: ${FG_REDIS_URL:-redis://redis:6379/0}
 
-      # Scoped auth (api/auth_scopes.py)
-      # Format: key|scope,scope;key2|scope
+      # Auth scopes
       FG_API_KEYS: ${FG_API_KEYS}
 
       # Rate limiting
-      FG_RL_ENABLED: "true"
-      FG_RL_BACKEND: "redis"
-      FG_RL_SCOPE: "tenant"
-      FG_RL_PATHS: "/defend"
-      FG_RL_RATE_PER_SEC: "2"
-      FG_RL_BURST: "60"
-      FG_RL_PREFIX: "fg:rl:prod"
-      FG_RL_ALLOW_BYPASS_IN_PROD: "false"
-      FG_RL_FAIL_OPEN: "false"
+      FG_RL_ENABLED: ${FG_RL_ENABLED:-true}
+      FG_RL_BACKEND: ${FG_RL_BACKEND:-redis}
+      FG_RL_SCOPE: ${FG_RL_SCOPE:-tenant}
+      FG_RL_PATHS: ${FG_RL_PATHS:-/defend}
+      FG_RL_RATE_PER_SEC: ${FG_RL_RATE_PER_SEC:-2}
+      FG_RL_BURST: ${FG_RL_BURST:-60}
+      FG_RL_PREFIX: ${FG_RL_PREFIX:-fg:rl:prod}
+      FG_RL_ALLOW_BYPASS_IN_PROD: ${FG_RL_ALLOW_BYPASS_IN_PROD:-false}
+      FG_RL_FAIL_OPEN: ${FG_RL_FAIL_OPEN:-false}
 
     volumes:
       - ./state:/app/state
+
+    # ONE healthcheck. Not two. Humans love duplicating keys for sport.
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health/live >/dev/null || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 30
+     test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=1).read()\""]
+     interval: 5s
+     timeout: 2s
+     retries: 30
+     start_period: 10s
 
   frostgate-agent:
     profiles: ["agent"]
@@ -86,7 +92,7 @@ services:
     env_file:
       - .env
     environment:
-      FG_CORE_BASE_URL: "http://frostgate-core:8080"
+      FG_CORE_BASE_URL: ${FG_CORE_BASE_URL:-http://frostgate-core:8080}
       FG_AGENT_API_KEY: ${FG_AGENT_KEY}
 
 volumes:

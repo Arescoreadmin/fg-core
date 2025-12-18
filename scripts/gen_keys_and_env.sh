@@ -10,5 +10,11 @@ agent = "AGENT_" + secrets.token_urlsafe(32)
 
 print(f"FG_ADMIN_KEY={admin}")
 print(f"FG_AGENT_KEY={agent}")
-print(f"FG_API_KEYS={admin}|decisions:read,defend:write;{agent}|decisions:read")
+# Admin can ingest + defend + read decisions
+# Agent can ingest + read decisions (NO defend)
+print(
+  "FG_API_KEYS="
+  f"{admin}|decisions:read,defend:write,ingest:write;"
+  f"{agent}|decisions:read,ingest:write"
+)
 PY
