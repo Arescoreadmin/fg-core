@@ -76,3 +76,10 @@ __pycache__/
 .DS_Store
 .vscode/
 .idea/
+
+# FrostGate secrets/state
+secrets/
+state/
+.env
+.env.*
+state/
