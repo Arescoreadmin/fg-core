@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import uuid
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -9,36 +10,42 @@ from api.defend import router as defend_router
 from api.feed import router as feed_router
 
 
-def build_app(auth_enabled: bool = True) -> FastAPI:
-    """
-    Test-facing app factory.
+ERR_INVALID = "Invalid or missing API key"
 
-    Guarantees:
-      - /health reflects build_app(auth_enabled)
-      - /status & /v1/status require x-api-key when auth_enabled=True
-      - revoked tenants rejected when x-tenant-id present (even if auth disabled)
-    """
+
+def _hdr(req: Request, name: str) -> Optional[str]:
+    return (
+        req.headers.get(name)
+        or req.headers.get(name.lower())
+        or req.headers.get(name.upper())
+    )
+
+
+def _fail(detail: str = ERR_INVALID) -> None:
+    raise HTTPException(status_code=401, detail=detail)
+
+
+def build_app(auth_enabled: bool = True) -> FastAPI:
     app = FastAPI(title="frostgate-core", version="0.1.0")
+
+    # ---- App state ----
     app.state.auth_enabled = bool(auth_enabled)
     app.state.service = os.getenv("FG_SERVICE", "frostgate-core")
     app.state.env = os.getenv("FG_ENV", "dev")
+    app.state.app_instance_id = str(uuid.uuid4())
 
-    def _get_header(req: Request, name: str) -> Optional[str]:
-        return req.headers.get(name) or req.headers.get(name.lower()) or req.headers.get(name.upper())
-
-    def _fail() -> None:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key")
-
-    def _check_tenant_if_present(req: Request) -> None:
-        tenant_id = _get_header(req, "x-tenant-id")
+    # ---- Auth helpers ----
+    def check_tenant_if_present(req: Request) -> None:
+        tenant_id = _hdr(req, "X-Tenant-Id")
         if not tenant_id:
             return
 
-        api_key = _get_header(req, "x-api-key")
+        api_key = _hdr(req, "X-API-Key")
         if not api_key:
             _fail()
 
-        import api.auth as auth  # tests monkeypatch auth.get_tenant
+        import api.auth as auth  # monkeypatched in tests
+
         get_tenant = getattr(auth, "get_tenant", None)
         if not callable(get_tenant):
             _fail()
@@ -49,41 +56,51 @@ def build_app(auth_enabled: bool = True) -> FastAPI:
 
         status = getattr(tenant, "status", None)
         if status and str(status).lower() != "active":
-            _fail()
+            _fail("Tenant revoked")
 
-        expected_key = getattr(tenant, "api_key", None)
-        if expected_key is None or str(expected_key) != str(api_key):
+        expected = getattr(tenant, "api_key", None)
+        if expected is None or str(expected) != str(api_key):
             _fail()
 
     def require_status_auth(req: Request) -> None:
-        _check_tenant_if_present(req)
+        check_tenant_if_present(req)
 
         if not app.state.auth_enabled:
             return
 
-        api_key = _get_header(req, "x-api-key")
+        api_key = _hdr(req, "X-API-Key")
         if not api_key:
             _fail()
 
-        expected = os.environ.get("FG_API_KEY") or "supersecret"
+        expected = os.getenv("FG_API_KEY") or "supersecret"
         if str(api_key) != str(expected):
             _fail()
 
-    # Define /health BEFORE routers so nothing can shadow it.
-    @app.get("/health")
-    async def health() -> dict:
-        return {
-            "status": "ok",
-            "service": app.state.service,
-            "env": app.state.env,
-            "auth_enabled": bool(app.state.auth_enabled),
-        }
-
-    # Routers
+    # ---- Routers ----
     app.include_router(defend_router)
     app.include_router(defend_router, prefix="/v1")
     app.include_router(feed_router)
 
+    # ---- Health ----
+    @app.get("/health")
+    async def health(request: Request) -> dict:
+        return {
+            "status": "ok",
+            "service": request.app.state.service,
+            "env": request.app.state.env,
+            "auth_enabled": bool(request.app.state.auth_enabled),
+            "app_instance_id": request.app.state.app_instance_id,
+        }
+
+    @app.get("/health/live")
+    async def health_live() -> dict:
+        return {"status": "live"}
+
+    @app.get("/health/ready")
+    async def health_ready() -> dict:
+        return {"status": "ready"}
+
+    # ---- Status ----
     @app.get("/status")
     async def status(_: None = Depends(require_status_auth)) -> dict:
         return {"status": "ok", "service": app.state.service, "env": app.state.env}
@@ -95,9 +112,7 @@ def build_app(auth_enabled: bool = True) -> FastAPI:
     return app
 
 
-# default import-time instance (some code/tests may import api.main.app)
+# Import-time default app (smoke tests depend on this)
 app = build_app(
-    auth_enabled=True
-    if os.getenv("FG_AUTH_ENABLED") in (None, "", "1", "true", "True", "yes", "on")
-    else False
+    auth_enabled=bool(os.getenv("FG_API_KEY"))
 )
