@@ -95,3 +95,9 @@ resolve
 resolving
 sending
 transferring
+
+# Local patch/backups
+*.bak
+*.bak.*
+*.orig
+*.rej
