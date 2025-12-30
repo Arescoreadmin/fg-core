@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+LOG_DIR="${LOG_DIR:-demo}"
+mkdir -p "$LOG_DIR"
+
 set -Eeuo pipefail
 
 # ----------------------------

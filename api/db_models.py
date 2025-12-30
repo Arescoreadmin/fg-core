@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timezone
 from sqlalchemy import Column, String
+from sqlalchemy import JSON, Text
 
 from sqlalchemy import (
     Boolean,
@@ -72,9 +73,6 @@ class DecisionRecord(Base):
     ai_adversarial_score = Column(Float, nullable=True)
     pq_fallback = Column(Boolean, nullable=True)
 
-    rules_triggered_json = Column(Text, nullable=True)
-    explain_summary = Column(Text, nullable=True)
-    latency_ms = Column(Integer, nullable=True)
-
-    request_json = Column(Text, nullable=True)
-    response_json = Column(Text, nullable=True)
+    rules_triggered_json = Column(JSON, nullable=False, default=list)
+    request_json = Column(JSON, nullable=False)
+    response_json = Column(JSON, nullable=False)

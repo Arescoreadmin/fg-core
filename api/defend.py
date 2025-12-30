@@ -6,10 +6,10 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
-from typing import Any, Iterable, Literal, Optional, Set, Tuple
+from typing import Any, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -20,8 +20,6 @@ from api.ratelimit import rate_limit_guard
 from api.schemas import TelemetryInput
 
 log = logging.getLogger("frostgate.defend")
-
-ERR_INVALID = "Invalid or missing API key"
 
 router = APIRouter(
     prefix="/defend",
@@ -34,7 +32,7 @@ router = APIRouter(
 )
 
 # =============================================================================
-# Time helpers (ONE source of truth)
+# Time helpers
 # =============================================================================
 
 
@@ -46,12 +44,19 @@ def _parse_dt(s: str) -> datetime:
 
 
 def _to_utc(dt: datetime | str) -> datetime:
-    """Accept datetime OR ISO-8601 string and normalize to tz-aware UTC."""
     if isinstance(dt, str):
         dt = _parse_dt(dt)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _iso(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 # =============================================================================
@@ -66,16 +71,22 @@ def _safe_dump(obj: Any) -> Any:
 
 
 def _canonical_json(obj: Any) -> str:
-    return json.dumps(_safe_dump(obj), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return json.dumps(
+        _safe_dump(obj),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        default=str,
+    )
 
 
 # =============================================================================
-# DB helper (column-safe kwargs)
+# SQLAlchemy model/column helpers
 # =============================================================================
 
 
 def _filter_model_kwargs(model_cls: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
-    """Filter kwargs to only mapped columns to avoid schema drift explosions."""
+    """Keep only kwargs that match real columns on the model."""
     try:
         from sqlalchemy import inspect  # type: ignore
 
@@ -83,6 +94,41 @@ def _filter_model_kwargs(model_cls: Any, kwargs: dict[str, Any]) -> dict[str, An
         return {k: v for k, v in kwargs.items() if k in cols}
     except Exception:
         return kwargs
+
+
+def _column_type_name(model_cls: Any, col_name: str) -> Optional[str]:
+    """Return SQLAlchemy column type class name if possible (e.g., 'JSON', 'Text')."""
+    try:
+        from sqlalchemy import inspect  # type: ignore
+
+        mapper = inspect(model_cls).mapper
+        col = mapper.columns.get(col_name)
+        if col is None:
+            return None
+        return col.type.__class__.__name__
+    except Exception:
+        return None
+
+
+def _value_for_column(model_cls: Any, col_name: str, value: Any) -> Any:
+    """
+    If column is JSON-ish, pass Python objects.
+    If column is TEXT-ish (SQLite common), serialize dict/list to JSON string.
+    """
+    tname = (_column_type_name(model_cls, col_name) or "").lower()
+
+    if value is None:
+        return None
+
+    is_json_col = "json" in tname  # JSON / JSONB / etc
+    if is_json_col:
+        return value
+
+    # Non-JSON column: only serialize complex objects.
+    if isinstance(value, (dict, list, tuple)):
+        return _canonical_json(value)
+
+    return value
 
 
 # =============================================================================
@@ -149,8 +195,8 @@ def _normalize_failed_auths(payload: dict[str, Any]) -> int:
 
 
 def _event_id(req: TelemetryInput) -> str:
-    ts_val = getattr(req, "timestamp", datetime.now(timezone.utc))
-    ts = _to_utc(ts_val).isoformat().replace("+00:00", "Z")
+    ts_val = getattr(req, "timestamp", _utcnow())
+    ts = _iso(_to_utc(ts_val))
     et = _coerce_event_type(req)
     body = _coerce_event_payload(req)
 
@@ -159,15 +205,11 @@ def _event_id(req: TelemetryInput) -> str:
 
 
 def _event_age_ms(event_ts: datetime | str) -> int:
-    now = datetime.now(timezone.utc)
+    now = _utcnow()
     return int((now - _to_utc(event_ts)).total_seconds() * 1000)
 
 
 def _clock_drift_ms(event_ts: datetime | str) -> int:
-    """
-    Contract invariant: never negative.
-    If event time is wildly stale beyond FG_CLOCK_STALE_MS, report 0 (ignore drift).
-    """
     age_ms = _event_age_ms(event_ts)
     stale_ms = int(os.getenv("FG_CLOCK_STALE_MS", "300000"))  # 5 min
     return 0 if abs(age_ms) > stale_ms else abs(age_ms)
@@ -188,13 +230,12 @@ class MitigationAction(BaseModel):
 
 class DecisionExplain(BaseModel):
     summary: str
-    rules_triggered: list[str] = []
+    rules_triggered: list[str] = Field(default_factory=list)
     anomaly_score: float = 0.0
     llm_note: Optional[str] = None
     tie_d: Optional[dict[str, Any]] = None
     score: int = 0
 
-    # Doctrine flags
     roe_applied: bool = False
     disruption_limited: bool = False
     ao_required: bool = False
@@ -204,7 +245,7 @@ class DecisionExplain(BaseModel):
 
 class DefendResponse(BaseModel):
     threat_level: Literal["none", "low", "medium", "high"]
-    mitigations: list[MitigationAction] = []
+    mitigations: list[MitigationAction] = Field(default_factory=list)
     explain: DecisionExplain
     ai_adversarial_score: float = 0.0
     pq_fallback: bool = False
@@ -283,7 +324,6 @@ def _apply_doctrine(
 
     out = list(mitigations)
 
-    # Contract: guardian + SECRET => roe_applied True; ao_required present; tie_d keys exist
     if persona_v == "guardian" and class_v == "SECRET":
         roe_applied = True
         ao_required = True
@@ -319,33 +359,32 @@ def _compute_chain_hash(prev_hash: Optional[str], payload: dict[str, Any]) -> st
 
 
 def _supports_chain_fields() -> bool:
-    # Avoid hard dependency on schema. If columns don’t exist, skip silently.
     return hasattr(DecisionRecord, "prev_hash") and hasattr(DecisionRecord, "chain_hash")
 
 
-def _canonical_hash_payload(
+def _hash_payload(
     *,
     event_id: str,
     created_at: datetime,
     tenant_id: str,
     source: str,
     event_type: str,
-    severity: str,
+    threat_level: str,
     rules_triggered: list[str],
 ) -> dict[str, Any]:
     return {
         "event_id": event_id,
-        "created_at": created_at.isoformat().replace("+00:00", "Z"),
+        "created_at": _iso(created_at),
         "tenant_id": tenant_id,
         "source": source,
         "event_type": event_type,
-        "severity": severity,
+        "threat_level": threat_level,
         "rules_triggered": rules_triggered,
     }
 
 
 # =============================================================================
-# Persistence (best effort, never break the endpoint)
+# Persistence (best effort)
 # =============================================================================
 
 
@@ -360,90 +399,86 @@ def _persist_decision_best_effort(
     anomaly_score: float,
     latency_ms: int,
 ) -> None:
-    ts_val = getattr(req, "timestamp", datetime.now(timezone.utc))
+    ts_val = getattr(req, "timestamp", _utcnow())
     created_at = _to_utc(ts_val)
 
-    request_obj = {
+    request_payload = {
         "tenant_id": req.tenant_id,
         "source": req.source,
-        "timestamp": created_at.isoformat().replace("+00:00", "Z"),
+        "timestamp": _iso(created_at),
         "event_type": event_type,
         "event": _coerce_event_payload(req),
         "persona": getattr(req, "persona", None),
         "classification": getattr(req, "classification", None),
     }
-    response_obj = decision.model_dump(mode="json") if hasattr(decision, "model_dump") else decision.dict()
+    response_payload = _safe_dump(decision)
 
     try:
-        # Prefer factory if present
-        if hasattr(DecisionRecord, "from_request_and_response"):
-            record = DecisionRecord.from_request_and_response(
-                tenant_id=req.tenant_id,
-                source=req.source,
-                event_id=event_id,
-                event_type=event_type,
-                threat_level=decision.threat_level,
-                anomaly_score=float(anomaly_score or 0.0),
-                ai_adversarial_score=float(decision.ai_adversarial_score or 0.0),
-                pq_fallback=bool(decision.pq_fallback),
-                rules_triggered=rules_triggered,
-                explain_summary=decision.explain.summary,
-                latency_ms=int(latency_ms or 0),
-                request_obj=request_obj,
-                response_obj=response_obj,
-            )
-        else:
-            record_kwargs = {
-                "tenant_id": req.tenant_id,
-                "source": req.source,
-                "event_id": event_id,
-                "event_type": event_type,
-                "threat_level": decision.threat_level,
-                "anomaly_score": float(anomaly_score or 0.0),
-                "ai_adversarial_score": float(decision.ai_adversarial_score or 0.0),
-                "pq_fallback": bool(decision.pq_fallback),
-                "explain_summary": decision.explain.summary,
-                "latency_ms": int(latency_ms or 0),
-                "request_obj": request_obj,
-                "response_obj": response_obj,
-                "rules_triggered": rules_triggered,
-                "created_at": created_at,
-            }
-            record = DecisionRecord(**_filter_model_kwargs(DecisionRecord, record_kwargs))
+        record_kwargs: dict[str, Any] = {
+            "tenant_id": req.tenant_id,
+            "source": req.source,
+            "event_id": event_id,
+            "event_type": event_type,
+            "threat_level": decision.threat_level,
+            "anomaly_score": float(anomaly_score or 0.0),
+            "ai_adversarial_score": float(decision.ai_adversarial_score or 0.0),
+            "pq_fallback": bool(decision.pq_fallback),
+            "explain_summary": decision.explain.summary,
+            "latency_ms": int(latency_ms or 0),
+        }
 
-        # Chain hash: compute prev from DB last record (best effort)
+        # Store rules/request/response in whichever columns exist, with correct serialization.
+        # - *_json columns might be TEXT or JSON depending on your model.
+        # - *_obj columns are backward-compat variants some repos use.
+        rules_value = list(rules_triggered or [])
+        req_value = dict(request_payload)
+        resp_value = response_payload
+
+        # rules_triggered_json / request_json / response_json
+        for col, val in (
+            ("rules_triggered_json", rules_value),
+            ("request_json", req_value),
+            ("response_json", resp_value),
+            ("request_obj", req_value),
+            ("response_obj", resp_value),
+        ):
+            if hasattr(DecisionRecord, col):
+                record_kwargs[col] = _value_for_column(DecisionRecord, col, val)
+
+        record = DecisionRecord(**_filter_model_kwargs(DecisionRecord, record_kwargs))
+
         if _supports_chain_fields():
             last = db.query(DecisionRecord).order_by(DecisionRecord.id.desc()).first()
             prev = getattr(last, "chain_hash", None) if last else None
-
-            hp = _canonical_hash_payload(
-                event_id=event_id,
-                created_at=created_at,
-                tenant_id=req.tenant_id,
-                source=req.source,
-                event_type=event_type,
-                severity=str(decision.threat_level),
-                rules_triggered=rules_triggered,
-            )
             record.prev_hash = prev
-            record.chain_hash = _compute_chain_hash(prev, hp)
+            record.chain_hash = _compute_chain_hash(
+                prev,
+                _hash_payload(
+                    event_id=event_id,
+                    created_at=created_at,
+                    tenant_id=req.tenant_id,
+                    source=req.source,
+                    event_type=event_type,
+                    threat_level=str(decision.threat_level),
+                    rules_triggered=rules_value,
+                ),
+            )
 
         db.add(record)
-        db.flush()
         db.commit()
 
         log.info(
-            "persisted decision tenant=%s event_id=%s event_type=%s threat=%s",
+            "persisted decision tenant=%s event_id=%s event_type=%s threat=%s latency_ms=%s",
             req.tenant_id,
             event_id,
             event_type,
             decision.threat_level,
+            int(latency_ms or 0),
         )
 
     except IntegrityError:
         db.rollback()
         log.info("duplicate decision ignored tenant=%s event_id=%s", req.tenant_id, event_id)
-
     except Exception:
         try:
             db.rollback()
@@ -457,8 +492,8 @@ def _persist_decision_best_effort(
         )
 
         if os.getenv("FG_DEBUG_DECISIONS", "false").lower() in ("1", "true", "yes", "on"):
-            log.error("DEBUG_DECISION request=%s", _canonical_json(req))
-            log.error("DEBUG_DECISION response=%s", _canonical_json(decision))
+            log.error("DEBUG_DECISION request=%s", _canonical_json(request_payload))
+            log.error("DEBUG_DECISION response=%s", _canonical_json(response_payload))
 
 
 # =============================================================================
@@ -481,13 +516,13 @@ async def defend(request: TelemetryInput, db: Session = Depends(get_db)) -> Defe
         mitigations=mitigations,
     )
 
-    ts_val = getattr(request, "timestamp", datetime.now(timezone.utc))
+    ts_val = getattr(request, "timestamp", _utcnow())
     drift_ms = _clock_drift_ms(ts_val)
-    latency_ms = int((time.perf_counter() - start) * 1000)
+    latency_ms = int((time.perf_counter() - start) * 1000.0)
 
     tie_d = {
         "event_age_ms": _event_age_ms(ts_val),
-        "clock_drift_ms_reported": drift_ms,
+        "clock_drift_ms_reported": int(drift_ms or 0),
         "latency_ms": latency_ms,
         "service_impact": float(0.10 if doctrine["disruption_limited"] else 0.05),
         "user_impact": float(0.20 if doctrine["ao_required"] else 0.05),
