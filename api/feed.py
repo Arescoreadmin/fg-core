@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
+import asyncio
+
 from typing import Any, List
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
+from starlette.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -321,3 +325,63 @@ def feed_live(
         items.append(FeedItem(**item_dict))
 
     return FeedLiveResponse(items=items, next_since_id=max_id)
+@router.get("/stream")
+async def feed_stream(
+    request: Request,
+    db: Session = Depends(get_db),
+    since_id: int | None = None,
+    limit: int = 50,
+    interval: float = 1.0,
+):
+    """
+    Server-Sent Events stream for the live feed.
+    Reuses feed_live() dynamically (no schema guessing).
+    """
+
+    async def event_gen():
+        nonlocal since_id
+        # Suggest client retry quickly
+        yield "retry: 1000\n\n"
+
+        while True:
+            # disconnect detection (best effort)
+            try:
+                if await request.is_disconnected():
+                    break
+            except Exception:
+                pass
+
+            # Reuse existing feed_live if present
+            fn = globals().get("feed_live")
+            if fn is None:
+                # If someone renamed it, that's on you.
+                yield 'event: error\ndata: {"detail":"feed_live not found"}\n\n'
+                break
+
+            resp = fn(db=db, since_id=since_id, limit=limit)
+            if hasattr(resp, "__await__"):
+                resp = await resp
+
+            data = resp.model_dump() if hasattr(resp, "model_dump") else (resp.dict() if hasattr(resp, "dict") else resp)
+
+            # advance cursor
+            try:
+                since_id = data.get("next_since_id") or since_id
+            except Exception:
+                pass
+
+            items = []
+            try:
+                items = data.get("items") or []
+            except Exception:
+                items = []
+
+            if items:
+                payload = json.dumps(data, separators=(",", ":"), ensure_ascii=False)
+                yield f"event: items\ndata: {payload}\n\n"
+            else:
+                yield "event: ping\ndata: {}\n\n"
+
+            await asyncio.sleep(interval)
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")

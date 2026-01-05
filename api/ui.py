@@ -83,131 +83,159 @@ def _require_ui_key(req: Request) -> None:
 )
 @router.get("/feed", include_in_schema=False)
 def ui_feed():
-    # Minimal UI: shows live feed, polls every 1s, renders as table.
-    # Auth: relies on fg_api_key cookie set by /ui/token.
+    # Minimal HTML dashboard: SSE first, fallback to polling.
     return HTMLResponse(
-        """<!doctype html>
+        """
+<!doctype html>
 <html>
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>FrostGate Live Feed</title>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 16px; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 16px; }
     h1 { margin: 0 0 8px 0; }
-    .meta { color: #666; margin-bottom: 12px; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ddd; padding: 8px; font-size: 13px; }
-    th { background: #f5f5f5; text-align: left; position: sticky; top: 0; }
-    tr:hover { background: #fafafa; }
-    .pill { padding: 2px 8px; border-radius: 999px; border: 1px solid #ddd; display: inline-block; }
-    .sev-critical { font-weight: 700; }
-    .sev-high { font-weight: 700; }
-    .small { font-size: 12px; color: #777; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    #status { display:flex; align-items:center; gap:10px; font-size: 12px; color:#444; margin: 8px 0 12px; }
+    .pill { display:inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid #ccc; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { border-bottom: 1px solid #eee; padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { position: sticky; top: 0; background: #fff; z-index: 1; }
+    tr:hover td { background: #fafafa; }
+    .sev-critical,.sev-high { font-weight: 600; }
+    .muted { color:#666; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    details { cursor: pointer; }
+    summary { list-style: none; }
+    summary::-webkit-details-marker { display:none; }
   </style>
 </head>
 <body>
   <h1>FrostGate Live Feed</h1>
-  <div class="meta">
-    <span id="status" class="pill">starting…</span>
-    <span class="small">Polls <span class="mono">/feed/live</span> every 1s. Uses cookie auth.</span>
+  <div id="status">
+    <span class="pill" id="mode">connecting</span>
+    <span class="muted" id="meta">SSE: /feed/stream</span>
   </div>
 
   <table>
     <thead>
       <tr>
-        <th style="width:70px;">ID</th>
-        <th style="width:180px;">Time</th>
-        <th style="width:90px;">Severity</th>
-        <th style="width:120px;">Action</th>
-        <th style="width:260px;">Title</th>
-        <th>Summary</th>
-        <th style="width:140px;">Source</th>
+        <th>ID</th><th>Time</th><th>Severity</th><th>Action</th><th>Title</th><th>Summary</th><th>Source</th>
       </tr>
     </thead>
     <tbody id="rows"></tbody>
   </table>
 
 <script>
-let sinceId = null;
-const seen = new Set();
-const statusEl = document.getElementById("status");
 const rowsEl = document.getElementById("rows");
+const modeEl = document.getElementById("mode");
+const metaEl = document.getElementById("meta");
 
-function esc(s) {
-  return String(s ?? "")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;");
-}
+let seen = new Set();
+let since_id = null;
+let useSSE = true;
 
-function sevClass(sev) {
-  const s = (sev || "").toLowerCase();
-  if (s === "critical") return "sev-critical";
-  if (s === "high") return "sev-high";
-  return "";
-}
+function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtTime(t){ return t ? esc(t) : ""; }
 
-function renderItem(it) {
-  const id = it.id;
-  if (seen.has(id)) return;
-  seen.add(id);
+function addItems(items){
+  for (const it of items){
+    const id = it.id;
+    if (seen.has(id)) continue;
+    seen.add(id);
 
-  const tr = document.createElement("tr");
-  tr.innerHTML = `
-    <td class="mono">${esc(it.id)}</td>
-    <td class="mono">${esc(it.timestamp)}</td>
-    <td class="${sevClass(it.severity)}">${esc(it.severity)}</td>
-    <td>${esc(it.action_taken)}</td>
-    <td>${esc(it.title)}</td>
-    <td>${esc(it.summary)}</td>
-    <td>${esc(it.source)}</td>
-  `;
+    const sev = (it.severity || "").toLowerCase();
+    const sevCls = sev ? ("sev-" + sev) : "";
+    const title = esc(it.title);
+    const summary = esc(it.summary);
+    const source = esc(it.source);
+    const action = esc(it.action_taken);
+    const ts = fmtTime(it.timestamp);
 
-  rowsEl.prepend(tr);
-  while (rowsEl.children.length > 200) rowsEl.removeChild(rowsEl.lastChild);
-}
+    const diff = it.decision_diff ? JSON.stringify(it.decision_diff, null, 2) : "";
+    const meta = it.metadata ? JSON.stringify(it.metadata, null, 2) : "";
 
-async function tick() {
-  try {
-    const url = new URL("/feed/live", window.location.origin);
-    url.searchParams.set("limit", "50");
-    if (sinceId !== null) url.searchParams.set("since_id", String(sinceId));
-
-    const r = await fetch(url.toString(), { credentials: "include" });
-    if (!r.ok) {
-      statusEl.textContent = `HTTP ${r.status}`;
-      return;
-    }
-    const data = await r.json();
-    statusEl.textContent = "OK";
-    const items = data.items || [];
-    for (const it of items) renderItem(it);
-    if (data.next_since_id !== undefined && data.next_since_id !== null) {
-      sinceId = data.next_since_id;
-    }
-  } catch (e) {
-    statusEl.textContent = "ERR";
-    console.warn(e);
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="mono">${esc(id)}</td>
+      <td class="mono">${ts}</td>
+      <td class="${sevCls}">${esc(sev || "")}</td>
+      <td>${action}</td>
+      <td>${title}</td>
+      <td>
+        ${summary}
+        ${(diff || meta) ? `
+          <details>
+            <summary class="muted">details</summary>
+            ${diff ? `<pre class="mono">${esc(diff)}</pre>` : ""}
+            ${meta ? `<pre class="mono">${esc(meta)}</pre>` : ""}
+          </details>
+        ` : ""}
+      </td>
+      <td>${source}</td>
+    `;
+    rowsEl.prepend(tr);
   }
 }
 
-setInterval(tick, 1000);
-tick();
-</script>
-</body>
-</html>""",
-        headers={
-            "Cache-Control": "no-store, max-age=0",
-            "Pragma": "no-cache",
-            "X-Content-Type-Options": "nosniff",
-            "X-Frame-Options": "DENY",
-            "Referrer-Policy": "no-referrer",
-        },
-    )
+async function poll(){
+  try{
+    const url = `/feed/live?limit=50` + (since_id ? `&since_id=${since_id}` : "");
+    const r = await fetch(url, { credentials: "include" });
+    if (!r.ok) throw new Error("poll status " + r.status);
+    const data = await r.json();
+    if (data?.items) addItems(data.items);
+    if (data?.next_since_id) since_id = data.next_since_id;
+    modeEl.textContent = "polling";
+    modeEl.className = "pill";
+    metaEl.textContent = "Polling: /feed/live (cookie auth)";
+  }catch(e){
+    modeEl.textContent = "error";
+    metaEl.textContent = "Polling failed: " + e;
+  }
+}
 
+function startSSE(){
+  modeEl.textContent = "connecting";
+  metaEl.textContent = "SSE: /feed/stream (cookie auth)";
+  const url = `/feed/stream?limit=50&interval=1.0` + (since_id ? `&since_id=${since_id}` : "");
+  const es = new EventSource(url, { withCredentials: true });
+
+  es.addEventListener("items", (ev) => {
+    try{
+      const data = JSON.parse(ev.data);
+      if (data?.items) addItems(data.items);
+      if (data?.next_since_id) since_id = data.next_since_id;
+      modeEl.textContent = "sse";
+    }catch(e){
+      modeEl.textContent = "error";
+      metaEl.textContent = "SSE parse failed: " + e;
+    }
+  });
+
+  es.addEventListener("ping", () => {
+    modeEl.textContent = "sse";
+  });
+
+  es.onerror = () => {
+    // fallback to polling if SSE fails
+    if (useSSE){
+      useSSE = false;
+      try { es.close(); } catch(_){}
+      modeEl.textContent = "fallback";
+      metaEl.textContent = "SSE failed; falling back to polling.";
+      poll();
+      setInterval(poll, 1500);
+    }
+  };
+}
+
+startSSE();
+</script>
+
+</body>
+</html>
+"""
+    )
 @router.post(
     "/token",
     dependencies=[

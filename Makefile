@@ -1,5 +1,6 @@
 # =============================================================================
-# FrostGate Core - Makefile (production grade / single source of truth / no drift)
+# FrostGate Core - Makefile
+# production-grade / single source of truth / no drift
 # =============================================================================
 
 SHELL := /bin/bash
@@ -22,12 +23,12 @@ HOST     ?= 127.0.0.1
 PORT     ?= 8000
 BASE_URL ?= http://$(HOST):$(PORT)
 
-FG_ENV              ?= dev
-FG_SERVICE          ?= frostgate-core
-FG_AUTH_ENABLED     ?= 1
-FG_API_KEY          ?= supersecret
-FG_ENFORCEMENT_MODE ?= observe
-FG_DEV_EVENTS_ENABLED ?= 1
+FG_ENV                ?= dev
+FG_SERVICE            ?= frostgate-core
+FG_AUTH_ENABLED       ?= 1
+FG_API_KEY            ?= supersecret
+FG_ENFORCEMENT_MODE   ?= observe
+FG_DEV_EVENTS_ENABLED ?= 0
 
 # State / artifacts
 ARTIFACTS_DIR ?= artifacts
@@ -36,10 +37,6 @@ STATE_DIR     ?= state
 # "Pinned" state dir for local runs (logs, pid, db)
 FG_STATE_DIR   ?= $(CURDIR)/$(ARTIFACTS_DIR)
 FG_SQLITE_PATH ?= $(FG_STATE_DIR)/frostgate.db
-
-# Evidence/demo
-EVIDENCE_DIR ?= $(ARTIFACTS_DIR)/evidence
-SCENARIO     ?= spike
 
 # Legacy mirror (some scripts/tests may still read API_KEY)
 export API_KEY := $(FG_API_KEY)
@@ -56,6 +53,7 @@ FG_ENFORCEMENT_MODE="$(FG_ENFORCEMENT_MODE)" \
 FG_STATE_DIR="$(FG_STATE_DIR)" \
 FG_SQLITE_PATH="$(FG_SQLITE_PATH)" \
 FG_DEV_EVENTS_ENABLED="$(FG_DEV_EVENTS_ENABLED)" \
+FG_BASE_URL="$(BASE_URL)" \
 BASE_URL="$(BASE_URL)" \
 HOST="$(HOST)" \
 PORT="$(PORT)" \
@@ -85,28 +83,38 @@ help:
 	  "  make venv" \
 	  "" \
 	  "Fast gates (no server):" \
-	  "  make fg-audit-make      Makefile target collision audit" \
-	  "  make fg-contract        Contract linter" \
-	  "  make fg-fast            audit + contract + compile + unit" \
-	  "  make fg-check           alias for fg-fast" \
+	  "  make fg-audit-make       Makefile target collision audit" \
+	  "  make fg-contract         Contract linter" \
+	  "  make fg-compile          py_compile core entrypoints" \
+	  "  make fg-fast             audit + contract + compile + unit tests" \
 	  "" \
 	  "Local server:" \
-	  "  make fg-dev-up          start uvicorn (pid+log under artifacts/)" \
-	  "  make fg-dev-down        stop uvicorn" \
-	  "  make fg-dev-restart     restart uvicorn + wait for ready" \
-	  "  make fg-ready           wait /health/ready" \
-	  "  make fg-health          GET /health" \
-	  "  make fg-seed            POST /dev/seed (deterministic; requires dev enabled)" \
+	  "  make fg-up               start uvicorn (pid+log under artifacts/)" \
+	  "  make fg-down             stop uvicorn" \
+	  "  make fg-restart          restart uvicorn + wait for ready" \
+	  "  make fg-ready            wait /health/ready" \
+	  "  make fg-health           GET /health" \
+	  "  make fg-logs N=200        tail uvicorn log" \
+	  "  make fg-openapi-assert   assert key OpenAPI paths exist" \
 	  "" \
 	  "E2E:" \
-	  "  make fg-e2e-local       start -> wait -> seed -> pytest -m e2e_http -> stop" \
-	  "  make fg-e2e-http        run http tests against an already running server" \
+	  "  make fg-e2e-http         start -> wait -> pytest -m e2e_http -> stop" \
+	  "  make fg-e2e-local        fg-fast + fg-e2e-http" \
+	  "" \
+	  "Snapshot / No drift:" \
+	  "  make fg-snapshot         update context snapshot (LATEST)" \
+	  "  make fg-snapshot-all     full bundle snapshot" \
+	  "  make fg-boot             fg-fast + fg-e2e-local + fg-snapshot" \
+	  "" \
+	  "Diagnostics:" \
+	  "  make fg-doctor           environment + dependency + endpoint sanity" \
 	  "" \
 	  "CI / Guards:" \
-	  "  make ci                 fast lane + sidecar build + guardrails" \
+	  "  make ci                  opinionated fast CI lane" \
 	  "" \
 	  "Legacy aliases:" \
-	  "  make up-local / down-local / restart-local / ready-local / seed-dev / check / test" \
+	  "  make up-local/down-local/restart-local/logs-local/ready-local" \
+	  "  make check/test" \
 	  ""
 
 # =============================================================================
@@ -121,51 +129,60 @@ venv:
 # =============================================================================
 # Guardrails / audits
 # =============================================================================
-.PHONY: fg-audit-make fg-contract
+.PHONY: fg-audit-make fg-contract fg-compile
 fg-audit-make:
 	@./scripts/audit_make_targets.py
 
 fg-contract:
 	@./scripts/contract_lint.py
 
-# =============================================================================
-# Local server (pid-safe wrapper)
-# =============================================================================
-.PHONY: fg-dev-up fg-dev-down fg-dev-restart fg-logs fg-ready fg-health fg-seed fg-status
+fg-compile:
+	@$(PY) -m py_compile api/main.py api/feed.py api/dev_events.py
 
-fg-dev-up:
+# =============================================================================
+# Fast lane (no server)
+# =============================================================================
+.PHONY: fg-fast fg-check fg-test
+fg-fast: fg-audit-make fg-contract fg-compile
+	@$(PY) -m pytest -q
+
+# aliases (muscle memory)
+fg-check: fg-fast
+fg-test: fg-fast
+
+# =============================================================================
+# Local server (canonical)
+# =============================================================================
+.PHONY: fg-up fg-down fg-restart fg-ready fg-health fg-logs fg-status
+
+fg-up:
 	mkdir -p "$(FG_STATE_DIR)" "$(STATE_DIR)"
 	$(FG_RUN) ./scripts/uvicorn_local.sh start
 	$(MAKE) -s fg-ready
 
-fg-dev-down:
+fg-down:
 	$(FG_RUN) ./scripts/uvicorn_local.sh stop || true
 
-fg-dev-restart:
+fg-restart:
 	mkdir -p "$(FG_STATE_DIR)" "$(STATE_DIR)"
 	$(FG_RUN) ./scripts/uvicorn_local.sh restart
 	$(MAKE) -s fg-ready
 
-fg-logs:
-	$(FG_RUN) ./scripts/uvicorn_local.sh logs $(or $(N),200)
-
 fg-ready:
-	@set -euo pipefail; \
-	./scripts/uvicorn_local.sh check
+	@./scripts/uvicorn_local.sh check
 
 fg-health:
-	curl -fsS "$(BASE_URL)/health" | $(PY) -m json.tool
+	@curl -fsS "$(BASE_URL)/health" | $(PY) -m json.tool
 
-fg-seed:
-	@set -euo pipefail; \
-	curl -fsS -X POST -H "x-api-key: $(FG_API_KEY)" "$(BASE_URL)/dev/seed" | $(PY) -m json.tool >/dev/null; \
-	echo "✅ seeded"
+fg-logs:
+	@$(FG_RUN) ./scripts/uvicorn_local.sh logs $(or $(N),200)
 
 fg-status:
 	@set -euo pipefail; \
 	echo "BASE_URL=$(BASE_URL)"; \
+	echo "FG_ENV=$(FG_ENV)"; \
 	echo "FG_AUTH_ENABLED=$(FG_AUTH_ENABLED)"; \
-	echo "FG_DEV_EVENTS_ENABLED=$(FG_DEV_EVENTS_ENABLED)"; \
+	echo "FG_ENFORCEMENT_MODE=$(FG_ENFORCEMENT_MODE)"; \
 	echo "FG_STATE_DIR=$(FG_STATE_DIR)"; \
 	echo "FG_SQLITE_PATH=$(FG_SQLITE_PATH)"; \
 	test -f "$(FG_PIDFILE)" && echo "PID=$$(cat "$(FG_PIDFILE)")" || echo "PID=(none)"; \
@@ -174,59 +191,54 @@ fg-status:
 	curl -fsS "$(BASE_URL)/health/ready" 2>/dev/null || true; echo
 
 # =============================================================================
-# Tests (tiered)
+# OpenAPI reality checks (prevents Makefile lying)
 # =============================================================================
-.PHONY: fg-fast fg-check fg-test fg-e2e-local fg-e2e-http fg-compile
-
-fg-compile:
-	$(PY) -m py_compile api/main.py api/feed.py api/dev_events.py
-
-# Fast lane: no live server. Deterministic. Runs what CI should run by default.
-fg-fast: fg-audit-make fg-contract fg-compile
-	$(PY) -m pytest -q
-
-# alias (keeps existing muscle memory)
-fg-check: fg-fast
-fg-test: fg-fast
-
-# HTTP E2E: manage server lifecycle locally, then run only e2e_http tests
-.PHONY: fg-e2e-local
-fg-e2e-local: fg-fast
-	@bash -lc 'set -euo pipefail; \
-	mkdir -p "$(PWD)/artifacts" "$(PWD)/state"; \
-	export FG_ENV=dev; \
-	export FG_SERVICE=frostgate-core; \
-	export FG_AUTH_ENABLED=1; \
-	export FG_API_KEY=supersecret; \
-	export FG_ENFORCEMENT_MODE=observe; \
-	export FG_STATE_DIR="$(PWD)/artifacts"; \
-	export FG_SQLITE_PATH="$(PWD)/artifacts/frostgate.e2e.db"; \
-	export FG_DEV_EVENTS_ENABLED=1; \
-	export FG_BASE_URL=http://127.0.0.1:8000; \
-	export FG_HOST=127.0.0.1; \
-	export FG_PORT=8000; \
-	export BASE_URL=http://127.0.0.1:8000; \
-	export API_KEY=supersecret; \
-	export FG_STRICT_START=0; \
-	export FG_RESTART_IF_RUNNING=1; \
-	export FG_READY_REQUIRED=$${FG_READY_REQUIRED:-1}; \
-	trap "./scripts/uvicorn_local.sh stop >/dev/null 2>&1 || true" EXIT; \
-	./scripts/uvicorn_local.sh start; \
-	./scripts/uvicorn_local.sh openapi; \
-	$(MAKE) -s fg-ready; \
-	$(MAKE) -s fg-seed; \
-	$(PY) -m pytest -q -m e2e_http; \
-	'
-
-# Explicitly run http e2e against an already-running server (no start/stop).
-fg-e2e-http:
-	@$(PY) -m pytest -q -m e2e_http
-
+.PHONY: fg-openapi-assert
+fg-openapi-assert: fg-up
+	@set -euo pipefail; \
+	if ! command -v jq >/dev/null 2>&1; then \
+	  echo "❌ jq is required for fg-openapi-assert"; \
+	  exit 1; \
+	fi; \
+	curl -fsS "$(BASE_URL)/openapi.json" | jq -e '.paths | has("/health") and has("/health/ready") and has("/feed/live") and (has("/defend") or has("/v1/defend")) and has("/decisions") and has("/stats")' >/dev/null; \
+	echo "✅ OpenAPI core endpoints present"; \
+	$(MAKE) -s fg-down
 
 # =============================================================================
-# CI / Guards (keep these opinionated)
+# HTTP E2E (managed server lifecycle)
 # =============================================================================
-.PHONY: ci-tools guard-no-8000 guard-no-pytest-detection build-sidecar ci
+.PHONY: fg-e2e-http fg-e2e-local
+fg-e2e-http: fg-up
+	@FG_E2E_HTTP=1 FG_BASE_URL="$(BASE_URL)" FG_API_KEY="$(FG_API_KEY)" \
+		$(PY) -m pytest -q -m e2e_http
+	@$(MAKE) -s fg-down
+
+fg-e2e-local: fg-fast fg-e2e-http
+
+# =============================================================================
+# Snapshot / No drift
+# =============================================================================
+.PHONY: fg-snapshot fg-snapshot-all fg-boot
+fg-snapshot:
+	@bash ./scripts/snapshot_context.sh
+
+fg-snapshot-all:
+	@bash ./scripts/snapshot_all.sh
+
+fg-boot: fg-fast fg-e2e-local fg-snapshot
+	@echo "✅ Boot complete. Snapshot updated."
+
+# =============================================================================
+# Diagnostics
+# =============================================================================
+.PHONY: fg-doctor
+fg-doctor:
+	@bash scripts/fg_doctor.sh
+
+# =============================================================================
+# CI / Guards (opinionated)
+# =============================================================================
+.PHONY: ci-tools guard-no-hardcoded-8000 guard-no-pytest-detection build-sidecar ci
 
 ci-tools:
 	@command -v rg >/dev/null || (echo "❌ rg missing" && exit 1)
@@ -234,7 +246,7 @@ ci-tools:
 	@command -v sqlite3 >/dev/null || (echo "❌ sqlite3 missing" && exit 1)
 	@echo "✅ CI tools present"
 
-guard-no-8000:
+guard-no-hardcoded-8000:
 	@rg -n "127\.0\.0\.1:8000|:8000\b" scripts api tests backend 2>/dev/null && \
 	 (echo "❌ Hardcoded :8000 found. Use HOST/PORT/BASE_URL." && exit 1) || \
 	 echo "✅ No hardcoded :8000 found"
@@ -247,20 +259,22 @@ guard-no-pytest-detection:
 build-sidecar:
 	@cd supervisor-sidecar && go build ./...
 
-# CI runs fast lane by default. HTTP e2e should be a separate workflow/job.
-ci: ci-tools guard-no-8000 guard-no-pytest-detection fg-fast build-sidecar
+# Default CI lane: fast, deterministic. HTTP e2e can be separate job/workflow.
+ci: ci-tools guard-no-hardcoded-8000 guard-no-pytest-detection fg-fast build-sidecar
 
 # =============================================================================
-# Legacy aliases (keep your docs and fingers intact)
+# Legacy aliases (keep docs/fingers intact)
 # =============================================================================
-.PHONY: up-local down-local restart-local logs-local ready-local seed-dev health check test
+.PHONY: up-local down-local restart-local logs-local ready-local health check test
 
-up-local: fg-dev-up
-down-local: fg-dev-down
-restart-local: fg-dev-restart
+up-local: fg-up
+down-local: fg-down
+restart-local: fg-restart
 logs-local: fg-logs
 ready-local: fg-ready
-seed-dev: fg-seed
 health: fg-health
-check: fg-check
+check: fg-fast
 test: fg-test
+.PHONY: fg-ui-sse
+fg-ui-sse:
+	./scripts/apply_ui_sse_everything.sh || true
