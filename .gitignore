@@ -40,8 +40,11 @@ logs/
 *.log
 *.tmp
 
-# accidental json dumps / exports
-*.json
+# accidental json dumps / exports (only where they belong)
+artifacts/**/*.json
+state/**/*.json
+agent_queue/**/*.json
+
 
 # local state
 state/

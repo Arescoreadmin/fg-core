@@ -2,15 +2,14 @@
 from __future__ import annotations
 
 import os
-from typing import Optional, Any, Dict
+from typing import Optional
 
-from fastapi import Depends, HTTPException, Request, Header, status
-from api.auth_scopes import verify_api_key_raw
-from sqlalchemy.orm import Session
-from api.db import get_db
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import APIKeyHeader
+from sqlalchemy.orm import Session
 
-# ---------- Optional tenant registry hook ----------
+from api.auth_scopes import verify_api_key_raw
+from api.db import get_db
 
 try:
     from tools.tenants.registry import get_tenant as _registry_get_tenant
@@ -24,8 +23,6 @@ def get_tenant(tenant_id: str):
     return _registry_get_tenant(tenant_id)
 
 
-# ---------- Global API key (FG_API_KEY) ----------
-
 API_KEY_HEADER = APIKeyHeader(name="x-api-key", auto_error=False)
 
 
@@ -33,30 +30,64 @@ def _get_expected_api_key() -> str:
     return os.getenv("FG_API_KEY", "supersecret")
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    v = os.getenv(name)
+    if v is None:
+        return default
+    return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def auth_enabled() -> bool:
+    if os.getenv("FG_AUTH_ENABLED") is not None:
+        return _env_bool("FG_AUTH_ENABLED", default=False)
+    return bool(os.getenv("FG_API_KEY"))
+
+
+def _ui_cookie_name() -> str:
+    return os.getenv("FG_UI_COOKIE_NAME", "fg_api_key")
+
+
+def _extract_key(request: Request, x_api_key: Optional[str]) -> Optional[str]:
+    # Header wins
+    if x_api_key and str(x_api_key).strip():
+        return str(x_api_key).strip()
+
+    # Cookie fallback (HttpOnly cookie, browser sends it; JS cannot read it)
+    ck = request.cookies.get(_ui_cookie_name())
+    if ck and str(ck).strip():
+        return str(ck).strip()
+
+    return None
+
+
 async def verify_api_key(
-    x_api_key: str | None = None,
+    request: Request,
+    x_api_key: Optional[str] = Depends(API_KEY_HEADER),
     db: Session = Depends(get_db),
 ) -> None:
-    """
-    Accept either:
-      - legacy env key (FG_API_KEY / whatever _get_expected_api_key reads)
-      - DB-backed API key (ApiKey.key_hash == hash_api_key(raw))
-    """
-    expected = _get_expected_api_key()
+    if not auth_enabled():
+        return
 
-    if x_api_key is None or not str(x_api_key).strip():
+    raw = _extract_key(request, x_api_key)
+    if raw is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing API key")
 
-    raw = str(x_api_key).strip()
+    expected = _get_expected_api_key()
 
-    # 1) env legacy path
+    # Env key fast path
     if expected and raw == expected:
         return
 
-    # 2) DB-backed path
+    # DB-backed key path
     try:
         verify_api_key_raw(raw_key=raw, db=db, required_scopes=None)
         return
     except HTTPException:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API key")
 
+
+def require_status_auth(
+    _: Request,
+    __: None = Depends(verify_api_key),
+) -> None:
+    return
