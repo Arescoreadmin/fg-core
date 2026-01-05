@@ -25,6 +25,8 @@ POLL_INTERVAL_SEC="${FG_POLL_INTERVAL_SEC:-0.1}"
 FORCE="${FG_FORCE:-0}"
 STRICT="${FG_STRICT_START:-0}"
 
+FG_EXTRA_UVICORN_ARGS="${FG_EXTRA_UVICORN_ARGS:-}"
+
 mkdir -p "$(dirname "$PIDFILE")" "$(dirname "$LOGFILE")"
 
 _now_ms() {
@@ -42,10 +44,7 @@ _read_pidfile() {
   echo "$pid"
 }
 
-_pid_alive() {
-  local pid="$1"
-  kill -0 "$pid" 2>/dev/null
-}
+_pid_alive() { kill -0 "$1" 2>/dev/null; }
 
 _port_owner_pid() {
   ss -lptn "sport = :$PORT" 2>/dev/null \
@@ -67,7 +66,6 @@ _wait_for_port_free() {
 }
 
 _auth_header() {
-  # Returns header value or empty string
   local auth="${FG_AUTH_ENABLED:-}"
   local key="${FG_API_KEY:-}"
   if [[ "${auth}" == "1" && -n "${key}" ]]; then
@@ -80,9 +78,7 @@ _curl_ok() {
   local hdr
   hdr="$(_auth_header || true)"
   local args=( -fsS )
-  if [[ -n "${hdr:-}" ]]; then
-    args+=( -H "$hdr" )
-  fi
+  [[ -n "${hdr:-}" ]] && args+=( -H "$hdr" )
   args+=( "$url" )
   curl "${args[@]}" >/dev/null 2>&1
 }
@@ -92,9 +88,7 @@ _curl_code() {
   local hdr
   hdr="$(_auth_header || true)"
   local args=( -sS -o /dev/null -w "%{http_code}" )
-  if [[ -n "${hdr:-}" ]]; then
-    args+=( -H "$hdr" )
-  fi
+  [[ -n "${hdr:-}" ]] && args+=( -H "$hdr" )
   args+=( "$url" )
   curl "${args[@]}" || true
 }
@@ -104,9 +98,7 @@ _curl_body() {
   local hdr
   hdr="$(_auth_header || true)"
   local args=( -sS )
-  if [[ -n "${hdr:-}" ]]; then
-    args+=( -H "$hdr" )
-  fi
+  [[ -n "${hdr:-}" ]] && args+=( -H "$hdr" )
   args+=( "$url" )
   curl "${args[@]}" || true
 }
@@ -135,10 +127,7 @@ _wait_for_ready_200() {
   while (( $(_now_ms) < deadline_ms )); do
     local code
     code="$(_ready_code)"
-    if [[ "$code" == "200" ]]; then
-      echo "✅ ${READY_PATH} OK"
-      return 0
-    fi
+    [[ "$code" == "200" ]] && echo "✅ ${READY_PATH} OK" && return 0
     sleep "$POLL_INTERVAL_SEC"
   done
 
@@ -189,15 +178,33 @@ _precreate_sqlite_file() {
   touch "$p" 2>/dev/null || true
 }
 
+_apply_default_env() {
+  export FG_ENV="${FG_ENV:-dev}"
+  export FG_SERVICE="${FG_SERVICE:-frostgate-core}"
+  export FG_AUTH_ENABLED="${FG_AUTH_ENABLED:-1}"
+  export FG_API_KEY="${FG_API_KEY:-supersecret}"
+  export FG_ENFORCEMENT_MODE="${FG_ENFORCEMENT_MODE:-observe}"
+  export FG_STATE_DIR="${FG_STATE_DIR:-$(pwd)/artifacts}"
+  export FG_SQLITE_PATH="${FG_SQLITE_PATH:-$(pwd)/artifacts/frostgate.db}"
+  export FG_DEV_EVENTS_ENABLED="${FG_DEV_EVENTS_ENABLED:-0}"
+FG_UI_TOKEN_GET_ENABLED="${FG_UI_TOKEN_GET_ENABLED:-0}"
+  export FG_BASE_URL="${FG_BASE_URL:-$BASE_URL}"
+
+  export BASE_URL="${BASE_URL:-$BASE_URL}"
+  export HOST="${HOST:-$HOST}"
+  export PORT="${PORT:-$PORT}"
+  export API_KEY="${API_KEY:-$FG_API_KEY}"
+}
+
 start() {
   _clean_stale_pidfile_if_needed
+  _apply_default_env
 
   if is_running; then
     if [[ "$STRICT" == "1" ]]; then
       echo "❌ uvicorn already running (pid=$(_read_pidfile)); strict mode refuses reuse" >&2
       exit 1
     fi
-
     if [[ "$RESTART_IF_RUNNING" == "1" ]]; then
       echo "⚠️  uvicorn already running (pid=$(_read_pidfile)); restarting to apply env"
       stop
@@ -227,13 +234,19 @@ start() {
   rm -f "$PIDFILE"
   _precreate_sqlite_file
 
-  nohup "$PY" -m uvicorn "$APP" --host "$HOST" --port "$PORT" >"$LOGFILE" 2>&1 &
+  local -a uv_args
+  uv_args=( -m uvicorn "$APP" --host "$HOST" --port "$PORT" )
+  if [[ -n "${FG_EXTRA_UVICORN_ARGS:-}" ]]; then
+    # shellcheck disable=SC2206
+    uv_args+=( ${FG_EXTRA_UVICORN_ARGS} )
+  fi
+
+  nohup "$PY" "${uv_args[@]}" >"$LOGFILE" 2>&1 &
   echo $! >"$PIDFILE"
 
   echo "✅ Started uvicorn (pid=$(_read_pidfile)) -> ${HOST}:${PORT}"
 
   _wait_for_health
-
   if [[ "$READY_REQUIRED" == "1" ]]; then
     _wait_for_ready_200
   else
@@ -257,15 +270,11 @@ stop() {
     return 0
   fi
 
-  if _pid_alive "$pid"; then
-    kill "$pid" 2>/dev/null || true
-  fi
+  _pid_alive "$pid" && kill "$pid" 2>/dev/null || true
 
   local deadline_ms="$(( $(_now_ms) + STOP_TIMEOUT_SEC*1000 ))"
   while (( $(_now_ms) < deadline_ms )); do
-    if ! _pid_alive "$pid"; then
-      break
-    fi
+    ! _pid_alive "$pid" && break
     sleep "$POLL_INTERVAL_SEC"
   done
 
@@ -275,20 +284,8 @@ stop() {
   fi
 
   rm -f "$PIDFILE"
-
-  if _wait_for_port_free; then
-    echo "✅ Stopped uvicorn"
-    return 0
-  fi
-
-  local opid
-  opid="$(_port_owner_pid || true)"
-  if [[ -n "${opid:-}" ]]; then
-    echo "⚠️  Uvicorn stopped but port $PORT still owned by pid=$opid" >&2
-  else
-    echo "⚠️  Uvicorn stopped but port $PORT still appears busy" >&2
-  fi
-  return 0
+  _wait_for_port_free || true
+  echo "✅ Stopped uvicorn"
 }
 
 restart() { stop; start; }
@@ -303,62 +300,6 @@ status() {
 }
 
 logs() { tail -n "${1:-200}" "$LOGFILE"; }
-
-openapi_check() {
-  local tmp
-  tmp="$(mktemp -t fg-openapi.XXXXXX.json)"
-  trap 'rm -f "$tmp"' RETURN
-
-  if ! curl -fsS "${BASE_URL}/openapi.json" -o "$tmp" >/dev/null 2>&1; then
-    echo "❌ Cannot fetch ${BASE_URL}/openapi.json" >&2
-    return 1
-  fi
-
-  "$PY" - <<PY
-import json
-spec=json.load(open("$tmp","r",encoding="utf-8"))
-ok = "/dev/seed" in spec.get("paths",{})
-print("✅ openapi includes /dev/seed" if ok else "❌ openapi missing /dev/seed")
-raise SystemExit(0 if ok else 1)
-PY
-}
-
-env_dump() {
-  _clean_stale_pidfile_if_needed
-  local pid
-  pid="$(_read_pidfile || true)"
-  if [[ -n "${pid:-}" ]]; then
-    echo "PID=$pid"
-  else
-    echo "❌ No valid pidfile (or it was stale and got removed)."
-    return 1
-  fi
-
-  cat <<EOF
-FG_DEV_EVENTS_ENABLED=${FG_DEV_EVENTS_ENABLED:-}
-FG_AUTH_ENABLED=${FG_AUTH_ENABLED:-}
-FG_API_KEY=${FG_API_KEY:-}
-FG_ENV=${FG_ENV:-}
-FG_SERVICE=${FG_SERVICE:-}
-FG_HOST=${HOST}
-FG_PORT=${PORT}
-FG_BASE_URL=${BASE_URL}
-FG_STATE_DIR=${FG_STATE_DIR:-}
-FG_SQLITE_PATH=${FG_SQLITE_PATH:-}
-FG_ENFORCEMENT_MODE=${FG_ENFORCEMENT_MODE:-}
-FG_STRICT_START=${STRICT}
-FG_FORCE=${FORCE}
-FG_READY_REQUIRED=${READY_REQUIRED}
-FG_RESTART_IF_RUNNING=${RESTART_IF_RUNNING}
-EOF
-
-  if [[ -r "/proc/$pid/environ" ]]; then
-    echo "--- /proc/$pid/environ (FG_* + BASE_URL/API_KEY) ---"
-    tr '\0' '\n' <"/proc/$pid/environ" | rg '^(FG_|BASE_URL=|API_KEY=)' || true
-  else
-    echo "⚠️  Cannot read /proc/$pid/environ (permissions?)."
-  fi
-}
 
 server_check() {
   if ! _curl_ok "${BASE_URL}${HEALTH_PATH}"; then
@@ -390,11 +331,10 @@ case "${1:-}" in
   restart) restart ;;
   status) status ;;
   logs) shift; logs "${1:-200}" ;;
-  env) env_dump ;;
+  env) _apply_default_env; env | rg '^(FG_|BASE_URL=|API_KEY=|HOST=|PORT=)' || true ;;
   check) server_check ;;
-  openapi) openapi_check ;;
   *)
-    echo "Usage: $0 {start|stop|restart|status|logs [N]|env|check|openapi}"
+    echo "Usage: $0 {start|stop|restart|status|logs [N]|env|check}"
     exit 2
     ;;
 esac

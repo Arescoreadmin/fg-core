@@ -1,164 +1,108 @@
 from __future__ import annotations
 
 import os
-from typing import Iterable, Set, Tuple
+from typing import Callable, Optional, Set
 
-from fastapi import Cookie, Depends, Header, HTTPException, Request
-from sqlalchemy.exc import OperationalError
-
-from api.db import get_db
+from fastapi import Depends, Header, HTTPException, Request
 
 ERR_INVALID = "Invalid or missing API key"
+UI_COOKIE_NAME = os.getenv("FG_UI_COOKIE_NAME", "fg_api_key")
 
 
-def _truthy(v: str | None, default: bool = False) -> bool:
+def _env_bool(name: str, default: bool = False) -> bool:
+    v = os.getenv(name)
     if v is None:
         return default
-    return v.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-def _split_scopes(scopes_csv: str | None) -> Set[str]:
-    if not scopes_csv:
-        return set()
-    return {s.strip() for s in scopes_csv.split(",") if s.strip()}
+def _auth_enabled() -> bool:
+    # Explicit flag wins. Else: presence of FG_API_KEY implies auth enabled.
+    if os.getenv("FG_AUTH_ENABLED") is not None:
+        return _env_bool("FG_AUTH_ENABLED", default=False)
+    return bool(os.getenv("FG_API_KEY"))
 
 
-def _has_scopes(granted: Set[str], required: Iterable[str]) -> bool:
-    if "*" in granted:
-        return True
-    req = set(required)
-    return req.issubset(granted)
+def _expected_global_key() -> str:
+    return os.getenv("FG_API_KEY") or "supersecret"
 
 
-def _auth_enabled_for_request(request: Request) -> bool:
-    """
-    Priority:
-      1) request.app.state.auth_enabled (if set)
-      2) FG_AUTH_ENABLED env override (only if explicitly set)
-      3) fallback: enabled iff FG_API_KEY exists
-    """
-    st = getattr(request.app, "state", None)
-    state_val = getattr(st, "auth_enabled", None) if st is not None else None
-
-    base = bool(state_val) if state_val is not None else bool(os.getenv("FG_API_KEY"))
-
-    if "FG_AUTH_ENABLED" in os.environ:
-        return _truthy(os.getenv("FG_AUTH_ENABLED"), default=base)
-    return base
+def _clean(v: Optional[str]) -> Optional[str]:
+    if v is None:
+        return None
+    vv = str(v).strip()
+    return vv if vv else None
 
 
-def verify_api_key_raw(api_key: str) -> Tuple[bool, Set[str]]:
-    """
-    Returns (ok, scopes).
-    - accepts "supersecret" (dev/test)
-    - accepts FG_API_KEY (global key)
-    - otherwise DB-backed keys if available
-    """
-    if not api_key:
-        return False, set()
+def _extract_key(req: Request, header_value: Optional[str] = None) -> Optional[str]:
+    # 1) Explicit Header injection (fast + clean)
+    k = _clean(header_value)
+    if k:
+        return k
 
-    if api_key == "supersecret":
-        return True, {"*"}  # dev/test wildcard
+    # 2) Raw headers (case-insensitive in Starlette, but be explicit anyway)
+    k = _clean(req.headers.get("x-api-key")) or _clean(req.headers.get("X-API-Key"))
+    if k:
+        return k
 
-    expected = os.getenv("FG_API_KEY")
-    if expected and api_key == expected:
-        return True, {"*"}
+    # 3) Cookie (UI flow)
+    k = _clean(req.cookies.get(UI_COOKIE_NAME))
+    if k:
+        return k
 
-    # Try DB-backed keys
-    try:
-        from api.db_models import ApiKey, hash_api_key
-    except Exception:
-        return False, set()
+    # 4) Query params (dev convenience)
+    qp = req.query_params
+    k = _clean(qp.get("api_key")) or _clean(qp.get("key"))
+    if k:
+        return k
 
-    key_hash = hash_api_key(api_key)
-
-    try:
-        db = next(get_db())
-        row = (
-            db.query(ApiKey)
-            .filter(ApiKey.key_hash == key_hash)
-            .filter(ApiKey.enabled.is_(True))
-            .first()
-        )
-        if not row:
-            return False, set()
-        return True, _split_scopes(row.scopes_csv)
-    except (OperationalError, Exception):
-        return False, set()
-
-
-def _get_candidate_key(
-    x_api_key: str | None,
-    cookie_key: str | None,
-) -> str | None:
-    # Header wins, cookie fallback
-    if x_api_key and x_api_key.strip():
-        return x_api_key.strip()
-    if cookie_key and cookie_key.strip():
-        return cookie_key.strip()
     return None
+
+
+def require_api_key_always(
+    request: Request,
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> str:
+    """
+    Enforce API key when auth is enabled.
+    Accepts:
+      - Header: X-API-Key
+      - Cookie: FG_UI_COOKIE_NAME (default fg_api_key)
+      - Query: api_key / key (dev convenience)
+    """
+    if not _auth_enabled():
+        return "auth_disabled"
+
+    got = _extract_key(request, x_api_key)
+    if not got:
+        raise HTTPException(status_code=401, detail=ERR_INVALID)
+
+    if str(got) != str(_expected_global_key()):
+        raise HTTPException(status_code=401, detail=ERR_INVALID)
+
+    return str(got)
 
 
 def verify_api_key(
     request: Request,
     x_api_key: str | None = Header(default=None, alias="X-API-Key"),
-    fg_api_key: str | None = Cookie(default=None, alias=None),
-) -> Set[str]:
+) -> str:
+    # Back-compat name used in other modules (e.g. api/decisions.py)
+    return require_api_key_always(request, x_api_key)
+
+
+def require_scopes(*scopes: str) -> Callable[..., None]:
     """
-    Dependency: returns granted scopes or raises 401.
-    Enforces only when auth is enabled.
+    Scope enforcement stub.
+    Right now: key must be valid (when auth is enabled). Scopes are accepted.
+    Later: plug into tenant registry / RBAC / token scope sets.
     """
-    enabled = _auth_enabled_for_request(request)
-    if not enabled:
-        return {"*"}
+    needed: Set[str] = {s.strip() for s in scopes if str(s).strip()}
 
-    # Cookie name is configurable; default "fg_api_key"
-    cookie_name = os.getenv("FG_UI_COOKIE_NAME", "fg_api_key")
-    cookie_val = request.cookies.get(cookie_name) or fg_api_key
-
-    key = _get_candidate_key(x_api_key, cookie_val)
-    if not key:
-        raise HTTPException(status_code=401, detail=ERR_INVALID)
-
-    ok, scopes = verify_api_key_raw(key)
-    if not ok:
-        raise HTTPException(status_code=401, detail=ERR_INVALID)
-
-    return scopes
-
-
-def verify_api_key_always(
-    request: Request,
-    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
-    fg_api_key: str | None = Cookie(default=None, alias=None),
-) -> Set[str]:
-    """
-    ALWAYS enforce a valid key. Header or cookie accepted.
-    """
-    cookie_name = os.getenv("FG_UI_COOKIE_NAME", "fg_api_key")
-    cookie_val = request.cookies.get(cookie_name) or fg_api_key
-
-    key = _get_candidate_key(x_api_key, cookie_val)
-    if not key:
-        raise HTTPException(status_code=401, detail=ERR_INVALID)
-
-    ok, scopes = verify_api_key_raw(key)
-    if not ok:
-        raise HTTPException(status_code=401, detail=ERR_INVALID)
-    return scopes
-
-
-def require_api_key_always(scopes: Set[str] = Depends(verify_api_key_always)) -> None:
-    return None
-
-
-def require_api_key(scopes: Set[str] = Depends(verify_api_key)) -> None:
-    return None
-
-
-def require_scopes(*required_scopes: str):
-    def _dep(scopes: Set[str] = Depends(verify_api_key)) -> None:
-        if not _has_scopes(scopes, required_scopes):
-            raise HTTPException(status_code=403, detail="forbidden")
+    def _dep(_: str = Depends(require_api_key_always)) -> None:
+        # Placeholder: all scopes allowed once authenticated.
+        # Keep `needed` to make future implementation trivial.
+        _ = needed
         return None
+
     return _dep

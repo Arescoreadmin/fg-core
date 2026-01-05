@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import verify_api_key
+from api.auth_scopes import verify_api_key, require_api_key_always
 from api.db import get_db
 from api.db_models import DecisionRecord
 from api.decisions import _loads_json_text
