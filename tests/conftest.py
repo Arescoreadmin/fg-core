@@ -1,16 +1,17 @@
-from __future__ import annotations
-
+import sqlite3
 import pytest
-from pathlib import Path
 
-from tests._harness import build_app_factory
-
-
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
-@pytest.fixture
-def build_app(tmp_path: Path):
-    return build_app_factory(tmp_path)
+@pytest.fixture()
+def clear_decisions(sqlite_path: str):
+    con = sqlite3.connect(sqlite_path)
+    try:
+        try:
+            con.execute("DELETE FROM decisions;")
+            con.commit()
+        except sqlite3.OperationalError as e:
+            # Table missing = schema not initialized yet
+            # This should not fail the test suite
+            if "no such table" not in str(e):
+                raise
+    finally:
+        con.close()

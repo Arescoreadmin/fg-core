@@ -30,14 +30,15 @@ def sqlite_path() -> str:
 
 @pytest.fixture()
 def clear_decisions(sqlite_path: str):
-    """
-    Hard reset only the decisions table between tests.
-    Uses sqlite directly for speed and determinism.
-    """
     con = sqlite3.connect(sqlite_path)
     try:
-        con.execute("DELETE FROM decisions;")
-        con.commit()
+        try:
+            con.execute("DELETE FROM decisions;")
+            con.commit()
+        except sqlite3.OperationalError as e:
+            # Table missing = schema not initialized yet
+            # This should not fail the test suite
+            if "no such table" not in str(e):
+                raise
     finally:
         con.close()
-    yield
