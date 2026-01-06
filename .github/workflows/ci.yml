@@ -181,7 +181,6 @@ jobs:
       BASE_URL: http://127.0.0.1:8001
       SCENARIO: spike
       MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
-      # Prefer committing keys/minisign.pub; otherwise use secret:
       MINISIGN_PUBLIC_KEY: ${{ secrets.MINISIGN_PUBLIC_KEY }}
 
     steps:
