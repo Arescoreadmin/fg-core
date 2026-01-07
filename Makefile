@@ -352,6 +352,26 @@ itest-local:
 	./scripts/smoke_auth.sh; \
 	$(MAKE) test-integration BASE_URL="$${BASE_URL}"
 
+	.PHONY: no-drift no-drift-check-clean
+
+no-drift: guard-stream-markers
+	@echo "== no-drift: unit tests =="
+	@python -m pytest -q
+	@echo "== no-drift: integration + smoke =="
+	@$(MAKE) itest-local
+	@$(MAKE) no-drift-check-clean
+	@echo "✅ no-drift OK"
+
+no-drift-check-clean:
+	@echo "== no-drift: git clean check =="
+	@st="$$(git status --porcelain)"; \
+	if [ -n "$$st" ]; then \
+		echo "❌ Working tree is dirty after no-drift run:"; \
+		echo "$$st"; \
+		exit 1; \
+	fi
+
+
 
 up-local: fg-up
 down-local: fg-down
