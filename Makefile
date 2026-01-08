@@ -352,7 +352,9 @@ ready-local: fg-ready
 health: fg-health
 check: fg-fast
 test: fg-fast
+
 .PHONY: test-clean
 test-clean:
+	npx markdownlint CONTRACT.md
 	python -m py_compile api/db.py api/auth_scopes.py tests/conftest.py backend/tests/conftest.py
 	env -u FG_DB_URL -u FG_SQLITE_PATH -u FG_STATE_DIR -u FG_ENV pytest -q
