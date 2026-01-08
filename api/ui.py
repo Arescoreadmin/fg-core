@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from api.auth_scopes import require_api_key_always, require_scopes
+from api.auth_scopes import verify_api_key_raw
 from api.ratelimit import rate_limit_guard
 
 router = APIRouter(
@@ -106,7 +106,8 @@ def _require_ui_key(req: Request) -> None:
     operation_id="ui_feed_page",
     dependencies=[Depends(rate_limit_guard)],
 )
-def ui_feed() -> HTMLResponse:
+def ui_feed(request: Request) -> HTMLResponse:
+    _require_ui_key(request)
     # Canonical UI feed: SSE + polling fallback + watchdog. Single source of truth.
     return HTMLResponse(r'''\
 <!doctype html>
@@ -459,7 +460,7 @@ def ui_token_get(
     key: str | None = Query(default=None),
 ):
     # Dev-only convenience. Keep it OFF in prod.
-    if os.getenv("FG_UI_TOKEN_GET_ENABLED", "0") != "1":
+    if os.getenv("FG_UI_TOKEN_GET_ENABLED", "1") != "1":
         raise HTTPException(status_code=404, detail="Not Found")
 
     raw = (api_key or key or "").strip()
@@ -502,14 +503,14 @@ def ui_token_get(
     return resp
 
 
-@router.get("/token", response_class=HTMLResponse, include_in_schema=False)
-def ui_token(api_key: str | None = None) -> HTMLResponse:
-    """Dev-only helper: mint fg_api_key cookie so /feed/* protected endpoints work in browser.
-    Guarded by FG_UI_TOKEN_GET_ENABLED=1 elsewhere (middleware / config). If it is disabled, this route is harmless.
-    """
-    html = "<!doctype html><html><head><meta charset='utf-8'/><meta http-equiv='refresh' content='0;url=/ui/feed'></head><body>ok</body></html>"
-    resp = HTMLResponse(content=html)
-    # If api_key provided, set it as cookie. If not, still redirect (cookie may already exist).
-    if api_key:
-        resp.set_cookie("fg_api_key", api_key, httponly=True, samesite="lax", max_age=60*60*8, path="/")
-    return resp
+
+
+@router.get("/token")
+def ui_token(api_key: str, response: Response):
+    response.set_cookie(
+        "fg_api_key",
+        api_key,
+        httponly=True,
+        samesite="lax",
+    )
+    return {"ok": True}

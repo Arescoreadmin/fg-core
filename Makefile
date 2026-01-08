@@ -23,27 +23,34 @@ HOST     ?= 127.0.0.1
 PORT     ?= 8000
 BASE_URL ?= http://$(HOST):$(PORT)
 
-FG_ENV                ?= dev
-FG_SERVICE            ?= frostgate-core
-FG_AUTH_ENABLED       ?= 1
-FG_API_KEY            ?= supersecret
-FG_ENFORCEMENT_MODE   ?= observe
-FG_DEV_EVENTS_ENABLED ?= 0
+FG_ENV                  ?= dev
+FG_SERVICE              ?= frostgate-core
+FG_AUTH_ENABLED         ?= 1
+FG_API_KEY              ?= supersecret
+FG_ENFORCEMENT_MODE     ?= observe
+FG_DEV_EVENTS_ENABLED   ?= 0
 FG_UI_TOKEN_GET_ENABLED ?= 1
+
+# Integration defaults (kept separate on purpose)
+ITEST_HOST ?= 127.0.0.1
+ITEST_PORT ?= 8001
+ITEST_BASE_URL ?= http://$(ITEST_HOST):$(ITEST_PORT)
+ITEST_DB ?= $(CURDIR)/state/frostgate-itest.db
 
 # State / artifacts
 ARTIFACTS_DIR ?= artifacts
 STATE_DIR     ?= state
 
-# "Pinned" state dir for local runs (logs, pid, db)
+# Canonical state dir for local runs (logs, pid, db)
 FG_STATE_DIR   ?= $(CURDIR)/$(ARTIFACTS_DIR)
 FG_SQLITE_PATH ?= $(FG_STATE_DIR)/frostgate.db
 
-# Legacy mirror (some scripts/tests may still read API_KEY)
+# Legacy mirror (some scripts/tests read API_KEY)
 export API_KEY := $(FG_API_KEY)
 
 # -----------------------------------------------------------------------------
 # Centralized env injector (single source of truth)
+# Use: $(FG_RUN) <command>
 # -----------------------------------------------------------------------------
 define FG_RUN
 FG_ENV="$(FG_ENV)" \
@@ -85,42 +92,28 @@ help:
 	  "  make venv" \
 	  "" \
 	  "Fast gates (no server):" \
-	  "  make fg-audit-make       Makefile target collision audit" \
-	  "  make fg-contract         Contract linter" \
-	  "  make fg-compile          py_compile core entrypoints" \
-	  "  make fg-fast             audit + contract + compile + unit tests" \
+	  "  make fg-audit-make      Makefile target collision audit" \
+	  "  make fg-contract        Contract linter" \
+	  "  make fg-compile         py_compile core entrypoints" \
+	  "  make fg-fast            audit + contract + compile + unit tests" \
 	  "" \
 	  "Local server:" \
-	  "  make fg-up               start uvicorn (pid+log under artifacts/)" \
-	  "  make fg-down             stop uvicorn" \
-	  "  make fg-restart          restart uvicorn + wait for ready" \
-	  "  make fg-ready            wait /health/ready" \
-	  "  make fg-health           GET /health" \
-	  "  make fg-logs N=200        tail uvicorn log" \
-	  "  make fg-openapi-assert   assert key OpenAPI paths exist" \
+	  "  make fg-up              start uvicorn (pid+log under artifacts/)" \
+	  "  make fg-down            stop uvicorn" \
+	  "  make fg-restart         restart uvicorn + wait for ready" \
+	  "  make fg-ready           wait /health/ready" \
+	  "  make fg-health          GET /health" \
+	  "  make fg-logs N=200       tail uvicorn log" \
+	  "  make fg-openapi-assert  assert key OpenAPI paths exist" \
 	  "" \
-	  "E2E:" \
-	  "  make fg-e2e-http         start -> wait -> pytest -m e2e_http -> stop" \
-	  "  make fg-e2e-local        fg-fast + fg-e2e-http" \
+	  "Integration:" \
+	  "  make itest-local        spins API on :8001, runs smoke_auth + integration tests" \
 	  "" \
-	  "Snapshot / No drift:" \
-	  "  make fg-snapshot         update context snapshot (LATEST)" \
-	  "  make fg-snapshot-all     full bundle snapshot" \
-	  "  make fg-boot             fg-fast + fg-e2e-local + fg-snapshot" \
+	  "No drift:" \
+	  "  make no-drift           guard + itest-local + unit + git-clean check" \
 	  "" \
-	  "UI / SSE:" \
-	  "  make fg-ui-sse           apply SSE UI wiring + restart" \
-	  "  make fg-ui-sse-smoke     strict smoke for cookie + /feed/live + SSE" \
-	  "" \
-	  "Diagnostics:" \
-	  "  make fg-doctor           compile + restart + UI/SSE smoke" \
-	  "" \
-	  "CI / Guards:" \
-	  "  make ci                  opinionated fast CI lane" \
-	  "" \
-	  "Legacy aliases:" \
-	  "  make up-local/down-local/restart-local/logs-local/ready-local" \
-	  "  make check/test" \
+	  "CI:" \
+	  "  make ci                 opinionated fast CI lane" \
 	  ""
 
 # =============================================================================
@@ -152,7 +145,6 @@ fg-compile:
 fg-fast: fg-audit-make fg-contract fg-compile
 	@$(PY) -m pytest -q
 
-# aliases (muscle memory)
 fg-check: fg-fast
 fg-test: fg-fast
 
@@ -174,7 +166,6 @@ fg-restart:
 	$(FG_RUN) ./scripts/uvicorn_local.sh restart
 	$(MAKE) -s fg-ready
 
-# IMPORTANT: keep env consistent here too (no drift)
 fg-ready:
 	@$(FG_RUN) ./scripts/uvicorn_local.sh check
 
@@ -199,34 +190,17 @@ fg-status:
 
 # =============================================================================
 # OpenAPI reality checks (prevents Makefile lying)
-# NOTE: trap ensures fg-down runs even on failure
 # =============================================================================
 .PHONY: fg-openapi-assert
 fg-openapi-assert: fg-up
 	@set -euo pipefail; \
 	trap '$(MAKE) -s fg-down >/dev/null 2>&1 || true' EXIT; \
-	if ! command -v jq >/dev/null 2>&1; then \
-	  echo "❌ jq is required for fg-openapi-assert"; \
-	  exit 1; \
-	fi; \
+	command -v jq >/dev/null 2>&1 || (echo "❌ jq is required for fg-openapi-assert" && exit 1); \
 	curl -fsS "$(BASE_URL)/openapi.json" | jq -e '.paths | has("/health") and has("/health/ready") and has("/feed/live") and (has("/defend") or has("/v1/defend")) and has("/decisions") and has("/stats")' >/dev/null; \
 	echo "✅ OpenAPI core endpoints present"
 
 # =============================================================================
-# HTTP E2E (managed server lifecycle)
-# NOTE: trap ensures fg-down runs even on pytest failure
-# =============================================================================
-.PHONY: fg-e2e-http fg-e2e-local
-fg-e2e-http: fg-up
-	@set -euo pipefail; \
-	trap '$(MAKE) -s fg-down >/dev/null 2>&1 || true' EXIT; \
-	FG_E2E_HTTP=1 FG_BASE_URL="$(BASE_URL)" FG_API_KEY="$(FG_API_KEY)" \
-		$(PY) -m pytest -q -m e2e_http
-
-fg-e2e-local: fg-fast fg-e2e-http
-
-# =============================================================================
-# Snapshot / No drift
+# Snapshot
 # =============================================================================
 .PHONY: fg-snapshot fg-snapshot-all fg-boot
 fg-snapshot:
@@ -235,31 +209,15 @@ fg-snapshot:
 fg-snapshot-all:
 	@bash ./scripts/snapshot_all.sh
 
-fg-boot: fg-fast fg-e2e-local fg-snapshot
+fg-boot: fg-fast itest-local fg-snapshot
 	@echo "✅ Boot complete. Snapshot updated."
 
 # =============================================================================
 # UI / SSE helpers
 # =============================================================================
-.PHONY: fg-ui-sse fg-ui-sse-smoke
-fg-ui-sse:
-	@./scripts/apply_ui_sse_everything.sh || true
-
-fg-ui-sse-smoke:
-	@FG_NO_OPEN=1 ./scripts/apply_ui_sse_everything.sh >/dev/null 2>&1 || true
-	@./scripts/smoke_ui_sse.sh
-
-# =============================================================================
-# Diagnostics
-# =============================================================================
-.PHONY: fg-doctor
-fg-doctor:
-	@bash scripts/fg_doctor.sh
-
 .PHONY: fg-smoke-auth
 fg-smoke-auth:
 	@./scripts/smoke_auth.sh
-
 
 # =============================================================================
 # CI / Guards (opinionated)
@@ -272,7 +230,6 @@ ci-tools:
 	@command -v sqlite3 >/dev/null || (echo "❌ sqlite3 missing" && exit 1)
 	@echo "✅ CI tools present"
 
-# Avoid banning docs/examples/snapshots. Enforce only in runtime code.
 guard-no-hardcoded-8000:
 	@rg -n "127\.0\.0\.1:8000|:8000\b" api scripts/uvicorn_local.sh 2>/dev/null && \
 	 (echo "❌ Hardcoded :8000 found in runtime code. Use HOST/PORT/BASE_URL." && exit 1) || \
@@ -289,88 +246,102 @@ guard-stream-markers:
 build-sidecar:
 	@cd supervisor-sidecar && go build ./...
 
-# Default CI lane: fast, deterministic. HTTP e2e can be separate job/workflow.
-ci: ci-tools guard-no-hardcoded-8000 guard-no-pytest-detection guard-stream-markers fg-fast build-sidecar itest-localI will get those KB's pulled
+ci: ci-tools guard-no-hardcoded-8000 guard-no-pytest-detection guard-stream-markers fg-fast build-sidecar itest-local
 
 # =============================================================================
-# Legacy aliases (keep docs/fingers intact)
+# Integration tests (expects API running at BASE_URL)
 # =============================================================================
-.PHONY: up-local down-local restart-local logs-local ready-local health check test
-
-
-# =============================================================================
-# Roll Back Last Patch
-# =============================================================================
-
-fg-rollback-last-patch:
-	@set -e; \
-	last="$$(ls -1dt artifacts/patch_backups/* 2>/dev/null | head -n 1)"; \
-	test -n "$$last" || (echo "No backups found" && exit 1); \
-	echo "Rolling back from $$last"; \
-	cp -a "$$last/main.py" api/main.py; \
-	echo "Restored api/main.py"; \
-	git status --porcelain
-
-# =============================================================================
-# Intergration Tests
-# =============================================================================
-
 .PHONY: test-integration
 test-integration:
 	@echo "== integration tests =="
 	@test -n "$${BASE_URL:-}" || (echo "❌ BASE_URL is required" && exit 1)
 	@test -n "$${FG_SQLITE_PATH:-}" || (echo "❌ FG_SQLITE_PATH is required (path to sqlite db)" && exit 1)
 	@test -n "$${FG_API_KEY:-}" || (echo "❌ FG_API_KEY is required" && exit 1)
-	@FG_BASE_URL="$${BASE_URL}" pytest -q -m integration
+	@FG_BASE_URL="$${BASE_URL}" $(PY) -m pytest -q -m integration
 
-.PHONY: itest-local
-itest-local:
+# =============================================================================
+# Integration test run (deterministic, no drift, no zombie reuse)
+# =============================================================================
+
+# ITest runtime (fixed + isolated)
+ITEST_HOST     ?= 127.0.0.1
+ITEST_PORT     ?= 8001
+ITEST_BASE_URL ?= http://$(ITEST_HOST):$(ITEST_PORT)
+
+# Dedicated itest DB (never the dev DB)
+ITEST_DB       ?= $(CURDIR)/$(STATE_DIR)/frostgate-itest.db
+
+# Optional: wipe DB each run (recommended)
+ITEST_WIPE_DB  ?= 1
+
+.PHONY: itest-local itest-down itest-up itest-db-reset
+
+itest-db-reset:
 	@set -euo pipefail; \
-	mkdir -p state artifacts; \
-	export HOST=127.0.0.1 PORT=8001; \
-	export BASE_URL=$${BASE_URL:-http://$${HOST}:$${PORT}}; \
-	export FG_ENV=$${FG_ENV:-dev}; \
-	export FG_AUTH_ENABLED=$${FG_AUTH_ENABLED:-1}; \
-	export FG_API_KEY=$${FG_API_KEY:-supersecret}; \
-	export FG_SQLITE_PATH=$${FG_SQLITE_PATH:-$$(pwd)/state/frostgate-itest.db}; \
-	python -c "from api.db import init_db; init_db()"; \
-	nohup bash -lc ' \
-	  set -e; \
-	  FG_ENV="'"$${FG_ENV}"'" \
-	  FG_AUTH_ENABLED="'"$${FG_AUTH_ENABLED}"'" \
-	  FG_API_KEY="'"$${FG_API_KEY}"'" \
-	  FG_SQLITE_PATH="'"$${FG_SQLITE_PATH}"'" \
-	  uvicorn api.main:app --host "'"$${HOST}"'" --port "'"$${PORT}"'" \
-	' > artifacts/uvicorn-itest.log 2>&1 & \
-	echo $$! > artifacts/uvicorn-itest.pid; \
-	trap 'kill $$(cat artifacts/uvicorn-itest.pid 2>/dev/null) 2>/dev/null || true' EXIT; \
-	for i in $$(seq 1 60); do \
-	  curl -fsS "$${BASE_URL}/health" >/dev/null && break; \
-	  sleep 0.5; \
-	done; \
-	curl -fsS "$${BASE_URL}/health" >/dev/null || (echo "API failed to start"; tail -200 artifacts/uvicorn-itest.log || true; exit 1); \
-	./scripts/smoke_auth.sh; \
-	$(MAKE) test-integration BASE_URL="$${BASE_URL}"
+	mkdir -p "$(STATE_DIR)"; \
+	if [ "$(ITEST_WIPE_DB)" = "1" ]; then \
+	  rm -f "$(ITEST_DB)"; \
+	fi; \
+	FG_SQLITE_PATH="$(ITEST_DB)" $(PY) -c "from api.db import init_db; init_db()"; \
+	echo "✅ itest db ready: $(ITEST_DB)"
 
-	.PHONY: no-drift no-drift-check-clean
+# Stop only the itest instance (using same uvicorn_local.sh env contract)
+itest-down:
+	@set -euo pipefail; \
+	$(MAKE) -s fg-down \
+	  HOST="$(ITEST_HOST)" PORT="$(ITEST_PORT)" BASE_URL="$(ITEST_BASE_URL)" \
+	  FG_SQLITE_PATH="$(ITEST_DB)" FG_API_KEY="$(FG_API_KEY)" FG_AUTH_ENABLED="$(FG_AUTH_ENABLED)" \
+	  >/dev/null 2>&1 || true; \
+	echo "✅ itest server stopped (or was not running)"
 
-no-drift: guard-stream-markers
-	@echo "== no-drift: unit tests =="
-	@python -m pytest -q
-	@echo "== no-drift: integration + smoke =="
-	@$(MAKE) itest-local
-	@$(MAKE) no-drift-check-clean
+# Start only the itest instance (always clean lifecycle)
+itest-up: itest-db-reset
+	@set -euo pipefail; \
+	$(MAKE) -s fg-up \
+	  HOST="$(ITEST_HOST)" PORT="$(ITEST_PORT)" BASE_URL="$(ITEST_BASE_URL)" \
+	  FG_SQLITE_PATH="$(ITEST_DB)" FG_API_KEY="$(FG_API_KEY)" FG_AUTH_ENABLED="$(FG_AUTH_ENABLED)"; \
+	echo "✅ itest server up: $(ITEST_BASE_URL)"
+
+# The deterministic integration run:
+# - always stops first (no zombie port 8001)
+# - always starts fresh with dedicated DB
+# - always stops at the end (even on failure)
+itest-local: itest-down itest-up
+	@set -euo pipefail; \
+	trap '$(MAKE) -s itest-down >/dev/null 2>&1 || true' EXIT; \
+	\
+	# smoke auth + integration suite against itest base
+	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(ITEST_DB)" ./scripts/smoke_auth.sh; \
+	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(ITEST_DB)" $(MAKE) -s test-integration; \
+	echo "✅ itest-local OK"
+
+# =============================================================================
+# No drift: "new terminal sanity button"
+# =============================================================================
+.PHONY: no-drift no-drift-check-clean
+no-drift: guard-stream-markers itest-local
+	@$(PY) -m pytest -q
+	@$(MAKE) -s no-drift-check-clean
 	@echo "✅ no-drift OK"
 
 no-drift-check-clean:
-	@echo "== no-drift: git clean check =="
-	@st="$$(git status --porcelain)"; \
+	@echo "== no-drift: git clean check =="; \
+	st="$$(git status --porcelain)"; \
 	if [ -n "$$st" ]; then \
 		echo "❌ Working tree is dirty after no-drift run:"; \
 		echo "$$st"; \
 		exit 1; \
 	fi
 
+# =============================================================================
+# Legacy aliases (keep docs/fingers intact)
+# =============================================================================
+.PHONY: up-local down-local restart-local logs-local ready-local health check test
+
+.PHONY: test
+test:
+	python -m py_compile api/db.py tests/conftest.py backend/tests/conftest.py
+	env -u FG_DB_URL -u FG_SQLITE_PATH -u FG_STATE_DIR -u FG_ENV pytest -q
 
 
 up-local: fg-up
@@ -381,3 +352,7 @@ ready-local: fg-ready
 health: fg-health
 check: fg-fast
 test: fg-fast
+.PHONY: test-clean
+test-clean:
+	python -m py_compile api/db.py api/auth_scopes.py tests/conftest.py backend/tests/conftest.py
+	env -u FG_DB_URL -u FG_SQLITE_PATH -u FG_STATE_DIR -u FG_ENV pytest -q

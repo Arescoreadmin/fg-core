@@ -4,7 +4,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
-from tests._mk_test_key import mint_key
+from api.auth_scopes import mint_key
+
 
 
 @pytest.fixture()

@@ -118,3 +118,8 @@ CONTEXT_SNAPSHOT.md
 scripts/_scratch/
 scripts/_scratch/*
 api/_scratch/
+
+# local diagnostics (do not commit)
+scripts/diag_*.py
+tests/diag_*.py
+tests/test__something.py

@@ -236,6 +236,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 "/health",
                 "/health/live",
                 "/health/ready",
+                "/ui",
                 "/ui/token",
                 # optional docs exposure:
                 "/openapi.json",

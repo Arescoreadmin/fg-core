@@ -1,33 +1,50 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
-from typing import Callable, Iterable, Optional
+from typing import Callable, Optional
 
-from fastapi import HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
+from fastapi import Request
 
 
 @dataclass(frozen=True)
 class AuthGateConfig:
-    public_paths: tuple[str, ...] = ("/health", "/health/ready", "/ui/token")
+    public_paths: tuple[str, ...] = ("/health", "/health/ready", "/ui", "/ui/token")
     header_authgate: str = "x-fg-authgate"
     header_gate: str = "x-fg-gate"
     header_path: str = "x-fg-path"
 
 
+def _auth_enabled() -> bool:
+    v = (os.getenv("FG_AUTH_ENABLED", "1") or "1").strip().lower()
+    return v not in ("0", "false", "off", "no")
+
+
+def _is_public(path: str, config: AuthGateConfig) -> bool:
+    for p in config.public_paths:
+        if path == p or path.startswith(p.rstrip("/") + "/"):
+            return True
+    return False
+
+
 class AuthGateMiddleware(BaseHTTPMiddleware):
     """
-    Auth gate that NEVER raises from middleware. It always returns a Response on failure.
+    Middleware MUST be dumb:
+      - decide public/protected
+      - validate key via auth_scopes.verify_api_key_raw
+    Anything else belongs in dependencies, not middleware.
     """
+
     def __init__(
         self,
         app,
-        require_status_auth: Callable[[Request], None],
+        require_status_auth: Callable[[Request], None],  # kept for main.py compatibility, ignored on purpose
         config: Optional[AuthGateConfig] = None,
     ):
         super().__init__(app)
-        self.require_status_auth = require_status_auth
+        self._ignored_require_status_auth = require_status_auth
         self.config = config or AuthGateConfig()
 
     def _stamp(self, resp: Response, request: Request, gate: str) -> Response:
@@ -36,32 +53,26 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
         resp.headers[self.config.header_path] = request.url.path
         return resp
 
-    def _is_public(self, path: str) -> bool:
-        # exact match only; if you want prefix logic later, do it intentionally
-        return path in self.config.public_paths
-
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
 
-        if self._is_public(path):
+        if not _auth_enabled():
+            resp = await call_next(request)
+            return self._stamp(resp, request, "auth_disabled")
+
+        if _is_public(path, self.config):
             resp = await call_next(request)
             return self._stamp(resp, request, "public")
 
-        try:
-            self.require_status_auth(request)
-        except HTTPException as e:
-            # IMPORTANT: middleware returns, never raises
-            resp = JSONResponse(
-                {"detail": getattr(e, "detail", str(e)), "auth": "blocked"},
-                status_code=int(getattr(e, "status_code", 401) or 401),
-            )
+        raw = (request.headers.get("x-api-key") or "").strip()
+        if not raw:
+            resp = JSONResponse({"detail": "Invalid or missing API key", "auth": "blocked"}, status_code=401)
             return self._stamp(resp, request, "blocked")
-        except Exception as e:
-            # hard shield: don't leak stack traces to clients
-            resp = JSONResponse(
-                {"detail": "Auth gate error", "auth": "blocked"},
-                status_code=500,
-            )
+
+        from api.auth_scopes import verify_api_key_raw
+
+        if not verify_api_key_raw(raw, required_scopes=None):
+            resp = JSONResponse({"detail": "Invalid or missing API key", "auth": "blocked"}, status_code=401)
             return self._stamp(resp, request, "blocked")
 
         resp = await call_next(request)

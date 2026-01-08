@@ -7,8 +7,7 @@ from typing import Optional
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import APIKeyHeader
 from sqlalchemy.orm import Session
-
-from api.auth_scopes import verify_api_key_raw
+import api.auth_scopes as auth_scopes
 from api.db import get_db
 
 try:
@@ -80,7 +79,7 @@ async def verify_api_key(
 
     # DB-backed key path
     try:
-        verify_api_key_raw(raw_key=raw, db=db, required_scopes=None)
+        auth_scopes.verify_api_key_raw(raw, required_scopes=None)
         return
     except HTTPException:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API key")

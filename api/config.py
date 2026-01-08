@@ -3,6 +3,9 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+
+
+
 class Settings(BaseSettings):
     """
     FrostGate core settings loaded from environment.
@@ -48,6 +51,8 @@ def get_settings() -> Settings:
     Cached settings accessor for app code.
     """
     return Settings.from_env()
+
+
 
 
 # Backwards-compat: some modules do `from api.config import settings`

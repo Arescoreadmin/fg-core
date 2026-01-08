@@ -1,4 +1,4 @@
-from tests._mk_test_key import mint_key
+from api.auth_scopes import mint_key
 import os
 import pytest
 from fastapi.testclient import TestClient

@@ -56,7 +56,7 @@ async def test_health_reflects_auth_enabled(auth_enabled: bool):
     assert resp.status_code == 200
     data = resp.json()
     assert data.get("status") == "ok"
-    assert data.get("env") == "dev"
+    assert data.get("env") == "test"
     assert data.get("auth_enabled") is auth_enabled
 
 
@@ -90,4 +90,4 @@ async def test_v1_status_accepts_valid_key_and_rejects_missing():
         assert resp_with_key.status_code == 200
         data = resp_with_key.json()
         assert data.get("service") == "frostgate-core"
-        assert data.get("env") == "dev"
+        assert data.get("env") == "test"

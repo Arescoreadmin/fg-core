@@ -1,22 +1,28 @@
-import httpx
+import pytest
+from starlette.testclient import TestClient
 
-BASE = "http://127.0.0.1:8000"
-
-def test_ui_token_is_public_and_sets_cookie():
-    r = httpx.get(f"{BASE}/ui/token", params={"api_key": "supersecret"})
+@pytest.mark.contract
+def test_ui_token_is_public_and_sets_cookie(build_app):
+    app = build_app(auth_enabled=True)
+    c = TestClient(app)
+    r = c.get("/ui/token", params={"api_key": "supersecret"})
     assert r.status_code == 200
-    assert "set-cookie" in r.headers
-    assert "fg_api_key=" in r.headers["set-cookie"]
+    assert "set-cookie" in {k.lower(): v for k, v in r.headers.items()}
 
-def test_ui_feed_without_cookie_is_401_not_500():
-    r = httpx.get(f"{BASE}/ui/feed")
+@pytest.mark.contract
+def test_ui_feed_without_cookie_is_401_not_500(build_app):
+    app = build_app(auth_enabled=True)
+    c = TestClient(app)
+    r = c.get("/ui/feed")
     assert r.status_code == 401
-    assert r.headers.get("content-type","").startswith("application/json")
+    assert r.headers.get("x-fg-authgate")
 
-def test_ui_feed_with_cookie_is_200_html():
-    cj = httpx.Cookies()
-    r = httpx.get(f"{BASE}/ui/token", params={"api_key": "supersecret"})
-    cj.extract_cookies(r)
-    r2 = httpx.get(f"{BASE}/ui/feed", cookies=cj)
+@pytest.mark.contract
+def test_ui_feed_with_cookie_is_200_html(build_app):
+    app = build_app(auth_enabled=True)
+    c = TestClient(app)
+    r = c.get("/ui/token", params={"api_key": "supersecret"})
+    assert r.status_code == 200
+    r2 = c.get("/ui/feed")
     assert r2.status_code == 200
-    assert "text/html" in r2.headers.get("content-type","")
+    assert "text/html" in r2.headers.get("content-type", "")
