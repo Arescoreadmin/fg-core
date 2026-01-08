@@ -16,6 +16,12 @@
 12) Dev Seed Contract (`FG_DEV_EVENTS_ENABLED`)
 13) Non-Goals (Explicit)
 14) Change Control
+15) Mission Envelope
+16) Ring Routing
+17) ROE Engine
+18) Impact Estimate
+19) Forensic Snapshot + Replay
+20) Governance Approvals
 
 build_app(auth_enabled
 FG_AUTH_ENABLED
@@ -357,15 +363,13 @@ This does NOT guarantee tamper resistance against:
 
 ### 11.1 Schema invariants (UI contract)
 
-Each item returned MUST include the following presentation fields
-- (non-null after backfill):
+Each item returned MUST include the following presentation fields (non-null after backfill):
+
 - `timestamp` (ISO8601 string; sourced from record `created_at`)
-- `severity` (one of: info, low, medium, high, critical; derived
-- from threat_level if missing)
+- `severity` (one of: info, low, medium, high, critical; derived from `threat_level` if missing)
 - `title` (derived if missing)
 - `summary` (derived if missing)
-- `action_taken` (one of: log_only, blocked, rate_limited, quarantined;
-- derived if missing)
+- `action_taken` (one of: log_only, blocked, rate_limited, quarantined; derived if missing)
 - `confidence` (float; derived if missing)
 - `score` (float; derived if missing)
 
@@ -448,3 +452,95 @@ Any change impacting:
 - DB path resolution behavior
 
 MUST update this CONTRACT first and include tests.
+
+---
+
+## 15) Mission Envelope
+
+### 15.1 Feature flag gate
+
+Mission envelope endpoints MUST be mounted only when:
+`FG_MISSION_ENVELOPE_ENABLED=1`.
+
+### 15.2 Route surface
+
+When enabled, the API MUST expose:
+
+- `GET /missions`
+- `GET /missions/{mission_id}`
+- `GET /missions/{mission_id}/status`
+
+---
+
+## 16) Ring Routing
+
+### 16.1 Feature flag gate
+
+Ring routing endpoints MUST be mounted only when:
+`FG_RING_ROUTER_ENABLED=1`.
+
+### 16.2 Route surface
+
+When enabled, the API MUST expose:
+
+- `GET /rings/policies`
+- `POST /rings/route`
+- `GET /rings/isolation`
+
+---
+
+## 17) ROE Engine
+
+### 17.1 Feature flag gate
+
+ROE endpoints MUST be mounted only when:
+`FG_ROE_ENGINE_ENABLED=1`.
+
+### 17.2 Route surface
+
+When enabled, the API MUST expose:
+
+- `GET /roe/policy`
+- `POST /roe/evaluate`
+
+---
+
+## 18) Impact Estimate
+
+### 18.1 Schema availability
+
+The system MUST expose an `ImpactEstimate` schema in the API layer
+for reuse by future decision and ROE components.
+
+---
+
+## 19) Forensic Snapshot + Replay
+
+### 19.1 Feature flag gate
+
+Forensics endpoints MUST be mounted only when:
+`FG_FORENSICS_ENABLED=1`.
+
+### 19.2 Route surface
+
+When enabled, the API MUST expose:
+
+- `GET /forensics/snapshot/{event_id}`
+- `GET /forensics/audit_trail/{event_id}`
+
+---
+
+## 20) Governance Approvals
+
+### 20.1 Feature flag gate
+
+Governance endpoints MUST be mounted only when:
+`FG_GOVERNANCE_ENABLED=1`.
+
+### 20.2 Route surface
+
+When enabled, the API MUST expose:
+
+- `GET /governance/changes`
+- `POST /governance/changes`
+- `POST /governance/changes/{change_id}/approve`

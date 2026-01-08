@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from api.db import init_db
+from api.db import init_db, _resolve_sqlite_path
 from api.decisions import router as decisions_router
 from api.defend import router as defend_router
 from api.dev_events import router as dev_events_router
@@ -19,7 +19,13 @@ from api.feed import router as feed_router
 from api.stats import router as stats_router
 from api.ui import router as ui_router
 
-# ✅ NEW: dedicated middleware module (you created this)
+# Optional "spine" modules (feature-flag gated)
+from api.forensics import forensics_enabled, router as forensics_router
+from api.governance import governance_enabled, router as governance_router
+from api.mission_envelope import mission_envelopes_enabled, router as mission_router
+from api.ring_router import ring_router_enabled, router as ring_router
+from api.roe_engine import roe_engine_enabled, router as roe_router
+
 from api.middleware.auth_gate import AuthGateMiddleware, AuthGateConfig
 
 log = logging.getLogger("frostgate")
@@ -39,20 +45,7 @@ def _resolve_auth_enabled_from_env() -> bool:
     # Explicit flag wins. Else: presence of FG_API_KEY implies auth enabled.
     if os.getenv("FG_AUTH_ENABLED") is not None:
         return _env_bool("FG_AUTH_ENABLED", default=False)
-    return bool(os.getenv("FG_API_KEY"))
-
-
-def _resolve_sqlite_path() -> Path:
-    p = (os.getenv("FG_SQLITE_PATH") or "").strip()
-    if p:
-        return Path(p)
-
-    state_dir = (os.getenv("FG_STATE_DIR") or "").strip()
-    if state_dir:
-        return Path(state_dir) / "frostgate.db"
-
-    # Local-dev sane default
-    return Path("artifacts") / "frostgate.db"
+    return bool((os.getenv("FG_API_KEY") or "").strip())
 
 
 def _sanitize_db_url(db_url: str) -> str:
@@ -81,9 +74,6 @@ class FGExceptionShieldMiddleware:
     """
     ASGI middleware that converts HTTPException (and ExceptionGroup containing one)
     into a clean JSON response instead of a 500.
-
-    Keep this. It prevents 'middleware raised HTTPException => ExceptionGroup => 500' regressions
-    elsewhere in the stack.
     """
 
     def __init__(self, app):
@@ -123,9 +113,9 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         try:
             # sqlite mode: ensure dir exists BEFORE init_db()
-            if not os.getenv("FG_DB_URL"):
+            if not (os.getenv("FG_DB_URL") or "").strip():
                 p = _resolve_sqlite_path()
-                p.parent.mkdir(parents=True, exist_ok=True)
+                Path(p).parent.mkdir(parents=True, exist_ok=True)
 
             init_db()
             app.state.db_init_ok = True
@@ -138,7 +128,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     app = FastAPI(title="frostgate-core", version="0.1.0", lifespan=lifespan)
 
-    # ✅ Shield first (outermost): ensures HTTPException never becomes a 500 taskgroup circus
+    # Shield first (outermost)
     app.add_middleware(FGExceptionShieldMiddleware)
 
     # Frozen state
@@ -154,7 +144,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     def _hdr(req: Request, name: str) -> Optional[str]:
         v = req.headers.get(name)  # headers are case-insensitive
-        return str(v).strip() if v and str(v).strip() else None
+        v = str(v).strip() if v is not None else ""
+        return v or None
 
     def check_tenant_if_present(req: Request) -> None:
         """
@@ -167,8 +158,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             return
 
         api_key = _hdr(req, "X-API-Key")
-
-        # Cookie fallback (UI / curl -b flows)
         if not api_key:
             ck = req.cookies.get(UI_COOKIE_NAME)
             api_key = str(ck).strip() if ck and str(ck).strip() else None
@@ -206,8 +195,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             return
 
         api_key = _hdr(req, "X-API-Key")
-
-        # Cookie fallback (UI / curl -b flows)
         if not api_key:
             ck = req.cookies.get(UI_COOKIE_NAME)
             api_key = str(ck).strip() if ck and str(ck).strip() else None
@@ -218,8 +205,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         if str(api_key) != str(_global_expected_api_key()):
             _fail()
 
-    # ---- Compatibility shim ----
-    # Some older modules import require_status_auth from api.auth.
+    # Compatibility shim: older modules importing require_status_auth from api.auth
     try:
         import api.auth as auth_mod  # noqa: WPS433
         if not hasattr(auth_mod, "require_status_auth"):
@@ -227,7 +213,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     except Exception:
         pass
 
-    # ✅ NEW: register the real auth gate middleware here (and ONLY here)
     app.add_middleware(
         AuthGateMiddleware,
         require_status_auth=require_status_auth,
@@ -238,7 +223,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 "/health/ready",
                 "/ui",
                 "/ui/token",
-                # optional docs exposure:
                 "/openapi.json",
                 "/docs",
                 "/redoc",
@@ -253,6 +237,18 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(decisions_router)
     app.include_router(stats_router)
     app.include_router(ui_router)
+
+    if mission_envelopes_enabled():
+        app.include_router(mission_router)
+    if ring_router_enabled():
+        app.include_router(ring_router)
+    if roe_engine_enabled():
+        app.include_router(roe_router)
+    if forensics_enabled():
+        app.include_router(forensics_router)
+    if governance_enabled():
+        app.include_router(governance_router)
+
     if _dev_enabled():
         app.include_router(dev_events_router)
 
@@ -279,10 +275,10 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 detail=f"db_init_failed: {app.state.db_init_error or 'unknown'}",
             )
 
-        if os.getenv("FG_DB_URL"):
+        if (os.getenv("FG_DB_URL") or "").strip():
             return {"status": "ready", "db": "url"}
 
-        p = _resolve_sqlite_path()
+        p = Path(_resolve_sqlite_path())
         if not p.exists():
             raise HTTPException(status_code=503, detail=f"DB missing: {p}")
         return {"status": "ready", "db": "sqlite", "path": str(p)}
@@ -297,7 +293,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     @app.get("/stats/debug")
     async def stats_debug(_: None = Depends(require_status_auth)) -> dict:
-        db_url = os.getenv("FG_DB_URL")
+        db_url = (os.getenv("FG_DB_URL") or "").strip()
         result: dict = {
             "service": app.state.service,
             "env": app.state.env,
@@ -316,7 +312,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             return result
 
         try:
-            p = _resolve_sqlite_path()
+            p = Path(_resolve_sqlite_path())
             exists = p.exists()
             size = p.stat().st_size if exists else 0
             result["sqlite_path_resolved"] = str(p)
@@ -331,7 +327,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
         return result
 
-    # ---- Debug: route map ----
     @app.get("/_debug/routes")
     async def debug_routes(request: Request) -> dict:
         try:
