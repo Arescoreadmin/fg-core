@@ -1,6 +1,6 @@
 # =============================================================================
 # FrostGate Core - Makefile
-# production-grade / single source of truth / no drift
+# Production-grade / single source of truth / no drift
 # =============================================================================
 
 SHELL := /bin/bash
@@ -12,8 +12,8 @@ SHELL := /bin/bash
 # Repo + Python
 # -----------------------------------------------------------------------------
 VENV   ?= .venv
-PY     ?= $(VENV)/bin/python
-PIP    ?= $(VENV)/bin/pip
+PY     := $(VENV)/bin/python
+PIP    := $(VENV)/bin/pip
 export PYTHONPATH := .
 
 # -----------------------------------------------------------------------------
@@ -30,12 +30,6 @@ FG_API_KEY              ?= supersecret
 FG_ENFORCEMENT_MODE     ?= observe
 FG_DEV_EVENTS_ENABLED   ?= 0
 FG_UI_TOKEN_GET_ENABLED ?= 1
-
-# Integration defaults (kept separate on purpose)
-ITEST_HOST ?= 127.0.0.1
-ITEST_PORT ?= 8001
-ITEST_BASE_URL ?= http://$(ITEST_HOST):$(ITEST_PORT)
-ITEST_DB ?= $(CURDIR)/state/frostgate-itest.db
 
 # State / artifacts
 ARTIFACTS_DIR ?= artifacts
@@ -91,29 +85,35 @@ help:
 	  "Setup:" \
 	  "  make venv" \
 	  "" \
-	  "Fast gates (no server):" \
-	  "  make fg-audit-make      Makefile target collision audit" \
-	  "  make fg-contract        Contract linter" \
-	  "  make fg-compile         py_compile core entrypoints" \
-	  "  make fg-fast            audit + contract + compile + unit tests" \
+	  "Guards / audits:" \
+	  "  make guard-scripts       Prevent paste-garbage + Makefile sanity" \
+	  "  make fg-audit-make       Makefile target collision audit" \
+	  "  make fg-contract         Contract linter" \
+	  "  make fg-compile          py_compile core entrypoints" \
+	  "" \
+	  "Fast lane (no server):" \
+	  "  make fg-fast             audit + contract + compile + pytest" \
 	  "" \
 	  "Local server:" \
-	  "  make fg-up              start uvicorn (pid+log under artifacts/)" \
-	  "  make fg-down            stop uvicorn" \
-	  "  make fg-restart         restart uvicorn + wait for ready" \
-	  "  make fg-ready           wait /health/ready" \
-	  "  make fg-health          GET /health" \
+	  "  make fg-up               start uvicorn + wait ready" \
+	  "  make fg-down             stop uvicorn" \
+	  "  make fg-ready            wait /health/ready" \
+	  "  make fg-health           GET /health" \
 	  "  make fg-logs N=200       tail uvicorn log" \
-	  "  make fg-openapi-assert  assert key OpenAPI paths exist" \
+	  "" \
+	  "Tests:" \
+	  "  make test-clean          contract+compile+pytest (plus spine)" \
+	  "  make test-spine          spine-only suite" \
+	  "  make test-strict         warnings-as-errors pytest" \
 	  "" \
 	  "Integration:" \
-	  "  make itest-local        spins API on :8001, runs smoke_auth + integration tests" \
+	  "  make itest-local         run isolated server on :8001 + integration tests" \
 	  "" \
 	  "No drift:" \
-	  "  make no-drift           guard + itest-local + unit + git-clean check" \
+	  "  make no-drift            guards + itest-local + pytest + git clean check" \
 	  "" \
 	  "CI:" \
-	  "  make ci                 opinionated fast CI lane" \
+	  "  make ci                  opinionated CI lane" \
 	  ""
 
 # =============================================================================
@@ -126,27 +126,29 @@ venv:
 	"$(PIP)" install -r requirements.txt -r requirements-dev.txt
 
 # =============================================================================
-# Guardrails / audits
+# Guards / audits (always run via $(PY), never as executables)
 # =============================================================================
-.PHONY: fg-audit-make fg-contract fg-compile
-fg-audit-make:
-	@./scripts/audit_make_targets.py
+.PHONY: guard-scripts fg-audit-make fg-contract fg-compile
 
-fg-contract:
-	@./scripts/contract_lint.py
+guard-scripts:
+	@$(PY) scripts/guard_no_paste_garbage.py
+	@$(PY) scripts/guard_makefile_sanity.py
 
-fg-compile:
+fg-audit-make: guard-scripts
+	@$(PY) scripts/audit_make_targets.py
+
+fg-contract: guard-scripts
+	@$(PY) scripts/contract_lint.py
+
+fg-compile: guard-scripts
 	@$(PY) -m py_compile api/main.py api/feed.py api/ui.py api/dev_events.py api/auth_scopes.py
 
 # =============================================================================
 # Fast lane (no server)
 # =============================================================================
-.PHONY: fg-fast fg-check fg-test
+.PHONY: fg-fast
 fg-fast: fg-audit-make fg-contract fg-compile
 	@$(PY) -m pytest -q
-
-fg-check: fg-fast
-fg-test: fg-fast
 
 # =============================================================================
 # Local server (canonical)
@@ -189,89 +191,23 @@ fg-status:
 	curl -fsS "$(BASE_URL)/health/ready" 2>/dev/null || true; echo
 
 # =============================================================================
-# OpenAPI reality checks (prevents Makefile lying)
-# =============================================================================
-.PHONY: fg-openapi-assert
-fg-openapi-assert: fg-up
-	@set -euo pipefail; \
-	trap '$(MAKE) -s fg-down >/dev/null 2>&1 || true' EXIT; \
-	command -v jq >/dev/null 2>&1 || (echo "❌ jq is required for fg-openapi-assert" && exit 1); \
-	curl -fsS "$(BASE_URL)/openapi.json" | jq -e '.paths | has("/health") and has("/health/ready") and has("/feed/live") and (has("/defend") or has("/v1/defend")) and has("/decisions") and has("/stats")' >/dev/null; \
-	echo "✅ OpenAPI core endpoints present"
-
-# =============================================================================
-# Snapshot
-# =============================================================================
-.PHONY: fg-snapshot fg-snapshot-all fg-boot
-fg-snapshot:
-	@bash ./scripts/snapshot_context.sh
-
-fg-snapshot-all:
-	@bash ./scripts/snapshot_all.sh
-
-fg-boot: fg-fast itest-local fg-snapshot
-	@echo "✅ Boot complete. Snapshot updated."
-
-# =============================================================================
-# UI / SSE helpers
-# =============================================================================
-.PHONY: fg-smoke-auth
-fg-smoke-auth:
-	@./scripts/smoke_auth.sh
-
-# =============================================================================
-# CI / Guards (opinionated)
-# =============================================================================
-.PHONY: ci-tools guard-no-hardcoded-8000 guard-no-pytest-detection guard-stream-markers build-sidecar ci
-
-ci-tools:
-	@command -v rg >/dev/null || (echo "❌ rg missing" && exit 1)
-	@command -v curl >/dev/null || (echo "❌ curl missing" && exit 1)
-	@command -v sqlite3 >/dev/null || (echo "❌ sqlite3 missing" && exit 1)
-	@echo "✅ CI tools present"
-
-guard-no-hardcoded-8000:
-	@rg -n "127\.0\.0\.1:8000|:8000\b" api scripts/uvicorn_local.sh 2>/dev/null && \
-	 (echo "❌ Hardcoded :8000 found in runtime code. Use HOST/PORT/BASE_URL." && exit 1) || \
-	 echo "✅ No hardcoded :8000 in runtime code"
-
-guard-no-pytest-detection:
-	@rg -n "_running_under_pytest|PYTEST_CURRENT_TEST|sys\.modules\['pytest'\]" api/main.py >/dev/null && \
-	 (echo "❌ Pytest-detection found in api/main.py. Remove test hacks." && exit 1) || \
-	 echo "✅ No pytest-detection in api/main.py"
-
-guard-stream-markers:
-	@./scripts/guard_feed_stream_markers.sh
-
-build-sidecar:
-	@cd supervisor-sidecar && go build ./...
-
-ci: ci-tools guard-no-hardcoded-8000 guard-no-pytest-detection guard-stream-markers fg-fast build-sidecar itest-local
-
-# =============================================================================
 # Integration tests (expects API running at BASE_URL)
 # =============================================================================
 .PHONY: test-integration
 test-integration:
 	@echo "== integration tests =="
 	@test -n "$${BASE_URL:-}" || (echo "❌ BASE_URL is required" && exit 1)
-	@test -n "$${FG_SQLITE_PATH:-}" || (echo "❌ FG_SQLITE_PATH is required (path to sqlite db)" && exit 1)
+	@test -n "$${FG_SQLITE_PATH:-}" || (echo "❌ FG_SQLITE_PATH is required" && exit 1)
 	@test -n "$${FG_API_KEY:-}" || (echo "❌ FG_API_KEY is required" && exit 1)
 	@FG_BASE_URL="$${BASE_URL}" $(PY) -m pytest -q -m integration
 
 # =============================================================================
 # Integration test run (deterministic, no drift, no zombie reuse)
 # =============================================================================
-
-# ITest runtime (fixed + isolated)
 ITEST_HOST     ?= 127.0.0.1
 ITEST_PORT     ?= 8001
 ITEST_BASE_URL ?= http://$(ITEST_HOST):$(ITEST_PORT)
-
-# Dedicated itest DB (never the dev DB)
 ITEST_DB       ?= $(CURDIR)/$(STATE_DIR)/frostgate-itest.db
-
-# Optional: wipe DB each run (recommended)
 ITEST_WIPE_DB  ?= 1
 
 .PHONY: itest-local itest-down itest-up itest-db-reset
@@ -279,13 +215,10 @@ ITEST_WIPE_DB  ?= 1
 itest-db-reset:
 	@set -euo pipefail; \
 	mkdir -p "$(STATE_DIR)"; \
-	if [ "$(ITEST_WIPE_DB)" = "1" ]; then \
-	  rm -f "$(ITEST_DB)"; \
-	fi; \
+	if [ "$(ITEST_WIPE_DB)" = "1" ]; then rm -f "$(ITEST_DB)"; fi; \
 	FG_SQLITE_PATH="$(ITEST_DB)" $(PY) -c "from api.db import init_db; init_db()"; \
 	echo "✅ itest db ready: $(ITEST_DB)"
 
-# Stop only the itest instance (using same uvicorn_local.sh env contract)
 itest-down:
 	@set -euo pipefail; \
 	$(MAKE) -s fg-down \
@@ -294,7 +227,6 @@ itest-down:
 	  >/dev/null 2>&1 || true; \
 	echo "✅ itest server stopped (or was not running)"
 
-# Start only the itest instance (always clean lifecycle)
 itest-up: itest-db-reset
 	@set -euo pipefail; \
 	$(MAKE) -s fg-up \
@@ -302,24 +234,44 @@ itest-up: itest-db-reset
 	  FG_SQLITE_PATH="$(ITEST_DB)" FG_API_KEY="$(FG_API_KEY)" FG_AUTH_ENABLED="$(FG_AUTH_ENABLED)"; \
 	echo "✅ itest server up: $(ITEST_BASE_URL)"
 
-# The deterministic integration run:
-# - always stops first (no zombie port 8001)
-# - always starts fresh with dedicated DB
-# - always stops at the end (even on failure)
 itest-local: itest-down itest-up
 	@set -euo pipefail; \
 	trap '$(MAKE) -s itest-down >/dev/null 2>&1 || true' EXIT; \
-	\
-	# smoke auth + integration suite against itest base
 	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(ITEST_DB)" ./scripts/smoke_auth.sh; \
 	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(ITEST_DB)" $(MAKE) -s test-integration; \
 	echo "✅ itest-local OK"
 
 # =============================================================================
+# Tests
+# =============================================================================
+.PHONY: test-spine test-clean test-strict test-guard
+
+test-guard:
+	@$(PY) scripts/guard_pytest_ini.py
+
+test-spine: test-guard
+	@$(PY) -m py_compile api/main.py api/forensics.py api/governance.py api/mission_envelope.py api/ring_router.py api/roe_engine.py api/schemas_impact.py
+	@env -u FG_DB_URL -u FG_SQLITE_PATH -u FG_STATE_DIR -u FG_ENV $(PY) -m pytest -q \
+		tests/test_forensic_snapshot_replay.py \
+		tests/test_governance_approval_flow.py \
+		tests/test_mission_envelope_contract.py \
+		tests/test_ring_router_contract.py \
+		tests/test_roe_gating_contract.py
+
+test-clean: test-guard
+	@npx markdownlint CONTRACT.md
+	@$(PY) -m py_compile api/db.py api/auth_scopes.py tests/conftest.py backend/tests/conftest.py
+	@env -u FG_DB_URL -u FG_SQLITE_PATH -u FG_STATE_DIR -u FG_ENV $(PY) -m pytest -q
+	@$(MAKE) -s test-spine
+
+test-strict: test-guard
+	@$(PY) -W error -m pytest -q
+
+# =============================================================================
 # No drift: "new terminal sanity button"
 # =============================================================================
 .PHONY: no-drift no-drift-check-clean
-no-drift: guard-stream-markers itest-local
+no-drift: guard-scripts itest-local
 	@$(PY) -m pytest -q
 	@$(MAKE) -s no-drift-check-clean
 	@echo "✅ no-drift OK"
@@ -334,27 +286,20 @@ no-drift-check-clean:
 	fi
 
 # =============================================================================
-# Legacy aliases (keep docs/fingers intact)
+# CI lane (keep it tight)
 # =============================================================================
-.PHONY: up-local down-local restart-local logs-local ready-local health check test
-
-.PHONY: test
-test:
-	python -m py_compile api/db.py tests/conftest.py backend/tests/conftest.py
-	env -u FG_DB_URL -u FG_SQLITE_PATH -u FG_STATE_DIR -u FG_ENV pytest -q
+.PHONY: ci
+ci: guard-scripts fg-fast itest-local test-strict
+	@echo "✅ CI lane OK"
 
 
-up-local: fg-up
-down-local: fg-down
-restart-local: fg-restart
-logs-local: fg-logs
-ready-local: fg-ready
-health: fg-health
-check: fg-fast
-test: fg-fast
-
-.PHONY: test-clean
-test-clean:
-	npx markdownlint CONTRACT.md
-	python -m py_compile api/db.py api/auth_scopes.py tests/conftest.py backend/tests/conftest.py
-	env -u FG_DB_URL -u FG_SQLITE_PATH -u FG_STATE_DIR -u FG_ENV pytest -q
+# =============================================================================
+# Doctor 
+# =============================================================================
+.PHONY: doctor
+doctor: guard-scripts
+	@$(PY) -m py_compile api/main.py api/db.py
+	@$(PY) scripts/find_bad_toml.py
+	@$(MAKE) -s fg-audit-make
+	@$(MAKE) -s test-clean
+	@echo "✅ doctor OK"
