@@ -4,9 +4,9 @@ import os
 from dataclasses import dataclass
 from typing import Callable, Optional
 
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
-from fastapi import Request
 
 
 @dataclass(frozen=True)
@@ -64,15 +64,26 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
             resp = await call_next(request)
             return self._stamp(resp, request, "public")
 
+        # Prefer header; fallback to UI cookie if header is missing/blank
         raw = (request.headers.get("x-api-key") or "").strip()
+        ck_name = os.getenv("FG_UI_COOKIE_NAME", "fg_api_key")
         if not raw:
-            resp = JSONResponse({"detail": "Invalid or missing API key", "auth": "blocked"}, status_code=401)
+            raw = (request.cookies.get(ck_name) or "").strip()
+
+        if not raw:
+            resp = JSONResponse(
+                {"detail": "Invalid or missing API key", "auth": "blocked"},
+                status_code=401,
+            )
             return self._stamp(resp, request, "blocked")
 
         from api.auth_scopes import verify_api_key_raw
 
         if not verify_api_key_raw(raw, required_scopes=None):
-            resp = JSONResponse({"detail": "Invalid or missing API key", "auth": "blocked"}, status_code=401)
+            resp = JSONResponse(
+                {"detail": "Invalid or missing API key", "auth": "blocked"},
+                status_code=401,
+            )
             return self._stamp(resp, request, "blocked")
 
         resp = await call_next(request)
