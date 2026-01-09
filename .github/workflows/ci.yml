@@ -88,7 +88,6 @@ jobs:
     name: Integration (uvicorn + pytest -m integration + smoke_auth)
     runs-on: ubuntu-latest
     needs: unit
-
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
@@ -185,7 +184,6 @@ jobs:
     name: Evidence Bundle (signed + verified + smoke_auth)
     runs-on: ubuntu-latest
     needs: integration
-
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"

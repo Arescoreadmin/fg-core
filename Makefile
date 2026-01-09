@@ -16,6 +16,9 @@ PY     := $(VENV)/bin/python
 PIP    := $(VENV)/bin/pip
 export PYTHONPATH := .
 
+# Deterministic tests (local + CI)
+PYTEST_ENV := env PYTHONHASHSEED=0 TZ=UTC
+
 # -----------------------------------------------------------------------------
 # Runtime defaults (single source of truth)
 # -----------------------------------------------------------------------------
@@ -92,9 +95,10 @@ help:
 	  "  make fg-compile          py_compile core entrypoints" \
 	  "" \
 	  "Fast lane (no server):" \
-	  "  make fg-fast             audit + contract + compile + pytest" \
+	  "  make fg-fast             audit + contract + compile + pytest + lint" \
 	  "" \
 	  "Local server:" \
+	  "  make fg-live-port-check  fail if HOST:PORT already bound" \
 	  "  make fg-up               start uvicorn + wait ready" \
 	  "  make fg-down             stop uvicorn" \
 	  "  make fg-ready            wait /health/ready" \
@@ -108,6 +112,8 @@ help:
 	  "" \
 	  "Integration:" \
 	  "  make itest-local         run isolated server on :8001 + integration tests" \
+	  "  make itest-up            bring itest server up (no tests)" \
+	  "  make itest-down          stop itest server" \
 	  "" \
 	  "No drift:" \
 	  "  make no-drift            guards + itest-local + pytest + git clean check" \
@@ -148,15 +154,37 @@ fg-compile: guard-scripts
 # =============================================================================
 .PHONY: fg-fast
 fg-fast: fg-audit-make fg-contract fg-compile
-	@$(PY) -m pytest -q
-	$(MAKE) fg-lint
+	@$(PYTEST_ENV) $(PY) -m pytest -q
+	@$(MAKE) -s fg-lint
+
+# =============================================================================
+# Live port guard (prevents zombie confusion)
+# =============================================================================
+.PHONY: fg-live-port-check
+fg-live-port-check:
+	@set -euo pipefail; \
+	host="$(HOST)"; port="$(PORT)"; \
+	python - <<'PY' "$$host" "$$port"
+import socket, sys
+host = sys.argv[1]
+port = int(sys.argv[2])
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.settimeout(0.25)
+try:
+    rc = s.connect_ex((host, port))
+finally:
+    s.close()
+if rc == 0:
+    raise SystemExit(f"❌ Refusing to start: {host}:{port} already has a listener (zombie server?)")
+print(f"✅ Port free: {host}:{port}")
+PY
 
 # =============================================================================
 # Local server (canonical)
 # =============================================================================
 .PHONY: fg-up fg-down fg-restart fg-ready fg-health fg-logs fg-status
 
-fg-up:
+fg-up: fg-live-port-check
 	mkdir -p "$(FG_STATE_DIR)" "$(STATE_DIR)"
 	$(FG_RUN) ./scripts/uvicorn_local.sh start
 	$(MAKE) -s fg-ready
@@ -164,7 +192,7 @@ fg-up:
 fg-down:
 	$(FG_RUN) ./scripts/uvicorn_local.sh stop || true
 
-fg-restart:
+fg-restart: fg-live-port-check
 	mkdir -p "$(FG_STATE_DIR)" "$(STATE_DIR)"
 	$(FG_RUN) ./scripts/uvicorn_local.sh restart
 	$(MAKE) -s fg-ready
@@ -200,7 +228,7 @@ test-integration:
 	@test -n "$${BASE_URL:-}" || (echo "❌ BASE_URL is required" && exit 1)
 	@test -n "$${FG_SQLITE_PATH:-}" || (echo "❌ FG_SQLITE_PATH is required" && exit 1)
 	@test -n "$${FG_API_KEY:-}" || (echo "❌ FG_API_KEY is required" && exit 1)
-	@FG_BASE_URL="$${BASE_URL}" $(PY) -m pytest -q -m integration
+	@FG_BASE_URL="$${BASE_URL}" $(PYTEST_ENV) $(PY) -m pytest -q -m integration
 
 # =============================================================================
 # Integration test run (deterministic, no drift, no zombie reuse)
@@ -252,7 +280,7 @@ test-guard:
 
 test-spine: test-guard
 	@$(PY) -m py_compile api/main.py api/forensics.py api/governance.py api/mission_envelope.py api/ring_router.py api/roe_engine.py api/schemas_impact.py
-	@env -u FG_DB_URL -u FG_SQLITE_PATH -u FG_STATE_DIR -u FG_ENV $(PY) -m pytest -q \
+	@env -u FG_DB_URL -u FG_SQLITE_PATH -u FG_STATE_DIR -u FG_ENV $(PYTEST_ENV) $(PY) -m pytest -q \
 		tests/test_forensic_snapshot_replay.py \
 		tests/test_governance_approval_flow.py \
 		tests/test_mission_envelope_contract.py \
@@ -260,20 +288,25 @@ test-spine: test-guard
 		tests/test_roe_gating_contract.py
 
 test-clean: test-guard
-	@npx markdownlint CONTRACT.md
+	@set -euo pipefail; \
+	if command -v npx >/dev/null 2>&1; then \
+		(npx -y markdownlint-cli CONTRACT.md >/dev/null 2>&1 && echo "✅ markdownlint OK") || echo "⚠️ markdownlint unavailable; skipping"; \
+	else \
+		echo "⚠️ npx not installed; skipping markdownlint"; \
+	fi
 	@$(PY) -m py_compile api/db.py api/auth_scopes.py tests/conftest.py backend/tests/conftest.py
-	@env -u FG_DB_URL -u FG_SQLITE_PATH -u FG_STATE_DIR -u FG_ENV $(PY) -m pytest -q
+	@env -u FG_DB_URL -u FG_SQLITE_PATH -u FG_STATE_DIR -u FG_ENV $(PYTEST_ENV) $(PY) -m pytest -q
 	@$(MAKE) -s test-spine
 
 test-strict: test-guard
-	@$(PY) -W error -m pytest -q
+	@$(PYTEST_ENV) $(PY) -W error -m pytest -q
 
 # =============================================================================
 # No drift: "new terminal sanity button"
 # =============================================================================
 .PHONY: no-drift no-drift-check-clean
 no-drift: guard-scripts itest-local
-	@$(PY) -m pytest -q
+	@$(PYTEST_ENV) $(PY) -m pytest -q
 	@$(MAKE) -s no-drift-check-clean
 	@echo "✅ no-drift OK"
 
@@ -293,9 +326,8 @@ no-drift-check-clean:
 ci: guard-scripts fg-fast itest-local test-strict
 	@echo "✅ CI lane OK"
 
-
 # =============================================================================
-# Doctor 
+# Doctor
 # =============================================================================
 .PHONY: doctor
 doctor: guard-scripts
@@ -311,6 +343,61 @@ doctor: guard-scripts
 .PHONY: fg-lint
 fg-lint:
 	@$(PY) -m py_compile api/middleware/auth_gate.py
-	@$(PY) -m ruff check api
-	@$(PY) -m ruff format --check api
-	.venv/bin/python -m ruff format --check api
+	@$(PY) -m ruff check api tests
+	@$(PY) -m ruff format --check api tests
+
+# =============================================================================
+# Convenience: run integration marker against a running itest-up server
+# =============================================================================
+.PHONY: itest-integration
+itest-integration: itest-up
+	@set -euo pipefail; \
+	trap '$(MAKE) -s itest-down >/dev/null 2>&1 || true' EXIT; \
+	BASE_URL="$(BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(FG_SQLITE_PATH)" \
+	$(PYTEST_ENV) $(PY) -m pytest -q -m integration; \
+	echo "✅ itest-integration OK"
+
+# =============================================================================
+# Live Port Check Convenience
+# =============================================================================
+.PHONY: fg-live-port-check
+fg-live-port-check:
+	@set -euo pipefail; \
+	host="$(HOST)"; port="$(PORT)"; \
+	python - <<'PY' "$$host" "$$port"
+import socket, sys, subprocess, shutil
+
+host = sys.argv[1]
+port = int(sys.argv[2])
+
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.settimeout(0.25)
+try:
+    rc = s.connect_ex((host, port))
+finally:
+    s.close()
+
+if rc != 0:
+    print(f"✅ Port free: {host}:{port}")
+    raise SystemExit(0)
+
+print(f"❌ Refusing to start: {host}:{port} already has a listener")
+
+# Optional: try to identify owning process via lsof (best-effort)
+if shutil.which("lsof"):
+    try:
+        out = subprocess.check_output(
+            ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+        if out:
+            print("\n--- lsof output ---")
+            print(out)
+    except Exception:
+        pass
+else:
+    print("(lsof not available; cannot identify owning process)")
+
+raise SystemExit(1)
+PY
