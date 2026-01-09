@@ -4,8 +4,7 @@ import os
 from enum import Enum
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field, Field, ConfigDict
-from pydantic import ConfigDict
+from pydantic import BaseModel, Field
 
 
 def _env_bool(name: str, default: bool = False) -> bool:

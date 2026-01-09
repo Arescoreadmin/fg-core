@@ -1,19 +1,33 @@
 from __future__ import annotations
 
-from fastapi.responses import StreamingResponse
-
+import asyncio
+import json
 import time
+from typing import Any, List
 
+from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from api.auth_scopes import verify_api_key
+from api.db import get_db
+from api.db_models import DecisionRecord
+from api.decisions import _loads_json_text
+from api.ratelimit import rate_limit_guard
 
 # -----------------------------------------------------------------------------
 # Query-param normalization helpers
 # (prevents empty-string filters + Query(None) objects from leaking into SQL binds)
+# -----------------------------------------------------------------------------
+
 
 def _fg_is_query_obj(v) -> bool:
     try:
         return v.__class__.__name__ == "Query"
     except Exception:
         return False
+
 
 def _fg_coerce_query_default(v):
     if _fg_is_query_obj(v):
@@ -22,6 +36,7 @@ def _fg_coerce_query_default(v):
         except Exception:
             return None
     return v
+
 
 def _fg_norm_str(v):
     v = _fg_coerce_query_default(v)
@@ -34,6 +49,7 @@ def _fg_norm_str(v):
     v = v.strip()
     return v if v else None
 
+
 def _fg_norm_int(v):
     v = _fg_coerce_query_default(v)
     if v is None or v == "":
@@ -43,6 +59,7 @@ def _fg_norm_int(v):
     except Exception:
         return None
 
+
 def _fg_norm_bool(v):
     v = _fg_coerce_query_default(v)
     if v is None:
@@ -50,29 +67,12 @@ def _fg_norm_bool(v):
     if isinstance(v, bool):
         return v
     sv = str(v).strip().lower()
-    if sv in ("1","true","t","yes","y","on"):
+    if sv in ("1", "true", "t", "yes", "y", "on"):
         return True
-    if sv in ("0","false","f","no","n","off"):
+    if sv in ("0", "false", "f", "no", "n", "off"):
         return False
     return None
 
-import json
-import asyncio
-
-from typing import Any, List
-
-from fastapi import APIRouter, Depends, Query, Request, Response
-from fastapi import Response
-from starlette.responses import StreamingResponse
-
-from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
-
-from api.auth_scopes import verify_api_key, require_api_key_always
-from api.db import get_db
-from api.db_models import DecisionRecord
-from api.decisions import _loads_json_text
-from api.ratelimit import rate_limit_guard
 
 router = APIRouter(
     prefix="/feed",
@@ -83,6 +83,7 @@ router = APIRouter(
 # -----------------------------
 # Presentation / backfill logic
 # -----------------------------
+
 
 def _sev_from_threat(threat: str | None) -> str:
     t = (threat or "").strip().lower()
@@ -95,6 +96,7 @@ def _sev_from_threat(threat: str | None) -> str:
     if t in ("low",):
         return "low"
     return "info"
+
 
 def _infer_action_taken(decision_diff: Any) -> str:
     """
@@ -109,7 +111,6 @@ def _infer_action_taken(decision_diff: Any) -> str:
     prev = decision_diff.get("prev") or {}
 
     # If diff explicitly includes a decision/action, prefer it
-    # (optional, but cheap and helpful when present)
     for k in ("decision", "action", "action_taken"):
         v = curr.get(k) or prev.get(k)
         if isinstance(v, str) and v.strip():
@@ -127,6 +128,7 @@ def _infer_action_taken(decision_diff: Any) -> str:
         return "rate_limited"
 
     return "log_only"
+
 
 def _derive_from_diff(diff: Any) -> tuple[list[str], float | None, list[str], str | None]:
     """
@@ -166,6 +168,7 @@ def _derive_from_diff(diff: Any) -> tuple[list[str], float | None, list[str], st
         changed_fields,
         str(action_reason) if action_reason is not None else None,
     )
+
 
 def _backfill_feed_item(i: dict) -> dict:
     # timestamp
@@ -225,6 +228,7 @@ def _backfill_feed_item(i: dict) -> dict:
 
     return i
 
+
 def _is_actionable(item: dict) -> bool:
     sev = (item.get("severity") or "").lower()
     act = (item.get("action_taken") or "").lower()
@@ -233,9 +237,11 @@ def _is_actionable(item: dict) -> bool:
         return False
     return True
 
+
 # -----------------------------
 # API models
 # -----------------------------
+
 
 class FeedItem(BaseModel):
     id: int
@@ -263,22 +269,23 @@ class FeedItem(BaseModel):
     decision_diff: Any | None = None
     metadata: Any | None = None
 
+
 class FeedLiveResponse(BaseModel):
     items: List[FeedItem] = Field(default_factory=list)
     next_since_id: int | None = None
 
+
 # -----------------------------
-# Route
+# Route: /live
 # -----------------------------
+
 
 @router.get("/live", response_model=FeedLiveResponse)
 def feed_live(
     db: Session = Depends(get_db),
-
     # pagination/incremental
     limit: int = Query(default=50, ge=1, le=200),
     since_id: int | None = Query(default=None, ge=0),
-
     # filters (severity is an alias for threat_level)
     severity: str | None = Query(default=None),
     threat_level: str | None = Query(default=None),
@@ -286,21 +293,23 @@ def feed_live(
     source: str | None = Query(default=None),
     tenant_id: str | None = Query(default=None),
     q: str | None = Query(default=None, description="search event_type/event_id/source"),
-
     # toggles
     only_changed: bool = Query(default=False),
     only_actionable: bool = Query(default=False),
 ):
-    # --- normalization guardrails (prevents blank-feed illusions + Query(None) SQL binds) ---
+    # --- normalization guardrails ---
     since_id = _fg_norm_int(since_id)
     limit = _fg_norm_int(limit) or limit
     threat_level = _fg_norm_str(threat_level)
+    severity = _fg_norm_str(severity)
+    action_taken = _fg_norm_str(action_taken)
     source = _fg_norm_str(source)
     tenant_id = _fg_norm_str(tenant_id)
     q = _fg_norm_str(q)
-    only_changed = _fg_norm_bool(only_changed)
-    only_actionable = _fg_norm_bool(only_actionable)
+    only_changed = bool(_fg_norm_bool(only_changed))
+    only_actionable = bool(_fg_norm_bool(only_actionable))
     # --- end normalization guardrails ---
+
     qry = db.query(DecisionRecord)
 
     # alias: severity -> threat_level (DB only has threat_level)
@@ -319,7 +328,7 @@ def feed_live(
     if tenant_id:
         qry = qry.filter(DecisionRecord.tenant_id == tenant_id)
 
-    # Search only on real columns (stop pretending title/summary exist in DB)
+    # Search only on real columns
     if q:
         like = f"%{q}%"
         qry = qry.filter(
@@ -352,19 +361,16 @@ def feed_live(
             "tenant_id": getattr(r, "tenant_id", None),
             "threat_level": getattr(r, "threat_level", None),
             "decision_id": None,
-
             "timestamp": ts_iso,
             "severity": None,
             "title": None,
             "summary": None,
             "action_taken": None,
             "confidence": None,
-
             "score": score,
             "rules_triggered": rules_triggered or [],
             "changed_fields": changed_fields or [],
             "action_reason": action_reason,
-
             "fingerprint": None,
             "decision_diff": diff,
             "metadata": None,
@@ -385,7 +391,11 @@ def feed_live(
         items.append(FeedItem(**item_dict))
 
     return FeedLiveResponse(items=items, next_since_id=max_id)
+
+
 # === STREAM BEGIN (do not patch with regex) ===
+
+
 @router.head("/stream")
 def feed_stream_head() -> Response:
     # Headers-only probe for smoke tests / health checks
@@ -396,15 +406,12 @@ def feed_stream_head() -> Response:
 async def feed_stream(
     request: Request,
     db: Session = Depends(get_db),
-
     # pacing
     interval: float = Query(default=1.0, ge=0.2, le=10.0),
     heartbeat: float = Query(default=10.0, ge=2.0, le=60.0),
-
     # pagination/incremental
     limit: int = Query(default=50, ge=1, le=200),
     since_id: int | None = Query(default=None, ge=0),
-
     # filters (severity is an alias for threat_level)
     severity: str | None = Query(default=None),
     threat_level: str | None = Query(default=None),
@@ -412,7 +419,6 @@ async def feed_stream(
     source: str | None = Query(default=None),
     tenant_id: str | None = Query(default=None),
     q: str | None = Query(default=None, description="search event_type/event_id/source"),
-
     # toggles
     only_changed: bool = Query(default=False),
     only_actionable: bool = Query(default=False),
@@ -424,24 +430,25 @@ async def feed_stream(
       - heartbeat ': ping' comments keep proxies happy
       - reuses feed_live() for filtering consistency
     """
-    def _ns(v: str | None) -> str | None:
-        if v is None:
-            return None
-        v2 = str(v).strip()
-        return v2 if v2 else None
 
-    severity = _ns(severity)
-    threat_level = _ns(threat_level)
-    action_taken = _ns(action_taken)
-    source = _ns(source)
-    tenant_id = _ns(tenant_id)
-    q = _ns(q)
+    severity = _fg_norm_str(severity)
+    threat_level = _fg_norm_str(threat_level)
+    action_taken = _fg_norm_str(action_taken)
+    source = _fg_norm_str(source)
+    tenant_id = _fg_norm_str(tenant_id)
+    q = _fg_norm_str(q)
 
     if severity and not threat_level:
         threat_level = severity
 
+    # normalize ints/bools
+    since_id_n = _fg_norm_int(since_id)
+    limit_n = _fg_norm_int(limit) or limit
+    only_changed_b = bool(_fg_norm_bool(only_changed))
+    only_actionable_b = bool(_fg_norm_bool(only_actionable))
+
     async def gen():
-        last_id = since_id
+        last_id = since_id_n
         last_hb = time.monotonic()
         yield ": connected\n\n"
 
@@ -452,7 +459,7 @@ async def feed_stream(
 
                 resp = feed_live(
                     db=db,
-                    limit=limit,
+                    limit=limit_n,
                     since_id=last_id,
                     severity=severity,
                     threat_level=threat_level,
@@ -460,8 +467,8 @@ async def feed_stream(
                     source=source,
                     tenant_id=tenant_id,
                     q=q,
-                    only_changed=only_changed,
-                    only_actionable=only_actionable,
+                    only_changed=only_changed_b,
+                    only_actionable=only_actionable_b,
                 )
 
                 payload = {
@@ -493,5 +500,6 @@ async def feed_stream(
             await asyncio.sleep(interval)
 
     return StreamingResponse(gen(), media_type="text/event-stream")
+
 
 # === STREAM END ===

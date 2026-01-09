@@ -201,7 +201,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             _fail()
 
         try:
-            import api.auth as auth_mod  # noqa: WPS433
+            import api.auth as auth_mod  # noqa: E402
         except Exception:
             _fail()
 
@@ -242,7 +242,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     # Compatibility shim: older modules importing require_status_auth from api.auth
     try:
-        import api.auth as auth_mod  # noqa: WPS433
+        import api.auth as auth_mod  # noqa: E402
         if not hasattr(auth_mod, "require_status_auth"):
             setattr(auth_mod, "require_status_auth", require_status_auth)
     except Exception:

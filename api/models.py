@@ -7,8 +7,7 @@ from pydantic import BaseModel, Field
 
 from api.schemas import TelemetryInput
 
-from sqlalchemy import Column, DateTime, Float, Integer, String, text
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, DateTime, text
 
 created_at = Column(
     DateTime,

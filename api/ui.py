@@ -3,10 +3,9 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import HTMLResponse
 
-from api.auth_scopes import verify_api_key_raw
 from api.ratelimit import rate_limit_guard
 
 router = APIRouter(

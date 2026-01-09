@@ -8,12 +8,9 @@ from sqlalchemy import JSON, Text
 
 from sqlalchemy import (
     Boolean,
-    Column,
     DateTime,
     Float,
     Integer,
-    String,
-    Text,
     func,
 )
 from sqlalchemy.orm import declarative_base
