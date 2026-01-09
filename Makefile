@@ -322,9 +322,9 @@ no-drift-check-clean:
 # =============================================================================
 # CI lane (keep it tight)
 # =============================================================================
-.PHONY: ci
-ci: guard-scripts fg-fast test-strict
-	@echo "✅ CI lane OK"
+.PHONY: ci-integration
+ci-integration: itest-local
+	@echo "✅ CI integration lane OK"
 
 # =============================================================================
 # Doctor
