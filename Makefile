@@ -323,7 +323,7 @@ no-drift-check-clean:
 # CI lane (keep it tight)
 # =============================================================================
 .PHONY: ci
-ci: guard-scripts fg-fast itest-local test-strict
+ci: guard-scripts fg-fast test-strict
 	@echo "✅ CI lane OK"
 
 # =============================================================================

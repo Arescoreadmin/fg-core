@@ -16,7 +16,7 @@ env:
 
 jobs:
   unit:
-    name: Unit + Build (make ci)
+    name: Unit + Build (no server)
     runs-on: ubuntu-latest
     env:
       FG_ENV: dev
@@ -149,7 +149,7 @@ jobs:
           done
           echo "API failed to start. Logs:"
           tail -200 artifacts/uvicorn.log || true
-          exit 1
+          exit 1guard-scripts fg-fast itest-local test-strict
 
       - name: Smoke auth gate (must pass)
         run: |
