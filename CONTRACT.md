@@ -34,6 +34,24 @@ POST /dev/seed
 source == "dev_seed"
 -->
 
+## Table of Contents
+- [Principles](#0-principles)
+- [Configuration and Environment Precedence](#1-configuration-and-environment-precedence)
+- [Auth, Scopes, Rate Limiting](#2-auth-scopes-rate-limiting)
+- [Database Path Contract (Anti-Drift)](#3-database-path-contract-anti-drift)
+- [`/defend` Endpoint Contract](#4-defend-endpoint-contract)
+- [Telemetry Input Normalization](#5-telemetry-input-normalization)
+- [Decision Engine MVP Rules](#6-decision-engine-mvp-rules)
+- [Clock Drift](#7-clock-drift)
+- [Persistence (Best Effort, Defined)](#8-persistence-best-effort-defined)
+- [Tamper-Evident Logging (Current State)](#9-tamper-evident-logging-current-state)
+- [`/feed/live` Contract](#10-feedlive-contract)
+- [Dev Seed Contract (`FG_DEV_EVENTS_ENABLED`)](#11-dev-seed-contract-fg_dev_events_enabled)
+- [Non-Goals (Explicit)](#12-non-goals-explicit)
+- [Change Control](#13-change-control)
+
+
+
 This document defines non-negotiable invariants for FrostGate Core MVP.
 If behavior changes, update this contract first, then code/tests.
 
