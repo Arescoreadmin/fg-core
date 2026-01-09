@@ -2,18 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 import os
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from api.db import get_db
 from api.db_models import DecisionRecord
-
-log = logging.getLogger("frostgate")
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -55,15 +52,15 @@ async def snapshot(event_id: str, db: Session = Depends(get_db)) -> dict[str, An
     if record is None:
         raise HTTPException(status_code=404, detail="Decision not found")
 
-    request_payload = _maybe_load_json(record.request_json)
-    response_payload = _maybe_load_json(record.response_json)
+    request_payload = _maybe_load_json(getattr(record, "request_json", None))
+    response_payload = _maybe_load_json(getattr(record, "response_json", None))
 
-    snapshot_payload: dict[str, Any] = {
+    snapshot_payload = {
         "event_id": event_id,
-        "created_at": record.created_at.isoformat() if record.created_at else None,
+        "created_at": record.created_at.isoformat() if getattr(record, "created_at", None) else None,
         "request": request_payload,
         "response": response_payload,
-        "threat_level": record.threat_level,
+        "threat_level": getattr(record, "threat_level", None),
     }
 
     return {
@@ -80,17 +77,20 @@ async def audit_trail(event_id: str, db: Session = Depends(get_db)) -> dict[str,
     if record is None:
         raise HTTPException(status_code=404, detail="Decision not found")
 
+    chain_hash = getattr(record, "chain_hash", None)
+    prev_hash = getattr(record, "prev_hash", None)
+
     return {
         "event_id": event_id,
         "timeline": [
             {
-                "timestamp": record.created_at.isoformat() if record.created_at else None,
+                "timestamp": record.created_at.isoformat() if getattr(record, "created_at", None) else None,
                 "summary": "Decision recorded",
             }
         ],
-        "reproducible": True,
-        "chain_hash": record.chain_hash,
-        "prev_hash": record.prev_hash,
+        "reproducible": bool(chain_hash is not None or prev_hash is not None),
+        "chain_hash": chain_hash,
+        "prev_hash": prev_hash,
     }
 
 

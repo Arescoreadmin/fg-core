@@ -19,14 +19,49 @@ from api.feed import router as feed_router
 from api.stats import router as stats_router
 from api.ui import router as ui_router
 
-# Optional "spine" modules (feature-flag gated)
-from api.forensics import forensics_enabled, router as forensics_router
-from api.governance import governance_enabled, router as governance_router
-from api.mission_envelope import mission_envelopes_enabled, router as mission_router
-from api.ring_router import ring_router_enabled, router as ring_router
-from api.roe_engine import roe_engine_enabled, router as roe_router
+# Optional "spine" modules (feature-flag gated, fail-open)
+try:
+    from api.forensics import forensics_enabled, router as forensics_router
+except Exception:  # pragma: no cover
+    def forensics_enabled() -> bool:  # type: ignore
+        return False
+    forensics_router = None  # type: ignore
+
+try:
+    from api.governance import governance_enabled, router as governance_router
+except Exception:  # pragma: no cover
+    def governance_enabled() -> bool:  # type: ignore
+        return False
+    governance_router = None  # type: ignore
+
+try:
+    # Mission envelope module: accept either exported name, but standardize on mission_envelope_enabled()
+    from api.mission_envelope import router as mission_router
+    try:
+        from api.mission_envelope import mission_envelope_enabled  # preferred
+    except Exception:  # pragma: no cover
+        from api.mission_envelope import mission_envelopes_enabled as mission_envelope_enabled  # type: ignore
+except Exception:  # pragma: no cover
+    def mission_envelope_enabled() -> bool:  # type: ignore
+        return False
+    mission_router = None  # type: ignore
+
+try:
+    from api.ring_router import ring_router_enabled, router as ring_router
+except Exception:  # pragma: no cover
+    def ring_router_enabled() -> bool:  # type: ignore
+        return False
+    ring_router = None  # type: ignore
+
+try:
+    from api.roe_engine import roe_engine_enabled, router as roe_router
+except Exception:  # pragma: no cover
+    def roe_engine_enabled() -> bool:  # type: ignore
+        return False
+    roe_router = None  # type: ignore
 
 from api.middleware.auth_gate import AuthGateMiddleware, AuthGateConfig
+
 
 log = logging.getLogger("frostgate")
 
@@ -237,16 +272,15 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(decisions_router)
     app.include_router(stats_router)
     app.include_router(ui_router)
-
-    if mission_envelopes_enabled():
+    if mission_router is not None and mission_envelope_enabled():
         app.include_router(mission_router)
-    if ring_router_enabled():
+    if ring_router is not None and ring_router_enabled():
         app.include_router(ring_router)
-    if roe_engine_enabled():
+    if roe_router is not None and roe_engine_enabled():
         app.include_router(roe_router)
-    if forensics_enabled():
+    if forensics_router is not None and forensics_enabled():
         app.include_router(forensics_router)
-    if governance_enabled():
+    if governance_router is not None and governance_enabled():
         app.include_router(governance_router)
 
     if _dev_enabled():

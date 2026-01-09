@@ -4,7 +4,8 @@ import os
 from enum import Enum
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, Field, ConfigDict
+from pydantic import ConfigDict
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -28,6 +29,9 @@ class RingPolicy(BaseModel):
     model_isolation: bool = True
     cross_ring_queries_allowed: bool = False
     audit_level: str = Field(default="basic", pattern="^(basic|detailed|comprehensive)$")
+    model_config = {"protected_namespaces": ()}
+    ring: ClassificationRing
+    model_isolation: bool = True
 
 
 class RingRouteRequest(BaseModel):
@@ -35,10 +39,10 @@ class RingRouteRequest(BaseModel):
 
 
 class RingRouteResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
     db_path: str
     model_path: str
     policy: RingPolicy
-
 
 DEFAULT_POLICIES = {
     ClassificationRing.UNCLASS: RingPolicy(ring=ClassificationRing.UNCLASS, audit_level="basic"),

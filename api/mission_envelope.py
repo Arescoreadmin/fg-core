@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def _utcnow() -> datetime:
@@ -20,7 +20,14 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
+def mission_envelope_enabled() -> bool:
+    return _env_bool("FG_MISSION_ENVELOPE_ENABLED", False)
+
+
 class MissionEnvelope(BaseModel):
+    # Fix pydantic protected namespace warning for fields like model_version
+    model_config = ConfigDict(protected_namespaces=())
+
     mission_id: str
     classification_level: str
     risk_tier: Optional[str] = None
@@ -46,7 +53,7 @@ class MissionEnvelope(BaseModel):
         return True
 
 
-DEFAULT_ENVELOPES = [
+DEFAULT_ENVELOPES: list[MissionEnvelope] = [
     MissionEnvelope(
         mission_id="fgc-mission-001",
         classification_level="CUI",
@@ -79,6 +86,9 @@ def _load_envelopes() -> list[MissionEnvelope]:
     return envelopes
 
 
+# IMPORTANT:
+# This router owns the /missions prefix. main.py must include_router(router) WITHOUT adding another prefix,
+# or you’ll create /missions/missions and your tests will (correctly) fail.
 router = APIRouter(prefix="/missions", tags=["missions"])
 
 
@@ -105,7 +115,3 @@ async def mission_status(mission_id: str) -> dict[str, str]:
                 "classification_level": envelope.classification_level,
             }
     raise HTTPException(status_code=404, detail="Mission envelope not found")
-
-
-def mission_envelopes_enabled() -> bool:
-    return _env_bool("FG_MISSION_ENVELOPE_ENABLED", False)
