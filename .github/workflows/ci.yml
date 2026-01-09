@@ -149,7 +149,7 @@ jobs:
           done
           echo "API failed to start. Logs:"
           tail -200 artifacts/uvicorn.log || true
-          exit 1guard-scripts fg-fast itest-local test-strict
+          exit 1
 
       - name: Smoke auth gate (must pass)
         run: |
