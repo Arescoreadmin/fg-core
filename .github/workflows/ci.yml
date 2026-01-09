@@ -36,6 +36,7 @@ jobs:
               assert k in y['jobs'], f'missing job: {k}'
           print('workflow sanity ok')
           PY
+
       - name: Install OS deps
         run: |
           sudo apt-get update
@@ -64,6 +65,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
+          python -m pip install ruff
+
+      - name: Ruff lint (api)
+        run: |
+          python -m ruff --version
+          python -m ruff check api
 
       - name: Run unit + build pipeline
         run: |
@@ -150,7 +157,7 @@ jobs:
       - name: Smoke auth gate (must pass)
         run: |
           chmod +x scripts/smoke_auth.sh
-          BASE_URL="${BASE_URL}" FG_API_KEY="${FG_API_KEY}" ./scripts/smoke_auth.sh
+          FG_BASE_URL="${BASE_URL}" BASE_URL="${BASE_URL}" FG_API_KEY="${FG_API_KEY}" ./scripts/smoke_auth.sh
 
       - name: Run integration tests
         run: |
@@ -250,7 +257,7 @@ jobs:
       - name: Smoke auth gate (must pass)
         run: |
           chmod +x scripts/smoke_auth.sh
-          FG_BASE_URL="${BASE_URL}" FG_API_KEY="${FG_API_KEY}" ./scripts/smoke_auth.sh
+          FG_BASE_URL="${BASE_URL}" BASE_URL="${BASE_URL}" FG_API_KEY="${FG_API_KEY}" ./scripts/smoke_auth.sh
 
       - name: Generate evidence bundle (signed)
         run: |
