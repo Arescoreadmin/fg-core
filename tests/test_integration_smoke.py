@@ -1,18 +1,25 @@
+from __future__ import annotations
+
 import os
+
 import httpx
 import pytest
 
-
-def _ci_mode() -> bool:
-    return (
-        os.getenv("CI") == "true" or os.getenv("CI") == "1" or os.getenv("FG_CI") == "1"
-    )
+pytestmark = pytest.mark.integration
 
 
-def _get(url: str) -> httpx.Response:
-    try:
-        return httpx.get(url, timeout=5.0)
-    except httpx.ConnectError:
-        if _ci_mode():
-            raise
-        pytest.skip(f"Server not reachable at {url}. Start it with `make itest-up`.")
+def _base_url() -> str:
+    base_url = os.environ.get("BASE_URL") or os.environ.get("FG_BASE_URL")
+    if not base_url:
+        pytest.skip("integration tests require BASE_URL (or FG_BASE_URL)")
+    return base_url.rstrip("/")
+
+
+def test_integration_health_ready() -> None:
+    base_url = _base_url()
+    with httpx.Client(timeout=5.0) as client:
+        r = client.get(f"{base_url}/health")
+        assert r.status_code == 200, f"/health expected 200 got {r.status_code}: {r.text}"
+
+        r = client.get(f"{base_url}/health/ready")
+        assert r.status_code == 200, f"/health/ready expected 200 got {r.status_code}: {r.text}"

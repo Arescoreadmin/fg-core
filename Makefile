@@ -173,12 +173,27 @@ fg-logs:
 
 .PHONY: test-integration
 test-integration:
-	@test -n "$${BASE_URL:-}" || (echo "❌ BASE_URL is required" && exit 1)
-	@test -n "$${FG_SQLITE_PATH:-}" || (echo "❌ FG_SQLITE_PATH is required" && exit 1)
-	@test -n "$${FG_API_KEY:-}" || (echo "❌ FG_API_KEY is required" && exit 1)
-	@FG_BASE_URL="$${BASE_URL}" $(PYTEST_ENV) $(PY) -m pytest -q -m integration || rc=$$?; \
-	if [ "$$rc" -eq 5 ]; then echo "⚠️  No integration tests collected (ok for now)"; exit 0; fi; \
-	exit "$$rc"
+	@set -euo pipefail; \
+	BASE_URL="$${BASE_URL:-$(ITEST_BASE_URL)}"; \
+	FG_SQLITE_PATH="$${FG_SQLITE_PATH:-$(ITEST_DB)}"; \
+	FG_API_KEY="$${FG_API_KEY:-$(FG_API_KEY)}"; \
+	export BASE_URL FG_SQLITE_PATH FG_API_KEY; \
+	\
+	# Fast fail with a useful message if the API isn't up
+	curl -fsS "$${BASE_URL}/health" >/dev/null || ( \
+		echo "❌ API not reachable at BASE_URL=$${BASE_URL}"; \
+		echo "   Start it with: make itest-up  (or run: make itest-local)"; \
+		exit 1; \
+	); \
+	\
+	rc=0; \
+	FG_BASE_URL="$${BASE_URL}" $(PYTEST_ENV) $(PY) -m pytest -q -m integration || rc=$$?; \
+	if [ $$rc -eq 5 ]; then \
+		echo "⚠️  No integration tests collected (ok for now)"; \
+		exit 0; \
+	fi; \
+	exit $$rc
+
 
 # =============================================================================
 # ITest harness
@@ -212,9 +227,11 @@ itest-up: itest-db-reset
 
 itest-local: itest-down itest-up
 	@set -euo pipefail; \
-	trap '$(MAKE) -s itest-down >/dev/null 2>&1 || true' EXIT; \
+	trap 'st=$$?; $(MAKE) -s itest-down >/dev/null 2>&1 || true; exit $$st' EXIT; \
 	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(ITEST_DB)" ./scripts/smoke_auth.sh; \
 	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(ITEST_DB)" $(MAKE) -s test-integration
+
+
 
 # =============================================================================
 # CI lanes
