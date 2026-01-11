@@ -1,27 +1,8 @@
-[build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "frostgate-core"
-version = "0.1.0"
-description = "FrostGate Core"
-requires-python = ">=3.12"
-
-[project.scripts]
-fg-mint-key = "scripts.mint_api_key:main"
-
-[tool.setuptools]
-include-package-data = true
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["api*", "engine*", "agent*", "scripts*"]
-
 [tool.pytest.ini_options]
 testpaths = ["tests", "backend/tests"]
 norecursedirs = [".venv", "artifacts", "state"]
 markers = [
   "e2e_http: HTTP e2e tests against a running server",
+  "integration: tests that require a running API",
 ]
 asyncio_default_fixture_loop_scope = "function"
