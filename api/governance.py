@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from api.sim_validator import run_simulations, simulations_passed
 
 def _env_bool(name: str, default: bool = False) -> bool:
     v = os.getenv(name)
@@ -93,6 +94,12 @@ async def approve_change(
     if change is None:
         raise HTTPException(status_code=404, detail="Change request not found")
 
+    if not simulations_passed(change.simulation_results):
+        raise HTTPException(
+            status_code=400,
+            detail="Simulation results missing or failing; cannot approve deployment.",
+        )
+
     change.approvals.append(
         {
             "approver": req.approver,
@@ -109,6 +116,24 @@ async def approve_change(
 
     _CHANGE_REQUESTS[change_id] = change
     return change
+
+
+@router.post("/changes/{change_id}/simulate", response_model=PolicyChangeRequest)
+async def simulate_change(change_id: str) -> PolicyChangeRequest:
+    change = _CHANGE_REQUESTS.get(change_id)
+    if change is None:
+        raise HTTPException(status_code=404, detail="Change request not found")
+
+    change.simulation_results = run_simulations()
+    _CHANGE_REQUESTS[change_id] = change
+    return change
+
+
+def ao_approval_granted() -> bool:
+    for change in _CHANGE_REQUESTS.values():
+        if change.change_type == "ao-approval" and change.status == "deployed":
+            return True
+    return False
 
 
 def governance_enabled() -> bool:

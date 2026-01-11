@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Iterable, List
 
-from api.schemas import Persona, ClassificationRing, TIEDEstimate
+from api.schemas_doctrine import Persona, ClassificationRing, TIEDEstimate
 
 
 @dataclass

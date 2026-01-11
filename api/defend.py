@@ -22,8 +22,13 @@ from api.decision_diff import (
     snapshot_from_record,
 )
 from api.ratelimit import rate_limit_guard
+from api.ring_router import RingRouter
 from api.schemas import TelemetryInput
-from api.schemas_doctrine import TieD
+from api.schemas_doctrine import ClassificationRing, Persona, TieD
+from api.governance import ao_approval_granted
+from engine.roe import Mitigation as ROEMitigation
+from engine.roe import apply_roe
+from engine.tied import estimate_impact
 
 log = logging.getLogger("frostgate.defend")
 
@@ -250,8 +255,10 @@ class DecisionExplain(BaseModel):
     roe_applied: bool = False
     disruption_limited: bool = False
     ao_required: bool = False
+    ao_blocked: bool = False
     persona: Optional[str] = None
     classification: Optional[str] = None
+    ring_route: Optional[dict[str, Any]] = None
 
 
 class DefendResponse(BaseModel):
@@ -335,72 +342,61 @@ def evaluate(
 
 
 def _apply_doctrine(
-    persona: Optional[str],
-    classification: Optional[str],
+    threat_level: str,
+    persona: Optional[Persona],
+    classification: Optional[ClassificationRing],
     mitigations: list[MitigationAction],
 ) -> tuple[list[MitigationAction], TieD]:
     """
-    Contract:
-      - tie_d must always exist
-      - guardian + SECRET:
-          - roe_applied=True
-          - ao_required=True
-          - cap block_ip mitigations to 1
-          - gating_decision present: allow | require_approval | reject
+    Consolidated ROE + TIE-D enforcement path.
     """
-    persona_v = (persona or "").strip().lower() or None
-    class_v = (classification or "").strip().upper() or None
+    persona_v = persona or Persona.GUARDIAN
+    class_v = classification or ClassificationRing.UNCLASS
 
-    roe_applied = False
-    disruption_limited = False
-    ao_required = False
+    tie_estimate = estimate_impact(
+        threat_level=threat_level,
+        classification=class_v,
+        persona=persona_v,
+    )
 
-    out = list(mitigations)
+    roe_result = apply_roe(
+        mitigations=[
+            ROEMitigation(
+                action=m.action,
+                target=m.target or "",
+                reason=m.reason,
+                confidence=m.confidence,
+            )
+            for m in mitigations
+        ],
+        persona=persona_v,
+        ring=class_v,
+        tie_d=tie_estimate,
+    )
 
-    # Baseline impacts (always initialized, no UnboundLocalError nonsense)
-    base_impact = 0.0
-    base_user_impact = 0.0
-
-    if any(m.action == "block_ip" for m in out):
-        base_impact = 0.35
-        base_user_impact = 0.20
-
-    if persona_v == "guardian" and class_v == "SECRET":
-        roe_applied = True
-        ao_required = True
-
-        # cap block_ip to 1 (guardian cap)
-        block_ips = [m for m in out if m.action == "block_ip"]
-        if len(block_ips) > 1:
-            disruption_limited = True
-            first = block_ips[0]
-            out = [m for m in out if m.action != "block_ip"]
-            out.insert(0, first)
-
-        # doctrine reduces blast radius by limiting actions
-        if disruption_limited:
-            base_impact = max(0.0, base_impact - 0.10)
-            base_user_impact = max(0.0, base_user_impact - 0.05)
-
-    # gating decision: allow | require_approval | reject
-    gating_decision: Literal["allow", "require_approval", "reject"] = "allow"
-    if persona_v == "guardian" and class_v == "SECRET":
-        # require approval if we actually took a disruptive action
-        gating_decision = (
-            "require_approval" if any(m.action == "block_ip" for m in out) else "allow"
+    out = [
+        MitigationAction(
+            action=m.action,
+            target=m.target or None,
+            reason=m.reason,
+            confidence=m.confidence,
         )
+        for m in roe_result.mitigations
+    ]
+
+    gating_decision = tie_estimate.gating_decision
+    if roe_result.ao_required and gating_decision == "allow":
+        gating_decision = "require_approval"
 
     tied = TieD(
-        roe_applied=roe_applied,
-        disruption_limited=disruption_limited,
-        ao_required=ao_required,
+        roe_applied=True,
+        disruption_limited=roe_result.disruption_limited,
+        ao_required=roe_result.ao_required,
         persona=persona_v,
         classification=class_v,
-        service_impact=float(min(1.0, max(0.0, base_impact))),
-        user_impact=float(min(1.0, max(0.0, base_user_impact))),
+        service_impact=float(tie_estimate.service_impact),
+        user_impact=float(tie_estimate.user_impact),
         gating_decision=gating_decision,
-        # policy_version is defaulted in TieD, but leaving explicit is fine if you prefer:
-        # policy_version="doctrine-v1",
     )
 
     return out, tied
@@ -586,8 +582,22 @@ def defend(req: TelemetryInput, db: Session = Depends(get_db)) -> DefendResponse
 
     persona = getattr(req, "persona", None)
     classification = getattr(req, "classification", None)
+    ring = classification or ClassificationRing.UNCLASS
+    persona = persona or Persona.GUARDIAN
 
-    mitigations, tie_d = _apply_doctrine(persona, classification, mitigations)
+    mitigations, tie_d = _apply_doctrine(
+        threat_level=threat_level,
+        persona=persona,
+        classification=ring,
+        mitigations=mitigations,
+    )
+
+    ring_route = RingRouter().route(ring)
+    ao_blocked = False
+    if tie_d.ao_required and not ao_approval_granted():
+        ao_blocked = True
+        mitigations = []
+        tie_d.gating_decision = "require_approval"
 
     summary = f"{event_type}: {threat_level} ({score})"
 
@@ -600,8 +610,10 @@ def defend(req: TelemetryInput, db: Session = Depends(get_db)) -> DefendResponse
         roe_applied=bool(tie_d.roe_applied),
         disruption_limited=bool(tie_d.disruption_limited),
         ao_required=bool(tie_d.ao_required),
+        ao_blocked=bool(ao_blocked),
         persona=tie_d.persona,
         classification=tie_d.classification,
+        ring_route=ring_route.model_dump(mode="json"),
     )
 
     resp = DefendResponse(
