@@ -1,24 +1,16 @@
 from __future__ import annotations
 
 import os
-from enum import Enum
-
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from api.schemas_doctrine import ClassificationRing
 
 def _env_bool(name: str, default: bool = False) -> bool:
     v = os.getenv(name)
     if v is None:
         return default
     return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
-
-
-class ClassificationRing(str, Enum):
-    UNCLASS = "UNCLASS"
-    CUI = "CUI"
-    SECRET = "SECRET"
-    TOPSECRET = "TOPSECRET"
 
 
 class RingPolicy(BaseModel):
@@ -56,11 +48,6 @@ DEFAULT_POLICIES = {
     ClassificationRing.SECRET: RingPolicy(
         ring=ClassificationRing.SECRET, audit_level="comprehensive"
     ),
-    ClassificationRing.TOPSECRET: RingPolicy(
-        ring=ClassificationRing.TOPSECRET,
-        audit_level="comprehensive",
-        cross_ring_queries_allowed=False,
-    ),
 }
 
 
@@ -89,7 +76,6 @@ class RingRouter:
             ClassificationRing.UNCLASS,
             ClassificationRing.CUI,
             ClassificationRing.SECRET,
-            ClassificationRing.TOPSECRET,
         ]
         return ring_order.index(source_ring) >= ring_order.index(target_ring)
 

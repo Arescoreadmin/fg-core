@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from api.schemas import TelemetryInput
+from api.schemas_doctrine import ClassificationRing, Persona
 
 
 
@@ -13,18 +14,6 @@ class ThreatLevel(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
-
-
-class ClassificationRing(str, Enum):
-    PUBLIC = "PUBLIC"
-    INTERNAL = "INTERNAL"
-    SECRET = "SECRET"
-    TOP_SECRET = "TOP_SECRET"
-
-
-class Persona(str, Enum):
-    GUARDIAN = "guardian"
-    SENTINEL = "sentinel"
 
 
 class TieDBlock(BaseModel):

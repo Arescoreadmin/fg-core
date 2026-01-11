@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from api.schemas_doctrine import ClassificationRing, Persona
 
 class MitigationAction(BaseModel):
     """
@@ -38,9 +39,9 @@ class TelemetryInput(BaseModel):
     tenant_id: Optional[str] = None
     timestamp: Optional[str] = None
 
-    # Doctrine fields as strings
-    classification: Optional[str] = None
-    persona: Optional[str] = None
+    # Doctrine fields (validated enums)
+    classification: Optional[ClassificationRing] = None
+    persona: Optional[Persona] = None
 
     # New + legacy containers
     payload: Dict[str, Any] = Field(default_factory=dict)
@@ -52,6 +53,11 @@ class TelemetryInput(BaseModel):
 
     @model_validator(mode="after")
     def _compat_backfill(self) -> "TelemetryInput":
+        if isinstance(self.classification, str):
+            self.classification = ClassificationRing(self.classification.strip().upper())
+        if isinstance(self.persona, str):
+            self.persona = Persona(self.persona.strip().lower())
+
         # If one of payload/event missing, mirror the other
         if not isinstance(self.payload, dict):
             self.payload = {}
