@@ -19,7 +19,11 @@ def test_integration_health_ready() -> None:
     base_url = _base_url()
     with httpx.Client(timeout=5.0) as client:
         r = client.get(f"{base_url}/health")
-        assert r.status_code == 200, f"/health expected 200 got {r.status_code}: {r.text}"
+        assert r.status_code == 200, (
+            f"/health expected 200 got {r.status_code}: {r.text}"
+        )
 
         r = client.get(f"{base_url}/health/ready")
-        assert r.status_code == 200, f"/health/ready expected 200 got {r.status_code}: {r.text}"
+        assert r.status_code == 200, (
+            f"/health/ready expected 200 got {r.status_code}: {r.text}"
+        )

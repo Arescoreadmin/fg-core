@@ -257,7 +257,7 @@ evidence:
 	test -n "$${FG_SQLITE_PATH:-}" || exit 1; \
 	mkdir -p "$(ARTIFACTS_DIR)" "$(STATE_DIR)" keys; \
 	ts="$$(date -u +%Y%m%dT%H%M%SZ)"; \
-	out="$(ARTIFACTS_DIR)/evidence_$${ts}_$${EVIDENCE_SCENARIO}"; \
+	out="$(ARTIFACTS_DIR)/evidence_$${ts}_$(EVIDENCE_SCENARIO)"; \
 	mkdir -p "$$out"; \
 	git rev-parse HEAD > "$$out/git_head.txt"; \
 	git status --porcelain=v1 > "$$out/git_status.txt" || true; \
@@ -265,6 +265,10 @@ evidence:
 	curl -fsS "$${BASE_URL}/openapi.json" > "$$out/openapi.json"; \
 	( cd "$$out" && find . -type f -print0 | sort -z | xargs -0 sha256sum > manifest.sha256 )
 
-ci-evidence: venv itest-local
-	@SCENARIO="$${SCENARIO:-spike}" BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" \
+ci-evidence: venv itest-down itest-up
+	@set -euo pipefail; \
+	trap 'st=$$?; $(MAKE) -s itest-down >/dev/null 2>&1 || true; exit $$st' EXIT; \
+	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(ITEST_DB)" ./scripts/smoke_auth.sh; \
+	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(ITEST_DB)" $(MAKE) -s test-integration; \
+	SCENARIO="$${SCENARIO:-spike}" BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" \
 	FG_SQLITE_PATH="$(ITEST_DB)" $(MAKE) -s evidence
