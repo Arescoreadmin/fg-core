@@ -132,11 +132,24 @@ def _parse_scopes_csv(val) -> Set[str]:
 
 
 def _extract_key(request: Request, x_api_key: Optional[str]) -> Optional[str]:
-    # Header first
+    """
+    Extract API key from request.
+
+    Security: Keys are ONLY accepted from:
+      1. X-API-Key header (preferred)
+      2. Cookie (for UI sessions)
+
+    Query parameters are NOT supported to prevent credential leakage via:
+      - Server access logs
+      - Browser history
+      - Referrer headers
+      - Proxy logs
+    """
+    # Header first (preferred method)
     if x_api_key and str(x_api_key).strip():
         return str(x_api_key).strip()
 
-    # Cookie (UI)
+    # Cookie (UI sessions only)
     cookie_name = (
         os.getenv("FG_UI_COOKIE_NAME") or "fg_api_key"
     ).strip() or "fg_api_key"
@@ -144,11 +157,9 @@ def _extract_key(request: Request, x_api_key: Optional[str]) -> Optional[str]:
     if ck:
         return ck
 
-    # Query (dev convenience)
-    qp = request.query_params
-    qk = (qp.get("api_key") or qp.get("key") or "").strip()
-    if qk:
-        return qk
+    # SECURITY: Query parameter extraction intentionally removed.
+    # API keys in URLs are logged by proxies, appear in referrer headers,
+    # and persist in browser history - all credential leak vectors.
 
     return None
 

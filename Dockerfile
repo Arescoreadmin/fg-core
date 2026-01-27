@@ -51,11 +51,13 @@ ENV FROSTGATE_ENV=prod \
 
 EXPOSE 8080
 
+# Switch to unprivileged user BEFORE defining CMD
+# This ensures the process runs as non-root from the start
+USER frostgate
+
 # Healthcheck for orchestrators
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD \
   curl -fsS http://127.0.0.1:8080/health || exit 1
 
-# Use uvicorn as the entrypoint
+# Use uvicorn as the entrypoint (runs as frostgate user)
 CMD ["python", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8080"]
-
-USER frostgate

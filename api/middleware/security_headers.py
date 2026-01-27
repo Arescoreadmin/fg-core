@@ -198,9 +198,16 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 # CORS configuration helper (to be used with FastAPI's CORSMiddleware)
 @dataclass
 class CORSConfig:
-    """CORS configuration for FrostGate Core."""
+    """
+    CORS configuration for FrostGate Core.
 
-    allow_origins: list = field(default_factory=lambda: ["*"])
+    Security: Default to empty origins list (deny all cross-origin requests).
+    Explicitly configure FG_CORS_ORIGINS for allowed domains.
+    """
+
+    # SECURITY: Default to empty list (deny cross-origin) instead of ["*"]
+    # Set FG_CORS_ORIGINS="https://app.example.com,https://admin.example.com" for allowed origins
+    allow_origins: list = field(default_factory=list)
     allow_methods: list = field(
         default_factory=lambda: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
     )
