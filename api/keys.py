@@ -6,14 +6,16 @@ Provides endpoints for:
 - Creating new API keys (admin)
 - Revoking API keys (admin)
 - Rotating API keys (self-service)
+- Key lifecycle management
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 
 from api.auth_scopes import (
@@ -25,6 +27,7 @@ from api.auth_scopes import (
     _validate_tenant_id,
     DEFAULT_TTL_SECONDS,
 )
+from api.security_audit import audit_key_created, audit_key_revoked, audit_key_rotated
 
 log = logging.getLogger("frostgate.keys")
 
@@ -140,14 +143,12 @@ class RevokeKeyResponse(BaseModel):
 
 
 @router.post("", response_model=CreateKeyResponse)
-def create_key(req: CreateKeyRequest) -> CreateKeyResponse:
+def create_key(req: CreateKeyRequest, request: Request) -> CreateKeyResponse:
     """
     Create a new API key.
 
     Requires `keys:admin` scope.
     """
-    import time
-
     try:
         key = mint_key(
             *req.scopes,
@@ -170,6 +171,15 @@ def create_key(req: CreateKeyRequest) -> CreateKeyResponse:
                 "tenant_id": req.tenant_id,
                 "ttl_seconds": req.ttl_seconds,
             },
+        )
+
+        # Audit log the key creation
+        audit_key_created(
+            key_prefix=prefix,
+            scopes=req.scopes,
+            tenant_id=req.tenant_id,
+            request=request,
+            ttl_seconds=req.ttl_seconds,
         )
 
         return CreateKeyResponse(
@@ -212,7 +222,7 @@ def get_keys(
 
 
 @router.post("/revoke", response_model=RevokeKeyResponse)
-def revoke_key(req: RevokeKeyRequest) -> RevokeKeyResponse:
+def revoke_key(req: RevokeKeyRequest, request: Request) -> RevokeKeyResponse:
     """
     Revoke (disable) an API key by prefix.
 
@@ -223,6 +233,8 @@ def revoke_key(req: RevokeKeyRequest) -> RevokeKeyResponse:
 
         if revoked:
             log.info("API key revoked", extra={"prefix": req.prefix})
+            # Audit log the revocation
+            audit_key_revoked(key_prefix=req.prefix, request=request)
             return RevokeKeyResponse(
                 revoked=True,
                 prefix=req.prefix,
@@ -240,7 +252,7 @@ def revoke_key(req: RevokeKeyRequest) -> RevokeKeyResponse:
 
 
 @router.delete("/{prefix}", response_model=RevokeKeyResponse)
-def delete_key(prefix: str) -> RevokeKeyResponse:
+def delete_key(prefix: str, request: Request) -> RevokeKeyResponse:
     """
     Delete (revoke) an API key by prefix.
 
@@ -250,4 +262,166 @@ def delete_key(prefix: str) -> RevokeKeyResponse:
     if not prefix or len(prefix) > 64:
         raise HTTPException(status_code=400, detail="Invalid prefix")
 
-    return revoke_key(RevokeKeyRequest(prefix=prefix))
+    return revoke_key(RevokeKeyRequest(prefix=prefix), request)
+
+
+# =============================================================================
+# Key Rotation
+# =============================================================================
+
+
+class RotateKeyRequest(BaseModel):
+    """Request to rotate an API key."""
+
+    current_key: str = Field(
+        min_length=10,
+        max_length=256,
+        description="The current API key to rotate",
+    )
+    ttl_seconds: int = Field(
+        default=DEFAULT_TTL_SECONDS,
+        ge=60,
+        le=365 * 24 * 3600,
+        description="TTL for the new key (default 24 hours)",
+    )
+    revoke_old: bool = Field(
+        default=True,
+        description="Whether to immediately revoke the old key",
+    )
+
+
+class RotateKeyResponse(BaseModel):
+    """Response containing the rotated API key."""
+
+    new_key: str = Field(description="The new API key (only shown once)")
+    new_prefix: str = Field(description="New key prefix for identification")
+    old_prefix: str = Field(description="Old key prefix (for reference)")
+    scopes: list[str] = Field(description="Scopes inherited from old key")
+    tenant_id: Optional[str] = Field(description="Associated tenant ID")
+    expires_at: int = Field(description="Unix timestamp when new key expires")
+    old_key_revoked: bool = Field(description="Whether the old key was revoked")
+
+
+@router.post("/rotate", response_model=RotateKeyResponse)
+def rotate_key(req: RotateKeyRequest, request: Request) -> RotateKeyResponse:
+    """
+    Rotate an API key, creating a new key with the same scopes.
+
+    This endpoint allows key rotation for security best practices:
+    - Creates a new key with the same scopes as the old key
+    - Optionally revokes the old key immediately
+    - Links the new key to the old key for audit trail
+
+    Requires the current key to be valid and active.
+    """
+    import sqlite3
+    import os
+    from api.db import _resolve_sqlite_path
+    from api.auth_scopes import _sha256_hex, _parse_scopes_csv
+
+    current_key = req.current_key.strip()
+    if not current_key:
+        raise HTTPException(status_code=400, detail="Current key is required")
+
+    # Validate the current key exists and is active
+    sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
+    if not sqlite_path:
+        sqlite_path = str(_resolve_sqlite_path())
+
+    # Parse the current key to extract components
+    parts = current_key.split(".")
+    if len(parts) < 3:
+        raise HTTPException(status_code=400, detail="Invalid key format")
+
+    old_prefix = parts[0]
+    secret_val = parts[-1]
+    old_key_hash = _sha256_hex(secret_val)
+
+    try:
+        con = sqlite3.connect(sqlite_path)
+        try:
+            row = con.execute(
+                "SELECT id, scopes_csv, enabled, tenant_id FROM api_keys WHERE prefix=? AND key_hash=? LIMIT 1",
+                (old_prefix, old_key_hash),
+            ).fetchone()
+
+            if not row:
+                raise HTTPException(status_code=404, detail="Key not found")
+
+            key_id, scopes_csv, enabled, tenant_id = row
+
+            if not enabled:
+                raise HTTPException(status_code=400, detail="Key is already disabled")
+
+            # Parse scopes from old key
+            scopes = list(_parse_scopes_csv(scopes_csv))
+
+            # Create new key with same scopes
+            new_key = mint_key(
+                *scopes,
+                ttl_seconds=req.ttl_seconds,
+                tenant_id=tenant_id,
+            )
+
+            new_parts = new_key.split(".")
+            new_prefix = new_parts[0] if new_parts else "fgk"
+
+            # Link the new key to the old key for audit trail
+            new_secret = new_parts[-1]
+            new_key_hash = _sha256_hex(new_secret)
+            con.execute(
+                "UPDATE api_keys SET rotated_from=? WHERE key_hash=?",
+                (old_key_hash, new_key_hash),
+            )
+
+            # Revoke old key if requested
+            old_key_revoked = False
+            if req.revoke_old:
+                con.execute(
+                    "UPDATE api_keys SET enabled=0 WHERE id=?",
+                    (key_id,),
+                )
+                old_key_revoked = True
+
+            con.commit()
+
+            now = int(time.time())
+            expires_at = now + req.ttl_seconds
+
+            log.info(
+                "API key rotated",
+                extra={
+                    "old_prefix": old_prefix,
+                    "new_prefix": new_prefix,
+                    "tenant_id": tenant_id,
+                    "old_key_revoked": old_key_revoked,
+                },
+            )
+
+            # Audit log the rotation
+            audit_key_rotated(
+                old_prefix=old_prefix,
+                new_prefix=new_prefix,
+                tenant_id=tenant_id,
+                request=request,
+                old_key_revoked=old_key_revoked,
+            )
+
+            return RotateKeyResponse(
+                new_key=new_key,
+                new_prefix=new_prefix,
+                old_prefix=old_prefix,
+                scopes=scopes,
+                tenant_id=tenant_id,
+                expires_at=expires_at,
+                old_key_revoked=old_key_revoked,
+            )
+
+        finally:
+            con.close()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.exception("Failed to rotate API key")
+        raise HTTPException(status_code=500, detail=f"Failed to rotate key: {e}")

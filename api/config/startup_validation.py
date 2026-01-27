@@ -115,6 +115,9 @@ class StartupValidator:
         self._check_cors(report)
         self._check_security_headers(report)
         self._check_auth_enabled(report)
+        self._check_key_ttl(report)
+        self._check_brute_force_protection(report)
+        self._check_audit_logging(report)
 
         return report
 
@@ -287,6 +290,88 @@ class StartupValidator:
                 passed=True,
                 message="Authentication is enabled.",
                 severity="info",
+            )
+
+    def _check_key_ttl(self, report: StartupValidationReport) -> None:
+        """Check API key TTL configuration."""
+        default_ttl = _env_int("FG_KEY_DEFAULT_TTL", 24 * 3600)  # 24 hours default
+
+        if self.is_production:
+            # Production should have reasonable key TTL
+            if default_ttl > 7 * 24 * 3600:  # > 7 days
+                report.add(
+                    name="key_ttl_long",
+                    passed=False,
+                    message=f"API key TTL is very long ({default_ttl // 3600}h). "
+                    "Consider shorter TTL for production (< 7 days).",
+                    severity="warning",
+                )
+            else:
+                report.add(
+                    name="key_ttl",
+                    passed=True,
+                    message=f"API key TTL configured: {default_ttl // 3600}h",
+                    severity="info",
+                )
+
+    def _check_brute_force_protection(self, report: StartupValidationReport) -> None:
+        """Check brute force protection settings."""
+        bf_threshold = _env_int("FG_BRUTE_FORCE_THRESHOLD", 10)
+        bf_window = _env_int("FG_BRUTE_FORCE_WINDOW", 300)
+
+        if bf_threshold > 50:
+            report.add(
+                name="brute_force_threshold_high",
+                passed=False,
+                message=f"Brute force threshold is high ({bf_threshold}). "
+                "Consider lower threshold (10-20) for better protection.",
+                severity="warning",
+            )
+        elif bf_threshold < 3:
+            report.add(
+                name="brute_force_threshold_low",
+                passed=False,
+                message=f"Brute force threshold is very low ({bf_threshold}). "
+                "May cause false positives for legitimate users.",
+                severity="warning",
+            )
+        else:
+            report.add(
+                name="brute_force_protection",
+                passed=True,
+                message=f"Brute force protection: {bf_threshold} attempts / {bf_window}s",
+                severity="info",
+            )
+
+    def _check_audit_logging(self, report: StartupValidationReport) -> None:
+        """Check audit logging configuration."""
+        audit_db = _env_bool("FG_AUDIT_PERSIST_DB", True)
+        log_level = _env_str("FG_LOG_LEVEL", "INFO").upper()
+
+        if self.is_production and not audit_db:
+            report.add(
+                name="audit_logging_disabled",
+                passed=False,
+                message="Security audit DB persistence is disabled. "
+                "Enable FG_AUDIT_PERSIST_DB for compliance.",
+                severity="warning",
+            )
+        else:
+            report.add(
+                name="audit_logging",
+                passed=True,
+                message=f"Audit logging enabled (DB: {audit_db}, Level: {log_level})",
+                severity="info",
+            )
+
+        # Check if debug logging in production
+        if self.is_production and log_level == "DEBUG":
+            report.add(
+                name="debug_logging_production",
+                passed=False,
+                message="DEBUG logging in production may expose sensitive data. "
+                "Use INFO or WARNING.",
+                severity="warning",
             )
 
 
