@@ -161,7 +161,17 @@ jobs:
         run: |
           set -euo pipefail
           out="$(cat artifacts/latest_evidence_dir.txt)"
-          test -f "$out/manifest.sha256.minisig" || (echo "❌ missing minisig" && exit 1)
+
+          # Check if signature file exists
+          if [ ! -f "$out/manifest.sha256.minisig" ]; then
+            # If MINISIGN_SECRET_KEY wasn't available, skip verification
+            if [ -z "${MINISIGN_SECRET_KEY:-}" ]; then
+              echo "⚠️ Skipping signature verification: MINISIGN_SECRET_KEY not available (expected for PRs)"
+              exit 0
+            fi
+            echo "❌ missing minisig (but MINISIGN_SECRET_KEY was set)"
+            exit 1
+          fi
 
           if [ -f keys/minisign.pub ]; then
             PUB="$(cat keys/minisign.pub)"
