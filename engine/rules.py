@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Tuple, Union
 
 from api.schemas import TelemetryInput, MitigationAction
+from engine.anomaly import analyze_telemetry
 
 
 def _as_dict(x: Any) -> Dict[str, Any]:
@@ -48,13 +49,19 @@ def _coerce_int(v: Any, default: int = 0) -> int:
 
 def _normalize_event_type(event_type: Any) -> str:
     s = _norm_str(event_type, "unknown").lower()
-    if s in ("auth.brute_force", "auth.bruteforce", "ssh.bruteforce", "bruteforce", "brute_force"):
+    if s in (
+        "auth.brute_force",
+        "auth.bruteforce",
+        "ssh.bruteforce",
+        "bruteforce",
+        "brute_force",
+    ):
         return "auth.bruteforce"
     return s
 
 
 def _extract_payload_and_meta(
-    telemetry: Union[TelemetryInput, Dict[str, Any], Any]
+    telemetry: Union[TelemetryInput, Dict[str, Any], Any],
 ) -> Tuple[Dict[str, Any], str, str, str]:
     payload: Dict[str, Any] = {}
     event_type: Any = "unknown"
@@ -63,15 +70,31 @@ def _extract_payload_and_meta(
 
     if isinstance(telemetry, dict):
         payload_raw = telemetry.get("payload") or telemetry.get("event") or {}
-        payload = payload_raw if isinstance(payload_raw, dict) else _as_dict(payload_raw)
+        payload = (
+            payload_raw if isinstance(payload_raw, dict) else _as_dict(payload_raw)
+        )
         event_type = telemetry.get("event_type") or telemetry.get("type") or "unknown"
         tenant_id = telemetry.get("tenant_id") or telemetry.get("tenant") or "unknown"
         source = telemetry.get("source") or "unknown"
     else:
-        payload_raw = getattr(telemetry, "payload", None) or getattr(telemetry, "event", None) or {}
-        payload = payload_raw if isinstance(payload_raw, dict) else _as_dict(payload_raw)
-        event_type = getattr(telemetry, "event_type", None) or getattr(telemetry, "type", None) or "unknown"
-        tenant_id = getattr(telemetry, "tenant_id", None) or getattr(telemetry, "tenant", None) or "unknown"
+        payload_raw = (
+            getattr(telemetry, "payload", None)
+            or getattr(telemetry, "event", None)
+            or {}
+        )
+        payload = (
+            payload_raw if isinstance(payload_raw, dict) else _as_dict(payload_raw)
+        )
+        event_type = (
+            getattr(telemetry, "event_type", None)
+            or getattr(telemetry, "type", None)
+            or "unknown"
+        )
+        tenant_id = (
+            getattr(telemetry, "tenant_id", None)
+            or getattr(telemetry, "tenant", None)
+            or "unknown"
+        )
         source = getattr(telemetry, "source", None) or "unknown"
 
     # fallback: some send event_type inside payload
@@ -79,14 +102,19 @@ def _extract_payload_and_meta(
     if et in ("unknown", "none", ""):
         event_type = payload.get("event_type") or payload.get("type") or event_type
 
-    return payload, _normalize_event_type(event_type), _norm_str(tenant_id), _norm_str(source)
+    return (
+        payload,
+        _normalize_event_type(event_type),
+        _norm_str(tenant_id),
+        _norm_str(source),
+    )
 
 
 def evaluate_rules(
     telemetry: TelemetryInput,
 ) -> Tuple[str, List[MitigationAction], List[str], float, float]:
     """
-    MVP rules engine.
+    Ensemble rules engine combining rule-based and statistical anomaly detection.
 
     Returns:
       threat_level: low | medium | high | critical
@@ -98,10 +126,18 @@ def evaluate_rules(
     threat_level = "low"
     mitigations: List[MitigationAction] = []
     rules_triggered: List[str] = []
-    anomaly_score = 0.0
-    ai_adv_score = 0.0
 
-    payload, event_type, _tenant_id, _source = _extract_payload_and_meta(telemetry)
+    payload, event_type, tenant_id, source = _extract_payload_and_meta(telemetry)
+
+    # Run anomaly detection on telemetry
+    telemetry_dict = _as_dict(telemetry)
+    if "tenant_id" not in telemetry_dict:
+        telemetry_dict["tenant_id"] = tenant_id
+    if "event_type" not in telemetry_dict:
+        telemetry_dict["event_type"] = event_type
+
+    anomaly_score, ai_adv_score, anomaly_indicators = analyze_telemetry(telemetry_dict)
+    rules_triggered.extend(anomaly_indicators)
 
     source_ip = (
         payload.get("src_ip")
@@ -127,7 +163,9 @@ def evaluate_rules(
     # robust bruteforce detection:
     # - explicit event_type indicates bruteforce
     # - OR high failed_auths implies bruteforce even if event_type is generic ("auth")
-    is_bruteforce = ("bruteforce" in et) or ("brute_force" in et) or (failed_auths >= 10)
+    is_bruteforce = (
+        ("bruteforce" in et) or ("brute_force" in et) or (failed_auths >= 10)
+    )
 
     # malformed telemetry (declares bruteforce but no count)
     if ("bruteforce" in et or "brute_force" in et) and failed_auths == 0:
@@ -141,8 +179,8 @@ def evaluate_rules(
         threat_level = "high"
         mitigations.append(
             MitigationAction(
-                action="block",          # schema-valid
-                target=str(source_ip),   # keep it string
+                action="block",  # schema-valid
+                target=str(source_ip),  # keep it string
                 reason=f"{failed_auths} failed auth attempts detected",
                 confidence=0.92,
             )
@@ -155,5 +193,18 @@ def evaluate_rules(
         ai_adv_score = max(ai_adv_score, 0.7)
         if threat_level == "low":
             threat_level = "medium"
+
+    # Elevate threat level based on anomaly score
+    if anomaly_score >= 0.7 and threat_level == "low":
+        threat_level = "medium"
+        rules_triggered.append("rule:high_anomaly_score")
+    elif anomaly_score >= 0.85 and threat_level == "medium":
+        threat_level = "high"
+        rules_triggered.append("rule:critical_anomaly_score")
+
+    # AI adversarial detection elevation
+    if ai_adv_score >= 0.6 and threat_level == "low":
+        threat_level = "medium"
+        rules_triggered.append("rule:ai_adversarial_detected")
 
     return threat_level, mitigations, rules_triggered, anomaly_score, ai_adv_score
