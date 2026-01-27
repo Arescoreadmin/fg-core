@@ -376,10 +376,12 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     @app.get("/health/live")
     async def health_live() -> dict:
+        """Kubernetes liveness probe - is the service running?"""
         return {"status": "live"}
 
     @app.get("/health/ready")
     async def health_ready() -> dict:
+        """Kubernetes readiness probe - can the service handle traffic?"""
         if not bool(app.state.db_init_ok):
             raise HTTPException(
                 status_code=503,
@@ -393,6 +395,29 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         if not p.exists():
             raise HTTPException(status_code=503, detail=f"DB missing: {p}")
         return {"status": "ready", "db": "sqlite", "path": str(p)}
+
+    @app.get("/health/detailed")
+    async def health_detailed(_: None = Depends(require_status_auth)) -> dict:
+        """
+        Detailed health check with all dependency status.
+
+        Requires authentication.
+        Returns comprehensive health information including:
+        - Database connectivity and latency
+        - Redis connectivity (if configured)
+        - Disk space status
+        - Service uptime
+        """
+        try:
+            from api.health import check_health_detailed
+
+            return check_health_detailed()
+        except Exception as e:
+            log.exception("Detailed health check failed")
+            return {
+                "status": "unhealthy",
+                "error": str(e),
+            }
 
     @app.get("/status")
     async def status(_: None = Depends(require_status_auth)) -> dict:

@@ -229,6 +229,12 @@ def mint_key(
         if "created_at" in names and "created_at" in notnull:
             values["created_at"] = now_i
 
+        # SaaS schema evolution - version and use_count (NOT NULL with defaults)
+        if "version" in names:
+            values["version"] = 1
+        if "use_count" in names:
+            values["use_count"] = 0
+
         ordered = [
             c
             for c in (
@@ -239,6 +245,8 @@ def mint_key(
                 "tenant_id",
                 "created_at",
                 "enabled",
+                "version",
+                "use_count",
             )
             if c in names and c in values
         ]
