@@ -3,9 +3,10 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     # Security: Require authentication to prevent unauthorized access from other containers
-    command: ["redis-server", "--save", "", "--appendonly", "no", "--requirepass", "${REDIS_PASSWORD:-frostgate_redis_secret}"]
+    # REDIS_PASSWORD must be set in .env - no default provided for security
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}"]
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-frostgate_redis_secret}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}", "ping"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -74,7 +75,7 @@ services:
       # DB/Redis
       FG_DB_URL: postgresql+psycopg://${POSTGRES_USER:-fg_user}:${POSTGRES_PASSWORD:-STRONG_PASSWORD}@postgres:5432/${POSTGRES_DB:-frostgate}
       # Redis URL with authentication (password must match redis service)
-      FG_REDIS_URL: ${FG_REDIS_URL:-redis://:${REDIS_PASSWORD:-frostgate_redis_secret}@redis:6379/0}
+      FG_REDIS_URL: ${FG_REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379/0}
 
       # Rate limiting
       FG_RL_ENABLED: ${FG_RL_ENABLED:-true}
