@@ -1,12 +1,24 @@
+"""
+Backwards compatibility shim - redirects to api.ratelimit module.
+
+The actual implementation is in api/ratelimit.py.
+"""
+
 from __future__ import annotations
 
-from fastapi import Request
+# Re-export from the actual implementation
+from api.ratelimit import (
+    rate_limit_guard,
+    load_config,
+    RLConfig,
+    MemoryRateLimiter,
+    MemoryBucket,
+)
 
-
-def rate_limit_guard():
-    # Proper FastAPI dependency: only injectable params (Request), no *args/**kwargs
-    async def _dep(request: Request):
-        # TODO: implement real limiter (redis token bucket, etc.)
-        return None
-
-    return _dep
+__all__ = [
+    "rate_limit_guard",
+    "load_config",
+    "RLConfig",
+    "MemoryRateLimiter",
+    "MemoryBucket",
+]

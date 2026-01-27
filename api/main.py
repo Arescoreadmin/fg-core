@@ -74,10 +74,17 @@ except Exception:  # pragma: no cover
 
     roe_router = None  # type: ignore
 
+from fastapi.middleware.cors import CORSMiddleware
+
 from api.middleware.auth_gate import AuthGateMiddleware, AuthGateConfig
 from api.middleware.security_headers import (
     SecurityHeadersMiddleware,
     SecurityHeadersConfig,
+    CORSConfig,
+)
+from api.middleware.request_validation import (
+    RequestValidationMiddleware,
+    RequestValidationConfig,
 )
 
 
@@ -187,6 +194,23 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     # Security headers middleware (after shield, before auth)
     app.add_middleware(
         SecurityHeadersMiddleware, config=SecurityHeadersConfig.from_env()
+    )
+
+    # CORS middleware (configurable via environment)
+    cors_config = CORSConfig.from_env()
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_config.allow_origins,
+        allow_credentials=cors_config.allow_credentials,
+        allow_methods=cors_config.allow_methods,
+        allow_headers=cors_config.allow_headers,
+        expose_headers=cors_config.expose_headers,
+        max_age=cors_config.max_age,
+    )
+
+    # Request validation middleware (body size limits, content-type validation)
+    app.add_middleware(
+        RequestValidationMiddleware, config=RequestValidationConfig.from_env()
     )
 
     # Frozen state
