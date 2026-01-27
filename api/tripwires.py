@@ -36,12 +36,13 @@ class TripwireAlert:
     timestamp: str
 
     def to_dict(self) -> dict[str, Any]:
+        # Note: 'message' is reserved by Python logging, use 'alert_message'
         return {
             "alert_type": self.alert_type,
             "severity": self.severity,
-            "message": self.message,
+            "alert_message": self.message,
             "details": self.details,
-            "timestamp": self.timestamp,
+            "alert_timestamp": self.timestamp,
         }
 
 

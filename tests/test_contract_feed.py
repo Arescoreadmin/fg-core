@@ -26,12 +26,14 @@ def test_auth_required_when_enabled(build_app):
     app = build_app(auth_enabled=True)
     c = TestClient(app)
 
+    # Missing key -> 401
     r = c.get("/feed/live?limit=1")
     assert r.status_code == 401
     assert r.json()["detail"] == "Invalid or missing API key"
 
+    # Invalid key -> 403 (key present but wrong)
     r = c.get("/feed/live?limit=1", headers={"X-API-Key": "wrong"})
-    assert r.status_code == 401
+    assert r.status_code == 403
 
     r = c.get("/feed/live?limit=1", headers=_auth_headers())
     assert r.status_code == 200

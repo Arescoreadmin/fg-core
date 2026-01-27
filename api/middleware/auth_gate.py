@@ -66,27 +66,28 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
             resp = await call_next(request)
             return self._stamp(resp, request, "public")
 
-        # Prefer header; fallback to UI cookie if header is missing/blank
-        raw = (request.headers.get("x-api-key") or "").strip()
-        ck_name = os.getenv("FG_UI_COOKIE_NAME", "fg_api_key")
-        if not raw:
-            raw = (request.cookies.get(ck_name) or "").strip()
+        # Use auth_scopes._extract_key for consistent key extraction
+        from api.auth_scopes import _extract_key, verify_api_key_detailed
 
-        if not raw:
+        raw = _extract_key(request, request.headers.get("x-api-key"))
+
+        # Delegate to single source of truth with request context
+        result = verify_api_key_detailed(raw=raw, required_scopes=None, request=request)
+
+        if result.valid:
+            resp = await call_next(request)
+            return self._stamp(resp, request, "protected")
+
+        # Proper status codes: 401 for missing, 403 for invalid
+        if result.is_missing_key:
             resp = JSONResponse(
                 {"detail": "Invalid or missing API key", "auth": "blocked"},
                 status_code=401,
             )
-            return self._stamp(resp, request, "blocked")
-
-        from api.auth_scopes import verify_api_key_raw
-
-        if not verify_api_key_raw(raw, required_scopes=None):
+            return self._stamp(resp, request, "blocked_missing")
+        else:
             resp = JSONResponse(
                 {"detail": "Invalid or missing API key", "auth": "blocked"},
-                status_code=401,
+                status_code=403,
             )
-            return self._stamp(resp, request, "blocked")
-
-        resp = await call_next(request)
-        return self._stamp(resp, request, "protected")
+            return self._stamp(resp, request, "blocked_invalid")
