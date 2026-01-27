@@ -1,18 +1,111 @@
 from __future__ import annotations
 
+import logging
 import os
+import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from fastapi import Depends, HTTPException, Request
 
 from api.auth_scopes import verify_api_key
 
+log = logging.getLogger("frostgate.ratelimit")
+
 try:
     import redis  # type: ignore
 except Exception:  # pragma: no cover
     redis = None
+
+
+# -----------------------------
+# In-Memory Token Bucket (for dev/testing)
+# -----------------------------
+
+
+@dataclass
+class MemoryBucket:
+    """Token bucket state for in-memory rate limiting."""
+
+    tokens: float
+    last_ts: float
+
+
+class MemoryRateLimiter:
+    """
+    Thread-safe in-memory token bucket rate limiter.
+    Suitable for single-instance development/testing.
+    For production, use Redis backend for distributed rate limiting.
+    """
+
+    def __init__(self) -> None:
+        self._buckets: Dict[str, MemoryBucket] = {}
+        self._lock = threading.Lock()
+        self._cleanup_interval = 300  # cleanup every 5 minutes
+        self._last_cleanup = time.time()
+
+    def _cleanup_expired(self, capacity: float, rate: float) -> None:
+        """Remove buckets that have been idle too long."""
+        now = time.time()
+        if now - self._last_cleanup < self._cleanup_interval:
+            return
+
+        # Calculate max idle time (time to refill from 0 to capacity * 2)
+        max_idle = (capacity * 2) / rate if rate > 0 else 3600
+
+        with self._lock:
+            expired = [
+                k for k, v in self._buckets.items() if now - v.last_ts > max_idle
+            ]
+            for k in expired:
+                del self._buckets[k]
+            self._last_cleanup = now
+
+    def allow(
+        self, key: str, rate_per_sec: float, capacity: float, cost: float = 1.0
+    ) -> Tuple[bool, int, int, int]:
+        """
+        Check if request is allowed under rate limit.
+
+        Returns:
+            (allowed, limit, remaining, reset_seconds)
+        """
+        now = time.time()
+        self._cleanup_expired(capacity, rate_per_sec)
+
+        with self._lock:
+            bucket = self._buckets.get(key)
+            if bucket is None:
+                bucket = MemoryBucket(tokens=capacity, last_ts=now)
+                self._buckets[key] = bucket
+
+            # Refill tokens
+            delta = max(0.0, now - bucket.last_ts)
+            bucket.tokens = min(capacity, bucket.tokens + (delta * rate_per_sec))
+            bucket.last_ts = now
+
+            # Check if allowed
+            if bucket.tokens >= cost:
+                bucket.tokens -= cost
+                remaining = int(bucket.tokens)
+                return True, int(capacity), remaining, 0
+            else:
+                # Calculate reset time
+                needed = cost - bucket.tokens
+                reset = int(max(1, needed / rate_per_sec)) if rate_per_sec > 0 else 1
+                return False, int(capacity), 0, reset
+
+
+# Global memory limiter instance
+_memory_limiter: Optional[MemoryRateLimiter] = None
+
+
+def _get_memory_limiter() -> MemoryRateLimiter:
+    global _memory_limiter
+    if _memory_limiter is None:
+        _memory_limiter = MemoryRateLimiter()
+    return _memory_limiter
 
 
 # -----------------------------
@@ -83,8 +176,8 @@ def load_config() -> RLConfig:
 
     fail_open = _env_bool("FG_RL_FAIL_OPEN", True)
 
-    if backend not in ("redis",):
-        backend = "redis"
+    if backend not in ("redis", "memory"):
+        backend = "memory"  # Default to memory for dev/test
     if scope not in ("tenant", "source", "ip"):
         scope = "tenant"
 
@@ -260,6 +353,20 @@ def _allow_redis(key: str, cfg: RLConfig) -> Tuple[bool, int, int, int]:
     return ok, int(float(limit)), int(float(remaining)), int(float(reset))
 
 
+def _allow_memory(key: str, cfg: RLConfig) -> Tuple[bool, int, int, int]:
+    """Use in-memory token bucket for rate limiting."""
+    limiter = _get_memory_limiter()
+    cap = _capacity(cfg)
+    return limiter.allow(key, cfg.rate_per_sec, cap, cost=1.0)
+
+
+def _allow(key: str, cfg: RLConfig) -> Tuple[bool, int, int, int]:
+    """Route to appropriate backend based on config."""
+    if cfg.backend == "memory":
+        return _allow_memory(key, cfg)
+    return _allow_redis(key, cfg)
+
+
 # -----------------------------
 # FastAPI dependency
 # -----------------------------
@@ -283,8 +390,9 @@ async def rate_limit_guard(
     key = _key_from_request(request, cfg)
 
     try:
-        ok, limit, remaining, reset = _allow_redis(key, cfg)
-    except Exception:
+        ok, limit, remaining, reset = _allow(key, cfg)
+    except Exception as e:
+        log.warning(f"Rate limiter error: {e}")
         if cfg.fail_open:
             return
         raise HTTPException(status_code=503, detail="Rate limiter unavailable")
