@@ -16,6 +16,7 @@ from api.decisions import router as decisions_router
 from api.defend import router as defend_router
 from api.dev_events import router as dev_events_router
 from api.feed import router as feed_router
+from api.keys import router as keys_router
 from api.stats import router as stats_router
 from api.ui import router as ui_router
 
@@ -74,6 +75,10 @@ except Exception:  # pragma: no cover
     roe_router = None  # type: ignore
 
 from api.middleware.auth_gate import AuthGateMiddleware, AuthGateConfig
+from api.middleware.security_headers import (
+    SecurityHeadersMiddleware,
+    SecurityHeadersConfig,
+)
 
 
 log = logging.getLogger("frostgate")
@@ -178,6 +183,11 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     # Shield first (outermost)
     app.add_middleware(FGExceptionShieldMiddleware)
+
+    # Security headers middleware (after shield, before auth)
+    app.add_middleware(
+        SecurityHeadersMiddleware, config=SecurityHeadersConfig.from_env()
+    )
 
     # Frozen state
     app.state.auth_enabled = bool(resolved_auth_enabled)
@@ -286,6 +296,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(decisions_router)
     app.include_router(stats_router)
     app.include_router(ui_router)
+    app.include_router(keys_router)
     if mission_router is not None and mission_envelope_enabled():
         app.include_router(mission_router)
     if ring_router is not None and ring_router_enabled():
