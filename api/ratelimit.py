@@ -209,6 +209,43 @@ def _api_key_from_request(request: Request) -> str:
     return (request.headers.get("x-api-key") or "").strip()
 
 
+def _extract_client_ip(request: Request) -> str:
+    """
+    Extract client IP from request, handling common proxy headers.
+
+    Priority:
+    1. X-Forwarded-For (first IP in chain)
+    2. X-Real-IP
+    3. CF-Connecting-IP (Cloudflare)
+    4. True-Client-IP (Akamai/Cloudflare)
+    5. request.client.host
+
+    Security: Only trust proxy headers in production if behind a trusted proxy.
+    """
+    # Try proxy headers in order of preference
+    for header in (
+        "x-forwarded-for",
+        "x-real-ip",
+        "cf-connecting-ip",
+        "true-client-ip",
+    ):
+        value = request.headers.get(header)
+        if value:
+            # X-Forwarded-For can be comma-separated, take first (client) IP
+            ip = value.split(",")[0].strip()
+            # Basic validation: must be non-empty and reasonable length
+            if ip and len(ip) <= 45:
+                # Sanitize: only allow valid IP characters
+                if all(c.isalnum() or c in ".:" for c in ip):
+                    return ip
+
+    # Fallback to direct client
+    if request.client and request.client.host:
+        return request.client.host
+
+    return "unknown"
+
+
 def _key_from_request(request: Request, cfg: RLConfig) -> str:
     body = getattr(request.state, "telemetry_body", None)
     tenant = None
@@ -222,12 +259,9 @@ def _key_from_request(request: Request, cfg: RLConfig) -> str:
     if cfg.scope == "source" and source:
         return f"source:{source}"
 
-    xfwd = request.headers.get("x-forwarded-for")
-    if xfwd:
-        ip = xfwd.split(",")[0].strip()
-        return f"ip:{ip}"
-    client = request.client.host if request.client else "unknown"
-    return f"ip:{client}"
+    # IP-based rate limiting (improved extraction)
+    client_ip = _extract_client_ip(request)
+    return f"ip:{client_ip}"
 
 
 # -----------------------------

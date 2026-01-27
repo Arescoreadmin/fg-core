@@ -261,8 +261,12 @@ evidence:
 	mkdir -p "$$out"; \
 	git rev-parse HEAD > "$$out/git_head.txt"; \
 	git status --porcelain=v1 > "$$out/git_status.txt" || true; \
+	git log --oneline -20 > "$$out/git_log.txt" || true; \
 	curl -fsS "$${BASE_URL}/health" > "$$out/health.json"; \
 	curl -fsS "$${BASE_URL}/openapi.json" > "$$out/openapi.json"; \
+	cp requirements.txt "$$out/requirements.txt" || true; \
+	echo "$(EVIDENCE_SCENARIO)" > "$$out/scenario.txt"; \
+	echo "$${ts}" > "$$out/timestamp.txt"; \
 	( cd "$$out" && find . -type f -print0 | sort -z | xargs -0 sha256sum > manifest.sha256 ); \
 	echo "$$out" > "$(ARTIFACTS_DIR)/latest_evidence_dir.txt"; \
 	if [ -n "$${MINISIGN_SECRET_KEY:-}" ]; then \
@@ -272,7 +276,11 @@ evidence:
 	  echo "✅ signed manifest.sha256"; \
 	else \
 	  echo "⚠️  MINISIGN_SECRET_KEY not set, skipping signature"; \
-	fi
+	fi; \
+	zipfile="$(ARTIFACTS_DIR)/frostgate_evidence_$${ts}_$(EVIDENCE_SCENARIO).zip"; \
+	( cd "$(ARTIFACTS_DIR)" && zip -r "$$(basename $$zipfile)" "$$(basename $$out)" ); \
+	echo "$$zipfile" > "$(ARTIFACTS_DIR)/latest_zip.txt"; \
+	echo "✅ evidence bundle: $$zipfile"
 
 ci-evidence: venv itest-down itest-up
 	@set -euo pipefail; \

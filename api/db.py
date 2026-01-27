@@ -8,6 +8,7 @@ from typing import Iterator, Optional
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import QueuePool
 
 from api.config.paths import (
     STATE_DIR,
@@ -15,6 +16,36 @@ from api.config.paths import (
 from api.db_models import Base
 
 log = logging.getLogger("frostgate")
+
+
+# =============================================================================
+# Connection pool configuration (environment-driven)
+# =============================================================================
+
+
+def _env_int(name: str, default: int) -> int:
+    v = os.getenv(name)
+    if v is None or v.strip() == "":
+        return default
+    try:
+        return int(v)
+    except ValueError:
+        return default
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    v = os.getenv(name)
+    if v is None:
+        return default
+    return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+# Pool configuration for production readiness
+POOL_SIZE = _env_int("FG_DB_POOL_SIZE", 5)
+POOL_MAX_OVERFLOW = _env_int("FG_DB_POOL_MAX_OVERFLOW", 10)
+POOL_TIMEOUT = _env_int("FG_DB_POOL_TIMEOUT", 30)
+POOL_RECYCLE = _env_int("FG_DB_POOL_RECYCLE", 1800)  # 30 minutes
+POOL_PRE_PING = _env_bool("FG_DB_POOL_PRE_PING", True)
 
 _ENGINE: Engine | None = None
 _SESSIONMAKER: sessionmaker | None = None
@@ -57,7 +88,24 @@ def _make_engine(
     env = _env()
 
     if db_url:
-        return create_engine(db_url, future=True)
+        # Production PostgreSQL with connection pooling
+        engine = create_engine(
+            db_url,
+            future=True,
+            poolclass=QueuePool,
+            pool_size=POOL_SIZE,
+            max_overflow=POOL_MAX_OVERFLOW,
+            pool_timeout=POOL_TIMEOUT,
+            pool_recycle=POOL_RECYCLE,
+            pool_pre_ping=POOL_PRE_PING,
+        )
+        log.info(
+            "DB_ENGINE=postgres pool_size=%d max_overflow=%d recycle=%ds",
+            POOL_SIZE,
+            POOL_MAX_OVERFLOW,
+            POOL_RECYCLE,
+        )
+        return engine
 
     pth = _resolve_sqlite_path(sqlite_path)
 
