@@ -1,4 +1,11 @@
 # api/auth.py
+"""
+Authentication module - thin adapter over auth_scopes.
+
+This module provides FastAPI dependencies that delegate all auth logic
+to auth_scopes.verify_api_key_detailed(), which is the SINGLE SOURCE OF TRUTH.
+"""
+
 from __future__ import annotations
 
 import os
@@ -25,11 +32,6 @@ def get_tenant(tenant_id: str):
 API_KEY_HEADER = APIKeyHeader(name="x-api-key", auto_error=False)
 
 
-def _get_expected_api_key() -> str:
-    """Return expected API key from env. Empty string if not set (no default)."""
-    return os.getenv("FG_API_KEY", "")
-
-
 def _env_bool(name: str, default: bool = False) -> bool:
     v = os.getenv(name)
     if v is None:
@@ -43,48 +45,44 @@ def auth_enabled() -> bool:
     return bool(os.getenv("FG_API_KEY"))
 
 
-def _ui_cookie_name() -> str:
-    return os.getenv("FG_UI_COOKIE_NAME", "fg_api_key")
-
-
-def _extract_key(request: Request, x_api_key: Optional[str]) -> Optional[str]:
-    # Header wins
-    if x_api_key and str(x_api_key).strip():
-        return str(x_api_key).strip()
-
-    # Cookie fallback (HttpOnly cookie, browser sends it; JS cannot read it)
-    ck = request.cookies.get(_ui_cookie_name())
-    if ck and str(ck).strip():
-        return str(ck).strip()
-
-    return None
-
-
 async def verify_api_key(
     request: Request,
     x_api_key: Optional[str] = Depends(API_KEY_HEADER),
     db: Session = Depends(get_db),
 ) -> None:
+    """
+    FastAPI dependency that verifies API keys.
+
+    Delegates ALL verification logic to auth_scopes.verify_api_key_detailed()
+    to ensure a single source of truth.
+
+    Status codes:
+      - 401: Missing key
+      - 403: Invalid key (wrong, expired, disabled, etc.)
+    """
     if not auth_enabled():
         return
 
-    raw = _extract_key(request, x_api_key)
-    if raw is None:
+    # Use auth_scopes._extract_key for consistent key extraction
+    raw = auth_scopes._extract_key(request, x_api_key)
+
+    # Delegate to single source of truth
+    result = auth_scopes.verify_api_key_detailed(
+        raw=raw, required_scopes=None, request=request
+    )
+
+    if result.valid:
+        return
+
+    # Proper status codes: 401 for missing, 403 for invalid
+    if result.is_missing_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing API key"
         )
-
-    expected = _get_expected_api_key()
-
-    # Env key fast path (constant-time compare to prevent timing attacks)
-    if expected and auth_scopes._constant_time_compare(raw, expected):
-        return
-
-    # DB-backed key path (verify_api_key_raw returns bool, does not raise)
-    if auth_scopes.verify_api_key_raw(raw, required_scopes=None, request=request):
-        return
-
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API key")
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API key"
+        )
 
 
 def require_status_auth(

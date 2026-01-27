@@ -275,15 +275,120 @@ def mint_key(
     return f"{prefix}.{token}.{secret}"
 
 
+class AuthResult:
+    """Result of API key verification with details for proper status codes."""
+
+    __slots__ = ("valid", "reason", "key_prefix", "tenant_id", "scopes")
+
+    def __init__(
+        self,
+        valid: bool,
+        reason: str = "",
+        key_prefix: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        scopes: Optional[Set[str]] = None,
+    ):
+        self.valid = valid
+        self.reason = reason
+        self.key_prefix = key_prefix
+        self.tenant_id = tenant_id
+        self.scopes = scopes or set()
+
+    @property
+    def is_missing_key(self) -> bool:
+        return self.reason == "no_key_provided"
+
+    @property
+    def is_invalid_key(self) -> bool:
+        return not self.valid and not self.is_missing_key
+
+
+def _update_key_usage(sqlite_path: str, prefix: str, key_hash: str) -> None:
+    """
+    Atomically update last_used_at and use_count for a key.
+    Best-effort for SQLite (no true atomic increment, but close enough).
+    """
+    try:
+        con = sqlite3.connect(sqlite_path, timeout=5.0)
+        try:
+            # Check if columns exist
+            cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
+            col_names = {r[1] for r in cols}
+
+            if "last_used_at" in col_names and "use_count" in col_names:
+                now_ts = int(time.time())
+                con.execute(
+                    """UPDATE api_keys
+                       SET last_used_at = ?, use_count = use_count + 1
+                       WHERE prefix = ? AND key_hash = ?""",
+                    (now_ts, prefix, key_hash),
+                )
+                con.commit()
+        finally:
+            con.close()
+    except Exception:
+        # Best effort - don't fail auth on usage tracking errors
+        pass
+
+
+def _check_db_expiration(sqlite_path: str, prefix: str, key_hash: str) -> bool:
+    """
+    Check if key is expired based on DB expires_at column.
+    Returns True if expired, False if not expired or no expiration set.
+    Fail closed: DB errors return False (assume not expired) to avoid blocking all auth.
+    """
+    try:
+        con = sqlite3.connect(sqlite_path)
+        try:
+            cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
+            col_names = {r[1] for r in cols}
+
+            if "expires_at" not in col_names:
+                return False
+
+            row = con.execute(
+                "SELECT expires_at FROM api_keys WHERE prefix=? AND key_hash=? LIMIT 1",
+                (prefix, key_hash),
+            ).fetchone()
+
+            if not row or row[0] is None:
+                return False
+
+            # expires_at could be int timestamp or ISO string
+            expires_at = row[0]
+            now_ts = int(time.time())
+
+            if isinstance(expires_at, (int, float)):
+                return now_ts > int(expires_at)
+            elif isinstance(expires_at, str):
+                # Try to parse ISO format
+                try:
+                    from datetime import datetime
+
+                    dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                    return now_ts > int(dt.timestamp())
+                except Exception:
+                    return False
+            return False
+        finally:
+            con.close()
+    except Exception:
+        # Fail open on DB errors - don't block all auth
+        return False
+
+
 def verify_api_key_raw(
     raw: Optional[str] = None,
     required_scopes=None,
     raw_key: Optional[str] = None,
     db=None,
     check_expiration: bool = True,
+    request: Optional[Request] = None,
     **_ignored,
 ) -> bool:
     """
+    SINGLE SOURCE OF TRUTH for API key validity.
+
     Verifies:
       1) Global FG_API_KEY matches exactly (constant-time comparison)
       2) DB-backed keys in sqlite `api_keys` table
@@ -299,34 +404,106 @@ def verify_api_key_raw(
 
     Security features:
       - Constant-time comparison to prevent timing attacks
-      - Token expiration checking
-      - Audit logging for failed attempts
+      - Token expiration checking (payload AND DB expires_at)
+      - Atomic usage tracking (last_used_at, use_count)
+      - Canary token detection (tripwire alerts)
+      - Audit logging for all auth attempts
     """
+    result = verify_api_key_detailed(
+        raw=raw,
+        required_scopes=required_scopes,
+        raw_key=raw_key,
+        db=db,
+        check_expiration=check_expiration,
+        request=request,
+    )
+    return result.valid
+
+
+def verify_api_key_detailed(
+    raw: Optional[str] = None,
+    required_scopes=None,
+    raw_key: Optional[str] = None,
+    db=None,
+    check_expiration: bool = True,
+    request: Optional[Request] = None,
+    **_ignored,
+) -> AuthResult:
+    """
+    SINGLE SOURCE OF TRUTH for API key validity with detailed result.
+
+    Returns AuthResult with:
+      - valid: bool
+      - reason: str (for logging/debugging)
+      - is_missing_key: bool (for 401 vs 403 distinction)
+      - is_invalid_key: bool
+    """
+    # Extract request context for audit logging
+    request_path = None
+    client_ip = None
+    if request:
+        request_path = str(request.url.path) if request.url else None
+        # Extract client IP with proxy header handling
+        for header in ("x-forwarded-for", "x-real-ip", "cf-connecting-ip"):
+            value = request.headers.get(header) if hasattr(request, "headers") else None
+            if value:
+                client_ip = value.split(",")[0].strip()
+                break
+        if not client_ip and hasattr(request, "client") and request.client:
+            client_ip = request.client.host
+
     raw = (raw or raw_key or "").strip()
 
     # 1) global key bypass (constant-time comparison)
     global_key = (os.getenv("FG_API_KEY") or "").strip()
     if raw and global_key and _constant_time_compare(raw, global_key):
-        _log_auth_event("global_key_auth", success=True)
-        return True
+        _log_auth_event(
+            "global_key_auth",
+            success=True,
+            request_path=request_path,
+            client_ip=client_ip,
+        )
+        return AuthResult(valid=True, reason="global_key")
 
     if not raw:
-        _log_auth_event("auth_attempt", success=False, reason="no_key_provided")
-        return False
+        _log_auth_event(
+            "auth_attempt",
+            success=False,
+            reason="no_key_provided",
+            request_path=request_path,
+            client_ip=client_ip,
+        )
+        return AuthResult(valid=False, reason="no_key_provided")
 
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
     if not sqlite_path:
-        _log_auth_event("auth_attempt", success=False, reason="no_db_configured")
-        return False
+        _log_auth_event(
+            "auth_attempt",
+            success=False,
+            reason="no_db_configured",
+            request_path=request_path,
+            client_ip=client_ip,
+        )
+        return AuthResult(valid=False, reason="no_db_configured")
 
     def _row_for(prefix: str, key_hash: str):
         con = sqlite3.connect(sqlite_path)
         try:
             try:
-                return con.execute(
-                    "select scopes_csv, enabled from api_keys where prefix=? and key_hash=? limit 1",
-                    (prefix, key_hash),
-                ).fetchone()
+                # Include tenant_id if available
+                cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
+                col_names = {r[1] for r in cols}
+                if "tenant_id" in col_names:
+                    return con.execute(
+                        "SELECT scopes_csv, enabled, tenant_id FROM api_keys WHERE prefix=? AND key_hash=? LIMIT 1",
+                        (prefix, key_hash),
+                    ).fetchone()
+                else:
+                    row = con.execute(
+                        "SELECT scopes_csv, enabled FROM api_keys WHERE prefix=? AND key_hash=? LIMIT 1",
+                        (prefix, key_hash),
+                    ).fetchone()
+                    return (*row, None) if row else None
             except sqlite3.OperationalError:
                 return None
         finally:
@@ -334,8 +511,10 @@ def verify_api_key_raw(
 
     scopes_csv = None
     enabled = None
+    tenant_id = None
     token_payload = None
     key_prefix = None
+    key_hash = None
 
     parts = raw.split(".")
     if len(parts) >= 3:
@@ -343,39 +522,81 @@ def verify_api_key_raw(
         key_prefix = parts[0]
         token = parts[1] if len(parts) > 1 else ""
         secret_val = parts[-1]
+        key_hash = _sha256_hex(secret_val)
+
+        # TRIPWIRE: Check for canary token BEFORE any other validation
+        try:
+            from api.tripwires import check_canary_key
+
+            if check_canary_key(key_prefix):
+                _log_auth_event(
+                    "canary_token_accessed",
+                    success=False,
+                    key_prefix=key_prefix,
+                    reason="canary_token",
+                    request_path=request_path,
+                    client_ip=client_ip,
+                )
+                # Still return invalid - canary keys should never auth
+                return AuthResult(
+                    valid=False, reason="canary_token", key_prefix=key_prefix
+                )
+        except ImportError:
+            pass
 
         # Decode token to check expiration
         token_payload = _decode_token_payload(token)
 
-        # Check expiration before DB lookup (fail fast)
+        # Check expiration from token payload (fail fast)
         if check_expiration and _is_key_expired(token_payload):
             _log_auth_event(
                 "auth_attempt",
                 success=False,
                 key_prefix=key_prefix,
-                reason="key_expired",
+                reason="key_expired_token",
+                request_path=request_path,
+                client_ip=client_ip,
             )
-            return False
+            return AuthResult(
+                valid=False, reason="key_expired_token", key_prefix=key_prefix
+            )
 
-        row = _row_for(key_prefix, _sha256_hex(secret_val))
+        row = _row_for(key_prefix, key_hash)
         if row:
-            scopes_csv, enabled = row
+            scopes_csv, enabled, tenant_id = row
     else:
         # LEGACY: raw key stored hashed by api.db_models.hash_api_key(raw), prefix=raw[:16]
         key_prefix = raw[:16]
+
+        # TRIPWIRE: Check for canary token
         try:
-            from api.db_models import (
-                hash_api_key as _hash_api_key,
-            )  # matches tests/_mk_test_key.py
+            from api.tripwires import check_canary_key
 
-            legacy_hash = _hash_api_key(raw)
+            if check_canary_key(key_prefix):
+                _log_auth_event(
+                    "canary_token_accessed",
+                    success=False,
+                    key_prefix=key_prefix,
+                    reason="canary_token",
+                    request_path=request_path,
+                    client_ip=client_ip,
+                )
+                return AuthResult(
+                    valid=False, reason="canary_token", key_prefix=key_prefix
+                )
+        except ImportError:
+            pass
+
+        try:
+            from api.db_models import hash_api_key as _hash_api_key
+
+            key_hash = _hash_api_key(raw)
         except Exception:
-            # fallback to something deterministic; shouldn't be needed if api.db_models exists
-            legacy_hash = _sha256_hex(raw)
+            key_hash = _sha256_hex(raw)
 
-        row = _row_for(key_prefix, legacy_hash)
+        row = _row_for(key_prefix, key_hash)
         if row:
-            scopes_csv, enabled = row
+            scopes_csv, enabled, tenant_id = row
 
     if scopes_csv is None or enabled is None:
         _log_auth_event(
@@ -383,8 +604,10 @@ def verify_api_key_raw(
             success=False,
             key_prefix=key_prefix,
             reason="key_not_found",
+            request_path=request_path,
+            client_ip=client_ip,
         )
-        return False
+        return AuthResult(valid=False, reason="key_not_found", key_prefix=key_prefix)
 
     if not int(enabled):
         _log_auth_event(
@@ -392,40 +615,75 @@ def verify_api_key_raw(
             success=False,
             key_prefix=key_prefix,
             reason="key_disabled",
+            request_path=request_path,
+            client_ip=client_ip,
         )
-        return False
+        return AuthResult(valid=False, reason="key_disabled", key_prefix=key_prefix)
+
+    # Check DB-backed expiration (expires_at column) - fail closed
+    if (
+        check_expiration
+        and key_hash
+        and _check_db_expiration(sqlite_path, key_prefix, key_hash)
+    ):
+        _log_auth_event(
+            "auth_attempt",
+            success=False,
+            key_prefix=key_prefix,
+            reason="key_expired_db",
+            request_path=request_path,
+            client_ip=client_ip,
+        )
+        return AuthResult(valid=False, reason="key_expired_db", key_prefix=key_prefix)
 
     # Scope enforcement (if requested)
-    if required_scopes is None:
-        _log_auth_event("auth_attempt", success=True, key_prefix=key_prefix)
-        return True
-
-    needed = (
-        set(required_scopes)
-        if isinstance(required_scopes, (set, list, tuple))
-        else {str(required_scopes)}
-    )
-    needed = {s.strip() for s in needed if str(s).strip()}
-    if not needed:
-        _log_auth_event("auth_attempt", success=True, key_prefix=key_prefix)
-        return True
-
     have = _parse_scopes_csv(scopes_csv)
-    if "*" in have:
-        _log_auth_event("auth_attempt", success=True, key_prefix=key_prefix)
-        return True
 
-    if needed.issubset(have):
-        _log_auth_event("auth_attempt", success=True, key_prefix=key_prefix)
-        return True
+    if required_scopes is not None:
+        needed = (
+            set(required_scopes)
+            if isinstance(required_scopes, (set, list, tuple))
+            else {str(required_scopes)}
+        )
+        needed = {s.strip() for s in needed if str(s).strip()}
+
+        if needed and "*" not in have and not needed.issubset(have):
+            _log_auth_event(
+                "auth_attempt",
+                success=False,
+                key_prefix=key_prefix,
+                tenant_id=tenant_id,
+                reason=f"missing_scopes:{','.join(needed - have)}",
+                request_path=request_path,
+                client_ip=client_ip,
+            )
+            return AuthResult(
+                valid=False,
+                reason=f"missing_scopes:{','.join(needed - have)}",
+                key_prefix=key_prefix,
+                tenant_id=tenant_id,
+                scopes=have,
+            )
+
+    # SUCCESS: Update usage stats atomically (best-effort)
+    if key_hash:
+        _update_key_usage(sqlite_path, key_prefix, key_hash)
 
     _log_auth_event(
         "auth_attempt",
-        success=False,
+        success=True,
         key_prefix=key_prefix,
-        reason=f"missing_scopes:{','.join(needed - have)}",
+        tenant_id=tenant_id,
+        request_path=request_path,
+        client_ip=client_ip,
     )
-    return False
+    return AuthResult(
+        valid=True,
+        reason="valid",
+        key_prefix=key_prefix,
+        tenant_id=tenant_id,
+        scopes=have,
+    )
 
 
 def require_api_key_always(
@@ -433,12 +691,27 @@ def require_api_key_always(
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
     required_scopes: Set[str] | None = None,
 ) -> str:
+    """
+    Extract and verify API key with proper HTTP status codes:
+      - 401 Unauthorized: Missing key
+      - 403 Forbidden: Invalid key (wrong, expired, disabled, etc.)
+    """
     got = _extract_key(request, x_api_key)
     if not got:
         raise HTTPException(status_code=401, detail=ERR_INVALID)
 
-    if not verify_api_key_raw(got, required_scopes=required_scopes):
+    result = verify_api_key_detailed(
+        raw=got, required_scopes=required_scopes, request=request
+    )
+
+    if result.valid:
+        return got
+
+    # Distinguish between missing and invalid for proper status code
+    if result.is_missing_key:
         raise HTTPException(status_code=401, detail=ERR_INVALID)
+    else:
+        raise HTTPException(status_code=403, detail=ERR_INVALID)
 
     return got
 
@@ -580,13 +853,16 @@ def list_api_keys(
 
 # Export validation functions for use in other modules
 __all__ = [
+    "AuthResult",
     "mint_key",
     "verify_api_key_raw",
+    "verify_api_key_detailed",
     "verify_api_key",
     "require_api_key_always",
     "require_scopes",
     "revoke_api_key",
     "list_api_keys",
+    "_extract_key",
     "_validate_tenant_id",
     "_log_auth_event",
     "_constant_time_compare",

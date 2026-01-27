@@ -23,7 +23,8 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-fg_user}
       POSTGRES_DB: ${POSTGRES_DB:-frostgate}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-STRONG_PASSWORD}
+      # Security: POSTGRES_PASSWORD must be set in .env - no default provided
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       FG_INGEST_LOG_EVERY: ${FG_INGEST_LOG_EVERY:-200}
       FG_STATE_DIR: /var/lib/frostgate/state
       FG_AGENT_QUEUE_DIR: /var/lib/frostgate/agent_queue
@@ -72,8 +73,8 @@ services:
       # API keys come from Docker secret file
       FG_API_KEYS_FILE: /run/secrets/fg_api_keys
 
-      # DB/Redis
-      FG_DB_URL: postgresql+psycopg://${POSTGRES_USER:-fg_user}:${POSTGRES_PASSWORD:-STRONG_PASSWORD}@postgres:5432/${POSTGRES_DB:-frostgate}
+      # DB/Redis - POSTGRES_PASSWORD must be set (no default)
+      FG_DB_URL: postgresql+psycopg://${POSTGRES_USER:-fg_user}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-frostgate}
       # Redis URL with authentication (password must match redis service)
       FG_REDIS_URL: ${FG_REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379/0}
 
