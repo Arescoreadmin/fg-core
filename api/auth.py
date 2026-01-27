@@ -26,7 +26,8 @@ API_KEY_HEADER = APIKeyHeader(name="x-api-key", auto_error=False)
 
 
 def _get_expected_api_key() -> str:
-    return os.getenv("FG_API_KEY", "supersecret")
+    """Return expected API key from env. Empty string if not set (no default)."""
+    return os.getenv("FG_API_KEY", "")
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -75,18 +76,15 @@ async def verify_api_key(
 
     expected = _get_expected_api_key()
 
-    # Env key fast path
-    if expected and raw == expected:
+    # Env key fast path (constant-time compare to prevent timing attacks)
+    if expected and auth_scopes._constant_time_compare(raw, expected):
         return
 
-    # DB-backed key path
-    try:
-        auth_scopes.verify_api_key_raw(raw, required_scopes=None)
+    # DB-backed key path (verify_api_key_raw returns bool, does not raise)
+    if auth_scopes.verify_api_key_raw(raw, required_scopes=None, request=request):
         return
-    except HTTPException:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API key"
-        )
+
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API key")
 
 
 def require_status_auth(
