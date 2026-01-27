@@ -7,8 +7,6 @@ loguru==0.7.2
 python-dotenv==1.0.1
 prometheus-fastapi-instrumentator==7.1.0
 redis==7.1.0
-redis==7.1.0
 alembic==1.11.1
 psycopg[binary]==3.3.2
 sqlalchemy==2.0.20
-httpx

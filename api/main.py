@@ -87,8 +87,20 @@ from api.middleware.request_validation import (
     RequestValidationConfig,
 )
 
+# Startup validation (fail-soft import)
+try:
+    from api.config.startup_validation import validate_startup_config
+except ImportError:  # pragma: no cover
+
+    def validate_startup_config(**_):  # type: ignore
+        return None
+
 
 log = logging.getLogger("frostgate")
+
+# Version info for API responses
+APP_VERSION = "0.8.0"
+API_VERSION = "v1"
 
 ERR_INVALID = "Invalid or missing API key"
 UI_COOKIE_NAME = os.getenv("FG_UI_COOKIE_NAME", "fg_api_key")
@@ -171,6 +183,17 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        # Run startup validation (non-blocking, logs warnings)
+        try:
+            validation_report = validate_startup_config(
+                fail_on_error=False,  # Don't fail startup, just log
+                log_results=True,
+            )
+            app.state.startup_validation = validation_report
+        except Exception as e:
+            log.warning(f"Startup validation failed: {e}")
+            app.state.startup_validation = None
+
         try:
             # sqlite mode: ensure dir exists BEFORE init_db()
             if not (os.getenv("FG_DB_URL") or "").strip():
@@ -186,7 +209,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             log.exception("DB init failed")
         yield
 
-    app = FastAPI(title="frostgate-core", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="frostgate-core", version=APP_VERSION, lifespan=lifespan)
 
     # Shield first (outermost)
     app.add_middleware(FGExceptionShieldMiddleware)
@@ -218,8 +241,11 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.state.service = os.getenv("FG_SERVICE", "frostgate-core")
     app.state.env = os.getenv("FG_ENV", "dev")
     app.state.app_instance_id = str(uuid.uuid4())
+    app.state.app_version = APP_VERSION
+    app.state.api_version = API_VERSION
     app.state.db_init_ok = False
     app.state.db_init_error = None
+    app.state.startup_validation = None
 
     def _fail(detail: str = ERR_INVALID) -> None:
         raise HTTPException(status_code=401, detail=detail)
@@ -341,6 +367,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         return {
             "status": "ok",
             "service": request.app.state.service,
+            "version": request.app.state.app_version,
+            "api_version": request.app.state.api_version,
             "env": request.app.state.env,
             "auth_enabled": bool(request.app.state.auth_enabled),
             "app_instance_id": request.app.state.app_instance_id,
