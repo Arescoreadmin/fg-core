@@ -96,6 +96,23 @@ except ImportError:  # pragma: no cover
         return None
 
 
+# Graceful shutdown (fail-soft import)
+try:
+    from api.graceful_shutdown import (
+        get_shutdown_manager,
+        ConnectionTrackingMiddleware,
+    )
+except ImportError:  # pragma: no cover
+    get_shutdown_manager = None  # type: ignore
+    ConnectionTrackingMiddleware = None  # type: ignore
+
+# Admin router (fail-soft import)
+try:
+    from api.admin import router as admin_router
+except ImportError:  # pragma: no cover
+    admin_router = None  # type: ignore
+
+
 log = logging.getLogger("frostgate")
 
 # Version info for API responses
@@ -207,12 +224,39 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             app.state.db_init_ok = False
             app.state.db_init_error = f"{type(e).__name__}: {e}"
             log.exception("DB init failed")
+
+        # Setup graceful shutdown handler
+        if get_shutdown_manager is not None:
+            try:
+                shutdown_manager = get_shutdown_manager()
+                await shutdown_manager.setup()
+                app.state.shutdown_manager = shutdown_manager
+                log.info("Graceful shutdown handler initialized")
+            except Exception as e:
+                log.warning(f"Graceful shutdown setup failed: {e}")
+                app.state.shutdown_manager = None
+        else:
+            app.state.shutdown_manager = None
+
         yield
+
+        # Cleanup on shutdown
+        if app.state.shutdown_manager is not None:
+            try:
+                await app.state.shutdown_manager.initiate_shutdown(
+                    "Application shutdown"
+                )
+            except Exception as e:
+                log.warning(f"Graceful shutdown error: {e}")
 
     app = FastAPI(title="frostgate-core", version=APP_VERSION, lifespan=lifespan)
 
     # Shield first (outermost)
     app.add_middleware(FGExceptionShieldMiddleware)
+
+    # Connection tracking middleware (for graceful shutdown)
+    if ConnectionTrackingMiddleware is not None:
+        app.add_middleware(ConnectionTrackingMiddleware)
 
     # Security headers middleware (after shield, before auth)
     app.add_middleware(
@@ -360,6 +404,10 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     if _dev_enabled():
         app.include_router(dev_events_router)
+
+    # Admin router for SaaS management
+    if admin_router is not None:
+        app.include_router(admin_router)
 
     # ---- Health / Status ----
     @app.get("/health")

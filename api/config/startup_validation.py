@@ -118,6 +118,10 @@ class StartupValidator:
         self._check_key_ttl(report)
         self._check_brute_force_protection(report)
         self._check_audit_logging(report)
+        self._check_webhook_security(report)
+        self._check_redis_config(report)
+        self._check_quota_enforcement(report)
+        self._check_encryption_keys(report)
 
         return report
 
@@ -373,6 +377,127 @@ class StartupValidator:
                 "Use INFO or WARNING.",
                 severity="warning",
             )
+
+    def _check_webhook_security(self, report: StartupValidationReport) -> None:
+        """Check webhook security configuration."""
+        webhook_secret = _env_str("FG_WEBHOOK_SECRET", "")
+
+        if self.is_production and not webhook_secret:
+            report.add(
+                name="webhook_secret_missing",
+                passed=False,
+                message="FG_WEBHOOK_SECRET not set. Required for secure webhook integration.",
+                severity="warning",
+            )
+        elif webhook_secret and len(webhook_secret) < 32:
+            report.add(
+                name="webhook_secret_weak",
+                passed=False,
+                message=f"FG_WEBHOOK_SECRET is weak ({len(webhook_secret)} chars). "
+                "Use at least 32 characters.",
+                severity="warning" if not self.is_production else "error",
+            )
+        elif webhook_secret:
+            report.add(
+                name="webhook_security",
+                passed=True,
+                message="Webhook secret configured.",
+                severity="info",
+            )
+
+    def _check_redis_config(self, report: StartupValidationReport) -> None:
+        """Check Redis configuration for production."""
+        redis_url = _env_str("FG_REDIS_URL", "")
+        rl_backend = _env_str("FG_RL_BACKEND", "memory").lower()
+
+        if self.is_production:
+            if not redis_url and rl_backend == "redis":
+                report.add(
+                    name="redis_url_missing",
+                    passed=False,
+                    message="FG_REDIS_URL not set but rate limiting backend is redis.",
+                    severity="error",
+                )
+            elif not redis_url:
+                report.add(
+                    name="redis_recommended",
+                    passed=True,
+                    message="Redis not configured. Recommended for distributed deployments.",
+                    severity="info",
+                )
+            else:
+                # Check for TLS in Redis URL
+                if not redis_url.startswith("rediss://"):
+                    report.add(
+                        name="redis_tls",
+                        passed=False,
+                        message="Redis URL doesn't use TLS (rediss://). "
+                        "Consider using TLS for production.",
+                        severity="warning",
+                    )
+                else:
+                    report.add(
+                        name="redis_config",
+                        passed=True,
+                        message="Redis configured with TLS.",
+                        severity="info",
+                    )
+
+    def _check_quota_enforcement(self, report: StartupValidationReport) -> None:
+        """Check tenant quota enforcement configuration."""
+        quota_enabled = _env_bool("FG_QUOTA_ENFORCEMENT_ENABLED", True)
+        quota_free = _env_int("FG_QUOTA_FREE_DAILY", 1000)
+
+        if self.is_production and not quota_enabled:
+            report.add(
+                name="quota_enforcement_disabled",
+                passed=False,
+                message="Quota enforcement is disabled. Enable for SaaS billing protection.",
+                severity="warning",
+            )
+        elif quota_enabled:
+            report.add(
+                name="quota_enforcement",
+                passed=True,
+                message=f"Quota enforcement enabled (free tier: {quota_free}/day).",
+                severity="info",
+            )
+
+    def _check_encryption_keys(self, report: StartupValidationReport) -> None:
+        """Check for encryption key configuration."""
+        encryption_key = _env_str("FG_ENCRYPTION_KEY", "")
+        jwt_secret = _env_str("FG_JWT_SECRET", "")
+
+        if self.is_production:
+            if not encryption_key:
+                report.add(
+                    name="encryption_key_missing",
+                    passed=False,
+                    message="FG_ENCRYPTION_KEY not set. Required for encrypting sensitive data.",
+                    severity="warning",
+                )
+            elif len(encryption_key) < 32:
+                report.add(
+                    name="encryption_key_weak",
+                    passed=False,
+                    message="FG_ENCRYPTION_KEY is too short. Use at least 32 characters.",
+                    severity="error",
+                )
+
+            if not jwt_secret:
+                report.add(
+                    name="jwt_secret_missing",
+                    passed=False,
+                    message="FG_JWT_SECRET not set. Consider setting for JWT token signing.",
+                    severity="info",
+                )
+            elif len(jwt_secret) < 32:
+                report.add(
+                    name="jwt_secret_weak",
+                    passed=False,
+                    message="FG_JWT_SECRET is too short. Use at least 32 characters.",
+                    severity="error",
+                )
 
 
 def validate_startup_config(
