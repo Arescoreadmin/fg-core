@@ -20,6 +20,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          mkdir -p secrets
+          echo "supersecret" > secrets/fg_api_keys.txt
+
       - name: Build images via docker compose
         run: |
           docker compose build
@@ -34,7 +40,7 @@ jobs:
         run: |
           echo "Waiting for core-api to come up..."
           for i in $(seq 1 20); do
-            if curl -sSf http://127.0.0.1:8080/health >/dev/null; then
+            if curl -sSf http://127.0.0.1:18080/health >/dev/null; then
               echo "core-api is healthy"
               exit 0
             fi

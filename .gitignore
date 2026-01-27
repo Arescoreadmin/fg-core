@@ -85,6 +85,7 @@ secrets/
 state/
 .env
 .env.*
+!.env.example
 state/
 
 # junk files accidentally created by bad paste/output redirection

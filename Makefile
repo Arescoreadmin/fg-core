@@ -263,7 +263,16 @@ evidence:
 	git status --porcelain=v1 > "$$out/git_status.txt" || true; \
 	curl -fsS "$${BASE_URL}/health" > "$$out/health.json"; \
 	curl -fsS "$${BASE_URL}/openapi.json" > "$$out/openapi.json"; \
-	( cd "$$out" && find . -type f -print0 | sort -z | xargs -0 sha256sum > manifest.sha256 )
+	( cd "$$out" && find . -type f -print0 | sort -z | xargs -0 sha256sum > manifest.sha256 ); \
+	echo "$$out" > "$(ARTIFACTS_DIR)/latest_evidence_dir.txt"; \
+	if [ -n "$${MINISIGN_SECRET_KEY:-}" ]; then \
+	  echo "$${MINISIGN_SECRET_KEY}" > /tmp/minisign.key; \
+	  minisign -Sm "$$out/manifest.sha256" -s /tmp/minisign.key -t "frostgate evidence $${ts}"; \
+	  rm -f /tmp/minisign.key; \
+	  echo "✅ signed manifest.sha256"; \
+	else \
+	  echo "⚠️  MINISIGN_SECRET_KEY not set, skipping signature"; \
+	fi
 
 ci-evidence: venv itest-down itest-up
 	@set -euo pipefail; \
