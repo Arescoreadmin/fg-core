@@ -11,13 +11,38 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from pydantic import BaseModel, Field
 
+from admin_gateway.auth import (
+    AuthUser,
+    build_login_redirect,
+    build_user_from_claims,
+    dev_bypass_enabled,
+    ensure_csrf_token,
+    environment,
+    exchange_code_for_tokens,
+    get_allowed_tenant,
+    get_current_user,
+    require_oidc_env,
+    require_scopes,
+    require_session_secret,
+    session_max_age,
+    verify_id_token,
+)
 from admin_gateway.middleware.request_id import RequestIdMiddleware
 from admin_gateway.middleware.logging import StructuredLoggingMiddleware
+from admin_gateway.middleware.audit import AuditMiddleware
+from admin_gateway.middleware.auth_context import AuthContextMiddleware
+from admin_gateway.middleware.csrf import CSRFMiddleware
 from admin_gateway.audit import AuditLogger
+
+
+class ProductCreate(BaseModel):
+    tenant_id: str = Field(..., description="Tenant identifier")
+    name: str | None = Field(default=None, description="Product name")
 
 # Version info
 SERVICE_NAME = "admin-gateway"
@@ -26,14 +51,6 @@ API_VERSION = "v1"
 
 # Configure structured logging
 log = logging.getLogger(SERVICE_NAME)
-
-
-def _env_bool(name: str, default: bool = False) -> bool:
-    """Parse boolean environment variable."""
-    v = os.getenv(name)
-    if v is None:
-        return default
-    return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def build_app() -> FastAPI:
@@ -52,7 +69,7 @@ def build_app() -> FastAPI:
         # Initialize audit logger
         app.state.audit_logger = AuditLogger(
             core_base_url=os.getenv("AG_CORE_BASE_URL"),
-            enabled=_env_bool("AG_AUDIT_ENABLED", True),
+            enabled=os.getenv("AG_AUDIT_ENABLED", "1").lower() not in {"0", "false", "no"},
         )
 
         yield
@@ -66,9 +83,28 @@ def build_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    if environment() == "prod" and dev_bypass_enabled():
+        raise RuntimeError("FG_DEV_AUTH_BYPASS cannot be enabled in production.")
+    require_oidc_env()
+
+    if os.getenv("FG_CONTRACTS_GEN") != "1":
+        from starlette.middleware.sessions import SessionMiddleware
+
+        session_secret = require_session_secret()
+        app.add_middleware(
+            SessionMiddleware,
+            secret_key=session_secret,
+            max_age=session_max_age(),
+            same_site="strict",
+            https_only=environment() == "prod",
+        )
+
     # Add middleware (order matters: outermost first)
     app.add_middleware(StructuredLoggingMiddleware)
     app.add_middleware(RequestIdMiddleware)
+    app.add_middleware(AuthContextMiddleware)
+    app.add_middleware(AuditMiddleware)
+    app.add_middleware(CSRFMiddleware)
 
     # CORS configuration
     cors_origins = os.getenv("AG_CORS_ORIGINS", "*").split(",")
@@ -117,37 +153,78 @@ def build_app() -> FastAPI:
         """OpenAPI schema endpoint."""
         return JSONResponse(content=request.app.openapi())
 
+    @app.get("/auth/login")
+    async def auth_login(request: Request) -> Response:
+        """Redirect to OIDC provider for login."""
+        url = await build_login_redirect(request)
+        return RedirectResponse(url=url)
+
+    @app.get("/auth/callback")
+    async def auth_callback(request: Request, code: str, state: str) -> Response:
+        """Handle OIDC callback and establish session."""
+        if state != request.session.get("oidc_state"):
+            return JSONResponse(status_code=400, content={"detail": "Invalid state"})
+        tokens = await exchange_code_for_tokens(code)
+        id_token = tokens.get("id_token")
+        if not id_token:
+            return JSONResponse(status_code=400, content={"detail": "Missing id_token"})
+        claims = await verify_id_token(id_token, request.session.get("oidc_nonce"))
+        user = build_user_from_claims(claims, tokens.get("scope"))
+        request.session.pop("oidc_state", None)
+        request.session.pop("oidc_nonce", None)
+        request.session["user"] = {
+            "sub": user.sub,
+            "email": user.email,
+            "scopes": user.scopes,
+            "tenants": user.tenants,
+            "exp": user.exp,
+        }
+        return JSONResponse(content={"status": "ok"})
+
+    @app.get("/auth/csrf")
+    async def auth_csrf(request: Request) -> dict:
+        """Return a CSRF token tied to the session."""
+        return {"csrf_token": ensure_csrf_token(request)}
+
+    @app.get("/admin/me")
+    async def admin_me(user: AuthUser = Depends(get_current_user)) -> dict:
+        """Return current admin session details."""
+        return {
+            "id": user.sub,
+            "email": user.email,
+            "scopes": user.scopes,
+            "tenants": user.tenants,
+            "session_expires_at": user.exp,
+        }
+
     # Placeholder admin endpoints
     @app.get("/api/v1/tenants")
-    async def list_tenants(request: Request) -> dict:
+    async def list_tenants(
+        request: Request,
+        user: AuthUser = Depends(require_scopes(["console:admin"])),
+    ) -> dict:
         """List tenants (placeholder)."""
-        # Audit log the action
-        await request.app.state.audit_logger.log(
-            request_id=getattr(request.state, "request_id", "unknown"),
-            action="list_tenants",
-            resource="tenants",
-            outcome="success",
-            ip_address=request.client.host if request.client else None,
-            user_agent=request.headers.get("user-agent"),
-        )
-        return {"tenants": [], "total": 0}
+        request.state.tenant_id = None
+        return {"tenants": user.tenants, "total": len(user.tenants)}
 
     @app.get("/api/v1/keys")
-    async def list_keys(request: Request) -> dict:
+    async def list_keys(
+        request: Request,
+        tenant_id: str | None = None,
+        user: AuthUser = Depends(require_scopes(["keys:read"])),
+    ) -> dict:
         """List API keys (placeholder)."""
-        await request.app.state.audit_logger.log(
-            request_id=getattr(request.state, "request_id", "unknown"),
-            action="list_keys",
-            resource="keys",
-            outcome="success",
-            ip_address=request.client.host if request.client else None,
-            user_agent=request.headers.get("user-agent"),
-        )
+        get_allowed_tenant(request, tenant_id, user)
         return {"keys": [], "total": 0}
 
     @app.get("/api/v1/dashboard")
-    async def dashboard(request: Request) -> dict:
+    async def dashboard(
+        request: Request,
+        tenant_id: str | None = None,
+        user: AuthUser = Depends(require_scopes(["console:admin"])),
+    ) -> dict:
         """Dashboard data endpoint (placeholder)."""
+        get_allowed_tenant(request, tenant_id, user)
         return {
             "stats": {
                 "total_requests": 0,
@@ -157,6 +234,15 @@ def build_app() -> FastAPI:
             },
             "recent_events": [],
         }
+
+    @app.post("/api/v1/products")
+    async def create_product(
+        request: Request,
+        payload: ProductCreate,
+        user: AuthUser = Depends(require_scopes(["product:write"])),
+    ) -> dict:
+        get_allowed_tenant(request, payload.tenant_id, user)
+        return {"status": "created", "tenant_id": payload.tenant_id}
 
     return app
 

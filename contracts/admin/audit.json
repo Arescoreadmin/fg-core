@@ -1,51 +1,118 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "AuditLogEntry",
   "description": "Audit log entry schema.",
-  "type": "object",
   "properties": {
-    "timestamp": {
-      "description": "Event timestamp",
-      "type": "string",
-      "format": "date-time"
-    },
-    "request_id": {
-      "description": "Request tracking ID",
-      "type": "string"
-    },
     "action": {
       "description": "Action performed",
+      "title": "Action",
       "type": "string"
     },
     "actor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
       "description": "Actor identifier",
-      "type": "string"
-    },
-    "resource": {
-      "description": "Resource affected",
-      "type": "string"
-    },
-    "resource_id": {
-      "description": "Resource identifier",
-      "type": "string"
+      "title": "Actor"
     },
     "details": {
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
       "description": "Additional details",
-      "type": "object"
+      "title": "Details"
+    },
+    "ip_address": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Client IP address",
+      "title": "Ip Address"
     },
     "outcome": {
       "description": "Action outcome",
-      "enum": ["success", "failure", "error"],
+      "enum": [
+        "success",
+        "failure",
+        "error"
+      ],
+      "title": "Outcome",
       "type": "string"
     },
-    "ip_address": {
-      "description": "Client IP address",
+    "request_id": {
+      "description": "Request tracking ID",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "resource": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Resource affected",
+      "title": "Resource"
+    },
+    "resource_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Resource identifier",
+      "title": "Resource Id"
+    },
+    "timestamp": {
+      "description": "Event timestamp",
+      "format": "date-time",
+      "title": "Timestamp",
       "type": "string"
     },
     "user_agent": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
       "description": "Client user agent",
-      "type": "string"
+      "title": "User Agent"
     }
   },
-  "required": ["timestamp", "request_id", "action", "outcome"]
+  "required": [
+    "timestamp",
+    "request_id",
+    "action",
+    "outcome"
+  ],
+  "title": "AuditLogEntry",
+  "type": "object"
 }

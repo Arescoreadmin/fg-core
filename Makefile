@@ -102,7 +102,7 @@ venv:
 # Guards / audits
 # =============================================================================
 
-.PHONY: guard-scripts fg-audit-make fg-contract fg-compile
+.PHONY: guard-scripts fg-audit-make fg-contract fg-compile contracts-gen
 
 guard-scripts:
 	@$(PY) scripts/guard_no_paste_garbage.py
@@ -111,8 +111,12 @@ guard-scripts:
 fg-audit-make: guard-scripts
 	@$(PY) scripts/audit_make_targets.py
 
-fg-contract: guard-scripts
+contracts-gen: admin-venv
+	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(AG_PY) scripts/contracts_gen.py
+
+fg-contract: guard-scripts contracts-gen
 	@$(PY) scripts/contract_lint.py
+	@git diff --exit-code contracts/admin
 
 fg-compile: guard-scripts
 	@$(PY) -m py_compile api/main.py api/feed.py api/ui.py api/dev_events.py api/auth_scopes.py
@@ -327,7 +331,7 @@ ci-admin: admin-venv admin-lint admin-test
 
 CONSOLE_DIR := console
 
-.PHONY: console-deps console-dev console-build console-lint ci-console
+.PHONY: console-deps console-dev console-build console-lint console-test ci-console
 
 console-deps:
 	@cd $(CONSOLE_DIR) && npm ci --prefer-offline 2>/dev/null || npm install
@@ -342,4 +346,7 @@ console-build: console-deps
 console-lint: console-deps
 	@cd $(CONSOLE_DIR) && npm run lint
 
-ci-console: console-lint
+console-test: console-deps
+	@cd $(CONSOLE_DIR) && npm run test
+
+ci-console: console-lint console-test
