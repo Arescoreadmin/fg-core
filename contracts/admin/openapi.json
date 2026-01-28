@@ -13,6 +13,7 @@
           "meta": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -73,6 +74,7 @@
           "meta": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -131,6 +133,32 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ProductCreate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Product name",
+            "title": "Name"
+          },
+          "tenant_id": {
+            "description": "Tenant identifier",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id"
+        ],
+        "title": "ProductCreate",
         "type": "object"
       },
       "ProductListResponse": {
@@ -420,32 +448,6 @@
         "title": "ValidationError",
         "type": "object"
       },
-      "admin_gateway__main__ProductCreate": {
-        "properties": {
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Product name",
-            "title": "Name"
-          },
-          "tenant_id": {
-            "description": "Tenant identifier",
-            "title": "Tenant Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "tenant_id"
-        ],
-        "title": "ProductCreate",
-        "type": "object"
-      },
       "admin_gateway__routers__products__ProductCreate": {
         "description": "Request model for creating a product.",
         "properties": {
@@ -518,6 +520,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Admin Me Admin Me Get",
                   "type": "object"
                 }
@@ -755,6 +758,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Dashboard Api V1 Dashboard Get",
                   "type": "object"
                 }
@@ -803,6 +807,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Keys Api V1 Keys Get",
                   "type": "object"
                 }
@@ -831,7 +836,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/admin_gateway__main__ProductCreate"
+                "$ref": "#/components/schemas/ProductCreate"
               }
             }
           },
@@ -842,6 +847,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Product Api V1 Products Post",
                   "type": "object"
                 }
@@ -872,6 +878,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Tenants Api V1 Tenants Get",
                   "type": "object"
                 }
@@ -939,6 +946,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Auth Csrf Auth Csrf Get",
                   "type": "object"
                 }
@@ -976,6 +984,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Health Health Get",
                   "type": "object"
                 }
@@ -996,6 +1005,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Version Version Get",
                   "type": "object"
                 }
