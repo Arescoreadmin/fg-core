@@ -29,7 +29,10 @@ def test_dev_bypass_refused_in_prod(monkeypatch):
     monkeypatch.setenv("FG_OIDC_ISSUER", "https://issuer.example.com")
     monkeypatch.setenv("FG_OIDC_CLIENT_ID", "client")
     monkeypatch.setenv("FG_OIDC_CLIENT_SECRET", "secret")
-    monkeypatch.setenv("FG_OIDC_REDIRECT_URL", "https://console.example.com/auth/callback")
+    monkeypatch.setenv(
+        "FG_OIDC_REDIRECT_URL",
+        "https://console.example.com/auth/callback",
+    )
     with pytest.raises(RuntimeError):
         build_app()
 

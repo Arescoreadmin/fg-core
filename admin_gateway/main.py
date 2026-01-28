@@ -44,6 +44,7 @@ class ProductCreate(BaseModel):
     tenant_id: str = Field(..., description="Tenant identifier")
     name: str | None = Field(default=None, description="Product name")
 
+
 # Version info
 SERVICE_NAME = "admin-gateway"
 VERSION = "0.1.0"
@@ -69,7 +70,8 @@ def build_app() -> FastAPI:
         # Initialize audit logger
         app.state.audit_logger = AuditLogger(
             core_base_url=os.getenv("AG_CORE_BASE_URL"),
-            enabled=os.getenv("AG_AUDIT_ENABLED", "1").lower() not in {"0", "false", "no"},
+            enabled=os.getenv("AG_AUDIT_ENABLED", "1").lower()
+            not in {"0", "false", "no"},
         )
 
         yield
