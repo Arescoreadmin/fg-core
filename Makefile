@@ -289,3 +289,57 @@ ci-evidence: venv itest-down itest-up
 	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(ITEST_DB)" $(MAKE) -s test-integration; \
 	SCENARIO="$${SCENARIO:-spike}" BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" \
 	FG_SQLITE_PATH="$(ITEST_DB)" $(MAKE) -s evidence
+
+# =============================================================================
+# Admin Gateway
+# =============================================================================
+
+AG_HOST     ?= 127.0.0.1
+AG_PORT     ?= 18001
+AG_BASE_URL ?= http://$(AG_HOST):$(AG_PORT)
+AG_VENV     ?= admin_gateway/.venv
+AG_PY       := $(AG_VENV)/bin/python
+AG_PIP      := $(AG_VENV)/bin/pip
+
+.PHONY: admin-venv admin-dev admin-lint admin-test ci-admin
+
+admin-venv:
+	@test -d "$(AG_VENV)" || python -m venv "$(AG_VENV)"
+	@"$(AG_PIP)" install --upgrade pip
+	@"$(AG_PIP)" install -r admin_gateway/requirements.txt -r admin_gateway/requirements-dev.txt
+
+admin-dev: admin-venv
+	@echo "Starting admin-gateway on $(AG_BASE_URL)..."
+	@PYTHONPATH=. AG_ENV=dev $(AG_PY) -m uvicorn admin_gateway.main:app --host $(AG_HOST) --port $(AG_PORT) --reload
+
+admin-lint: admin-venv
+	@$(AG_PY) -m ruff check admin_gateway
+	@$(AG_PY) -m ruff format --check admin_gateway
+
+admin-test: admin-venv
+	@PYTHONPATH=. $(PYTEST_ENV) $(AG_PY) -m pytest admin_gateway/tests -q
+
+ci-admin: admin-venv admin-lint admin-test
+
+# =============================================================================
+# Console (Next.js)
+# =============================================================================
+
+CONSOLE_DIR := console
+
+.PHONY: console-deps console-dev console-build console-lint ci-console
+
+console-deps:
+	@cd $(CONSOLE_DIR) && npm ci --prefer-offline 2>/dev/null || npm install
+
+console-dev: console-deps
+	@echo "Starting console on http://localhost:3000..."
+	@cd $(CONSOLE_DIR) && npm run dev
+
+console-build: console-deps
+	@cd $(CONSOLE_DIR) && npm run build
+
+console-lint: console-deps
+	@cd $(CONSOLE_DIR) && npm run lint
+
+ci-console: console-lint
