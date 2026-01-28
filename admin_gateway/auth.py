@@ -10,7 +10,7 @@ from typing import Iterable, Optional
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, status
 
 
 OIDC_ENV_VARS = (
@@ -157,8 +157,7 @@ def get_current_user(request: Request) -> AuthUser:
 def require_scopes(required: Iterable[str]):
     required_set = set(required)
 
-    def _dependency(request: Request) -> AuthUser:
-        user = get_current_user(request)
+    def _dependency(user: AuthUser = Depends(get_current_user)) -> AuthUser:
         missing = required_set.difference(user.scopes)
         if missing:
             raise HTTPException(
