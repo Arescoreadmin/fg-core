@@ -18,6 +18,8 @@ from fastapi.responses import JSONResponse
 from admin_gateway.middleware.request_id import RequestIdMiddleware
 from admin_gateway.middleware.logging import StructuredLoggingMiddleware
 from admin_gateway.audit import AuditLogger
+from admin_gateway.db import init_db, close_db
+from admin_gateway.routers import products_router
 
 # Version info
 SERVICE_NAME = "admin-gateway"
@@ -49,6 +51,10 @@ def build_app() -> FastAPI:
             extra={"service": SERVICE_NAME, "version": VERSION},
         )
 
+        # Initialize database
+        await init_db()
+        log.info("Database initialized")
+
         # Initialize audit logger
         app.state.audit_logger = AuditLogger(
             core_base_url=os.getenv("AG_CORE_BASE_URL"),
@@ -57,6 +63,8 @@ def build_app() -> FastAPI:
 
         yield
 
+        # Cleanup
+        await close_db()
         log.info("Shutting down %s", SERVICE_NAME)
 
     app = FastAPI(
@@ -86,6 +94,9 @@ def build_app() -> FastAPI:
     app.state.api_version = API_VERSION
     app.state.instance_id = str(uuid.uuid4())
     app.state.start_time = datetime.now(timezone.utc)
+
+    # Include routers
+    app.include_router(products_router)
 
     # Health endpoint
     @app.get("/health")
