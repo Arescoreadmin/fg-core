@@ -39,6 +39,8 @@ from admin_gateway.middleware.auth_context import AuthContextMiddleware
 from admin_gateway.middleware.csrf import CSRFMiddleware
 from admin_gateway.middleware.session_cookie import SessionCookieMiddleware
 from admin_gateway.audit import AuditLogger
+from admin_gateway.db import init_db, close_db
+from admin_gateway.routers import products_router
 
 
 class ProductCreate(BaseModel):
@@ -68,6 +70,10 @@ def build_app() -> FastAPI:
             extra={"service": SERVICE_NAME, "version": VERSION},
         )
 
+        # Initialize database
+        await init_db()
+        log.info("Database initialized")
+
         # Initialize audit logger
         if getattr(app.state, "audit_logger", None) is None:
             app.state.audit_logger = AuditLogger(
@@ -78,6 +84,8 @@ def build_app() -> FastAPI:
 
         yield
 
+        # Cleanup
+        await close_db()
         log.info("Shutting down %s", SERVICE_NAME)
 
     app = FastAPI(
@@ -125,6 +133,9 @@ def build_app() -> FastAPI:
     app.state.api_version = API_VERSION
     app.state.instance_id = str(uuid.uuid4())
     app.state.start_time = datetime.now(timezone.utc)
+
+    # Include routers
+    app.include_router(products_router)
 
     # Health endpoint
     @app.get("/health")

@@ -1,0 +1,343 @@
+"""Integration tests for Products Registry API.
+
+Tests the full CRUD lifecycle and security controls.
+"""
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import httpx
+
+
+class TestProductsCRUD:
+    """Test complete CRUD lifecycle: create -> list -> read -> patch -> test connection."""
+
+    def test_create_product(self, client):
+        """Test creating a new product."""
+        response = client.post(
+            "/admin/products",
+            json={
+                "slug": "test-product",
+                "name": "Test Product",
+                "env": "test",
+                "owner": "test-team@example.com",
+                "enabled": True,
+                "endpoints": [
+                    {
+                        "kind": "rest",
+                        "url": "https://api.example.com",
+                    }
+                ],
+            },
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["slug"] == "test-product"
+        assert data["name"] == "Test Product"
+        assert data["env"] == "test"
+        assert data["tenant_id"] == "tenant-dev"
+        assert data["enabled"] is True
+        assert len(data["endpoints"]) == 1
+        assert data["endpoints"][0]["kind"] == "rest"
+        assert data["endpoints"][0]["url"] == "https://api.example.com"
+
+    def test_list_products(self, client):
+        """Test listing products after creation."""
+        # Create two products
+        client.post(
+            "/admin/products",
+            json={"slug": "product-a", "name": "Product A"},
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+        client.post(
+            "/admin/products",
+            json={"slug": "product-b", "name": "Product B"},
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+
+        # List products
+        response = client.get(
+            "/admin/products",
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 2
+        assert len(data["products"]) == 2
+        slugs = [p["slug"] for p in data["products"]]
+        assert "product-a" in slugs
+        assert "product-b" in slugs
+
+    def test_get_product(self, client):
+        """Test getting a single product by ID."""
+        # Create product
+        create_resp = client.post(
+            "/admin/products",
+            json={"slug": "my-product", "name": "My Product"},
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+        product_id = create_resp.json()["id"]
+
+        # Get product
+        response = client.get(
+            f"/admin/products/{product_id}",
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == product_id
+        assert data["slug"] == "my-product"
+        assert data["name"] == "My Product"
+
+    def test_patch_product(self, client):
+        """Test updating a product."""
+        # Create product
+        create_resp = client.post(
+            "/admin/products",
+            json={
+                "slug": "update-me",
+                "name": "Original Name",
+                "env": "development",
+            },
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+        product_id = create_resp.json()["id"]
+
+        # Update product
+        response = client.patch(
+            f"/admin/products/{product_id}",
+            json={
+                "name": "Updated Name",
+                "env": "production",
+                "enabled": False,
+            },
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["name"] == "Updated Name"
+        assert data["env"] == "production"
+        assert data["enabled"] is False
+        assert data["slug"] == "update-me"  # Slug unchanged
+
+    def test_patch_product_endpoints(self, client):
+        """Test updating product endpoints."""
+        # Create product with REST endpoint
+        create_resp = client.post(
+            "/admin/products",
+            json={
+                "slug": "endpoints-test",
+                "name": "Endpoints Test",
+                "endpoints": [{"kind": "rest", "url": "https://old.example.com"}],
+            },
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+        product_id = create_resp.json()["id"]
+
+        # Update endpoints
+        response = client.patch(
+            f"/admin/products/{product_id}",
+            json={
+                "endpoints": [
+                    {"kind": "rest", "url": "https://new.example.com"},
+                    {"kind": "grpc", "url": "grpc.example.com:443"},
+                ],
+            },
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["endpoints"]) == 2
+        kinds = [ep["kind"] for ep in data["endpoints"]]
+        assert "rest" in kinds
+        assert "grpc" in kinds
+
+    def test_test_connection_success(self, client):
+        """Test connection endpoint with mocked successful response."""
+        # Create product with endpoint
+        create_resp = client.post(
+            "/admin/products",
+            json={
+                "slug": "conntest",
+                "name": "Connection Test",
+                "endpoints": [{"kind": "rest", "url": "https://api.example.com"}],
+            },
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+        product_id = create_resp.json()["id"]
+
+        # Mock httpx.AsyncClient
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(return_value=mock_response)
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client_class.return_value = mock_client
+
+            response = client.post(
+                f"/admin/products/{product_id}/test-connection",
+                headers={"X-Tenant-ID": "tenant-dev"},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["status_code"] == 200
+        assert data["endpoint_url"] == "https://api.example.com/health"
+
+    def test_test_connection_failure(self, client):
+        """Test connection endpoint with mocked failure response."""
+        # Create product
+        create_resp = client.post(
+            "/admin/products",
+            json={
+                "slug": "connfail",
+                "name": "Connection Fail",
+                "endpoints": [{"kind": "rest", "url": "https://api.example.com"}],
+            },
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+        product_id = create_resp.json()["id"]
+
+        # Mock httpx.AsyncClient with connection error
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(
+                side_effect=httpx.ConnectError("Connection refused")
+            )
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client_class.return_value = mock_client
+
+            response = client.post(
+                f"/admin/products/{product_id}/test-connection",
+                headers={"X-Tenant-ID": "tenant-dev"},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is False
+        assert "Connection failed" in data["error"]
+
+    def test_test_connection_no_endpoint(self, client):
+        """Test connection endpoint when no endpoint configured."""
+        # Create product without endpoints
+        create_resp = client.post(
+            "/admin/products",
+            json={"slug": "no-endpoint", "name": "No Endpoint"},
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+        product_id = create_resp.json()["id"]
+
+        response = client.post(
+            f"/admin/products/{product_id}/test-connection",
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is False
+        assert "No REST endpoint" in data["error"]
+
+
+class TestProductsValidation:
+    """Test input validation."""
+
+    def test_create_duplicate_slug(self, client):
+        """Test creating product with duplicate slug returns 409."""
+        # Create first product
+        client.post(
+            "/admin/products",
+            json={"slug": "duplicate", "name": "First"},
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+
+        # Try to create second with same slug
+        response = client.post(
+            "/admin/products",
+            json={"slug": "duplicate", "name": "Second"},
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+        assert response.status_code == 409
+        assert "already exists" in response.json()["detail"]
+
+    def test_create_invalid_slug(self, client):
+        """Test creating product with invalid slug."""
+        response = client.post(
+            "/admin/products",
+            json={"slug": "Invalid Slug!", "name": "Test"},
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+        assert response.status_code == 422  # Validation error
+
+    def test_get_nonexistent_product(self, client):
+        """Test getting product that doesn't exist."""
+        response = client.get(
+            "/admin/products/99999",
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+        assert response.status_code == 404
+
+    def test_patch_nonexistent_product(self, client):
+        """Test patching product that doesn't exist."""
+        response = client.patch(
+            "/admin/products/99999",
+            json={"name": "New Name"},
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+        assert response.status_code == 404
+
+
+class TestTenantIsolation:
+    """Test tenant scoping and access control."""
+
+    def test_unauthorized_tenant_returns_403(self, client):
+        """Test that accessing unauthorized tenant returns 403."""
+        # Try to access a tenant not in the user's tenants list
+        response = client.get(
+            "/admin/products",
+            headers={"X-Tenant-ID": "unauthorized-tenant"},
+        )
+        assert response.status_code == 403
+        assert "Tenant access denied" in response.json()["detail"]
+
+    def test_missing_tenant_uses_default(self, client):
+        """Test that missing tenant header uses user's first tenant."""
+        # Create a product without specifying tenant (uses default from user)
+        response = client.post(
+            "/admin/products",
+            json={"slug": "default-tenant-product", "name": "Default Tenant"},
+        )
+        assert response.status_code == 201
+        # Should use tenant-dev (the dev user's only tenant)
+        assert response.json()["tenant_id"] == "tenant-dev"
+
+    def test_tenant_scoped_queries(self, client):
+        """Test that products are scoped to tenant."""
+        # Create product
+        create_resp = client.post(
+            "/admin/products",
+            json={"slug": "scoped-product", "name": "Scoped Product"},
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+        assert create_resp.status_code == 201
+        product_id = create_resp.json()["id"]
+
+        # Should be visible within same tenant
+        get_resp = client.get(
+            f"/admin/products/{product_id}",
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+        assert get_resp.status_code == 200
+
+        # Verify it's in the list
+        list_resp = client.get(
+            "/admin/products",
+            headers={"X-Tenant-ID": "tenant-dev"},
+        )
+        assert list_resp.status_code == 200
+        slugs = [p["slug"] for p in list_resp.json()["products"]]
+        assert "scoped-product" in slugs
