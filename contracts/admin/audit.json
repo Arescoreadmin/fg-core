@@ -23,6 +23,7 @@
     "details": {
       "anyOf": [
         {
+          "additionalProperties": true,
           "type": "object"
         },
         {

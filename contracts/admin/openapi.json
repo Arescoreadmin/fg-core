@@ -91,6 +91,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Admin Me Admin Me Get",
                   "type": "object"
                 }
@@ -129,6 +130,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Dashboard Api V1 Dashboard Get",
                   "type": "object"
                 }
@@ -177,6 +179,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Keys Api V1 Keys Get",
                   "type": "object"
                 }
@@ -216,6 +219,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Product Api V1 Products Post",
                   "type": "object"
                 }
@@ -246,6 +250,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Tenants Api V1 Tenants Get",
                   "type": "object"
                 }
@@ -313,6 +318,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Auth Csrf Auth Csrf Get",
                   "type": "object"
                 }
@@ -350,6 +356,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Health Health Get",
                   "type": "object"
                 }
@@ -370,6 +377,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Version Version Get",
                   "type": "object"
                 }
