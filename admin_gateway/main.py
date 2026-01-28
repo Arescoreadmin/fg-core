@@ -41,7 +41,8 @@ from admin_gateway.middleware.auth_context import AuthContextMiddleware
 from admin_gateway.middleware.csrf import CSRFMiddleware
 from admin_gateway.middleware.session_cookie import SessionCookieMiddleware
 from admin_gateway.audit import AuditLogger
-from admin_gateway.routers import auth_router, admin_router
+from admin_gateway.db import init_db, close_db
+from admin_gateway.routers import products_router
 
 
 class ProductCreate(BaseModel):
@@ -71,22 +72,9 @@ def build_app() -> FastAPI:
             extra={"service": SERVICE_NAME, "version": VERSION},
         )
 
-        # Log auth configuration
-        from admin_gateway.auth.config import get_auth_config
-
-        config = get_auth_config()
-        log.info(
-            "Auth config: env=%s, oidc_enabled=%s, dev_bypass=%s",
-            config.env,
-            config.oidc_enabled,
-            config.dev_bypass_allowed,
-        )
-
-        # Validate config
-        errors = config.validate()
-        if errors:
-            for error in errors:
-                log.warning("Config validation: %s", error)
+        # Initialize database
+        await init_db()
+        log.info("Database initialized")
 
         # Initialize audit logger
         if getattr(app.state, "audit_logger", None) is None:
@@ -98,6 +86,8 @@ def build_app() -> FastAPI:
 
         yield
 
+        # Cleanup
+        await close_db()
         log.info("Shutting down %s", SERVICE_NAME)
 
     app = FastAPI(
@@ -151,10 +141,9 @@ def build_app() -> FastAPI:
     app.state.start_time = datetime.now(timezone.utc)
 
     # Include routers
-    app.include_router(auth_router)
-    app.include_router(admin_router)
+    app.include_router(products_router)
 
-    # Health endpoint (public, no auth)
+    # Health endpoint
     @app.get("/health")
     async def health(request: Request) -> dict[str, Any]:
         """Health check endpoint."""
