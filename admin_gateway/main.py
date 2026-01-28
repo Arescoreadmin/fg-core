@@ -1,6 +1,7 @@
 """Admin Gateway - FastAPI Application.
 
 Provides administrative API for FrostGate management console.
+Includes OIDC authentication, RBAC, CSRF protection, and audit logging.
 """
 
 from __future__ import annotations
@@ -10,18 +11,22 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from typing import Any
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from admin_gateway.middleware.request_id import RequestIdMiddleware
 from admin_gateway.middleware.logging import StructuredLoggingMiddleware
+from admin_gateway.middleware.audit import AuditMiddleware
+from admin_gateway.middleware.auth import AuthMiddleware
 from admin_gateway.audit import AuditLogger
+from admin_gateway.routers import auth_router, admin_router
 
 # Version info
 SERVICE_NAME = "admin-gateway"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 API_VERSION = "v1"
 
 # Configure structured logging
@@ -49,6 +54,23 @@ def build_app() -> FastAPI:
             extra={"service": SERVICE_NAME, "version": VERSION},
         )
 
+        # Log auth configuration
+        from admin_gateway.auth.config import get_auth_config
+
+        config = get_auth_config()
+        log.info(
+            "Auth config: env=%s, oidc_enabled=%s, dev_bypass=%s",
+            config.env,
+            config.oidc_enabled,
+            config.dev_bypass_allowed,
+        )
+
+        # Validate config
+        errors = config.validate()
+        if errors:
+            for error in errors:
+                log.warning("Config validation: %s", error)
+
         # Initialize audit logger
         app.state.audit_logger = AuditLogger(
             core_base_url=os.getenv("AG_CORE_BASE_URL"),
@@ -67,6 +89,9 @@ def build_app() -> FastAPI:
     )
 
     # Add middleware (order matters: outermost first)
+    # Audit comes after auth so it can see the session
+    app.add_middleware(AuditMiddleware)
+    app.add_middleware(AuthMiddleware, auto_csrf=True)
     app.add_middleware(StructuredLoggingMiddleware)
     app.add_middleware(RequestIdMiddleware)
 
@@ -78,6 +103,7 @@ def build_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Request-Id", "X-CSRF-Token"],
     )
 
     # Store service metadata
@@ -87,9 +113,13 @@ def build_app() -> FastAPI:
     app.state.instance_id = str(uuid.uuid4())
     app.state.start_time = datetime.now(timezone.utc)
 
-    # Health endpoint
+    # Include routers
+    app.include_router(auth_router)
+    app.include_router(admin_router)
+
+    # Health endpoint (public, no auth)
     @app.get("/health")
-    async def health(request: Request) -> dict:
+    async def health(request: Request) -> dict[str, Any]:
         """Health check endpoint."""
         return {
             "status": "ok",
@@ -99,9 +129,9 @@ def build_app() -> FastAPI:
             "request_id": getattr(request.state, "request_id", None),
         }
 
-    # Version endpoint
+    # Version endpoint (public, no auth)
     @app.get("/version")
-    async def version(request: Request) -> dict:
+    async def version(request: Request) -> dict[str, Any]:
         """Version information endpoint."""
         return {
             "service": request.app.state.service,
@@ -113,40 +143,58 @@ def build_app() -> FastAPI:
 
     # OpenAPI JSON endpoint (explicit for clarity)
     @app.get("/openapi.json", include_in_schema=False)
-    async def openapi_json(request: Request) -> Response:
+    async def openapi_json(request: Request) -> JSONResponse:
         """OpenAPI schema endpoint."""
         return JSONResponse(content=request.app.openapi())
 
-    # Placeholder admin endpoints
-    @app.get("/api/v1/tenants")
-    async def list_tenants(request: Request) -> dict:
+    # Legacy placeholder endpoints (moved to /api/v1 prefix, require auth)
+    from admin_gateway.auth import get_current_session, require_scope_dependency, Scope
+
+    @app.get(
+        "/api/v1/tenants",
+        dependencies=[Depends(require_scope_dependency(Scope.PRODUCT_READ))],
+    )
+    async def list_tenants_v1(
+        request: Request,
+        session=Depends(get_current_session),
+    ) -> dict[str, Any]:
         """List tenants (placeholder)."""
-        # Audit log the action
         await request.app.state.audit_logger.log(
             request_id=getattr(request.state, "request_id", "unknown"),
             action="list_tenants",
             resource="tenants",
             outcome="success",
+            actor=session.user_id,
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
         )
         return {"tenants": [], "total": 0}
 
-    @app.get("/api/v1/keys")
-    async def list_keys(request: Request) -> dict:
+    @app.get(
+        "/api/v1/keys",
+        dependencies=[Depends(require_scope_dependency(Scope.KEYS_READ))],
+    )
+    async def list_keys_v1(
+        request: Request,
+        session=Depends(get_current_session),
+    ) -> dict[str, Any]:
         """List API keys (placeholder)."""
         await request.app.state.audit_logger.log(
             request_id=getattr(request.state, "request_id", "unknown"),
             action="list_keys",
             resource="keys",
             outcome="success",
+            actor=session.user_id,
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
         )
         return {"keys": [], "total": 0}
 
     @app.get("/api/v1/dashboard")
-    async def dashboard(request: Request) -> dict:
+    async def dashboard(
+        request: Request,
+        session=Depends(get_current_session),
+    ) -> dict[str, Any]:
         """Dashboard data endpoint (placeholder)."""
         return {
             "stats": {
