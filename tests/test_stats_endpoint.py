@@ -11,7 +11,7 @@ def test_stats_requires_auth():
 
 
 def test_stats_schema_with_auth():
-    r = client.get("/stats", headers={"x-api-key": "supersecret"})
+    r = client.get("/stats", headers={"x-api-key": "CHANGEME"})
     assert r.status_code == 200
     data = r.json()
 

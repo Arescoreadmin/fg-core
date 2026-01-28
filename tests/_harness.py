@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Callable, Any
 
-DEFAULT_API_KEY = "supersecret"
+DEFAULT_API_KEY = "CHANGEME"
 
 
 def _b(v: bool) -> str:
@@ -59,7 +59,7 @@ def _call_build_app(
 def build_app_factory(tmp_path: Path) -> Callable[..., Any]:
     """
     Returns a callable:
-        app = build_app(auth_enabled=True, api_key="supersecret", dev_events_enabled=True)
+        app = build_app(auth_enabled=True, api_key="CHANGEME", dev_events_enabled=True)
     """
 
     def _build(

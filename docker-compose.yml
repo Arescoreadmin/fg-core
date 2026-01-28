@@ -149,7 +149,7 @@ services:
     env_file:
       - .env
     environment:
-      AG_ENV: ${FG_ENV:-prod}
+      FG_ENV: ${FG_ENV:-prod}
       AG_LOG_LEVEL: ${FG_LOG_LEVEL:-info}
       AG_CORE_BASE_URL: http://frostgate-core:8080
       AG_CORS_ORIGINS: ${AG_CORS_ORIGINS:-*}

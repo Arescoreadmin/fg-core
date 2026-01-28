@@ -97,6 +97,7 @@ def build_app() -> FastAPI:
             max_age=session_max_age(),
             same_site="strict",
             https_only=environment() == "prod",
+            httponly=True,
         )
 
     # Add middleware (order matters: outermost first)

@@ -9,7 +9,7 @@ Behavior:
 Env:
   FG_E2E_HTTP=1
   FG_BASE_URL=http://127.0.0.1:8000
-  FG_API_KEY=supersecret
+  FG_API_KEY=CHANGEME
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ import requests
 
 
 BASE_URL = os.getenv("FG_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
-API_KEY = os.getenv("FG_API_KEY", "supersecret")
+API_KEY = os.getenv("FG_API_KEY", "CHANGEME")
 
 E2E_ENABLED = os.getenv("FG_E2E_HTTP", "").strip().lower() in (
     "1",

@@ -316,7 +316,7 @@ export FG_UI_TOKEN_GET_ENABLED=1
 make fg-restart
 
 echo "==> 4) Smoke: issue cookie + open UI"
-curl -s -i -c /tmp/cj "http://127.0.0.1:8000/ui/token?api_key=supersecret" | head -n 12 || true
+curl -s -i -c /tmp/cj -H "X-API-Key: CHANGEME" "http://127.0.0.1:8000/ui/token" | head -n 12 || true
 echo "✅ cookie jar:"; tail -n 2 /tmp/cj
 echo "✅ SSE headers:"
 curl -s -i -b /tmp/cj "http://127.0.0.1:8000/feed/stream?limit=1&interval=1.0" | head -n 12 || true

@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 
 from api.ratelimit import rate_limit_guard
@@ -73,24 +73,17 @@ def _get_header_key(req: Request) -> Optional[str]:
     return None
 
 
-def _get_query_key(req: Request) -> Optional[str]:
-    v = req.query_params.get("api_key") or req.query_params.get("key")
-    if v and str(v).strip():
-        return str(v).strip()
-    return None
-
-
 def _require_ui_key(req: Request) -> None:
     """
     UI auth gate:
     - If auth disabled, no-op.
-    - If enabled, accept API key from cookie OR x-api-key OR query param.
+    - If enabled, accept API key from cookie OR x-api-key.
     NOTE: This only checks "present". Actual validation happens on API endpoints
     via require_api_key_always/require_scopes. UI is just a UX convenience gate.
     """
     if not _auth_enabled():
         return
-    if _get_cookie_key(req) or _get_header_key(req) or _get_query_key(req):
+    if _get_cookie_key(req) or _get_header_key(req):
         return
     raise HTTPException(status_code=401, detail=ERR_INVALID)
 
@@ -182,7 +175,7 @@ def ui_feed(request: Request) -> HTMLResponse:
         <div>Last event id: <span id="lastId">-</span></div>
         <div>Last update: <span id="lastTs">-</span></div>
         <div>Age: <span id="age">-</span></div>
-        <div class="muted">Dev: hit <code>/ui/token?api_key=...</code> once to mint cookie.</div>
+        <div class="muted">Dev: call <code>/ui/token</code> once with <code>X-API-Key</code> to mint cookie.</div>
       </div>
 
       <div class="row" style="margin-top:10px;">
@@ -456,61 +449,18 @@ def ui_feed(request: Request) -> HTMLResponse:
 """)
 
 
-def ui_token_get(
-    request: Request,
-    api_key: str | None = Query(default=None, alias="api_key"),
-    key: str | None = Query(default=None),
-):
-    # Dev-only convenience. Keep it OFF in prod.
-    if os.getenv("FG_UI_TOKEN_GET_ENABLED", "1") != "1":
-        raise HTTPException(status_code=404, detail="Not Found")
-
-    raw = (api_key or key or "").strip()
-    if not raw:
-        raise HTTPException(status_code=400, detail="missing api_key")
-
-    api_key_val = raw
-
-    html = f"""<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FrostGate UI Token</title>
-</head>
-<body>
-<script>
-  try {{
-    localStorage.setItem("FG_API_KEY", {api_key_val!r});
-  }} catch (e) {{
-    console.warn("localStorage blocked:", e);
-  }}
-  window.location.replace("/ui/feed");
-</script>
-<p>Setting token…</p>
-</body>
-</html>
-"""
-
-    resp = HTMLResponse(content=html, headers=_html_headers())
-    resp.set_cookie(
-        key=UI_COOKIE_NAME,
-        value=api_key_val,
+@router.get("/token")
+def ui_token(request: Request, response: Response):
+    api_key = _get_header_key(request)
+    if not api_key:
+        raise HTTPException(status_code=401, detail=ERR_INVALID)
+    response.set_cookie(
+        UI_COOKIE_NAME,
+        api_key,
         httponly=True,
         samesite="lax",
         secure=_is_prod(),
         path="/",
         max_age=60 * 60 * 8,
-    )
-    return resp
-
-
-@router.get("/token")
-def ui_token(api_key: str, response: Response):
-    response.set_cookie(
-        "fg_api_key",
-        api_key,
-        httponly=True,
-        samesite="lax",
     )
     return {"ok": True}

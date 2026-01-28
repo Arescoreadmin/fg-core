@@ -29,7 +29,7 @@ BASE_URL ?= http://$(HOST):$(PORT)
 FG_ENV                  ?= dev
 FG_SERVICE              ?= frostgate-core
 FG_AUTH_ENABLED         ?= 1
-FG_API_KEY              ?= supersecret
+FG_API_KEY              ?= CHANGEME
 FG_ENFORCEMENT_MODE     ?= observe
 FG_DEV_EVENTS_ENABLED   ?= 0
 FG_UI_TOKEN_GET_ENABLED ?= 1
@@ -86,6 +86,7 @@ help:
 	"  make ci" \
 	"  make ci-integration" \
 	"  make ci-evidence" \
+	"  make ci-pt" \
 	""
 
 # =============================================================================
@@ -295,6 +296,14 @@ ci-evidence: venv itest-down itest-up
 	FG_SQLITE_PATH="$(ITEST_DB)" $(MAKE) -s evidence
 
 # =============================================================================
+# PT lane (security regression)
+# =============================================================================
+
+.PHONY: ci-pt
+ci-pt: venv
+	@$(PYTEST_ENV) $(PY) -m pytest -q tests/test_security_hardening.py tests/test_security_middleware.py
+
+# =============================================================================
 # Admin Gateway
 # =============================================================================
 
@@ -314,7 +323,7 @@ admin-venv:
 
 admin-dev: admin-venv
 	@echo "Starting admin-gateway on $(AG_BASE_URL)..."
-	@PYTHONPATH=. AG_ENV=dev $(AG_PY) -m uvicorn admin_gateway.main:app --host $(AG_HOST) --port $(AG_PORT) --reload
+	@PYTHONPATH=. FG_ENV=dev $(AG_PY) -m uvicorn admin_gateway.main:app --host $(AG_HOST) --port $(AG_PORT) --reload
 
 admin-lint: admin-venv
 	@$(AG_PY) -m ruff check admin_gateway

@@ -2,7 +2,7 @@ import os
 from fastapi.testclient import TestClient
 from api.main import build_app
 
-API_KEY = "supersecret"
+API_KEY = "CHANGEME"
 
 def test_feed_live_presentation_fields_present(tmp_path):
     old = {k: os.environ.get(k) for k in ["FG_API_KEY", "FG_AUTH_ENABLED", "FG_SQLITE_PATH", "FG_DEV_EVENTS_ENABLED"]}

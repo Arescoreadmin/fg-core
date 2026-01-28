@@ -12,7 +12,7 @@ def test_rings_not_mounted_when_disabled(build_app, monkeypatch):
 
     r = client.post(
         "/rings/route",
-        headers={"X-API-Key": "supersecret"},
+        headers={"X-API-Key": "CHANGEME"},
         json={"classification": "CUI"},
     )
     assert r.status_code == 404
@@ -23,7 +23,7 @@ def test_ring_router_contract(build_app, monkeypatch):
     app = build_app()
 
     client = TestClient(app)
-    headers = {"X-API-Key": "supersecret"}
+    headers = {"X-API-Key": "CHANGEME"}
 
     resp = client.post("/rings/route", headers=headers, json={"classification": "CUI"})
     assert resp.status_code == 200, resp.text

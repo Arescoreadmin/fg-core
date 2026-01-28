@@ -2,7 +2,7 @@ import os
 import importlib
 from fastapi.testclient import TestClient
 
-API_KEY = "supersecret"
+API_KEY = "CHANGEME"
 
 
 def build_app(auth_enabled: bool):

@@ -145,11 +145,11 @@ def test_decision_diff_exposed_in_decisions_and_feed():
         "metadata": {"source_ip": "1.2.3.4", "username": "alice", "failed_attempts": 1},
     }
 
-    r1 = client.post("/defend", json=payload, headers={"x-api-key": "supersecret"})
+    r1 = client.post("/defend", json=payload, headers={"x-api-key": "CHANGEME"})
     assert r1.status_code in (200, 201), r1.text
 
     payload["metadata"]["failed_attempts"] = 10
-    r2 = client.post("/defend", json=payload, headers={"x-api-key": "supersecret"})
+    r2 = client.post("/defend", json=payload, headers={"x-api-key": "CHANGEME"})
     assert r2.status_code in (200, 201), r2.text
 
     # decisions list should include decision_diff (scope name may vary; mint_key accepts any scope string)
