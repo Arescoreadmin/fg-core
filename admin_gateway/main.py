@@ -1,6 +1,7 @@
 """Admin Gateway - FastAPI Application.
 
 Provides administrative API for FrostGate management console.
+Includes OIDC authentication, RBAC, CSRF protection, and audit logging.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -50,7 +52,7 @@ class ProductCreate(BaseModel):
 
 # Version info
 SERVICE_NAME = "admin-gateway"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 API_VERSION = "v1"
 
 # Configure structured logging
@@ -100,6 +102,9 @@ def build_app() -> FastAPI:
     require_oidc_env()
 
     # Add middleware (order matters: outermost first)
+    # Audit comes after auth so it can see the session
+    app.add_middleware(AuditMiddleware)
+    app.add_middleware(AuthMiddleware, auto_csrf=True)
     app.add_middleware(StructuredLoggingMiddleware)
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(AuthContextMiddleware)
@@ -125,6 +130,7 @@ def build_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Request-Id", "X-CSRF-Token"],
     )
 
     # Store service metadata
@@ -139,7 +145,7 @@ def build_app() -> FastAPI:
 
     # Health endpoint
     @app.get("/health")
-    async def health(request: Request) -> dict:
+    async def health(request: Request) -> dict[str, Any]:
         """Health check endpoint."""
         return {
             "status": "ok",
@@ -149,9 +155,9 @@ def build_app() -> FastAPI:
             "request_id": getattr(request.state, "request_id", None),
         }
 
-    # Version endpoint
+    # Version endpoint (public, no auth)
     @app.get("/version")
-    async def version(request: Request) -> dict:
+    async def version(request: Request) -> dict[str, Any]:
         """Version information endpoint."""
         return {
             "service": request.app.state.service,
@@ -163,7 +169,7 @@ def build_app() -> FastAPI:
 
     # OpenAPI JSON endpoint (explicit for clarity)
     @app.get("/openapi.json", include_in_schema=False)
-    async def openapi_json(request: Request) -> Response:
+    async def openapi_json(request: Request) -> JSONResponse:
         """OpenAPI schema endpoint."""
         return JSONResponse(content=request.app.openapi())
 
