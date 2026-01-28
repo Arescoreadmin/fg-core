@@ -19,7 +19,7 @@ REQUIRED_PRESENTATION_FIELDS = (
 
 
 def _auth_headers() -> Dict[str, str]:
-    return {"X-API-Key": os.getenv("FG_API_KEY", "supersecret")}
+    return {"X-API-Key": os.getenv("FG_API_KEY", "CHANGEME")}
 
 
 def test_auth_required_when_enabled(build_app):

@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from api.main import build_app
 
-API_KEY = os.getenv("FG_API_KEY", "supersecret")
+API_KEY = os.getenv("FG_API_KEY", "CHANGEME")
 
 
 def _post_auth(client: TestClient, attempts: int):

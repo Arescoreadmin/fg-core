@@ -21,7 +21,7 @@ jobs:
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
-      FG_API_KEY: supersecret
+      FG_API_KEY: CHANGEME
       FG_ENFORCEMENT_MODE: observe
       FG_SQLITE_PATH: state/frostgate-ci.db
 
@@ -68,7 +68,7 @@ jobs:
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
-      FG_API_KEY: supersecret
+      FG_API_KEY: CHANGEME
       FG_ENFORCEMENT_MODE: observe
       FG_SQLITE_PATH: state/frostgate-ci-integration.db
 
@@ -112,6 +112,78 @@ jobs:
             state/**
           if-no-files-found: ignore
 
+  admin:
+    name: Admin Gateway (ci-admin)
+    runs-on: ubuntu-latest
+    needs: unit
+    env:
+      FG_ENV: dev
+      FG_AUTH_ENABLED: "1"
+      FG_API_KEY: CHANGEME
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install OS deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sqlite3 curl zip minisign ripgrep
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run admin gateway lane
+        run: |
+          make ci-admin
+
+  console:
+    name: Console (ci-console)
+    runs-on: ubuntu-latest
+    needs: unit
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run console lane
+        run: |
+          make ci-console
+
+  pt:
+    name: PT (ci-pt)
+    runs-on: ubuntu-latest
+    needs: unit
+    env:
+      FG_ENV: dev
+      FG_AUTH_ENABLED: "1"
+      FG_API_KEY: CHANGEME
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install OS deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sqlite3 curl zip minisign ripgrep
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run PT lane
+        run: |
+          make ci-pt
+
   evidence:
     name: Evidence (ci-evidence)
     runs-on: ubuntu-latest
@@ -119,7 +191,7 @@ jobs:
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
-      FG_API_KEY: supersecret
+      FG_API_KEY: CHANGEME
       FG_ENFORCEMENT_MODE: observe
       FG_SQLITE_PATH: state/frostgate-ci-evidence.db
 

@@ -10,7 +10,7 @@ from typing import Iterable, Optional
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, status
 
 
 OIDC_ENV_VARS = (
@@ -79,7 +79,9 @@ def require_oidc_env() -> None:
         return
     missing = [name for name in OIDC_ENV_VARS if not os.getenv(name)]
     if missing:
-        raise RuntimeError(f"Missing OIDC configuration in production: {', '.join(missing)}")
+        raise RuntimeError(
+            f"Missing OIDC configuration in production: {', '.join(missing)}"
+        )
 
 
 def session_max_age() -> int:
@@ -144,7 +146,10 @@ def get_current_user(request: Request) -> AuthUser:
     if not user:
         user = ensure_dev_user(request)
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
     request.state.user = user
     return user
 
@@ -152,8 +157,7 @@ def get_current_user(request: Request) -> AuthUser:
 def require_scopes(required: Iterable[str]):
     required_set = set(required)
 
-    def _dependency(request: Request) -> AuthUser:
-        user = get_current_user(request)
+    def _dependency(user: AuthUser = Depends(get_current_user)) -> AuthUser:
         missing = required_set.difference(user.scopes)
         if missing:
             raise HTTPException(
@@ -173,7 +177,11 @@ def ensure_csrf_token(request: Request) -> str:
     return token
 
 
-def get_allowed_tenant(request: Request, tenant_id: Optional[str], user: AuthUser) -> Optional[str]:
+def get_allowed_tenant(
+    request: Request,
+    tenant_id: Optional[str],
+    user: AuthUser,
+) -> Optional[str]:
     if tenant_id and tenant_id not in user.tenants:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -289,7 +297,9 @@ async def verify_id_token(id_token: str, nonce: str) -> dict:
         keys = jwks.get("keys", [])
         key = next((k for k in keys if k.get("kid") == kid), None)
         if not key:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+            )
         claims = jwt.decode(
             id_token,
             key,
@@ -298,9 +308,13 @@ async def verify_id_token(id_token: str, nonce: str) -> dict:
             issuer=issuer,
         )
     except JWTError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        ) from exc
     if claims.get("nonce") != nonce:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token nonce")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token nonce"
+        )
     return claims
 
 

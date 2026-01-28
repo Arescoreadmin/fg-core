@@ -2,13 +2,13 @@
 set -euo pipefail
 
 BASE="${BASE_URL:-http://127.0.0.1:8000}"
-KEY="${FG_API_KEY:-supersecret}"
+KEY="${FG_API_KEY:-CHANGEME}"
 
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 
 # 1) Get cookie (UI token endpoint sets HttpOnly cookie)
-curl -sS -D /dev/null -o /dev/null -c "$tmp" "${BASE}/ui/token?api_key=${KEY}"
+curl -sS -D /dev/null -o /dev/null -c "$tmp" -H "X-API-Key: ${KEY}" "${BASE}/ui/token"
 
 # 2) Cookie should authorize /feed/live (200)
 code="$(curl -sS -o /dev/null -w '%{http_code}' -b "$tmp" "${BASE}/feed/live?limit=1")"

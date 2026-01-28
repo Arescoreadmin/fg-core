@@ -37,12 +37,14 @@ from admin_gateway.middleware.logging import StructuredLoggingMiddleware
 from admin_gateway.middleware.audit import AuditMiddleware
 from admin_gateway.middleware.auth_context import AuthContextMiddleware
 from admin_gateway.middleware.csrf import CSRFMiddleware
+from admin_gateway.middleware.session_cookie import SessionCookieMiddleware
 from admin_gateway.audit import AuditLogger
 
 
 class ProductCreate(BaseModel):
     tenant_id: str = Field(..., description="Tenant identifier")
     name: str | None = Field(default=None, description="Product name")
+
 
 # Version info
 SERVICE_NAME = "admin-gateway"
@@ -67,10 +69,12 @@ def build_app() -> FastAPI:
         )
 
         # Initialize audit logger
-        app.state.audit_logger = AuditLogger(
-            core_base_url=os.getenv("AG_CORE_BASE_URL"),
-            enabled=os.getenv("AG_AUDIT_ENABLED", "1").lower() not in {"0", "false", "no"},
-        )
+        if getattr(app.state, "audit_logger", None) is None:
+            app.state.audit_logger = AuditLogger(
+                core_base_url=os.getenv("AG_CORE_BASE_URL"),
+                enabled=os.getenv("AG_AUDIT_ENABLED", "1").lower()
+                not in {"0", "false", "no"},
+            )
 
         yield
 
@@ -87,24 +91,23 @@ def build_app() -> FastAPI:
         raise RuntimeError("FG_DEV_AUTH_BYPASS cannot be enabled in production.")
     require_oidc_env()
 
-    if os.getenv("FG_CONTRACTS_GEN") != "1":
-        from starlette.middleware.sessions import SessionMiddleware
-
-        session_secret = require_session_secret()
-        app.add_middleware(
-            SessionMiddleware,
-            secret_key=session_secret,
-            max_age=session_max_age(),
-            same_site="strict",
-            https_only=environment() == "prod",
-        )
-
     # Add middleware (order matters: outermost first)
     app.add_middleware(StructuredLoggingMiddleware)
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(AuthContextMiddleware)
     app.add_middleware(AuditMiddleware)
     app.add_middleware(CSRFMiddleware)
+    from starlette.middleware.sessions import SessionMiddleware
+
+    session_secret = require_session_secret()
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=session_secret,
+        max_age=session_max_age(),
+        same_site="strict",
+        https_only=environment() == "prod",
+    )
+    app.add_middleware(SessionCookieMiddleware)
 
     # CORS configuration
     cors_origins = os.getenv("AG_CORS_ORIGINS", "*").split(",")

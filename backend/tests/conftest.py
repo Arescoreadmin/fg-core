@@ -10,7 +10,7 @@ def build_app(tmp_path, monkeypatch):
         db_path = sqlite_path or str(tmp_path / "fg-test.db")
         monkeypatch.setenv("FG_SQLITE_PATH", db_path)
         monkeypatch.setenv("FG_AUTH_ENABLED", "1" if auth_enabled else "0")
-        monkeypatch.setenv("FG_API_KEY", "supersecret")
+        monkeypatch.setenv("FG_API_KEY", "CHANGEME")
         monkeypatch.setenv("FG_UI_TOKEN_GET_ENABLED", "1")
         monkeypatch.setenv("FG_ENV", "test")
 

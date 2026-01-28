@@ -25,7 +25,7 @@ def test_defend_returns_explanation_brief():
             "failed_attempts": 10,
         },
     }
-    r = client.post("/defend", json=payload, headers={"x-api-key": "supersecret"})
+    r = client.post("/defend", json=payload, headers={"x-api-key": "CHANGEME"})
     assert r.status_code in (200, 201), r.text
     data = r.json()
 

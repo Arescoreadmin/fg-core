@@ -294,15 +294,15 @@ def test_decision_diff_persisted_after_second_event():
         "source": "pytest",
         "metadata": {"source_ip": "1.2.3.4", "username": "alice", "failed_attempts": 1},
     }
-    r1 = client.post("/defend", json=payload, headers={"x-api-key": "supersecret"})
+    r1 = client.post("/defend", json=payload, headers={"x-api-key": "CHANGEME"})
     assert r1.status_code in (200, 201), r1.text
 
     payload["metadata"]["failed_attempts"] = 10
-    r2 = client.post("/defend", json=payload, headers={"x-api-key": "supersecret"})
+    r2 = client.post("/defend", json=payload, headers={"x-api-key": "CHANGEME"})
     assert r2.status_code in (200, 201), r2.text
 
     # pull decisions page and ensure newest has decision_diff_json (via /decisions include_raw)
-    page = client.get("/decisions?limit=5&include_raw=true", headers={"x-api-key": "supersecret"})
+    page = client.get("/decisions?limit=5&include_raw=true", headers={"x-api-key": "CHANGEME"})
     assert page.status_code == 200, page.text
     data = page.json()
     items = data.get("items") or []

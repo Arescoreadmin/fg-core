@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Callable, Dict, Iterator, Optional
 
 
-API_KEY_DEFAULT = "supersecret"
+API_KEY_DEFAULT = "CHANGEME"
 
 
 @contextmanager

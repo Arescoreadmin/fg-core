@@ -421,14 +421,14 @@ class TestStartupValidation:
         validator = StartupValidator()
 
         # Check that default insecure keys are detected
-        assert "supersecret" in validator.INSECURE_API_KEYS
         assert "changeme" in validator.INSECURE_API_KEYS
+        assert "password" in validator.INSECURE_API_KEYS
 
     def test_validation_with_env(self):
         """Test validation with environment variables."""
         from api.config.startup_validation import validate_startup_config
 
-        with patch.dict(os.environ, {"FG_ENV": "dev", "FG_API_KEY": "supersecret"}):
+        with patch.dict(os.environ, {"FG_ENV": "dev", "FG_API_KEY": "CHANGEME"}):
             report = validate_startup_config(log_results=False)
 
             assert report is not None

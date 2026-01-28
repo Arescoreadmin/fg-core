@@ -88,7 +88,7 @@ async def test_global_key_still_works_with_registry(monkeypatch):
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get(
             "/status",
-            headers={"x-api-key": "supersecret"},  # what build_app wires
+            headers={"x-api-key": "CHANGEME"},  # what build_app wires
         )
 
     assert resp.status_code == 200
