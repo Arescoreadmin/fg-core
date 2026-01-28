@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AuditLogEntry",
+  "description": "Audit log entry schema.",
+  "type": "object",
+  "properties": {
+    "timestamp": {
+      "description": "Event timestamp",
+      "type": "string",
+      "format": "date-time"
+    },
+    "request_id": {
+      "description": "Request tracking ID",
+      "type": "string"
+    },
+    "action": {
+      "description": "Action performed",
+      "type": "string"
+    },
+    "actor": {
+      "description": "Actor identifier",
+      "type": "string"
+    },
+    "resource": {
+      "description": "Resource affected",
+      "type": "string"
+    },
+    "resource_id": {
+      "description": "Resource identifier",
+      "type": "string"
+    },
+    "details": {
+      "description": "Additional details",
+      "type": "object"
+    },
+    "outcome": {
+      "description": "Action outcome",
+      "enum": ["success", "failure", "error"],
+      "type": "string"
+    },
+    "ip_address": {
+      "description": "Client IP address",
+      "type": "string"
+    },
+    "user_agent": {
+      "description": "Client user agent",
+      "type": "string"
+    }
+  },
+  "required": ["timestamp", "request_id", "action", "outcome"]
+}

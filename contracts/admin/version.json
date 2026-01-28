@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VersionResponse",
+  "description": "Version information response schema.",
+  "type": "object",
+  "properties": {
+    "service": {
+      "description": "Service name",
+      "type": "string"
+    },
+    "version": {
+      "description": "Semantic version string",
+      "type": "string"
+    },
+    "api_version": {
+      "description": "API version",
+      "type": "string"
+    },
+    "build_commit": {
+      "description": "Git commit hash",
+      "type": "string"
+    },
+    "build_time": {
+      "description": "Build timestamp",
+      "type": "string"
+    }
+  },
+  "required": ["service", "version", "api_version"]
+}
