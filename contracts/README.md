@@ -7,6 +7,7 @@ This folder contains shared API contracts and schemas used across FrostGate serv
 ```
 contracts/
   admin/           # Admin Gateway API schemas
+    openapi.json   # Admin Gateway OpenAPI schema
     health.json    # Health check response schema
     version.json   # Version response schema
     audit.json     # Audit log entry schema
@@ -24,11 +25,11 @@ from contracts.admin.schemas import HealthResponse, VersionResponse, AuditLogEnt
 
 ### JSON Schema
 
-JSON schema files are auto-generated from Pydantic models. Use `make contracts-gen` to regenerate.
+OpenAPI and JSON schema files are auto-generated. Use `make contracts-gen` to regenerate.
 
 ## Adding New Contracts
 
 1. Define Pydantic models in the appropriate `schemas.py` file
 2. Export models in `__init__.py`
-3. Run `make contracts-gen` to generate JSON schemas
-4. Commit both Python files and generated JSON schemas
+3. Run `make contracts-gen` to generate OpenAPI and JSON schemas
+4. Commit both Python files and generated artifacts

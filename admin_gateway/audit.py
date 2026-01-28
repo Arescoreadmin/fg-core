@@ -24,6 +24,25 @@ class AuditLogger:
         self.enabled = enabled
         self._client = None
 
+    async def log_event(self, event: dict) -> None:
+        """Log an audit event."""
+        if not self.enabled:
+            return
+
+        entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            **event,
+        }
+
+        log.info(
+            "audit",
+            extra={"audit_entry": entry},
+        )
+
+        if self.core_base_url:
+            # Future: POST to core audit endpoint
+            pass
+
     async def log(
         self,
         request_id: str,
@@ -36,31 +55,17 @@ class AuditLogger:
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
     ) -> None:
-        """Log an audit event."""
-        if not self.enabled:
-            return
-
-        entry = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "request_id": request_id,
-            "action": action,
-            "outcome": outcome,
-            "actor": actor,
-            "resource": resource,
-            "resource_id": resource_id,
-            "details": details,
-            "ip_address": ip_address,
-            "user_agent": user_agent,
-        }
-
-        # For now, just log locally
-        # TODO: Forward to core audit endpoint when available
-        log.info(
-            "audit",
-            extra={"audit_entry": entry},
+        """Compatibility wrapper for older audit calls."""
+        await self.log_event(
+            {
+                "request_id": request_id,
+                "action": action,
+                "outcome": outcome,
+                "actor": actor,
+                "resource": resource,
+                "resource_id": resource_id,
+                "details": details,
+                "ip_address": ip_address,
+                "user_agent": user_agent,
+            }
         )
-
-        # If core URL is configured, we could forward here
-        if self.core_base_url:
-            # Future: POST to core audit endpoint
-            pass
