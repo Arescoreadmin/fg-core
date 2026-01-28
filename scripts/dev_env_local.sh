@@ -13,7 +13,7 @@ export FG_SQLITE_PATH="${FG_SQLITE_PATH:-$FG_STATE_DIR/frostgate.db}"
 
 # Demo auth defaults (tweak if you want auth off during local dev)
 export FG_AUTH_ENABLED="${FG_AUTH_ENABLED:-true}"
-export FG_API_KEY="${FG_API_KEY:-supersecret}"
+export FG_API_KEY="${FG_API_KEY:-CHANGEME}"
 
 echo "[dev_env_local] FG_HOST=$FG_HOST"
 echo "[dev_env_local] FG_PORT=$FG_PORT"

@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      FG_API_KEY: supersecret
+      FG_API_KEY: CHANGEME
 
     steps:
       - name: Checkout
@@ -24,7 +24,7 @@ jobs:
         run: |
           cp .env.example .env
           mkdir -p secrets
-          echo "supersecret" > secrets/fg_api_keys.txt
+          echo "CHANGEME" > secrets/fg_api_keys.txt
 
       - name: Build images via docker compose
         run: |

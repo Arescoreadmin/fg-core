@@ -10,7 +10,7 @@ def test_governance_not_mounted_when_disabled(build_app, monkeypatch):
     app = build_app()
     client = TestClient(app)
 
-    r = client.get("/governance/changes", headers={"X-API-Key": "supersecret"})
+    r = client.get("/governance/changes", headers={"X-API-Key": "CHANGEME"})
     assert r.status_code == 404
 
 
@@ -19,7 +19,7 @@ def test_governance_approval_flow(build_app, monkeypatch):
     app = build_app()
 
     client = TestClient(app)
-    headers = {"X-API-Key": "supersecret"}
+    headers = {"X-API-Key": "CHANGEME"}
 
     create = client.post(
         "/governance/changes",

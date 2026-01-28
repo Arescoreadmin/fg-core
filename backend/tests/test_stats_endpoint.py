@@ -12,7 +12,7 @@ def test_stats_requires_auth():
 
 
 def test_stats_schema_with_auth():
-    r = client.get("/stats", headers={"x-api-key": "supersecret"})
+    r = client.get("/stats", headers={"x-api-key": "CHANGEME"})
     assert r.status_code == 200
     data = r.json()
 
@@ -28,7 +28,7 @@ def test_stats_schema_with_auth():
     assert "pct_high_medium_24h" in data
 
 def test_stats_has_buyer_fields():
-    r = client.get("/stats", headers={"X-API-Key": "supersecret"})
+    r = client.get("/stats", headers={"X-API-Key": "CHANGEME"})
     assert r.status_code == 200
     data = r.json()
     assert "top_sources_24h" in data

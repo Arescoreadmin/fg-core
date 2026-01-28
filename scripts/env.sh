@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 
 fg_admin() {
-  export FG_API_KEY='ADMIN_4xqJf7B1uGl7dorzw9mnMm_47PJO21z7GNg0PJ7L5Co'
+  if [[ -z "${FG_ADMIN_API_KEY:-}" ]]; then
+    echo "FG_ADMIN_API_KEY not set"
+    return 1
+  fi
+  export FG_API_KEY="${FG_ADMIN_API_KEY}"
   echo "[fg] admin key loaded"
 }
 
 fg_agent() {
-  export FG_API_KEY='AGENT_BmdkRM7m3CuGAO1lsqMc7VojlWFdKH7MjYcgz6NJQfo'
+  if [[ -z "${FG_AGENT_API_KEY:-}" ]]; then
+    echo "FG_AGENT_API_KEY not set"
+    return 1
+  fi
+  export FG_API_KEY="${FG_AGENT_API_KEY}"
   echo "[fg] agent key loaded"
 }

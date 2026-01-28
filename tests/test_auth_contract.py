@@ -14,7 +14,7 @@ async def test_default_env_in_ci_has_auth_enabled():
     - FG_API_KEY must be set (we default it locally if missing)
     - /health should report auth_enabled = True
     """
-    os.environ.setdefault("FG_API_KEY", "supersecret")
+    os.environ.setdefault("FG_API_KEY", "CHANGEME")
 
     app = build_app(auth_enabled=True)
 

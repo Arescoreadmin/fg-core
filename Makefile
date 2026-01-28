@@ -29,7 +29,7 @@ BASE_URL ?= http://$(HOST):$(PORT)
 FG_ENV                  ?= dev
 FG_SERVICE              ?= frostgate-core
 FG_AUTH_ENABLED         ?= 1
-FG_API_KEY              ?= supersecret
+FG_API_KEY              ?= CHANGEME
 FG_ENFORCEMENT_MODE     ?= observe
 FG_DEV_EVENTS_ENABLED   ?= 0
 FG_UI_TOKEN_GET_ENABLED ?= 1
@@ -86,6 +86,7 @@ help:
 	"  make ci" \
 	"  make ci-integration" \
 	"  make ci-evidence" \
+	"  make ci-pt" \
 	""
 
 # =============================================================================
@@ -102,7 +103,7 @@ venv:
 # Guards / audits
 # =============================================================================
 
-.PHONY: guard-scripts fg-audit-make fg-contract fg-compile
+.PHONY: guard-scripts fg-audit-make fg-contract fg-compile contracts-gen
 
 guard-scripts:
 	@$(PY) scripts/guard_no_paste_garbage.py
@@ -111,8 +112,12 @@ guard-scripts:
 fg-audit-make: guard-scripts
 	@$(PY) scripts/audit_make_targets.py
 
-fg-contract: guard-scripts
+contracts-gen: admin-venv
+	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(AG_PY) scripts/contracts_gen.py
+
+fg-contract: guard-scripts contracts-gen
 	@$(PY) scripts/contract_lint.py
+	@git diff --exit-code contracts/admin
 
 fg-compile: guard-scripts
 	@$(PY) -m py_compile api/main.py api/feed.py api/ui.py api/dev_events.py api/auth_scopes.py
@@ -291,6 +296,14 @@ ci-evidence: venv itest-down itest-up
 	FG_SQLITE_PATH="$(ITEST_DB)" $(MAKE) -s evidence
 
 # =============================================================================
+# PT lane (security regression)
+# =============================================================================
+
+.PHONY: ci-pt
+ci-pt: venv
+	@$(PYTEST_ENV) $(PY) -m pytest -q tests/test_security_hardening.py tests/test_security_middleware.py
+
+# =============================================================================
 # Admin Gateway
 # =============================================================================
 
@@ -310,7 +323,7 @@ admin-venv:
 
 admin-dev: admin-venv
 	@echo "Starting admin-gateway on $(AG_BASE_URL)..."
-	@PYTHONPATH=. AG_ENV=dev $(AG_PY) -m uvicorn admin_gateway.main:app --host $(AG_HOST) --port $(AG_PORT) --reload
+	@PYTHONPATH=. FG_ENV=dev $(AG_PY) -m uvicorn admin_gateway.main:app --host $(AG_HOST) --port $(AG_PORT) --reload
 
 admin-lint: admin-venv
 	@$(AG_PY) -m ruff check admin_gateway
@@ -327,7 +340,7 @@ ci-admin: admin-venv admin-lint admin-test
 
 CONSOLE_DIR := console
 
-.PHONY: console-deps console-dev console-build console-lint ci-console
+.PHONY: console-deps console-dev console-build console-lint console-test ci-console
 
 console-deps:
 	@cd $(CONSOLE_DIR) && npm ci --prefer-offline 2>/dev/null || npm install
@@ -342,4 +355,7 @@ console-build: console-deps
 console-lint: console-deps
 	@cd $(CONSOLE_DIR) && npm run lint
 
-ci-console: console-lint
+console-test: console-deps
+	@cd $(CONSOLE_DIR) && npm run test
+
+ci-console: console-lint console-test
