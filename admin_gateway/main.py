@@ -90,6 +90,12 @@ def build_app() -> FastAPI:
         raise RuntimeError("FG_DEV_AUTH_BYPASS cannot be enabled in production.")
     require_oidc_env()
 
+    # Add middleware (order matters: outermost first)
+    app.add_middleware(StructuredLoggingMiddleware)
+    app.add_middleware(RequestIdMiddleware)
+    app.add_middleware(AuthContextMiddleware)
+    app.add_middleware(AuditMiddleware)
+    app.add_middleware(CSRFMiddleware)
     from starlette.middleware.sessions import SessionMiddleware
 
     session_secret = require_session_secret()
@@ -100,13 +106,6 @@ def build_app() -> FastAPI:
         same_site="strict",
         https_only=environment() == "prod",
     )
-
-    # Add middleware (order matters: outermost first)
-    app.add_middleware(StructuredLoggingMiddleware)
-    app.add_middleware(RequestIdMiddleware)
-    app.add_middleware(AuthContextMiddleware)
-    app.add_middleware(AuditMiddleware)
-    app.add_middleware(CSRFMiddleware)
     app.add_middleware(SessionCookieMiddleware)
 
     # CORS configuration
