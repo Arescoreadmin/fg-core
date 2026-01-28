@@ -17,9 +17,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from admin_gateway.auth import (
-    AuthContext,
-    Scopes,
-    TenantScoped,
+    AuthUser,
+    get_allowed_tenant,
     require_scopes,
 )
 from admin_gateway.db import Product, ProductEndpoint, get_db
@@ -126,6 +125,20 @@ class TestConnectionResult(BaseModel):
 # ==============================================================================
 
 
+def _get_tenant_id(request: Request, user: AuthUser) -> str:
+    """Extract and validate tenant ID from request."""
+    tenant_id = request.headers.get("X-Tenant-ID")
+    if not tenant_id and user.tenants:
+        tenant_id = user.tenants[0]
+    if not tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tenant ID required (X-Tenant-ID header or user tenants)",
+        )
+    get_allowed_tenant(request, tenant_id, user)
+    return tenant_id
+
+
 def _product_to_response(product: Product) -> ProductResponse:
     """Convert Product model to response."""
     endpoints = []
@@ -168,7 +181,7 @@ async def _audit_action(
     resource_id: Optional[str],
     outcome: str,
     details: Optional[dict] = None,
-    auth: Optional[AuthContext] = None,
+    user: Optional[AuthUser] = None,
 ) -> None:
     """Log an audit event."""
     audit_logger = getattr(request.app.state, "audit_logger", None)
@@ -179,7 +192,7 @@ async def _audit_action(
             resource="products",
             resource_id=resource_id,
             outcome=outcome,
-            actor=auth.actor if auth else None,
+            actor=user.sub if user else None,
             details=details,
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
@@ -195,14 +208,13 @@ async def _audit_action(
 async def list_products(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    auth: AuthContext = Depends(require_scopes(Scopes.PRODUCT_READ)),
+    user: AuthUser = Depends(require_scopes(["product:read"])),
 ) -> ProductListResponse:
     """List all products for the authenticated tenant.
 
     Requires: product:read scope
     """
-    scoped = TenantScoped(auth)
-    tenant_id = scoped.get_tenant_id()
+    tenant_id = _get_tenant_id(request, user)
 
     # Query products for tenant
     stmt = select(Product).where(Product.tenant_id == tenant_id).order_by(Product.name)
@@ -215,7 +227,7 @@ async def list_products(
         None,
         "success",
         {"count": len(products)},
-        auth,
+        user,
     )
 
     return ProductListResponse(
@@ -229,14 +241,13 @@ async def create_product(
     request: Request,
     data: ProductCreate,
     db: AsyncSession = Depends(get_db),
-    auth: AuthContext = Depends(require_scopes(Scopes.PRODUCT_WRITE)),
+    user: AuthUser = Depends(require_scopes(["product:write"])),
 ) -> ProductResponse:
     """Create a new product.
 
     Requires: product:write scope
     """
-    scoped = TenantScoped(auth)
-    tenant_id = scoped.get_tenant_id()
+    tenant_id = _get_tenant_id(request, user)
 
     # Check for duplicate slug within tenant
     stmt = select(Product).where(
@@ -281,7 +292,7 @@ async def create_product(
         str(product.id),
         "success",
         {"slug": data.slug, "name": data.name},
-        auth,
+        user,
     )
 
     return _product_to_response(product)
@@ -292,14 +303,13 @@ async def get_product(
     request: Request,
     product_id: int,
     db: AsyncSession = Depends(get_db),
-    auth: AuthContext = Depends(require_scopes(Scopes.PRODUCT_READ)),
+    user: AuthUser = Depends(require_scopes(["product:read"])),
 ) -> ProductResponse:
     """Get a product by ID.
 
     Requires: product:read scope
     """
-    scoped = TenantScoped(auth)
-    tenant_id = scoped.get_tenant_id()
+    tenant_id = _get_tenant_id(request, user)
 
     # Query product
     stmt = select(Product).where(
@@ -315,14 +325,14 @@ async def get_product(
             str(product_id),
             "failure",
             {"reason": "not_found"},
-            auth,
+            user,
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Product not found",
         )
 
-    await _audit_action(request, "get_product", str(product_id), "success", None, auth)
+    await _audit_action(request, "get_product", str(product_id), "success", None, user)
 
     return _product_to_response(product)
 
@@ -333,14 +343,13 @@ async def update_product(
     product_id: int,
     data: ProductUpdate,
     db: AsyncSession = Depends(get_db),
-    auth: AuthContext = Depends(require_scopes(Scopes.PRODUCT_WRITE)),
+    user: AuthUser = Depends(require_scopes(["product:write"])),
 ) -> ProductResponse:
     """Update a product.
 
     Requires: product:write scope
     """
-    scoped = TenantScoped(auth)
-    tenant_id = scoped.get_tenant_id()
+    tenant_id = _get_tenant_id(request, user)
 
     # Query product
     stmt = select(Product).where(
@@ -356,7 +365,7 @@ async def update_product(
             str(product_id),
             "failure",
             {"reason": "not_found"},
-            auth,
+            user,
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -406,7 +415,7 @@ async def update_product(
         str(product_id),
         "success",
         {"changes": {k: str(v) for k, v in changes.items()}},
-        auth,
+        user,
     )
 
     return _product_to_response(product)
@@ -417,7 +426,7 @@ async def test_connection(
     request: Request,
     product_id: int,
     db: AsyncSession = Depends(get_db),
-    auth: AuthContext = Depends(require_scopes(Scopes.PRODUCT_READ)),
+    user: AuthUser = Depends(require_scopes(["product:read"])),
 ) -> TestConnectionResult:
     """Test connection to a product's endpoint.
 
@@ -430,8 +439,7 @@ async def test_connection(
     """
     import time
 
-    scoped = TenantScoped(auth)
-    tenant_id = scoped.get_tenant_id()
+    tenant_id = _get_tenant_id(request, user)
 
     # Query product
     stmt = select(Product).where(
@@ -447,7 +455,7 @@ async def test_connection(
             str(product_id),
             "failure",
             {"reason": "not_found"},
-            auth,
+            user,
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -475,7 +483,7 @@ async def test_connection(
             str(product_id),
             "failure",
             {"reason": "no_endpoint"},
-            auth,
+            user,
         )
         return TestConnectionResult(
             product_id=product.id,
@@ -513,7 +521,7 @@ async def test_connection(
                     "status_code": response.status_code,
                     "latency_ms": round(latency_ms, 2),
                 },
-                auth,
+                user,
             )
 
             return TestConnectionResult(
@@ -537,7 +545,7 @@ async def test_connection(
             str(product_id),
             "failure",
             {"endpoint_url": health_url, "error": "timeout"},
-            auth,
+            user,
         )
         return TestConnectionResult(
             product_id=product.id,
@@ -560,7 +568,7 @@ async def test_connection(
             str(product_id),
             "failure",
             {"endpoint_url": health_url, "error": str(e)},
-            auth,
+            user,
         )
         return TestConnectionResult(
             product_id=product.id,
@@ -584,7 +592,7 @@ async def test_connection(
             str(product_id),
             "error",
             {"endpoint_url": health_url, "error": str(e)},
-            auth,
+            user,
         )
         return TestConnectionResult(
             product_id=product.id,
