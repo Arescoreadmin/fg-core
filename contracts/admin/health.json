@@ -1,31 +1,53 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "HealthResponse",
   "description": "Health check response schema.",
-  "type": "object",
   "properties": {
-    "status": {
-      "description": "Service health status",
-      "enum": ["ok", "degraded", "unhealthy"],
-      "type": "string"
+    "request_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Request tracking ID",
+      "title": "Request Id"
     },
     "service": {
       "description": "Service name",
+      "title": "Service",
       "type": "string"
     },
-    "version": {
-      "description": "Service version",
+    "status": {
+      "description": "Service health status",
+      "enum": [
+        "ok",
+        "degraded",
+        "unhealthy"
+      ],
+      "title": "Status",
       "type": "string"
     },
     "timestamp": {
       "description": "Response timestamp",
-      "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
     },
-    "request_id": {
-      "description": "Request tracking ID",
+    "version": {
+      "description": "Service version",
+      "title": "Version",
       "type": "string"
     }
   },
-  "required": ["status", "service", "version", "timestamp"]
+  "required": [
+    "status",
+    "service",
+    "version",
+    "timestamp"
+  ],
+  "title": "HealthResponse",
+  "type": "object"
 }

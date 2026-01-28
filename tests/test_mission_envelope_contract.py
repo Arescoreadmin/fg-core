@@ -10,7 +10,7 @@ def test_missions_not_mounted_when_disabled(build_app, monkeypatch):
     app = build_app()
     client = TestClient(app)
 
-    r = client.get("/missions", headers={"X-API-Key": "supersecret"})
+    r = client.get("/missions", headers={"X-API-Key": "CHANGEME"})
     assert r.status_code == 404
 
 
@@ -19,7 +19,7 @@ def test_mission_envelope_routes(build_app, monkeypatch):
     app = build_app()
 
     client = TestClient(app)
-    headers = {"X-API-Key": "supersecret"}
+    headers = {"X-API-Key": "CHANGEME"}
 
     resp = client.get("/missions", headers=headers)
     assert resp.status_code == 200, resp.text

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BASE_URL="${FG_BASE_URL:-${BASE_URL:-http://127.0.0.1:8000}}"
-API_KEY="${FG_API_KEY:-${API_KEY:-supersecret}}"
+API_KEY="${FG_API_KEY:-${API_KEY:-CHANGEME}}"
 CJ="${CJ:-/tmp/fg_smoke_cj.txt}"
 TMPDIR="${TMPDIR:-/tmp}"
 
@@ -66,7 +66,7 @@ assert_code "$c" "200" "/health"
 # get cookie
 echo "-- getting cookie via /ui/token"
 rm -f "$CJ" || true
-c="$(http_code "$BASE_URL/ui/token?api_key=$API_KEY" -c "$CJ")"
+c="$(http_code "$BASE_URL/ui/token" -H "X-API-Key: $API_KEY" -c "$CJ")"
 assert_code "$c" "200" "/ui/token (valid api_key)"
 grep -q 'fg_api_key' "$CJ" || fail "cookie jar missing fg_api_key"
 ok "cookie jar captured fg_api_key"

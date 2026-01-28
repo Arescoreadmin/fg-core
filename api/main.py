@@ -152,7 +152,7 @@ def _sanitize_db_url(db_url: str) -> str:
 
 
 def _global_expected_api_key() -> str:
-    return os.getenv("FG_API_KEY") or "supersecret"
+    return (os.getenv("FG_API_KEY") or "").strip()
 
 
 def _dev_enabled() -> bool:
@@ -200,10 +200,14 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        # Run startup validation (non-blocking, logs warnings)
+        # Run startup validation (fails closed in prod, logs in all envs)
         try:
+            is_production = os.getenv("FG_ENV", "dev").strip().lower() in {
+                "prod",
+                "production",
+            }
             validation_report = validate_startup_config(
-                fail_on_error=False,  # Don't fail startup, just log
+                fail_on_error=is_production,
                 log_results=True,
             )
             app.state.startup_validation = validation_report

@@ -36,7 +36,7 @@ Some endpoints are ALWAYS protected (ex: /feed/live).
 
 Required headers (when enforced)
 
-X-API-Key: supersecret (dev/test default)
+X-API-Key: <YOUR_API_KEY>
 
 Key endpoints
 

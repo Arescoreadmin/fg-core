@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 
 from api.main import build_app
 
-API_KEY = "supersecret"
+API_KEY = "CHANGEME"
 
 def test_feed_live_includes_timestamp(tmp_path):
     # isolate env

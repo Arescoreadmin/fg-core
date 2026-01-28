@@ -85,8 +85,7 @@ API key MUST accept request header `X-API-Key`
 (case-insensitive handling).
 
 Expected global key is:
-- `FG_API_KEY` if set
-- else `"supersecret"` as a safe local-dev fallback
+- `FG_API_KEY` if set (no default fallback; production fails closed when missing)
 
 ### 1.3 Tenant auth (if present)
 

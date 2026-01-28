@@ -88,7 +88,6 @@ class StartupValidator:
 
     # Known insecure default values
     INSECURE_API_KEYS = {
-        "supersecret",
         "secret",
         "password",
         "changeme",
@@ -127,7 +126,17 @@ class StartupValidator:
 
     def _check_api_key(self, report: StartupValidationReport) -> None:
         """Check API key security."""
-        api_key = _env_str("FG_API_KEY", "supersecret")
+        api_key = _env_str("FG_API_KEY", "")
+
+        if not api_key:
+            severity = "error" if self.is_production else "warning"
+            report.add(
+                name="api_key_missing",
+                passed=False,
+                message="FG_API_KEY not set. Set a strong, random API key.",
+                severity=severity,
+            )
+            return
 
         if api_key.lower() in self.INSECURE_API_KEYS:
             severity = "error" if self.is_production else "warning"

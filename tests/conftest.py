@@ -20,7 +20,7 @@ def _session_env(tmp_path_factory: pytest.TempPathFactory):
     db_path = str(tmp_path_factory.mktemp("fg-session") / "fg-session.db")
     _setenv("FG_ENV", "test")
     _setenv("FG_SQLITE_PATH", db_path)
-    _setenv("FG_API_KEY", "supersecret")
+    _setenv("FG_API_KEY", "CHANGEME")
     _setenv("FG_UI_TOKEN_GET_ENABLED", "1")
 
     # Critical: make sure schema exists in this session DB
@@ -40,7 +40,7 @@ def build_app(tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch)
         auth_enabled: bool = True,
         sqlite_path: str | None = None,
         dev_events_enabled: bool = False,
-        api_key: str = "supersecret",
+        api_key: str = "CHANGEME",
         ui_token_get_enabled: bool = True,
     ):
         db_path = sqlite_path or str(tmp_path / "fg-test.db")

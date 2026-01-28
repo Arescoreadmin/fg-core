@@ -1,259 +1,332 @@
-"""Authentication and Authorization for Admin Gateway.
-
-Provides RBAC scope enforcement and tenant scoping for multi-tenant isolation.
-"""
+"""Authentication and authorization helpers for admin-gateway."""
 
 from __future__ import annotations
 
-import hmac
 import os
-import re
-from dataclasses import dataclass, field
-from typing import Optional
+import secrets
+import time
+from dataclasses import dataclass
+from typing import Iterable, Optional
+from urllib.parse import urlencode
 
+import httpx
 from fastapi import Depends, HTTPException, Request, status
 
 
-# Available RBAC scopes for products
-class Scopes:
-    """Available RBAC scopes."""
+OIDC_ENV_VARS = (
+    "FG_OIDC_ISSUER",
+    "FG_OIDC_CLIENT_ID",
+    "FG_OIDC_CLIENT_SECRET",
+    "FG_OIDC_REDIRECT_URL",
+)
 
-    PRODUCT_READ = "product:read"
-    PRODUCT_WRITE = "product:write"
-    ADMIN_READ = "admin:read"
-    ADMIN_WRITE = "admin:write"
-    WILDCARD = "*"
+REQUIRED_SCOPES = {
+    "console:admin",
+    "product:read",
+    "product:write",
+    "keys:read",
+    "keys:write",
+    "policies:write",
+    "audit:read",
+}
 
+DEV_USER = {
+    "sub": "dev-user",
+    "email": "dev@frostgate.local",
+    "scopes": sorted(REQUIRED_SCOPES),
+    "tenants": ["tenant-dev"],
+}
 
-@dataclass
-class AuthContext:
-    """Authentication context with tenant and scope information."""
-
-    authenticated: bool = False
-    tenant_id: Optional[str] = None
-    actor: Optional[str] = None
-    scopes: list[str] = field(default_factory=list)
-    key_prefix: Optional[str] = None
-    error: Optional[str] = None
-
-    def has_scope(self, scope: str) -> bool:
-        """Check if context has the given scope."""
-        if Scopes.WILDCARD in self.scopes:
-            return True
-        return scope in self.scopes
-
-    def has_any_scope(self, *scopes: str) -> bool:
-        """Check if context has any of the given scopes."""
-        return any(self.has_scope(s) for s in scopes)
-
-    def has_all_scopes(self, *scopes: str) -> bool:
-        """Check if context has all of the given scopes."""
-        return all(self.has_scope(s) for s in scopes)
+_OIDC_CACHE: dict[str, dict] = {}
+_JWKS_CACHE: dict[str, dict] = {}
 
 
-def _constant_time_compare(a: str, b: str) -> bool:
-    """Constant-time string comparison to prevent timing attacks."""
-    return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
+@dataclass(frozen=True)
+class AuthUser:
+    sub: str
+    email: Optional[str]
+    scopes: list[str]
+    tenants: list[str]
+    exp: Optional[int]
 
 
-def _validate_tenant_id(tenant_id: str) -> tuple[bool, str]:
-    """Validate tenant ID format.
-
-    Returns (is_valid, error_message).
-    """
-    if not tenant_id:
-        return False, "Tenant ID is required"
-
-    if len(tenant_id) > 128:
-        return False, "Tenant ID too long (max 128 chars)"
-
-    # Only allow alphanumeric, dash, underscore
-    if not re.match(r"^[a-zA-Z0-9_-]+$", tenant_id):
-        return False, "Tenant ID contains invalid characters"
-
-    return True, ""
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-def _extract_api_key(request: Request) -> Optional[str]:
-    """Extract API key from request.
-
-    Priority:
-    1. X-API-Key header
-    2. Authorization Bearer token
-    3. Cookie (for UI sessions)
-
-    Never from query parameters (security: prevents logging in proxies/referrer).
-    """
-    # Header (preferred)
-    api_key = request.headers.get("X-API-Key")
-    if api_key:
-        return api_key
-
-    # Authorization header
-    auth_header = request.headers.get("Authorization")
-    if auth_header and auth_header.lower().startswith("bearer "):
-        return auth_header[7:].strip()
-
-    # Cookie fallback (for UI)
-    api_key = request.cookies.get("fg_api_key")
-    if api_key:
-        return api_key
-
-    return None
+def environment() -> str:
+    return os.getenv("FG_ENV", "dev").strip().lower()
 
 
-def _extract_tenant_id(request: Request) -> Optional[str]:
-    """Extract tenant ID from request.
-
-    Priority:
-    1. X-Tenant-ID header
-    2. Query parameter (for convenience in dev)
-    """
-    tenant_id = request.headers.get("X-Tenant-ID")
-    if tenant_id:
-        return tenant_id
-
-    # Query param fallback (dev only)
-    if os.getenv("AG_ENV", "prod") == "dev":
-        return request.query_params.get("tenant_id")
-
-    return None
+def dev_bypass_enabled() -> bool:
+    return _env_bool("FG_DEV_AUTH_BYPASS", False)
 
 
-async def get_auth_context(request: Request) -> AuthContext:
-    """FastAPI dependency to extract authentication context.
+def require_session_secret() -> str:
+    secret = os.getenv("FG_SESSION_SECRET")
+    if secret:
+        return secret
+    if environment() == "prod":
+        raise RuntimeError("FG_SESSION_SECRET must be set in production.")
+    return secrets.token_urlsafe(32)
 
-    This validates the API key and extracts tenant/scope information.
-    """
-    api_key = _extract_api_key(request)
-    tenant_id = _extract_tenant_id(request)
 
-    # Check if auth is disabled (dev mode)
-    auth_enabled = os.getenv("AG_AUTH_ENABLED", "1").lower() in ("1", "true", "yes")
-    if not auth_enabled:
-        # Dev mode: allow all with default tenant
-        return AuthContext(
-            authenticated=True,
-            tenant_id=tenant_id or "dev-tenant",
-            actor="dev-user",
-            scopes=[Scopes.WILDCARD],
+def require_oidc_env() -> None:
+    if environment() != "prod":
+        return
+    missing = [name for name in OIDC_ENV_VARS if not os.getenv(name)]
+    if missing:
+        raise RuntimeError(
+            f"Missing OIDC configuration in production: {', '.join(missing)}"
         )
 
-    # Validate API key
-    if not api_key:
-        return AuthContext(authenticated=False, error="API key required")
 
-    # Check against environment key (simple mode)
-    env_key = os.getenv("AG_API_KEY") or os.getenv("FG_API_KEY")
-    if env_key and _constant_time_compare(api_key, env_key):
-        # Environment key grants wildcard access
-        return AuthContext(
-            authenticated=True,
-            tenant_id=tenant_id or "default",
-            actor="api-key",
-            scopes=[Scopes.WILDCARD],
-            key_prefix=api_key[:8] if len(api_key) >= 8 else api_key,
+def session_max_age() -> int:
+    return int(os.getenv("FG_SESSION_MAX_AGE", "3600"))
+
+
+def _from_session(payload: dict) -> Optional[AuthUser]:
+    try:
+        exp = payload.get("exp")
+        if exp is not None and int(exp) < int(time.time()):
+            return None
+        return AuthUser(
+            sub=payload["sub"],
+            email=payload.get("email"),
+            scopes=list(payload.get("scopes", [])),
+            tenants=list(payload.get("tenants", [])),
+            exp=exp,
         )
-
-    # TODO: Add database key lookup when needed
-    # For now, reject unknown keys
-    return AuthContext(authenticated=False, error="Invalid API key")
+    except KeyError:
+        return None
 
 
-def require_auth(
-    request: Request, auth: AuthContext = Depends(get_auth_context)
-) -> AuthContext:
-    """Dependency that requires authentication."""
-    if not auth.authenticated:
+def get_user_from_session(request: Request) -> Optional[AuthUser]:
+    data = request.session.get("user") if hasattr(request, "session") else None
+    if not data:
+        return None
+    user = _from_session(data)
+    if not user:
+        request.session.pop("user", None)
+        return None
+    return user
+
+
+def set_session_user(request: Request, user: AuthUser) -> None:
+    request.session["user"] = {
+        "sub": user.sub,
+        "email": user.email,
+        "scopes": user.scopes,
+        "tenants": user.tenants,
+        "exp": user.exp,
+    }
+
+
+def ensure_dev_user(request: Request) -> Optional[AuthUser]:
+    if environment() == "prod":
+        return None
+    if not dev_bypass_enabled():
+        return None
+    user = AuthUser(
+        sub=DEV_USER["sub"],
+        email=DEV_USER["email"],
+        scopes=list(DEV_USER["scopes"]),
+        tenants=list(DEV_USER["tenants"]),
+        exp=int(time.time()) + session_max_age(),
+    )
+    set_session_user(request, user)
+    return user
+
+
+def get_current_user(request: Request) -> AuthUser:
+    user = get_user_from_session(request)
+    if not user:
+        user = ensure_dev_user(request)
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=auth.error or "Authentication required",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail="Not authenticated",
         )
-    return auth
+    request.state.user = user
+    return user
 
 
-def require_scopes(*required_scopes: str):
-    """Factory for scope-checking dependency.
+def require_scopes(required: Iterable[str]):
+    required_set = set(required)
 
-    Usage:
-        @app.get("/admin/products")
-        async def list_products(auth: AuthContext = Depends(require_scopes("product:read"))):
-            ...
-    """
-
-    def _check_scopes(
-        request: Request, auth: AuthContext = Depends(require_auth)
-    ) -> AuthContext:
-        if not auth.has_any_scope(*required_scopes):
+    def _dependency(user: AuthUser = Depends(get_current_user)) -> AuthUser:
+        missing = required_set.difference(user.scopes)
+        if missing:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Insufficient permissions. Required: {', '.join(required_scopes)}",
+                detail=f"Missing required scopes: {', '.join(sorted(missing))}",
             )
-        return auth
+        return user
 
-    return _check_scopes
+    return _dependency
 
 
-def require_tenant(
-    tenant_id: str, auth: AuthContext = Depends(require_auth)
-) -> AuthContext:
-    """Validate tenant access.
+def ensure_csrf_token(request: Request) -> str:
+    token = request.session.get("csrf_token")
+    if not token:
+        token = secrets.token_urlsafe(32)
+        request.session["csrf_token"] = token
+    return token
 
-    Ensures the authenticated user can access the specified tenant.
-    """
-    # Wildcard scope can access any tenant
-    if auth.has_scope(Scopes.WILDCARD):
-        return auth
 
-    # Admin scope can access any tenant
-    if auth.has_scope(Scopes.ADMIN_READ) or auth.has_scope(Scopes.ADMIN_WRITE):
-        return auth
-
-    # Otherwise, must match tenant
-    if auth.tenant_id != tenant_id:
+def get_allowed_tenant(
+    request: Request,
+    tenant_id: Optional[str],
+    user: AuthUser,
+) -> Optional[str]:
+    if tenant_id and tenant_id not in user.tenants:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied: tenant mismatch",
+            detail="Tenant access denied",
         )
+    request.state.tenant_id = tenant_id
+    return tenant_id
 
-    return auth
+
+async def _fetch_oidc_config(issuer: str) -> dict:
+    cached = _OIDC_CACHE.get(issuer)
+    if cached:
+        return cached
+    url = issuer.rstrip("/") + "/.well-known/openid-configuration"
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        data = response.json()
+    _OIDC_CACHE[issuer] = data
+    return data
 
 
-class TenantScoped:
-    """Helper for tenant-scoped database queries.
+async def _fetch_jwks(jwks_uri: str) -> dict:
+    cached = _JWKS_CACHE.get(jwks_uri)
+    if cached:
+        return cached
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.get(jwks_uri)
+        response.raise_for_status()
+        data = response.json()
+    _JWKS_CACHE[jwks_uri] = data
+    return data
 
-    Usage:
-        scoped = TenantScoped(auth)
-        query = scoped.filter_query(select(Product))
-    """
 
-    def __init__(self, auth: AuthContext):
-        self.auth = auth
-        self.tenant_id = auth.tenant_id
+def _parse_scopes(claims: dict, token_scope: Optional[str]) -> list[str]:
+    if token_scope:
+        return token_scope.split()
+    if "scope" in claims and isinstance(claims["scope"], str):
+        return claims["scope"].split()
+    if "scopes" in claims and isinstance(claims["scopes"], list):
+        return list(claims["scopes"])
+    if "scp" in claims and isinstance(claims["scp"], list):
+        return list(claims["scp"])
+    return []
 
-    def validate_tenant_id(self, tenant_id: str) -> None:
-        """Validate that the given tenant ID matches the auth context."""
-        valid, error = _validate_tenant_id(tenant_id)
-        if not valid:
+
+async def build_login_redirect(request: Request) -> str:
+    issuer = os.getenv("FG_OIDC_ISSUER")
+    client_id = os.getenv("FG_OIDC_CLIENT_ID")
+    redirect_uri = os.getenv("FG_OIDC_REDIRECT_URL")
+    if not issuer or not client_id or not redirect_uri:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="OIDC configuration missing",
+        )
+    config = await _fetch_oidc_config(issuer)
+    auth_endpoint = config["authorization_endpoint"]
+    state = secrets.token_urlsafe(24)
+    nonce = secrets.token_urlsafe(24)
+    request.session["oidc_state"] = state
+    request.session["oidc_nonce"] = nonce
+    params = {
+        "client_id": client_id,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "redirect_uri": redirect_uri,
+        "state": state,
+        "nonce": nonce,
+    }
+    return f"{auth_endpoint}?{urlencode(params)}"
+
+
+async def exchange_code_for_tokens(code: str) -> dict:
+    issuer = os.getenv("FG_OIDC_ISSUER")
+    client_id = os.getenv("FG_OIDC_CLIENT_ID")
+    client_secret = os.getenv("FG_OIDC_CLIENT_SECRET")
+    redirect_uri = os.getenv("FG_OIDC_REDIRECT_URL")
+    if not issuer or not client_id or not client_secret or not redirect_uri:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="OIDC configuration missing",
+        )
+    config = await _fetch_oidc_config(issuer)
+    token_endpoint = config["token_endpoint"]
+    payload = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": redirect_uri,
+        "client_id": client_id,
+        "client_secret": client_secret,
+    }
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.post(token_endpoint, data=payload)
+        response.raise_for_status()
+        return response.json()
+
+
+async def verify_id_token(id_token: str, nonce: str) -> dict:
+    from jose import JWTError, jwt
+
+    issuer = os.getenv("FG_OIDC_ISSUER")
+    client_id = os.getenv("FG_OIDC_CLIENT_ID")
+    if not issuer or not client_id:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="OIDC configuration missing",
+        )
+    config = await _fetch_oidc_config(issuer)
+    jwks = await _fetch_jwks(config["jwks_uri"])
+    try:
+        header = jwt.get_unverified_header(id_token)
+        kid = header.get("kid")
+        keys = jwks.get("keys", [])
+        key = next((k for k in keys if k.get("kid") == kid), None)
+        if not key:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=error,
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
             )
+        claims = jwt.decode(
+            id_token,
+            key,
+            algorithms=[header.get("alg", "RS256")],
+            audience=client_id,
+            issuer=issuer,
+        )
+    except JWTError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        ) from exc
+    if claims.get("nonce") != nonce:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token nonce"
+        )
+    return claims
 
-        # Check access
-        if not self.auth.has_scope(Scopes.WILDCARD):
-            if self.auth.tenant_id != tenant_id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Access denied: tenant mismatch",
-                )
 
-    def get_tenant_id(self) -> str:
-        """Get the tenant ID for operations."""
-        if not self.tenant_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Tenant ID required",
-            )
-        return self.tenant_id
+def build_user_from_claims(claims: dict, token_scope: Optional[str]) -> AuthUser:
+    scopes = _parse_scopes(claims, token_scope)
+    tenants = claims.get("tenants") or claims.get("allowed_tenants") or []
+    if isinstance(tenants, str):
+        tenants = [t for t in tenants.split(",") if t]
+    return AuthUser(
+        sub=claims.get("sub", "unknown"),
+        email=claims.get("email"),
+        scopes=scopes,
+        tenants=list(tenants),
+        exp=claims.get("exp"),
+    )

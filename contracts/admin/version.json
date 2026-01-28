@@ -1,29 +1,54 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "VersionResponse",
   "description": "Version information response schema.",
-  "type": "object",
   "properties": {
+    "api_version": {
+      "description": "API version",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "build_commit": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Git commit hash",
+      "title": "Build Commit"
+    },
+    "build_time": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Build timestamp",
+      "title": "Build Time"
+    },
     "service": {
       "description": "Service name",
+      "title": "Service",
       "type": "string"
     },
     "version": {
       "description": "Semantic version string",
-      "type": "string"
-    },
-    "api_version": {
-      "description": "API version",
-      "type": "string"
-    },
-    "build_commit": {
-      "description": "Git commit hash",
-      "type": "string"
-    },
-    "build_time": {
-      "description": "Build timestamp",
+      "title": "Version",
       "type": "string"
     }
   },
-  "required": ["service", "version", "api_version"]
+  "required": [
+    "service",
+    "version",
+    "api_version"
+  ],
+  "title": "VersionResponse",
+  "type": "object"
 }
