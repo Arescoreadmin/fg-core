@@ -37,6 +37,7 @@ from admin_gateway.middleware.logging import StructuredLoggingMiddleware
 from admin_gateway.middleware.audit import AuditMiddleware
 from admin_gateway.middleware.auth_context import AuthContextMiddleware
 from admin_gateway.middleware.csrf import CSRFMiddleware
+from admin_gateway.middleware.session_cookie import SessionCookieMiddleware
 from admin_gateway.audit import AuditLogger
 
 
@@ -99,7 +100,6 @@ def build_app() -> FastAPI:
             max_age=session_max_age(),
             same_site="strict",
             https_only=environment() == "prod",
-            httponly=True,
         )
 
     # Add middleware (order matters: outermost first)
@@ -108,6 +108,7 @@ def build_app() -> FastAPI:
     app.add_middleware(AuthContextMiddleware)
     app.add_middleware(AuditMiddleware)
     app.add_middleware(CSRFMiddleware)
+    app.add_middleware(SessionCookieMiddleware)
 
     # CORS configuration
     cors_origins = os.getenv("AG_CORS_ORIGINS", "*").split(",")
