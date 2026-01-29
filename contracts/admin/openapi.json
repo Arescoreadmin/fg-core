@@ -61,6 +61,127 @@
         "title": "AdminRotateKeyRequest",
         "type": "object"
       },
+      "AuditExportRequest": {
+        "description": "Audit export request.",
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          },
+          "format": {
+            "pattern": "^(csv|json)$",
+            "title": "Format",
+            "type": "string"
+          },
+          "from_ts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Ts"
+          },
+          "page_size": {
+            "default": 1000,
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "resource_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Id"
+          },
+          "resource_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Type"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "to_ts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Ts"
+          }
+        },
+        "required": [
+          "format"
+        ],
+        "title": "AuditExportRequest",
+        "type": "object"
+      },
       "CSRFTokenResponse": {
         "description": "CSRF token response.",
         "properties": {
@@ -664,129 +785,13 @@
   "paths": {
     "/admin/audit/export": {
       "post": {
-        "description": "Export audit events as CSV/NDJSON.",
+        "description": "Export audit events as CSV/JSON.",
         "operationId": "export_audit_events_admin_audit_export_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "properties": {
-                  "action": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "title": "Action"
-                  },
-                  "actor": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "title": "Actor"
-                  },
-                  "format": {
-                    "enum": [
-                      "csv",
-                      "json"
-                    ],
-                    "title": "Format",
-                    "type": "string"
-                  },
-                  "from_ts": {
-                    "anyOf": [
-                      {
-                        "format": "date-time",
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "title": "From Ts"
-                  },
-                  "page_size": {
-                    "default": 1000,
-                    "maximum": 5000,
-                    "minimum": 1,
-                    "title": "Page Size",
-                    "type": "integer"
-                  },
-                  "request_id": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "title": "Request Id"
-                  },
-                  "resource_id": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "title": "Resource Id"
-                  },
-                  "resource_type": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "title": "Resource Type"
-                  },
-                  "status": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "title": "Status"
-                  },
-                  "tenant_id": {
-                    "title": "Tenant Id",
-                    "type": "string"
-                  },
-                  "to_ts": {
-                    "anyOf": [
-                      {
-                        "format": "date-time",
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "title": "To Ts"
-                  }
-                },
-                "required": [
-                  "format",
-                  "tenant_id"
-                ],
-                "title": "AuditExportRequest",
-                "type": "object"
+                "$ref": "#/components/schemas/AuditExportRequest"
               }
             }
           },
@@ -795,15 +800,8 @@
         "responses": {
           "200": {
             "content": {
-              "application/x-ndjson": {
-                "schema": {
-                  "type": "string"
-                }
-              },
-              "text/csv": {
-                "schema": {
-                  "type": "string"
-                }
+              "application/json": {
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -819,7 +817,10 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Export Audit Events"
+        "summary": "Export Audit Events",
+        "tags": [
+          "admin"
+        ]
       }
     },
     "/admin/audit/search": {
@@ -831,10 +832,18 @@
             "description": "Tenant filter",
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Tenant Id",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Tenant filter",
+              "title": "Tenant Id"
             }
           },
           {
@@ -851,6 +860,7 @@
                   "type": "null"
                 }
               ],
+              "description": "Filter by action",
               "title": "Action"
             }
           },
@@ -868,6 +878,7 @@
                   "type": "null"
                 }
               ],
+              "description": "Filter by actor",
               "title": "Actor"
             }
           },
@@ -885,6 +896,7 @@
                   "type": "null"
                 }
               ],
+              "description": "Filter by status",
               "title": "Status"
             }
           },
@@ -902,6 +914,7 @@
                   "type": "null"
                 }
               ],
+              "description": "Filter by request id",
               "title": "Request Id"
             }
           },
@@ -919,6 +932,7 @@
                   "type": "null"
                 }
               ],
+              "description": "Filter by resource type",
               "title": "Resource Type"
             }
           },
@@ -936,6 +950,7 @@
                   "type": "null"
                 }
               ],
+              "description": "Filter by resource id",
               "title": "Resource Id"
             }
           },
@@ -947,13 +962,13 @@
             "schema": {
               "anyOf": [
                 {
-                  "format": "date-time",
                   "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
+              "description": "Start time (RFC3339)",
               "title": "From Ts"
             }
           },
@@ -965,13 +980,13 @@
             "schema": {
               "anyOf": [
                 {
-                  "format": "date-time",
                   "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
+              "description": "End time (RFC3339)",
               "title": "To Ts"
             }
           },
@@ -989,11 +1004,11 @@
                   "type": "null"
                 }
               ],
+              "description": "Pagination cursor",
               "title": "Cursor"
             }
           },
           {
-            "description": "Page size",
             "in": "query",
             "name": "page_size",
             "required": false,
@@ -1011,145 +1026,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "items": {
-                      "items": {
-                        "properties": {
-                          "action": {
-                            "title": "Action",
-                            "type": "string"
-                          },
-                          "actor": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "title": "Actor"
-                          },
-                          "id": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "integer"
-                              }
-                            ],
-                            "title": "Id"
-                          },
-                          "ip": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "title": "Ip"
-                          },
-                          "meta": {
-                            "additionalProperties": true,
-                            "title": "Meta",
-                            "type": "object"
-                          },
-                          "request_id": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "title": "Request Id"
-                          },
-                          "resource_id": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "title": "Resource Id"
-                          },
-                          "resource_type": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "title": "Resource Type"
-                          },
-                          "status": {
-                            "enum": [
-                              "success",
-                              "deny",
-                              "error"
-                            ],
-                            "title": "Status",
-                            "type": "string"
-                          },
-                          "tenant_id": {
-                            "title": "Tenant Id",
-                            "type": "string"
-                          },
-                          "ts": {
-                            "format": "date-time",
-                            "title": "Ts",
-                            "type": "string"
-                          },
-                          "user_agent": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "title": "User Agent"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "ts",
-                          "tenant_id",
-                          "action",
-                          "status",
-                          "meta"
-                        ],
-                        "title": "AuditEvent",
-                        "type": "object"
-                      },
-                      "title": "Items",
-                      "type": "array"
-                    },
-                    "next_cursor": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ],
-                      "title": "Next Cursor"
-                    }
-                  },
-                  "required": [
-                    "items"
-                  ],
-                  "title": "AuditSearchResponse",
+                  "title": "Response Search Audit Events Admin Audit Search Get",
                   "type": "object"
                 }
               }
@@ -1167,7 +1044,10 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Search Audit Events"
+        "summary": "Search Audit Events",
+        "tags": [
+          "admin"
+        ]
       }
     },
     "/admin/csrf-token": {

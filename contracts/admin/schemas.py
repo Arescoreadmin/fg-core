@@ -52,7 +52,11 @@ class AuditEvent(BaseModel):
     ip: Optional[str] = Field(default=None, description="Client IP address")
     user_agent: Optional[str] = Field(default=None, description="Client user agent")
     meta: dict[str, Any] = Field(
-        default_factory=dict,
+        ...,
         description="Additional metadata",
         json_schema_extra={"additionalProperties": True},
     )
+
+
+# Backwards-compatible alias for legacy contract consumers.
+AuditLogEntry = AuditEvent
