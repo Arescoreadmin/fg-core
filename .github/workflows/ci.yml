@@ -21,13 +21,19 @@ jobs:
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
-      FG_API_KEY: ${{ secrets.FG_API_KEY }}
       FG_ENFORCEMENT_MODE: observe
       FG_SQLITE_PATH: state/frostgate-ci.db
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Generate FG_API_KEY
+        run: |
+          python - <<'PY' >> "$GITHUB_ENV"
+          import secrets
+          print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
+          PY
 
       - name: Install OS deps
         run: |
@@ -68,7 +74,6 @@ jobs:
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
-      FG_API_KEY: ${{ secrets.FG_API_KEY }}
       FG_ENFORCEMENT_MODE: observe
       FG_SQLITE_PATH: state/frostgate-ci-integration.db
 
@@ -79,6 +84,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Generate FG_API_KEY
+        run: |
+          python - <<'PY' >> "$GITHUB_ENV"
+          import secrets
+          print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
+          PY
 
       - name: Install OS deps
         run: |
@@ -119,11 +131,17 @@ jobs:
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
-      FG_API_KEY: ${{ secrets.FG_API_KEY }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Generate FG_API_KEY
+        run: |
+          python - <<'PY' >> "$GITHUB_ENV"
+          import secrets
+          print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
+          PY
 
       - name: Install OS deps
         run: |
@@ -164,11 +182,17 @@ jobs:
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
-      FG_API_KEY: ${{ secrets.FG_API_KEY }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Generate FG_API_KEY
+        run: |
+          python - <<'PY' >> "$GITHUB_ENV"
+          import secrets
+          print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
+          PY
 
       - name: Install OS deps
         run: |
@@ -191,7 +215,6 @@ jobs:
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
-      FG_API_KEY: ${{ secrets.FG_API_KEY }}
       FG_ENFORCEMENT_MODE: observe
       FG_SQLITE_PATH: state/frostgate-ci-evidence.db
 
@@ -206,6 +229,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Generate FG_API_KEY
+        run: |
+          python - <<'PY' >> "$GITHUB_ENV"
+          import secrets
+          print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
+          PY
 
       - name: Install OS deps
         run: |

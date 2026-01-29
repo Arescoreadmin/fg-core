@@ -2,7 +2,9 @@ import os
 from fastapi.testclient import TestClient
 from api.main import build_app
 
-API_KEY = "CHANGEME"
+API_KEY = os.environ.get("FG_API_KEY")
+if not API_KEY:
+    raise RuntimeError("FG_API_KEY must be set for test runs.")
 
 def test_feed_live_presentation_fields_present(tmp_path):
     old = {k: os.environ.get(k) for k in ["FG_API_KEY", "FG_AUTH_ENABLED", "FG_SQLITE_PATH", "FG_DEV_EVENTS_ENABLED"]}

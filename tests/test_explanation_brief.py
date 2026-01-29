@@ -1,3 +1,4 @@
+import os
 from fastapi.testclient import TestClient
 
 try:
@@ -21,7 +22,9 @@ def test_defend_returns_explanation_brief():
             "failed_attempts": 10,
         },
     }
-    r = client.post("/defend", json=payload, headers={"x-api-key": "CHANGEME"})
+    r = client.post(
+        "/defend", json=payload, headers={"x-api-key": os.environ["FG_API_KEY"]}
+    )
     assert r.status_code in (200, 201), r.text
     data = r.json()
 

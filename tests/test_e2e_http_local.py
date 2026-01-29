@@ -9,7 +9,7 @@ Behavior:
 Env:
   FG_E2E_HTTP=1
   FG_BASE_URL=http://127.0.0.1:8000
-  FG_API_KEY=CHANGEME
+  FG_API_KEY=...your-key...
 """
 
 from __future__ import annotations
@@ -23,7 +23,9 @@ import requests
 
 
 BASE_URL = os.getenv("FG_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
-API_KEY = os.getenv("FG_API_KEY", "CHANGEME")
+API_KEY = os.getenv("FG_API_KEY")
+if not API_KEY:
+    raise RuntimeError("FG_API_KEY must be set for e2e_http tests.")
 
 E2E_ENABLED = os.getenv("FG_E2E_HTTP", "").strip().lower() in (
     "1",

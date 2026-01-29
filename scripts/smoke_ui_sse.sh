@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BASE="${BASE_URL:-http://127.0.0.1:8000}"
-KEY="${FG_API_KEY:-CHANGEME}"
+KEY="${FG_API_KEY:?set FG_API_KEY}"
 
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT

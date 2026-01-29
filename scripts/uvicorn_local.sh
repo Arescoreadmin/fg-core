@@ -182,7 +182,7 @@ _apply_default_env() {
   export FG_ENV="${FG_ENV:-dev}"
   export FG_SERVICE="${FG_SERVICE:-frostgate-core}"
   export FG_AUTH_ENABLED="${FG_AUTH_ENABLED:-1}"
-  export FG_API_KEY="${FG_API_KEY:-CHANGEME}"
+  export FG_API_KEY="${FG_API_KEY:?set FG_API_KEY}"
   export FG_ENFORCEMENT_MODE="${FG_ENFORCEMENT_MODE:-observe}"
   export FG_STATE_DIR="${FG_STATE_DIR:-$(pwd)/artifacts}"
   export FG_SQLITE_PATH="${FG_SQLITE_PATH:-$(pwd)/artifacts/frostgate.db}"

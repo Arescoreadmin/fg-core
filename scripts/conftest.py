@@ -17,7 +17,9 @@ def base_url() -> str:
 @pytest.fixture(scope="session")
 def api_key() -> str:
     # prefer FG_API_KEY, fallback to API_KEY
-    v = _env("FG_API_KEY") or _env("API_KEY") or "CHANGEME"
+    v = _env("FG_API_KEY") or _env("API_KEY")
+    if not v:
+        raise RuntimeError("FG_API_KEY is required for script-based tests.")
     return v
 
 @pytest.fixture(scope="session")

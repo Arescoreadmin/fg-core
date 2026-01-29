@@ -128,6 +128,7 @@ PY
 
 echo "==> [3/3] Add tests proving diff appears in feed + decisions"
 cat > tests/test_decision_diff_surfaces.py <<'PY'
+import os
 import pytest
 from fastapi.testclient import TestClient
 
@@ -145,11 +146,15 @@ def test_decision_diff_exposed_in_decisions_and_feed():
         "metadata": {"source_ip": "1.2.3.4", "username": "alice", "failed_attempts": 1},
     }
 
-    r1 = client.post("/defend", json=payload, headers={"x-api-key": "CHANGEME"})
+    r1 = client.post(
+        "/defend", json=payload, headers={"x-api-key": os.environ["FG_API_KEY"]}
+    )
     assert r1.status_code in (200, 201), r1.text
 
     payload["metadata"]["failed_attempts"] = 10
-    r2 = client.post("/defend", json=payload, headers={"x-api-key": "CHANGEME"})
+    r2 = client.post(
+        "/defend", json=payload, headers={"x-api-key": os.environ["FG_API_KEY"]}
+    )
     assert r2.status_code in (200, 201), r2.text
 
     # decisions list should include decision_diff (scope name may vary; mint_key accepts any scope string)

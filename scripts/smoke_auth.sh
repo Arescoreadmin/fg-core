@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BASE_URL="${FG_BASE_URL:-${BASE_URL:-http://127.0.0.1:8000}}"
-API_KEY="${FG_API_KEY:-${API_KEY:-CHANGEME}}"
+API_KEY="${FG_API_KEY:-${API_KEY:?set FG_API_KEY}}"
 CJ="${CJ:-/tmp/fg_smoke_cj.txt}"
 TMPDIR="${TMPDIR:-/tmp}"
 

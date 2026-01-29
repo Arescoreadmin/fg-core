@@ -10,31 +10,42 @@ jobs:
   docker-validate:
     runs-on: ubuntu-latest
 
-    env:
-      FG_API_KEY: ${{ secrets.FG_API_KEY }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Generate CI secrets
+        run: |
+          python - <<'PY' >> "$GITHUB_ENV"
+          import secrets
+          print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
+          print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
+          print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
+          print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(24)}")
+          PY
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Prepare environment
         run: |
-          cp .env.example .env
+          cp .env.example .env.ci
           mkdir -p secrets
-          echo "${{ secrets.FG_API_KEY }}" > secrets/fg_api_keys.txt
+          {
+            echo "FG_API_KEY=${FG_API_KEY}"
+            echo "REDIS_PASSWORD=${REDIS_PASSWORD}"
+            echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}"
+            echo "FG_AGENT_API_KEY=${FG_AGENT_API_KEY}"
+          } >> .env.ci
+          echo "${FG_API_KEY}" > secrets/fg_api_keys.txt
 
       - name: Build images via docker compose
         run: |
-          docker compose build
+          docker compose --env-file .env.ci build
 
       - name: Start stack
         run: |
-          docker compose up -d
-        env:
-          FG_API_KEY: ${{ env.FG_API_KEY }}
+          docker compose --env-file .env.ci up -d
 
       - name: Smoke test /health
         run: |
@@ -53,9 +64,9 @@ jobs:
       - name: Dump docker compose logs on failure
         if: failure()
         run: |
-          docker compose logs || true
+          docker compose --env-file .env.ci logs || true
 
       - name: Tear down stack
         if: always()
         run: |
-          docker compose down -v || true
+          docker compose --env-file .env.ci down -v || true

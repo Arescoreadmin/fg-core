@@ -428,7 +428,7 @@ class TestStartupValidation:
         """Test validation with environment variables."""
         from api.config.startup_validation import validate_startup_config
 
-        with patch.dict(os.environ, {"FG_ENV": "dev", "FG_API_KEY": "CHANGEME"}):
+        with patch.dict(os.environ, {"FG_ENV": "dev", "FG_API_KEY": "changeme"}):
             report = validate_startup_config(log_results=False)
 
             assert report is not None

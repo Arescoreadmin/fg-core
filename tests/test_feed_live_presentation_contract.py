@@ -2,7 +2,9 @@ import os
 import importlib
 from fastapi.testclient import TestClient
 
-API_KEY = "CHANGEME"
+API_KEY = os.environ.get("FG_API_KEY")
+if not API_KEY:
+    raise RuntimeError("FG_API_KEY must be set for test runs.")
 
 
 def build_app(auth_enabled: bool):

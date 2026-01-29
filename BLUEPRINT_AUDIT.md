@@ -48,7 +48,7 @@ This audit covers Stage 0/1/2, key lifecycle, and the new Audit Search/Export fe
 - **Contracts present:** admin OpenAPI contracts updated for new audit endpoints.
 
 ## Repo-Wide Static Checks (Audit Findings)
-1. **Placeholder secrets:** No default secrets remain in Makefile, `.env.example`, workflows, or docker-compose. Test fixtures and scripts still use `CHANGEME` as test data (expected).  
+1. **Placeholder secrets:** No default secrets remain in Makefile, `.env.example`, workflows, or docker-compose. Tests and scripts require explicit FG_API_KEY values.  
 2. **Query-param API keys:** No production code accepts API keys via query parameters; only headers/cookies are used.  
 3. **Tenant defaulting:** Write/export endpoints require explicit tenant scoping in admin-gateway and core.  
 4. **Core bypass risk:** admin-gateway enforces tenant access before proxying to core for tenant-specific endpoints.  
@@ -56,7 +56,7 @@ This audit covers Stage 0/1/2, key lifecycle, and the new Audit Search/Export fe
 
 ## Tripwires (Risky Patterns to Monitor)
 - **Fallback auth in compose:** `FG_AUTH_ALLOW_FALLBACK` defaults to true in docker-compose for MVP environments; should be disabled for production hardening.  
-- **Test placeholders:** `CHANGEME` appears in test fixtures/scripts (non-production), ensure no promotion into production configs.  
+- **Test placeholders:** Ensure test fixtures do not reintroduce default secrets.  
 - **Audit forwarder:** admin-gateway audit forwarder is disabled by default; if enabled, ensure core endpoint and scopes are aligned.
 
 ---

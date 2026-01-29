@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8000}"
-API_KEY="${API_KEY:-${FG_API_KEY:-CHANGEME}}"
+API_KEY="${API_KEY:-${FG_API_KEY:?set FG_API_KEY}}"
 TENANT_ID="${TENANT_ID:-acme-prod}"
 SEED_MODE="${SEED_MODE:-spike}"
 SOURCES="${SOURCES:-edge-gw,waf,collector}"
