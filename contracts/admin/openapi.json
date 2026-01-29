@@ -90,6 +90,7 @@
             "type": "string"
           },
           "meta": {
+            "additionalProperties": true,
             "anyOf": [
               {
                 "type": "object"
@@ -150,6 +151,7 @@
             "type": "string"
           },
           "meta": {
+            "additionalProperties": true,
             "anyOf": [
               {
                 "type": "object"
@@ -193,7 +195,6 @@
           "kind",
           "url",
           "target",
-          "meta",
           "created_at"
         ],
         "title": "EndpointResponse",
@@ -210,6 +211,86 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LegacyProductCreate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Product name",
+            "title": "Name"
+          },
+          "tenant_id": {
+            "description": "Tenant identifier",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id"
+        ],
+        "title": "LegacyProductCreate",
+        "type": "object"
+      },
+      "ProductCreate": {
+        "description": "Request model for creating a product.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "endpoints": {
+            "items": {
+              "$ref": "#/components/schemas/EndpointCreate"
+            },
+            "title": "Endpoints",
+            "type": "array"
+          },
+          "env": {
+            "default": "production",
+            "maxLength": 64,
+            "title": "Env",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "slug": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "name"
+        ],
+        "title": "ProductCreate",
         "type": "object"
       },
       "ProductListResponse": {
@@ -570,86 +651,6 @@
           "type"
         ],
         "title": "ValidationError",
-        "type": "object"
-      },
-      "admin_gateway__main__ProductCreate": {
-        "properties": {
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Product name",
-            "title": "Name"
-          },
-          "tenant_id": {
-            "description": "Tenant identifier",
-            "title": "Tenant Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "tenant_id"
-        ],
-        "title": "ProductCreate",
-        "type": "object"
-      },
-      "admin_gateway__routers__products__ProductCreate": {
-        "description": "Request model for creating a product.",
-        "properties": {
-          "enabled": {
-            "default": true,
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "endpoints": {
-            "items": {
-              "$ref": "#/components/schemas/EndpointCreate"
-            },
-            "title": "Endpoints",
-            "type": "array"
-          },
-          "env": {
-            "default": "production",
-            "maxLength": 64,
-            "title": "Env",
-            "type": "string"
-          },
-          "name": {
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          },
-          "owner": {
-            "anyOf": [
-              {
-                "maxLength": 256,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner"
-          },
-          "slug": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[a-z0-9][a-z0-9-]*$",
-            "title": "Slug",
-            "type": "string"
-          }
-        },
-        "required": [
-          "slug",
-          "name"
-        ],
-        "title": "ProductCreate",
         "type": "object"
       }
     }
@@ -1012,7 +1013,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/admin_gateway__routers__products__ProductCreate"
+                "$ref": "#/components/schemas/ProductCreate"
               }
             }
           },
@@ -1332,7 +1333,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/admin_gateway__main__ProductCreate"
+                "$ref": "#/components/schemas/LegacyProductCreate"
               }
             }
           },

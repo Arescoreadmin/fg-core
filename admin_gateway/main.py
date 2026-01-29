@@ -34,7 +34,7 @@ from admin_gateway.db import init_db, close_db
 from admin_gateway.routers import admin_router, auth_router, products_router
 
 
-class ProductCreate(BaseModel):
+class LegacyProductCreate(BaseModel):
     tenant_id: str = Field(..., description="Tenant identifier")
     name: str | None = Field(default=None, description="Product name")
 
@@ -220,7 +220,7 @@ def build_app() -> FastAPI:
     )
     async def create_product(
         request: Request,
-        payload: ProductCreate,
+        payload: LegacyProductCreate,
         session: Session = Depends(get_current_session),
     ) -> dict:
         validate_tenant_access(session, payload.tenant_id, is_write=True)

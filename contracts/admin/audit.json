@@ -21,6 +21,7 @@
       "title": "Actor"
     },
     "details": {
+      "additionalProperties": true,
       "anyOf": [
         {
           "type": "object"

@@ -37,7 +37,11 @@ class EndpointCreate(BaseModel):
     kind: str = Field(..., pattern="^(rest|grpc|nats)$", description="Endpoint type")
     url: Optional[str] = Field(None, max_length=1024, description="URL for REST/gRPC")
     target: Optional[str] = Field(None, max_length=1024, description="Target for NATS")
-    meta: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
+    meta: Optional[dict[str, Any]] = Field(
+        None,
+        description="Additional metadata",
+        json_schema_extra={"additionalProperties": True},
+    )
 
     @field_validator("kind")
     @classmethod
@@ -77,7 +81,10 @@ class EndpointResponse(BaseModel):
     kind: str
     url: Optional[str]
     target: Optional[str]
-    meta: Optional[dict[str, Any]]
+    meta: Optional[dict[str, Any]] = Field(
+        None,
+        json_schema_extra={"additionalProperties": True},
+    )
     created_at: str
 
 
