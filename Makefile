@@ -34,6 +34,7 @@ FG_API_KEY              ?= CHANGEME
 FG_ENFORCEMENT_MODE     ?= observe
 FG_DEV_EVENTS_ENABLED   ?= 0
 FG_UI_TOKEN_GET_ENABLED ?= 1
+ADMIN_SKIP_PIP_INSTALL  ?= 0
 
 ARTIFACTS_DIR ?= artifacts
 STATE_DIR     ?= state
@@ -321,7 +322,7 @@ AG_PIP      := $(AG_VENV)/bin/pip
 
 admin-venv:
 	@test -d "$(AG_VENV)" || python -m venv "$(AG_VENV)"
-	@if [ -n "$$ADMIN_SKIP_PIP_INSTALL" ]; then \
+	@if [ "$${ADMIN_SKIP_PIP_INSTALL:-0}" = "1" ]; then \
 		echo "Skipping admin-gateway package install (ADMIN_SKIP_PIP_INSTALL=1)"; \
 		exit 0; \
 	fi
