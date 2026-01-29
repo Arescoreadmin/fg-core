@@ -3,7 +3,9 @@ from fastapi.testclient import TestClient
 
 from api.main import build_app
 
-API_KEY = "CHANGEME"
+API_KEY = os.environ.get("FG_API_KEY")
+if not API_KEY:
+    raise RuntimeError("FG_API_KEY must be set for test runs.")
 
 def test_feed_live_includes_timestamp(tmp_path):
     # isolate env

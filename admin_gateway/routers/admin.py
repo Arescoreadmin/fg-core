@@ -11,7 +11,7 @@ from typing import Any, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from admin_gateway.auth import (
@@ -62,6 +62,42 @@ class AdminRotateKeyRequest(BaseModel):
 
     ttl_seconds: int = Field(default=86400, ge=60, le=365 * 24 * 3600)
     revoke_old: bool = Field(default=True)
+
+
+def _parse_tenant_ids(tenant_ids: Optional[str]) -> list[str]:
+    if not tenant_ids:
+        return []
+    return [tenant.strip() for tenant in tenant_ids.split(",") if tenant.strip()]
+
+
+def _ensure_allowed_tenants(
+    session: Session,
+    tenant_id: Optional[str],
+    tenant_ids: Optional[str],
+) -> tuple[Optional[str], Optional[list[str]]]:
+    allowed = get_allowed_tenants(session)
+    if tenant_id:
+        if tenant_id not in allowed:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Access denied to tenant: {tenant_id}",
+            )
+        return tenant_id, None
+    if tenant_ids:
+        resolved = _parse_tenant_ids(tenant_ids)
+        if not resolved:
+            raise HTTPException(status_code=400, detail="tenant_ids must not be empty")
+        for tenant in resolved:
+            if tenant not in allowed:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Access denied to tenant: {tenant}",
+                )
+        return None, resolved
+    raise HTTPException(
+        status_code=400,
+        detail="tenant_id or tenant_ids is required",
+    )
 
 
 def _core_base_url() -> str:
@@ -115,6 +151,43 @@ async def _proxy_to_core(
         raise HTTPException(status_code=response.status_code, detail=detail)
 
     return response.json()
+
+
+async def _proxy_to_core_raw(
+    request: Request,
+    method: str,
+    path: str,
+    *,
+    params: Optional[dict[str, Any]] = None,
+) -> Response:
+    base_url = _core_base_url()
+    headers = {
+        "X-API-Key": _core_api_key(),
+        "X-Request-Id": getattr(request.state, "request_id", ""),
+    }
+
+    async with httpx.AsyncClient(base_url=base_url, timeout=15.0) as client:
+        response = await client.request(
+            method,
+            path,
+            params=params,
+            headers=headers,
+        )
+
+    if response.status_code >= 400:
+        try:
+            detail = response.json().get("detail")
+        except ValueError:
+            detail = response.text
+        raise HTTPException(status_code=response.status_code, detail=detail)
+
+    content_type = response.headers.get("content-type", "application/octet-stream")
+    proxy_response = Response(content=response.content, media_type=content_type)
+    for header_name in ("content-disposition",):
+        header_value = response.headers.get(header_name)
+        if header_value:
+            proxy_response.headers[header_name] = header_value
+    return proxy_response
 
 
 @router.get("/me", response_model=UserInfo)
@@ -402,25 +475,105 @@ async def rotate_key(
 )
 async def list_audit_events(
     request: Request,
-    tenant_id: Optional[str] = Query(None, description="Filter by tenant"),
+    tenant_id: Optional[str] = Query(
+        None, description="Single tenant filter (required unless using tenant_ids)"
+    ),
+    tenant_ids: Optional[str] = Query(
+        None, description="Comma-separated tenant IDs (for multi-tenant admins)"
+    ),
+    event_type: Optional[str] = Query(None, description="Filter by event type"),
+    severity: Optional[str] = Query(None, description="Filter by severity"),
+    success: Optional[bool] = Query(None, description="Filter by success flag"),
+    request_id: Optional[str] = Query(None, description="Filter by request id"),
+    key_prefix: Optional[str] = Query(None, description="Filter by key prefix"),
+    start_time: Optional[str] = Query(None, description="Start time (ISO8601)"),
+    end_time: Optional[str] = Query(None, description="End time (ISO8601)"),
+    query_text: Optional[str] = Query(None, description="Search fragment"),
     limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
     session: Session = Depends(get_current_session),
 ) -> dict[str, Any]:
-    """List audit events (placeholder).
+    """List audit events."""
+    tenant_id, resolved_tenant_ids = _ensure_allowed_tenants(
+        session, tenant_id, tenant_ids
+    )
 
-    Requires audit:read scope.
-    """
-    # Validate tenant access if specified
-    allowed = get_allowed_tenants(session)
-    if tenant_id and tenant_id not in allowed:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Access denied to tenant: {tenant_id}",
-        )
-
-    return {
-        "events": [],
-        "total": 0,
+    params: dict[str, Any] = {
         "tenant_id": tenant_id,
+        "tenant_ids": ",".join(resolved_tenant_ids) if resolved_tenant_ids else None,
+        "event_type": event_type,
+        "severity": severity,
+        "success": success,
+        "request_id": request_id,
+        "key_prefix": key_prefix,
+        "start_time": start_time,
+        "end_time": end_time,
+        "query_text": query_text,
         "limit": limit,
+        "offset": offset,
     }
+    params = {k: v for k, v in params.items() if v is not None}
+
+    response = await _proxy_to_core(
+        request,
+        "GET",
+        "/admin/audit",
+        params=params,
+    )
+
+    return response
+
+
+@router.get(
+    "/audit/export",
+    dependencies=[Depends(require_scope_dependency(Scope.AUDIT_READ))],
+)
+async def export_audit_events(
+    request: Request,
+    tenant_id: Optional[str] = Query(
+        None, description="Single tenant filter (required unless using tenant_ids)"
+    ),
+    tenant_ids: Optional[str] = Query(
+        None, description="Comma-separated tenant IDs (for multi-tenant admins)"
+    ),
+    event_type: Optional[str] = Query(None, description="Filter by event type"),
+    severity: Optional[str] = Query(None, description="Filter by severity"),
+    success: Optional[bool] = Query(None, description="Filter by success flag"),
+    request_id: Optional[str] = Query(None, description="Filter by request id"),
+    key_prefix: Optional[str] = Query(None, description="Filter by key prefix"),
+    start_time: Optional[str] = Query(None, description="Start time (ISO8601)"),
+    end_time: Optional[str] = Query(None, description="End time (ISO8601)"),
+    query_text: Optional[str] = Query(None, description="Search fragment"),
+    format: str = Query("jsonl", pattern="^(jsonl|csv)$"),
+    limit: int = Query(1000, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
+    session: Session = Depends(get_current_session),
+) -> Response:
+    """Export audit events as CSV/JSONL."""
+    tenant_id, resolved_tenant_ids = _ensure_allowed_tenants(
+        session, tenant_id, tenant_ids
+    )
+
+    params: dict[str, Any] = {
+        "tenant_id": tenant_id,
+        "tenant_ids": ",".join(resolved_tenant_ids) if resolved_tenant_ids else None,
+        "event_type": event_type,
+        "severity": severity,
+        "success": success,
+        "request_id": request_id,
+        "key_prefix": key_prefix,
+        "start_time": start_time,
+        "end_time": end_time,
+        "query_text": query_text,
+        "format": format,
+        "limit": limit,
+        "offset": offset,
+    }
+    params = {k: v for k, v in params.items() if v is not None}
+
+    return await _proxy_to_core_raw(
+        request,
+        "GET",
+        "/admin/audit/export",
+        params=params,
+    )

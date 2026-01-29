@@ -149,6 +149,7 @@ PY
 
 echo "==> [4/4] Add DB-asserting test (real verification, no API surface changes)"
 cat > tests/test_decision_diff_db.py <<'PY'
+import os
 from api.main import app
 from api.db import get_db
 from api.db_models import DecisionRecord
@@ -166,11 +167,15 @@ def test_decision_diff_is_persisted_in_db_after_second_event():
         "metadata": {"source_ip": "1.2.3.4", "username": "alice", "failed_attempts": 1},
     }
 
-    r1 = client.post("/defend", json=payload, headers={"x-api-key": "CHANGEME"})
+    r1 = client.post(
+        "/defend", json=payload, headers={"x-api-key": os.environ["FG_API_KEY"]}
+    )
     assert r1.status_code in (200, 201), r1.text
 
     payload["metadata"]["failed_attempts"] = 10
-    r2 = client.post("/defend", json=payload, headers={"x-api-key": "CHANGEME"})
+    r2 = client.post(
+        "/defend", json=payload, headers={"x-api-key": os.environ["FG_API_KEY"]}
+    )
     assert r2.status_code in (200, 201), r2.text
 
     db = next(get_db())

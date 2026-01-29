@@ -6,7 +6,15 @@ import os
 from pathlib import Path
 from typing import Callable, Any
 
-DEFAULT_API_KEY = "CHANGEME"
+
+def _require_api_key() -> str:
+    api_key = os.environ.get("FG_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("FG_API_KEY must be set for test runs.")
+    return api_key
+
+
+DEFAULT_API_KEY = _require_api_key()
 
 
 def _b(v: bool) -> str:
@@ -59,7 +67,7 @@ def _call_build_app(
 def build_app_factory(tmp_path: Path) -> Callable[..., Any]:
     """
     Returns a callable:
-        app = build_app(auth_enabled=True, api_key="CHANGEME", dev_events_enabled=True)
+        app = build_app(auth_enabled=True, api_key=os.environ["FG_API_KEY"], dev_events_enabled=True)
     """
 
     def _build(

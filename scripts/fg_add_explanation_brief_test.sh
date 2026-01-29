@@ -6,6 +6,7 @@ mkdir -p tests
 # This assumes you already have a FastAPI app import path like api.main:app
 # If your test harness differs, adjust ONE import in the file.
 cat > tests/test_explanation_brief.py <<'PY'
+import os
 from fastapi.testclient import TestClient
 
 try:
@@ -25,7 +26,9 @@ def test_defend_returns_explanation_brief():
             "failed_attempts": 10,
         },
     }
-    r = client.post("/defend", json=payload, headers={"x-api-key": "CHANGEME"})
+    r = client.post(
+        "/defend", json=payload, headers={"x-api-key": os.environ["FG_API_KEY"]}
+    )
     assert r.status_code in (200, 201), r.text
     data = r.json()
 

@@ -30,7 +30,7 @@ BASE_URL ?= http://$(HOST):$(PORT)
 FG_ENV                  ?= dev
 FG_SERVICE              ?= frostgate-core
 FG_AUTH_ENABLED         ?= 1
-FG_API_KEY              ?= CHANGEME
+FG_API_KEY              ?=
 FG_ENFORCEMENT_MODE     ?= observe
 FG_DEV_EVENTS_ENABLED   ?= 0
 FG_UI_TOKEN_GET_ENABLED ?= 1
@@ -315,19 +315,33 @@ AG_HOST     ?= 127.0.0.1
 AG_PORT     ?= 18001
 AG_BASE_URL ?= http://$(AG_HOST):$(AG_PORT)
 AG_VENV     ?= admin_gateway/.venv
+ADMIN_PY    ?= python3
 AG_PY       := $(AG_VENV)/bin/python
 AG_PIP      := $(AG_VENV)/bin/pip
 
 .PHONY: admin-venv admin-dev admin-lint admin-test ci-admin
 
 admin-venv:
-	@test -d "$(AG_VENV)" || python -m venv "$(AG_VENV)"
-	@if [ "$${ADMIN_SKIP_PIP_INSTALL:-0}" = "1" ]; then \
+	set -euo pipefail; \
+	echo "Admin venv: $(AG_VENV) (python: $$(command -v $(ADMIN_PY)))"; \
+	command -v "$(ADMIN_PY)"; \
+	"$(ADMIN_PY)" -V; \
+	"$(ADMIN_PY)" -c "import sys; print(sys.executable)"; \
+	"$(ADMIN_PY)" -m venv --upgrade --system-site-packages "$(AG_VENV)"
+	if [ "$${ADMIN_SKIP_PIP_INSTALL:-0}" = "1" ]; then \
 		echo "Skipping admin-gateway package install (ADMIN_SKIP_PIP_INSTALL=1)"; \
 		exit 0; \
 	fi
-	@"$(AG_PIP)" install --upgrade pip
-	@"$(AG_PIP)" install -r admin_gateway/requirements.txt -r admin_gateway/requirements-dev.txt
+	if $(AG_PY) -c "import importlib.util; required=['fastapi','httpx','pytest','ruff']; missing=[name for name in required if importlib.util.find_spec(name) is None]; raise SystemExit(0 if not missing else 1)"; then \
+		echo "Admin-gateway dependencies present (system-site-packages)."; \
+		if command -v ruff >/dev/null 2>&1 && [ ! -x "$(AG_VENV)/bin/ruff" ]; then \
+			ln -sf "$$(command -v ruff)" "$(AG_VENV)/bin/ruff"; \
+		fi; \
+	else \
+		echo "Admin-gateway dependencies missing; installing into $(AG_VENV)."; \
+		env -u HTTP_PROXY -u http_proxy -u HTTPS_PROXY -u https_proxy "$(AG_PIP)" install --upgrade pip; \
+		env -u HTTP_PROXY -u http_proxy -u HTTPS_PROXY -u https_proxy "$(AG_PIP)" install -r admin_gateway/requirements.txt -r admin_gateway/requirements-dev.txt; \
+	fi
 
 admin-dev: admin-venv
 	@echo "Starting admin-gateway on $(AG_BASE_URL)..."

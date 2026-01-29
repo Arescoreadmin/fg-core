@@ -16,11 +16,14 @@ def build_app(auth_enabled: bool):
       - Re-import api.config and api.main so `settings` sees the new env
     """
     # Control env (pin both knobs; FG_AUTH_ENABLED overrides FG_API_KEY in app logic)
+    api_key = os.environ.get("FG_API_KEY", "")
     os.environ.pop("FG_API_KEY", None)
     os.environ.pop("FG_AUTH_ENABLED", None)
     os.environ["FG_AUTH_ENABLED"] = "1" if auth_enabled else "0"
     if auth_enabled:
-        os.environ["FG_API_KEY"] = "CHANGEME"
+        if not api_key:
+            raise RuntimeError("FG_API_KEY must be set for test runs.")
+        os.environ["FG_API_KEY"] = api_key
 
     # Hard reset api module tree
     for name in list(sys.modules.keys()):
@@ -86,7 +89,7 @@ async def test_v1_status_accepts_valid_key_and_rejects_missing():
         # With correct key -> 200
         resp_with_key = await client.get(
             "/v1/status",
-            headers={"x-api-key": "CHANGEME"},
+            headers={"x-api-key": os.environ["FG_API_KEY"]},
         )
         assert resp_with_key.status_code == 200
         data = resp_with_key.json()

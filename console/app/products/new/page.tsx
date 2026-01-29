@@ -27,12 +27,17 @@ export default function NewProductPage() {
   const [env, setEnv] = useState('production');
   const [owner, setOwner] = useState('');
   const [enabled, setEnabled] = useState(true);
+  const [tenantId, setTenantId] = useState('');
   const [endpoints, setEndpoints] = useState<EndpointForm[]>([
     { kind: 'rest', url: '', target: '' },
   ]);
 
   // Validation
-  const isBasicsValid = slug.length > 0 && name.length > 0 && /^[a-z0-9][a-z0-9-]*$/.test(slug);
+  const isBasicsValid =
+    slug.length > 0 &&
+    name.length > 0 &&
+    tenantId.length > 0 &&
+    /^[a-z0-9][a-z0-9-]*$/.test(slug);
   const isEndpointsValid = endpoints.every(
     (ep) => ep.kind === 'nats' ? ep.target.length > 0 : ep.url.length > 0
   );
@@ -71,7 +76,7 @@ export default function NewProductPage() {
           })),
       };
 
-      const product = await createProduct(data);
+      const product = await createProduct(data, tenantId);
       router.push(`/products/${product.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create product');
@@ -145,6 +150,20 @@ export default function NewProductPage() {
             <span style={styles.hint}>
               Lowercase letters, numbers, and hyphens only. Must start with letter or number.
             </span>
+          </div>
+
+          <div style={styles.formGroup}>
+            <label style={styles.label}>
+              Tenant ID <span style={styles.required}>*</span>
+            </label>
+            <input
+              type="text"
+              value={tenantId}
+              onChange={(e) => setTenantId(e.target.value)}
+              placeholder="tenant-id"
+              style={styles.input}
+            />
+            <span style={styles.hint}>Provide the tenant for this product.</span>
           </div>
 
           <div style={styles.formGroup}>

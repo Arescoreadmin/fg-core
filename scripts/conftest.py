@@ -1,8 +1,15 @@
 import os
 import sqlite3
+import sys
 import pytest
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
+
+if "pytest" in sys.modules:
+    os.environ.setdefault(
+        "FG_API_KEY", "ci-test-key-00000000000000000000000000000000"
+    )
+    os.environ.setdefault("FG_ENV", "test")
 
 def _env(name: str, default: str | None = None) -> str | None:
     v = os.getenv(name)
@@ -17,7 +24,9 @@ def base_url() -> str:
 @pytest.fixture(scope="session")
 def api_key() -> str:
     # prefer FG_API_KEY, fallback to API_KEY
-    v = _env("FG_API_KEY") or _env("API_KEY") or "CHANGEME"
+    v = _env("FG_API_KEY") or _env("API_KEY")
+    if not v:
+        raise RuntimeError("FG_API_KEY is required for script-based tests.")
     return v
 
 @pytest.fixture(scope="session")

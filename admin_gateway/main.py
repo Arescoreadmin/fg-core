@@ -69,8 +69,11 @@ def build_app() -> FastAPI:
         if getattr(app.state, "audit_logger", None) is None:
             app.state.audit_logger = AuditLogger(
                 core_base_url=os.getenv("AG_CORE_BASE_URL"),
+                core_api_key=os.getenv("AG_CORE_API_KEY"),
                 enabled=os.getenv("AG_AUDIT_ENABLED", "1").lower()
                 not in {"0", "false", "no"},
+                forward_enabled=os.getenv("AG_AUDIT_FORWARD_ENABLED", "0").lower()
+                in {"1", "true", "yes"},
             )
 
         yield

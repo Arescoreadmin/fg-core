@@ -1,3 +1,4 @@
+import os
 import pytest
 from httpx import AsyncClient, ASGITransport
 
@@ -19,7 +20,7 @@ async def test_guardian_disruption_limit_and_roe_flags():
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
             "/v1/defend",
-            headers={"x-api-key": "CHANGEME"},
+            headers={"x-api-key": os.environ["FG_API_KEY"]},
             json={
                 "source": "edge-gateway-1",
                 "tenant_id": "tenant-doctrine-guardian",
@@ -86,12 +87,12 @@ async def test_sentinel_can_allow_more_disruption():
 
         guardian_resp = await client.post(
             "/v1/defend",
-            headers={"x-api-key": "CHANGEME"},
+            headers={"x-api-key": os.environ["FG_API_KEY"]},
             json={**base_payload, "persona": "guardian"},
         )
         sentinel_resp = await client.post(
             "/v1/defend",
-            headers={"x-api-key": "CHANGEME"},
+            headers={"x-api-key": os.environ["FG_API_KEY"]},
             json={**base_payload, "persona": "sentinel"},
         )
 

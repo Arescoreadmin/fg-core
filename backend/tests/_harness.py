@@ -8,7 +8,14 @@ from pathlib import Path
 from typing import Callable, Dict, Iterator, Optional
 
 
-API_KEY_DEFAULT = "CHANGEME"
+def _require_api_key() -> str:
+    api_key = os.environ.get("FG_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("FG_API_KEY must be set for test runs.")
+    return api_key
+
+
+API_KEY_DEFAULT = _require_api_key()
 
 
 @contextmanager

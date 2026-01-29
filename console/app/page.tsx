@@ -58,6 +58,9 @@ export default function Dashboard() {
           <a style={styles.linkButton} href="/keys">
             Manage API keys
           </a>
+          <a style={styles.linkButton} href="/audit">
+            Audit logs
+          </a>
           <div style={styles.statusBadge}>
             <span
               style={{

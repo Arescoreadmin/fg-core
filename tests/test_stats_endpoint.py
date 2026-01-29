@@ -1,3 +1,4 @@
+import os
 from fastapi.testclient import TestClient
 
 from api.main import app
@@ -11,7 +12,7 @@ def test_stats_requires_auth():
 
 
 def test_stats_schema_with_auth():
-    r = client.get("/stats", headers={"x-api-key": "CHANGEME"})
+    r = client.get("/stats", headers={"x-api-key": os.environ["FG_API_KEY"]})
     assert r.status_code == 200
     data = r.json()
 

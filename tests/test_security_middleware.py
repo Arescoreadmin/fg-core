@@ -131,7 +131,7 @@ class TestRequestValidation:
             response = client.post(
                 "/defend",
                 json={"tenant_id": "test", "source": "test"},
-                headers={"X-API-Key": "CHANGEME"},
+                headers={"X-API-Key": os.environ["FG_API_KEY"]},
             )
             # Should not be 415 (may be 401 or other if auth fails, but not content-type rejection)
             assert response.status_code != 415

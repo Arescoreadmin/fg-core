@@ -136,15 +136,43 @@ export interface TestConnectionResult {
   tested_at: string;
 }
 
+export interface AuditEvent {
+  id: number;
+  created_at: string;
+  event_type: string;
+  event_category: string;
+  severity: string;
+  tenant_id?: string | null;
+  key_prefix?: string | null;
+  client_ip?: string | null;
+  user_agent?: string | null;
+  request_id?: string | null;
+  request_path?: string | null;
+  request_method?: string | null;
+  success: boolean;
+  reason?: string | null;
+  details?: Record<string, unknown> | null;
+}
+
+export interface AuditSearchResponse {
+  events: AuditEvent[];
+  total: number;
+  limit: number;
+  offset: number;
+  tenant_id?: string | null;
+  tenant_ids?: string[] | null;
+}
+
 /**
  * Get default headers for API requests
  */
-function getHeaders(): Record<string, string> {
+function getHeaders(tenantId?: string): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  // Add tenant ID header (dev mode uses default)
-  headers['X-Tenant-ID'] = 'default';
+  if (tenantId) {
+    headers['X-Tenant-ID'] = tenantId;
+  }
   return headers;
 }
 
@@ -184,9 +212,9 @@ export async function fetchHealth(): Promise<HealthData> {
 /**
  * Fetch all products for the current tenant
  */
-export async function fetchProducts(): Promise<ProductListResponse> {
+export async function fetchProducts(tenantId?: string): Promise<ProductListResponse> {
   const response = await fetch(apiUrl('/admin/products'), {
-    headers: getHeaders(),
+    headers: getHeaders(tenantId),
   });
   if (!response.ok) {
     throw new Error(`Failed to fetch products: ${response.status}`);
@@ -197,7 +225,7 @@ export async function fetchProducts(): Promise<ProductListResponse> {
 export async function fetchApiKeys(tenantId: string): Promise<ApiKeyListResponse> {
   const params = new URLSearchParams({ tenant_id: tenantId });
   const response = await fetch(apiUrl(`/admin/keys?${params.toString()}`), {
-    headers: getHeaders(),
+    headers: getHeaders(tenantId),
     credentials: 'include',
   });
   if (!response.ok) {
@@ -213,7 +241,7 @@ export async function createApiKey(
   const response = await fetch(apiUrl('/admin/keys'), {
     method: 'POST',
     headers: {
-      ...getHeaders(),
+      ...getHeaders(data.tenant_id),
       [csrf.headerName]: csrf.token,
     },
     credentials: 'include',
@@ -238,7 +266,7 @@ export async function rotateApiKey(
     {
       method: 'POST',
       headers: {
-        ...getHeaders(),
+        ...getHeaders(tenantId),
         [csrf.headerName]: csrf.token,
       },
       credentials: 'include',
@@ -263,7 +291,7 @@ export async function revokeApiKey(
     {
       method: 'POST',
       headers: {
-        ...getHeaders(),
+        ...getHeaders(tenantId),
         [csrf.headerName]: csrf.token,
       },
       credentials: 'include',
@@ -279,9 +307,9 @@ export async function revokeApiKey(
 /**
  * Fetch a single product by ID
  */
-export async function fetchProduct(id: number): Promise<Product> {
+export async function fetchProduct(id: number, tenantId?: string): Promise<Product> {
   const response = await fetch(apiUrl(`/admin/products/${id}`), {
-    headers: getHeaders(),
+    headers: getHeaders(tenantId),
   });
   if (!response.ok) {
     if (response.status === 404) {
@@ -295,10 +323,13 @@ export async function fetchProduct(id: number): Promise<Product> {
 /**
  * Create a new product
  */
-export async function createProduct(data: ProductCreateRequest): Promise<Product> {
+export async function createProduct(
+  data: ProductCreateRequest,
+  tenantId: string
+): Promise<Product> {
   const response = await fetch(apiUrl('/admin/products'), {
     method: 'POST',
-    headers: getHeaders(),
+    headers: getHeaders(tenantId),
     body: JSON.stringify(data),
   });
   if (!response.ok) {
@@ -311,10 +342,14 @@ export async function createProduct(data: ProductCreateRequest): Promise<Product
 /**
  * Update an existing product
  */
-export async function updateProduct(id: number, data: ProductUpdateRequest): Promise<Product> {
+export async function updateProduct(
+  id: number,
+  data: ProductUpdateRequest,
+  tenantId: string
+): Promise<Product> {
   const response = await fetch(apiUrl(`/admin/products/${id}`), {
     method: 'PATCH',
-    headers: getHeaders(),
+    headers: getHeaders(tenantId),
     body: JSON.stringify(data),
   });
   if (!response.ok) {
@@ -327,14 +362,93 @@ export async function updateProduct(id: number, data: ProductUpdateRequest): Pro
 /**
  * Test connection to a product's endpoint
  */
-export async function testProductConnection(id: number): Promise<TestConnectionResult> {
+export async function testProductConnection(
+  id: number,
+  tenantId: string
+): Promise<TestConnectionResult> {
   const response = await fetch(apiUrl(`/admin/products/${id}/test-connection`), {
     method: 'POST',
-    headers: getHeaders(),
+    headers: getHeaders(tenantId),
   });
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     throw new Error(error.detail || `Failed to test connection: ${response.status}`);
   }
   return response.json();
+}
+
+export interface AuditSearchParams {
+  tenantId?: string;
+  tenantIds?: string[];
+  eventType?: string;
+  severity?: string;
+  success?: boolean;
+  requestId?: string;
+  keyPrefix?: string;
+  startTime?: string;
+  endTime?: string;
+  queryText?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export async function fetchAuditEvents(
+  params: AuditSearchParams
+): Promise<AuditSearchResponse> {
+  const query = new URLSearchParams();
+  if (params.tenantId) query.set('tenant_id', params.tenantId);
+  if (params.tenantIds && params.tenantIds.length > 0) {
+    query.set('tenant_ids', params.tenantIds.join(','));
+  }
+  if (params.eventType) query.set('event_type', params.eventType);
+  if (params.severity) query.set('severity', params.severity);
+  if (params.success !== undefined) query.set('success', String(params.success));
+  if (params.requestId) query.set('request_id', params.requestId);
+  if (params.keyPrefix) query.set('key_prefix', params.keyPrefix);
+  if (params.startTime) query.set('start_time', params.startTime);
+  if (params.endTime) query.set('end_time', params.endTime);
+  if (params.queryText) query.set('query_text', params.queryText);
+  if (params.limit !== undefined) query.set('limit', String(params.limit));
+  if (params.offset !== undefined) query.set('offset', String(params.offset));
+
+  const response = await fetch(apiUrl(`/admin/audit?${query.toString()}`), {
+    headers: getHeaders(params.tenantId),
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to fetch audit events: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function exportAuditEvents(
+  params: AuditSearchParams & { format: 'csv' | 'jsonl' }
+): Promise<Blob> {
+  const query = new URLSearchParams();
+  if (params.tenantId) query.set('tenant_id', params.tenantId);
+  if (params.tenantIds && params.tenantIds.length > 0) {
+    query.set('tenant_ids', params.tenantIds.join(','));
+  }
+  if (params.eventType) query.set('event_type', params.eventType);
+  if (params.severity) query.set('severity', params.severity);
+  if (params.success !== undefined) query.set('success', String(params.success));
+  if (params.requestId) query.set('request_id', params.requestId);
+  if (params.keyPrefix) query.set('key_prefix', params.keyPrefix);
+  if (params.startTime) query.set('start_time', params.startTime);
+  if (params.endTime) query.set('end_time', params.endTime);
+  if (params.queryText) query.set('query_text', params.queryText);
+  if (params.limit !== undefined) query.set('limit', String(params.limit));
+  if (params.offset !== undefined) query.set('offset', String(params.offset));
+  query.set('format', params.format);
+
+  const response = await fetch(apiUrl(`/admin/audit/export?${query.toString()}`), {
+    headers: getHeaders(params.tenantId),
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to export audit: ${response.status}`);
+  }
+  return response.blob();
 }
