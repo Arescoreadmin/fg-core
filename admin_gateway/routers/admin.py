@@ -561,6 +561,27 @@ class AuditExportRequest(BaseModel):
 @router.post(
     "/audit/export",
     dependencies=[Depends(require_scope_dependency(Scope.AUDIT_READ))],
+    responses={
+        200: {
+            "description": "Streaming audit export (CSV or NDJSON).",
+            "content": {
+                "text/csv": {"schema": {"type": "string", "format": "binary"}},
+                "application/x-ndjson": {
+                    "schema": {"type": "string", "format": "binary"}
+                },
+            },
+            "headers": {
+                "Content-Disposition": {
+                    "description": "Attachment filename for the export payload.",
+                    "schema": {"type": "string"},
+                },
+                "Content-Type": {
+                    "description": "Streaming content type.",
+                    "schema": {"type": "string"},
+                },
+            },
+        }
+    },
 )
 async def export_audit_events(
     request: Request,

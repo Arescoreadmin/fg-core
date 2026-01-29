@@ -802,9 +802,35 @@
             "content": {
               "application/json": {
                 "schema": {}
+              },
+              "application/x-ndjson": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
               }
             },
-            "description": "Successful Response"
+            "description": "Streaming audit export (CSV or NDJSON).",
+            "headers": {
+              "Content-Disposition": {
+                "description": "Attachment filename for the export payload.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Type": {
+                "description": "Streaming content type.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "422": {
             "content": {

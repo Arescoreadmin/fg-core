@@ -72,17 +72,17 @@ async def verify_api_key(
     )
 
     if result.valid:
+        request.state.auth = result
         return
 
-    # Proper status codes: 401 for missing, 403 for invalid
+    # Proper status codes: 401 for missing/invalid
     if result.is_missing_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing API key"
         )
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API key"
-        )
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key"
+    )
 
 
 def require_status_auth(

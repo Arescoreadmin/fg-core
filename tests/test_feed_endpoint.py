@@ -10,7 +10,7 @@ client = TestClient(app)
 @pytest.mark.smoke
 def test_feed_live_requires_auth():
     r = client.get("/feed/live?limit=5")
-    assert r.status_code in (401, 403)
+    assert r.status_code == 401
 
 
 @pytest.mark.smoke

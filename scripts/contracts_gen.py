@@ -13,15 +13,19 @@ from contracts.admin import schemas
 
 OUTPUT_DIR = Path("contracts/admin")
 
+AuditSchema = getattr(schemas, "AuditLogEntry", schemas.AuditEvent)
+
 MODELS: Dict[str, Type[BaseModel]] = {
     "health": schemas.HealthResponse,
     "version": schemas.VersionResponse,
-    "audit": schemas.AuditLogEntry,
+    "audit": AuditSchema,
 }
 
 
 def _write_json(path: Path, payload: dict) -> None:
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def main() -> None:

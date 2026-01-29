@@ -41,4 +41,4 @@ def test_ui_token_rejects_query_param_key(build_app):
     app = build_app(auth_enabled=True)
     c = TestClient(app)
     r = c.get("/ui/token", params={"api_key": API_KEY})
-    assert r.status_code in {401, 403}
+    assert r.status_code == 401

@@ -16,7 +16,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import require_scopes
+from api.auth_scopes import bind_tenant_id, require_scopes
 from api.db import get_db
 from api.db_models import DecisionRecord
 from api.ingest_schemas import IngestResponse
@@ -61,9 +61,8 @@ def _safe_json(obj: Any) -> str:
 def _resolve_tenant_id(
     req: TelemetryInput, x_tenant_id: Optional[str], request: Request
 ) -> str:
-    tid = (x_tenant_id or req.tenant_id or "").strip()
-    if not tid:
-        tid = getattr(request.state, "tenant_id", "") or "unknown"
+    requested = (x_tenant_id or req.tenant_id or "").strip() or None
+    tid = bind_tenant_id(request, requested)
     request.state.tenant_id = tid
     return tid
 

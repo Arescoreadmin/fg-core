@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import verify_api_key
+from api.auth_scopes import bind_tenant_id, verify_api_key
 from api.db import get_db
 from api.db_models import DecisionRecord
 from api.decisions import _loads_json_text
@@ -286,6 +286,7 @@ class FeedLiveResponse(BaseModel):
 
 @router.get("/live", response_model=FeedLiveResponse)
 def feed_live(
+    request: Request,
     db: Session = Depends(get_db),
     # pagination/incremental
     limit: int = Query(default=50, ge=1, le=200),
@@ -330,6 +331,9 @@ def feed_live(
 
     if source:
         qry = qry.filter(DecisionRecord.source == source)
+
+    tenant_id = bind_tenant_id(request, tenant_id)
+    request.state.tenant_id = tenant_id
 
     if tenant_id:
         qry = qry.filter(DecisionRecord.tenant_id == tenant_id)
@@ -449,6 +453,9 @@ async def feed_stream(
     if severity and not threat_level:
         threat_level = severity
 
+    tenant_id = bind_tenant_id(request, tenant_id)
+    request.state.tenant_id = tenant_id
+
     # normalize ints/bools
     since_id_n = _fg_norm_int(since_id)
     limit_n = _fg_norm_int(limit) or limit
@@ -466,6 +473,7 @@ async def feed_stream(
                     break
 
                 resp = feed_live(
+                    request=request,
                     db=db,
                     limit=limit_n,
                     since_id=last_id,

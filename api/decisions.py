@@ -5,12 +5,12 @@ import logging
 from datetime import datetime
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import verify_api_key
+from api.auth_scopes import bind_tenant_id, verify_api_key
 from api.db import get_db
 from api.db_models import DecisionRecord
 
@@ -105,6 +105,7 @@ class DecisionsPage(BaseModel):
     dependencies=[Depends(verify_api_key)],
 )
 def list_decisions(
+    request: Request,
     db: Session = Depends(get_db),
     limit: int = Query(20, ge=1, le=200),
     offset: int = Query(0, ge=0, le=200000),
@@ -116,6 +117,9 @@ def list_decisions(
     threat_level: Optional[str] = Query(None, min_length=1),
 ) -> DecisionsPage:
     try:
+        tenant_id = bind_tenant_id(request, tenant_id)
+        request.state.tenant_id = tenant_id
+
         # Build WHERE clauses once
         where = []
         if tenant_id:
@@ -189,6 +193,7 @@ def list_decisions(
 )
 def get_decision(
     decision_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     include_raw: bool = Query(True, description="Include request/response JSON blobs"),
 ) -> DecisionOut:
@@ -196,6 +201,11 @@ def get_decision(
         r = db.get(DecisionRecord, decision_id)
         if r is None:
             raise HTTPException(status_code=404, detail="Decision not found")
+
+        auth = getattr(getattr(request, "state", None), "auth", None)
+        auth_tenant = getattr(auth, "tenant_id", None)
+        if auth_tenant and r.tenant_id != auth_tenant:
+            raise HTTPException(status_code=403, detail="Tenant mismatch")
 
         out = DecisionOut(
             id=int(r.id),

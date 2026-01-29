@@ -327,18 +327,18 @@ admin-venv:
 	command -v "$(ADMIN_PY)"; \
 	"$(ADMIN_PY)" -V; \
 	"$(ADMIN_PY)" -c "import sys; print(sys.executable)"; \
-	"$(ADMIN_PY)" -m venv --upgrade --system-site-packages "$(AG_VENV)"
+	"$(ADMIN_PY)" -m venv --upgrade "$(AG_VENV)"
 	if [ "$${ADMIN_SKIP_PIP_INSTALL:-0}" = "1" ]; then \
 		echo "Skipping admin-gateway package install (ADMIN_SKIP_PIP_INSTALL=1)"; \
 		exit 0; \
 	fi
 	if $(AG_PY) -c "import importlib.util; required=['fastapi','httpx','pytest','ruff']; missing=[name for name in required if importlib.util.find_spec(name) is None]; raise SystemExit(0 if not missing else 1)"; then \
-		echo "Admin-gateway dependencies present (system-site-packages)."; \
+		echo "Admin-gateway dependencies present in $(AG_VENV)."; \
 		if command -v ruff >/dev/null 2>&1 && [ ! -x "$(AG_VENV)/bin/ruff" ]; then \
 			ln -sf "$$(command -v ruff)" "$(AG_VENV)/bin/ruff"; \
 		fi; \
 	else \
-		echo "Admin-gateway dependencies missing; installing into $(AG_VENV)."; \
+		echo "Installing admin-gateway dependencies into $(AG_VENV)."; \
 		env -u HTTP_PROXY -u http_proxy -u HTTPS_PROXY -u https_proxy "$(AG_PIP)" install --upgrade pip; \
 		env -u HTTP_PROXY -u http_proxy -u HTTPS_PROXY -u https_proxy "$(AG_PIP)" install -r admin_gateway/requirements.txt -r admin_gateway/requirements-dev.txt; \
 	fi

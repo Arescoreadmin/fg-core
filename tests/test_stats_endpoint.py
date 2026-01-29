@@ -8,7 +8,7 @@ client = TestClient(app)
 
 def test_stats_requires_auth():
     r = client.get("/stats")
-    assert r.status_code in (401, 403)
+    assert r.status_code == 401
 
 
 def test_stats_schema_with_auth():
