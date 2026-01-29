@@ -313,7 +313,9 @@ def _derive_status(record: SecurityAuditLog) -> Literal["success", "deny", "erro
     return "deny"
 
 
-def _audit_meta(record: SecurityAuditLog, details: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def _audit_meta(
+    record: SecurityAuditLog, details: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
     meta: Dict[str, Any] = {
         "event_category": record.event_category,
         "severity": record.severity,
@@ -609,7 +611,9 @@ async def search_audit_events(
             session.execute(
                 select(SecurityAuditLog)
                 .where(*filters)
-                .order_by(SecurityAuditLog.created_at.desc(), SecurityAuditLog.id.desc())
+                .order_by(
+                    SecurityAuditLog.created_at.desc(), SecurityAuditLog.id.desc()
+                )
                 .limit(page_size)
             )
             .scalars()
@@ -703,18 +707,15 @@ async def export_audit_events(
 
     def _event_rows():
         with Session(engine) as session:
-            result = (
-                session.execute(
-                    select(SecurityAuditLog)
-                    .where(*filters)
-                    .order_by(
-                        SecurityAuditLog.created_at.desc(),
-                        SecurityAuditLog.id.desc(),
-                    )
-                    .limit(payload.page_size)
+            result = session.execute(
+                select(SecurityAuditLog)
+                .where(*filters)
+                .order_by(
+                    SecurityAuditLog.created_at.desc(),
+                    SecurityAuditLog.id.desc(),
                 )
-                .scalars()
-            )
+                .limit(payload.page_size)
+            ).scalars()
             for record in result:
                 details = None
                 if record.details_json:
