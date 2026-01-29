@@ -45,7 +45,11 @@ def mock_core_proxy(monkeypatch):
 
     async def _mock_proxy_to_core(request, method, path, params=None, json_body=None):
         if path == "/admin/keys" and method == "GET":
-            return {"keys": [], "total": 0}
+            return {
+                "keys": [],
+                "total": 0,
+                "tenant_id": (params or {}).get("tenant_id"),
+            }
         if path == "/admin/keys" and method == "POST":
             tenant_id = (json_body or {}).get("tenant_id")
             return {

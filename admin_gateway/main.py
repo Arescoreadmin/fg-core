@@ -13,27 +13,15 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import Depends, FastAPI, Request, Response
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from admin_gateway.auth import (
-    AuthUser,
-    build_login_redirect,
-    build_user_from_claims,
-    dev_bypass_enabled,
-    ensure_csrf_token,
-    environment,
-    exchange_code_for_tokens,
-    get_allowed_tenant,
-    get_current_user,
-    require_oidc_env,
-    require_scopes,
-    require_session_secret,
-    session_max_age,
-    verify_id_token,
-)
+from admin_gateway.auth import Scope, get_current_session, require_scope_dependency
+from admin_gateway.auth.config import get_auth_config
+from admin_gateway.auth.tenant import get_allowed_tenants, validate_tenant_access
+from admin_gateway.auth.session import Session
 from admin_gateway.middleware.request_id import RequestIdMiddleware
 from admin_gateway.middleware.logging import StructuredLoggingMiddleware
 from admin_gateway.middleware.audit import AuditMiddleware
@@ -42,7 +30,7 @@ from admin_gateway.middleware.csrf import CSRFMiddleware
 from admin_gateway.middleware.session_cookie import SessionCookieMiddleware
 from admin_gateway.audit import AuditLogger
 from admin_gateway.db import init_db, close_db
-from admin_gateway.routers import admin_router, products_router
+from admin_gateway.routers import admin_router, auth_router, products_router
 
 
 class ProductCreate(BaseModel):
@@ -97,9 +85,11 @@ def build_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    if environment() == "prod" and dev_bypass_enabled():
+    config = get_auth_config()
+    if config.is_prod and config.dev_auth_bypass:
         raise RuntimeError("FG_DEV_AUTH_BYPASS cannot be enabled in production.")
-    require_oidc_env()
+    if config.is_prod and not config.oidc_enabled:
+        raise RuntimeError("Missing OIDC configuration in production.")
 
     # Add middleware (order matters: outermost first)
     # Audit comes after auth so it can see the session
@@ -112,13 +102,13 @@ def build_app() -> FastAPI:
     app.add_middleware(CSRFMiddleware)
     from starlette.middleware.sessions import SessionMiddleware
 
-    session_secret = require_session_secret()
+    session_secret = config.session_secret
     app.add_middleware(
         SessionMiddleware,
         secret_key=session_secret,
-        max_age=session_max_age(),
+        max_age=config.session_ttl_seconds,
         same_site="strict",
-        https_only=environment() == "prod",
+        https_only=config.is_prod,
     )
     app.add_middleware(SessionCookieMiddleware)
 
@@ -142,6 +132,7 @@ def build_app() -> FastAPI:
 
     # Include routers
     app.include_router(admin_router)
+    app.include_router(auth_router)
     app.include_router(products_router)
 
     # Health endpoint
@@ -174,67 +165,44 @@ def build_app() -> FastAPI:
         """OpenAPI schema endpoint."""
         return JSONResponse(content=request.app.openapi())
 
-    @app.get("/auth/login")
-    async def auth_login(request: Request) -> Response:
-        """Redirect to OIDC provider for login."""
-        url = await build_login_redirect(request)
-        return RedirectResponse(url=url)
-
-    @app.get("/auth/callback")
-    async def auth_callback(request: Request, code: str, state: str) -> Response:
-        """Handle OIDC callback and establish session."""
-        if state != request.session.get("oidc_state"):
-            return JSONResponse(status_code=400, content={"detail": "Invalid state"})
-        tokens = await exchange_code_for_tokens(code)
-        id_token = tokens.get("id_token")
-        if not id_token:
-            return JSONResponse(status_code=400, content={"detail": "Missing id_token"})
-        claims = await verify_id_token(id_token, request.session.get("oidc_nonce"))
-        user = build_user_from_claims(claims, tokens.get("scope"))
-        request.session.pop("oidc_state", None)
-        request.session.pop("oidc_nonce", None)
-        request.session["user"] = {
-            "sub": user.sub,
-            "email": user.email,
-            "scopes": user.scopes,
-            "tenants": user.tenants,
-            "exp": user.exp,
-        }
-        return JSONResponse(content={"status": "ok"})
-
-    @app.get("/auth/csrf")
-    async def auth_csrf(request: Request) -> dict:
-        """Return a CSRF token tied to the session."""
-        return {"csrf_token": ensure_csrf_token(request)}
-
     # Placeholder admin endpoints
-    @app.get("/api/v1/tenants")
+    @app.get(
+        "/api/v1/tenants",
+        dependencies=[Depends(require_scope_dependency(Scope.CONSOLE_ADMIN))],
+    )
     async def list_tenants(
         request: Request,
-        user: AuthUser = Depends(require_scopes(["console:admin"])),
+        session: Session = Depends(get_current_session),
     ) -> dict:
         """List tenants (placeholder)."""
+        allowed = get_allowed_tenants(session)
         request.state.tenant_id = None
-        return {"tenants": user.tenants, "total": len(user.tenants)}
+        return {"tenants": sorted(allowed), "total": len(allowed)}
 
-    @app.get("/api/v1/keys")
+    @app.get(
+        "/api/v1/keys",
+        dependencies=[Depends(require_scope_dependency(Scope.KEYS_READ))],
+    )
     async def list_keys(
         request: Request,
         tenant_id: str | None = None,
-        user: AuthUser = Depends(require_scopes(["keys:read"])),
+        session: Session = Depends(get_current_session),
     ) -> dict:
         """List API keys (placeholder)."""
-        get_allowed_tenant(request, tenant_id, user)
+        validate_tenant_access(session, tenant_id)
         return {"keys": [], "total": 0}
 
-    @app.get("/api/v1/dashboard")
+    @app.get(
+        "/api/v1/dashboard",
+        dependencies=[Depends(require_scope_dependency(Scope.CONSOLE_ADMIN))],
+    )
     async def dashboard(
         request: Request,
         tenant_id: str | None = None,
-        user: AuthUser = Depends(require_scopes(["console:admin"])),
+        session: Session = Depends(get_current_session),
     ) -> dict:
         """Dashboard data endpoint (placeholder)."""
-        get_allowed_tenant(request, tenant_id, user)
+        validate_tenant_access(session, tenant_id)
         return {
             "stats": {
                 "total_requests": 0,
@@ -245,13 +213,16 @@ def build_app() -> FastAPI:
             "recent_events": [],
         }
 
-    @app.post("/api/v1/products")
+    @app.post(
+        "/api/v1/products",
+        dependencies=[Depends(require_scope_dependency(Scope.PRODUCT_WRITE))],
+    )
     async def create_product(
         request: Request,
         payload: ProductCreate,
-        user: AuthUser = Depends(require_scopes(["product:write"])),
+        session: Session = Depends(get_current_session),
     ) -> dict:
-        get_allowed_tenant(request, payload.tenant_id, user)
+        validate_tenant_access(session, payload.tenant_id, is_write=True)
         return {"status": "created", "tenant_id": payload.tenant_id}
 
     return app

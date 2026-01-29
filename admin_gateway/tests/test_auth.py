@@ -40,28 +40,31 @@ def test_dev_bypass_refused_in_prod(monkeypatch):
 def test_csrf_protects_state_changes(app_no_bypass):
     """Test CSRF protection when bypass is disabled."""
     # Import after module cache is cleared by fixture
-    from admin_gateway.auth import AuthUser, get_current_user
+    from admin_gateway.auth.dependencies import get_current_session
+    from admin_gateway.auth.session import Session
 
-    user = AuthUser(
-        sub="tester",
+    user = Session(
+        user_id="tester",
         email="tester@example.com",
-        scopes=["product:write"],
-        tenants=["tenant-a"],
-        exp=None,
+        scopes={"product:write"},
+        claims={"allowed_tenants": ["tenant-a"]},
+        tenant_id="tenant-a",
     )
 
     def override_user():
         return user
 
-    app_no_bypass.dependency_overrides[get_current_user] = override_user
+    app_no_bypass.dependency_overrides[get_current_session] = override_user
     with TestClient(app_no_bypass) as client:
         response = client.post("/api/v1/products", json={"tenant_id": "tenant-a"})
         assert response.status_code == 403
-        token = client.get("/auth/csrf").json()["csrf_token"]
+        csrf = client.get("/admin/csrf-token").json()
+        token = csrf["csrf_token"]
+        header = csrf["header_name"]
         response = client.post(
             "/api/v1/products",
             json={"tenant_id": "tenant-a"},
-            headers={"X-CSRF-Token": token},
+            headers={header: token},
         )
     assert response.status_code == 200
 
@@ -69,26 +72,29 @@ def test_csrf_protects_state_changes(app_no_bypass):
 def test_rbac_enforced(app_no_bypass):
     """Test RBAC scope enforcement when bypass is disabled."""
     # Import after module cache is cleared by fixture
-    from admin_gateway.auth import AuthUser, get_current_user
+    from admin_gateway.auth.dependencies import get_current_session
+    from admin_gateway.auth.session import Session
 
-    user = AuthUser(
-        sub="tester",
+    user = Session(
+        user_id="tester",
         email="tester@example.com",
-        scopes=["product:read"],
-        tenants=["tenant-a"],
-        exp=None,
+        scopes={"product:read"},
+        claims={"allowed_tenants": ["tenant-a"]},
+        tenant_id="tenant-a",
     )
 
     def override_user():
         return user
 
-    app_no_bypass.dependency_overrides[get_current_user] = override_user
+    app_no_bypass.dependency_overrides[get_current_session] = override_user
     with TestClient(app_no_bypass) as client:
-        token = client.get("/auth/csrf").json()["csrf_token"]
+        csrf = client.get("/admin/csrf-token").json()
+        token = csrf["csrf_token"]
+        header = csrf["header_name"]
         response = client.post(
             "/api/v1/products",
             json={"tenant_id": "tenant-a"},
-            headers={"X-CSRF-Token": token},
+            headers={header: token},
         )
     assert response.status_code == 403
 
@@ -96,26 +102,29 @@ def test_rbac_enforced(app_no_bypass):
 def test_tenant_scope_enforced(app_no_bypass):
     """Test tenant scope enforcement when bypass is disabled."""
     # Import after module cache is cleared by fixture
-    from admin_gateway.auth import AuthUser, get_current_user
+    from admin_gateway.auth.dependencies import get_current_session
+    from admin_gateway.auth.session import Session
 
-    user = AuthUser(
-        sub="tester",
+    user = Session(
+        user_id="tester",
         email="tester@example.com",
-        scopes=["product:write"],
-        tenants=["tenant-a"],
-        exp=None,
+        scopes={"product:write"},
+        claims={"allowed_tenants": ["tenant-a"]},
+        tenant_id="tenant-a",
     )
 
     def override_user():
         return user
 
-    app_no_bypass.dependency_overrides[get_current_user] = override_user
+    app_no_bypass.dependency_overrides[get_current_session] = override_user
     with TestClient(app_no_bypass) as client:
-        token = client.get("/auth/csrf").json()["csrf_token"]
+        csrf = client.get("/admin/csrf-token").json()
+        token = csrf["csrf_token"]
+        header = csrf["header_name"]
         response = client.post(
             "/api/v1/products",
             json={"tenant_id": "tenant-b"},
-            headers={"X-CSRF-Token": token},
+            headers={header: token},
         )
     assert response.status_code == 403
 
@@ -123,7 +132,8 @@ def test_tenant_scope_enforced(app_no_bypass):
 def test_audit_event_emitted(app):
     """Test audit events are emitted."""
     # Import after module cache is cleared by fixture
-    from admin_gateway.auth import AuthUser, get_current_user
+    from admin_gateway.auth.dependencies import get_current_session
+    from admin_gateway.auth.session import Session
 
     events = []
 
@@ -134,15 +144,15 @@ def test_audit_event_emitted(app):
     app.state.audit_logger = StubAuditLogger()
 
     def override_user():
-        return AuthUser(
-            sub="tester",
+        return Session(
+            user_id="tester",
             email="tester@example.com",
-            scopes=["console:admin"],
-            tenants=["tenant-a"],
-            exp=None,
+            scopes={"console:admin"},
+            claims={"allowed_tenants": ["tenant-a"]},
+            tenant_id="tenant-a",
         )
 
-    app.dependency_overrides[get_current_user] = override_user
+    app.dependency_overrides[get_current_session] = override_user
     with TestClient(app) as client:
         client.get("/admin/me")
     assert events

@@ -32,7 +32,11 @@ class AuditMiddleware(BaseHTTPMiddleware):
             user = getattr(request.state, "user", None)
             actor = None
             if user:
-                actor = user.email or user.sub
+                actor = (
+                    getattr(user, "email", None)
+                    or getattr(user, "sub", None)
+                    or getattr(user, "user_id", None)
+                )
             await audit_logger.log_event(
                 {
                     "request_id": getattr(request.state, "request_id", "unknown"),
