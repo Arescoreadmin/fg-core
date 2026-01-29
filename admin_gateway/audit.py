@@ -6,6 +6,7 @@ Stub implementation that logs audit events locally or forwards to core.
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
@@ -63,7 +64,22 @@ class AuditLogger:
             log.debug("Failed to forward audit entry to core")
 
     def _redact_event(self, event: dict) -> dict:
-        return self._redact_secrets(event)
+        redacted = self._redact_secrets(event)
+        if self._audit_redaction_enabled():
+            for key in ("ip_address", "user_agent"):
+                if key in redacted:
+                    redacted[key] = None
+        return redacted
+
+    @staticmethod
+    def _audit_redaction_enabled() -> bool:
+        return os.getenv("FG_AUDIT_REDACT", "true").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "y",
+            "on",
+        }
 
     @staticmethod
     def _is_sensitive_key(key: str) -> bool:

@@ -4,7 +4,7 @@ Shared Pydantic models for admin-gateway API contracts.
 """
 
 from datetime import datetime
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -31,22 +31,28 @@ class VersionResponse(BaseModel):
     build_time: Optional[str] = Field(default=None, description="Build timestamp")
 
 
-class AuditLogEntry(BaseModel):
-    """Audit log entry schema."""
+class AuditEvent(BaseModel):
+    """Audit event schema."""
 
-    timestamp: datetime = Field(description="Event timestamp")
-    request_id: str = Field(description="Request tracking ID")
-    action: str = Field(description="Action performed")
+    id: Union[str, int] = Field(description="Audit event identifier")
+    ts: datetime = Field(description="Event timestamp (RFC3339)")
+    tenant_id: str = Field(description="Tenant identifier")
     actor: Optional[str] = Field(default=None, description="Actor identifier")
-    resource: Optional[str] = Field(default=None, description="Resource affected")
-    resource_id: Optional[str] = Field(default=None, description="Resource identifier")
-    details: Optional[dict[str, Any]] = Field(
-        default=None,
-        description="Additional details",
-        json_schema_extra={"additionalProperties": True},
-    )
-    outcome: Literal["success", "failure", "error"] = Field(
+    action: str = Field(description="Action performed")
+    status: Literal["success", "deny", "error"] = Field(
         description="Action outcome"
     )
-    ip_address: Optional[str] = Field(default=None, description="Client IP address")
+    resource_type: Optional[str] = Field(
+        default=None, description="Resource type"
+    )
+    resource_id: Optional[str] = Field(
+        default=None, description="Resource identifier"
+    )
+    request_id: Optional[str] = Field(default=None, description="Request tracking ID")
+    ip: Optional[str] = Field(default=None, description="Client IP address")
     user_agent: Optional[str] = Field(default=None, description="Client user agent")
+    meta: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional metadata",
+        json_schema_extra={"additionalProperties": True},
+    )

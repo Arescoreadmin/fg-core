@@ -137,30 +137,23 @@ export interface TestConnectionResult {
 }
 
 export interface AuditEvent {
-  id: number;
-  created_at: string;
-  event_type: string;
-  event_category: string;
-  severity: string;
-  tenant_id?: string | null;
-  key_prefix?: string | null;
-  client_ip?: string | null;
-  user_agent?: string | null;
+  id: string;
+  ts: string;
+  tenant_id: string;
+  actor?: string | null;
+  action: string;
+  status: 'success' | 'deny' | 'error';
+  resource_type?: string | null;
+  resource_id?: string | null;
   request_id?: string | null;
-  request_path?: string | null;
-  request_method?: string | null;
-  success: boolean;
-  reason?: string | null;
-  details?: Record<string, unknown> | null;
+  ip?: string | null;
+  user_agent?: string | null;
+  meta: Record<string, unknown>;
 }
 
 export interface AuditSearchResponse {
-  events: AuditEvent[];
-  total: number;
-  limit: number;
-  offset: number;
-  tenant_id?: string | null;
-  tenant_ids?: string[] | null;
+  items: AuditEvent[];
+  next_cursor?: string | null;
 }
 
 /**
@@ -379,17 +372,16 @@ export async function testProductConnection(
 
 export interface AuditSearchParams {
   tenantId?: string;
-  tenantIds?: string[];
-  eventType?: string;
-  severity?: string;
-  success?: boolean;
+  action?: string;
+  actor?: string;
+  status?: string;
   requestId?: string;
-  keyPrefix?: string;
-  startTime?: string;
-  endTime?: string;
-  queryText?: string;
-  limit?: number;
-  offset?: number;
+  resourceType?: string;
+  resourceId?: string;
+  fromTs?: string;
+  toTs?: string;
+  cursor?: string;
+  pageSize?: number;
 }
 
 export async function fetchAuditEvents(
@@ -397,21 +389,18 @@ export async function fetchAuditEvents(
 ): Promise<AuditSearchResponse> {
   const query = new URLSearchParams();
   if (params.tenantId) query.set('tenant_id', params.tenantId);
-  if (params.tenantIds && params.tenantIds.length > 0) {
-    query.set('tenant_ids', params.tenantIds.join(','));
-  }
-  if (params.eventType) query.set('event_type', params.eventType);
-  if (params.severity) query.set('severity', params.severity);
-  if (params.success !== undefined) query.set('success', String(params.success));
+  if (params.action) query.set('action', params.action);
+  if (params.actor) query.set('actor', params.actor);
+  if (params.status) query.set('status', params.status);
   if (params.requestId) query.set('request_id', params.requestId);
-  if (params.keyPrefix) query.set('key_prefix', params.keyPrefix);
-  if (params.startTime) query.set('start_time', params.startTime);
-  if (params.endTime) query.set('end_time', params.endTime);
-  if (params.queryText) query.set('query_text', params.queryText);
-  if (params.limit !== undefined) query.set('limit', String(params.limit));
-  if (params.offset !== undefined) query.set('offset', String(params.offset));
+  if (params.resourceType) query.set('resource_type', params.resourceType);
+  if (params.resourceId) query.set('resource_id', params.resourceId);
+  if (params.fromTs) query.set('from_ts', params.fromTs);
+  if (params.toTs) query.set('to_ts', params.toTs);
+  if (params.cursor) query.set('cursor', params.cursor);
+  if (params.pageSize !== undefined) query.set('page_size', String(params.pageSize));
 
-  const response = await fetch(apiUrl(`/admin/audit?${query.toString()}`), {
+  const response = await fetch(apiUrl(`/admin/audit/search?${query.toString()}`), {
     headers: getHeaders(params.tenantId),
     credentials: 'include',
   });
@@ -423,28 +412,27 @@ export async function fetchAuditEvents(
 }
 
 export async function exportAuditEvents(
-  params: AuditSearchParams & { format: 'csv' | 'jsonl' }
+  params: AuditSearchParams & { format: 'csv' | 'json' }
 ): Promise<Blob> {
-  const query = new URLSearchParams();
-  if (params.tenantId) query.set('tenant_id', params.tenantId);
-  if (params.tenantIds && params.tenantIds.length > 0) {
-    query.set('tenant_ids', params.tenantIds.join(','));
-  }
-  if (params.eventType) query.set('event_type', params.eventType);
-  if (params.severity) query.set('severity', params.severity);
-  if (params.success !== undefined) query.set('success', String(params.success));
-  if (params.requestId) query.set('request_id', params.requestId);
-  if (params.keyPrefix) query.set('key_prefix', params.keyPrefix);
-  if (params.startTime) query.set('start_time', params.startTime);
-  if (params.endTime) query.set('end_time', params.endTime);
-  if (params.queryText) query.set('query_text', params.queryText);
-  if (params.limit !== undefined) query.set('limit', String(params.limit));
-  if (params.offset !== undefined) query.set('offset', String(params.offset));
-  query.set('format', params.format);
+  const payload = {
+    format: params.format,
+    tenant_id: params.tenantId,
+    action: params.action,
+    actor: params.actor,
+    status: params.status,
+    request_id: params.requestId,
+    resource_type: params.resourceType,
+    resource_id: params.resourceId,
+    from_ts: params.fromTs,
+    to_ts: params.toTs,
+    page_size: params.pageSize,
+  };
 
-  const response = await fetch(apiUrl(`/admin/audit/export?${query.toString()}`), {
+  const response = await fetch(apiUrl('/admin/audit/export'), {
+    method: 'POST',
     headers: getHeaders(params.tenantId),
     credentials: 'include',
+    body: JSON.stringify(payload),
   });
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));

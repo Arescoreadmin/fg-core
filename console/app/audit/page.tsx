@@ -9,63 +9,46 @@ import {
   type AuditSearchParams,
 } from '@/lib/api';
 
-const DEFAULT_LIMIT = 100;
+const DEFAULT_PAGE_SIZE = 100;
 
 export default function AuditPage() {
   const [tenantId, setTenantId] = useState('');
-  const [tenantIds, setTenantIds] = useState('');
-  const [eventType, setEventType] = useState('');
-  const [severity, setSeverity] = useState('');
-  const [success, setSuccess] = useState('');
-  const [queryText, setQueryText] = useState('');
+  const [action, setAction] = useState('');
+  const [actor, setActor] = useState('');
+  const [status, setStatus] = useState('');
+  const [fromTs, setFromTs] = useState('');
+  const [toTs, setToTs] = useState('');
   const [events, setEvents] = useState<AuditEvent[]>([]);
-  const [total, setTotal] = useState(0);
-  const [limit, setLimit] = useState(DEFAULT_LIMIT);
-  const [offset, setOffset] = useState(0);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const derivedTenantIds = useMemo(
-    () =>
-      tenantIds
-        .split(',')
-        .map((id) => id.trim())
-        .filter(Boolean),
-    [tenantIds]
-  );
+  const toIsoString = (value: string) =>
+    value ? new Date(value).toISOString() : undefined;
 
   const params: AuditSearchParams = useMemo(
     () => ({
       tenantId: tenantId || undefined,
-      tenantIds: derivedTenantIds.length ? derivedTenantIds : undefined,
-      eventType: eventType || undefined,
-      severity: severity || undefined,
-      success: success ? success === 'true' : undefined,
-      queryText: queryText || undefined,
-      limit,
-      offset,
+      action: action || undefined,
+      actor: actor || undefined,
+      status: status || undefined,
+      fromTs: toIsoString(fromTs),
+      toTs: toIsoString(toTs),
+      pageSize,
     }),
-    [
-      tenantId,
-      derivedTenantIds,
-      eventType,
-      severity,
-      success,
-      queryText,
-      limit,
-      offset,
-    ]
+    [tenantId, action, actor, status, fromTs, toTs, pageSize]
   );
 
-  const isTenantValid = Boolean(tenantId || derivedTenantIds.length);
+  const isTenantValid = Boolean(tenantId);
 
   const handleSearch = async () => {
     setError(null);
     setLoading(true);
     try {
       const data = await fetchAuditEvents(params);
-      setEvents(data.events || []);
-      setTotal(data.total || 0);
+      setEvents(data.items || []);
+      setNextCursor(data.next_cursor || null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load audit events');
     } finally {
@@ -73,7 +56,22 @@ export default function AuditPage() {
     }
   };
 
-  const handleExport = async (format: 'csv' | 'jsonl') => {
+  const handleLoadMore = async () => {
+    if (!nextCursor) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const data = await fetchAuditEvents({ ...params, cursor: nextCursor });
+      setEvents((prev) => [...prev, ...(data.items || [])]);
+      setNextCursor(data.next_cursor || null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load more events');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExport = async (format: 'csv' | 'json') => {
     setError(null);
     try {
       const blob = await exportAuditEvents({ ...params, format });
@@ -87,6 +85,11 @@ export default function AuditPage() {
       setError(err instanceof Error ? err.message : 'Failed to export audit data');
     }
   };
+
+  const failureCount = events.filter((event) => event.status !== 'success').length;
+  const canaryCount = events.filter((event) =>
+    event.action.toLowerCase().startsWith('canary')
+  ).length;
 
   return (
     <main style={styles.main}>
@@ -108,10 +111,10 @@ export default function AuditPage() {
           </button>
           <button
             style={styles.secondaryButton}
-            onClick={() => handleExport('jsonl')}
+            onClick={() => handleExport('json')}
             disabled={!isTenantValid}
           >
-            Export JSONL
+            Export JSON
           </button>
         </div>
       </header>
@@ -127,72 +130,63 @@ export default function AuditPage() {
           />
         </label>
         <label style={styles.filterLabel}>
-          Tenant IDs (comma-separated)
+          Action
           <input
             style={styles.input}
-            value={tenantIds}
-            onChange={(event) => setTenantIds(event.target.value)}
-            placeholder="tenant-a, tenant-b"
-          />
-        </label>
-        <label style={styles.filterLabel}>
-          Event type
-          <input
-            style={styles.input}
-            value={eventType}
-            onChange={(event) => setEventType(event.target.value)}
+            value={action}
+            onChange={(event) => setAction(event.target.value)}
             placeholder="auth_success"
           />
         </label>
         <label style={styles.filterLabel}>
-          Severity
+          Actor
           <input
             style={styles.input}
-            value={severity}
-            onChange={(event) => setSeverity(event.target.value)}
-            placeholder="info"
+            value={actor}
+            onChange={(event) => setActor(event.target.value)}
+            placeholder="user-123"
           />
         </label>
         <label style={styles.filterLabel}>
-          Success
+          Status
           <select
             style={styles.select}
-            value={success}
-            onChange={(event) => setSuccess(event.target.value)}
+            value={status}
+            onChange={(event) => setStatus(event.target.value)}
           >
             <option value="">Any</option>
-            <option value="true">True</option>
-            <option value="false">False</option>
+            <option value="success">Success</option>
+            <option value="deny">Deny</option>
+            <option value="error">Error</option>
           </select>
         </label>
         <label style={styles.filterLabel}>
-          Search
+          From
           <input
             style={styles.input}
-            value={queryText}
-            onChange={(event) => setQueryText(event.target.value)}
-            placeholder="request_id, path, reason"
+            type="datetime-local"
+            value={fromTs}
+            onChange={(event) => setFromTs(event.target.value)}
           />
         </label>
         <label style={styles.filterLabel}>
-          Limit
+          To
+          <input
+            style={styles.input}
+            type="datetime-local"
+            value={toTs}
+            onChange={(event) => setToTs(event.target.value)}
+          />
+        </label>
+        <label style={styles.filterLabel}>
+          Page size
           <input
             style={styles.input}
             type="number"
             min={1}
             max={1000}
-            value={limit}
-            onChange={(event) => setLimit(Number(event.target.value))}
-          />
-        </label>
-        <label style={styles.filterLabel}>
-          Offset
-          <input
-            style={styles.input}
-            type="number"
-            min={0}
-            value={offset}
-            onChange={(event) => setOffset(Number(event.target.value))}
+            value={pageSize}
+            onChange={(event) => setPageSize(Number(event.target.value))}
           />
         </label>
         <button
@@ -206,7 +200,7 @@ export default function AuditPage() {
 
       {!isTenantValid ? (
         <div style={styles.notice}>
-          Provide a tenant ID or a tenant list to search or export.
+          Provide a tenant ID to search or export.
         </div>
       ) : null}
 
@@ -215,7 +209,17 @@ export default function AuditPage() {
       <section style={styles.section}>
         <div style={styles.sectionHeader}>
           <h2 style={styles.sectionTitle}>Results</h2>
-          <span style={styles.count}>{total} events</span>
+          <span style={styles.count}>{events.length} events</span>
+        </div>
+        <div style={styles.highlights}>
+          <div style={styles.highlightCard}>
+            <p style={styles.highlightLabel}>Recent failures</p>
+            <p style={styles.highlightValue}>{failureCount}</p>
+          </div>
+          <div style={styles.highlightCard}>
+            <p style={styles.highlightLabel}>Canary trips</p>
+            <p style={styles.highlightValue}>{canaryCount}</p>
+          </div>
         </div>
         <div style={styles.tableWrapper}>
           <table style={styles.table}>
@@ -223,37 +227,50 @@ export default function AuditPage() {
               <tr>
                 <th style={styles.th}>Time</th>
                 <th style={styles.th}>Tenant</th>
-                <th style={styles.th}>Event</th>
-                <th style={styles.th}>Severity</th>
-                <th style={styles.th}>Success</th>
+                <th style={styles.th}>Actor</th>
+                <th style={styles.th}>Action</th>
+                <th style={styles.th}>Status</th>
                 <th style={styles.th}>Request</th>
-                <th style={styles.th}>Reason</th>
+                <th style={styles.th}>Resource</th>
+                <th style={styles.th}>IP</th>
+                <th style={styles.th}>User Agent</th>
               </tr>
             </thead>
             <tbody>
               {events.length === 0 ? (
                 <tr>
-                  <td style={styles.td} colSpan={7}>
+                  <td style={styles.td} colSpan={10}>
                     No audit events loaded.
                   </td>
                 </tr>
               ) : (
                 events.map((event) => (
-                  <tr key={`${event.id}-${event.created_at}`}>
-                    <td style={styles.td}>{event.created_at}</td>
-                    <td style={styles.td}>{event.tenant_id || '—'}</td>
-                    <td style={styles.td}>{event.event_type}</td>
-                    <td style={styles.td}>{event.severity}</td>
-                    <td style={styles.td}>{event.success ? 'yes' : 'no'}</td>
+                  <tr key={`${event.id}-${event.ts}`}>
+                    <td style={styles.td}>{event.ts}</td>
+                    <td style={styles.td}>{event.tenant_id}</td>
+                    <td style={styles.td}>{event.actor || '—'}</td>
+                    <td style={styles.td}>{event.action}</td>
+                    <td style={styles.td}>{event.status}</td>
+                    <td style={styles.td}>{event.request_id || '—'}</td>
                     <td style={styles.td}>
-                      {event.request_method} {event.request_path}
+                      {event.resource_type || '—'} {event.resource_id || ''}
                     </td>
-                    <td style={styles.td}>{event.reason || '—'}</td>
+                    <td style={styles.td}>{event.ip || '—'}</td>
+                    <td style={styles.td}>{event.user_agent || '—'}</td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
+        </div>
+        <div style={styles.pagination}>
+          <button
+            style={styles.secondaryButton}
+            onClick={handleLoadMore}
+            disabled={!nextCursor || loading}
+          >
+            {loading ? 'Loading...' : 'Load more'}
+          </button>
         </div>
       </section>
     </main>
@@ -365,6 +382,29 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'space-between',
     marginBottom: '0.75rem',
   },
+  highlights: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gap: '0.75rem',
+    marginBottom: '1rem',
+  },
+  highlightCard: {
+    padding: '0.75rem',
+    borderRadius: '8px',
+    border: '1px solid var(--border)',
+    backgroundColor: 'rgba(15, 23, 42, 0.03)',
+  },
+  highlightLabel: {
+    fontSize: '0.7rem',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    color: 'var(--muted)',
+    marginBottom: '0.35rem',
+  },
+  highlightValue: {
+    fontSize: '1.25rem',
+    fontWeight: 600,
+  },
   sectionTitle: {
     fontSize: '1.1rem',
     fontWeight: 600,
@@ -393,5 +433,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '0.6rem',
     borderBottom: '1px solid var(--border)',
     fontSize: '0.85rem',
+  },
+  pagination: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    marginTop: '1rem',
   },
 };

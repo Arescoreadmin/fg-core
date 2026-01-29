@@ -38,9 +38,9 @@ This audit covers Stage 0/1/2, key lifecycle, and the new Audit Search/Export fe
 - **Proxy redaction:** audit search/export redacts sensitive fields; admin-gateway audit logger redacts before logging/forwarding.
 
 ## Audit Search + Export Feature (New)
-- **Core API:** `/admin/audit` search and `/admin/audit/export` implemented with tenant scoping and redaction.  
-- **Admin Gateway:** `/admin/audit` and `/admin/audit/export` proxy to core with tenant access validation.  
-- **Console:** New Audit Search UI with filtering and CSV/JSONL export actions.
+- **Core API:** `/admin/audit/search` and `/admin/audit/export` implemented with tenant scoping and redaction.  
+- **Admin Gateway:** `/admin/audit/search` and `/admin/audit/export` proxy to core with tenant access validation.  
+- **Console:** New Audit Search UI with filtering and CSV/JSON export actions.
 
 ## Drift Checks
 - **Makefile vs workflows:** workflows call Makefile lanes; workflows now use secrets for FG_API_KEY rather than defaults.  
