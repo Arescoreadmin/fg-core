@@ -25,6 +25,7 @@ from admin_gateway.auth.session import Session
 from admin_gateway.middleware.request_id import RequestIdMiddleware
 from admin_gateway.middleware.logging import StructuredLoggingMiddleware
 from admin_gateway.middleware.audit import AuditMiddleware
+from admin_gateway.middleware.auth import AuthMiddleware
 from admin_gateway.middleware.auth_context import AuthContextMiddleware
 from admin_gateway.middleware.csrf import CSRFMiddleware
 from admin_gateway.middleware.session_cookie import SessionCookieMiddleware
