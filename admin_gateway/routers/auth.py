@@ -9,7 +9,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from admin_gateway.auth.config import AuthConfig, get_auth_config
 from admin_gateway.auth.csrf import CSRFProtection
@@ -84,6 +84,19 @@ async def login(
         request.app.state.pending_returns[state] = return_to
 
     return RedirectResponse(url=url, status_code=302)
+
+
+@router.get("/csrf")
+async def csrf_token(
+    request: Request,
+    csrf: CSRFProtection = Depends(get_csrf),
+) -> dict:
+    """Return a CSRF token tied to the session."""
+    response = JSONResponse(content={})
+    token = csrf.set_token_cookie(response)
+    response = JSONResponse(content={"csrf_token": token})
+    csrf.set_token_cookie(response, token)
+    return response
 
 
 @router.get("/callback")
