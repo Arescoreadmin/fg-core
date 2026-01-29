@@ -315,21 +315,25 @@ AG_HOST     ?= 127.0.0.1
 AG_PORT     ?= 18001
 AG_BASE_URL ?= http://$(AG_HOST):$(AG_PORT)
 AG_VENV     ?= admin_gateway/.venv
+ADMIN_PY    ?= python3
 AG_PY       := $(AG_VENV)/bin/python
 AG_PIP      := $(AG_VENV)/bin/pip
 
 .PHONY: admin-venv admin-dev admin-lint admin-test ci-admin
 
 admin-venv:
-	@echo "Admin venv: $(AG_VENV) (python: $$(command -v python3))"
-	@python3 -m venv --upgrade --system-site-packages "$(AG_VENV)" || \
-		python -m venv --upgrade --system-site-packages "$(AG_VENV)"
-	@if [ "$${ADMIN_SKIP_PIP_INSTALL:-0}" = "1" ]; then \
+	set -euo pipefail; \
+	echo "Admin venv: $(AG_VENV) (python: $$(command -v $(ADMIN_PY)))"; \
+	command -v "$(ADMIN_PY)"; \
+	"$(ADMIN_PY)" -V; \
+	"$(ADMIN_PY)" -c "import sys; print(sys.executable)"; \
+	"$(ADMIN_PY)" -m venv --upgrade --system-site-packages "$(AG_VENV)"
+	if [ "$${ADMIN_SKIP_PIP_INSTALL:-0}" = "1" ]; then \
 		echo "Skipping admin-gateway package install (ADMIN_SKIP_PIP_INSTALL=1)"; \
 		exit 0; \
 	fi
-	@$(AG_PY) -c "import importlib.util; required=['fastapi','httpx','pytest','ruff']; missing=[name for name in required if importlib.util.find_spec(name) is None]; raise SystemExit(0 if not missing else 1)"
-	@if [ $$? -eq 0 ]; then \
+	$(AG_PY) -c "import importlib.util; required=['fastapi','httpx','pytest','ruff']; missing=[name for name in required if importlib.util.find_spec(name) is None]; raise SystemExit(0 if not missing else 1)"
+	if [ $$? -eq 0 ]; then \
 		echo "Admin-gateway dependencies already present (system-site-packages)."; \
 		if command -v ruff >/dev/null 2>&1 && [ ! -x "$(AG_VENV)/bin/ruff" ]; then \
 			ln -sf "$$(command -v ruff)" "$(AG_VENV)/bin/ruff"; \
