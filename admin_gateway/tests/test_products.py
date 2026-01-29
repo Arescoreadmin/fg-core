@@ -178,10 +178,14 @@ class TestProductsCRUD:
             mock_client.__aexit__ = AsyncMock(return_value=None)
             mock_client_class.return_value = mock_client
 
-            response = client.post(
-                f"/admin/products/{product_id}/test-connection",
-                headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
-            )
+            with patch("socket.getaddrinfo") as mock_getaddrinfo:
+                mock_getaddrinfo.return_value = [
+                    (None, None, None, None, ("93.184.216.34", 0))
+                ]
+                response = client.post(
+                    f"/admin/products/{product_id}/test-connection",
+                    headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
+                )
 
         assert response.status_code == 200
         data = response.json()
@@ -213,10 +217,14 @@ class TestProductsCRUD:
             mock_client.__aexit__ = AsyncMock(return_value=None)
             mock_client_class.return_value = mock_client
 
-            response = client.post(
-                f"/admin/products/{product_id}/test-connection",
-                headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
-            )
+            with patch("socket.getaddrinfo") as mock_getaddrinfo:
+                mock_getaddrinfo.return_value = [
+                    (None, None, None, None, ("93.184.216.34", 0))
+                ]
+                response = client.post(
+                    f"/admin/products/{product_id}/test-connection",
+                    headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
+                )
 
         assert response.status_code == 200
         data = response.json()
