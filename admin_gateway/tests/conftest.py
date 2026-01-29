@@ -4,6 +4,7 @@ import sys
 
 import pytest
 from fastapi.testclient import TestClient
+from fastapi.responses import Response
 
 DEFAULT_TENANTS = ["tenant-dev", "tenant-2"]
 DEFAULT_SCOPES = [
@@ -50,7 +51,38 @@ async def _mock_proxy_to_core(request, method, path, params=None, json_body=None
             "expires_at": 0,
             "old_key_revoked": True,
         }
+    if path == "/admin/audit" and method == "GET":
+        tenant_id = (params or {}).get("tenant_id")
+        tenant_ids = (params or {}).get("tenant_ids")
+        events = [
+            {
+                "id": 1,
+                "created_at": "2024-01-01T00:00:00Z",
+                "event_type": "auth_success",
+                "event_category": "security",
+                "severity": "info",
+                "tenant_id": tenant_id or "tenant-dev",
+                "success": True,
+                "reason": None,
+                "details": {"note": "ok"},
+            }
+        ]
+        return {
+            "events": events,
+            "total": len(events),
+            "limit": (params or {}).get("limit", 100),
+            "offset": (params or {}).get("offset", 0),
+            "tenant_id": tenant_id,
+            "tenant_ids": tenant_ids.split(",") if tenant_ids else None,
+        }
     return {}
+
+
+async def _mock_proxy_to_core_raw(request, method, path, params=None):
+    if path == "/admin/audit/export" and method == "GET":
+        content = "id,event_type\n1,auth_success\n"
+        return Response(content=content, media_type="text/csv")
+    return Response(content="", media_type="application/octet-stream")
 
 
 @pytest.fixture(autouse=True)
@@ -96,6 +128,7 @@ def mock_core_proxy(monkeypatch, setup_test_env):
     from admin_gateway.routers import admin as admin_router
 
     monkeypatch.setattr(admin_router, "_proxy_to_core", _mock_proxy_to_core)
+    monkeypatch.setattr(admin_router, "_proxy_to_core_raw", _mock_proxy_to_core_raw)
 
 
 @pytest.fixture

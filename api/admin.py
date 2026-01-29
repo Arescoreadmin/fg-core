@@ -12,12 +12,20 @@ Provides administrative endpoints for:
 
 from __future__ import annotations
 
+import csv
+import io
+import json
 import logging
+import os
 import time
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import Session
 
 from api.auth_scopes import (
     _validate_tenant_id,
@@ -28,6 +36,8 @@ from api.auth_scopes import (
     rotate_api_key_by_prefix,
     verify_api_key,
 )
+from api.db import get_engine
+from api.db_models import SecurityAuditLog
 from api.keys import (
     CreateKeyResponse,
     KeyInfo,
@@ -163,6 +173,150 @@ class SystemHealthResponse(BaseModel):
     active_connections: int
     circuit_breakers: List[CircuitBreakerStatsResponse]
     alert_stats: Dict[str, Any]
+
+
+class AuditLogEntry(BaseModel):
+    """Audit log entry response."""
+
+    id: int
+    created_at: datetime
+    event_type: str
+    event_category: str
+    severity: str
+    tenant_id: Optional[str] = None
+    key_prefix: Optional[str] = None
+    client_ip: Optional[str] = None
+    user_agent: Optional[str] = None
+    request_id: Optional[str] = None
+    request_path: Optional[str] = None
+    request_method: Optional[str] = None
+    success: bool
+    reason: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
+
+
+class AuditSearchResponse(BaseModel):
+    """Audit search response."""
+
+    events: List[AuditLogEntry]
+    total: int
+    limit: int
+    offset: int
+    tenant_id: Optional[str] = None
+    tenant_ids: Optional[List[str]] = None
+
+
+_SENSITIVE_KEYS = {
+    "authorization",
+    "cookie",
+    "set-cookie",
+    "x-api-key",
+    "api_key",
+    "apikey",
+    "client_secret",
+    "client-secret",
+    "access_token",
+    "refresh_token",
+    "id_token",
+    "token",
+    "secret",
+}
+
+
+def _is_sensitive_key(key: str) -> bool:
+    normalized = key.strip().lower().replace(" ", "").replace("_", "-")
+    if normalized in _SENSITIVE_KEYS:
+        return True
+    return any(fragment in normalized for fragment in ("token", "secret", "api-key"))
+
+
+def _redact_secrets(value: Any) -> Any:
+    if isinstance(value, dict):
+        redacted = {}
+        for key, item in value.items():
+            if _is_sensitive_key(str(key)):
+                redacted[key] = "[REDACTED]"
+            else:
+                redacted[key] = _redact_secrets(item)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_secrets(item) for item in value]
+    return value
+
+
+def _audit_redaction_enabled() -> bool:
+    value = os.getenv("FG_AUDIT_REDACT", "true").strip().lower()
+    return value in {"1", "true", "yes", "y", "on"}
+
+
+def _parse_tenant_ids(tenant_ids: Optional[str]) -> List[str]:
+    if not tenant_ids:
+        return []
+    return [tenant.strip() for tenant in tenant_ids.split(",") if tenant.strip()]
+
+
+def _audit_filters(
+    *,
+    tenant_id: Optional[str],
+    tenant_ids: Optional[str],
+    event_type: Optional[str],
+    severity: Optional[str],
+    success: Optional[bool],
+    request_id: Optional[str],
+    key_prefix: Optional[str],
+    start_time: Optional[datetime],
+    end_time: Optional[datetime],
+    query_text: Optional[str],
+) -> tuple[list[Any], Optional[List[str]]]:
+    filters: list[Any] = []
+    resolved_tenant_ids: Optional[List[str]] = None
+
+    if tenant_id:
+        valid, message = _validate_tenant_id(tenant_id)
+        if not valid:
+            raise HTTPException(status_code=400, detail=message)
+        filters.append(SecurityAuditLog.tenant_id == tenant_id)
+    else:
+        resolved = _parse_tenant_ids(tenant_ids)
+        if resolved:
+            for tid in resolved:
+                valid, message = _validate_tenant_id(tid)
+                if not valid:
+                    raise HTTPException(status_code=400, detail=message)
+            filters.append(SecurityAuditLog.tenant_id.in_(resolved))
+            resolved_tenant_ids = resolved
+
+    if event_type:
+        filters.append(SecurityAuditLog.event_type == event_type)
+    if severity:
+        filters.append(SecurityAuditLog.severity == severity)
+    if success is not None:
+        filters.append(SecurityAuditLog.success == success)
+    if request_id:
+        filters.append(SecurityAuditLog.request_id == request_id)
+    if key_prefix:
+        filters.append(SecurityAuditLog.key_prefix == key_prefix)
+    if start_time:
+        filters.append(SecurityAuditLog.created_at >= start_time)
+    if end_time:
+        filters.append(SecurityAuditLog.created_at <= end_time)
+    if query_text:
+        like = f"%{query_text.lower()}%"
+        filters.append(
+            or_(
+                func.lower(SecurityAuditLog.event_type).like(like),
+                func.lower(SecurityAuditLog.event_category).like(like),
+                func.lower(SecurityAuditLog.severity).like(like),
+                func.lower(SecurityAuditLog.request_id).like(like),
+                func.lower(SecurityAuditLog.request_path).like(like),
+                func.lower(SecurityAuditLog.reason).like(like),
+                func.lower(SecurityAuditLog.key_prefix).like(like),
+                func.lower(SecurityAuditLog.client_ip).like(like),
+                func.lower(SecurityAuditLog.user_agent).like(like),
+            )
+        )
+
+    return filters, resolved_tenant_ids
 
 
 # =============================================================================
@@ -394,6 +548,266 @@ async def admin_list_keys(
     keys = list_api_keys(tenant_id=tenant_id, include_disabled=include_disabled)
     key_infos = [KeyInfo(**k) for k in keys]
     return ListKeysResponse(keys=key_infos, total=len(key_infos))
+
+
+@router.get(
+    "/audit",
+    response_model=AuditSearchResponse,
+    dependencies=[Depends(require_scopes("audit:read"))],
+)
+async def list_audit_events(
+    request: Request,
+    tenant_id: Optional[str] = Query(
+        None, description="Single tenant filter (required unless using tenant_ids)"
+    ),
+    tenant_ids: Optional[str] = Query(
+        None, description="Comma-separated tenant IDs (for multi-tenant admins)"
+    ),
+    event_type: Optional[str] = Query(None, description="Filter by event type"),
+    severity: Optional[str] = Query(None, description="Filter by severity"),
+    success: Optional[bool] = Query(None, description="Filter by success flag"),
+    request_id: Optional[str] = Query(None, description="Filter by request id"),
+    key_prefix: Optional[str] = Query(None, description="Filter by key prefix"),
+    start_time: Optional[datetime] = Query(None, description="Start time (ISO8601)"),
+    end_time: Optional[datetime] = Query(None, description="End time (ISO8601)"),
+    query_text: Optional[str] = Query(None, description="Full-text search fragment"),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    _: str = Depends(verify_api_key),
+) -> AuditSearchResponse:
+    """List audit events with tenant scoping enforced."""
+    if not tenant_id and not tenant_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="tenant_id or tenant_ids is required",
+        )
+
+    filters, resolved_tenant_ids = _audit_filters(
+        tenant_id=tenant_id,
+        tenant_ids=tenant_ids,
+        event_type=event_type,
+        severity=severity,
+        success=success,
+        request_id=request_id,
+        key_prefix=key_prefix,
+        start_time=start_time,
+        end_time=end_time,
+        query_text=query_text,
+    )
+
+    engine = get_engine()
+    with Session(engine) as session:
+        total = session.execute(
+            select(func.count()).select_from(SecurityAuditLog).where(*filters)
+        ).scalar_one()
+        records = (
+            session.execute(
+                select(SecurityAuditLog)
+                .where(*filters)
+                .order_by(SecurityAuditLog.created_at.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+            .scalars()
+            .all()
+        )
+
+    events: list[AuditLogEntry] = []
+    for record in records:
+        details = None
+        if record.details_json:
+            if isinstance(record.details_json, str):
+                try:
+                    details = json.loads(record.details_json)
+                except json.JSONDecodeError:
+                    details = {"raw": record.details_json}
+            else:
+                details = record.details_json
+        if details and _audit_redaction_enabled():
+            details = _redact_secrets(details)
+        events.append(
+            AuditLogEntry(
+                id=record.id,
+                created_at=record.created_at,
+                event_type=record.event_type,
+                event_category=record.event_category,
+                severity=record.severity,
+                tenant_id=record.tenant_id,
+                key_prefix=record.key_prefix,
+                client_ip=record.client_ip,
+                user_agent=record.user_agent,
+                request_id=record.request_id,
+                request_path=record.request_path,
+                request_method=record.request_method,
+                success=record.success,
+                reason=record.reason,
+                details=details,
+            )
+        )
+
+    return AuditSearchResponse(
+        events=events,
+        total=total,
+        limit=limit,
+        offset=offset,
+        tenant_id=tenant_id,
+        tenant_ids=resolved_tenant_ids,
+    )
+
+
+@router.get(
+    "/audit/export",
+    dependencies=[Depends(require_scopes("audit:read"))],
+)
+async def export_audit_events(
+    request: Request,
+    tenant_id: Optional[str] = Query(
+        None, description="Single tenant filter (required unless using tenant_ids)"
+    ),
+    tenant_ids: Optional[str] = Query(
+        None, description="Comma-separated tenant IDs (for multi-tenant admins)"
+    ),
+    event_type: Optional[str] = Query(None, description="Filter by event type"),
+    severity: Optional[str] = Query(None, description="Filter by severity"),
+    success: Optional[bool] = Query(None, description="Filter by success flag"),
+    request_id: Optional[str] = Query(None, description="Filter by request id"),
+    key_prefix: Optional[str] = Query(None, description="Filter by key prefix"),
+    start_time: Optional[datetime] = Query(None, description="Start time (ISO8601)"),
+    end_time: Optional[datetime] = Query(None, description="End time (ISO8601)"),
+    query_text: Optional[str] = Query(None, description="Full-text search fragment"),
+    format: str = Query("jsonl", pattern="^(jsonl|csv)$"),
+    limit: int = Query(1000, ge=1, le=5000),
+    offset: int = Query(0, ge=0),
+    _: str = Depends(verify_api_key),
+) -> StreamingResponse:
+    """Export audit events as JSONL or CSV with tenant scoping enforced."""
+    if not tenant_id and not tenant_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="tenant_id or tenant_ids is required",
+        )
+
+    filters, resolved_tenant_ids = _audit_filters(
+        tenant_id=tenant_id,
+        tenant_ids=tenant_ids,
+        event_type=event_type,
+        severity=severity,
+        success=success,
+        request_id=request_id,
+        key_prefix=key_prefix,
+        start_time=start_time,
+        end_time=end_time,
+        query_text=query_text,
+    )
+
+    engine = get_engine()
+    with Session(engine) as session:
+        records = (
+            session.execute(
+                select(SecurityAuditLog)
+                .where(*filters)
+                .order_by(SecurityAuditLog.created_at.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+            .scalars()
+            .all()
+        )
+
+    rows: list[dict[str, Any]] = []
+    for record in records:
+        details = None
+        if record.details_json:
+            if isinstance(record.details_json, str):
+                try:
+                    details = json.loads(record.details_json)
+                except json.JSONDecodeError:
+                    details = {"raw": record.details_json}
+            else:
+                details = record.details_json
+        if details and _audit_redaction_enabled():
+            details = _redact_secrets(details)
+        rows.append(
+            {
+                "id": record.id,
+                "created_at": record.created_at.isoformat()
+                if record.created_at
+                else None,
+                "event_type": record.event_type,
+                "event_category": record.event_category,
+                "severity": record.severity,
+                "tenant_id": record.tenant_id,
+                "key_prefix": record.key_prefix,
+                "client_ip": record.client_ip,
+                "user_agent": record.user_agent,
+                "request_id": record.request_id,
+                "request_path": record.request_path,
+                "request_method": record.request_method,
+                "success": record.success,
+                "reason": record.reason,
+                "details": details,
+            }
+        )
+
+    filename = "audit-events"
+    if tenant_id:
+        filename = f"{filename}-{tenant_id}"
+    elif resolved_tenant_ids:
+        filename = f"{filename}-multi"
+
+    if format == "csv":
+        buffer = io.StringIO()
+        writer = csv.DictWriter(
+            buffer,
+            fieldnames=list(rows[0].keys())
+            if rows
+            else [
+                "id",
+                "created_at",
+                "event_type",
+                "event_category",
+                "severity",
+                "tenant_id",
+                "key_prefix",
+                "client_ip",
+                "user_agent",
+                "request_id",
+                "request_path",
+                "request_method",
+                "success",
+                "reason",
+                "details",
+            ],
+        )
+        writer.writeheader()
+        for row in rows:
+            row_copy = row.copy()
+            if isinstance(row_copy.get("details"), (dict, list)):
+                row_copy["details"] = json.dumps(row_copy["details"])
+            writer.writerow(row_copy)
+        buffer.seek(0)
+        response = StreamingResponse(
+            iter([buffer.getvalue()]),
+            media_type="text/csv",
+        )
+        response.headers["Content-Disposition"] = (
+            f'attachment; filename=\"{filename}.csv\"'
+        )
+        return response
+
+    buffer = io.StringIO()
+    for row in rows:
+        buffer.write(json.dumps(row))
+        buffer.write("\n")
+    buffer.seek(0)
+    response = StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="application/jsonl",
+    )
+    response.headers["Content-Disposition"] = (
+        f'attachment; filename=\"{filename}.jsonl\"'
+    )
+    return response
 
 
 @router.post(

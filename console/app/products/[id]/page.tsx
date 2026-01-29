@@ -70,9 +70,10 @@ export default function ProductDetailPage() {
   }, [productId]);
 
   const handleTestConnection = async () => {
+    if (!state.product) return;
     setTestState({ testing: true, result: null });
     try {
-      const result = await testProductConnection(productId);
+      const result = await testProductConnection(productId, state.product.tenant_id);
       setTestState({ testing: false, result });
     } catch (err) {
       setTestState({
@@ -84,6 +85,7 @@ export default function ProductDetailPage() {
   };
 
   const handleSave = async () => {
+    if (!state.product) return;
     setSaving(true);
     try {
       const updated = await updateProduct(productId, {
@@ -91,7 +93,7 @@ export default function ProductDetailPage() {
         env: editForm.env,
         owner: editForm.owner || undefined,
         enabled: editForm.enabled,
-      });
+      }, state.product.tenant_id);
       setState({ product: updated, loading: false });
       setEditing(false);
     } catch (err) {
@@ -107,7 +109,7 @@ export default function ProductDetailPage() {
     try {
       const updated = await updateProduct(productId, {
         enabled: !state.product.enabled,
-      });
+      }, state.product.tenant_id);
       setState({ product: updated, loading: false });
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to update product');

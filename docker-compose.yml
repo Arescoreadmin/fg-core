@@ -126,7 +126,7 @@ services:
      FG_AGENT_SOURCE: agent
      FG_CORE_BASE_URL: http://frostgate-core:8080
      FG_AGENT_INTERVAL_SEC: 60
-     FG_AGENT_API_KEY: ${FG_AGENT_API_KEY:-...}
+     FG_AGENT_API_KEY: ${FG_AGENT_API_KEY:?set FG_AGENT_API_KEY in .env}
      FG_INGEST_LOG_EVERY: ${FG_INGEST_LOG_EVERY:-200}
      FG_AGENT_LOG_EVERY: 30
      FG_STATE_DIR: /var/lib/frostgate/state

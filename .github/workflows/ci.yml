@@ -21,7 +21,7 @@ jobs:
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
-      FG_API_KEY: CHANGEME
+      FG_API_KEY: ${{ secrets.FG_API_KEY }}
       FG_ENFORCEMENT_MODE: observe
       FG_SQLITE_PATH: state/frostgate-ci.db
 
@@ -68,7 +68,7 @@ jobs:
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
-      FG_API_KEY: CHANGEME
+      FG_API_KEY: ${{ secrets.FG_API_KEY }}
       FG_ENFORCEMENT_MODE: observe
       FG_SQLITE_PATH: state/frostgate-ci-integration.db
 
@@ -119,7 +119,7 @@ jobs:
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
-      FG_API_KEY: CHANGEME
+      FG_API_KEY: ${{ secrets.FG_API_KEY }}
 
     steps:
       - name: Checkout
@@ -164,7 +164,7 @@ jobs:
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
-      FG_API_KEY: CHANGEME
+      FG_API_KEY: ${{ secrets.FG_API_KEY }}
 
     steps:
       - name: Checkout
@@ -191,7 +191,7 @@ jobs:
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
-      FG_API_KEY: CHANGEME
+      FG_API_KEY: ${{ secrets.FG_API_KEY }}
       FG_ENFORCEMENT_MODE: observe
       FG_SQLITE_PATH: state/frostgate-ci-evidence.db
 

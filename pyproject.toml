@@ -5,7 +5,6 @@ markers = [
   "e2e_http: HTTP e2e tests against a running server",
   "integration: tests that require a running API",
 ]
-asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
 target-version = "py311"

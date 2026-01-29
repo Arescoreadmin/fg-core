@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      FG_API_KEY: CHANGEME
+      FG_API_KEY: ${{ secrets.FG_API_KEY }}
 
     steps:
       - name: Checkout
@@ -24,7 +24,7 @@ jobs:
         run: |
           cp .env.example .env
           mkdir -p secrets
-          echo "CHANGEME" > secrets/fg_api_keys.txt
+          echo "${{ secrets.FG_API_KEY }}" > secrets/fg_api_keys.txt
 
       - name: Build images via docker compose
         run: |

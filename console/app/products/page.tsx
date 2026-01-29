@@ -15,11 +15,12 @@ export default function ProductsPage() {
     products: [],
     loading: true,
   });
+  const [tenantId, setTenantId] = useState('');
 
   useEffect(() => {
     async function loadProducts() {
       try {
-        const data = await fetchProducts();
+        const data = await fetchProducts(tenantId || undefined);
         setState({ products: data.products, loading: false });
       } catch (err) {
         setState({
@@ -30,7 +31,7 @@ export default function ProductsPage() {
       }
     }
     loadProducts();
-  }, []);
+  }, [tenantId]);
 
   return (
     <main style={styles.main}>
@@ -45,6 +46,18 @@ export default function ProductsPage() {
           + Add Product
         </Link>
       </header>
+
+      <section style={styles.filters}>
+        <label style={styles.filterLabel}>
+          Tenant
+          <input
+            style={styles.input}
+            value={tenantId}
+            onChange={(event) => setTenantId(event.target.value)}
+            placeholder="tenant-id"
+          />
+        </label>
+      </section>
 
       {state.loading ? (
         <div style={styles.loading}>Loading products...</div>
@@ -164,6 +177,28 @@ const styles: { [key: string]: React.CSSProperties } = {
     textDecoration: 'none',
     fontSize: '0.875rem',
     fontWeight: 500,
+  },
+  filters: {
+    display: 'flex',
+    gap: '1rem',
+    alignItems: 'flex-end',
+    marginBottom: '1.5rem',
+    flexWrap: 'wrap',
+  },
+  filterLabel: {
+    display: 'flex',
+    flexDirection: 'column',
+    fontSize: '0.75rem',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    color: 'var(--muted)',
+    gap: '0.5rem',
+  },
+  input: {
+    padding: '0.5rem 0.75rem',
+    borderRadius: '6px',
+    border: '1px solid var(--border)',
+    minWidth: '220px',
   },
   loading: {
     textAlign: 'center',
