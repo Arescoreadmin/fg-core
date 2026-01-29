@@ -178,10 +178,14 @@ class TestProductsCRUD:
             mock_client.__aexit__ = AsyncMock(return_value=None)
             mock_client_class.return_value = mock_client
 
-            response = client.post(
-                f"/admin/products/{product_id}/test-connection",
-                headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
-            )
+            with patch("socket.getaddrinfo") as mock_getaddrinfo:
+                mock_getaddrinfo.return_value = [
+                    (None, None, None, None, ("93.184.216.34", 0))
+                ]
+                response = client.post(
+                    f"/admin/products/{product_id}/test-connection",
+                    headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
+                )
 
         assert response.status_code == 200
         data = response.json()
@@ -213,10 +217,14 @@ class TestProductsCRUD:
             mock_client.__aexit__ = AsyncMock(return_value=None)
             mock_client_class.return_value = mock_client
 
-            response = client.post(
-                f"/admin/products/{product_id}/test-connection",
-                headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
-            )
+            with patch("socket.getaddrinfo") as mock_getaddrinfo:
+                mock_getaddrinfo.return_value = [
+                    (None, None, None, None, ("93.184.216.34", 0))
+                ]
+                response = client.post(
+                    f"/admin/products/{product_id}/test-connection",
+                    headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
+                )
 
         assert response.status_code == 200
         data = response.json()
@@ -242,6 +250,119 @@ class TestProductsCRUD:
         data = response.json()
         assert data["success"] is False
         assert "No REST endpoint" in data["error"]
+
+
+class TestProductsSSRF:
+    """Test SSRF protections for test-connection."""
+
+    def _create_product(self, client, csrf_headers, url: str) -> int:
+        response = client.post(
+            "/admin/products",
+            json={
+                "slug": "ssrf-test",
+                "name": "SSRF Test",
+                "endpoints": [{"kind": "rest", "url": url}],
+            },
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
+        )
+        return response.json()["id"]
+
+    def test_blocks_localhost(self, client, csrf_headers):
+        product_id = self._create_product(client, csrf_headers, "http://localhost:8080")
+        response = client.post(
+            f"/admin/products/{product_id}/test-connection",
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Blocked endpoint host"
+
+    def test_blocks_loopback_ip(self, client, csrf_headers):
+        product_id = self._create_product(client, csrf_headers, "http://127.0.0.1:8080")
+        response = client.post(
+            f"/admin/products/{product_id}/test-connection",
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Blocked endpoint host"
+
+    def test_blocks_link_local(self, client, csrf_headers):
+        product_id = self._create_product(
+            client, csrf_headers, "http://169.254.169.254"
+        )
+        response = client.post(
+            f"/admin/products/{product_id}/test-connection",
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Blocked endpoint host"
+
+    def test_blocks_internal_dns(self, client, csrf_headers):
+        product_id = self._create_product(
+            client, csrf_headers, "http://internal.example.test"
+        )
+        with patch("socket.getaddrinfo") as mock_getaddrinfo:
+            mock_getaddrinfo.return_value = [(None, None, None, None, ("10.0.0.5", 0))]
+            response = client.post(
+                f"/admin/products/{product_id}/test-connection",
+                headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
+            )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Blocked endpoint host"
+
+    def test_blocks_redirects(self, client, csrf_headers):
+        product_id = self._create_product(
+            client, csrf_headers, "https://api.example.com"
+        )
+        mock_response = MagicMock()
+        mock_response.status_code = 302
+        mock_response.headers = {"location": "http://127.0.0.1"}
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(return_value=mock_response)
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client_class.return_value = mock_client
+
+            with patch("socket.getaddrinfo") as mock_getaddrinfo:
+                mock_getaddrinfo.return_value = [
+                    (None, None, None, None, ("93.184.216.34", 0))
+                ]
+                response = client.post(
+                    f"/admin/products/{product_id}/test-connection",
+                    headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
+                )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Redirects are not allowed"
+
+    def test_allows_public_https(self, client, csrf_headers):
+        product_id = self._create_product(
+            client, csrf_headers, "https://api.example.com"
+        )
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.headers = {}
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(return_value=mock_response)
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client_class.return_value = mock_client
+
+            with patch("socket.getaddrinfo") as mock_getaddrinfo:
+                mock_getaddrinfo.return_value = [
+                    (None, None, None, None, ("93.184.216.34", 0))
+                ]
+                response = client.post(
+                    f"/admin/products/{product_id}/test-connection",
+                    headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
+                )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
 
 
 class TestProductsValidation:

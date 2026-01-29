@@ -28,11 +28,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate FG_API_KEY
+      - name: Generate CI secrets
         run: |
           python - <<'PY' >> "$GITHUB_ENV"
           import secrets
           print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
+          print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
+          print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
+          print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(32)}")
           PY
 
       - name: Install OS deps
@@ -91,11 +94,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate FG_API_KEY
+      - name: Generate CI secrets
         run: |
           python - <<'PY' >> "$GITHUB_ENV"
           import secrets
           print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
+          print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
+          print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
+          print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(32)}")
           PY
 
       - name: Install OS deps
@@ -146,11 +152,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate FG_API_KEY
+      - name: Generate CI secrets
         run: |
           python - <<'PY' >> "$GITHUB_ENV"
           import secrets
           print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
+          print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
+          print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
+          print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(32)}")
           PY
 
       - name: Install OS deps
@@ -185,6 +194,10 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Generate CI secrets
+        run: |
+          node -e "const crypto=require('crypto'); console.log('FG_API_KEY='+crypto.randomBytes(32).toString('hex')); console.log('REDIS_PASSWORD='+crypto.randomBytes(24).toString('hex')); console.log('POSTGRES_PASSWORD='+crypto.randomBytes(24).toString('hex')); console.log('FG_AGENT_API_KEY='+crypto.randomBytes(32).toString('hex'));" >> "$GITHUB_ENV"
+
       - name: Run console lane
         run: |
           make ci-console
@@ -201,11 +214,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate FG_API_KEY
+      - name: Generate CI secrets
         run: |
           python - <<'PY' >> "$GITHUB_ENV"
           import secrets
           print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
+          print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
+          print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
+          print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(32)}")
           PY
 
       - name: Install OS deps
@@ -248,11 +264,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate FG_API_KEY
+      - name: Generate CI secrets
         run: |
           python - <<'PY' >> "$GITHUB_ENV"
           import secrets
           print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
+          print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
+          print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
+          print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(32)}")
           PY
 
       - name: Install OS deps

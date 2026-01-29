@@ -8,12 +8,12 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional, Tuple
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import require_scopes, verify_api_key
+from api.auth_scopes import bind_tenant_id, require_scopes, verify_api_key
 from api.db import get_db
 from api.db_models import DecisionRecord
 from api.decision_diff import (
@@ -257,7 +257,7 @@ class DecisionExplain(BaseModel):
 class DefendResponse(BaseModel):
     # Tests require this to be a string, not None.
     explanation_brief: str
-    threat_level: Literal["none", "low", "medium", "high"]
+    threat_level: Literal["none", "low", "medium", "high", "critical"]
     mitigations: list[MitigationAction] = Field(default_factory=list)
     explain: DecisionExplain
     ai_adversarial_score: float = 0.0
@@ -276,7 +276,11 @@ RULE_SCORES: dict[str, int] = {
 }
 
 
-def _threat_from_score(score: int) -> Literal["none", "low", "medium", "high"]:
+def _threat_from_score(
+    score: int,
+) -> Literal["none", "low", "medium", "high", "critical"]:
+    if score >= 95:
+        return "critical"
     if score >= 80:
         return "high"
     if score >= 50:
@@ -289,7 +293,7 @@ def _threat_from_score(score: int) -> Literal["none", "low", "medium", "high"]:
 def evaluate(
     req: TelemetryInput,
 ) -> Tuple[
-    Literal["none", "low", "medium", "high"],
+    Literal["none", "low", "medium", "high", "critical"],
     list[str],
     list[MitigationAction],
     float,
@@ -573,8 +577,16 @@ def _persist_decision_best_effort(
 
 
 @router.post("", response_model=DefendResponse)
-def defend(req: TelemetryInput, db: Session = Depends(get_db)) -> DefendResponse:
+def defend(
+    req: TelemetryInput,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> DefendResponse:
     t0 = time.time()
+
+    tenant_id = bind_tenant_id(request, req.tenant_id)
+    req.tenant_id = tenant_id
+    request.state.tenant_id = tenant_id
 
     event_type = _coerce_event_type(req)
     event_id = _event_id(req)

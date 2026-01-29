@@ -715,7 +715,8 @@ def require_api_key_always(
     """
     Extract and verify API key with proper HTTP status codes:
       - 401 Unauthorized: Missing key
-      - 403 Forbidden: Invalid key (wrong, expired, disabled, etc.)
+      - 401 Unauthorized: Invalid key (wrong, expired, disabled, etc.)
+      - 403 Forbidden: Valid key, insufficient scope
     """
     got = _extract_key(request, x_api_key)
     if not got:
@@ -726,13 +727,16 @@ def require_api_key_always(
     )
 
     if result.valid:
+        if request is not None:
+            request.state.auth = result
         return got
 
     # Distinguish between missing and invalid for proper status code
     if result.is_missing_key:
         raise HTTPException(status_code=401, detail=ERR_INVALID)
-    else:
+    if result.reason.startswith("missing_scopes:"):
         raise HTTPException(status_code=403, detail=ERR_INVALID)
+    raise HTTPException(status_code=401, detail=ERR_INVALID)
 
     return got
 
@@ -743,6 +747,38 @@ def verify_api_key(
 ) -> str:
     # compatibility dep expected by modules
     return require_api_key_always(request, x_api_key, required_scopes=None)
+
+
+def bind_tenant_id(
+    request: Request,
+    requested_tenant: Optional[str],
+    *,
+    require_explicit: bool = False,
+    default_unscoped: str = "unknown",
+) -> Optional[str]:
+    """
+    Clamp request tenant_id to the authenticated key's tenant scope.
+
+    Rules:
+      - If key is tenant-scoped, requested tenant must match or be omitted.
+      - If key is unscoped, allow requested tenant or default deterministically.
+    """
+    requested = (str(requested_tenant).strip() if requested_tenant else "") or None
+    auth = getattr(getattr(request, "state", None), "auth", None)
+    auth_tenant = getattr(auth, "tenant_id", None)
+
+    if auth_tenant:
+        if requested and requested != auth_tenant:
+            raise HTTPException(status_code=403, detail="Tenant mismatch")
+        return auth_tenant
+
+    if requested:
+        return requested
+
+    if require_explicit:
+        raise HTTPException(status_code=400, detail="tenant_id required")
+
+    return default_unscoped
 
 
 def require_scopes(*scopes: str) -> Callable[..., None]:
@@ -960,6 +996,7 @@ __all__ = [
     "verify_api_key",
     "require_api_key_always",
     "require_scopes",
+    "bind_tenant_id",
     "revoke_api_key",
     "rotate_api_key_by_prefix",
     "list_api_keys",

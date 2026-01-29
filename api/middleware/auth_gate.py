@@ -75,6 +75,7 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
         result = verify_api_key_detailed(raw=raw, required_scopes=None, request=request)
 
         if result.valid:
+            request.state.auth = result
             resp = await call_next(request)
             return self._stamp(resp, request, "protected")
 
@@ -85,9 +86,8 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
                 status_code=401,
             )
             return self._stamp(resp, request, "blocked_missing")
-        else:
-            resp = JSONResponse(
-                {"detail": "Invalid or missing API key", "auth": "blocked"},
-                status_code=403,
-            )
-            return self._stamp(resp, request, "blocked_invalid")
+        resp = JSONResponse(
+            {"detail": "Invalid or missing API key", "auth": "blocked"},
+            status_code=401,
+        )
+        return self._stamp(resp, request, "blocked_invalid")

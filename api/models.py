@@ -65,7 +65,7 @@ class DecisionExplain(BaseModel):
 
 
 class DefendResponse(BaseModel):
-    threat_level: Literal["none", "low", "medium", "high"]
+    threat_level: Literal["none", "low", "medium", "high", "critical"]
     mitigations: List[MitigationAction] = []
     explain: DecisionExplain
     ai_adversarial_score: float = 0.0

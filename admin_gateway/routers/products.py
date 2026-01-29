@@ -8,6 +8,9 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
+import ipaddress
+import socket
+from urllib.parse import urlparse
 from typing import Any, Optional
 
 import httpx
@@ -182,6 +185,81 @@ def _product_to_response(product: Product) -> ProductResponse:
         updated_at=product.updated_at.isoformat() if product.updated_at else "",
         endpoints=endpoints,
     )
+
+
+def _is_blocked_ip(ip: ipaddress._BaseAddress) -> bool:
+    return bool(
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    )
+
+
+def _resolve_host_ips(hostname: str) -> list[ipaddress._BaseAddress]:
+    try:
+        results = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return []
+    ips: set[ipaddress._BaseAddress] = set()
+    for entry in results:
+        addr = entry[4][0]
+        try:
+            ips.add(ipaddress.ip_address(addr))
+        except ValueError:
+            continue
+    return list(ips)
+
+
+def _validate_health_url(url: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only http/https URLs are allowed",
+        )
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid endpoint URL",
+        )
+
+    host_l = hostname.lower()
+    if host_l in {"localhost"} or host_l.endswith(".localhost"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Blocked endpoint host",
+        )
+
+    try:
+        ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        ip = None
+
+    if ip:
+        if _is_blocked_ip(ip):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Blocked endpoint host",
+            )
+        return
+
+    resolved = _resolve_host_ips(hostname)
+    if not resolved:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unable to resolve endpoint host",
+        )
+
+    if any(_is_blocked_ip(ip_addr) for ip_addr in resolved):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Blocked endpoint host",
+        )
 
 
 async def _audit_action(
@@ -537,9 +615,24 @@ async def test_connection(
     # Perform health check
     start_time = time.time()
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        _validate_health_url(health_url)
+        async with httpx.AsyncClient(timeout=3.0) as client:
             response = await client.get(health_url)
             latency_ms = (time.time() - start_time) * 1000
+
+            if 300 <= response.status_code < 400 and response.headers.get("location"):
+                await _audit_action(
+                    request,
+                    "test_connection",
+                    str(product_id),
+                    "failure",
+                    {"endpoint_url": health_url, "error": "redirect_blocked"},
+                    session,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Redirects are not allowed",
+                )
 
             success = response.status_code < 400
 
@@ -615,6 +708,17 @@ async def test_connection(
             tested_at=datetime.now(timezone.utc).isoformat(),
         )
 
+    except HTTPException as exc:
+        latency_ms = (time.time() - start_time) * 1000
+        await _audit_action(
+            request,
+            "test_connection",
+            str(product_id),
+            "failure",
+            {"endpoint_url": health_url, "error": exc.detail},
+            session,
+        )
+        raise
     except Exception as e:
         latency_ms = (time.time() - start_time) * 1000
         log.exception("Unexpected error testing connection")

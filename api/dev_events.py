@@ -5,10 +5,10 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import verify_api_key
+from api.auth_scopes import bind_tenant_id, verify_api_key
 from api.db import get_db
 from api.db_models import DecisionRecord
 
@@ -166,6 +166,7 @@ def _make_record(
 
 @router.post("/seed")
 def dev_seed(
+    request: Request,
     tenant_id: Optional[str] = None,
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
@@ -175,6 +176,9 @@ def dev_seed(
     """
     if not _dev_enabled():
         raise HTTPException(status_code=404, detail="Not Found")
+
+    tenant_id = bind_tenant_id(request, tenant_id)
+    request.state.tenant_id = tenant_id
 
     now = _utcnow_naive()
     src = "dev_seed"
@@ -259,6 +263,7 @@ def dev_seed(
 
 @router.post("/emit")
 def dev_emit(
+    request: Request,
     count: int = Query(10, ge=1, le=500),
     kind: Literal[
         "auth_attempt", "waf", "edge_gw", "collector", "info"
@@ -275,6 +280,9 @@ def dev_emit(
 ) -> Dict[str, Any]:
     if not _dev_enabled():
         raise HTTPException(status_code=404, detail="Not Found")
+
+    tenant_id = bind_tenant_id(request, tenant_id)
+    request.state.tenant_id = tenant_id
 
     src = source or kind
     created_ids: List[int] = []

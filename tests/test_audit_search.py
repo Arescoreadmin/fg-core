@@ -178,6 +178,14 @@ def test_audit_contract_endpoints_present():
     assert "/admin/audit/search" in spec["paths"]
     assert "/admin/audit/export" in spec["paths"]
 
+    export = spec["paths"]["/admin/audit/export"]["post"]["responses"]["200"]
+    content = export["content"]
+    assert "text/csv" in content
+    assert "application/x-ndjson" in content
+    headers = export["headers"]
+    assert "Content-Disposition" in headers
+    assert "Content-Type" in headers
+
 
 def test_audit_export_csv(audit_client):
     client, api_key = audit_client
