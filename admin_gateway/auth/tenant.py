@@ -56,7 +56,7 @@ class TenantContext:
             if self.tenant_id not in self.allowed_tenants:
                 raise HTTPException(
                     status_code=403,
-                    detail=f"Access denied to tenant: {self.tenant_id}",
+                    detail="Tenant access denied",
                 )
 
 
@@ -111,8 +111,12 @@ def validate_tenant_access(
     """
     allowed = get_allowed_tenants(session)
 
+    resolved_tenant = tenant_id
+    if not resolved_tenant and not is_write and len(allowed) == 1:
+        resolved_tenant = list(allowed)[0]
+
     ctx = TenantContext(
-        tenant_id=tenant_id or (list(allowed)[0] if len(allowed) == 1 else None),
+        tenant_id=resolved_tenant,
         allowed_tenants=allowed,
         is_write_operation=is_write,
     )

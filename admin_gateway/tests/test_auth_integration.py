@@ -25,7 +25,13 @@ def client_no_bypass():
     """Create test client WITHOUT dev bypass."""
     reset_auth_config()
     with patch.dict(
-        os.environ, {"FG_ENV": "dev", "FG_DEV_AUTH_BYPASS": "false"}, clear=False
+        os.environ,
+        {
+            "FG_ENV": "dev",
+            "FG_DEV_AUTH_BYPASS": "false",
+            "FG_SESSION_SECRET": "test-session-secret",
+        },
+        clear=False,
     ):
         reset_auth_config()
         from admin_gateway.main import build_app
@@ -40,7 +46,18 @@ def client_with_bypass():
     """Create test client WITH dev bypass enabled."""
     reset_auth_config()
     with patch.dict(
-        os.environ, {"FG_ENV": "dev", "FG_DEV_AUTH_BYPASS": "true"}, clear=False
+        os.environ,
+        {
+            "FG_ENV": "dev",
+            "FG_DEV_AUTH_BYPASS": "true",
+            "FG_SESSION_SECRET": "test-session-secret",
+            "FG_DEV_AUTH_USER_ID": "test-user",
+            "FG_DEV_AUTH_EMAIL": "test-user@example.com",
+            "FG_DEV_AUTH_NAME": "Test User",
+            "FG_DEV_AUTH_TENANTS": "tenant-dev,tenant-2",
+            "FG_DEV_AUTH_SCOPES": "console:admin,product:read,product:write,keys:read,keys:write",
+        },
+        clear=False,
     ):
         reset_auth_config()
         from admin_gateway.main import build_app
@@ -121,8 +138,8 @@ class TestAuthorizedAllowed:
         data = response.json()
 
         # Verify user info
-        assert data["user_id"] == "dev-user"
-        assert data["email"] == "dev@localhost"
+        assert data["user_id"] == "test-user"
+        assert data["email"] == "test-user@example.com"
         assert "console:admin" in data["scopes"]
         assert len(data["tenants"]) > 0
 
@@ -170,26 +187,17 @@ class TestCSRFEnforcement:
         """Test POST without CSRF token is blocked."""
         response = client_with_bypass.post(
             "/admin/keys",
-            params={"tenant_id": "default"},
+            json={"tenant_id": "tenant-dev", "scopes": [], "ttl_seconds": 3600},
         )
         # Should be 403 due to missing CSRF
         assert response.status_code == 403
 
-    def test_post_with_csrf_allowed(self, client_with_bypass):
+    def test_post_with_csrf_allowed(self, client_with_bypass, csrf_headers):
         """Test POST with CSRF token is allowed."""
-        # First get a CSRF token
-        csrf_response = client_with_bypass.get("/admin/csrf-token")
-        assert csrf_response.status_code == 200
-        csrf_data = csrf_response.json()
-        csrf_token = csrf_data["csrf_token"]
-        header_name = csrf_data["header_name"]
-
-        # Set CSRF cookie and header
-        client_with_bypass.cookies.set("fg_csrf_token", csrf_token)
         response = client_with_bypass.post(
             "/admin/keys",
-            params={"tenant_id": "default"},
-            headers={header_name: csrf_token},
+            json={"tenant_id": "tenant-dev", "scopes": [], "ttl_seconds": 3600},
+            headers=csrf_headers(client_with_bypass),
         )
 
         # Should work now
@@ -228,11 +236,11 @@ class TestTenantScoping:
         """Test /admin/keys accepts tenant_id filter."""
         response = client_with_bypass.get(
             "/admin/keys",
-            params={"tenant_id": "default"},
+            params={"tenant_id": "tenant-dev"},
         )
         assert response.status_code == 200
         data = response.json()
-        assert data.get("tenant_id") == "default"
+        assert data.get("tenant_id") == "tenant-dev"
 
 
 class TestAuthFlowEndpoints:

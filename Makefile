@@ -14,6 +14,7 @@ SHELL := /bin/bash
 VENV ?= .venv
 PY   := $(VENV)/bin/python
 PIP  := $(VENV)/bin/pip
+PY_CONTRACT := $(if $(wildcard $(PY)),$(PY),python)
 export PYTHONPATH := .
 
 PYTEST_ENV := env PYTHONHASHSEED=0 TZ=UTC
@@ -33,6 +34,7 @@ FG_API_KEY              ?= CHANGEME
 FG_ENFORCEMENT_MODE     ?= observe
 FG_DEV_EVENTS_ENABLED   ?= 0
 FG_UI_TOKEN_GET_ENABLED ?= 1
+ADMIN_SKIP_PIP_INSTALL  ?= 0
 
 ARTIFACTS_DIR ?= artifacts
 STATE_DIR     ?= state
@@ -106,18 +108,20 @@ venv:
 .PHONY: guard-scripts fg-audit-make fg-contract fg-compile contracts-gen
 
 guard-scripts:
-	@$(PY) scripts/guard_no_paste_garbage.py
-	@$(PY) scripts/guard_makefile_sanity.py
+	@$(PY_CONTRACT) scripts/guard_no_paste_garbage.py
+	@$(PY_CONTRACT) scripts/guard_makefile_sanity.py
 
 fg-audit-make: guard-scripts
 	@$(PY) scripts/audit_make_targets.py
 
-contracts-gen: admin-venv
-	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(AG_PY) scripts/contracts_gen.py
+contracts-gen:
+	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) scripts/contracts_gen.py
 
 fg-contract: guard-scripts contracts-gen
-	@$(PY) scripts/contract_lint.py
+	@$(PY_CONTRACT) scripts/contract_toolchain_check.py
+	@$(PY_CONTRACT) scripts/contract_lint.py
 	@git diff --exit-code contracts/admin
+	@echo "Contract diff: OK"
 
 fg-compile: guard-scripts
 	@$(PY) -m py_compile api/main.py api/feed.py api/ui.py api/dev_events.py api/auth_scopes.py
@@ -318,6 +322,10 @@ AG_PIP      := $(AG_VENV)/bin/pip
 
 admin-venv:
 	@test -d "$(AG_VENV)" || python -m venv "$(AG_VENV)"
+	@if [ "$${ADMIN_SKIP_PIP_INSTALL:-0}" = "1" ]; then \
+		echo "Skipping admin-gateway package install (ADMIN_SKIP_PIP_INSTALL=1)"; \
+		exit 0; \
+	fi
 	@"$(AG_PIP)" install --upgrade pip
 	@"$(AG_PIP)" install -r admin_gateway/requirements.txt -r admin_gateway/requirements-dev.txt
 

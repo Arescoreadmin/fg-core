@@ -4,7 +4,7 @@ Shared Pydantic models for admin-gateway API contracts.
 """
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -40,7 +40,11 @@ class AuditLogEntry(BaseModel):
     actor: Optional[str] = Field(default=None, description="Actor identifier")
     resource: Optional[str] = Field(default=None, description="Resource affected")
     resource_id: Optional[str] = Field(default=None, description="Resource identifier")
-    details: Optional[dict] = Field(default=None, description="Additional details")
+    details: Optional[dict[str, Any]] = Field(
+        default=None,
+        description="Additional details",
+        json_schema_extra={"additionalProperties": True},
+    )
     outcome: Literal["success", "failure", "error"] = Field(
         description="Action outcome"
     )

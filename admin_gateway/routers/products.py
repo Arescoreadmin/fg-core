@@ -16,11 +16,9 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from admin_gateway.auth import (
-    AuthUser,
-    get_allowed_tenant,
-    require_scopes,
-)
+from admin_gateway.auth import Scope, get_current_session, require_scope_dependency
+from admin_gateway.auth.session import Session
+from admin_gateway.auth.tenant import get_allowed_tenants, validate_tenant_access
 from admin_gateway.db import Product, ProductEndpoint, get_db
 
 log = logging.getLogger("admin-gateway.products")
@@ -39,7 +37,11 @@ class EndpointCreate(BaseModel):
     kind: str = Field(..., pattern="^(rest|grpc|nats)$", description="Endpoint type")
     url: Optional[str] = Field(None, max_length=1024, description="URL for REST/gRPC")
     target: Optional[str] = Field(None, max_length=1024, description="Target for NATS")
-    meta: Optional[dict[str, Any]] = Field(None, description="Additional metadata")
+    meta: Optional[dict[str, Any]] = Field(
+        None,
+        description="Additional metadata",
+        json_schema_extra={"additionalProperties": True},
+    )
 
     @field_validator("kind")
     @classmethod
@@ -79,7 +81,10 @@ class EndpointResponse(BaseModel):
     kind: str
     url: Optional[str]
     target: Optional[str]
-    meta: Optional[dict[str, Any]]
+    meta: Optional[dict[str, Any]] = Field(
+        None,
+        json_schema_extra={"additionalProperties": True},
+    )
     created_at: str
 
 
@@ -125,17 +130,21 @@ class TestConnectionResult(BaseModel):
 # ==============================================================================
 
 
-def _get_tenant_id(request: Request, user: AuthUser) -> str:
+def _get_tenant_id(request: Request, session: Session, is_write: bool = False) -> str:
     """Extract and validate tenant ID from request."""
     tenant_id = request.headers.get("X-Tenant-ID")
-    if not tenant_id and user.tenants:
-        tenant_id = user.tenants[0]
+    if not tenant_id and not is_write:
+        tenant_id = session.tenant_id
+    if not tenant_id:
+        if not is_write:
+            allowed = sorted(get_allowed_tenants(session))
+            tenant_id = allowed[0] if allowed else None
     if not tenant_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Tenant ID required (X-Tenant-ID header or user tenants)",
         )
-    get_allowed_tenant(request, tenant_id, user)
+    validate_tenant_access(session, tenant_id, is_write=is_write)
     return tenant_id
 
 
@@ -181,7 +190,7 @@ async def _audit_action(
     resource_id: Optional[str],
     outcome: str,
     details: Optional[dict] = None,
-    user: Optional[AuthUser] = None,
+    user: Optional[Session] = None,
 ) -> None:
     """Log an audit event."""
     audit_logger = getattr(request.app.state, "audit_logger", None)
@@ -192,7 +201,7 @@ async def _audit_action(
             resource="products",
             resource_id=resource_id,
             outcome=outcome,
-            actor=user.sub if user else None,
+            actor=user.user_id if user else None,
             details=details,
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
@@ -204,17 +213,21 @@ async def _audit_action(
 # ==============================================================================
 
 
-@router.get("", response_model=ProductListResponse)
+@router.get(
+    "",
+    response_model=ProductListResponse,
+    dependencies=[Depends(require_scope_dependency(Scope.PRODUCT_READ))],
+)
 async def list_products(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_scopes(["product:read"])),
+    session: Session = Depends(get_current_session),
 ) -> ProductListResponse:
     """List all products for the authenticated tenant.
 
     Requires: product:read scope
     """
-    tenant_id = _get_tenant_id(request, user)
+    tenant_id = _get_tenant_id(request, session)
 
     # Query products for tenant
     stmt = select(Product).where(Product.tenant_id == tenant_id).order_by(Product.name)
@@ -227,7 +240,7 @@ async def list_products(
         None,
         "success",
         {"count": len(products)},
-        user,
+        session,
     )
 
     return ProductListResponse(
@@ -236,18 +249,23 @@ async def list_products(
     )
 
 
-@router.post("", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=ProductResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_scope_dependency(Scope.PRODUCT_WRITE))],
+)
 async def create_product(
     request: Request,
     data: ProductCreate,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_scopes(["product:write"])),
+    session: Session = Depends(get_current_session),
 ) -> ProductResponse:
     """Create a new product.
 
     Requires: product:write scope
     """
-    tenant_id = _get_tenant_id(request, user)
+    tenant_id = _get_tenant_id(request, session, is_write=True)
 
     # Check for duplicate slug within tenant
     stmt = select(Product).where(
@@ -292,24 +310,28 @@ async def create_product(
         str(product.id),
         "success",
         {"slug": data.slug, "name": data.name},
-        user,
+        session,
     )
 
     return _product_to_response(product)
 
 
-@router.get("/{product_id}", response_model=ProductResponse)
+@router.get(
+    "/{product_id}",
+    response_model=ProductResponse,
+    dependencies=[Depends(require_scope_dependency(Scope.PRODUCT_READ))],
+)
 async def get_product(
     request: Request,
     product_id: int,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_scopes(["product:read"])),
+    session: Session = Depends(get_current_session),
 ) -> ProductResponse:
     """Get a product by ID.
 
     Requires: product:read scope
     """
-    tenant_id = _get_tenant_id(request, user)
+    tenant_id = _get_tenant_id(request, session)
 
     # Query product
     stmt = select(Product).where(
@@ -325,31 +347,37 @@ async def get_product(
             str(product_id),
             "failure",
             {"reason": "not_found"},
-            user,
+            session,
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Product not found",
         )
 
-    await _audit_action(request, "get_product", str(product_id), "success", None, user)
+    await _audit_action(
+        request, "get_product", str(product_id), "success", None, session
+    )
 
     return _product_to_response(product)
 
 
-@router.patch("/{product_id}", response_model=ProductResponse)
+@router.patch(
+    "/{product_id}",
+    response_model=ProductResponse,
+    dependencies=[Depends(require_scope_dependency(Scope.PRODUCT_WRITE))],
+)
 async def update_product(
     request: Request,
     product_id: int,
     data: ProductUpdate,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_scopes(["product:write"])),
+    session: Session = Depends(get_current_session),
 ) -> ProductResponse:
     """Update a product.
 
     Requires: product:write scope
     """
-    tenant_id = _get_tenant_id(request, user)
+    tenant_id = _get_tenant_id(request, session, is_write=True)
 
     # Query product
     stmt = select(Product).where(
@@ -365,7 +393,7 @@ async def update_product(
             str(product_id),
             "failure",
             {"reason": "not_found"},
-            user,
+            session,
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -415,18 +443,22 @@ async def update_product(
         str(product_id),
         "success",
         {"changes": {k: str(v) for k, v in changes.items()}},
-        user,
+        session,
     )
 
     return _product_to_response(product)
 
 
-@router.post("/{product_id}/test-connection", response_model=TestConnectionResult)
+@router.post(
+    "/{product_id}/test-connection",
+    response_model=TestConnectionResult,
+    dependencies=[Depends(require_scope_dependency(Scope.PRODUCT_READ))],
+)
 async def test_connection(
     request: Request,
     product_id: int,
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(require_scopes(["product:read"])),
+    session: Session = Depends(get_current_session),
 ) -> TestConnectionResult:
     """Test connection to a product's endpoint.
 
@@ -439,7 +471,7 @@ async def test_connection(
     """
     import time
 
-    tenant_id = _get_tenant_id(request, user)
+    tenant_id = _get_tenant_id(request, session)
 
     # Query product
     stmt = select(Product).where(
@@ -455,7 +487,7 @@ async def test_connection(
             str(product_id),
             "failure",
             {"reason": "not_found"},
-            user,
+            session,
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -483,7 +515,7 @@ async def test_connection(
             str(product_id),
             "failure",
             {"reason": "no_endpoint"},
-            user,
+            session,
         )
         return TestConnectionResult(
             product_id=product.id,
@@ -521,7 +553,7 @@ async def test_connection(
                     "status_code": response.status_code,
                     "latency_ms": round(latency_ms, 2),
                 },
-                user,
+                session,
             )
 
             return TestConnectionResult(
@@ -545,7 +577,7 @@ async def test_connection(
             str(product_id),
             "failure",
             {"endpoint_url": health_url, "error": "timeout"},
-            user,
+            session,
         )
         return TestConnectionResult(
             product_id=product.id,
@@ -568,7 +600,7 @@ async def test_connection(
             str(product_id),
             "failure",
             {"endpoint_url": health_url, "error": str(e)},
-            user,
+            session,
         )
         return TestConnectionResult(
             product_id=product.id,
@@ -592,7 +624,7 @@ async def test_connection(
             str(product_id),
             "error",
             {"endpoint_url": health_url, "error": str(e)},
-            user,
+            session,
         )
         return TestConnectionResult(
             product_id=product.id,

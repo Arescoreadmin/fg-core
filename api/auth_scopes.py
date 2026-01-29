@@ -34,6 +34,11 @@ def _sha256_hex(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
 
+def _is_production_env() -> bool:
+    env = os.getenv("FG_ENV", "dev").strip().lower()
+    return env in {"prod", "production", "staging"}
+
+
 def _constant_time_compare(a: str, b: str) -> bool:
     """Constant-time string comparison to prevent timing attacks."""
     return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
@@ -239,6 +244,8 @@ def mint_key(
             values["tenant_id"] = tenant_id
         if "created_at" in names and "created_at" in notnull:
             values["created_at"] = now_i
+        if "expires_at" in names:
+            values["expires_at"] = exp_i
 
         # SaaS schema evolution - version and use_count (NOT NULL with defaults)
         if "version" in names:
@@ -255,6 +262,7 @@ def mint_key(
                 "scopes_csv",
                 "tenant_id",
                 "created_at",
+                "expires_at",
                 "enabled",
                 "version",
                 "use_count",
@@ -457,6 +465,19 @@ def verify_api_key_detailed(
     # 1) global key bypass (constant-time comparison)
     global_key = (os.getenv("FG_API_KEY") or "").strip()
     if raw and global_key and _constant_time_compare(raw, global_key):
+        if _is_production_env():
+            log.warning(
+                "FG_API_KEY env key rejected in production path",
+                extra={"path": request_path},
+            )
+            _log_auth_event(
+                "global_key_auth",
+                success=False,
+                reason="env_key_disabled_production",
+                request_path=request_path,
+                client_ip=client_ip,
+            )
+            return AuthResult(valid=False, reason="env_key_disabled_production")
         _log_auth_event(
             "global_key_auth",
             success=True,
@@ -790,6 +811,79 @@ def revoke_api_key(key_prefix: str, key_hash: Optional[str] = None) -> bool:
         con.close()
 
 
+def rotate_api_key_by_prefix(
+    key_prefix: str,
+    ttl_seconds: int = DEFAULT_TTL_SECONDS,
+    tenant_id: Optional[str] = None,
+    revoke_old: bool = True,
+) -> dict:
+    """
+    Rotate an API key by prefix.
+
+    Returns a dict containing the new key and metadata.
+    Raises ValueError on invalid input or missing key.
+    """
+    sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
+    if not sqlite_path:
+        sqlite_path = str(_resolve_sqlite_path())
+
+    con = sqlite3.connect(sqlite_path)
+    try:
+        row = con.execute(
+            "SELECT id, scopes_csv, enabled, tenant_id, key_hash FROM api_keys WHERE prefix=? LIMIT 1",
+            (key_prefix,),
+        ).fetchone()
+
+        if not row:
+            raise ValueError("Key not found")
+
+        key_id, scopes_csv, enabled, db_tenant_id, old_key_hash = row
+
+        if tenant_id and db_tenant_id and tenant_id != db_tenant_id:
+            raise ValueError("Key not found for tenant")
+
+        if not int(enabled):
+            raise ValueError("Key is disabled")
+
+        scopes = list(_parse_scopes_csv(scopes_csv))
+        new_key = mint_key(*scopes, ttl_seconds=ttl_seconds, tenant_id=db_tenant_id)
+        parts = new_key.split(".")
+        new_prefix = parts[0] if parts else "fgk"
+        new_secret = parts[-1]
+        new_key_hash = _sha256_hex(new_secret)
+
+        cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
+        col_names = {r[1] for r in cols}
+
+        if "rotated_from" in col_names:
+            con.execute(
+                "UPDATE api_keys SET rotated_from=? WHERE key_hash=?",
+                (old_key_hash, new_key_hash),
+            )
+
+        old_key_revoked = False
+        if revoke_old:
+            con.execute("UPDATE api_keys SET enabled=0 WHERE id=?", (key_id,))
+            old_key_revoked = True
+
+        con.commit()
+
+        now = int(time.time())
+        expires_at = now + int(ttl_seconds)
+
+        return {
+            "new_key": new_key,
+            "new_prefix": new_prefix,
+            "old_prefix": key_prefix,
+            "scopes": scopes,
+            "tenant_id": db_tenant_id,
+            "expires_at": expires_at,
+            "old_key_revoked": old_key_revoked,
+        }
+    finally:
+        con.close()
+
+
 def list_api_keys(
     tenant_id: Optional[str] = None,
     include_disabled: bool = False,
@@ -815,6 +909,12 @@ def list_api_keys(
             select_cols.append("created_at")
         if "tenant_id" in col_names:
             select_cols.append("tenant_id")
+        if "expires_at" in col_names:
+            select_cols.append("expires_at")
+        if "last_used_at" in col_names:
+            select_cols.append("last_used_at")
+        if "use_count" in col_names:
+            select_cols.append("use_count")
 
         query = f"SELECT {','.join(select_cols)} FROM api_keys"
         conditions = []
@@ -861,6 +961,7 @@ __all__ = [
     "require_api_key_always",
     "require_scopes",
     "revoke_api_key",
+    "rotate_api_key_by_prefix",
     "list_api_keys",
     "_extract_key",
     "_validate_tenant_id",

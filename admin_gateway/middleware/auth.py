@@ -169,6 +169,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     def _ensure_csrf_cookie(self, request: Request, response: Response) -> None:
         """Ensure CSRF cookie is set."""
+        set_cookie = response.headers.get("set-cookie", "")
+        if self.config.csrf_cookie_name in set_cookie:
+            return
         existing = request.cookies.get(self.config.csrf_cookie_name)
         if not existing:
             self.csrf.set_token_cookie(response)

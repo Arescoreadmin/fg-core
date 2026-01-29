@@ -3,22 +3,20 @@
 from fastapi.testclient import TestClient
 
 
-def test_list_tenants_returns_allowed(app_no_bypass):
+def test_list_tenants_returns_allowed(app_no_bypass, session_cookie):
     """Test list tenants endpoint (placeholder)."""
-    # Import after module cache is cleared by fixture
-    from admin_gateway.auth import AuthUser, get_current_user
+    from admin_gateway.auth.session import Session
 
-    def _override_user():
-        return AuthUser(
-            sub="tester",
-            email="tester@example.com",
-            scopes=["console:admin", "keys:read"],
-            tenants=["tenant-a"],
-            exp=None,
-        )
-
-    app_no_bypass.dependency_overrides[get_current_user] = _override_user
+    session = Session(
+        user_id="tester",
+        email="tester@example.com",
+        scopes={"console:admin", "keys:read"},
+        claims={"allowed_tenants": ["tenant-a"]},
+        tenant_id="tenant-a",
+    )
+    cookie_name, cookie_value = session_cookie(session)
     with TestClient(app_no_bypass) as client:
+        client.cookies.set(cookie_name, cookie_value)
         response = client.get("/api/v1/tenants")
     assert response.status_code == 200
     data = response.json()
@@ -26,22 +24,20 @@ def test_list_tenants_returns_allowed(app_no_bypass):
     assert data["total"] == 1
 
 
-def test_list_keys_returns_empty(app_no_bypass):
+def test_list_keys_returns_empty(app_no_bypass, session_cookie):
     """Test list keys endpoint (placeholder)."""
-    # Import after module cache is cleared by fixture
-    from admin_gateway.auth import AuthUser, get_current_user
+    from admin_gateway.auth.session import Session
 
-    def _override_user():
-        return AuthUser(
-            sub="tester",
-            email="tester@example.com",
-            scopes=["console:admin", "keys:read"],
-            tenants=["tenant-a"],
-            exp=None,
-        )
-
-    app_no_bypass.dependency_overrides[get_current_user] = _override_user
+    session = Session(
+        user_id="tester",
+        email="tester@example.com",
+        scopes={"console:admin", "keys:read"},
+        claims={"allowed_tenants": ["tenant-a"]},
+        tenant_id="tenant-a",
+    )
+    cookie_name, cookie_value = session_cookie(session)
     with TestClient(app_no_bypass) as client:
+        client.cookies.set(cookie_name, cookie_value)
         response = client.get("/api/v1/keys")
     assert response.status_code == 200
     data = response.json()
@@ -50,22 +46,20 @@ def test_list_keys_returns_empty(app_no_bypass):
     assert data["total"] == 0
 
 
-def test_dashboard_returns_stats(app_no_bypass):
+def test_dashboard_returns_stats(app_no_bypass, session_cookie):
     """Test dashboard endpoint returns stats."""
-    # Import after module cache is cleared by fixture
-    from admin_gateway.auth import AuthUser, get_current_user
+    from admin_gateway.auth.session import Session
 
-    def _override_user():
-        return AuthUser(
-            sub="tester",
-            email="tester@example.com",
-            scopes=["console:admin", "keys:read"],
-            tenants=["tenant-a"],
-            exp=None,
-        )
-
-    app_no_bypass.dependency_overrides[get_current_user] = _override_user
+    session = Session(
+        user_id="tester",
+        email="tester@example.com",
+        scopes={"console:admin", "keys:read"},
+        claims={"allowed_tenants": ["tenant-a"]},
+        tenant_id="tenant-a",
+    )
+    cookie_name, cookie_value = session_cookie(session)
     with TestClient(app_no_bypass) as client:
+        client.cookies.set(cookie_name, cookie_value)
         response = client.get("/api/v1/dashboard")
     assert response.status_code == 200
     data = response.json()

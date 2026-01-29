@@ -1,5 +1,7 @@
 """Tests for dev auth bypass gating."""
 
+import os
+
 import pytest
 
 from admin_gateway.auth.config import AuthConfig, reset_auth_config
@@ -136,7 +138,7 @@ class TestGetDevBypassSession:
         session = get_dev_bypass_session(config)
 
         assert session is not None
-        assert session.user_id == "dev-user"
+        assert session.user_id == os.getenv("FG_DEV_AUTH_USER_ID", "dev-user")
 
     def test_returns_none_when_not_allowed(self):
         """Test returns None when dev bypass is not allowed."""
