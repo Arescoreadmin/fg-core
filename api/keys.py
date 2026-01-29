@@ -115,6 +115,9 @@ class KeyInfo(BaseModel):
     enabled: bool = True
     tenant_id: Optional[str] = None
     created_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    last_used_at: Optional[str] = None
+    use_count: Optional[int] = None
 
 
 class ListKeysResponse(BaseModel):

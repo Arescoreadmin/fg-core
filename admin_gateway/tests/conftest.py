@@ -18,6 +18,8 @@ def setup_test_env(tmp_path, monkeypatch):
     monkeypatch.setenv("FG_ENV", "dev")
     monkeypatch.setenv("FG_SESSION_SECRET", "test-session-secret")
     monkeypatch.setenv("FG_DEV_AUTH_BYPASS", "1")
+    monkeypatch.setenv("AG_CORE_BASE_URL", "http://core.local")
+    monkeypatch.setenv("AG_CORE_API_KEY", "test-core-key")
 
     # Clear OIDC env vars to ensure dev mode
     for key in (
@@ -34,6 +36,47 @@ def setup_test_env(tmp_path, monkeypatch):
         del sys.modules[mod]
 
     yield
+
+
+@pytest.fixture(autouse=True)
+def mock_core_proxy(monkeypatch):
+    """Mock core proxy calls for admin key endpoints."""
+    from admin_gateway.routers import admin as admin_router
+
+    async def _mock_proxy_to_core(request, method, path, params=None, json_body=None):
+        if path == "/admin/keys" and method == "GET":
+            return {"keys": [], "total": 0}
+        if path == "/admin/keys" and method == "POST":
+            tenant_id = (json_body or {}).get("tenant_id")
+            return {
+                "key": "fgk.mock.token",
+                "prefix": "fgk",
+                "scopes": (json_body or {}).get("scopes", []),
+                "tenant_id": tenant_id,
+                "ttl_seconds": (json_body or {}).get("ttl_seconds", 86400),
+                "expires_at": 0,
+            }
+        if path.endswith("/revoke") and method == "POST":
+            prefix = path.split("/")[-2]
+            return {
+                "revoked": True,
+                "prefix": prefix,
+                "message": "Key successfully revoked",
+            }
+        if path.endswith("/rotate") and method == "POST":
+            prefix = path.split("/")[-2]
+            return {
+                "new_key": "fgk.rotated.token",
+                "new_prefix": "fgk",
+                "old_prefix": prefix,
+                "scopes": ["read"],
+                "tenant_id": (params or {}).get("tenant_id"),
+                "expires_at": 0,
+                "old_key_revoked": True,
+            }
+        return {}
+
+    monkeypatch.setattr(admin_router, "_proxy_to_core", _mock_proxy_to_core)
 
 
 @pytest.fixture
@@ -56,6 +99,8 @@ def app_no_bypass(tmp_path, monkeypatch):
     monkeypatch.setenv("FG_ENV", "dev")
     monkeypatch.setenv("FG_SESSION_SECRET", "test-session-secret")
     monkeypatch.delenv("FG_DEV_AUTH_BYPASS", raising=False)
+    monkeypatch.setenv("AG_CORE_BASE_URL", "http://core.local")
+    monkeypatch.setenv("AG_CORE_API_KEY", "test-core-key")
 
     # Clear OIDC env vars
     for key in (

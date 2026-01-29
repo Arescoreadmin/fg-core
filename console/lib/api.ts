@@ -53,6 +53,49 @@ export interface ProductListResponse {
   total: number;
 }
 
+export interface ApiKeyInfo {
+  prefix: string;
+  name?: string | null;
+  scopes: string[];
+  enabled: boolean;
+  tenant_id?: string | null;
+  created_at?: string | null;
+  expires_at?: string | number | null;
+  last_used_at?: string | number | null;
+  use_count?: number | null;
+}
+
+export interface ApiKeyListResponse {
+  keys: ApiKeyInfo[];
+  total: number;
+}
+
+export interface ApiKeyCreateRequest {
+  name?: string;
+  scopes: string[];
+  tenant_id: string;
+  ttl_seconds: number;
+}
+
+export interface ApiKeyCreateResponse {
+  key: string;
+  prefix: string;
+  scopes: string[];
+  tenant_id?: string | null;
+  ttl_seconds: number;
+  expires_at: number;
+}
+
+export interface ApiKeyRotateResponse {
+  new_key: string;
+  new_prefix: string;
+  old_prefix: string;
+  scopes: string[];
+  tenant_id?: string | null;
+  expires_at: number;
+  old_key_revoked: boolean;
+}
+
 export interface ProductCreateRequest {
   slug: string;
   name: string;
@@ -105,6 +148,17 @@ function getHeaders(): Record<string, string> {
   return headers;
 }
 
+async function fetchCsrfToken(): Promise<{ token: string; headerName: string }> {
+  const response = await fetch(apiUrl('/admin/csrf-token'), {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch CSRF token: ${response.status}`);
+  }
+  const data = await response.json();
+  return { token: data.csrf_token, headerName: data.header_name };
+}
+
 /**
  * Fetch dashboard data from admin-gateway
  */
@@ -136,6 +190,88 @@ export async function fetchProducts(): Promise<ProductListResponse> {
   });
   if (!response.ok) {
     throw new Error(`Failed to fetch products: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function fetchApiKeys(tenantId: string): Promise<ApiKeyListResponse> {
+  const params = new URLSearchParams({ tenant_id: tenantId });
+  const response = await fetch(apiUrl(`/admin/keys?${params.toString()}`), {
+    headers: getHeaders(),
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch API keys: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function createApiKey(
+  data: ApiKeyCreateRequest
+): Promise<ApiKeyCreateResponse> {
+  const csrf = await fetchCsrfToken();
+  const response = await fetch(apiUrl('/admin/keys'), {
+    method: 'POST',
+    headers: {
+      ...getHeaders(),
+      [csrf.headerName]: csrf.token,
+    },
+    credentials: 'include',
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to create API key: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function rotateApiKey(
+  prefix: string,
+  tenantId: string,
+  ttlSeconds: number
+): Promise<ApiKeyRotateResponse> {
+  const csrf = await fetchCsrfToken();
+  const params = new URLSearchParams({ tenant_id: tenantId });
+  const response = await fetch(
+    apiUrl(`/admin/keys/${prefix}/rotate?${params.toString()}`),
+    {
+      method: 'POST',
+      headers: {
+        ...getHeaders(),
+        [csrf.headerName]: csrf.token,
+      },
+      credentials: 'include',
+      body: JSON.stringify({ ttl_seconds: ttlSeconds, revoke_old: true }),
+    }
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to rotate API key: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function revokeApiKey(
+  prefix: string,
+  tenantId: string
+): Promise<{ revoked: boolean }> {
+  const csrf = await fetchCsrfToken();
+  const params = new URLSearchParams({ tenant_id: tenantId });
+  const response = await fetch(
+    apiUrl(`/admin/keys/${prefix}/revoke?${params.toString()}`),
+    {
+      method: 'POST',
+      headers: {
+        ...getHeaders(),
+        [csrf.headerName]: csrf.token,
+      },
+      credentials: 'include',
+    }
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to revoke API key: ${response.status}`);
   }
   return response.json();
 }

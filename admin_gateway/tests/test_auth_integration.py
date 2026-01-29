@@ -170,7 +170,7 @@ class TestCSRFEnforcement:
         """Test POST without CSRF token is blocked."""
         response = client_with_bypass.post(
             "/admin/keys",
-            params={"tenant_id": "default"},
+            json={"tenant_id": "default", "scopes": [], "ttl_seconds": 3600},
         )
         # Should be 403 due to missing CSRF
         assert response.status_code == 403
@@ -188,7 +188,7 @@ class TestCSRFEnforcement:
         client_with_bypass.cookies.set("fg_csrf_token", csrf_token)
         response = client_with_bypass.post(
             "/admin/keys",
-            params={"tenant_id": "default"},
+            json={"tenant_id": "default", "scopes": [], "ttl_seconds": 3600},
             headers={header_name: csrf_token},
         )
 

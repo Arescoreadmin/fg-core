@@ -13,7 +13,12 @@ import time
 
 import pytest
 
-from api.auth_scopes import mint_key, verify_api_key_detailed
+from api.auth_scopes import (
+    mint_key,
+    rotate_api_key_by_prefix,
+    verify_api_key_detailed,
+    verify_api_key_raw,
+)
 from api.db import init_db, reset_engine_cache
 from api.tripwires import CANARY_KEY_PREFIX
 
@@ -151,6 +156,53 @@ class TestUsageTracking:
 
         assert after is not None
         assert after >= before_auth
+
+    def test_verify_api_key_raw_tracks_usage(self, fresh_db):
+        """verify_api_key_raw should update usage stats on success."""
+        key = mint_key("read", ttl_seconds=86400)
+
+        parts = key.split(".")
+        prefix = parts[0]
+        secret = parts[-1]
+        import hashlib
+
+        key_hash = hashlib.sha256(secret.encode()).hexdigest()
+
+        verify_api_key_raw(raw=key)
+
+        con = sqlite3.connect(fresh_db)
+        try:
+            row = con.execute(
+                "SELECT use_count, last_used_at FROM api_keys WHERE prefix = ? AND key_hash = ?",
+                (prefix, key_hash),
+            ).fetchone()
+            use_count, last_used_at = row if row else (0, None)
+        finally:
+            con.close()
+
+        assert use_count == 1
+        assert last_used_at is not None
+
+
+class TestKeyRotation:
+    """Test key rotation behavior."""
+
+    def test_rotate_invalidates_prior(self, fresh_db):
+        """Rotating a key should revoke the old key."""
+        key = mint_key("read", ttl_seconds=86400)
+        prefix = key.split(".")[0]
+
+        pre_rotate = verify_api_key_detailed(raw=key)
+        assert pre_rotate.valid
+
+        result = rotate_api_key_by_prefix(prefix, ttl_seconds=3600)
+        new_key = result["new_key"]
+
+        new_result = verify_api_key_detailed(raw=new_key)
+        assert new_result.valid
+
+        old_result = verify_api_key_detailed(raw=key)
+        assert not old_result.valid
 
 
 class TestCanaryTokenDetection:

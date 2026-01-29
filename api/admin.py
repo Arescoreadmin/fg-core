@@ -13,12 +13,29 @@ Provides administrative endpoints for:
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from api.auth_scopes import require_scopes, verify_api_key
+from api.auth_scopes import (
+    _validate_tenant_id,
+    list_api_keys,
+    mint_key,
+    require_scopes,
+    revoke_api_key,
+    rotate_api_key_by_prefix,
+    verify_api_key,
+)
+from api.keys import (
+    CreateKeyResponse,
+    KeyInfo,
+    ListKeysResponse,
+    RevokeKeyResponse,
+    RotateKeyResponse,
+)
+from api.security_audit import audit_key_created, audit_key_revoked, audit_key_rotated
 
 log = logging.getLogger("frostgate.admin")
 
@@ -79,6 +96,51 @@ class KeyRotationStatusResponse(BaseModel):
     days_until_expiration: Optional[int]
     rotation_recommended: bool
     message: Optional[str]
+
+
+class AdminCreateKeyRequest(BaseModel):
+    """Request to create a new API key via admin."""
+
+    name: Optional[str] = Field(
+        default=None,
+        max_length=128,
+        description="Human-readable name for the key",
+    )
+    scopes: list[str] = Field(
+        default_factory=list,
+        description="List of scopes to grant to the key",
+    )
+    tenant_id: str = Field(
+        ...,
+        max_length=128,
+        description="Tenant ID to associate with the key",
+    )
+    ttl_seconds: int = Field(
+        default=86400,
+        ge=60,
+        le=365 * 24 * 3600,
+        description="Time-to-live in seconds (default 24 hours)",
+    )
+
+
+class AdminRotateKeyRequest(BaseModel):
+    """Request to rotate an API key via admin."""
+
+    ttl_seconds: int = Field(
+        default=86400,
+        ge=60,
+        le=365 * 24 * 3600,
+        description="TTL for the new key (default 24 hours)",
+    )
+    revoke_old: bool = Field(
+        default=True,
+        description="Whether to revoke the old key immediately",
+    )
+    tenant_id: Optional[str] = Field(
+        default=None,
+        max_length=128,
+        description="Optional tenant ID for validation",
+    )
 
 
 class CircuitBreakerStatsResponse(BaseModel):
@@ -306,6 +368,153 @@ async def activate_tenant(
         "status": "active",
         "message": "Tenant activated successfully",
     }
+
+
+# =============================================================================
+# API Key Admin Endpoints
+# =============================================================================
+
+
+@router.get(
+    "/keys",
+    response_model=ListKeysResponse,
+    dependencies=[Depends(require_scopes("keys:read"))],
+)
+async def admin_list_keys(
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
+    include_disabled: bool = Query(default=False),
+    _: str = Depends(verify_api_key),
+) -> ListKeysResponse:
+    """List API keys for admin usage."""
+    if tenant_id:
+        is_valid, error = _validate_tenant_id(tenant_id)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error)
+
+    keys = list_api_keys(tenant_id=tenant_id, include_disabled=include_disabled)
+    key_infos = [KeyInfo(**k) for k in keys]
+    return ListKeysResponse(keys=key_infos, total=len(key_infos))
+
+
+@router.post(
+    "/keys",
+    response_model=CreateKeyResponse,
+    dependencies=[Depends(require_scopes("keys:write"))],
+)
+async def admin_create_key(
+    req: AdminCreateKeyRequest,
+    request: Request,
+    _: str = Depends(verify_api_key),
+) -> CreateKeyResponse:
+    """Create a new API key via admin."""
+    is_valid, error = _validate_tenant_id(req.tenant_id)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error)
+
+    key = mint_key(
+        *req.scopes,
+        ttl_seconds=req.ttl_seconds,
+        tenant_id=req.tenant_id,
+    )
+
+    parts = key.split(".")
+    prefix = parts[0] if parts else "fgk"
+
+    expires_at = int(time.time()) + req.ttl_seconds
+
+    audit_key_created(
+        key_prefix=prefix,
+        scopes=req.scopes,
+        tenant_id=req.tenant_id,
+        request=request,
+        ttl_seconds=req.ttl_seconds,
+    )
+
+    return CreateKeyResponse(
+        key=key,
+        prefix=prefix,
+        scopes=req.scopes,
+        tenant_id=req.tenant_id,
+        ttl_seconds=req.ttl_seconds,
+        expires_at=expires_at,
+    )
+
+
+@router.post(
+    "/keys/{key_prefix}/revoke",
+    response_model=RevokeKeyResponse,
+    dependencies=[Depends(require_scopes("keys:write"))],
+)
+async def admin_revoke_key(
+    key_prefix: str,
+    request: Request,
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
+    _: str = Depends(verify_api_key),
+) -> RevokeKeyResponse:
+    """Revoke an API key by prefix."""
+    if tenant_id:
+        is_valid, error = _validate_tenant_id(tenant_id)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error)
+        keys = list_api_keys(tenant_id=tenant_id, include_disabled=True)
+        if not any(k.get("prefix") == key_prefix for k in keys):
+            raise HTTPException(status_code=404, detail="Key not found")
+
+    revoked = revoke_api_key(key_prefix)
+    if revoked:
+        audit_key_revoked(key_prefix=key_prefix, request=request)
+        return RevokeKeyResponse(
+            revoked=True,
+            prefix=key_prefix,
+            message="Key successfully revoked",
+        )
+
+    return RevokeKeyResponse(
+        revoked=False,
+        prefix=key_prefix,
+        message="Key not found or already revoked",
+    )
+
+
+@router.post(
+    "/keys/{key_prefix}/rotate",
+    response_model=RotateKeyResponse,
+    dependencies=[Depends(require_scopes("keys:write"))],
+)
+async def admin_rotate_key(
+    key_prefix: str,
+    req: AdminRotateKeyRequest,
+    request: Request,
+    _: str = Depends(verify_api_key),
+) -> RotateKeyResponse:
+    """Rotate an API key by prefix."""
+    try:
+        result = rotate_api_key_by_prefix(
+            key_prefix=key_prefix,
+            ttl_seconds=req.ttl_seconds,
+            tenant_id=req.tenant_id,
+            revoke_old=req.revoke_old,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    audit_key_rotated(
+        old_prefix=result["old_prefix"],
+        new_prefix=result["new_prefix"],
+        tenant_id=result["tenant_id"],
+        request=request,
+        old_key_revoked=result["old_key_revoked"],
+    )
+
+    return RotateKeyResponse(
+        new_key=result["new_key"],
+        new_prefix=result["new_prefix"],
+        old_prefix=result["old_prefix"],
+        scopes=result["scopes"],
+        tenant_id=result["tenant_id"],
+        expires_at=result["expires_at"],
+        old_key_revoked=result["old_key_revoked"],
+    )
 
 
 # =============================================================================

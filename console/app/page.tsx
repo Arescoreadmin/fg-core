@@ -54,14 +54,19 @@ export default function Dashboard() {
     <main style={styles.main}>
       <header style={styles.header}>
         <h1 style={styles.title}>FrostGate Console</h1>
-        <div style={styles.statusBadge}>
-          <span
-            style={{
-              ...styles.statusDot,
-              backgroundColor: status.connected ? '#22c55e' : '#ef4444',
-            }}
-          />
-          {status.connected ? 'Connected' : 'Disconnected'}
+        <div style={styles.headerActions}>
+          <a style={styles.linkButton} href="/keys">
+            Manage API keys
+          </a>
+          <div style={styles.statusBadge}>
+            <span
+              style={{
+                ...styles.statusDot,
+                backgroundColor: status.connected ? '#22c55e' : '#ef4444',
+              }}
+            />
+            {status.connected ? 'Connected' : 'Disconnected'}
+          </div>
         </div>
       </header>
 
@@ -154,6 +159,19 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginBottom: '2rem',
     paddingBottom: '1rem',
     borderBottom: '1px solid var(--border)',
+  },
+  headerActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1rem',
+  },
+  linkButton: {
+    padding: '0.5rem 0.75rem',
+    borderRadius: '6px',
+    border: '1px solid var(--border)',
+    textDecoration: 'none',
+    color: 'inherit',
+    fontSize: '0.875rem',
   },
   title: {
     fontSize: '1.5rem',

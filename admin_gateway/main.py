@@ -42,7 +42,7 @@ from admin_gateway.middleware.csrf import CSRFMiddleware
 from admin_gateway.middleware.session_cookie import SessionCookieMiddleware
 from admin_gateway.audit import AuditLogger
 from admin_gateway.db import init_db, close_db
-from admin_gateway.routers import products_router
+from admin_gateway.routers import admin_router, products_router
 
 
 class ProductCreate(BaseModel):
@@ -141,6 +141,7 @@ def build_app() -> FastAPI:
     app.state.start_time = datetime.now(timezone.utc)
 
     # Include routers
+    app.include_router(admin_router)
     app.include_router(products_router)
 
     # Health endpoint
@@ -205,17 +206,6 @@ def build_app() -> FastAPI:
     async def auth_csrf(request: Request) -> dict:
         """Return a CSRF token tied to the session."""
         return {"csrf_token": ensure_csrf_token(request)}
-
-    @app.get("/admin/me")
-    async def admin_me(user: AuthUser = Depends(get_current_user)) -> dict:
-        """Return current admin session details."""
-        return {
-            "id": user.sub,
-            "email": user.email,
-            "scopes": user.scopes,
-            "tenants": user.tenants,
-            "session_expires_at": user.exp,
-        }
 
     # Placeholder admin endpoints
     @app.get("/api/v1/tenants")
