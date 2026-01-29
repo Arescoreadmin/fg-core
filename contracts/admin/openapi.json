@@ -1,6 +1,85 @@
 {
   "components": {
     "schemas": {
+      "AdminCreateKeyRequest": {
+        "description": "Request model for admin key creation.",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "tenant_id": {
+            "maxLength": 128,
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "ttl_seconds": {
+            "default": 86400,
+            "maximum": 31536000.0,
+            "minimum": 60.0,
+            "title": "Ttl Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id"
+        ],
+        "title": "AdminCreateKeyRequest",
+        "type": "object"
+      },
+      "AdminRotateKeyRequest": {
+        "description": "Request model for admin key rotation.",
+        "properties": {
+          "revoke_old": {
+            "default": true,
+            "title": "Revoke Old",
+            "type": "boolean"
+          },
+          "ttl_seconds": {
+            "default": 86400,
+            "maximum": 31536000.0,
+            "minimum": 60.0,
+            "title": "Ttl Seconds",
+            "type": "integer"
+          }
+        },
+        "title": "AdminRotateKeyRequest",
+        "type": "object"
+      },
+      "CSRFTokenResponse": {
+        "description": "CSRF token response.",
+        "properties": {
+          "csrf_token": {
+            "title": "Csrf Token",
+            "type": "string"
+          },
+          "header_name": {
+            "title": "Header Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "csrf_token",
+          "header_name"
+        ],
+        "title": "CSRFTokenResponse",
+        "type": "object"
+      },
       "EndpointCreate": {
         "description": "Request model for creating a product endpoint.",
         "properties": {
@@ -13,7 +92,6 @@
           "meta": {
             "anyOf": [
               {
-                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -74,7 +152,6 @@
           "meta": {
             "anyOf": [
               {
-                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -133,32 +210,6 @@
           }
         },
         "title": "HTTPValidationError",
-        "type": "object"
-      },
-      "ProductCreate": {
-        "properties": {
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Product name",
-            "title": "Name"
-          },
-          "tenant_id": {
-            "description": "Tenant identifier",
-            "title": "Tenant Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "tenant_id"
-        ],
-        "title": "ProductCreate",
         "type": "object"
       },
       "ProductListResponse": {
@@ -415,6 +466,79 @@
         "title": "TestConnectionResult",
         "type": "object"
       },
+      "UserInfo": {
+        "description": "User information response.",
+        "properties": {
+          "current_tenant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Tenant"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "tenants": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tenants",
+            "type": "array"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "scopes",
+          "tenants",
+          "session_id",
+          "expires_in"
+        ],
+        "title": "UserInfo",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -446,6 +570,32 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "admin_gateway__main__ProductCreate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Product name",
+            "title": "Name"
+          },
+          "tenant_id": {
+            "description": "Tenant identifier",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id"
+        ],
+        "title": "ProductCreate",
         "type": "object"
       },
       "admin_gateway__routers__products__ProductCreate": {
@@ -507,29 +657,331 @@
   "info": {
     "description": "Administrative API for FrostGate management console",
     "title": "FrostGate Admin Gateway",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "openapi": "3.1.0",
   "paths": {
-    "/admin/me": {
+    "/admin/audit": {
       "get": {
-        "description": "Return current admin session details.",
-        "operationId": "admin_me_admin_me_get",
+        "description": "List audit events (placeholder).\n\nRequires audit:read scope.",
+        "operationId": "list_audit_events_admin_audit_get",
+        "parameters": [
+          {
+            "description": "Filter by tenant",
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by tenant",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Me Admin Me Get",
+                  "title": "Response List Audit Events Admin Audit Get",
                   "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Audit Events",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/csrf-token": {
+      "get": {
+        "description": "Get CSRF token for state-changing requests.\n\nThe token is also set in a cookie. Include the token value\nin the X-CSRF-Token header for POST/PUT/PATCH/DELETE requests.",
+        "operationId": "get_csrf_token_admin_csrf_token_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CSRFTokenResponse"
                 }
               }
             },
             "description": "Successful Response"
           }
         },
-        "summary": "Admin Me"
+        "summary": "Get Csrf Token",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/keys": {
+      "get": {
+        "description": "List API keys (proxied to core).\n\nRequires keys:read or higher scope.",
+        "operationId": "list_keys_admin_keys_get",
+        "parameters": [
+          {
+            "description": "Filter by tenant",
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by tenant",
+              "title": "Tenant Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Keys Admin Keys Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Keys",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "description": "Create a new API key (proxied to core).\n\nRequires keys:write scope and tenant_id.",
+        "operationId": "create_key_admin_keys_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminCreateKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Create Key Admin Keys Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Key",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/keys/{prefix}/revoke": {
+      "post": {
+        "description": "Revoke an API key (proxied to core).",
+        "operationId": "revoke_key_admin_keys__prefix__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "prefix",
+            "required": true,
+            "schema": {
+              "title": "Prefix",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Tenant ID (required for writes)",
+            "in": "query",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "description": "Tenant ID (required for writes)",
+              "title": "Tenant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Revoke Key Admin Keys  Prefix  Revoke Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Key",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/keys/{prefix}/rotate": {
+      "post": {
+        "description": "Rotate an API key (proxied to core).",
+        "operationId": "rotate_key_admin_keys__prefix__rotate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "prefix",
+            "required": true,
+            "schema": {
+              "title": "Prefix",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Tenant ID (required for writes)",
+            "in": "query",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "description": "Tenant ID (required for writes)",
+              "title": "Tenant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminRotateKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Rotate Key Admin Keys  Prefix  Rotate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rotate Key",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/me": {
+      "get": {
+        "description": "Get current authenticated user information.\n\nReturns user profile, scopes, and tenant access.",
+        "operationId": "get_current_user_admin_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Current User",
+        "tags": [
+          "admin"
+        ]
       }
     },
     "/admin/products": {
@@ -731,6 +1183,52 @@
         ]
       }
     },
+    "/admin/scopes": {
+      "get": {
+        "description": "List all available scopes and user's current scopes.",
+        "operationId": "list_scopes_admin_scopes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Scopes Admin Scopes Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Scopes",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/tenants": {
+      "get": {
+        "description": "List tenants the user has access to.\n\nRequires product:read or higher scope.",
+        "operationId": "list_tenants_admin_tenants_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Tenants Admin Tenants Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Tenants",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/api/v1/dashboard": {
       "get": {
         "description": "Dashboard data endpoint (placeholder).",
@@ -758,7 +1256,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "title": "Response Dashboard Api V1 Dashboard Get",
                   "type": "object"
                 }
@@ -807,7 +1304,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "title": "Response List Keys Api V1 Keys Get",
                   "type": "object"
                 }
@@ -836,7 +1332,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ProductCreate"
+                "$ref": "#/components/schemas/admin_gateway__main__ProductCreate"
               }
             }
           },
@@ -847,7 +1343,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "title": "Response Create Product Api V1 Products Post",
                   "type": "object"
                 }
@@ -878,7 +1373,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "title": "Response List Tenants Api V1 Tenants Get",
                   "type": "object"
                 }
@@ -892,25 +1386,65 @@
     },
     "/auth/callback": {
       "get": {
-        "description": "Handle OIDC callback and establish session.",
-        "operationId": "auth_callback_auth_callback_get",
+        "description": "Handle OIDC callback.\n\nExchanges authorization code for tokens and creates session.",
+        "operationId": "callback_auth_callback_get",
         "parameters": [
           {
+            "description": "Authorization code",
             "in": "query",
             "name": "code",
             "required": true,
             "schema": {
+              "description": "Authorization code",
               "title": "Code",
               "type": "string"
             }
           },
           {
+            "description": "State parameter",
             "in": "query",
             "name": "state",
             "required": true,
             "schema": {
+              "description": "State parameter",
               "title": "State",
               "type": "string"
+            }
+          },
+          {
+            "description": "Error code",
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Error code",
+              "title": "Error"
+            }
+          },
+          {
+            "description": "Error description",
+            "in": "query",
+            "name": "error_description",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Error description",
+              "title": "Error Description"
             }
           }
         ],
@@ -934,20 +1468,22 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Auth Callback"
+        "summary": "Callback",
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/auth/csrf": {
       "get": {
         "description": "Return a CSRF token tied to the session.",
-        "operationId": "auth_csrf_auth_csrf_get",
+        "operationId": "csrf_token_auth_csrf_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Auth Csrf Auth Csrf Get",
+                  "title": "Response Csrf Token Auth Csrf Get",
                   "type": "object"
                 }
               }
@@ -955,13 +1491,66 @@
             "description": "Successful Response"
           }
         },
-        "summary": "Auth Csrf"
+        "summary": "Csrf Token",
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/auth/login": {
       "get": {
-        "description": "Redirect to OIDC provider for login.",
-        "operationId": "auth_login_auth_login_get",
+        "description": "Initiate OIDC login flow.\n\nIf OIDC is not configured and dev bypass is enabled, creates a dev session.\nOtherwise, redirects to the OIDC provider.",
+        "operationId": "login_auth_login_get",
+        "parameters": [
+          {
+            "description": "URL to return to after login",
+            "in": "query",
+            "name": "return_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "URL to return to after login",
+              "title": "Return To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/logout": {
+      "get": {
+        "description": "Log out user.\n\nClears session cookie and optionally redirects to IdP logout.",
+        "operationId": "logout_auth_logout_get",
         "responses": {
           "200": {
             "content": {
@@ -972,7 +1561,28 @@
             "description": "Successful Response"
           }
         },
-        "summary": "Auth Login"
+        "summary": "Logout",
+        "tags": [
+          "auth"
+        ]
+      },
+      "post": {
+        "description": "Log out user (POST version for CSRF-safe logout).",
+        "operationId": "logout_post_auth_logout_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout Post",
+        "tags": [
+          "auth"
+        ]
       }
     },
     "/health": {
@@ -984,7 +1594,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "title": "Response Health Health Get",
                   "type": "object"
                 }
@@ -1005,7 +1614,6 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
                   "title": "Response Version Version Get",
                   "type": "object"
                 }
