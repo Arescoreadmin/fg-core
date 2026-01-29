@@ -19,13 +19,13 @@ def test_admin_keys_list_proxies(client, monkeypatch):
 
     monkeypatch.setattr(admin_router, "_proxy_to_core", _mock_proxy)
 
-    response = client.get("/admin/keys", params={"tenant_id": "default"})
+    response = client.get("/admin/keys", params={"tenant_id": "tenant-dev"})
     assert response.status_code == 200
     data = response.json()
     assert data["total"] == 1
     assert calls["method"] == "GET"
     assert calls["path"] == "/admin/keys"
-    assert calls["params"] == {"tenant_id": "default"}
+    assert calls["params"] == {"tenant_id": "tenant-dev"}
 
 
 def test_admin_keys_scope_enforced(app, monkeypatch):
@@ -40,12 +40,13 @@ def test_admin_keys_scope_enforced(app, monkeypatch):
         return Session(
             user_id="tester",
             scopes={"product:read"},
-            tenant_id="default",
+            tenant_id="tenant-dev",
+            claims={"allowed_tenants": ["tenant-dev"]},
         )
 
     app.dependency_overrides[get_current_session] = _override_session
     monkeypatch.setattr(admin_router, "_proxy_to_core", _mock_proxy)
 
     with TestClient(app) as test_client:
-        response = test_client.get("/admin/keys", params={"tenant_id": "default"})
+        response = test_client.get("/admin/keys", params={"tenant_id": "tenant-dev"})
     assert response.status_code == 403

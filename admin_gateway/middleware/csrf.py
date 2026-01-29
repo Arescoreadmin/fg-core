@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import os
-import secrets
-
+from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -28,23 +27,14 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         if request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
-            session_token = (
-                request.session.get("csrf_token")
-                if hasattr(request, "session")
-                else None
-            )
-            header_token = (
-                request.headers.get("x-csrf-token")
-                or request.headers.get("x-xsrf-token")
-                or request.headers.get("x-csrf")
-            )
-            if (
-                not session_token
-                or not header_token
-                or not secrets.compare_digest(session_token, header_token)
-            ):
+            from admin_gateway.auth.csrf import CSRFProtection
+
+            csrf = CSRFProtection()
+            try:
+                csrf.validate_request(request)
+            except HTTPException as exc:
                 return JSONResponse(
-                    status_code=403,
-                    content={"detail": "CSRF token missing or invalid"},
+                    status_code=exc.status_code,
+                    content={"detail": exc.detail},
                 )
         return await call_next(request)

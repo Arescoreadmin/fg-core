@@ -7,7 +7,8 @@ MUST NEVER be enabled in production.
 from __future__ import annotations
 
 import logging
-from typing import Optional, Set
+import os
+from typing import Iterable, Optional, Set
 
 from admin_gateway.auth.config import AuthConfig, get_auth_config
 from admin_gateway.auth.scopes import Scope
@@ -54,6 +55,7 @@ def create_dev_session(
     name: str = "Development User",
     scopes: Optional[Set[str]] = None,
     tenant_id: str = "default",
+    allowed_tenants: Optional[Iterable[str]] = None,
     config: Optional[AuthConfig] = None,
 ) -> Session:
     """Create a development session with full admin access.
@@ -88,6 +90,8 @@ def create_dev_session(
     if scopes is None:
         scopes = {Scope.CONSOLE_ADMIN.value}
 
+    allowed = list(allowed_tenants) if allowed_tenants else [tenant_id]
+
     log.warning(
         "DEV BYPASS: Creating development session for user=%s with scopes=%s",
         user_id,
@@ -105,7 +109,7 @@ def create_dev_session(
             "name": name,
             "dev_bypass": True,
             "tenant_id": tenant_id,
-            "allowed_tenants": [tenant_id],
+            "allowed_tenants": allowed,
         },
         tenant_id=tenant_id,
     )
@@ -126,6 +130,26 @@ def get_dev_bypass_session(config: Optional[AuthConfig] = None) -> Optional[Sess
 
     # Not in prod + bypass enabled = create dev session
     if config.dev_bypass_allowed:
-        return create_dev_session(config=config)
+        tenants = _parse_csv_env("FG_DEV_AUTH_TENANTS")
+        tenant_id = os.getenv("FG_DEV_AUTH_TENANT_ID") or (
+            tenants[0] if tenants else "default"
+        )
+        scopes = _parse_csv_env("FG_DEV_AUTH_SCOPES")
+        return create_dev_session(
+            user_id=os.getenv("FG_DEV_AUTH_USER_ID", "dev-user"),
+            email=os.getenv("FG_DEV_AUTH_EMAIL", "dev@localhost"),
+            name=os.getenv("FG_DEV_AUTH_NAME", "Development User"),
+            scopes=set(scopes) if scopes else None,
+            tenant_id=tenant_id,
+            allowed_tenants=tenants or None,
+            config=config,
+        )
 
     return None
+
+
+def _parse_csv_env(name: str) -> list[str]:
+    value = os.getenv(name, "")
+    if not value:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]

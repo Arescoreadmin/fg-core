@@ -11,6 +11,7 @@ from typing import Any, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from admin_gateway.auth import (
@@ -160,10 +161,14 @@ async def get_csrf_token(
     if not token:
         token = csrf._generate_token()
 
-    return CSRFTokenResponse(
-        csrf_token=token,
-        header_name=config.csrf_header_name,
+    response = JSONResponse(
+        content={
+            "csrf_token": token,
+            "header_name": config.csrf_header_name,
+        }
     )
+    csrf.set_token_cookie(response, token)
+    return response
 
 
 @router.get("/scopes")

@@ -6,12 +6,13 @@ Tests the full CRUD lifecycle and security controls.
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
+from fastapi.testclient import TestClient
 
 
 class TestProductsCRUD:
     """Test complete CRUD lifecycle: create -> list -> read -> patch -> test connection."""
 
-    def test_create_product(self, client):
+    def test_create_product(self, client, csrf_headers):
         """Test creating a new product."""
         response = client.post(
             "/admin/products",
@@ -28,7 +29,7 @@ class TestProductsCRUD:
                     }
                 ],
             },
-            headers={"X-Tenant-ID": "tenant-dev"},
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
         )
         assert response.status_code == 201
         data = response.json()
@@ -41,18 +42,18 @@ class TestProductsCRUD:
         assert data["endpoints"][0]["kind"] == "rest"
         assert data["endpoints"][0]["url"] == "https://api.example.com"
 
-    def test_list_products(self, client):
+    def test_list_products(self, client, csrf_headers):
         """Test listing products after creation."""
         # Create two products
         client.post(
             "/admin/products",
             json={"slug": "product-a", "name": "Product A"},
-            headers={"X-Tenant-ID": "tenant-dev"},
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
         )
         client.post(
             "/admin/products",
             json={"slug": "product-b", "name": "Product B"},
-            headers={"X-Tenant-ID": "tenant-dev"},
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
         )
 
         # List products
@@ -68,13 +69,13 @@ class TestProductsCRUD:
         assert "product-a" in slugs
         assert "product-b" in slugs
 
-    def test_get_product(self, client):
+    def test_get_product(self, client, csrf_headers):
         """Test getting a single product by ID."""
         # Create product
         create_resp = client.post(
             "/admin/products",
             json={"slug": "my-product", "name": "My Product"},
-            headers={"X-Tenant-ID": "tenant-dev"},
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
         )
         product_id = create_resp.json()["id"]
 
@@ -89,7 +90,7 @@ class TestProductsCRUD:
         assert data["slug"] == "my-product"
         assert data["name"] == "My Product"
 
-    def test_patch_product(self, client):
+    def test_patch_product(self, client, csrf_headers):
         """Test updating a product."""
         # Create product
         create_resp = client.post(
@@ -99,7 +100,7 @@ class TestProductsCRUD:
                 "name": "Original Name",
                 "env": "development",
             },
-            headers={"X-Tenant-ID": "tenant-dev"},
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
         )
         product_id = create_resp.json()["id"]
 
@@ -111,7 +112,7 @@ class TestProductsCRUD:
                 "env": "production",
                 "enabled": False,
             },
-            headers={"X-Tenant-ID": "tenant-dev"},
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -120,7 +121,7 @@ class TestProductsCRUD:
         assert data["enabled"] is False
         assert data["slug"] == "update-me"  # Slug unchanged
 
-    def test_patch_product_endpoints(self, client):
+    def test_patch_product_endpoints(self, client, csrf_headers):
         """Test updating product endpoints."""
         # Create product with REST endpoint
         create_resp = client.post(
@@ -130,7 +131,7 @@ class TestProductsCRUD:
                 "name": "Endpoints Test",
                 "endpoints": [{"kind": "rest", "url": "https://old.example.com"}],
             },
-            headers={"X-Tenant-ID": "tenant-dev"},
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
         )
         product_id = create_resp.json()["id"]
 
@@ -143,7 +144,7 @@ class TestProductsCRUD:
                     {"kind": "grpc", "url": "grpc.example.com:443"},
                 ],
             },
-            headers={"X-Tenant-ID": "tenant-dev"},
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -152,7 +153,7 @@ class TestProductsCRUD:
         assert "rest" in kinds
         assert "grpc" in kinds
 
-    def test_test_connection_success(self, client):
+    def test_test_connection_success(self, client, csrf_headers):
         """Test connection endpoint with mocked successful response."""
         # Create product with endpoint
         create_resp = client.post(
@@ -162,7 +163,7 @@ class TestProductsCRUD:
                 "name": "Connection Test",
                 "endpoints": [{"kind": "rest", "url": "https://api.example.com"}],
             },
-            headers={"X-Tenant-ID": "tenant-dev"},
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
         )
         product_id = create_resp.json()["id"]
 
@@ -179,7 +180,7 @@ class TestProductsCRUD:
 
             response = client.post(
                 f"/admin/products/{product_id}/test-connection",
-                headers={"X-Tenant-ID": "tenant-dev"},
+                headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
             )
 
         assert response.status_code == 200
@@ -188,7 +189,7 @@ class TestProductsCRUD:
         assert data["status_code"] == 200
         assert data["endpoint_url"] == "https://api.example.com/health"
 
-    def test_test_connection_failure(self, client):
+    def test_test_connection_failure(self, client, csrf_headers):
         """Test connection endpoint with mocked failure response."""
         # Create product
         create_resp = client.post(
@@ -198,7 +199,7 @@ class TestProductsCRUD:
                 "name": "Connection Fail",
                 "endpoints": [{"kind": "rest", "url": "https://api.example.com"}],
             },
-            headers={"X-Tenant-ID": "tenant-dev"},
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
         )
         product_id = create_resp.json()["id"]
 
@@ -214,7 +215,7 @@ class TestProductsCRUD:
 
             response = client.post(
                 f"/admin/products/{product_id}/test-connection",
-                headers={"X-Tenant-ID": "tenant-dev"},
+                headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
             )
 
         assert response.status_code == 200
@@ -222,19 +223,19 @@ class TestProductsCRUD:
         assert data["success"] is False
         assert "Connection failed" in data["error"]
 
-    def test_test_connection_no_endpoint(self, client):
+    def test_test_connection_no_endpoint(self, client, csrf_headers):
         """Test connection endpoint when no endpoint configured."""
         # Create product without endpoints
         create_resp = client.post(
             "/admin/products",
             json={"slug": "no-endpoint", "name": "No Endpoint"},
-            headers={"X-Tenant-ID": "tenant-dev"},
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
         )
         product_id = create_resp.json()["id"]
 
         response = client.post(
             f"/admin/products/{product_id}/test-connection",
-            headers={"X-Tenant-ID": "tenant-dev"},
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
         )
 
         assert response.status_code == 200
@@ -246,30 +247,30 @@ class TestProductsCRUD:
 class TestProductsValidation:
     """Test input validation."""
 
-    def test_create_duplicate_slug(self, client):
+    def test_create_duplicate_slug(self, client, csrf_headers):
         """Test creating product with duplicate slug returns 409."""
         # Create first product
         client.post(
             "/admin/products",
             json={"slug": "duplicate", "name": "First"},
-            headers={"X-Tenant-ID": "tenant-dev"},
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
         )
 
         # Try to create second with same slug
         response = client.post(
             "/admin/products",
             json={"slug": "duplicate", "name": "Second"},
-            headers={"X-Tenant-ID": "tenant-dev"},
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
         )
         assert response.status_code == 409
         assert "already exists" in response.json()["detail"]
 
-    def test_create_invalid_slug(self, client):
+    def test_create_invalid_slug(self, client, csrf_headers):
         """Test creating product with invalid slug."""
         response = client.post(
             "/admin/products",
             json={"slug": "Invalid Slug!", "name": "Test"},
-            headers={"X-Tenant-ID": "tenant-dev"},
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
         )
         assert response.status_code == 422  # Validation error
 
@@ -281,12 +282,12 @@ class TestProductsValidation:
         )
         assert response.status_code == 404
 
-    def test_patch_nonexistent_product(self, client):
+    def test_patch_nonexistent_product(self, client, csrf_headers):
         """Test patching product that doesn't exist."""
         response = client.patch(
             "/admin/products/99999",
             json={"name": "New Name"},
-            headers={"X-Tenant-ID": "tenant-dev"},
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
         )
         assert response.status_code == 404
 
@@ -304,24 +305,22 @@ class TestTenantIsolation:
         assert response.status_code == 403
         assert "Tenant access denied" in response.json()["detail"]
 
-    def test_missing_tenant_uses_default(self, client):
-        """Test that missing tenant header uses user's first tenant."""
-        # Create a product without specifying tenant (uses default from user)
+    def test_missing_tenant_rejected_for_write(self, client, csrf_headers):
+        """Test that missing tenant header is rejected for writes."""
         response = client.post(
             "/admin/products",
             json={"slug": "default-tenant-product", "name": "Default Tenant"},
+            headers=csrf_headers(client),
         )
-        assert response.status_code == 201
-        # Should use tenant-dev (the dev user's only tenant)
-        assert response.json()["tenant_id"] == "tenant-dev"
+        assert response.status_code == 400
 
-    def test_tenant_scoped_queries(self, client):
+    def test_tenant_scoped_queries(self, client, csrf_headers):
         """Test that products are scoped to tenant."""
         # Create product
         create_resp = client.post(
             "/admin/products",
             json={"slug": "scoped-product", "name": "Scoped Product"},
-            headers={"X-Tenant-ID": "tenant-dev"},
+            headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
         )
         assert create_resp.status_code == 201
         product_id = create_resp.json()["id"]
@@ -341,3 +340,94 @@ class TestTenantIsolation:
         assert list_resp.status_code == 200
         slugs = [p["slug"] for p in list_resp.json()["products"]]
         assert "scoped-product" in slugs
+
+
+class TestProductsRBAC:
+    """Test RBAC enforcement for products endpoints."""
+
+    def test_list_requires_product_read(self, app_no_bypass, session_cookie):
+        from admin_gateway.auth.session import Session
+
+        def _no_product_scope():
+            return Session(
+                user_id="rbac-user",
+                scopes={"keys:read"},
+                tenant_id="tenant-dev",
+                claims={"allowed_tenants": ["tenant-dev"]},
+            )
+
+        with TestClient(app_no_bypass) as client:
+            session = _no_product_scope()
+            cookie_name, cookie_value = session_cookie(session)
+            client.cookies.set(cookie_name, cookie_value)
+            response = client.get(
+                "/admin/products",
+                headers={"X-Tenant-ID": "tenant-dev"},
+            )
+        assert response.status_code == 403
+
+    def test_create_requires_product_write(
+        self, app_no_bypass, csrf_headers, session_cookie
+    ):
+        from admin_gateway.auth.session import Session
+
+        def _read_only():
+            return Session(
+                user_id="rbac-user",
+                scopes={"product:read"},
+                tenant_id="tenant-dev",
+                claims={"allowed_tenants": ["tenant-dev"]},
+            )
+
+        with TestClient(app_no_bypass) as client:
+            session = _read_only()
+            cookie_name, cookie_value = session_cookie(session)
+            client.cookies.set(cookie_name, cookie_value)
+            response = client.post(
+                "/admin/products",
+                json={"slug": "rbac-create", "name": "RBAC Create"},
+                headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
+            )
+        assert response.status_code == 403
+
+    def test_patch_requires_product_write(
+        self, app_no_bypass, csrf_headers, session_cookie
+    ):
+        from admin_gateway.auth.session import Session
+
+        def _writer():
+            return Session(
+                user_id="rbac-user",
+                scopes={"product:write"},
+                tenant_id="tenant-dev",
+                claims={"allowed_tenants": ["tenant-dev"]},
+            )
+
+        def _reader():
+            return Session(
+                user_id="rbac-user",
+                scopes={"product:read"},
+                tenant_id="tenant-dev",
+                claims={"allowed_tenants": ["tenant-dev"]},
+            )
+
+        with TestClient(app_no_bypass) as client:
+            writer_session = _writer()
+            cookie_name, cookie_value = session_cookie(writer_session)
+            client.cookies.set(cookie_name, cookie_value)
+            create_resp = client.post(
+                "/admin/products",
+                json={"slug": "rbac-update", "name": "RBAC Update"},
+                headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
+            )
+            product_id = create_resp.json()["id"]
+
+            reader_session = _reader()
+            cookie_name, cookie_value = session_cookie(reader_session)
+            client.cookies.set(cookie_name, cookie_value)
+            response = client.patch(
+                f"/admin/products/{product_id}",
+                json={"name": "Blocked"},
+                headers={**csrf_headers(client), "X-Tenant-ID": "tenant-dev"},
+            )
+        assert response.status_code == 403

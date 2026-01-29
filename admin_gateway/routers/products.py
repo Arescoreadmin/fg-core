@@ -132,10 +132,13 @@ class TestConnectionResult(BaseModel):
 
 def _get_tenant_id(request: Request, session: Session, is_write: bool = False) -> str:
     """Extract and validate tenant ID from request."""
-    tenant_id = request.headers.get("X-Tenant-ID") or session.tenant_id
+    tenant_id = request.headers.get("X-Tenant-ID")
+    if not tenant_id and not is_write:
+        tenant_id = session.tenant_id
     if not tenant_id:
-        allowed = sorted(get_allowed_tenants(session))
-        tenant_id = allowed[0] if allowed else None
+        if not is_write:
+            allowed = sorted(get_allowed_tenants(session))
+            tenant_id = allowed[0] if allowed else None
     if not tenant_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

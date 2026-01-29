@@ -321,6 +321,10 @@ AG_PIP      := $(AG_VENV)/bin/pip
 
 admin-venv:
 	@test -d "$(AG_VENV)" || python -m venv "$(AG_VENV)"
+	@if [ -n "$$ADMIN_SKIP_PIP_INSTALL" ]; then \
+		echo "Skipping admin-gateway package install (ADMIN_SKIP_PIP_INSTALL=1)"; \
+		exit 0; \
+	fi
 	@"$(AG_PIP)" install --upgrade pip
 	@"$(AG_PIP)" install -r admin_gateway/requirements.txt -r admin_gateway/requirements-dev.txt
 
