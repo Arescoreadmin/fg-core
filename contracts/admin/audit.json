@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Audit log entry schema.",
+  "description": "Audit event schema.",
   "properties": {
     "action": {
       "description": "Action performed",
@@ -20,21 +20,19 @@
       "description": "Actor identifier",
       "title": "Actor"
     },
-    "details": {
-      "additionalProperties": true,
+    "id": {
       "anyOf": [
         {
-          "type": "object"
+          "type": "string"
         },
         {
-          "type": "null"
+          "type": "integer"
         }
       ],
-      "default": null,
-      "description": "Additional details",
-      "title": "Details"
+      "description": "Audit event identifier",
+      "title": "Id"
     },
-    "ip_address": {
+    "ip": {
       "anyOf": [
         {
           "type": "string"
@@ -45,24 +43,15 @@
       ],
       "default": null,
       "description": "Client IP address",
-      "title": "Ip Address"
+      "title": "Ip"
     },
-    "outcome": {
-      "description": "Action outcome",
-      "enum": [
-        "success",
-        "failure",
-        "error"
-      ],
-      "title": "Outcome",
-      "type": "string"
+    "meta": {
+      "additionalProperties": true,
+      "description": "Additional metadata",
+      "title": "Meta",
+      "type": "object"
     },
     "request_id": {
-      "description": "Request tracking ID",
-      "title": "Request Id",
-      "type": "string"
-    },
-    "resource": {
       "anyOf": [
         {
           "type": "string"
@@ -72,8 +61,8 @@
         }
       ],
       "default": null,
-      "description": "Resource affected",
-      "title": "Resource"
+      "description": "Request tracking ID",
+      "title": "Request Id"
     },
     "resource_id": {
       "anyOf": [
@@ -88,10 +77,38 @@
       "description": "Resource identifier",
       "title": "Resource Id"
     },
-    "timestamp": {
-      "description": "Event timestamp",
+    "resource_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Resource type",
+      "title": "Resource Type"
+    },
+    "status": {
+      "description": "Action outcome",
+      "enum": [
+        "success",
+        "deny",
+        "error"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "tenant_id": {
+      "description": "Tenant identifier",
+      "title": "Tenant Id",
+      "type": "string"
+    },
+    "ts": {
+      "description": "Event timestamp (RFC3339)",
       "format": "date-time",
-      "title": "Timestamp",
+      "title": "Ts",
       "type": "string"
     },
     "user_agent": {
@@ -109,11 +126,13 @@
     }
   },
   "required": [
-    "timestamp",
-    "request_id",
+    "id",
+    "ts",
+    "tenant_id",
     "action",
-    "outcome"
+    "status",
+    "meta"
   ],
-  "title": "AuditLogEntry",
+  "title": "AuditEvent",
   "type": "object"
 }

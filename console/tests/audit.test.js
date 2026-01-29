@@ -9,5 +9,5 @@ test('audit page includes search and export copy', () => {
 
   assert.match(contents, /Audit Search/);
   assert.match(contents, /Export CSV/);
-  assert.match(contents, /Export JSONL/);
+  assert.match(contents, /Export JSON/);
 });

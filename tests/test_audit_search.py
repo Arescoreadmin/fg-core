@@ -27,9 +27,8 @@ def audit_client(tmp_path, monkeypatch):
 
 def test_audit_requires_tenant_filter(audit_client):
     client, api_key = audit_client
-    response = client.get("/admin/audit", headers={"X-API-Key": api_key})
-    assert response.status_code == 400
-    assert response.json()["detail"] == "tenant_id or tenant_ids is required"
+    response = client.get("/admin/audit/search", headers={"X-API-Key": api_key})
+    assert response.status_code == 422
 
 
 def test_audit_filters_by_tenant(audit_client):
@@ -61,16 +60,16 @@ def test_audit_filters_by_tenant(audit_client):
         session.commit()
 
     response = client.get(
-        "/admin/audit",
+        "/admin/audit/search",
         headers={"X-API-Key": api_key},
         params={"tenant_id": "tenant-a"},
     )
     assert response.status_code == 200
     payload = response.json()
-    assert all(event["tenant_id"] == "tenant-a" for event in payload["events"])
+    assert all(item["tenant_id"] == "tenant-a" for item in payload["items"])
 
 
-def test_audit_redacts_sensitive_details(audit_client):
+def test_audit_redacts_sensitive_details_and_ip(audit_client):
     client, api_key = audit_client
 
     from api.db import get_engine
@@ -85,6 +84,8 @@ def test_audit_redacts_sensitive_details(audit_client):
                 severity="info",
                 tenant_id="tenant-1",
                 success=True,
+                client_ip="192.168.1.10",
+                user_agent="agent",
                 details_json={
                     "authorization": "Bearer secret",
                     "nested": {"token": "secret-token"},
@@ -95,17 +96,20 @@ def test_audit_redacts_sensitive_details(audit_client):
         session.commit()
 
     response = client.get(
-        "/admin/audit",
+        "/admin/audit/search",
         headers={"X-API-Key": api_key},
         params={"tenant_id": "tenant-1"},
     )
     assert response.status_code == 200
     payload = response.json()
-    assert payload["events"]
-    details = payload["events"][0]["details"]
+    assert payload["items"]
+    event = payload["items"][0]
+    details = event["meta"]["details"]
     assert details["authorization"] == "[REDACTED]"
     assert details["nested"]["token"] == "[REDACTED]"
     assert details["safe"] == "ok"
+    assert event["ip"] is None
+    assert event["user_agent"] is None
 
 
 def test_audit_pagination_is_stable(audit_client):
@@ -147,21 +151,31 @@ def test_audit_pagination_is_stable(audit_client):
         )
         session.commit()
 
-    response = client.get(
-        "/admin/audit",
+    first = client.get(
+        "/admin/audit/search",
         headers={"X-API-Key": api_key},
-        params={"tenant_id": "tenant-3", "limit": 1, "offset": 1},
+        params={"tenant_id": "tenant-3", "page_size": 1},
     )
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["events"][0]["event_type"] == "event_b"
+    assert first.status_code == 200
+    first_payload = first.json()
+    assert first_payload["items"][0]["action"] == "event_c"
+    cursor = first_payload["next_cursor"]
+
+    second = client.get(
+        "/admin/audit/search",
+        headers={"X-API-Key": api_key},
+        params={"tenant_id": "tenant-3", "page_size": 1, "cursor": cursor},
+    )
+    assert second.status_code == 200
+    second_payload = second.json()
+    assert second_payload["items"][0]["action"] == "event_b"
 
 
 def test_audit_contract_endpoints_present():
     from pathlib import Path
 
     spec = json.loads(Path("contracts/admin/openapi.json").read_text())
-    assert "/admin/audit" in spec["paths"]
+    assert "/admin/audit/search" in spec["paths"]
     assert "/admin/audit/export" in spec["paths"]
 
 
@@ -185,11 +199,44 @@ def test_audit_export_csv(audit_client):
         )
         session.commit()
 
-    response = client.get(
+    response = client.post(
         "/admin/audit/export",
         headers={"X-API-Key": api_key},
-        params={"tenant_id": "tenant-2", "format": "csv"},
+        json={"tenant_id": "tenant-2", "format": "csv"},
     )
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/csv")
-    assert "event_type" in response.text
+    assert "action" in response.text
+
+
+def test_audit_export_redacts_ip_user_agent(audit_client):
+    client, api_key = audit_client
+
+    from api.db import get_engine
+    from sqlalchemy.orm import Session
+
+    engine = get_engine()
+    with Session(engine) as session:
+        session.add(
+            SecurityAuditLog(
+                event_type="auth_failure",
+                event_category="security",
+                severity="warning",
+                tenant_id="tenant-9",
+                success=False,
+                client_ip="10.0.0.1",
+                user_agent="test-agent",
+            )
+        )
+        session.commit()
+
+    response = client.post(
+        "/admin/audit/export",
+        headers={"X-API-Key": api_key},
+        json={"tenant_id": "tenant-9", "format": "json"},
+    )
+    assert response.status_code == 200
+    lines = [line for line in response.text.splitlines() if line]
+    payload = json.loads(lines[0])
+    assert payload["ip"] is None
+    assert payload["user_agent"] is None

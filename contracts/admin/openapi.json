@@ -61,6 +61,127 @@
         "title": "AdminRotateKeyRequest",
         "type": "object"
       },
+      "AuditExportRequest": {
+        "description": "Audit export request.",
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          },
+          "format": {
+            "pattern": "^(csv|json)$",
+            "title": "Format",
+            "type": "string"
+          },
+          "from_ts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Ts"
+          },
+          "page_size": {
+            "default": 1000,
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "resource_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Id"
+          },
+          "resource_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Type"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "to_ts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Ts"
+          }
+        },
+        "required": [
+          "format"
+        ],
+        "title": "AuditExportRequest",
+        "type": "object"
+      },
       "CSRFTokenResponse": {
         "description": "CSRF token response.",
         "properties": {
@@ -662,464 +783,20 @@
   },
   "openapi": "3.1.0",
   "paths": {
-    "/admin/audit": {
-      "get": {
-        "description": "List audit events.",
-        "operationId": "list_audit_events_admin_audit_get",
-        "parameters": [
-          {
-            "description": "Single tenant filter (required unless using tenant_ids)",
-            "in": "query",
-            "name": "tenant_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Single tenant filter (required unless using tenant_ids)",
-              "title": "Tenant Id"
-            }
-          },
-          {
-            "description": "Comma-separated tenant IDs (for multi-tenant admins)",
-            "in": "query",
-            "name": "tenant_ids",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Comma-separated tenant IDs (for multi-tenant admins)",
-              "title": "Tenant Ids"
-            }
-          },
-          {
-            "description": "Filter by event type",
-            "in": "query",
-            "name": "event_type",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by event type",
-              "title": "Event Type"
-            }
-          },
-          {
-            "description": "Filter by severity",
-            "in": "query",
-            "name": "severity",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by severity",
-              "title": "Severity"
-            }
-          },
-          {
-            "description": "Filter by success flag",
-            "in": "query",
-            "name": "success",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by success flag",
-              "title": "Success"
-            }
-          },
-          {
-            "description": "Filter by request id",
-            "in": "query",
-            "name": "request_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by request id",
-              "title": "Request Id"
-            }
-          },
-          {
-            "description": "Filter by key prefix",
-            "in": "query",
-            "name": "key_prefix",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by key prefix",
-              "title": "Key Prefix"
-            }
-          },
-          {
-            "description": "Start time (ISO8601)",
-            "in": "query",
-            "name": "start_time",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Start time (ISO8601)",
-              "title": "Start Time"
-            }
-          },
-          {
-            "description": "End time (ISO8601)",
-            "in": "query",
-            "name": "end_time",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "End time (ISO8601)",
-              "title": "End Time"
-            }
-          },
-          {
-            "description": "Search fragment",
-            "in": "query",
-            "name": "query_text",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Search fragment",
-              "title": "Query Text"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 100,
-              "maximum": 1000,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "required": false,
-            "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "title": "Response List Audit Events Admin Audit Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Audit Events",
-        "tags": [
-          "admin"
-        ]
-      }
-    },
     "/admin/audit/export": {
-      "get": {
-        "description": "Export audit events as CSV/JSONL.",
-        "operationId": "export_audit_events_admin_audit_export_get",
-        "parameters": [
-          {
-            "description": "Single tenant filter (required unless using tenant_ids)",
-            "in": "query",
-            "name": "tenant_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Single tenant filter (required unless using tenant_ids)",
-              "title": "Tenant Id"
+      "post": {
+        "description": "Export audit events as CSV/JSON.",
+        "operationId": "export_audit_events_admin_audit_export_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuditExportRequest"
+              }
             }
           },
-          {
-            "description": "Comma-separated tenant IDs (for multi-tenant admins)",
-            "in": "query",
-            "name": "tenant_ids",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Comma-separated tenant IDs (for multi-tenant admins)",
-              "title": "Tenant Ids"
-            }
-          },
-          {
-            "description": "Filter by event type",
-            "in": "query",
-            "name": "event_type",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by event type",
-              "title": "Event Type"
-            }
-          },
-          {
-            "description": "Filter by severity",
-            "in": "query",
-            "name": "severity",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by severity",
-              "title": "Severity"
-            }
-          },
-          {
-            "description": "Filter by success flag",
-            "in": "query",
-            "name": "success",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by success flag",
-              "title": "Success"
-            }
-          },
-          {
-            "description": "Filter by request id",
-            "in": "query",
-            "name": "request_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by request id",
-              "title": "Request Id"
-            }
-          },
-          {
-            "description": "Filter by key prefix",
-            "in": "query",
-            "name": "key_prefix",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by key prefix",
-              "title": "Key Prefix"
-            }
-          },
-          {
-            "description": "Start time (ISO8601)",
-            "in": "query",
-            "name": "start_time",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Start time (ISO8601)",
-              "title": "Start Time"
-            }
-          },
-          {
-            "description": "End time (ISO8601)",
-            "in": "query",
-            "name": "end_time",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "End time (ISO8601)",
-              "title": "End Time"
-            }
-          },
-          {
-            "description": "Search fragment",
-            "in": "query",
-            "name": "query_text",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Search fragment",
-              "title": "Query Text"
-            }
-          },
-          {
-            "in": "query",
-            "name": "format",
-            "required": false,
-            "schema": {
-              "default": "jsonl",
-              "pattern": "^(jsonl|csv)$",
-              "title": "Format",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 1000,
-              "maximum": 5000,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "required": false,
-            "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
-              "type": "integer"
-            }
-          }
-        ],
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
@@ -1141,6 +818,233 @@
           }
         },
         "summary": "Export Audit Events",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/audit/search": {
+      "get": {
+        "description": "Search audit events.",
+        "operationId": "search_audit_events_admin_audit_search_get",
+        "parameters": [
+          {
+            "description": "Tenant filter",
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Tenant filter",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "description": "Filter by action",
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by action",
+              "title": "Action"
+            }
+          },
+          {
+            "description": "Filter by actor",
+            "in": "query",
+            "name": "actor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by actor",
+              "title": "Actor"
+            }
+          },
+          {
+            "description": "Filter by status",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by status",
+              "title": "Status"
+            }
+          },
+          {
+            "description": "Filter by request id",
+            "in": "query",
+            "name": "request_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by request id",
+              "title": "Request Id"
+            }
+          },
+          {
+            "description": "Filter by resource type",
+            "in": "query",
+            "name": "resource_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by resource type",
+              "title": "Resource Type"
+            }
+          },
+          {
+            "description": "Filter by resource id",
+            "in": "query",
+            "name": "resource_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by resource id",
+              "title": "Resource Id"
+            }
+          },
+          {
+            "description": "Start time (RFC3339)",
+            "in": "query",
+            "name": "from_ts",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Start time (RFC3339)",
+              "title": "From Ts"
+            }
+          },
+          {
+            "description": "End time (RFC3339)",
+            "in": "query",
+            "name": "to_ts",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "End time (RFC3339)",
+              "title": "To Ts"
+            }
+          },
+          {
+            "description": "Pagination cursor",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Pagination cursor",
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Search Audit Events Admin Audit Search Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Audit Events",
         "tags": [
           "admin"
         ]
