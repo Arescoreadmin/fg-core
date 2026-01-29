@@ -1,21 +1,37 @@
 from __future__ import annotations
 
 import os
-import sys
 import pytest
 
 from api.main import build_app as _build_app
 from api.db import init_db, reset_engine_cache
 
-if "pytest" in sys.modules:
+
+def _setenv(key: str, val: str) -> None:
+    os.environ[str(key)] = str(val)
+
+
+def pytest_configure() -> None:
     os.environ.setdefault(
         "FG_API_KEY", "ci-test-key-00000000000000000000000000000000"
     )
     os.environ.setdefault("FG_ENV", "test")
 
 
-def _setenv(key: str, val: str) -> None:
-    os.environ[str(key)] = str(val)
+@pytest.fixture(scope="session", autouse=True)
+def _test_env_defaults() -> None:
+    os.environ.setdefault(
+        "FG_API_KEY", "ci-test-key-00000000000000000000000000000000"
+    )
+    os.environ.setdefault("FG_ENV", "test")
+
+
+@pytest.fixture(autouse=True)
+def _restore_env():
+    before = dict(os.environ)
+    yield
+    os.environ.clear()
+    os.environ.update(before)
 
 
 def _require_api_key() -> str:
