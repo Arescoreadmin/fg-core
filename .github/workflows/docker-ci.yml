@@ -24,6 +24,23 @@ jobs:
           print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(24)}")
           PY
 
+      - name: Verify required env vars are set
+        run: |
+          set -euo pipefail
+          missing=0
+          for var in FG_API_KEY REDIS_PASSWORD POSTGRES_PASSWORD FG_AGENT_API_KEY; do
+            if [ -n "${!var:-}" ]; then
+              echo "${var}=set"
+            else
+              echo "${var}=missing"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Required env vars missing; aborting."
+            exit 1
+          fi
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -37,6 +54,7 @@ jobs:
             echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}"
             echo "FG_AGENT_API_KEY=${FG_AGENT_API_KEY}"
           } >> .env.ci
+          cp .env.ci .env
           echo "${FG_API_KEY}" > secrets/fg_api_keys.txt
 
       - name: Build images via docker compose
