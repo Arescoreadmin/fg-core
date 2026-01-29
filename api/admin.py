@@ -791,7 +791,7 @@ async def export_audit_events(
             media_type="text/csv",
         )
         response.headers["Content-Disposition"] = (
-            f'attachment; filename=\"{filename}.csv\"'
+            f'attachment; filename="{filename}.csv"'
         )
         return response
 
@@ -804,9 +804,7 @@ async def export_audit_events(
         iter([buffer.getvalue()]),
         media_type="application/jsonl",
     )
-    response.headers["Content-Disposition"] = (
-        f'attachment; filename=\"{filename}.jsonl\"'
-    )
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}.jsonl"'
     return response
 
 

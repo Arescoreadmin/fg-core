@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from typing import Callable, Any
 
+
 def _require_api_key() -> str:
     api_key = os.environ.get("FG_API_KEY", "").strip()
     if not api_key:
