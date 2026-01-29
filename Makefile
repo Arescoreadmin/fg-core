@@ -322,7 +322,8 @@ AG_PIP      := $(AG_VENV)/bin/pip
 
 admin-venv:
 	@echo "Admin venv: $(AG_VENV) (python: $$(command -v python3))"
-	@python3 -m venv --upgrade --system-site-packages "$(AG_VENV)"
+	@python3 -m venv --upgrade --system-site-packages "$(AG_VENV)" || \
+		python -m venv --upgrade --system-site-packages "$(AG_VENV)"
 	@if [ "$${ADMIN_SKIP_PIP_INSTALL:-0}" = "1" ]; then \
 		echo "Skipping admin-gateway package install (ADMIN_SKIP_PIP_INSTALL=1)"; \
 		exit 0; \
