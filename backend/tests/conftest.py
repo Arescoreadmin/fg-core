@@ -1,22 +1,21 @@
 import os
+import sys
 import pytest
 
 from api.main import build_app as _build_app
 from api.db import init_db, reset_engine_cache
 
+if "pytest" in sys.modules:
+    os.environ.setdefault(
+        "FG_API_KEY", "ci-test-key-00000000000000000000000000000000"
+    )
+    os.environ.setdefault("FG_ENV", "test")
+
 
 def _require_api_key() -> str:
     api_key = os.environ.get("FG_API_KEY", "").strip()
     if not api_key:
-        in_pytest = bool(os.environ.get("PYTEST_CURRENT_TEST")) or os.environ.get(
-            "FG_ENV"
-        ) in {"test", "ci"}
-        if in_pytest:
-            # Deterministic test-only key to avoid CI/local env drift.
-            api_key = "pytest-fg-api-key"
-            os.environ["FG_API_KEY"] = api_key
-        else:
-            raise RuntimeError("FG_API_KEY must be set for test runs.")
+        raise RuntimeError("FG_API_KEY must be set for test runs.")
     return api_key
 
 

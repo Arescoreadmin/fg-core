@@ -1,8 +1,15 @@
 import os
 import sqlite3
+import sys
 import pytest
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
+
+if "pytest" in sys.modules:
+    os.environ.setdefault(
+        "FG_API_KEY", "ci-test-key-00000000000000000000000000000000"
+    )
+    os.environ.setdefault("FG_ENV", "test")
 
 def _env(name: str, default: str | None = None) -> str | None:
     v = os.getenv(name)

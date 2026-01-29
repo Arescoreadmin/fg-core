@@ -53,9 +53,15 @@ jobs:
         run: |
           make venv
 
+      - name: Verify FG_API_KEY is set
+        run: |
+          python -c "import os; assert os.getenv('FG_API_KEY')"
+
       - name: Run unit lane
         run: |
           make ci
+        env:
+          FG_API_KEY: ${{ env.FG_API_KEY }}
 
       - name: Upload artifacts (always)
         if: always()
@@ -110,6 +116,10 @@ jobs:
         run: |
           make venv
 
+      - name: Verify FG_API_KEY is set
+        run: |
+          python -c "import os; assert os.getenv('FG_API_KEY')"
+
       - name: Run integration lane
         run: |
           make ci-integration
@@ -152,6 +162,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Verify FG_API_KEY is set
+        run: |
+          python -c "import os; assert os.getenv('FG_API_KEY')"
 
       - name: Run admin gateway lane
         run: |
@@ -204,6 +218,10 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Verify FG_API_KEY is set
+        run: |
+          python -c "import os; assert os.getenv('FG_API_KEY')"
+
       - name: Run PT lane
         run: |
           make ci-pt
@@ -254,6 +272,10 @@ jobs:
       - name: Build venv + deps
         run: |
           make venv
+
+      - name: Verify FG_API_KEY is set
+        run: |
+          python -c "import os; assert os.getenv('FG_API_KEY')"
 
       - name: Run evidence lane (server + smoke + evidence)
         run: |
