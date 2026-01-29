@@ -14,6 +14,7 @@ SHELL := /bin/bash
 VENV ?= .venv
 PY   := $(VENV)/bin/python
 PIP  := $(VENV)/bin/pip
+PY_CONTRACT := $(if $(wildcard $(PY)),$(PY),python)
 export PYTHONPATH := .
 
 PYTEST_ENV := env PYTHONHASHSEED=0 TZ=UTC
@@ -106,18 +107,20 @@ venv:
 .PHONY: guard-scripts fg-audit-make fg-contract fg-compile contracts-gen
 
 guard-scripts:
-	@$(PY) scripts/guard_no_paste_garbage.py
-	@$(PY) scripts/guard_makefile_sanity.py
+	@$(PY_CONTRACT) scripts/guard_no_paste_garbage.py
+	@$(PY_CONTRACT) scripts/guard_makefile_sanity.py
 
 fg-audit-make: guard-scripts
 	@$(PY) scripts/audit_make_targets.py
 
-contracts-gen: admin-venv
-	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(AG_PY) scripts/contracts_gen.py
+contracts-gen:
+	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) scripts/contracts_gen.py
 
 fg-contract: guard-scripts contracts-gen
-	@$(PY) scripts/contract_lint.py
+	@$(PY_CONTRACT) scripts/contract_toolchain_check.py
+	@$(PY_CONTRACT) scripts/contract_lint.py
 	@git diff --exit-code contracts/admin
+	@echo "Contract diff: OK"
 
 fg-compile: guard-scripts
 	@$(PY) -m py_compile api/main.py api/feed.py api/ui.py api/dev_events.py api/auth_scopes.py
