@@ -425,9 +425,7 @@ class TestRateLimitFailureBehavior:
                 import asyncio
 
                 with pytest.raises(HTTPException) as exc_info:
-                    asyncio.get_event_loop().run_until_complete(
-                        rate_limit_guard(mock_request, None)
-                    )
+                    asyncio.run(rate_limit_guard(mock_request, None))
 
                 assert exc_info.value.status_code == 503
                 assert "unavailable" in exc_info.value.detail.lower()
@@ -461,9 +459,7 @@ class TestRateLimitFailureBehavior:
                 import asyncio
 
                 # Should NOT raise - request allowed on Redis failure
-                result = asyncio.get_event_loop().run_until_complete(
-                    rate_limit_guard(mock_request, None)
-                )
+                result = asyncio.run(rate_limit_guard(mock_request, None))
                 assert result is None
 
     def test_production_compose_sets_fail_closed(self):
