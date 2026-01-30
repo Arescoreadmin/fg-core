@@ -64,6 +64,10 @@ jobs:
         run: |
           make prod-profile-check
 
+      - name: Gap audit (fail if Production-blocking gaps exist)
+        run: |
+          make gap-audit
+
       - name: Run unit lane
         run: |
           make ci
