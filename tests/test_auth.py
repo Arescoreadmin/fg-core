@@ -3,7 +3,7 @@ import sys
 import importlib
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from fastapi.testclient import TestClient
 
 
 def build_app(auth_enabled: bool):
@@ -48,14 +48,12 @@ def build_app(auth_enabled: bool):
     return main.app
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("auth_enabled", [False, True])
-async def test_health_reflects_auth_enabled(auth_enabled: bool):
+def test_health_reflects_auth_enabled(auth_enabled: bool):
     app = build_app(auth_enabled)
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/health")
+    with TestClient(app) as client:
+        resp = client.get("/health")
 
     assert resp.status_code == 200
     data = resp.json()
@@ -64,30 +62,26 @@ async def test_health_reflects_auth_enabled(auth_enabled: bool):
     assert data.get("auth_enabled") is auth_enabled
 
 
-@pytest.mark.asyncio
-async def test_status_requires_key_when_auth_enabled():
+def test_status_requires_key_when_auth_enabled():
     app = build_app(auth_enabled=True)
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/status")
+    with TestClient(app) as client:
+        resp = client.get("/status")
 
     assert resp.status_code == 401
     assert resp.json().get("detail") == "Invalid or missing API key"
 
 
-@pytest.mark.asyncio
-async def test_v1_status_accepts_valid_key_and_rejects_missing():
+def test_v1_status_accepts_valid_key_and_rejects_missing():
     app = build_app(auth_enabled=True)
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
+    with TestClient(app) as client:
         # No key -> 401
-        resp_no_key = await client.get("/v1/status")
+        resp_no_key = client.get("/v1/status")
         assert resp_no_key.status_code == 401
 
         # With correct key -> 200
-        resp_with_key = await client.get(
+        resp_with_key = client.get(
             "/v1/status",
             headers={"x-api-key": os.environ["FG_API_KEY"]},
         )
