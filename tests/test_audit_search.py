@@ -25,13 +25,14 @@ def audit_client(tmp_path, monkeypatch):
     return client, api_key
 
 
-def test_audit_defaults_tenant_when_omitted(audit_client):
-    """When tenant_id is omitted, it defaults based on auth context."""
+def test_unscoped_key_requires_tenant_id(audit_client):
+    """Unscoped key without tenant_id returns 400 for audit search."""
     client, api_key = audit_client
-    # With tenant binding, omitted tenant_id defaults to auth tenant or 'unknown'
+    # Unscoped keys MUST provide explicit tenant_id for audit endpoints
     response = client.get("/admin/audit/search", headers={"X-API-Key": api_key})
-    # Should succeed with default tenant
-    assert response.status_code == 200
+    # Should return 400 because unscoped keys must provide tenant_id
+    assert response.status_code == 400
+    assert response.json()["detail"] == "tenant_id required for unscoped keys"
 
 
 def test_audit_filters_by_tenant(audit_client):

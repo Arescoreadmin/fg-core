@@ -753,30 +753,55 @@ def bind_tenant_id(
     request: Request,
     requested_tenant: Optional[str],
     *,
-    require_explicit: bool = False,
+    require_explicit_for_unscoped: bool = False,
     default_unscoped: str = "unknown",
-) -> Optional[str]:
+) -> str:
     """
     Clamp request tenant_id to the authenticated key's tenant scope.
 
     Rules:
       - If key is tenant-scoped, requested tenant must match or be omitted.
-      - If key is unscoped, allow requested tenant or default deterministically.
+        When omitted, defaults to the key's bound tenant.
+      - If key is unscoped (no tenant binding):
+        - If require_explicit_for_unscoped=True: tenant_id is required (400 error).
+        - Otherwise: uses requested tenant_id or falls back to default_unscoped.
+
+    Args:
+        request: The FastAPI request object (must have state.auth set)
+        requested_tenant: The tenant_id from the request (query param or body)
+        require_explicit_for_unscoped: If True, unscoped keys MUST provide tenant_id
+        default_unscoped: Default tenant_id for unscoped keys when not required
+
+    Returns:
+        The effective tenant_id to use for the request.
+
+    Raises:
+        HTTPException(403): Tenant mismatch (scoped key accessing wrong tenant)
+        HTTPException(400): tenant_id required for unscoped keys (when required)
+        HTTPException(400): Invalid tenant_id format
     """
     requested = (str(requested_tenant).strip() if requested_tenant else "") or None
     auth = getattr(getattr(request, "state", None), "auth", None)
     auth_tenant = getattr(auth, "tenant_id", None)
 
+    # Tenant-scoped key: clamp to auth tenant
     if auth_tenant:
         if requested and requested != auth_tenant:
             raise HTTPException(status_code=403, detail="Tenant mismatch")
         return auth_tenant
 
+    # Unscoped key: handle based on require_explicit_for_unscoped flag
     if requested:
+        # Validate tenant_id format
+        valid, error = _validate_tenant_id(requested)
+        if not valid:
+            raise HTTPException(status_code=400, detail=error)
         return requested
 
-    if require_explicit:
-        raise HTTPException(status_code=400, detail="tenant_id required")
+    if require_explicit_for_unscoped:
+        raise HTTPException(
+            status_code=400, detail="tenant_id required for unscoped keys"
+        )
 
     return default_unscoped
 
