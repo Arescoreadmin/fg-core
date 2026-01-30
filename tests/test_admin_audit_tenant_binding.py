@@ -171,22 +171,37 @@ def test_unscoped_key_can_search_any_tenant(audit_tenant_client):
     assert all(item["tenant_id"] == "tenant-b" for item in payload["items"])
 
 
-def test_unscoped_key_defaults_to_unknown_tenant(audit_tenant_client):
-    """Unscoped key without tenant_id defaults to 'unknown' tenant."""
+def test_unscoped_key_requires_tenant_id_for_search(audit_tenant_client):
+    """Unscoped key without tenant_id returns 400 for search."""
     client = audit_tenant_client
     key_global = mint_key("audit:read", ttl_seconds=3600)  # No tenant_id
 
-    # Search without tenant_id - should default to 'unknown'
+    # Search without tenant_id - should require explicit tenant_id
     response = client.get(
         "/admin/audit/search",
         headers={"X-API-Key": key_global},
     )
 
-    # Should return 200 (searching for 'unknown' tenant, which may have no records)
-    assert response.status_code == 200
-    payload = response.json()
-    # No records for 'unknown' tenant in our test data
-    assert len(payload["items"]) == 0
+    # Should return 400 because unscoped keys must provide tenant_id
+    assert response.status_code == 400
+    assert response.json()["detail"] == "tenant_id required for unscoped keys"
+
+
+def test_unscoped_key_requires_tenant_id_for_export(audit_tenant_client):
+    """Unscoped key without tenant_id returns 400 for export."""
+    client = audit_tenant_client
+    key_global = mint_key("audit:read", ttl_seconds=3600)  # No tenant_id
+
+    # Export without tenant_id - should require explicit tenant_id
+    response = client.post(
+        "/admin/audit/export",
+        headers={"X-API-Key": key_global},
+        json={"format": "json"},
+    )
+
+    # Should return 400 because unscoped keys must provide tenant_id
+    assert response.status_code == 400
+    assert response.json()["detail"] == "tenant_id required for unscoped keys"
 
 
 def test_audit_search_redacts_ip_and_user_agent(audit_tenant_client):
@@ -265,3 +280,106 @@ def test_key_without_audit_scope_returns_403(audit_tenant_client):
     )
 
     assert response.status_code == 403
+
+
+# =============================================================================
+# Export Header Tests
+# =============================================================================
+
+
+def test_export_csv_headers(audit_tenant_client):
+    """CSV export has correct Content-Type and Content-Disposition headers."""
+    client = audit_tenant_client
+    key_a = mint_key("audit:read", ttl_seconds=3600, tenant_id="tenant-a")
+
+    response = client.post(
+        "/admin/audit/export",
+        headers={"X-API-Key": key_a},
+        json={"format": "csv", "tenant_id": "tenant-a"},
+    )
+
+    assert response.status_code == 200
+    # Content-Type for CSV
+    assert response.headers["content-type"] == "text/csv; charset=utf-8"
+    # Content-Disposition includes filename with tenant and timestamp
+    content_disp = response.headers["content-disposition"]
+    assert content_disp.startswith('attachment; filename="audit-tenant-a-')
+    assert content_disp.endswith('.csv"')
+
+
+def test_export_ndjson_headers(audit_tenant_client):
+    """NDJSON export has correct Content-Type and Content-Disposition headers."""
+    client = audit_tenant_client
+    key_a = mint_key("audit:read", ttl_seconds=3600, tenant_id="tenant-a")
+
+    response = client.post(
+        "/admin/audit/export",
+        headers={"X-API-Key": key_a},
+        json={"format": "json", "tenant_id": "tenant-a"},
+    )
+
+    assert response.status_code == 200
+    # Content-Type for NDJSON
+    assert response.headers["content-type"] == "application/x-ndjson"
+    # Content-Disposition includes filename with tenant and timestamp
+    content_disp = response.headers["content-disposition"]
+    assert content_disp.startswith('attachment; filename="audit-tenant-a-')
+    assert content_disp.endswith('.json"')
+
+
+def test_export_filename_includes_tenant_and_timestamp(audit_tenant_client):
+    """Export filename contains tenant_id and ISO timestamp pattern."""
+    import re
+
+    client = audit_tenant_client
+    key_a = mint_key("audit:read", ttl_seconds=3600, tenant_id="tenant-a")
+
+    response = client.post(
+        "/admin/audit/export",
+        headers={"X-API-Key": key_a},
+        json={"format": "json", "tenant_id": "tenant-a"},
+    )
+
+    assert response.status_code == 200
+    content_disp = response.headers["content-disposition"]
+    # Pattern: audit-{tenant_id}-{YYYYMMDDTHHMMSSZ}.json
+    pattern = r'attachment; filename="audit-tenant-a-\d{8}T\d{6}Z\.json"'
+    assert re.match(pattern, content_disp), (
+        f"Unexpected Content-Disposition: {content_disp}"
+    )
+
+
+def test_unscoped_key_export_with_explicit_tenant(audit_tenant_client):
+    """Unscoped key can export when tenant_id is explicitly provided."""
+    client = audit_tenant_client
+    key_global = mint_key("audit:read", ttl_seconds=3600)  # No tenant_id
+
+    # Export with explicit tenant_id - should succeed
+    response = client.post(
+        "/admin/audit/export",
+        headers={"X-API-Key": key_global},
+        json={"format": "json", "tenant_id": "tenant-b"},
+    )
+
+    assert response.status_code == 200
+    lines = [line for line in response.text.splitlines() if line]
+    assert len(lines) > 0
+    for line in lines:
+        event = json.loads(line)
+        assert event["tenant_id"] == "tenant-b"
+
+
+def test_invalid_tenant_id_format_returns_400(audit_tenant_client):
+    """Invalid tenant_id format returns 400."""
+    client = audit_tenant_client
+    key_global = mint_key("audit:read", ttl_seconds=3600)  # No tenant_id
+
+    # Search with invalid tenant_id format
+    response = client.get(
+        "/admin/audit/search",
+        headers={"X-API-Key": key_global},
+        params={"tenant_id": "tenant@invalid!"},
+    )
+
+    assert response.status_code == 400
+    assert "invalid characters" in response.json()["detail"]

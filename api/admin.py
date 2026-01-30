@@ -582,9 +582,11 @@ async def search_audit_events(
     _: str = Depends(verify_api_key),
 ) -> AuditSearchResponse:
     """Search audit events with tenant scoping enforced."""
-    # Enforce tenant binding: tenant-scoped keys can only query their own tenant
+    # Enforce tenant binding:
+    # - Tenant-scoped keys can only query their own tenant (or omit to use auth tenant)
+    # - Unscoped keys MUST provide explicit tenant_id (no "unknown" shadow tenant)
     effective_tenant = bind_tenant_id(
-        request, tenant_id, require_explicit=False, default_unscoped="unknown"
+        request, tenant_id, require_explicit_for_unscoped=True
     )
     filters = _audit_filters(
         tenant_id=effective_tenant,
@@ -696,9 +698,11 @@ async def export_audit_events(
     _: str = Depends(verify_api_key),
 ) -> StreamingResponse:
     """Export audit events as NDJSON or CSV with tenant scoping enforced."""
-    # Enforce tenant binding: tenant-scoped keys can only export their own tenant
+    # Enforce tenant binding:
+    # - Tenant-scoped keys can only export their own tenant (or omit to use auth tenant)
+    # - Unscoped keys MUST provide explicit tenant_id (no "unknown" shadow tenant)
     effective_tenant = bind_tenant_id(
-        request, payload.tenant_id, require_explicit=False, default_unscoped="unknown"
+        request, payload.tenant_id, require_explicit_for_unscoped=True
     )
     filters = _audit_filters(
         tenant_id=effective_tenant,
@@ -760,7 +764,9 @@ async def export_audit_events(
                 )
                 yield event
 
-    filename = f"audit-events-{effective_tenant}"
+    # Generate deterministic filename with tenant and timestamp
+    export_ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    filename = f"audit-{effective_tenant}-{export_ts}"
     if payload.format == "csv":
         fieldnames = [
             "id",
