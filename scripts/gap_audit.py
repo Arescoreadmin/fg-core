@@ -47,6 +47,37 @@ WAIVER_WARNING_DAYS = 14
 # Gap ID pattern: G followed by exactly 3 digits (e.g., G001)
 GAP_ID_PATTERN = re.compile(r"^G\d{3}$")
 
+# Legacy GAP ID pattern for backward compatibility parsing (GAP-001, GAP-999, etc.)
+LEGACY_GAP_ID_PATTERN = re.compile(r"^GAP-(\d+)$")
+
+
+def normalize_gap_id(gap_id: str) -> str:
+    """Normalize gap ID to G### format.
+
+    Supports both new format (G001) and legacy format (GAP-001).
+    Returns normalized G### format for internal use.
+
+    Examples:
+        G001 -> G001
+        GAP-001 -> G001
+        GAP-42 -> G042
+    """
+    gap_id = gap_id.strip()
+
+    # Already in new format
+    if GAP_ID_PATTERN.match(gap_id):
+        return gap_id
+
+    # Legacy format: GAP-NNN -> G0NN (zero-padded to 3 digits)
+    legacy_match = LEGACY_GAP_ID_PATTERN.match(gap_id)
+    if legacy_match:
+        num = int(legacy_match.group(1))
+        if 1 <= num <= 999:
+            return f"G{num:03d}"
+
+    # Return as-is if unrecognized (validation will catch it)
+    return gap_id
+
 # Expected GAP_MATRIX table header columns (canonical)
 EXPECTED_MATRIX_COLUMNS = [
     "ID",
@@ -195,7 +226,7 @@ def parse_gap_matrix(path: Path) -> list[Gap]:
     )
 
     for match in table_pattern.finditer(content):
-        gap_id = match.group(1).strip()
+        gap_id = normalize_gap_id(match.group(1).strip())
         description = match.group(2).strip()
         severity = match.group(3).strip()
         evidence = match.group(4).strip()
@@ -238,7 +269,7 @@ def parse_waivers(path: Path) -> list[Waiver]:
     )
 
     for match in table_pattern.finditer(content):
-        gap_id = match.group(1).strip()
+        gap_id = normalize_gap_id(match.group(1).strip())
         severity = match.group(2).strip()
         reason = match.group(3).strip()
         approved_by = match.group(4).strip()

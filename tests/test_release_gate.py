@@ -22,6 +22,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 from release_gate import (
     calculate_readiness_score,
     run_release_gate,
+    run_readiness_checks,
+    run_command,
 )
 
 
@@ -299,3 +301,169 @@ class TestReleaseGateCLI:
         exit_code = main()
 
         assert exit_code == 1
+
+
+class TestRunCommand:
+    """Tests for run_command helper."""
+
+    def test_successful_command(self) -> None:
+        """Successful command returns (True, '')."""
+        passed, msg = run_command(["echo", "hello"], "test echo")
+        assert passed is True
+        assert msg == ""
+
+    def test_failed_command(self) -> None:
+        """Failed command returns (False, error_message)."""
+        passed, msg = run_command(["false"], "test false")
+        assert passed is False
+        assert "failed" in msg.lower()
+
+    def test_command_timeout(self) -> None:
+        """Command timeout returns informative error."""
+        # Use a very short timeout with a sleep command
+        import subprocess
+
+        # Mock the run to simulate timeout
+        from unittest.mock import patch
+
+        with patch("release_gate.subprocess.run") as mock_run:
+            mock_run.side_effect = subprocess.TimeoutExpired(cmd=["sleep"], timeout=1)
+            passed, msg = run_command(["sleep", "60"], "test sleep")
+
+        assert passed is False
+        assert "timed out" in msg.lower()
+
+    def test_command_not_found(self) -> None:
+        """Missing command returns informative error."""
+        passed, msg = run_command(["nonexistent_cmd_xyz"], "test missing")
+        assert passed is False
+        assert "not found" in msg.lower()
+
+
+class TestRunReadinessChecks:
+    """Tests for run_readiness_checks."""
+
+    def test_readiness_checks_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Readiness checks run in correct order."""
+        from unittest.mock import patch
+
+        call_order: list[str] = []
+
+        def mock_run_command(cmd: list[str], desc: str) -> tuple[bool, str]:
+            # Record the check name
+            if cmd == ["make", "contracts-gen"]:
+                call_order.append("contracts-gen")
+            elif cmd[0] == "git" and "diff" in cmd:
+                call_order.append("contracts-diff")
+            elif cmd == ["make", "fg-contract"]:
+                call_order.append("fg-contract")
+            elif cmd == ["make", "fg-lint"]:
+                call_order.append("fg-lint")
+            return True, ""
+
+        with patch("release_gate.run_command", side_effect=mock_run_command):
+            _ = run_readiness_checks()
+
+        # Verify order
+        assert call_order == [
+            "contracts-gen",
+            "contracts-diff",
+            "fg-contract",
+            "fg-lint",
+        ]
+
+    def test_readiness_checks_returns_all_results(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Readiness checks return results for all checks."""
+        from unittest.mock import patch
+
+        def mock_run_command(cmd: list[str], desc: str) -> tuple[bool, str]:
+            return True, ""
+
+        with patch("release_gate.run_command", side_effect=mock_run_command):
+            results = run_readiness_checks()
+
+        # Should have 4 results
+        assert len(results) == 4
+        names = [r[0] for r in results]
+        assert "contracts-gen" in names
+        assert "contracts-diff" in names
+        assert "fg-contract" in names
+        assert "fg-lint" in names
+
+    def test_contracts_diff_skipped_on_gen_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Contracts-diff is skipped if contracts-gen fails."""
+        from unittest.mock import patch
+
+        def mock_run_command(cmd: list[str], desc: str) -> tuple[bool, str]:
+            if cmd == ["make", "contracts-gen"]:
+                return False, "contracts-gen failed"
+            return True, ""
+
+        with patch("release_gate.run_command", side_effect=mock_run_command):
+            results = run_readiness_checks()
+
+        # Find contracts-diff result
+        diff_result = next(r for r in results if r[0] == "contracts-diff")
+        assert diff_result[1] is False
+        assert "Skipped" in diff_result[2]
+
+
+class TestReleaseGateWithReadinessChecks:
+    """Tests for release gate integration with readiness checks."""
+
+    def test_failing_check_blocks_release(self, tmp_path: Path) -> None:
+        """Failing readiness check blocks release."""
+        from unittest.mock import patch
+
+        matrix = tmp_path / "GAP_MATRIX.md"
+        matrix.write_text(
+            dedent("""
+            | ID | Gap | Severity | Evidence (file / test / CI lane) | Owner | ETA / Milestone | Definition of Done |
+            |----|-----|----------|----------------------------------|-------|-----------------|--------------------|
+            | G001 | Minor | Launch-risk | tests/test_minor.py | repo | V2 | Fixed |
+        """)
+        )
+        waivers = tmp_path / "RISK_WAIVERS.md"
+        waivers.write_text("# No waivers")
+
+        def mock_readiness_checks() -> list[tuple[str, bool, str]]:
+            return [
+                ("contracts-gen", True, ""),
+                ("contracts-diff", True, ""),
+                ("fg-contract", False, "Contract validation failed"),
+                ("fg-lint", True, ""),
+            ]
+
+        with patch(
+            "release_gate.run_readiness_checks", side_effect=mock_readiness_checks
+        ):
+            passed, summary = run_release_gate(
+                matrix, waivers, skip_subprocess_checks=False
+            )
+
+        assert passed is False
+        assert "fg-contract" in summary.lower()
+
+    def test_skip_subprocess_checks_bypass(self, tmp_path: Path) -> None:
+        """skip_subprocess_checks bypasses readiness checks."""
+        matrix = tmp_path / "GAP_MATRIX.md"
+        matrix.write_text(
+            dedent("""
+            | ID | Gap | Severity | Evidence (file / test / CI lane) | Owner | ETA / Milestone | Definition of Done |
+            |----|-----|----------|----------------------------------|-------|-----------------|--------------------|
+            | G001 | Minor | Launch-risk | tests/test_minor.py | repo | V2 | Fixed |
+        """)
+        )
+        waivers = tmp_path / "RISK_WAIVERS.md"
+        waivers.write_text("# No waivers")
+
+        # With skip_subprocess_checks=True, no subprocess calls should happen
+        passed, summary = run_release_gate(matrix, waivers, skip_subprocess_checks=True)
+
+        assert passed is True
+        # Readiness checks section should not appear in summary
+        assert "READINESS CHECKS:" not in summary
