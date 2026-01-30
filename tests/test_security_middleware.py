@@ -14,6 +14,7 @@ import os
 import time
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 
@@ -394,7 +395,8 @@ class TestRateLimitFailureBehavior:
             cfg = load_config()
             assert cfg.fail_open is False
 
-    def test_fail_closed_returns_503_on_redis_error(self):
+    @pytest.mark.asyncio
+    async def test_fail_closed_returns_503_on_redis_error(self):
         """Fail-closed mode must return 503 when Redis is unavailable."""
         import pytest
         from unittest.mock import MagicMock
@@ -422,15 +424,14 @@ class TestRateLimitFailureBehavior:
                 mock_request.client = MagicMock()
                 mock_request.client.host = "127.0.0.1"
 
-                import asyncio
-
                 with pytest.raises(HTTPException) as exc_info:
-                    asyncio.run(rate_limit_guard(mock_request, None))
+                    await rate_limit_guard(mock_request, None)
 
                 assert exc_info.value.status_code == 503
                 assert "unavailable" in exc_info.value.detail.lower()
 
-    def test_fail_open_allows_on_redis_error(self):
+    @pytest.mark.asyncio
+    async def test_fail_open_allows_on_redis_error(self):
         """Fail-open mode must allow requests when Redis is unavailable."""
         from unittest.mock import MagicMock
 
@@ -456,10 +457,8 @@ class TestRateLimitFailureBehavior:
                 mock_request.client = MagicMock()
                 mock_request.client.host = "127.0.0.1"
 
-                import asyncio
-
                 # Should NOT raise - request allowed on Redis failure
-                result = asyncio.run(rate_limit_guard(mock_request, None))
+                result = await rate_limit_guard(mock_request, None)
                 assert result is None
 
     def test_production_compose_sets_fail_closed(self):
