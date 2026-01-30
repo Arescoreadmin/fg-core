@@ -25,10 +25,13 @@ def audit_client(tmp_path, monkeypatch):
     return client, api_key
 
 
-def test_audit_requires_tenant_filter(audit_client):
+def test_audit_defaults_tenant_when_omitted(audit_client):
+    """When tenant_id is omitted, it defaults based on auth context."""
     client, api_key = audit_client
+    # With tenant binding, omitted tenant_id defaults to auth tenant or 'unknown'
     response = client.get("/admin/audit/search", headers={"X-API-Key": api_key})
-    assert response.status_code == 422
+    # Should succeed with default tenant
+    assert response.status_code == 200
 
 
 def test_audit_filters_by_tenant(audit_client):

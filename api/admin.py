@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 
 from api.auth_scopes import (
     _validate_tenant_id,
+    bind_tenant_id,
     list_api_keys,
     mint_key,
     require_scopes,
@@ -567,7 +568,7 @@ async def admin_list_keys(
 )
 async def search_audit_events(
     request: Request,
-    tenant_id: str = Query(..., description="Tenant filter (required)"),
+    tenant_id: Optional[str] = Query(None, description="Tenant filter"),
     action: Optional[str] = Query(None, description="Filter by action"),
     actor: Optional[str] = Query(None, description="Filter by actor"),
     status: Optional[str] = Query(None, description="Filter by status"),
@@ -581,8 +582,12 @@ async def search_audit_events(
     _: str = Depends(verify_api_key),
 ) -> AuditSearchResponse:
     """Search audit events with tenant scoping enforced."""
+    # Enforce tenant binding: tenant-scoped keys can only query their own tenant
+    effective_tenant = bind_tenant_id(
+        request, tenant_id, require_explicit=False, default_unscoped="unknown"
+    )
     filters = _audit_filters(
-        tenant_id=tenant_id,
+        tenant_id=effective_tenant,
         action=action,
         actor=actor,
         status=status,
@@ -644,7 +649,7 @@ async def search_audit_events(
             AuditEvent(
                 id=str(record.id),
                 ts=record.created_at,
-                tenant_id=record.tenant_id or tenant_id,
+                tenant_id=record.tenant_id or effective_tenant,
                 actor=record.key_prefix,
                 action=record.event_type,
                 status=_derive_status(record),
@@ -669,7 +674,7 @@ class AuditExportRequest(BaseModel):
     """Audit export request."""
 
     format: Literal["csv", "json"]
-    tenant_id: str
+    tenant_id: Optional[str] = None
     action: Optional[str] = None
     actor: Optional[str] = None
     status: Optional[str] = None
@@ -691,8 +696,12 @@ async def export_audit_events(
     _: str = Depends(verify_api_key),
 ) -> StreamingResponse:
     """Export audit events as NDJSON or CSV with tenant scoping enforced."""
+    # Enforce tenant binding: tenant-scoped keys can only export their own tenant
+    effective_tenant = bind_tenant_id(
+        request, payload.tenant_id, require_explicit=False, default_unscoped="unknown"
+    )
     filters = _audit_filters(
-        tenant_id=payload.tenant_id,
+        tenant_id=effective_tenant,
         action=payload.action,
         actor=payload.actor,
         status=payload.status,
@@ -738,7 +747,7 @@ async def export_audit_events(
                 event = AuditEvent(
                     id=str(record.id),
                     ts=record.created_at,
-                    tenant_id=record.tenant_id or payload.tenant_id,
+                    tenant_id=record.tenant_id or effective_tenant,
                     actor=record.key_prefix,
                     action=record.event_type,
                     status=_derive_status(record),
@@ -751,7 +760,7 @@ async def export_audit_events(
                 )
                 yield event
 
-    filename = f"audit-events-{payload.tenant_id}"
+    filename = f"audit-events-{effective_tenant}"
     if payload.format == "csv":
         fieldnames = [
             "id",
@@ -792,9 +801,9 @@ async def export_audit_events(
 
     def _json_stream():
         for event in _event_rows():
-            payload = event.model_dump()
-            payload["ts"] = event.ts.isoformat()
-            yield json.dumps(payload) + "\n"
+            row = event.model_dump()
+            row["ts"] = event.ts.isoformat()
+            yield json.dumps(row) + "\n"
 
     response = StreamingResponse(_json_stream(), media_type="application/x-ndjson")
     response.headers["Content-Disposition"] = f'attachment; filename="{filename}.json"'
