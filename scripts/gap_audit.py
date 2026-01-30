@@ -44,6 +44,43 @@ VALID_OWNERS = frozenset({"repo", "infra", "docs"})
 # Waiver expiration warning threshold (days)
 WAIVER_WARNING_DAYS = 14
 
+# Gap ID pattern: G followed by exactly 3 digits (e.g., G001)
+GAP_ID_PATTERN = re.compile(r"^G\d{3}$")
+
+# Expected GAP_MATRIX table header columns (canonical)
+EXPECTED_MATRIX_COLUMNS = [
+    "ID",
+    "Gap",
+    "Severity",
+    "Evidence (file / test / CI lane)",
+    "Owner",
+    "ETA / Milestone",
+    "Definition of Done",
+]
+
+# Known CI lanes (from Makefile and .github/workflows/)
+KNOWN_CI_LANES = frozenset(
+    {
+        "unit",
+        "integration",
+        "ci",
+        "ci-integration",
+        "ci-evidence",
+        "ci-pt",
+        "ci-admin",
+        "ci-console",
+        "fg-fast",
+        "fg-lint",
+        "fg-contract",
+        "gap-audit",
+        "release-gate",
+        "evidence",
+        "admin",
+        "console",
+        "pt",
+    }
+)
+
 
 @dataclass
 class Gap:
@@ -70,6 +107,73 @@ class Waiver:
     review_date: str
 
 
+def validate_matrix_header(content: str) -> list[str]:
+    """Validate that GAP_MATRIX.md has the expected table header."""
+    errors: list[str] = []
+
+    # Find header row: | ID | Gap | Severity | ... |
+    header_match = None
+
+    for line in content.split("\n"):
+        line = line.strip()
+        if line.startswith("|") and "ID" in line and "Gap" in line:
+            header_match = line
+            break
+
+    if not header_match:
+        errors.append("GAP_MATRIX: No table header found (expected | ID | Gap | ...)")
+        return errors
+
+    # Extract columns from header
+    columns = [col.strip() for col in header_match.split("|") if col.strip()]
+
+    if len(columns) != len(EXPECTED_MATRIX_COLUMNS):
+        errors.append(
+            f"GAP_MATRIX: Header has {len(columns)} columns, expected {len(EXPECTED_MATRIX_COLUMNS)}"
+        )
+        return errors
+
+    for i, (actual, expected) in enumerate(zip(columns, EXPECTED_MATRIX_COLUMNS)):
+        if actual != expected:
+            errors.append(
+                f"GAP_MATRIX: Column {i + 1} is '{actual}', expected '{expected}'"
+            )
+
+    return errors
+
+
+def validate_evidence_artifact(evidence: str) -> bool:
+    """Check if evidence includes at least one repo-backed artifact.
+
+    Valid evidence includes:
+    - A file path containing "/" and a "." extension (e.g., api/auth.py)
+    - A test name containing "test_" (e.g., tests/test_auth.py::test_x)
+    - A CI lane name that matches a known lane in Makefile/CI
+    """
+    if not evidence.strip():
+        return False
+
+    # Check for file path: contains "/" and "." (e.g., api/auth.py)
+    if "/" in evidence and "." in evidence:
+        return True
+
+    # Check for test reference: contains "test_"
+    if "test_" in evidence:
+        return True
+
+    # Check for known CI lane references
+    evidence_lower = evidence.lower()
+    for lane in KNOWN_CI_LANES:
+        if lane in evidence_lower:
+            return True
+
+    # Check for CI-related patterns (yaml files, workflow references)
+    if ".yml" in evidence or ".yaml" in evidence:
+        return True
+
+    return False
+
+
 def parse_gap_matrix(path: Path) -> list[Gap]:
     """Parse GAP_MATRIX.md and extract gap entries."""
     if not path.exists():
@@ -78,9 +182,9 @@ def parse_gap_matrix(path: Path) -> list[Gap]:
     content = path.read_text()
     gaps: list[Gap] = []
 
-    # Find the gap matrix table (starts with | ID |)
+    # Find the gap matrix table rows (ID pattern: G followed by 3 digits OR legacy GAP-NNN)
     table_pattern = re.compile(
-        r"^\|\s*([A-Z]+-\d+)\s*\|"  # ID column
+        r"^\|\s*(G\d{3}|GAP-\d+)\s*\|"  # ID column (G001 or legacy GAP-001)
         r"\s*([^|]+)\|"  # Gap description
         r"\s*([^|]+)\|"  # Severity
         r"\s*([^|]+)\|"  # Evidence
@@ -122,9 +226,9 @@ def parse_waivers(path: Path) -> list[Waiver]:
     content = path.read_text()
     waivers: list[Waiver] = []
 
-    # Find waiver table rows
+    # Find waiver table rows (ID pattern: G followed by 3 digits OR legacy GAP-NNN)
     table_pattern = re.compile(
-        r"^\|\s*([A-Z]+-\d+)\s*\|"  # Gap ID
+        r"^\|\s*(G\d{3}|GAP-\d+)\s*\|"  # Gap ID (G001 or legacy GAP-001)
         r"\s*([^|]+)\|"  # Severity
         r"\s*([^|]+)\|"  # Reason
         r"\s*([^|]+)\|"  # Approved By
@@ -184,21 +288,44 @@ def validate_gap(gap: Gap) -> list[str]:
     """Validate gap entry format."""
     errors: list[str] = []
 
+    # Validate ID format: must match G[0-9]{3}
+    if not GAP_ID_PATTERN.match(gap.id):
+        errors.append(
+            f"{gap.id}: Invalid ID format. Must match G[0-9]{{3}} (e.g., G001)"
+        )
+
+    # Validate severity
     if gap.severity not in SEVERITY_LEVELS:
         errors.append(
             f"{gap.id}: Invalid severity '{gap.severity}'. "
             f"Must be one of: {', '.join(sorted(SEVERITY_LEVELS))}"
         )
 
+    # Validate owner
     if gap.owner not in VALID_OWNERS:
         errors.append(
             f"{gap.id}: Invalid owner '{gap.owner}'. "
             f"Must be one of: {', '.join(sorted(VALID_OWNERS))}"
         )
 
+    # Validate non-empty description
+    if not gap.description.strip():
+        errors.append(f"{gap.id}: Gap description is required")
+
+    # Validate evidence is non-empty
     if not gap.evidence.strip():
         errors.append(f"{gap.id}: Evidence is required")
+    elif not validate_evidence_artifact(gap.evidence):
+        errors.append(
+            f"{gap.id}: Evidence '{gap.evidence}' must include a repo-backed artifact "
+            "(file path with '/' and '.', test name with 'test_', or CI lane name)"
+        )
 
+    # Validate ETA is non-empty
+    if not gap.eta.strip():
+        errors.append(f"{gap.id}: ETA / Milestone is required")
+
+    # Validate Definition of Done is non-empty
     if not gap.definition_of_done.strip():
         errors.append(f"{gap.id}: Definition of Done is required")
 
@@ -219,6 +346,47 @@ class GapAuditResult:
         self.invalid_waiver_attempts: list[Waiver] = []  # Production-blocking waivers
 
 
+def validate_waiver(waiver: Waiver, gap_lookup: dict[str, Gap]) -> list[str]:
+    """Validate waiver entry format and cross-references."""
+    errors: list[str] = []
+
+    # Gap ID must exist in GAP_MATRIX
+    if waiver.gap_id not in gap_lookup:
+        errors.append(
+            f"Waiver {waiver.gap_id}: Gap ID does not exist in GAP_MATRIX (phantom waiver)"
+        )
+        return errors  # Can't validate further without the gap
+
+    gap = gap_lookup[waiver.gap_id]
+
+    # Severity in waiver must match gap's actual severity
+    if waiver.severity != gap.severity:
+        errors.append(
+            f"Waiver {waiver.gap_id}: Severity mismatch - waiver says '{waiver.severity}', "
+            f"gap is '{gap.severity}'"
+        )
+
+    # Approved By must be non-empty and contain '@' OR '/' OR ' ' (human identifier)
+    approved = waiver.approved_by.strip()
+    if not approved:
+        errors.append(f"Waiver {waiver.gap_id}: Approved By is required")
+    elif not ("@" in approved or "/" in approved or " " in approved):
+        errors.append(
+            f"Waiver {waiver.gap_id}: Approved By '{approved}' must contain '@', '/', or ' ' "
+            "(human identifier format)"
+        )
+
+    # Expiration must be valid ISO date YYYY-MM-DD
+    exp_date = parse_date(waiver.expiration)
+    if exp_date is None:
+        errors.append(
+            f"Waiver {waiver.gap_id}: Expiration '{waiver.expiration}' is not a valid "
+            "ISO date (YYYY-MM-DD)"
+        )
+
+    return errors
+
+
 def run_gap_audit(
     matrix_path: Path,
     waivers_path: Path,
@@ -230,19 +398,39 @@ def run_gap_audit(
 
     result = GapAuditResult()
 
+    # Validate matrix header first
+    if matrix_path.exists():
+        content = matrix_path.read_text()
+        header_errors = validate_matrix_header(content)
+        result.validation_errors.extend(header_errors)
+
     # Parse files
     gaps = parse_gap_matrix(matrix_path)
     waivers = parse_waivers(waivers_path)
 
-    # Build waiver lookup
+    # Check for duplicate gap IDs
+    seen_ids: set[str] = set()
+    for gap in gaps:
+        if gap.id in seen_ids:
+            result.validation_errors.append(f"{gap.id}: Duplicate gap ID")
+        seen_ids.add(gap.id)
+
+    # Build gap lookup for waiver validation
+    gap_lookup: dict[str, Gap] = {gap.id: gap for gap in gaps}
+
+    # Build waiver lookup and validate waivers
     waiver_by_gap: dict[str, Waiver] = {}
     for waiver in waivers:
+        # Validate waiver format and cross-references
+        waiver_errors = validate_waiver(waiver, gap_lookup)
+        result.validation_errors.extend(waiver_errors)
+
         # Check for invalid Production-blocking waiver attempts
         if waiver.severity == "Production-blocking":
             result.invalid_waiver_attempts.append(waiver)
             continue
 
-        # Check waiver validity
+        # Check waiver validity (expiration)
         if not is_waiver_valid(waiver, today):
             result.expired_waivers.append(waiver)
             continue

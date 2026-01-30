@@ -56,11 +56,11 @@ All Production-blocking gaps resolved. Release may proceed.
 
 ### Active Launch Risks
 
-- **GAP-001**: Auth fallback defaults to true in docker-compose
-- **GAP-002**: SLSA provenance attestations not generated
-- **GAP-003**: OpenSCAP/STIG compliance scan not in CI
-- **GAP-004**: CIS K8s v1.9 benchmark not enforced
-- **GAP-005**: Merkle anchor job placeholder
+- **G001**: Auth fallback defaults to true in docker-compose
+- **G002**: SLSA provenance attestations not generated
+- **G003**: OpenSCAP/STIG compliance scan not in CI
+- **G004**: CIS K8s v1.9 benchmark not enforced
+- **G005**: Merkle anchor job placeholder
 
 
 ---
@@ -69,27 +69,27 @@ All Production-blocking gaps resolved. Release may proceed.
 
 ### Launch-risk
 
-- **GAP-001**: Auth fallback defaults to true in docker-compose
+- **G001**: Auth fallback defaults to true in docker-compose
   - Evidence: ``docker-compose.yml:67` / `scripts/prod_profile_check.py` / `ci.yml:unit``
   - Owner: repo
-- **GAP-002**: SLSA provenance attestations not generated
+- **G002**: SLSA provenance attestations not generated
   - Evidence: ``Makefile:evidence` / `.github/workflows/ci.yml:evidence``
   - Owner: infra
-- **GAP-003**: OpenSCAP/STIG compliance scan not in CI
+- **G003**: OpenSCAP/STIG compliance scan not in CI
   - Evidence: ``.github/workflows/ci.yml``
   - Owner: infra
-- **GAP-004**: CIS K8s v1.9 benchmark not enforced
+- **G004**: CIS K8s v1.9 benchmark not enforced
   - Evidence: ``.github/workflows/ci.yml``
   - Owner: infra
-- **GAP-005**: Merkle anchor job placeholder
+- **G005**: Merkle anchor job placeholder
   - Evidence: ``jobs/` directory / `docs/FrostGateCore_Buildout_vNext.md:57``
   - Owner: repo
 
 ### Post-launch
 
-- **GAP-006**: Chaos testing jobs not implemented
+- **G006**: Chaos testing jobs not implemented
   - Evidence: ``docs/FrostGateCore_Buildout_vNext.md:57``
   - Owner: repo
-- **GAP-007**: AI model drift monitoring not implemented
+- **G007**: AI model drift monitoring not implemented
   - Evidence: ``docs/FrostGateCore_Buildout_vNext.md:207``
   - Owner: repo
