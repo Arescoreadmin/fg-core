@@ -38,8 +38,10 @@ from gap_audit import (
     validate_evidence_artifact,
     is_waiver_valid,
     is_waiver_expiring_soon,
+    normalize_gap_id,
     WAIVER_WARNING_DAYS,
     GAP_ID_PATTERN,
+    LEGACY_GAP_ID_PATTERN,
 )
 from generate_scorecard import generate_scorecard
 
@@ -805,6 +807,158 @@ class TestGapIdPattern:
         assert GAP_ID_PATTERN.match("G0001") is None
         assert GAP_ID_PATTERN.match("g001") is None
         assert GAP_ID_PATTERN.match("001") is None
+
+
+class TestLegacyGapIdPattern:
+    """Tests for legacy GAP-### pattern (backward compatibility)."""
+
+    def test_valid_legacy_ids(self) -> None:
+        """Valid legacy GAP-### IDs match pattern."""
+        assert LEGACY_GAP_ID_PATTERN.match("GAP-001") is not None
+        assert LEGACY_GAP_ID_PATTERN.match("GAP-42") is not None
+        assert LEGACY_GAP_ID_PATTERN.match("GAP-999") is not None
+
+    def test_invalid_legacy_ids(self) -> None:
+        """Invalid legacy IDs do not match pattern."""
+        assert LEGACY_GAP_ID_PATTERN.match("G001") is None
+        assert LEGACY_GAP_ID_PATTERN.match("GAP001") is None
+        assert LEGACY_GAP_ID_PATTERN.match("gap-001") is None
+
+
+class TestNormalizeGapId:
+    """Tests for gap ID normalization (backward compatibility)."""
+
+    def test_normalize_new_format(self) -> None:
+        """New G### format is unchanged."""
+        assert normalize_gap_id("G001") == "G001"
+        assert normalize_gap_id("G123") == "G123"
+        assert normalize_gap_id("G999") == "G999"
+
+    def test_normalize_legacy_format(self) -> None:
+        """Legacy GAP-### format normalizes to G###."""
+        assert normalize_gap_id("GAP-001") == "G001"
+        assert normalize_gap_id("GAP-42") == "G042"
+        assert normalize_gap_id("GAP-999") == "G999"
+        assert normalize_gap_id("GAP-1") == "G001"
+
+    def test_normalize_strips_whitespace(self) -> None:
+        """Whitespace is stripped before normalization."""
+        assert normalize_gap_id("  G001  ") == "G001"
+        assert normalize_gap_id("  GAP-042  ") == "G042"
+
+    def test_normalize_invalid_unchanged(self) -> None:
+        """Invalid IDs are returned as-is (validation will catch)."""
+        assert normalize_gap_id("INVALID") == "INVALID"
+        assert normalize_gap_id("G0001") == "G0001"
+        assert normalize_gap_id("GAP-1000") == "GAP-1000"  # Out of range
+
+
+class TestBackwardCompatibilityParsing:
+    """Tests for backward compatibility with legacy GAP-### IDs."""
+
+    def test_parse_matrix_with_legacy_ids(self, tmp_path: Path) -> None:
+        """Legacy GAP-### IDs are normalized to G### when parsing matrix."""
+        matrix = tmp_path / "GAP_MATRIX.md"
+        matrix.write_text(
+            dedent("""
+            # Gap Matrix
+
+            | ID | Gap | Severity | Evidence (file / test / CI lane) | Owner | ETA / Milestone | Definition of Done |
+            |----|-----|----------|----------------------------------|-------|-----------------|--------------------|
+            | GAP-001 | Legacy gap | Launch-risk | tests/test_legacy.py | repo | V2 | Tests pass |
+            | G002 | New gap | Post-launch | tests/test_new.py | infra | V2+ | Done |
+        """)
+        )
+
+        gaps = parse_gap_matrix(matrix)
+
+        assert len(gaps) == 2
+        assert gaps[0].id == "G001"  # Normalized from GAP-001
+        assert gaps[1].id == "G002"  # Already in new format
+
+    def test_parse_waivers_with_legacy_ids(self, tmp_path: Path) -> None:
+        """Legacy GAP-### IDs are normalized to G### when parsing waivers."""
+        waivers_file = tmp_path / "RISK_WAIVERS.md"
+        waivers_file.write_text(
+            dedent("""
+            # Risk Waivers
+
+            | Gap ID | Severity | Reason | Approved By | Expiration | Review Date |
+            |--------|----------|--------|-------------|------------|-------------|
+            | GAP-001 | Launch-risk | Business | Alice Smith | 2099-12-31 | 2099-12-01 |
+        """)
+        )
+
+        waivers = parse_waivers(waivers_file)
+
+        assert len(waivers) == 1
+        assert waivers[0].gap_id == "G001"  # Normalized from GAP-001
+
+    def test_audit_accepts_legacy_ids(self, tmp_path: Path) -> None:
+        """Gap audit accepts legacy GAP-### IDs and normalizes them."""
+        matrix = tmp_path / "GAP_MATRIX.md"
+        matrix.write_text(
+            dedent("""
+            | ID | Gap | Severity | Evidence (file / test / CI lane) | Owner | ETA / Milestone | Definition of Done |
+            |----|-----|----------|----------------------------------|-------|-----------------|--------------------|
+            | GAP-001 | Legacy gap | Launch-risk | tests/test_legacy.py | repo | V2 | Tests pass |
+        """)
+        )
+        waivers = tmp_path / "RISK_WAIVERS.md"
+        waivers.write_text("# No waivers")
+
+        result = run_gap_audit(matrix, waivers)
+
+        # Should be parsed and normalized successfully
+        assert len(result.launch_risk_gaps) == 1
+        assert result.launch_risk_gaps[0].id == "G001"
+        # No validation errors about ID format
+        assert not any("Invalid ID format" in e for e in result.validation_errors)
+
+    def test_duplicate_detection_with_mixed_ids(self, tmp_path: Path) -> None:
+        """Duplicate IDs are detected even with mixed GAP-### and G### formats."""
+        matrix = tmp_path / "GAP_MATRIX.md"
+        matrix.write_text(
+            dedent("""
+            | ID | Gap | Severity | Evidence (file / test / CI lane) | Owner | ETA / Milestone | Definition of Done |
+            |----|-----|----------|----------------------------------|-------|-----------------|--------------------|
+            | GAP-001 | First gap | Launch-risk | tests/test_first.py | repo | V2 | Fixed |
+            | G001 | Duplicate | Launch-risk | tests/test_dup.py | repo | V2 | Fixed |
+        """)
+        )
+        waivers = tmp_path / "RISK_WAIVERS.md"
+        waivers.write_text("# No waivers")
+
+        result = run_gap_audit(matrix, waivers)
+
+        # Should detect duplicate after normalization
+        assert len(result.validation_errors) >= 1
+        assert any("Duplicate gap ID" in e for e in result.validation_errors)
+
+    def test_waiver_matches_legacy_gap(self, tmp_path: Path) -> None:
+        """Waiver with legacy ID matches gap with new ID format."""
+        matrix = tmp_path / "GAP_MATRIX.md"
+        matrix.write_text(
+            dedent("""
+            | ID | Gap | Severity | Evidence (file / test / CI lane) | Owner | ETA / Milestone | Definition of Done |
+            |----|-----|----------|----------------------------------|-------|-----------------|--------------------|
+            | G001 | Gap in new format | Launch-risk | tests/test_gap.py | repo | V2 | Fixed |
+        """)
+        )
+        waivers = tmp_path / "RISK_WAIVERS.md"
+        waivers.write_text(
+            dedent("""
+            | Gap ID | Severity | Reason | Approved By | Expiration | Review Date |
+            |--------|----------|--------|-------------|------------|-------------|
+            | GAP-001 | Launch-risk | Business | Alice Smith | 2099-12-31 | 2099-12-01 |
+        """)
+        )
+
+        result = run_gap_audit(matrix, waivers, today=datetime(2024, 1, 1))
+
+        # Waiver should match despite different formats
+        assert len(result.waived_gaps) == 1
+        assert result.waived_gaps[0][0].id == "G001"
 
 
 class TestScorecardDeterminism:
