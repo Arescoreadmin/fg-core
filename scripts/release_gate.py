@@ -3,6 +3,10 @@
 
 This script provides a hard block on releases:
 - Runs gap_audit
+- Runs generate_scorecard
+- Runs contracts-gen and verifies no diff
+- Runs fg-contract
+- Runs lint checks (ruff format --check)
 - Fails release if ANY Production-blocking gaps exist
 - Fails release if Production Readiness < 100%
 - Outputs single-screen failure summary
@@ -12,6 +16,7 @@ FAIL-CLOSED: No release without explicit pass.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +25,7 @@ from gap_audit import (
     parse_gap_matrix,
     run_gap_audit,
 )
+from generate_scorecard import generate_scorecard as gen_scorecard_content
 
 
 def calculate_readiness_score(
@@ -35,12 +41,90 @@ def calculate_readiness_score(
     return ((total_count - open_count) / total_count) * 100.0
 
 
+def run_command(cmd: list[str], description: str) -> tuple[bool, str]:
+    """Run a shell command and return (success, output).
+
+    Returns a tuple of (passed, message) where message contains
+    stdout/stderr on failure.
+    """
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode == 0:
+            return True, ""
+        # Include both stdout and stderr in error message
+        output = (result.stdout + result.stderr).strip()
+        if len(output) > 500:
+            output = output[:500] + "... (truncated)"
+        return False, f"{description} failed:\n{output}"
+    except subprocess.TimeoutExpired:
+        return False, f"{description} timed out after 120s"
+    except FileNotFoundError as e:
+        return False, f"{description} command not found: {e}"
+    except Exception as e:
+        return False, f"{description} error: {e}"
+
+
+def run_readiness_checks() -> list[tuple[str, bool, str]]:
+    """Run all readiness checks and return results.
+
+    Returns list of (check_name, passed, error_message) tuples.
+    """
+    results: list[tuple[str, bool, str]] = []
+
+    # Check 1: contracts-gen (generate contracts)
+    passed, msg = run_command(
+        ["make", "contracts-gen"],
+        "contracts-gen",
+    )
+    results.append(("contracts-gen", passed, msg))
+
+    # Check 2: git diff --exit-code contracts/ (verify no uncommitted contract changes)
+    if passed:  # Only check diff if generation succeeded
+        passed, msg = run_command(
+            ["git", "diff", "--exit-code", "contracts/"],
+            "contracts diff check",
+        )
+        if not passed and not msg:
+            msg = "contracts diff check failed: uncommitted contract changes detected"
+        results.append(("contracts-diff", passed, msg))
+    else:
+        results.append(("contracts-diff", False, "Skipped (contracts-gen failed)"))
+
+    # Check 3: fg-contract (contract validation)
+    passed, msg = run_command(
+        ["make", "fg-contract"],
+        "fg-contract",
+    )
+    results.append(("fg-contract", passed, msg))
+
+    # Check 4: lint check (ruff format --check)
+    passed, msg = run_command(
+        ["make", "fg-lint"],
+        "fg-lint",
+    )
+    results.append(("fg-lint", passed, msg))
+
+    return results
+
+
 def run_release_gate(
     matrix_path: Path,
     waivers_path: Path,
     today: datetime | None = None,
+    skip_subprocess_checks: bool = False,
 ) -> tuple[bool, str]:
     """Run release gate checks.
+
+    Args:
+        matrix_path: Path to GAP_MATRIX.md
+        waivers_path: Path to RISK_WAIVERS.md
+        today: Override for current date (for testing)
+        skip_subprocess_checks: Skip subprocess-based checks (for unit tests)
 
     Returns:
         Tuple of (passed: bool, summary: str)
@@ -118,6 +202,20 @@ def run_release_gate(
     if prod_readiness < 100.0:
         blocking_reasons.append(f"Production Readiness {prod_readiness:.1f}% < 100%")
 
+    # Run additional readiness checks (contracts, lint, etc.)
+    if not skip_subprocess_checks:
+        lines.append("READINESS CHECKS:")
+        check_results = run_readiness_checks()
+        for check_name, check_passed, check_msg in check_results:
+            status = "PASS" if check_passed else "FAIL"
+            lines.append(f"  [{status}] {check_name}")
+            if not check_passed:
+                blocking_reasons.append(f"Readiness check '{check_name}' failed")
+                if check_msg:
+                    for msg_line in check_msg.split("\n")[:3]:
+                        lines.append(f"        {msg_line}")
+        lines.append("")
+
     # Warnings (non-blocking)
     if result.expiring_soon_waivers:
         lines.append("WAIVERS EXPIRING SOON:")
@@ -162,6 +260,7 @@ def main() -> int:
     """Run release gate and return exit code."""
     matrix_path = Path("docs/GAP_MATRIX.md")
     waivers_path = Path("docs/RISK_WAIVERS.md")
+    scorecard_path = Path("docs/GAP_SCORECARD.md")
 
     # Check if matrix exists
     if not matrix_path.exists():
@@ -175,6 +274,14 @@ def main() -> int:
         print("FAIL-CLOSED: Release blocked by default.")
         print("=" * 60)
         return 1
+
+    # Generate scorecard (deterministic, no timestamps)
+    try:
+        scorecard_content = gen_scorecard_content(matrix_path, waivers_path)
+        scorecard_path.write_text(scorecard_content)
+        print(f"Generated: {scorecard_path}")
+    except Exception as e:
+        print(f"WARNING: Failed to generate scorecard: {e}")
 
     passed, summary = run_release_gate(matrix_path, waivers_path)
     print(summary)
