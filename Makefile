@@ -135,6 +135,21 @@ prod-profile-check:
 	@$(PY_CONTRACT) scripts/prod_profile_check.py
 
 # =============================================================================
+# Gap Audit (Production Readiness)
+# =============================================================================
+
+.PHONY: gap-audit release-gate generate-scorecard
+
+gap-audit:
+	@PYTHONPATH=scripts $(PY_CONTRACT) scripts/gap_audit.py
+
+release-gate:
+	@PYTHONPATH=scripts $(PY_CONTRACT) scripts/release_gate.py
+
+generate-scorecard:
+	@PYTHONPATH=scripts $(PY_CONTRACT) scripts/generate_scorecard.py
+
+# =============================================================================
 # Lint
 # =============================================================================
 
@@ -149,7 +164,7 @@ fg-lint:
 # =============================================================================
 
 .PHONY: fg-fast
-fg-fast: fg-audit-make fg-contract fg-compile prod-profile-check
+fg-fast: fg-audit-make fg-contract fg-compile prod-profile-check gap-audit
 	@$(PYTEST_ENV) $(PY) -m pytest -q
 	@$(MAKE) -s fg-lint
 

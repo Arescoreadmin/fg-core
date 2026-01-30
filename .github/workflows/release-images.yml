@@ -27,9 +27,23 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Generate CI secrets
+        run: |
+          python - <<'PY' >> "$GITHUB_ENV"
+          import secrets
+          print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
+          print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
+          print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
+          print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(32)}")
+          PY
+
       - name: Run tests (gate release via Makefile)
         run: |
           make ci
+
+      - name: Release gate check (blocks if Production-blocking gaps exist)
+        run: |
+          make release-gate
 
       - name: Set up Go
         uses: actions/setup-go@v5

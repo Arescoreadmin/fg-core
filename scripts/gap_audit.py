@@ -1,0 +1,406 @@
+#!/usr/bin/env python3
+"""Gap audit enforcement for FrostGate production readiness.
+
+This script parses docs/GAP_MATRIX.md and enforces gap severity rules:
+- Production-blocking gaps → CI FAILS
+- Launch-risk gaps → CI WARNS (unless waived)
+- Post-launch gaps → INFORMATIONAL
+
+Waiver-aware: Cross-references docs/RISK_WAIVERS.md to suppress allowed gaps.
+
+Severity Classification Rules (canonical):
+-----------------------------------------
+Production-blocking if ANY are true:
+  - Cross-tenant data access possible
+  - Auth fallback enabled in production
+  - Audit or integrity claims not verifiable
+  - CI cannot detect unsafe production config
+  - Security-critical blueprint promise unimplemented
+
+Launch-risk if:
+  - Incident response incomplete
+  - Compliance evidence is manual
+  - Placeholder jobs exist for resilience/integrity
+
+Post-launch if:
+  - UX, analytics, optimizations only
+  - No immediate security/compliance impact
+"""
+
+from __future__ import annotations
+
+import re
+import sys
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from pathlib import Path
+
+# Valid severity levels (canonical)
+SEVERITY_LEVELS = frozenset({"Production-blocking", "Launch-risk", "Post-launch"})
+
+# Valid owner values
+VALID_OWNERS = frozenset({"repo", "infra", "docs"})
+
+# Waiver expiration warning threshold (days)
+WAIVER_WARNING_DAYS = 14
+
+
+@dataclass
+class Gap:
+    """Represents a production gap from GAP_MATRIX.md."""
+
+    id: str
+    description: str
+    severity: str
+    evidence: str
+    owner: str
+    eta: str
+    definition_of_done: str
+
+
+@dataclass
+class Waiver:
+    """Represents a risk waiver from RISK_WAIVERS.md."""
+
+    gap_id: str
+    severity: str
+    reason: str
+    approved_by: str
+    expiration: str
+    review_date: str
+
+
+def parse_gap_matrix(path: Path) -> list[Gap]:
+    """Parse GAP_MATRIX.md and extract gap entries."""
+    if not path.exists():
+        return []
+
+    content = path.read_text()
+    gaps: list[Gap] = []
+
+    # Find the gap matrix table (starts with | ID |)
+    table_pattern = re.compile(
+        r"^\|\s*([A-Z]+-\d+)\s*\|"  # ID column
+        r"\s*([^|]+)\|"  # Gap description
+        r"\s*([^|]+)\|"  # Severity
+        r"\s*([^|]+)\|"  # Evidence
+        r"\s*([^|]+)\|"  # Owner
+        r"\s*([^|]+)\|"  # ETA
+        r"\s*([^|]+)\|",  # Definition of Done
+        re.MULTILINE,
+    )
+
+    for match in table_pattern.finditer(content):
+        gap_id = match.group(1).strip()
+        description = match.group(2).strip()
+        severity = match.group(3).strip()
+        evidence = match.group(4).strip()
+        owner = match.group(5).strip()
+        eta = match.group(6).strip()
+        dod = match.group(7).strip()
+
+        gaps.append(
+            Gap(
+                id=gap_id,
+                description=description,
+                severity=severity,
+                evidence=evidence,
+                owner=owner,
+                eta=eta,
+                definition_of_done=dod,
+            )
+        )
+
+    return gaps
+
+
+def parse_waivers(path: Path) -> list[Waiver]:
+    """Parse RISK_WAIVERS.md and extract waiver entries."""
+    if not path.exists():
+        return []
+
+    content = path.read_text()
+    waivers: list[Waiver] = []
+
+    # Find waiver table rows
+    table_pattern = re.compile(
+        r"^\|\s*([A-Z]+-\d+)\s*\|"  # Gap ID
+        r"\s*([^|]+)\|"  # Severity
+        r"\s*([^|]+)\|"  # Reason
+        r"\s*([^|]+)\|"  # Approved By
+        r"\s*([^|]+)\|"  # Expiration
+        r"\s*([^|]+)\|",  # Review Date
+        re.MULTILINE,
+    )
+
+    for match in table_pattern.finditer(content):
+        gap_id = match.group(1).strip()
+        severity = match.group(2).strip()
+        reason = match.group(3).strip()
+        approved_by = match.group(4).strip()
+        expiration = match.group(5).strip()
+        review_date = match.group(6).strip()
+
+        waivers.append(
+            Waiver(
+                gap_id=gap_id,
+                severity=severity,
+                reason=reason,
+                approved_by=approved_by,
+                expiration=expiration,
+                review_date=review_date,
+            )
+        )
+
+    return waivers
+
+
+def parse_date(date_str: str) -> datetime | None:
+    """Parse date string in YYYY-MM-DD format."""
+    try:
+        return datetime.strptime(date_str.strip(), "%Y-%m-%d")
+    except ValueError:
+        return None
+
+
+def is_waiver_valid(waiver: Waiver, today: datetime) -> bool:
+    """Check if a waiver is currently valid (not expired)."""
+    expiration = parse_date(waiver.expiration)
+    if expiration is None:
+        return False  # Invalid date format = invalid waiver
+    return expiration >= today
+
+
+def is_waiver_expiring_soon(waiver: Waiver, today: datetime) -> bool:
+    """Check if a waiver expires within the warning threshold."""
+    expiration = parse_date(waiver.expiration)
+    if expiration is None:
+        return False
+    warning_date = today + timedelta(days=WAIVER_WARNING_DAYS)
+    return expiration <= warning_date
+
+
+def validate_gap(gap: Gap) -> list[str]:
+    """Validate gap entry format."""
+    errors: list[str] = []
+
+    if gap.severity not in SEVERITY_LEVELS:
+        errors.append(
+            f"{gap.id}: Invalid severity '{gap.severity}'. "
+            f"Must be one of: {', '.join(sorted(SEVERITY_LEVELS))}"
+        )
+
+    if gap.owner not in VALID_OWNERS:
+        errors.append(
+            f"{gap.id}: Invalid owner '{gap.owner}'. "
+            f"Must be one of: {', '.join(sorted(VALID_OWNERS))}"
+        )
+
+    if not gap.evidence.strip():
+        errors.append(f"{gap.id}: Evidence is required")
+
+    if not gap.definition_of_done.strip():
+        errors.append(f"{gap.id}: Definition of Done is required")
+
+    return errors
+
+
+class GapAuditResult:
+    """Collects audit results."""
+
+    def __init__(self) -> None:
+        self.blocking_gaps: list[Gap] = []
+        self.launch_risk_gaps: list[Gap] = []
+        self.post_launch_gaps: list[Gap] = []
+        self.waived_gaps: list[tuple[Gap, Waiver]] = []
+        self.expired_waivers: list[Waiver] = []
+        self.expiring_soon_waivers: list[Waiver] = []
+        self.validation_errors: list[str] = []
+        self.invalid_waiver_attempts: list[Waiver] = []  # Production-blocking waivers
+
+
+def run_gap_audit(
+    matrix_path: Path,
+    waivers_path: Path,
+    today: datetime | None = None,
+) -> GapAuditResult:
+    """Run the gap audit and return results."""
+    if today is None:
+        today = datetime.now()
+
+    result = GapAuditResult()
+
+    # Parse files
+    gaps = parse_gap_matrix(matrix_path)
+    waivers = parse_waivers(waivers_path)
+
+    # Build waiver lookup
+    waiver_by_gap: dict[str, Waiver] = {}
+    for waiver in waivers:
+        # Check for invalid Production-blocking waiver attempts
+        if waiver.severity == "Production-blocking":
+            result.invalid_waiver_attempts.append(waiver)
+            continue
+
+        # Check waiver validity
+        if not is_waiver_valid(waiver, today):
+            result.expired_waivers.append(waiver)
+            continue
+
+        if is_waiver_expiring_soon(waiver, today):
+            result.expiring_soon_waivers.append(waiver)
+
+        waiver_by_gap[waiver.gap_id] = waiver
+
+    # Process gaps
+    for gap in gaps:
+        # Validate gap format
+        errors = validate_gap(gap)
+        result.validation_errors.extend(errors)
+
+        # Check if waived
+        waiver = waiver_by_gap.get(gap.id)
+        if waiver and gap.severity != "Production-blocking":
+            result.waived_gaps.append((gap, waiver))
+            continue
+
+        # Categorize by severity
+        if gap.severity == "Production-blocking":
+            result.blocking_gaps.append(gap)
+        elif gap.severity == "Launch-risk":
+            result.launch_risk_gaps.append(gap)
+        elif gap.severity == "Post-launch":
+            result.post_launch_gaps.append(gap)
+
+    return result
+
+
+def format_gap_table(gaps: list[Gap], header: str) -> str:
+    """Format gaps as a simple text table."""
+    if not gaps:
+        return ""
+
+    lines = [header, "=" * len(header)]
+    for gap in gaps:
+        lines.append(f"  {gap.id}: {gap.description}")
+        lines.append(f"    Evidence: {gap.evidence}")
+        lines.append(f"    Owner: {gap.owner}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def main() -> int:
+    """Run gap audit and return exit code."""
+    # Paths relative to repo root
+    matrix_path = Path("docs/GAP_MATRIX.md")
+    waivers_path = Path("docs/RISK_WAIVERS.md")
+
+    # Check if matrix exists
+    if not matrix_path.exists():
+        print("ERROR: docs/GAP_MATRIX.md not found")
+        print("Create the gap matrix before running audit.")
+        return 1
+
+    result = run_gap_audit(matrix_path, waivers_path)
+
+    # Print report
+    print("=" * 60)
+    print("GAP AUDIT REPORT")
+    print("=" * 60)
+    print()
+
+    # Validation errors (always fail)
+    if result.validation_errors:
+        print("VALIDATION ERRORS:")
+        for error in result.validation_errors:
+            print(f"  [ERROR] {error}")
+        print()
+
+    # Invalid waiver attempts (always fail)
+    if result.invalid_waiver_attempts:
+        print("INVALID WAIVER ATTEMPTS (Production-blocking cannot be waived):")
+        for waiver in result.invalid_waiver_attempts:
+            print(f"  [ERROR] {waiver.gap_id}: Attempted waiver rejected")
+        print()
+
+    # Expired waivers (always fail)
+    if result.expired_waivers:
+        print("EXPIRED WAIVERS:")
+        for waiver in result.expired_waivers:
+            print(f"  [ERROR] {waiver.gap_id}: Waiver expired {waiver.expiration}")
+        print()
+
+    # Production-blocking gaps (fail)
+    if result.blocking_gaps:
+        print(
+            format_gap_table(
+                result.blocking_gaps, "PRODUCTION-BLOCKING GAPS (CI FAILS)"
+            )
+        )
+
+    # Launch-risk gaps (warn)
+    if result.launch_risk_gaps:
+        print(format_gap_table(result.launch_risk_gaps, "LAUNCH-RISK GAPS (Warning)"))
+
+    # Expiring soon waivers (warn)
+    if result.expiring_soon_waivers:
+        print("WAIVERS EXPIRING SOON:")
+        for waiver in result.expiring_soon_waivers:
+            print(f"  [WARN] {waiver.gap_id}: Expires {waiver.expiration}")
+        print()
+
+    # Waived gaps (info)
+    if result.waived_gaps:
+        print("WAIVED GAPS:")
+        for gap, waiver in result.waived_gaps:
+            print(f"  [WAIVED] {gap.id}: {gap.description}")
+            print(
+                f"    Approved by: {waiver.approved_by}, Expires: {waiver.expiration}"
+            )
+        print()
+
+    # Post-launch gaps (info)
+    if result.post_launch_gaps:
+        print(
+            format_gap_table(
+                result.post_launch_gaps, "POST-LAUNCH GAPS (Informational)"
+            )
+        )
+
+    # Summary
+    print("-" * 60)
+    print("SUMMARY:")
+    print(f"  Production-blocking: {len(result.blocking_gaps)}")
+    print(f"  Launch-risk: {len(result.launch_risk_gaps)}")
+    print(f"  Post-launch: {len(result.post_launch_gaps)}")
+    print(f"  Waived: {len(result.waived_gaps)}")
+    print(f"  Expired waivers: {len(result.expired_waivers)}")
+    print()
+
+    # Determine exit code
+    has_errors = (
+        len(result.blocking_gaps) > 0
+        or len(result.validation_errors) > 0
+        or len(result.expired_waivers) > 0
+        or len(result.invalid_waiver_attempts) > 0
+    )
+
+    if has_errors:
+        print("=" * 60)
+        print("GAP AUDIT: FAILED")
+        print("=" * 60)
+        if result.blocking_gaps:
+            print(
+                f"\nCI blocked by {len(result.blocking_gaps)} Production-blocking gap(s)."
+            )
+            print("Remediate gaps or escalate for business review.")
+        return 1
+    else:
+        print("=" * 60)
+        print("GAP AUDIT: PASSED")
+        print("=" * 60)
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
