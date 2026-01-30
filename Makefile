@@ -127,6 +127,14 @@ fg-compile: guard-scripts
 	@$(PY) -m py_compile api/main.py api/feed.py api/ui.py api/dev_events.py api/auth_scopes.py
 
 # =============================================================================
+# Production Profile Validation
+# =============================================================================
+
+.PHONY: prod-profile-check
+prod-profile-check:
+	@$(PY_CONTRACT) scripts/prod_profile_check.py
+
+# =============================================================================
 # Lint
 # =============================================================================
 
@@ -141,7 +149,7 @@ fg-lint:
 # =============================================================================
 
 .PHONY: fg-fast
-fg-fast: fg-audit-make fg-contract fg-compile
+fg-fast: fg-audit-make fg-contract fg-compile prod-profile-check
 	@$(PYTEST_ENV) $(PY) -m pytest -q
 	@$(MAKE) -s fg-lint
 
@@ -319,7 +327,9 @@ ADMIN_PY    ?= python3
 AG_PY       := $(AG_VENV)/bin/python
 AG_PIP      := $(AG_VENV)/bin/pip
 
-.PHONY: admin-venv admin-dev admin-lint admin-test ci-admin
+.PHONY: admin-venv admin-venv-check admin-dev admin-lint admin-test ci-admin
+
+AG_REQS_STAMP := $(AG_VENV)/.requirements.sha256
 
 admin-venv:
 	set -euo pipefail; \
@@ -328,12 +338,25 @@ admin-venv:
 	"$(ADMIN_PY)" -V; \
 	"$(ADMIN_PY)" -c "import sys; print(sys.executable)"; \
 	"$(ADMIN_PY)" -m venv --upgrade "$(AG_VENV)"
+	@# Skip pip install if explicitly disabled
 	if [ "$${ADMIN_SKIP_PIP_INSTALL:-0}" = "1" ]; then \
 		echo "Skipping admin-gateway package install (ADMIN_SKIP_PIP_INSTALL=1)"; \
 		exit 0; \
 	fi
+	@# Compute requirements hash and compare with stamp file
+	@set -euo pipefail; \
+	REQS_HASH=$$(cat admin_gateway/requirements.txt admin_gateway/requirements-dev.txt 2>/dev/null | sha256sum | cut -d' ' -f1); \
+	STAMP_HASH=$$(cat "$(AG_REQS_STAMP)" 2>/dev/null || echo "none"); \
+	if [ "$$REQS_HASH" = "$$STAMP_HASH" ]; then \
+		echo "Admin-gateway deps unchanged (stamp match), skipping pip install."; \
+		if command -v ruff >/dev/null 2>&1 && [ ! -x "$(AG_VENV)/bin/ruff" ]; then \
+			ln -sf "$$(command -v ruff)" "$(AG_VENV)/bin/ruff"; \
+		fi; \
+		exit 0; \
+	fi; \
 	if $(AG_PY) -c "import importlib.util; required=['fastapi','httpx','pytest','ruff']; missing=[name for name in required if importlib.util.find_spec(name) is None]; raise SystemExit(0 if not missing else 1)"; then \
-		echo "Admin-gateway dependencies present in $(AG_VENV)."; \
+		echo "Admin-gateway dependencies present in $(AG_VENV), updating stamp."; \
+		echo "$$REQS_HASH" > "$(AG_REQS_STAMP)"; \
 		if command -v ruff >/dev/null 2>&1 && [ ! -x "$(AG_VENV)/bin/ruff" ]; then \
 			ln -sf "$$(command -v ruff)" "$(AG_VENV)/bin/ruff"; \
 		fi; \
@@ -341,6 +364,19 @@ admin-venv:
 		echo "Installing admin-gateway dependencies into $(AG_VENV)."; \
 		env -u HTTP_PROXY -u http_proxy -u HTTPS_PROXY -u https_proxy "$(AG_PIP)" install --upgrade pip; \
 		env -u HTTP_PROXY -u http_proxy -u HTTPS_PROXY -u https_proxy "$(AG_PIP)" install -r admin_gateway/requirements.txt -r admin_gateway/requirements-dev.txt; \
+		echo "$$REQS_HASH" > "$(AG_REQS_STAMP)"; \
+	fi
+
+.PHONY: admin-venv-check
+admin-venv-check:
+	@set -euo pipefail; \
+	if [ -x "$(AG_PY)" ]; then \
+		echo "Admin venv OK: $(AG_PY)"; \
+		"$(AG_PY)" -V; \
+		exit 0; \
+	else \
+		echo "Admin venv not ready: $(AG_PY) not found"; \
+		exit 1; \
 	fi
 
 admin-dev: admin-venv

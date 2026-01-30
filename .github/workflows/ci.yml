@@ -60,6 +60,10 @@ jobs:
         run: |
           python -c "import os; assert os.getenv('FG_API_KEY')"
 
+      - name: Production profile check (fail-fast on unsafe defaults)
+        run: |
+          make prod-profile-check
+
       - name: Run unit lane
         run: |
           make ci
