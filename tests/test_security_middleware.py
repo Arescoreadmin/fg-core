@@ -354,3 +354,136 @@ class TestSecurityIntegration:
 
         for header in expected_headers:
             assert header in response.headers, f"Missing header: {header}"
+
+
+class TestRateLimitFailureBehavior:
+    """Test rate limiting behavior when backend fails (fail-open vs fail-closed).
+
+    These tests verify production-critical behavior: when Redis is unavailable,
+    the rate limiter must either allow (fail-open) or deny (fail-closed) based
+    on FG_RL_FAIL_OPEN configuration.
+    """
+
+    def test_fail_open_config_true(self):
+        """Verify FG_RL_FAIL_OPEN=true is parsed correctly."""
+        from api.ratelimit import load_config
+
+        with patch.dict(
+            os.environ,
+            {
+                "FG_RL_ENABLED": "1",
+                "FG_RL_BACKEND": "redis",
+                "FG_RL_FAIL_OPEN": "true",
+            },
+        ):
+            cfg = load_config()
+            assert cfg.fail_open is True
+
+    def test_fail_closed_config_false(self):
+        """Verify FG_RL_FAIL_OPEN=false is parsed correctly (production mode)."""
+        from api.ratelimit import load_config
+
+        with patch.dict(
+            os.environ,
+            {
+                "FG_RL_ENABLED": "1",
+                "FG_RL_BACKEND": "redis",
+                "FG_RL_FAIL_OPEN": "false",
+            },
+        ):
+            cfg = load_config()
+            assert cfg.fail_open is False
+
+    def test_fail_closed_returns_503_on_redis_error(self):
+        """Fail-closed mode must return 503 when Redis is unavailable."""
+        import pytest
+        from unittest.mock import MagicMock
+        from fastapi import HTTPException
+
+        from api.ratelimit import rate_limit_guard
+
+        with patch.dict(
+            os.environ,
+            {
+                "FG_RL_ENABLED": "1",
+                "FG_RL_BACKEND": "redis",
+                "FG_RL_FAIL_OPEN": "false",
+                "FG_RL_PATHS": "/defend",
+            },
+        ):
+            with patch("api.ratelimit._allow") as mock_allow:
+                mock_allow.side_effect = ConnectionError("Redis unavailable")
+
+                mock_request = MagicMock()
+                mock_request.url.path = "/defend"
+                mock_request.headers.get = MagicMock(return_value="test-api-key")
+                mock_request.state = MagicMock()
+                mock_request.state.telemetry_body = {"tenant_id": "test-tenant"}
+                mock_request.client = MagicMock()
+                mock_request.client.host = "127.0.0.1"
+
+                import asyncio
+
+                with pytest.raises(HTTPException) as exc_info:
+                    asyncio.get_event_loop().run_until_complete(
+                        rate_limit_guard(mock_request, None)
+                    )
+
+                assert exc_info.value.status_code == 503
+                assert "unavailable" in exc_info.value.detail.lower()
+
+    def test_fail_open_allows_on_redis_error(self):
+        """Fail-open mode must allow requests when Redis is unavailable."""
+        from unittest.mock import MagicMock
+
+        from api.ratelimit import rate_limit_guard
+
+        with patch.dict(
+            os.environ,
+            {
+                "FG_RL_ENABLED": "1",
+                "FG_RL_BACKEND": "redis",
+                "FG_RL_FAIL_OPEN": "true",
+                "FG_RL_PATHS": "/defend",
+            },
+        ):
+            with patch("api.ratelimit._allow") as mock_allow:
+                mock_allow.side_effect = ConnectionError("Redis unavailable")
+
+                mock_request = MagicMock()
+                mock_request.url.path = "/defend"
+                mock_request.headers.get = MagicMock(return_value="test-api-key")
+                mock_request.state = MagicMock()
+                mock_request.state.telemetry_body = {"tenant_id": "test-tenant"}
+                mock_request.client = MagicMock()
+                mock_request.client.host = "127.0.0.1"
+
+                import asyncio
+
+                # Should NOT raise - request allowed on Redis failure
+                result = asyncio.get_event_loop().run_until_complete(
+                    rate_limit_guard(mock_request, None)
+                )
+                assert result is None
+
+    def test_production_compose_sets_fail_closed(self):
+        """Verify docker-compose.yml sets FG_RL_FAIL_OPEN=false for production."""
+        import yaml
+
+        with open("docker-compose.yml") as f:
+            compose = yaml.safe_load(f)
+
+        core_env = (
+            compose.get("services", {}).get("frostgate-core", {}).get("environment", {})
+        )
+        fail_open_value = core_env.get("FG_RL_FAIL_OPEN")
+
+        assert fail_open_value is not None, (
+            "FG_RL_FAIL_OPEN must be explicitly set in docker-compose.yml"
+        )
+        # Value may be a variable reference like ${FG_RL_FAIL_OPEN:-false}
+        # The default value after :- is what matters
+        val_str = str(fail_open_value).lower()
+        assert "false" in val_str or val_str == "false", (
+            f"FG_RL_FAIL_OPEN must default to 'false' in production compose, got: {fail_open_value}"
+        )

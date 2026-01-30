@@ -220,3 +220,94 @@ class TestAuthAnomalyDetection:
 
             assert result is False
             mock_alert.assert_not_called()
+
+
+class TestProductionProfileValidation:
+    """Test production profile safety validation."""
+
+    def test_compose_has_fail_closed_rate_limiting(self):
+        """docker-compose.yml must set FG_RL_FAIL_OPEN=false."""
+        import yaml
+
+        with open("docker-compose.yml") as f:
+            compose = yaml.safe_load(f)
+
+        core_env = (
+            compose.get("services", {}).get("frostgate-core", {}).get("environment", {})
+        )
+        fail_open = core_env.get("FG_RL_FAIL_OPEN")
+
+        assert fail_open is not None, "FG_RL_FAIL_OPEN must be set in docker-compose"
+        # Value may be ${FG_RL_FAIL_OPEN:-false} - check that default is false
+        val_str = str(fail_open).lower()
+        assert "false" in val_str, (
+            f"FG_RL_FAIL_OPEN must default to 'false' for production, got: {fail_open}"
+        )
+
+    def test_compose_has_rate_limiting_enabled(self):
+        """docker-compose.yml must enable rate limiting."""
+        import yaml
+
+        with open("docker-compose.yml") as f:
+            compose = yaml.safe_load(f)
+
+        core_env = (
+            compose.get("services", {}).get("frostgate-core", {}).get("environment", {})
+        )
+        rl_enabled = core_env.get("FG_RL_ENABLED")
+
+        # If present, must be truthy (or default to true via ${VAR:-true})
+        if rl_enabled is not None:
+            val_str = str(rl_enabled).lower()
+            assert "true" in val_str or val_str in ("1", "yes", "on"), (
+                f"FG_RL_ENABLED should be truthy, got: {rl_enabled}"
+            )
+
+    def test_compose_uses_redis_backend(self):
+        """docker-compose.yml should use Redis rate limiting backend."""
+        import yaml
+
+        with open("docker-compose.yml") as f:
+            compose = yaml.safe_load(f)
+
+        core_env = (
+            compose.get("services", {}).get("frostgate-core", {}).get("environment", {})
+        )
+        backend = core_env.get("FG_RL_BACKEND")
+
+        if backend is not None:
+            val_str = str(backend).lower()
+            assert "redis" in val_str, (
+                f"FG_RL_BACKEND should be 'redis' for production, got: {backend}"
+            )
+
+    def test_compose_disables_bypass_in_prod(self):
+        """docker-compose.yml must disable rate limit bypass in production."""
+        import yaml
+
+        with open("docker-compose.yml") as f:
+            compose = yaml.safe_load(f)
+
+        core_env = (
+            compose.get("services", {}).get("frostgate-core", {}).get("environment", {})
+        )
+        bypass = core_env.get("FG_RL_ALLOW_BYPASS_IN_PROD")
+
+        if bypass is not None:
+            val_str = str(bypass).lower()
+            assert "false" in val_str or val_str in ("0", "no", "off"), (
+                f"FG_RL_ALLOW_BYPASS_IN_PROD must be 'false', got: {bypass}"
+            )
+
+    def test_prod_profile_checker_script_runs(self):
+        """Production profile checker script must run without errors."""
+        from scripts.prod_profile_check import ProductionProfileChecker
+        from pathlib import Path
+
+        checker = ProductionProfileChecker()
+        checker.check_compose_file(Path("docker-compose.yml"))
+
+        # Should have no critical errors for our production compose
+        assert len(checker.errors) == 0, (
+            f"Production profile check failed: {checker.errors}"
+        )
