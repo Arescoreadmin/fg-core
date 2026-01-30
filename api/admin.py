@@ -18,7 +18,7 @@ import json
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -765,7 +765,7 @@ async def export_audit_events(
                 yield event
 
     # Generate deterministic filename with tenant and timestamp
-    export_ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    export_ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     filename = f"audit-{effective_tenant}-{export_ts}"
     if payload.format == "csv":
         fieldnames = [
