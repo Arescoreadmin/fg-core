@@ -191,6 +191,8 @@ def list_decisions(
 
         return DecisionsPage(items=items, limit=limit, offset=offset, total=total)
 
+    except HTTPException:
+        raise
     except Exception:
         log.exception("decisions.list FAILED")
         raise HTTPException(status_code=500, detail="Internal Server Error")

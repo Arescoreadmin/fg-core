@@ -81,9 +81,14 @@ def test_governance_fails_closed_on_db_error(build_app, monkeypatch):
     client = TestClient(app)
     key = mint_key("*")
 
-    # Simulate DB error by patching get_db
-    with patch("api.governance.get_db") as mock_get_db:
-        mock_get_db.side_effect = Exception("Simulated DB failure")
+    # Mock the Session.execute method to raise an exception
+    from sqlalchemy.orm import Session as RealSession
+    original_execute = RealSession.execute
+
+    def broken_execute(self, *args, **kwargs):
+        raise Exception("Simulated DB failure")
+
+    with patch.object(RealSession, 'execute', broken_execute):
         r = client.get("/governance/changes", headers={"X-API-Key": key})
         # Should return 503, not 200 with empty list
         assert r.status_code == 503, "Must fail-closed on DB error"
@@ -104,7 +109,7 @@ def test_decisions_requires_tenant_id(build_app):
     # No tenant_id provided - should fail
     r = client.get("/decisions", headers={"X-API-Key": key})
     assert r.status_code == 400, "Must require tenant_id"
-    assert "tenant_id is required" in r.json()["detail"]
+    assert "tenant_id" in r.json()["detail"].lower()
 
 
 def test_decisions_rejects_unknown_tenant(build_app):

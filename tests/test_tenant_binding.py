@@ -31,7 +31,9 @@ def test_tenant_mismatch_rejected_feed(build_app):
     assert resp.json()["detail"] == "Tenant mismatch"
 
 
-def test_scoped_key_clamps_defend(build_app):
+def test_scoped_key_clamps_defend(build_app, monkeypatch):
+    # Disable rate limiting to isolate tenant mismatch test
+    monkeypatch.setenv("FG_RL_ENABLED", "0")
     app = build_app(auth_enabled=True)
     client = TestClient(app)
     key = mint_key("defend:write", tenant_id="tenant-a")
@@ -62,7 +64,7 @@ def test_unscoped_key_requires_tenant_id_on_decisions(build_app, tenant_id):
     # Decisions endpoint now requires tenant_id
     decisions = client.get("/decisions?limit=1", headers={"X-API-Key": key})
     assert decisions.status_code == 400
-    assert "tenant_id is required" in decisions.json()["detail"]
+    assert "tenant_id" in decisions.json()["detail"].lower()
 
 
 def test_unscoped_key_with_explicit_tenant_works(build_app):

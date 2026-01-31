@@ -15,11 +15,11 @@ def test_feed_live_requires_auth():
 
 @pytest.mark.smoke
 def test_feed_live_returns_items_with_auth():
-    # Use whatever env var you already use in tests for an agent/admin key.
-    # If your test suite sets a default key, this will pass automatically.
-    key = mint_key("feed:read")
+    # P0 Security Fix: tenant_id is now required
+    test_tenant = "pytest-tenant"
+    key = mint_key("feed:read", tenant_id=test_tenant)
 
-    r = client.get("/feed/live?limit=5", headers={"X-API-Key": key})
+    r = client.get(f"/feed/live?limit=5&tenant_id={test_tenant}", headers={"X-API-Key": key})
     assert r.status_code == 200
     body = r.json()
     assert "items" in body
