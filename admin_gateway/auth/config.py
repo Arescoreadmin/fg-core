@@ -79,12 +79,34 @@ class AuthConfig:
         """Validate configuration and return list of errors."""
         errors = []
 
+        # P0: Validate environment value to prevent typo-based security bypass
+        valid_envs = {
+            "prod",
+            "production",
+            "staging",
+            "dev",
+            "development",
+            "local",
+            "test",
+        }
+        env_lower = self.env.lower()
+        if env_lower not in valid_envs:
+            errors.append(
+                f"Invalid FG_ENV='{self.env}'. Valid values: {', '.join(sorted(valid_envs))}. "
+                "This prevents accidental security bypass via typos."
+            )
+
         # In prod, must have OIDC configured OR dev bypass is forced (which is blocked)
         if self.is_prod:
             if not self.oidc_enabled:
                 errors.append("OIDC must be configured in production")
             if self.dev_auth_bypass:
                 errors.append("FG_DEV_AUTH_BYPASS cannot be enabled in production")
+
+        # P0: Staging should also be treated as production-like
+        if env_lower == "staging":
+            if self.dev_auth_bypass:
+                errors.append("FG_DEV_AUTH_BYPASS cannot be enabled in staging")
 
         # If OIDC is partially configured, warn about missing fields
         oidc_fields = [

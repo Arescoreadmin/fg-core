@@ -5,7 +5,7 @@ import json
 import time
 from typing import Any, List
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -332,11 +332,23 @@ def feed_live(
     if source:
         qry = qry.filter(DecisionRecord.source == source)
 
-    tenant_id = bind_tenant_id(request, tenant_id)
+    # P0: Require tenant_id for all requests - no cross-tenant access allowed
+    tenant_id = bind_tenant_id(
+        request,
+        tenant_id,
+        require_explicit_for_unscoped=True,  # P0: Reject unscoped keys without tenant_id
+    )
     request.state.tenant_id = tenant_id
 
-    if tenant_id:
-        qry = qry.filter(DecisionRecord.tenant_id == tenant_id)
+    # P0: Reject "unknown" tenant bucket - fail closed
+    if not tenant_id or tenant_id == "unknown":
+        raise HTTPException(
+            status_code=400,
+            detail="tenant_id is required and must be a known tenant",
+        )
+
+    # P0: ALWAYS filter by tenant - no cross-tenant access
+    qry = qry.filter(DecisionRecord.tenant_id == tenant_id)
 
     # Search only on real columns
     if q:
@@ -453,8 +465,20 @@ async def feed_stream(
     if severity and not threat_level:
         threat_level = severity
 
-    tenant_id = bind_tenant_id(request, tenant_id)
+    # P0: Require tenant_id for all requests - no cross-tenant access allowed
+    tenant_id = bind_tenant_id(
+        request,
+        tenant_id,
+        require_explicit_for_unscoped=True,  # P0: Reject unscoped keys without tenant_id
+    )
     request.state.tenant_id = tenant_id
+
+    # P0: Reject "unknown" tenant bucket - fail closed
+    if not tenant_id or tenant_id == "unknown":
+        raise HTTPException(
+            status_code=400,
+            detail="tenant_id is required and must be a known tenant",
+        )
 
     # normalize ints/bools
     since_id_n = _fg_norm_int(since_id)

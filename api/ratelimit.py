@@ -174,7 +174,8 @@ def load_config() -> RLConfig:
     redis_url = os.getenv("FG_REDIS_URL", "redis://localhost:6379/0").strip()
     prefix = os.getenv("FG_RL_PREFIX", "fg:rl").strip()
 
-    fail_open = _env_bool("FG_RL_FAIL_OPEN", True)
+    # P0: Default to fail-closed (deny on backend failure)
+    fail_open = _env_bool("FG_RL_FAIL_OPEN", False)
 
     if backend not in ("redis", "memory"):
         backend = "memory"  # Default to memory for dev/test
@@ -428,6 +429,14 @@ async def rate_limit_guard(
     except Exception as e:
         log.warning(f"Rate limiter error: {e}")
         if cfg.fail_open:
+            # P0: Explicit fail-open requires loud logging
+            log.error(
+                "SECURITY: Rate limiter fail-open triggered - allowing request. "
+                "Set FG_RL_FAIL_OPEN=false for fail-closed behavior. "
+                "Error: %s, Key: %s",
+                e,
+                key,
+            )
             return
         raise HTTPException(status_code=503, detail="Rate limiter unavailable")
 

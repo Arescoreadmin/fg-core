@@ -94,8 +94,9 @@ ok "/ui/feed content-type looks html"
 echo "-- SSE /feed/stream with cookie"
 tmp="$(mktemp "$TMPDIR/fg_sse.XXXXXX")"
 # timeout is expected to stop the stream; ignore exit code
+# P0: tenant_id required for tenant isolation
 timeout 2s curl -sS -N -b "$CJ" \
-  "$BASE_URL/feed/stream?limit=1&interval=0.2&q=&threat_level=" \
+  "$BASE_URL/feed/stream?limit=1&interval=0.2&q=&threat_level=&tenant_id=smoke-test" \
   >"$tmp" 2>/dev/null || true
 
 grep -m1 '^data: ' "$tmp" >/dev/null || (sed -n '1,80p' "$tmp" >&2; rm -f "$tmp"; fail "SSE did not emit any data: within timeout")

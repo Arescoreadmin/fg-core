@@ -117,13 +117,23 @@ def list_decisions(
     threat_level: Optional[str] = Query(None, min_length=1),
 ) -> DecisionsPage:
     try:
-        tenant_id = bind_tenant_id(request, tenant_id)
+        # P0: Require tenant_id for all requests - no cross-tenant access allowed
+        tenant_id = bind_tenant_id(
+            request,
+            tenant_id,
+            require_explicit_for_unscoped=True,  # P0: Reject unscoped keys without tenant_id
+        )
         request.state.tenant_id = tenant_id
 
-        # Build WHERE clauses once
-        where = []
-        if tenant_id:
-            where.append(DecisionRecord.tenant_id == tenant_id)
+        # P0: Reject "unknown" tenant bucket - fail closed
+        if not tenant_id or tenant_id == "unknown":
+            raise HTTPException(
+                status_code=400,
+                detail="tenant_id is required and must be a known tenant",
+            )
+
+        # Build WHERE clauses once - tenant_id is ALWAYS required
+        where = [DecisionRecord.tenant_id == tenant_id]  # P0: Always filter by tenant
         if event_type:
             where.append(DecisionRecord.event_type == event_type)
         if threat_level:
@@ -181,6 +191,8 @@ def list_decisions(
 
         return DecisionsPage(items=items, limit=limit, offset=offset, total=total)
 
+    except HTTPException:
+        raise
     except Exception:
         log.exception("decisions.list FAILED")
         raise HTTPException(status_code=500, detail="Internal Server Error")
@@ -196,15 +208,30 @@ def get_decision(
     request: Request,
     db: Session = Depends(get_db),
     include_raw: bool = Query(True, description="Include request/response JSON blobs"),
+    tenant_id: Optional[str] = Query(None, min_length=1),
 ) -> DecisionOut:
     try:
+        # P0: Require tenant_id for all requests - no cross-tenant access allowed
+        resolved_tenant = bind_tenant_id(
+            request,
+            tenant_id,
+            require_explicit_for_unscoped=True,  # P0: Reject unscoped keys without tenant_id
+        )
+        request.state.tenant_id = resolved_tenant
+
+        # P0: Reject "unknown" tenant bucket - fail closed
+        if not resolved_tenant or resolved_tenant == "unknown":
+            raise HTTPException(
+                status_code=400,
+                detail="tenant_id is required and must be a known tenant",
+            )
+
         r = db.get(DecisionRecord, decision_id)
         if r is None:
             raise HTTPException(status_code=404, detail="Decision not found")
 
-        auth = getattr(getattr(request, "state", None), "auth", None)
-        auth_tenant = getattr(auth, "tenant_id", None)
-        if auth_tenant and r.tenant_id != auth_tenant:
+        # P0: ALWAYS check tenant isolation - no exceptions
+        if r.tenant_id != resolved_tenant:
             raise HTTPException(status_code=403, detail="Tenant mismatch")
 
         out = DecisionOut(
