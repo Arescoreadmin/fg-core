@@ -146,3 +146,44 @@ class DecisionRecord(Base):
     decision_diff_json = Column(JSON, nullable=True)
     request_json = Column(JSON, nullable=False)
     response_json = Column(JSON, nullable=False)
+
+
+class PolicyChangeRequest(Base):
+    """
+    Persistent storage for governance policy change requests.
+
+    Security requirements (P0):
+    - Survives restart (database-backed)
+    - Auditable (all changes logged with timestamps)
+    - Fail-closed on DB error
+    """
+
+    __tablename__ = "policy_change_requests"
+
+    id = Column(Integer, primary_key=True)
+    change_id = Column(String(64), unique=True, nullable=False, index=True)
+    change_type = Column(String(64), nullable=False)
+    proposed_by = Column(String(128), nullable=False)
+    proposed_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+    justification = Column(Text, nullable=False)
+
+    # Policy content (nullable for different change types)
+    rule_definition_json = Column(JSON, nullable=True)
+    roe_update_json = Column(JSON, nullable=True)
+
+    # Simulation and confidence
+    simulation_results_json = Column(JSON, nullable=False, default=dict)
+    estimated_false_positives = Column(Integer, nullable=False, default=0)
+    estimated_true_positives = Column(Integer, nullable=False, default=0)
+    confidence = Column(String(16), nullable=False, default="medium")
+
+    # Approval workflow
+    requires_approval_from_json = Column(JSON, nullable=False, default=list)
+    approvals_json = Column(JSON, nullable=False, default=list)
+    status = Column(String(32), nullable=False, default="pending", index=True)
+    deployed_at = Column(DateTime(timezone=True), nullable=True)

@@ -78,8 +78,9 @@ services:
       FG_PYCACHE_DIR: /var/lib/frostgate/pycache
 
 
-      # Auth safety rail: allow env/file keys for MVP. Flip to false when DB keys are seeded.
-      FG_AUTH_ALLOW_FALLBACK: ${FG_AUTH_ALLOW_FALLBACK:-true}
+      # Auth: env/file key fallback DISABLED by default (P0 security).
+      # Set to true ONLY for initial bootstrap/development.
+      FG_AUTH_ALLOW_FALLBACK: ${FG_AUTH_ALLOW_FALLBACK:-false}
       
       FG_INGEST_LOG_EVERY: ${FG_INGEST_LOG_EVERY:-200}
       FG_DEFEND_LOG_EVERY: 200
@@ -170,7 +171,8 @@ services:
       FG_ENV: ${FG_ENV:-prod}
       AG_LOG_LEVEL: ${FG_LOG_LEVEL:-info}
       AG_CORE_BASE_URL: http://frostgate-core:8080
-      AG_CORS_ORIGINS: ${AG_CORS_ORIGINS:-*}
+      # CORS: No wildcard allowed (P0 security). Specify explicit origins.
+      AG_CORS_ORIGINS: ${AG_CORS_ORIGINS:?set AG_CORS_ORIGINS in .env (e.g., http://localhost:13000)}
       AG_AUDIT_ENABLED: ${AG_AUDIT_ENABLED:-true}
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)\""]

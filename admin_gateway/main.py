@@ -90,6 +90,14 @@ def build_app() -> FastAPI:
     )
 
     config = get_auth_config()
+
+    # P0: Validate config and fail startup on any errors (including env typos)
+    config_errors = config.validate()
+    if config_errors:
+        error_msg = "; ".join(config_errors)
+        log.error("Configuration validation failed: %s", error_msg)
+        raise RuntimeError(f"Configuration validation failed: {error_msg}")
+
     if config.is_prod and config.dev_auth_bypass:
         raise RuntimeError("FG_DEV_AUTH_BYPASS cannot be enabled in production.")
     if config.is_prod and not config.oidc_enabled:
@@ -116,14 +124,30 @@ def build_app() -> FastAPI:
     )
     app.add_middleware(SessionCookieMiddleware)
 
-    # CORS configuration
-    cors_origins = os.getenv("AG_CORS_ORIGINS", "*").split(",")
+    # CORS configuration - P0: No wildcard allowed in production
+    cors_origins_raw = os.getenv("AG_CORS_ORIGINS", "")
+    if not cors_origins_raw.strip():
+        if config.is_prod:
+            raise RuntimeError(
+                "AG_CORS_ORIGINS must be set in production (no wildcard allowed)"
+            )
+        cors_origins_raw = "http://localhost:3000,http://localhost:13000"
+        log.warning("AG_CORS_ORIGINS not set, using dev defaults: %s", cors_origins_raw)
+
+    cors_origins = [o.strip() for o in cors_origins_raw.split(",") if o.strip()]
+
+    # P0: Reject wildcard CORS in production
+    if config.is_prod and "*" in cors_origins:
+        raise RuntimeError(
+            "Wildcard CORS origin (*) is not allowed in production"
+        )
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[o.strip() for o in cors_origins],
+        allow_origins=cors_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-CSRF-Token", "X-Request-Id"],
         expose_headers=["X-Request-Id", "X-CSRF-Token"],
     )
 

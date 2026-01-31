@@ -339,11 +339,21 @@ def _update_key_usage(sqlite_path: str, prefix: str, key_hash: str) -> None:
         pass
 
 
+def _env_bool_auth(name: str, default: bool) -> bool:
+    """Parse boolean env var for auth module."""
+    v = os.getenv(name)
+    if v is None:
+        return default
+    return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 def _check_db_expiration(sqlite_path: str, prefix: str, key_hash: str) -> bool:
     """
     Check if key is expired based on DB expires_at column.
     Returns True if expired, False if not expired or no expiration set.
-    Fail closed: DB errors return False (assume not expired) to avoid blocking all auth.
+
+    P0: Fail-closed by default - DB errors return True (expired = deny).
+    Set FG_AUTH_DB_FAIL_OPEN=true to allow on DB errors (NOT recommended).
     """
     try:
         con = sqlite3.connect(sqlite_path)
@@ -376,13 +386,36 @@ def _check_db_expiration(sqlite_path: str, prefix: str, key_hash: str) -> bool:
                     dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
                     return now_ts > int(dt.timestamp())
                 except Exception:
-                    return False
+                    # P0: Fail-closed on parse error - treat as expired
+                    log.warning(
+                        "SECURITY: Failed to parse expires_at=%r for key prefix=%s, treating as expired",
+                        expires_at,
+                        prefix,
+                    )
+                    return True
             return False
         finally:
             con.close()
-    except Exception:
-        # Fail open on DB errors - don't block all auth
-        return False
+    except Exception as e:
+        # P0: Fail-closed by default on DB errors
+        fail_open = _env_bool_auth("FG_AUTH_DB_FAIL_OPEN", False)
+        if fail_open:
+            log.error(
+                "SECURITY: DB expiration check fail-open triggered - allowing request. "
+                "Set FG_AUTH_DB_FAIL_OPEN=false for fail-closed behavior. "
+                "Error: %s, Prefix: %s",
+                e,
+                prefix,
+            )
+            return False  # Allow (not expired)
+        else:
+            log.error(
+                "SECURITY: DB expiration check failed - denying request (fail-closed). "
+                "Error: %s, Prefix: %s",
+                e,
+                prefix,
+            )
+            return True  # Deny (treat as expired)
 
 
 def verify_api_key_raw(
