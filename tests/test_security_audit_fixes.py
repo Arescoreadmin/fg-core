@@ -18,8 +18,6 @@ import os
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-import pytest
-from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from api.auth_scopes import mint_key
@@ -83,7 +81,6 @@ def test_governance_fails_closed_on_db_error(build_app, monkeypatch):
 
     # Mock the Session.execute method to raise an exception
     from sqlalchemy.orm import Session as RealSession
-    original_execute = RealSession.execute
 
     def broken_execute(self, *args, **kwargs):
         raise Exception("Simulated DB failure")
