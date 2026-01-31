@@ -2,11 +2,15 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
+from api.db import reset_engine_cache
 from api.main import build_app
 
 API_KEY = os.getenv("FG_API_KEY")
 if not API_KEY:
     raise RuntimeError("FG_API_KEY must be set for test runs.")
+
+
+TEST_TENANT = "test-tenant-diff"
 
 
 def _post_auth(client: TestClient, attempts: int):
@@ -16,6 +20,7 @@ def _post_auth(client: TestClient, attempts: int):
         json={
             "event_type": "auth_attempt",
             "source": "pytest",
+            "tenant_id": TEST_TENANT,
             "payload": {"source_ip": "1.2.3.4", "attempts": attempts},
         },
     )
@@ -25,12 +30,16 @@ def _post_auth(client: TestClient, attempts: int):
 
 def test_decision_diff_is_persisted_and_surfaced(tmp_path):
     # Protect suite from env leakage
-    keys = ["FG_API_KEY", "FG_AUTH_ENABLED", "FG_SQLITE_PATH"]
+    keys = ["FG_API_KEY", "FG_AUTH_ENABLED", "FG_SQLITE_PATH", "FG_RL_ENABLED"]
     old = {k: os.environ.get(k) for k in keys}
     try:
         os.environ["FG_API_KEY"] = API_KEY
         os.environ["FG_AUTH_ENABLED"] = "1"
         os.environ["FG_SQLITE_PATH"] = str(tmp_path / "frostgate-test.db")
+        os.environ["FG_RL_ENABLED"] = "0"  # Disable rate limiter for test
+
+        # Reset DB engine cache to use new SQLITE_PATH
+        reset_engine_cache()
 
         app = build_app(auth_enabled=True)
 
@@ -39,7 +48,7 @@ def test_decision_diff_is_persisted_and_surfaced(tmp_path):
             _post_auth(client, 1)
             _post_auth(client, 10)
 
-            r = client.get("/decisions", params={"limit": 1}, headers={"x-api-key": API_KEY})
+            r = client.get("/decisions", params={"limit": 1, "tenant_id": TEST_TENANT}, headers={"x-api-key": API_KEY})
             assert r.status_code == 200, f"/decisions failed {r.status_code}: {r.text}"
             item = r.json()["items"][0]
 
