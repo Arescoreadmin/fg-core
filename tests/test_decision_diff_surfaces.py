@@ -35,7 +35,9 @@ def test_decision_diff_exposed_in_decisions_and_feed():
 
     # decisions list should include decision_diff (P0: tenant_id required)
     key_dec = mint_key("decisions:read", tenant_id=test_tenant)
-    dl = client.get(f"/decisions?limit=5&tenant_id={test_tenant}", headers={"X-API-Key": key_dec})
+    dl = client.get(
+        f"/decisions?limit=5&tenant_id={test_tenant}", headers={"X-API-Key": key_dec}
+    )
     assert dl.status_code == 200, dl.text
     data = dl.json()
     items = data.get("items") or data.get("results") or []
@@ -44,7 +46,9 @@ def test_decision_diff_exposed_in_decisions_and_feed():
 
     # feed live should include decision_diff too (P0: tenant_id required)
     key_feed = mint_key("feed:read", tenant_id=test_tenant)
-    fl = client.get(f"/feed/live?limit=5&tenant_id={test_tenant}", headers={"X-API-Key": key_feed})
+    fl = client.get(
+        f"/feed/live?limit=5&tenant_id={test_tenant}", headers={"X-API-Key": key_feed}
+    )
     assert fl.status_code == 200, fl.text
     fdata = fl.json()
     fitems = fdata.get("items") or fdata.get("results") or []

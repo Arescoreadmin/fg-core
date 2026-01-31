@@ -104,7 +104,9 @@ def _model_to_response(m: PolicyChangeRequestModel) -> PolicyChangeResponse:
 router = APIRouter(
     prefix="/governance",
     tags=["governance"],
-    dependencies=[Depends(verify_api_key)],  # P0: Auth required on all governance endpoints
+    dependencies=[
+        Depends(verify_api_key)
+    ],  # P0: Auth required on all governance endpoints
 )
 
 

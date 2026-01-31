@@ -19,7 +19,9 @@ def test_feed_live_returns_items_with_auth():
     test_tenant = "pytest-tenant"
     key = mint_key("feed:read", tenant_id=test_tenant)
 
-    r = client.get(f"/feed/live?limit=5&tenant_id={test_tenant}", headers={"X-API-Key": key})
+    r = client.get(
+        f"/feed/live?limit=5&tenant_id={test_tenant}", headers={"X-API-Key": key}
+    )
     assert r.status_code == 200
     body = r.json()
     assert "items" in body

@@ -68,8 +68,9 @@ def test_governance_persistence_survives_restart(build_app, monkeypatch):
     list_resp = client2.get("/governance/changes", headers={"X-API-Key": key})
     assert list_resp.status_code == 200
     changes = list_resp.json()
-    assert any(c["change_id"] == change_id for c in changes), \
+    assert any(c["change_id"] == change_id for c in changes), (
         "Governance change must persist across restart"
+    )
 
 
 def test_governance_fails_closed_on_db_error(build_app, monkeypatch):
@@ -85,7 +86,7 @@ def test_governance_fails_closed_on_db_error(build_app, monkeypatch):
     def broken_execute(self, *args, **kwargs):
         raise Exception("Simulated DB failure")
 
-    with patch.object(RealSession, 'execute', broken_execute):
+    with patch.object(RealSession, "execute", broken_execute):
         r = client.get("/governance/changes", headers={"X-API-Key": key})
         # Should return 503, not 200 with empty list
         assert r.status_code == 503, "Must fail-closed on DB error"
@@ -213,16 +214,15 @@ def test_auth_fallback_default_false():
     # This is verified by docker-compose.yml change, but we test the code path
     import yaml
 
-    compose_path = os.path.join(
-        os.path.dirname(__file__), "..", "docker-compose.yml"
-    )
+    compose_path = os.path.join(os.path.dirname(__file__), "..", "docker-compose.yml")
     with open(compose_path) as f:
         compose = yaml.safe_load(f)
 
     core_env = compose["services"]["frostgate-core"]["environment"]
     fallback_val = core_env.get("FG_AUTH_ALLOW_FALLBACK", "")
-    assert "false" in fallback_val.lower(), \
+    assert "false" in fallback_val.lower(), (
         "FG_AUTH_ALLOW_FALLBACK must default to false in docker-compose"
+    )
 
 
 def test_admin_gateway_rejects_wildcard_cors_in_prod():
@@ -250,8 +250,9 @@ def test_env_typo_detection():
     # Typo in environment
     config = AuthConfig(env="producton")  # typo
     errors = config.validate()
-    assert any("Invalid FG_ENV" in e for e in errors), \
+    assert any("Invalid FG_ENV" in e for e in errors), (
         "Must detect environment value typos"
+    )
 
 
 def test_valid_env_values_accepted():
@@ -295,5 +296,6 @@ def test_cross_tenant_access_impossible(build_app):
             "/decisions?tenant_id=tenant-a",
             headers={"X-API-Key": key_b},
         )
-        assert decisions_resp.status_code == 403, \
+        assert decisions_resp.status_code == 403, (
             "Must not allow cross-tenant access via tenant_id param"
+        )
