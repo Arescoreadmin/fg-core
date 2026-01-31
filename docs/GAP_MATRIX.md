@@ -38,13 +38,13 @@ A gap is `Post-launch` if:
 
 | ID | Gap | Severity | Evidence (file / test / CI lane) | Owner | ETA / Milestone | Definition of Done |
 |----|-----|----------|----------------------------------|-------|-----------------|--------------------|
-| G001 | Auth fallback defaults to true in docker-compose | Launch-risk | `docker-compose.yml:67` / `scripts/prod_profile_check.py` / `ci.yml:unit` | repo | V2 | `FG_AUTH_ALLOW_FALLBACK` defaults to `false` in docker-compose.yml and prod_profile_check.py fails if truthy |
+| G001 | Auth fallback defaults to true in docker-compose | Launch-risk | `docker-compose.yml:67` / `scripts/prod_profile_check.py` / `.github/workflows/ci.yml` / `unit` | repo | V2 | `FG_AUTH_ALLOW_FALLBACK` defaults to `false` in docker-compose.yml and prod_profile_check.py fails if truthy |
 | G002 | SLSA provenance attestations not generated | Launch-risk | `Makefile:evidence` / `.github/workflows/ci.yml:evidence` | infra | V2 | Evidence bundle includes SLSA provenance JSON; CI verifies provenance attestation |
 | G003 | OpenSCAP/STIG compliance scan not in CI | Launch-risk | `.github/workflows/ci.yml` | infra | V2 | CI job runs OpenSCAP against container images; results in evidence bundle |
 | G004 | CIS K8s v1.9 benchmark not enforced | Launch-risk | `.github/workflows/ci.yml` | infra | V2 | CI runs kube-bench CIS scan; gate fails if score < 95% |
-| G005 | Merkle anchor job placeholder | Launch-risk | `jobs/` directory / `docs/FrostGateCore_Buildout_vNext.md:57` | repo | V2 | `merkle-anchor` CronJob exists and anchors hourly; verification test passes |
-| G006 | Chaos testing jobs not implemented | Post-launch | `docs/FrostGateCore_Buildout_vNext.md:57` | repo | V2+ | Litmus v3 chaos scenarios defined and pass in staging |
-| G007 | AI model drift monitoring not implemented | Post-launch | `docs/FrostGateCore_Buildout_vNext.md:207` | repo | V2+ | Drift threshold alerts configured; retrain runbook tested |
+| G005 | Merkle anchor job placeholder | Launch-risk | `jobs/__init__.py` / `docs/FrostGateCore_Buildout_vNext.md:57` / `fg-fast` | repo | V2 | `merkle-anchor` CronJob exists and anchors hourly; verification test passes |
+| G006 | Chaos testing jobs not implemented | Post-launch | `docs/FrostGateCore_Buildout_vNext.md:57` | docs | V2+ | Litmus v3 chaos scenarios defined and pass in staging |
+| G007 | AI model drift monitoring not implemented | Post-launch | `docs/FrostGateCore_Buildout_vNext.md:207` | docs | V2+ | Drift threshold alerts configured; retrain runbook tested |
 
 ---
 

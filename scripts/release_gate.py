@@ -69,10 +69,15 @@ def run_command(cmd: list[str], description: str) -> tuple[bool, str]:
         return False, f"{description} error: {e}"
 
 
-def run_readiness_checks() -> list[tuple[str, bool, str]]:
+def run_readiness_checks(
+    scorecard_path: Path | None = None,
+) -> list[tuple[str, bool, str]]:
     """Run all readiness checks and return results.
 
     Returns list of (check_name, passed, error_message) tuples.
+
+    Args:
+        scorecard_path: Path to scorecard for drift check (optional)
     """
     results: list[tuple[str, bool, str]] = []
 
@@ -109,6 +114,28 @@ def run_readiness_checks() -> list[tuple[str, bool, str]]:
     )
     results.append(("fg-lint", passed, msg))
 
+    # Check 5: scorecard drift check (generate and verify no changes)
+    if scorecard_path is not None:
+        passed, msg = run_command(
+            ["make", "generate-scorecard"],
+            "generate-scorecard",
+        )
+        results.append(("generate-scorecard", passed, msg))
+
+        if passed:
+            passed, msg = run_command(
+                ["git", "diff", "--exit-code", str(scorecard_path)],
+                "scorecard drift check",
+            )
+            if not passed and not msg:
+                msg = (
+                    "scorecard drift check failed: GAP_SCORECARD.md differs from committed version. "
+                    "Run 'make generate-scorecard' and commit the updated scorecard."
+                )
+            results.append(("scorecard-drift", passed, msg))
+        else:
+            results.append(("scorecard-drift", False, "Skipped (generate-scorecard failed)"))
+
     return results
 
 
@@ -117,6 +144,9 @@ def run_release_gate(
     waivers_path: Path,
     today: datetime | None = None,
     skip_subprocess_checks: bool = False,
+    scorecard_path: Path | None = None,
+    skip_evidence_verification: bool = False,
+    repo_root: Path | None = None,
 ) -> tuple[bool, str]:
     """Run release gate checks.
 
@@ -125,6 +155,9 @@ def run_release_gate(
         waivers_path: Path to RISK_WAIVERS.md
         today: Override for current date (for testing)
         skip_subprocess_checks: Skip subprocess-based checks (for unit tests)
+        scorecard_path: Path to GAP_SCORECARD.md for drift check
+        skip_evidence_verification: Skip deep evidence verification (for unit tests)
+        repo_root: Repository root for evidence verification (defaults to cwd)
 
     Returns:
         Tuple of (passed: bool, summary: str)
@@ -135,7 +168,15 @@ def run_release_gate(
     lines: list[str] = []
 
     # Run gap audit
-    result = run_gap_audit(matrix_path, waivers_path, today)
+    # Note: skip_evidence_verification is independent of skip_subprocess_checks
+    # to allow testing evidence verification without running make commands
+    result = run_gap_audit(
+        matrix_path,
+        waivers_path,
+        today,
+        repo_root=repo_root,
+        skip_evidence_verification=skip_evidence_verification,
+    )
 
     # Parse full matrix to get totals (including closed gaps for scoring)
     # For now, treat all parsed gaps as open (adjust when we have closure tracking)
@@ -199,13 +240,37 @@ def run_release_gate(
             lines.append(f"  - {waiver.gap_id}: Production-blocking cannot be waived")
         lines.append("")
 
+    # Evidence verification errors (blocking)
+    if result.evidence_verification_errors:
+        blocking_reasons.append(
+            f"{len(result.evidence_verification_errors)} evidence verification error(s)"
+        )
+        lines.append("EVIDENCE VERIFICATION ERRORS:")
+        for error in result.evidence_verification_errors[:5]:  # Show first 5
+            lines.append(f"  - {error}")
+        if len(result.evidence_verification_errors) > 5:
+            lines.append(f"  ... and {len(result.evidence_verification_errors) - 5} more")
+        lines.append("")
+
+    # Owner/evidence mismatch errors (blocking)
+    if result.owner_evidence_mismatches:
+        blocking_reasons.append(
+            f"{len(result.owner_evidence_mismatches)} owner/evidence mismatch(es)"
+        )
+        lines.append("OWNER/EVIDENCE MISMATCH ERRORS:")
+        for error in result.owner_evidence_mismatches[:5]:  # Show first 5
+            lines.append(f"  - {error}")
+        if len(result.owner_evidence_mismatches) > 5:
+            lines.append(f"  ... and {len(result.owner_evidence_mismatches) - 5} more")
+        lines.append("")
+
     if prod_readiness < 100.0:
         blocking_reasons.append(f"Production Readiness {prod_readiness:.1f}% < 100%")
 
-    # Run additional readiness checks (contracts, lint, etc.)
+    # Run additional readiness checks (contracts, lint, scorecard drift)
     if not skip_subprocess_checks:
         lines.append("READINESS CHECKS:")
-        check_results = run_readiness_checks()
+        check_results = run_readiness_checks(scorecard_path=scorecard_path)
         for check_name, check_passed, check_msg in check_results:
             status = "PASS" if check_passed else "FAIL"
             lines.append(f"  [{status}] {check_name}")
@@ -283,7 +348,11 @@ def main() -> int:
     except Exception as e:
         print(f"WARNING: Failed to generate scorecard: {e}")
 
-    passed, summary = run_release_gate(matrix_path, waivers_path)
+    passed, summary = run_release_gate(
+        matrix_path,
+        waivers_path,
+        scorecard_path=scorecard_path,
+    )
     print(summary)
 
     return 0 if passed else 1

@@ -38,9 +38,9 @@ Launch Readiness = 1 - (open Launch-risk gaps / total Launch-risk gaps)
 
 | Owner | Open | Total |
 |-------|------|-------|
-| repo | 4 | 4 |
+| repo | 2 | 2 |
 | infra | 3 | 3 |
-| docs | 0 | 0 |
+| docs | 2 | 2 |
 
 ---
 
@@ -70,7 +70,7 @@ All Production-blocking gaps resolved. Release may proceed.
 ### Launch-risk
 
 - **G001**: Auth fallback defaults to true in docker-compose
-  - Evidence: ``docker-compose.yml:67` / `scripts/prod_profile_check.py` / `ci.yml:unit``
+  - Evidence: ``docker-compose.yml:67` / `scripts/prod_profile_check.py` / `.github/workflows/ci.yml` / `unit``
   - Owner: repo
 - **G002**: SLSA provenance attestations not generated
   - Evidence: ``Makefile:evidence` / `.github/workflows/ci.yml:evidence``
@@ -82,14 +82,14 @@ All Production-blocking gaps resolved. Release may proceed.
   - Evidence: ``.github/workflows/ci.yml``
   - Owner: infra
 - **G005**: Merkle anchor job placeholder
-  - Evidence: ``jobs/` directory / `docs/FrostGateCore_Buildout_vNext.md:57``
+  - Evidence: ``jobs/__init__.py` / `docs/FrostGateCore_Buildout_vNext.md:57` / `fg-fast``
   - Owner: repo
 
 ### Post-launch
 
 - **G006**: Chaos testing jobs not implemented
   - Evidence: ``docs/FrostGateCore_Buildout_vNext.md:57``
-  - Owner: repo
+  - Owner: docs
 - **G007**: AI model drift monitoring not implemented
   - Evidence: ``docs/FrostGateCore_Buildout_vNext.md:207``
-  - Owner: repo
+  - Owner: docs

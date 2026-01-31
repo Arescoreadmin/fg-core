@@ -39,9 +39,20 @@ from gap_audit import (
     is_waiver_valid,
     is_waiver_expiring_soon,
     normalize_gap_id,
+    verify_evidence_artifacts,
+    verify_file_exists,
+    verify_test_exists,
+    verify_ci_lane_exists,
+    validate_owner_evidence_match,
+    extract_file_paths,
+    extract_test_references,
+    extract_ci_lane_references,
+    is_infra_path,
+    is_docs_path,
     WAIVER_WARNING_DAYS,
     GAP_ID_PATTERN,
     LEGACY_GAP_ID_PATTERN,
+    VALID_OWNERS,
 )
 from generate_scorecard import generate_scorecard
 
@@ -770,6 +781,11 @@ class TestGapAuditCLI:
         docs_dir = tmp_path / "docs"
         docs_dir.mkdir()
 
+        # Create tests directory with test file for evidence verification
+        tests_dir = tmp_path / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_minor.py").write_text("def test_minor(): pass\n")
+
         matrix = docs_dir / "GAP_MATRIX.md"
         matrix.write_text(
             dedent("""
@@ -1009,4 +1025,394 @@ class TestScorecardDeterminism:
 
         assert run1 == run2, (
             "Scorecard output differs between runs - NOT deterministic!"
+        )
+
+
+class TestExtractFilePaths:
+    """Tests for file path extraction from evidence."""
+
+    def test_extract_simple_path(self) -> None:
+        """Extract simple file paths."""
+        paths = extract_file_paths("api/auth.py")
+        assert "api/auth.py" in paths
+
+    def test_extract_path_with_line_number(self) -> None:
+        """Extract file path with line number."""
+        paths = extract_file_paths("docker-compose.yml:67")
+        assert "docker-compose.yml" in paths
+
+    def test_extract_backtick_path(self) -> None:
+        """Extract file path in backticks."""
+        paths = extract_file_paths("`scripts/prod_profile_check.py`")
+        assert "scripts/prod_profile_check.py" in paths
+
+    def test_extract_workflow_path(self) -> None:
+        """Extract workflow file path."""
+        paths = extract_file_paths(".github/workflows/ci.yml")
+        assert ".github/workflows/ci.yml" in paths
+
+    def test_extract_multiple_paths(self) -> None:
+        """Extract multiple file paths."""
+        evidence = "api/auth.py:123 / tests/test_auth.py / .github/workflows/ci.yml"
+        paths = extract_file_paths(evidence)
+        assert len(paths) >= 3
+
+
+class TestExtractTestReferences:
+    """Tests for test reference extraction from evidence."""
+
+    def test_extract_test_function(self) -> None:
+        """Extract test function name."""
+        refs = extract_test_references("test_auth_flow")
+        assert "test_auth_flow" in refs
+
+    def test_extract_test_file_and_function(self) -> None:
+        """Extract test file with function reference."""
+        refs = extract_test_references("tests/test_auth.py::test_login")
+        assert any("test_auth" in r for r in refs)
+
+    def test_extract_test_file(self) -> None:
+        """Extract test file reference."""
+        refs = extract_test_references("tests/test_security_hardening.py")
+        assert any("test_security_hardening" in r for r in refs)
+
+
+class TestExtractCiLaneReferences:
+    """Tests for CI lane extraction from evidence."""
+
+    def test_extract_known_lanes(self) -> None:
+        """Extract known CI lane names."""
+        refs = extract_ci_lane_references("ci.yml:unit")
+        assert "unit" in refs
+
+    def test_extract_fg_fast(self) -> None:
+        """Extract fg-fast lane reference."""
+        refs = extract_ci_lane_references("fg-fast")
+        assert "fg-fast" in refs
+
+    def test_extract_ci_integration(self) -> None:
+        """Extract ci-integration lane reference."""
+        refs = extract_ci_lane_references("ci-integration lane")
+        assert "ci-integration" in refs
+
+
+class TestVerifyFileExists:
+    """Tests for file existence verification."""
+
+    def test_existing_file(self, tmp_path: Path) -> None:
+        """Verify existing file returns True."""
+        test_file = tmp_path / "test.py"
+        test_file.write_text("# test")
+        assert verify_file_exists("test.py", tmp_path) is True
+
+    def test_missing_file(self, tmp_path: Path) -> None:
+        """Verify missing file returns False."""
+        assert verify_file_exists("nonexistent.py", tmp_path) is False
+
+    def test_nested_path(self, tmp_path: Path) -> None:
+        """Verify nested file path."""
+        (tmp_path / "api").mkdir()
+        (tmp_path / "api" / "auth.py").write_text("# auth")
+        assert verify_file_exists("api/auth.py", tmp_path) is True
+
+
+class TestVerifyTestExists:
+    """Tests for test reference verification."""
+
+    def test_test_file_exists(self, tmp_path: Path) -> None:
+        """Verify test file exists."""
+        tests_dir = tmp_path / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_auth.py").write_text("def test_login(): pass")
+        assert verify_test_exists("tests/test_auth.py", tmp_path) is True
+
+    def test_test_function_exists(self, tmp_path: Path) -> None:
+        """Verify test function exists via grep."""
+        tests_dir = tmp_path / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_auth.py").write_text("def test_login():\n    pass\n")
+        assert verify_test_exists("tests/test_auth.py::test_login", tmp_path) is True
+
+    def test_test_function_not_exists(self, tmp_path: Path) -> None:
+        """Verify missing test function returns False."""
+        tests_dir = tmp_path / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_auth.py").write_text("def test_login(): pass")
+        assert verify_test_exists("tests/test_auth.py::test_missing", tmp_path) is False
+
+
+class TestVerifyCiLaneExists:
+    """Tests for CI lane verification."""
+
+    def test_known_lanes_exist(self) -> None:
+        """Known CI lanes return True."""
+        for lane in ["fg-fast", "fg-lint", "ci", "unit", "integration"]:
+            assert verify_ci_lane_exists(lane) is True
+
+    def test_unknown_lane_without_makefile(self, tmp_path: Path) -> None:
+        """Unknown lane without Makefile returns False."""
+        assert verify_ci_lane_exists("custom-lane-xyz", tmp_path) is False
+
+    def test_lane_in_makefile(self, tmp_path: Path) -> None:
+        """Lane defined in Makefile returns True."""
+        makefile = tmp_path / "Makefile"
+        makefile.write_text(".PHONY: custom-target\ncustom-target:\n\techo hello")
+        assert verify_ci_lane_exists("custom-target", tmp_path) is True
+
+
+class TestIsInfraPath:
+    """Tests for infra path detection."""
+
+    def test_github_workflow(self) -> None:
+        """GitHub workflow is infra path."""
+        assert is_infra_path(".github/workflows/ci.yml") is True
+
+    def test_makefile(self) -> None:
+        """Makefile reference is infra path."""
+        assert is_infra_path("Makefile:123") is True
+
+    def test_dockerfile(self) -> None:
+        """Dockerfile is infra path."""
+        assert is_infra_path("Dockerfile") is True
+
+    def test_docker_compose(self) -> None:
+        """docker-compose.yml is infra path."""
+        assert is_infra_path("docker-compose.yml") is True
+
+    def test_code_file_not_infra(self) -> None:
+        """Regular code file is not infra path."""
+        assert is_infra_path("api/auth.py") is False
+
+
+class TestIsDocsPath:
+    """Tests for docs path detection."""
+
+    def test_docs_directory(self) -> None:
+        """docs/ path is docs path."""
+        assert is_docs_path("docs/README.md") is True
+
+    def test_readme(self) -> None:
+        """README is docs path."""
+        assert is_docs_path("README.md") is True
+
+    def test_markdown_extension(self) -> None:
+        """Any .md file is docs path."""
+        assert is_docs_path("CHANGELOG.md") is True
+
+    def test_code_file_not_docs(self) -> None:
+        """Regular code file is not docs path."""
+        assert is_docs_path("api/auth.py") is False
+
+
+class TestValidateOwnerEvidenceMatch:
+    """Tests for owner/evidence semantic validation."""
+
+    def test_repo_owner_with_code_file(self) -> None:
+        """Owner=repo with code file path passes."""
+        errors = validate_owner_evidence_match("repo", "api/auth.py")
+        assert errors == []
+
+    def test_repo_owner_with_test(self) -> None:
+        """Owner=repo with test reference passes."""
+        errors = validate_owner_evidence_match("repo", "tests/test_auth.py::test_login")
+        assert errors == []
+
+    def test_repo_owner_with_ci_lane(self) -> None:
+        """Owner=repo with CI lane passes."""
+        errors = validate_owner_evidence_match("repo", "fg-fast")
+        assert errors == []
+
+    def test_repo_owner_with_infra_path_and_ci_lane(self) -> None:
+        """Owner=repo with infra path passes if CI lane is found."""
+        errors = validate_owner_evidence_match("repo", ".github/workflows/ci.yml")
+        # This passes because "ci" is a known CI lane found in the path
+        assert errors == []
+
+    def test_infra_owner_with_workflow(self) -> None:
+        """Owner=infra with workflow YAML passes."""
+        errors = validate_owner_evidence_match("infra", ".github/workflows/ci.yml")
+        assert errors == []
+
+    def test_infra_owner_with_makefile(self) -> None:
+        """Owner=infra with Makefile reference passes."""
+        errors = validate_owner_evidence_match("infra", "Makefile:evidence")
+        assert errors == []
+
+    def test_infra_owner_with_ci_lane(self) -> None:
+        """Owner=infra with CI lane passes."""
+        errors = validate_owner_evidence_match("infra", "ci-integration")
+        assert errors == []
+
+    def test_infra_owner_with_code_only_fails(self) -> None:
+        """Owner=infra with only code evidence fails."""
+        errors = validate_owner_evidence_match("infra", "api/auth.py")
+        assert len(errors) >= 1
+        assert "infra" in errors[0].lower()
+
+    def test_docs_owner_with_docs_path(self) -> None:
+        """Owner=docs with docs path passes."""
+        errors = validate_owner_evidence_match("docs", "docs/README.md")
+        assert errors == []
+
+    def test_docs_owner_with_code_only_fails(self) -> None:
+        """Owner=docs with only code evidence fails."""
+        errors = validate_owner_evidence_match("docs", "api/auth.py")
+        assert len(errors) >= 1
+        assert "docs" in errors[0].lower()
+
+
+class TestVerifyEvidenceArtifacts:
+    """Tests for comprehensive evidence verification."""
+
+    def test_skip_file_checks(self) -> None:
+        """skip_file_checks=True skips filesystem verification."""
+        result = verify_evidence_artifacts(
+            "api/nonexistent.py / tests/test_fake.py",
+            skip_file_checks=True,
+        )
+        assert result.valid is True
+        assert len(result.verified_artifacts) >= 2
+
+    def test_empty_evidence_fails(self) -> None:
+        """Empty evidence fails verification."""
+        result = verify_evidence_artifacts("", skip_file_checks=True)
+        assert result.valid is False
+        assert len(result.errors) >= 1
+
+    def test_plain_text_evidence_fails(self) -> None:
+        """Plain text without artifacts fails verification."""
+        result = verify_evidence_artifacts(
+            "TODO: implement later", skip_file_checks=True
+        )
+        assert result.valid is False
+
+    def test_valid_evidence_with_multiple_artifacts(self) -> None:
+        """Evidence with multiple artifacts passes."""
+        result = verify_evidence_artifacts(
+            "api/auth.py:123 / tests/test_auth.py / fg-fast",
+            skip_file_checks=True,
+        )
+        assert result.valid is True
+        assert len(result.verified_artifacts) >= 3
+
+
+class TestInvalidOwnerValues:
+    """Tests for invalid owner values."""
+
+    def test_invalid_owner_team_name(self) -> None:
+        """Team name as owner fails validation."""
+        gap = Gap(
+            id="G001",
+            description="Test",
+            severity="Launch-risk",
+            evidence="tests/test_auth.py",
+            owner="team-security",  # Invalid
+            eta="V2",
+            definition_of_done="Tests pass",
+        )
+        errors = validate_gap(gap)
+        assert len(errors) >= 1
+        assert any("Invalid owner" in e for e in errors)
+
+    def test_invalid_owner_person_name(self) -> None:
+        """Person name as owner fails validation."""
+        gap = Gap(
+            id="G001",
+            description="Test",
+            severity="Launch-risk",
+            evidence="tests/test_auth.py",
+            owner="alice",  # Invalid
+            eta="V2",
+            definition_of_done="Tests pass",
+        )
+        errors = validate_gap(gap)
+        assert len(errors) >= 1
+        assert any("Invalid owner" in e for e in errors)
+
+    def test_valid_owners_constant(self) -> None:
+        """Valid owners are repo, infra, docs."""
+        assert VALID_OWNERS == frozenset({"repo", "infra", "docs"})
+
+
+class TestOwnerEvidenceMismatchInAudit:
+    """Tests for owner/evidence mismatch detection in full audit."""
+
+    def test_audit_detects_owner_mismatch(self, tmp_path: Path) -> None:
+        """Audit detects owner/evidence mismatch."""
+        matrix = tmp_path / "GAP_MATRIX.md"
+        matrix.write_text(
+            dedent("""
+            | ID | Gap | Severity | Evidence (file / test / CI lane) | Owner | ETA / Milestone | Definition of Done |
+            |----|-----|----------|----------------------------------|-------|-----------------|--------------------|
+            | G001 | Test gap | Launch-risk | api/auth.py | infra | V2 | Done |
+        """)
+        )
+        waivers = tmp_path / "RISK_WAIVERS.md"
+        waivers.write_text("# No waivers")
+
+        result = run_gap_audit(matrix, waivers, skip_evidence_verification=True)
+
+        assert len(result.owner_evidence_mismatches) >= 1
+        assert any("infra" in e.lower() for e in result.owner_evidence_mismatches)
+
+    def test_audit_passes_matching_owner(self, tmp_path: Path) -> None:
+        """Audit passes when owner matches evidence."""
+        matrix = tmp_path / "GAP_MATRIX.md"
+        matrix.write_text(
+            dedent("""
+            | ID | Gap | Severity | Evidence (file / test / CI lane) | Owner | ETA / Milestone | Definition of Done |
+            |----|-----|----------|----------------------------------|-------|-----------------|--------------------|
+            | G001 | Test gap | Launch-risk | .github/workflows/ci.yml | infra | V2 | Done |
+        """)
+        )
+        waivers = tmp_path / "RISK_WAIVERS.md"
+        waivers.write_text("# No waivers")
+
+        result = run_gap_audit(matrix, waivers, skip_evidence_verification=True)
+
+        assert len(result.owner_evidence_mismatches) == 0
+
+
+class TestEvidenceVerificationInAudit:
+    """Tests for evidence verification in full audit."""
+
+    def test_audit_with_skip_evidence_verification(self, tmp_path: Path) -> None:
+        """Audit skips evidence verification when flag is set."""
+        matrix = tmp_path / "GAP_MATRIX.md"
+        matrix.write_text(
+            dedent("""
+            | ID | Gap | Severity | Evidence (file / test / CI lane) | Owner | ETA / Milestone | Definition of Done |
+            |----|-----|----------|----------------------------------|-------|-----------------|--------------------|
+            | G001 | Test gap | Launch-risk | nonexistent/fake.py | repo | V2 | Done |
+        """)
+        )
+        waivers = tmp_path / "RISK_WAIVERS.md"
+        waivers.write_text("# No waivers")
+
+        result = run_gap_audit(matrix, waivers, skip_evidence_verification=True)
+
+        # Should not have evidence errors when skipped
+        assert len(result.evidence_verification_errors) == 0
+
+    def test_audit_detects_missing_evidence_file(self, tmp_path: Path) -> None:
+        """Audit detects missing evidence file."""
+        matrix = tmp_path / "GAP_MATRIX.md"
+        matrix.write_text(
+            dedent("""
+            | ID | Gap | Severity | Evidence (file / test / CI lane) | Owner | ETA / Milestone | Definition of Done |
+            |----|-----|----------|----------------------------------|-------|-----------------|--------------------|
+            | G001 | Test gap | Launch-risk | nonexistent/fake.py | repo | V2 | Done |
+        """)
+        )
+        waivers = tmp_path / "RISK_WAIVERS.md"
+        waivers.write_text("# No waivers")
+
+        result = run_gap_audit(
+            matrix, waivers, repo_root=tmp_path, skip_evidence_verification=False
+        )
+
+        # Should detect missing file
+        assert len(result.evidence_verification_errors) >= 1
+        assert any(
+            "not found" in e.lower() for e in result.evidence_verification_errors
         )
