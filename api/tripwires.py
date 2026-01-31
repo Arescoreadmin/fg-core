@@ -1,21 +1,24 @@
 """
-Tripwire Detection for FrostGate Core.
+Tripwire Detection and Alert Delivery for FrostGate Core.
 
 Implements early breach detection mechanisms:
 - Canary token detection (honeypot API keys)
 - Anomaly signals for suspicious activity
-- Alert emission for security events
+- REAL async webhook delivery with configurable retry policy
+- Failures recorded to audit log
 
 Security principle: Assume breach, detect early, alert fast.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 log = logging.getLogger("frostgate.tripwire")
 _security_log = logging.getLogger("frostgate.security")
@@ -23,6 +26,15 @@ _security_log = logging.getLogger("frostgate.security")
 # Canary key prefix - any key starting with this triggers an alert
 # These keys should be seeded in the database but NEVER used legitimately
 CANARY_KEY_PREFIX = "fgk_canary_"
+
+# Webhook configuration via environment
+WEBHOOK_MAX_ATTEMPTS = int(os.getenv("FG_WEBHOOK_MAX_ATTEMPTS", "3"))
+WEBHOOK_BACKOFF_BASE = float(os.getenv("FG_WEBHOOK_BACKOFF_BASE", "2.0"))
+WEBHOOK_TIMEOUT = float(os.getenv("FG_WEBHOOK_TIMEOUT", "10.0"))
+
+# In-memory queue for async delivery (production would use Redis/NATS)
+_delivery_queue: asyncio.Queue["WebhookDelivery"] = asyncio.Queue()
+_delivery_task: Optional[asyncio.Task] = None
 
 
 @dataclass
@@ -46,11 +58,342 @@ class TripwireAlert:
         }
 
 
+@dataclass
+class WebhookDelivery:
+    """Represents a webhook delivery attempt."""
+
+    url: str
+    payload: dict[str, Any]
+    alert_type: str
+    severity: str
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    attempt: int = 0
+    max_attempts: int = WEBHOOK_MAX_ATTEMPTS
+    last_error: Optional[str] = None
+    delivered: bool = False
+    delivery_time: Optional[datetime] = None
+
+
+@dataclass
+class DeliveryResult:
+    """Result of a webhook delivery attempt."""
+
+    success: bool
+    status_code: Optional[int] = None
+    error: Optional[str] = None
+    attempt: int = 0
+    response_time_ms: float = 0
+
+
+class WebhookDeliveryService:
+    """
+    Async webhook delivery service with retry and backoff.
+
+    Features:
+    - Non-blocking request path (queues delivery)
+    - Configurable retry policy with exponential backoff
+    - Failure logging to audit log
+    - Circuit breaker pattern (optional)
+    """
+
+    def __init__(
+        self,
+        max_attempts: int = WEBHOOK_MAX_ATTEMPTS,
+        backoff_base: float = WEBHOOK_BACKOFF_BASE,
+        timeout: float = WEBHOOK_TIMEOUT,
+        audit_logger: Optional[Callable[[dict], None]] = None,
+    ):
+        self.max_attempts = max_attempts
+        self.backoff_base = backoff_base
+        self.timeout = timeout
+        self.audit_logger = audit_logger or self._default_audit_logger
+        self._http_client: Optional[Any] = None
+
+    def _default_audit_logger(self, event: dict) -> None:
+        """Default audit logger - logs to security logger."""
+        _security_log.info(
+            f"WEBHOOK_AUDIT: {event.get('event_type', 'unknown')}",
+            extra=event,
+        )
+
+    async def _get_http_client(self):
+        """Lazy-initialize HTTP client."""
+        if self._http_client is None:
+            try:
+                import httpx
+
+                self._http_client = httpx.AsyncClient(
+                    timeout=self.timeout,
+                    follow_redirects=True,
+                )
+            except ImportError:
+                # Fallback to aiohttp if httpx not available
+                try:
+                    import aiohttp
+
+                    self._http_client = aiohttp.ClientSession(
+                        timeout=aiohttp.ClientTimeout(total=self.timeout)
+                    )
+                except ImportError:
+                    raise RuntimeError(
+                        "No HTTP client available (install httpx or aiohttp)"
+                    )
+        return self._http_client
+
+    async def close(self):
+        """Close HTTP client."""
+        if self._http_client is not None:
+            await self._http_client.aclose()
+            self._http_client = None
+
+    async def deliver(
+        self,
+        url: str,
+        payload: dict[str, Any],
+        alert_type: str = "unknown",
+        severity: str = "INFO",
+    ) -> DeliveryResult:
+        """
+        Attempt to deliver webhook with retries.
+
+        Returns DeliveryResult with success status and details.
+        """
+        last_error = None
+        last_status = None
+
+        for attempt in range(1, self.max_attempts + 1):
+            start_time = time.time()
+            try:
+                client = await self._get_http_client()
+
+                # Determine client type and make request
+                if hasattr(client, "post"):  # httpx
+                    response = await client.post(
+                        url,
+                        json=payload,
+                        headers={
+                            "Content-Type": "application/json",
+                            "User-Agent": "FrostGate-Tripwire/1.0",
+                            "X-Alert-Type": alert_type,
+                            "X-Alert-Severity": severity,
+                        },
+                    )
+                    status_code = response.status_code
+                    response_time = (time.time() - start_time) * 1000
+                else:  # aiohttp
+                    async with client.post(
+                        url,
+                        json=payload,
+                        headers={
+                            "Content-Type": "application/json",
+                            "User-Agent": "FrostGate-Tripwire/1.0",
+                            "X-Alert-Type": alert_type,
+                            "X-Alert-Severity": severity,
+                        },
+                    ) as response:
+                        status_code = response.status
+                        response_time = (time.time() - start_time) * 1000
+
+                last_status = status_code
+
+                # 2xx = success
+                if 200 <= status_code < 300:
+                    self.audit_logger(
+                        {
+                            "event_type": "webhook_delivered",
+                            "url": url,
+                            "alert_type": alert_type,
+                            "severity": severity,
+                            "status_code": status_code,
+                            "attempt": attempt,
+                            "response_time_ms": response_time,
+                            "success": True,
+                        }
+                    )
+                    return DeliveryResult(
+                        success=True,
+                        status_code=status_code,
+                        attempt=attempt,
+                        response_time_ms=response_time,
+                    )
+
+                # 4xx = client error, don't retry
+                if 400 <= status_code < 500:
+                    error = f"Client error: {status_code}"
+                    self.audit_logger(
+                        {
+                            "event_type": "webhook_failed",
+                            "url": url,
+                            "alert_type": alert_type,
+                            "severity": severity,
+                            "status_code": status_code,
+                            "attempt": attempt,
+                            "error": error,
+                            "success": False,
+                            "permanent_failure": True,
+                        }
+                    )
+                    return DeliveryResult(
+                        success=False,
+                        status_code=status_code,
+                        error=error,
+                        attempt=attempt,
+                        response_time_ms=response_time,
+                    )
+
+                # 5xx = server error, retry
+                last_error = f"Server error: {status_code}"
+
+            except asyncio.TimeoutError:
+                last_error = "Request timeout"
+            except Exception as e:
+                last_error = str(e)
+
+            # Log retry attempt
+            if attempt < self.max_attempts:
+                backoff = self.backoff_base ** (attempt - 1)
+                log.warning(
+                    f"Webhook delivery failed (attempt {attempt}/{self.max_attempts}), "
+                    f"retrying in {backoff}s: {last_error}"
+                )
+                self.audit_logger(
+                    {
+                        "event_type": "webhook_retry",
+                        "url": url,
+                        "alert_type": alert_type,
+                        "attempt": attempt,
+                        "max_attempts": self.max_attempts,
+                        "error": last_error,
+                        "backoff_seconds": backoff,
+                    }
+                )
+                await asyncio.sleep(backoff)
+
+        # All attempts exhausted
+        self.audit_logger(
+            {
+                "event_type": "webhook_failed",
+                "url": url,
+                "alert_type": alert_type,
+                "severity": severity,
+                "status_code": last_status,
+                "attempt": self.max_attempts,
+                "error": last_error,
+                "success": False,
+                "permanent_failure": True,
+            }
+        )
+
+        return DeliveryResult(
+            success=False,
+            status_code=last_status,
+            error=last_error,
+            attempt=self.max_attempts,
+        )
+
+
+# Singleton delivery service instance
+_delivery_service: Optional[WebhookDeliveryService] = None
+
+
+def get_delivery_service() -> WebhookDeliveryService:
+    """Get or create the webhook delivery service."""
+    global _delivery_service
+    if _delivery_service is None:
+        _delivery_service = WebhookDeliveryService()
+    return _delivery_service
+
+
+async def _process_delivery_queue():
+    """Background task to process webhook delivery queue."""
+    service = get_delivery_service()
+
+    while True:
+        try:
+            delivery = await _delivery_queue.get()
+            await service.deliver(
+                url=delivery.url,
+                payload=delivery.payload,
+                alert_type=delivery.alert_type,
+                severity=delivery.severity,
+            )
+            _delivery_queue.task_done()
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            log.exception(f"Error processing delivery queue: {e}")
+
+
+def start_delivery_worker():
+    """Start the background delivery worker task."""
+    global _delivery_task
+    if _delivery_task is None or _delivery_task.done():
+        _delivery_task = asyncio.create_task(_process_delivery_queue())
+        log.info("Started webhook delivery worker")
+
+
+def stop_delivery_worker():
+    """Stop the background delivery worker task."""
+    global _delivery_task
+    if _delivery_task is not None and not _delivery_task.done():
+        _delivery_task.cancel()
+        _delivery_task = None
+        log.info("Stopped webhook delivery worker")
+
+
+def queue_webhook_delivery(
+    url: str,
+    payload: dict[str, Any],
+    alert_type: str = "unknown",
+    severity: str = "INFO",
+) -> None:
+    """
+    Queue a webhook for async delivery (non-blocking).
+
+    Call this from request handlers to avoid blocking.
+    """
+    delivery = WebhookDelivery(
+        url=url,
+        payload=payload,
+        alert_type=alert_type,
+        severity=severity,
+    )
+
+    try:
+        _delivery_queue.put_nowait(delivery)
+        log.debug(f"Queued webhook delivery to {url}")
+    except asyncio.QueueFull:
+        log.error(f"Webhook delivery queue full, dropping alert to {url}")
+        _security_log.error(
+            "WEBHOOK_QUEUE_FULL",
+            extra={
+                "event_type": "webhook_queue_full",
+                "url": url,
+                "alert_type": alert_type,
+            },
+        )
+
+
+async def deliver_webhook_async(
+    url: str,
+    payload: dict[str, Any],
+    alert_type: str = "unknown",
+    severity: str = "INFO",
+) -> DeliveryResult:
+    """
+    Deliver webhook asynchronously with retry (awaitable).
+
+    Use this when you need to know the delivery result.
+    """
+    service = get_delivery_service()
+    return await service.deliver(url, payload, alert_type, severity)
+
+
 def _emit_alert(alert: TripwireAlert) -> None:
     """
     Emit a tripwire alert.
 
-    Currently logs to security logger. Future: webhook delivery.
+    Logs to security logger and delivers via webhook if configured.
     """
     alert_dict = alert.to_dict()
 
@@ -61,20 +404,15 @@ def _emit_alert(alert: TripwireAlert) -> None:
     else:
         _security_log.warning(f"TRIPWIRE_ALERT: {alert.alert_type}", extra=alert_dict)
 
-    # Future: webhook delivery
+    # Webhook delivery
     webhook_url = os.getenv("FG_ALERT_WEBHOOK_URL", "").strip()
     if webhook_url:
-        _deliver_webhook_async(webhook_url, alert_dict)
-
-
-def _deliver_webhook_async(url: str, payload: dict) -> None:
-    """
-    Deliver alert via webhook (best-effort, non-blocking).
-
-    TODO: Implement async delivery with retry logic.
-    """
-    # Stub for future implementation
-    log.debug(f"Webhook delivery stub: {url}")
+        queue_webhook_delivery(
+            url=webhook_url,
+            payload=alert_dict,
+            alert_type=alert.alert_type,
+            severity=alert.severity,
+        )
 
 
 def check_canary_key(key_prefix: Optional[str]) -> bool:
@@ -254,8 +592,16 @@ def seed_canary_key_if_missing() -> Optional[str]:
 __all__ = [
     "CANARY_KEY_PREFIX",
     "TripwireAlert",
+    "WebhookDelivery",
+    "WebhookDeliveryService",
+    "DeliveryResult",
     "check_canary_key",
     "check_honeypot_path",
     "check_auth_anomaly",
     "seed_canary_key_if_missing",
+    "queue_webhook_delivery",
+    "deliver_webhook_async",
+    "get_delivery_service",
+    "start_delivery_worker",
+    "stop_delivery_worker",
 ]

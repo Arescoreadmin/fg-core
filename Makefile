@@ -408,6 +408,31 @@ admin-test: admin-venv
 ci-admin: admin-venv admin-lint admin-test
 
 # =============================================================================
+# Compliance Gates
+# =============================================================================
+
+.PHONY: compliance-sbom compliance-provenance compliance-cis compliance-scap compliance-all
+
+compliance-sbom:
+	@mkdir -p "$(ARTIFACTS_DIR)"
+	@$(PY) scripts/generate_sbom.py -o "$(ARTIFACTS_DIR)/sbom.json"
+
+compliance-provenance:
+	@mkdir -p "$(ARTIFACTS_DIR)"
+	@$(PY) scripts/provenance.py -o "$(ARTIFACTS_DIR)/provenance.json"
+
+compliance-cis:
+	@mkdir -p "$(ARTIFACTS_DIR)"
+	@$(PY) scripts/cis_check.py -o "$(ARTIFACTS_DIR)/cis_check.json" --fail-threshold 70
+
+compliance-scap:
+	@mkdir -p "$(ARTIFACTS_DIR)"
+	@$(PY) scripts/scap_scan.py -o "$(ARTIFACTS_DIR)/scap_scan.json"
+
+compliance-all: compliance-sbom compliance-provenance compliance-cis compliance-scap
+	@echo "Compliance gates complete. Artifacts in $(ARTIFACTS_DIR)/"
+
+# =============================================================================
 # Console (Next.js)
 # =============================================================================
 

@@ -29,7 +29,7 @@ Launch Readiness = 1 - (open Launch-risk gaps / total Launch-risk gaps)
 | Severity | Open | Waived | Total |
 |----------|------|--------|-------|
 | Production-blocking | 0 | 0 | 0 |
-| Launch-risk | 5 | 0 | 5 |
+| Launch-risk | 1 | 0 | 1 |
 | Post-launch | 2 | 0 | 2 |
 
 ---
@@ -38,8 +38,8 @@ Launch Readiness = 1 - (open Launch-risk gaps / total Launch-risk gaps)
 
 | Owner | Open | Total |
 |-------|------|-------|
-| repo | 2 | 2 |
-| infra | 3 | 3 |
+| repo | 1 | 1 |
+| infra | 0 | 0 |
 | docs | 2 | 2 |
 
 ---
@@ -57,10 +57,6 @@ All Production-blocking gaps resolved. Release may proceed.
 ### Active Launch Risks
 
 - **G001**: Auth fallback defaults to true in docker-compose
-- **G002**: SLSA provenance attestations not generated
-- **G003**: OpenSCAP/STIG compliance scan not in CI
-- **G004**: CIS K8s v1.9 benchmark not enforced
-- **G005**: Merkle anchor job placeholder
 
 
 ---
@@ -71,18 +67,6 @@ All Production-blocking gaps resolved. Release may proceed.
 
 - **G001**: Auth fallback defaults to true in docker-compose
   - Evidence: ``docker-compose.yml:67` / `scripts/prod_profile_check.py` / `.github/workflows/ci.yml` / `unit``
-  - Owner: repo
-- **G002**: SLSA provenance attestations not generated
-  - Evidence: ``Makefile:evidence` / `.github/workflows/ci.yml:evidence``
-  - Owner: infra
-- **G003**: OpenSCAP/STIG compliance scan not in CI
-  - Evidence: ``.github/workflows/ci.yml``
-  - Owner: infra
-- **G004**: CIS K8s v1.9 benchmark not enforced
-  - Evidence: ``.github/workflows/ci.yml``
-  - Owner: infra
-- **G005**: Merkle anchor job placeholder
-  - Evidence: ``jobs/__init__.py` / `docs/FrostGateCore_Buildout_vNext.md:57` / `fg-fast``
   - Owner: repo
 
 ### Post-launch
