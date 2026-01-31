@@ -331,6 +331,33 @@ ci-pt: venv
 	@$(PYTEST_ENV) $(PY) -m pytest -q tests/test_security_hardening.py tests/test_security_middleware.py
 
 # =============================================================================
+# Hardening Test Lanes (Day 1-7 hardening plan)
+# =============================================================================
+
+.PHONY: test-decision-unified test-tenant-isolation test-auth-hardening test-hardening-all
+
+# Day 1: Unified decision pipeline
+test-decision-unified: venv
+	@$(PYTEST_ENV) $(PY) -m pytest -q tests/test_decision_pipeline_unified.py
+
+# Day 2: Tenant isolation invariants
+test-tenant-isolation: venv
+	@$(PYTEST_ENV) $(PY) -m pytest -q tests/test_tenant_invariant.py tests/test_auth_tenants.py
+
+# Day 3: Auth hardening and config fail-fast
+test-auth-hardening: venv
+	@$(PYTEST_ENV) $(PY) -m pytest -q tests/test_auth_hardening.py tests/test_auth.py tests/test_auth_contract.py
+
+# All hardening tests
+test-hardening-all: test-decision-unified test-tenant-isolation test-auth-hardening
+	@echo "✅ All hardening tests passed"
+
+# CI lane for hardening (run on every PR)
+.PHONY: ci-hardening
+ci-hardening: venv test-hardening-all
+	@echo "✅ Hardening CI gate passed"
+
+# =============================================================================
 # Admin Gateway
 # =============================================================================
 
