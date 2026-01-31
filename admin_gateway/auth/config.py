@@ -80,7 +80,15 @@ class AuthConfig:
         errors = []
 
         # P0: Validate environment value to prevent typo-based security bypass
-        valid_envs = {"prod", "production", "staging", "dev", "development", "local", "test"}
+        valid_envs = {
+            "prod",
+            "production",
+            "staging",
+            "dev",
+            "development",
+            "local",
+            "test",
+        }
         env_lower = self.env.lower()
         if env_lower not in valid_envs:
             errors.append(

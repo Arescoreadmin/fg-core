@@ -138,16 +138,20 @@ def build_app() -> FastAPI:
 
     # P0: Reject wildcard CORS in production
     if config.is_prod and "*" in cors_origins:
-        raise RuntimeError(
-            "Wildcard CORS origin (*) is not allowed in production"
-        )
+        raise RuntimeError("Wildcard CORS origin (*) is not allowed in production")
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-CSRF-Token", "X-Request-Id"],
+        allow_headers=[
+            "Authorization",
+            "Content-Type",
+            "X-API-Key",
+            "X-CSRF-Token",
+            "X-Request-Id",
+        ],
         expose_headers=["X-Request-Id", "X-CSRF-Token"],
     )
 
