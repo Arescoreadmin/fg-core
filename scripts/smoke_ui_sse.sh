@@ -11,7 +11,8 @@ trap 'rm -f "$tmp"' EXIT
 curl -sS -D /dev/null -o /dev/null -c "$tmp" -H "X-API-Key: ${KEY}" "${BASE}/ui/token"
 
 # 2) Cookie should authorize /feed/live (200)
-code="$(curl -sS -o /dev/null -w '%{http_code}' -b "$tmp" "${BASE}/feed/live?limit=1")"
+# P0: tenant_id required for tenant isolation
+code="$(curl -sS -o /dev/null -w '%{http_code}' -b "$tmp" "${BASE}/feed/live?limit=1&tenant_id=smoke-test")"
 if [[ "$code" != "200" ]]; then
   echo "❌ /feed/live expected 200, got ${code}"
   exit 1
@@ -19,9 +20,10 @@ fi
 
 # 3) SSE endpoint should advertise event-stream (HEADERS ONLY)
 # Use HEAD to avoid reading the streaming body at all (no curl 18 from early abort)
+# P0: tenant_id required for tenant isolation
 hdr="$(
   curl -sS --max-time 2 --head -D - -o /dev/null -b "$tmp" \
-    "${BASE}/feed/stream?limit=1&interval=1.0" \
+    "${BASE}/feed/stream?limit=1&interval=1.0&tenant_id=smoke-test" \
   || true
 )"
 
