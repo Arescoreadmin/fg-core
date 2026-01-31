@@ -250,6 +250,73 @@ jobs:
         run: |
           make ci-pt
 
+  compliance:
+    name: Compliance Gates
+    runs-on: ubuntu-latest
+    needs: unit
+    env:
+      FG_ENV: dev
+      FG_AUTH_ENABLED: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate CI secrets
+        run: |
+          python - <<'PY' >> "$GITHUB_ENV"
+          import secrets
+          print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
+          print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
+          print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
+          print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(32)}")
+          PY
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build venv + deps
+        run: |
+          make venv
+
+      - name: Generate SBOM
+        run: |
+          make compliance-sbom
+
+      - name: Generate Provenance
+        run: |
+          make compliance-provenance
+
+      - name: Run CIS Checks
+        run: |
+          make compliance-cis
+
+      - name: Run SCAP Scan
+        run: |
+          make compliance-scap
+
+      - name: Verify Compliance Artifacts
+        run: |
+          test -f artifacts/sbom.json || (echo "SBOM missing" && exit 1)
+          test -f artifacts/provenance.json || (echo "Provenance missing" && exit 1)
+          test -f artifacts/cis_check.json || (echo "CIS check missing" && exit 1)
+          test -f artifacts/scap_scan.json || (echo "SCAP scan missing" && exit 1)
+          echo "All compliance artifacts generated"
+
+      - name: Upload Compliance Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostgate-compliance-artifacts
+          path: |
+            artifacts/sbom.json
+            artifacts/provenance.json
+            artifacts/cis_check.json
+            artifacts/scap_scan.json
+          if-no-files-found: error
+
   evidence:
     name: Evidence (ci-evidence)
     runs-on: ubuntu-latest
