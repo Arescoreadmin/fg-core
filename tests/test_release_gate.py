@@ -67,7 +67,12 @@ class TestReleaseGate:
         waivers = tmp_path / "RISK_WAIVERS.md"
         waivers.write_text("# No waivers")
 
-        passed, summary = run_release_gate(matrix, waivers, skip_subprocess_checks=True)
+        passed, summary = run_release_gate(
+            matrix,
+            waivers,
+            skip_subprocess_checks=True,
+            skip_evidence_verification=True,
+        )
 
         assert passed is False
         assert "BLOCKED" in summary
@@ -86,7 +91,12 @@ class TestReleaseGate:
         waivers = tmp_path / "RISK_WAIVERS.md"
         waivers.write_text("# No waivers")
 
-        passed, summary = run_release_gate(matrix, waivers, skip_subprocess_checks=True)
+        passed, summary = run_release_gate(
+            matrix,
+            waivers,
+            skip_subprocess_checks=True,
+            skip_evidence_verification=True,
+        )
 
         assert passed is True
         assert "PASSED" in summary
@@ -111,7 +121,11 @@ class TestReleaseGate:
         )
 
         passed, summary = run_release_gate(
-            matrix, waivers, today=datetime(2024, 1, 1), skip_subprocess_checks=True
+            matrix,
+            waivers,
+            today=datetime(2024, 1, 1),
+            skip_subprocess_checks=True,
+            skip_evidence_verification=True,
         )
 
         assert passed is False
@@ -137,7 +151,11 @@ class TestReleaseGate:
         )
 
         passed, summary = run_release_gate(
-            matrix, waivers, today=datetime(2024, 1, 1), skip_subprocess_checks=True
+            matrix,
+            waivers,
+            today=datetime(2024, 1, 1),
+            skip_subprocess_checks=True,
+            skip_evidence_verification=True,
         )
 
         assert passed is False
@@ -156,7 +174,12 @@ class TestReleaseGate:
         waivers = tmp_path / "RISK_WAIVERS.md"
         waivers.write_text("# No waivers")
 
-        passed, summary = run_release_gate(matrix, waivers, skip_subprocess_checks=True)
+        passed, summary = run_release_gate(
+            matrix,
+            waivers,
+            skip_subprocess_checks=True,
+            skip_evidence_verification=True,
+        )
 
         assert "Production Readiness: 100.0%" in summary
         assert "Launch Readiness:" in summary
@@ -169,13 +192,18 @@ class TestReleaseGate:
             | ID | Gap | Severity | Evidence (file / test / CI lane) | Owner | ETA / Milestone | Definition of Done |
             |----|-----|----------|----------------------------------|-------|-----------------|--------------------|
             | G001 | Risk A | Launch-risk | tests/test_a.py | repo | V2 | Fixed |
-            | G002 | Risk B | Launch-risk | tests/test_b.py | infra | V2 | Done |
+            | G002 | Risk B | Launch-risk | .github/workflows/ci.yml | infra | V2 | Done |
         """)
         )
         waivers = tmp_path / "RISK_WAIVERS.md"
         waivers.write_text("# No waivers")
 
-        passed, summary = run_release_gate(matrix, waivers, skip_subprocess_checks=True)
+        passed, summary = run_release_gate(
+            matrix,
+            waivers,
+            skip_subprocess_checks=True,
+            skip_evidence_verification=True,
+        )
 
         assert passed is True  # Launch-risk doesn't block
         assert "G001" in summary
@@ -204,7 +232,11 @@ class TestReleaseGate:
         )
 
         passed, summary = run_release_gate(
-            matrix, waivers, today=today, skip_subprocess_checks=True
+            matrix,
+            waivers,
+            today=today,
+            skip_subprocess_checks=True,
+            skip_evidence_verification=True,
         )
 
         assert passed is True  # Still valid
@@ -430,7 +462,7 @@ class TestReleaseGateWithReadinessChecks:
         waivers = tmp_path / "RISK_WAIVERS.md"
         waivers.write_text("# No waivers")
 
-        def mock_readiness_checks() -> list[tuple[str, bool, str]]:
+        def mock_readiness_checks(scorecard_path=None) -> list[tuple[str, bool, str]]:
             return [
                 ("contracts-gen", True, ""),
                 ("contracts-diff", True, ""),
@@ -462,8 +494,191 @@ class TestReleaseGateWithReadinessChecks:
         waivers.write_text("# No waivers")
 
         # With skip_subprocess_checks=True, no subprocess calls should happen
-        passed, summary = run_release_gate(matrix, waivers, skip_subprocess_checks=True)
+        passed, summary = run_release_gate(
+            matrix,
+            waivers,
+            skip_subprocess_checks=True,
+            skip_evidence_verification=True,
+        )
 
         assert passed is True
         # Readiness checks section should not appear in summary
         assert "READINESS CHECKS:" not in summary
+
+
+class TestScorecardDriftCheck:
+    """Tests for scorecard drift detection in release gate."""
+
+    def test_readiness_checks_include_scorecard_drift(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Readiness checks include scorecard drift check when path provided."""
+        from unittest.mock import patch
+
+        call_order: list[str] = []
+
+        def mock_run_command(cmd: list[str], desc: str) -> tuple[bool, str]:
+            if cmd == ["make", "contracts-gen"]:
+                call_order.append("contracts-gen")
+            elif cmd[0] == "git" and "diff" in cmd:
+                if "contracts" in " ".join(cmd):
+                    call_order.append("contracts-diff")
+                else:
+                    call_order.append("scorecard-drift")
+            elif cmd == ["make", "fg-contract"]:
+                call_order.append("fg-contract")
+            elif cmd == ["make", "fg-lint"]:
+                call_order.append("fg-lint")
+            elif cmd == ["make", "generate-scorecard"]:
+                call_order.append("generate-scorecard")
+            return True, ""
+
+        with patch("release_gate.run_command", side_effect=mock_run_command):
+            results = run_readiness_checks(scorecard_path=Path("docs/GAP_SCORECARD.md"))
+
+        # Should include scorecard checks
+        check_names = [r[0] for r in results]
+        assert "generate-scorecard" in check_names
+        assert "scorecard-drift" in check_names
+
+    def test_readiness_checks_no_scorecard_when_no_path(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Readiness checks skip scorecard check when no path provided."""
+        from unittest.mock import patch
+
+        call_order: list[str] = []
+
+        def mock_run_command(cmd: list[str], desc: str) -> tuple[bool, str]:
+            if cmd == ["make", "contracts-gen"]:
+                call_order.append("contracts-gen")
+            elif cmd[0] == "git" and "diff" in cmd:
+                call_order.append("contracts-diff")
+            elif cmd == ["make", "fg-contract"]:
+                call_order.append("fg-contract")
+            elif cmd == ["make", "fg-lint"]:
+                call_order.append("fg-lint")
+            elif cmd == ["make", "generate-scorecard"]:
+                call_order.append("generate-scorecard")
+            return True, ""
+
+        with patch("release_gate.run_command", side_effect=mock_run_command):
+            results = run_readiness_checks(scorecard_path=None)
+
+        # Should NOT include scorecard checks
+        check_names = [r[0] for r in results]
+        assert "generate-scorecard" not in check_names
+        assert "scorecard-drift" not in check_names
+
+    def test_scorecard_drift_failure_message(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Scorecard drift failure includes helpful message."""
+        from unittest.mock import patch
+
+        def mock_run_command(cmd: list[str], desc: str) -> tuple[bool, str]:
+            if cmd == ["make", "contracts-gen"]:
+                return True, ""
+            elif cmd[0] == "git" and "diff" in cmd:
+                if "contracts" in " ".join(cmd):
+                    return True, ""
+                else:
+                    # Scorecard drift detected
+                    return False, ""
+            elif cmd == ["make", "fg-contract"]:
+                return True, ""
+            elif cmd == ["make", "fg-lint"]:
+                return True, ""
+            elif cmd == ["make", "generate-scorecard"]:
+                return True, ""
+            return True, ""
+
+        with patch("release_gate.run_command", side_effect=mock_run_command):
+            results = run_readiness_checks(scorecard_path=Path("docs/GAP_SCORECARD.md"))
+
+        # Find scorecard-drift result
+        drift_result = next(r for r in results if r[0] == "scorecard-drift")
+        assert drift_result[1] is False
+        assert "differs from committed" in drift_result[2]
+
+    def test_scorecard_drift_skipped_on_generate_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Scorecard drift check skipped if generate fails."""
+        from unittest.mock import patch
+
+        def mock_run_command(cmd: list[str], desc: str) -> tuple[bool, str]:
+            if cmd == ["make", "contracts-gen"]:
+                return True, ""
+            elif cmd[0] == "git" and "diff" in cmd:
+                return True, ""
+            elif cmd == ["make", "fg-contract"]:
+                return True, ""
+            elif cmd == ["make", "fg-lint"]:
+                return True, ""
+            elif cmd == ["make", "generate-scorecard"]:
+                return False, "Generate failed"
+            return True, ""
+
+        with patch("release_gate.run_command", side_effect=mock_run_command):
+            results = run_readiness_checks(scorecard_path=Path("docs/GAP_SCORECARD.md"))
+
+        # Find scorecard-drift result
+        drift_result = next(r for r in results if r[0] == "scorecard-drift")
+        assert drift_result[1] is False
+        assert "Skipped" in drift_result[2]
+
+
+class TestReleaseGateEvidenceVerification:
+    """Tests for evidence verification in release gate."""
+
+    def test_release_gate_blocks_on_evidence_errors(self, tmp_path: Path) -> None:
+        """Release gate blocks when evidence verification fails."""
+        matrix = tmp_path / "GAP_MATRIX.md"
+        matrix.write_text(
+            dedent("""
+            | ID | Gap | Severity | Evidence (file / test / CI lane) | Owner | ETA / Milestone | Definition of Done |
+            |----|-----|----------|----------------------------------|-------|-----------------|--------------------|
+            | G001 | Test gap | Launch-risk | nonexistent/file.py | repo | V2 | Done |
+        """)
+        )
+        waivers = tmp_path / "RISK_WAIVERS.md"
+        waivers.write_text("# No waivers")
+
+        # Run with evidence verification enabled and repo_root = tmp_path (no files exist)
+        passed, summary = run_release_gate(
+            matrix,
+            waivers,
+            skip_subprocess_checks=True,
+            skip_evidence_verification=False,
+            repo_root=tmp_path,
+        )
+
+        # Should block due to evidence errors
+        assert passed is False
+        assert "evidence" in summary.lower()
+
+    def test_release_gate_blocks_on_owner_mismatch(self, tmp_path: Path) -> None:
+        """Release gate blocks when owner/evidence mismatch detected."""
+        matrix = tmp_path / "GAP_MATRIX.md"
+        matrix.write_text(
+            dedent("""
+            | ID | Gap | Severity | Evidence (file / test / CI lane) | Owner | ETA / Milestone | Definition of Done |
+            |----|-----|----------|----------------------------------|-------|-----------------|--------------------|
+            | G001 | Test gap | Launch-risk | api/auth.py | infra | V2 | Done |
+        """)
+        )
+        waivers = tmp_path / "RISK_WAIVERS.md"
+        waivers.write_text("# No waivers")
+
+        # Run with evidence verification skipped but owner check enabled
+        passed, summary = run_release_gate(
+            matrix,
+            waivers,
+            skip_subprocess_checks=True,
+            skip_evidence_verification=True,
+        )
+
+        # Should block due to owner mismatch
+        assert passed is False
+        assert "owner" in summary.lower() or "mismatch" in summary.lower()
