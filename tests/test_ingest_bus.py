@@ -10,10 +10,7 @@ Tests verify:
 """
 
 import asyncio
-import json
-from datetime import datetime, timezone
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -229,10 +226,7 @@ class TestIngestProcessor:
         )
 
         # Run synchronously for testing
-        import asyncio
-        result = asyncio.get_event_loop().run_until_complete(
-            processor.process(msg)
-        )
+        result = asyncio.get_event_loop().run_until_complete(processor.process(msg))
 
         assert "threat_level" in result
         assert "rules_triggered" in result
@@ -253,10 +247,7 @@ class TestIngestProcessor:
             },
         )
 
-        import asyncio
-        result = asyncio.get_event_loop().run_until_complete(
-            processor.process(msg)
-        )
+        result = asyncio.get_event_loop().run_until_complete(processor.process(msg))
 
         assert result["threat_level"] == "high"
         assert "rule:ssh_bruteforce" in result["rules_triggered"]
@@ -280,10 +271,7 @@ class TestIngestProcessor:
             },
         )
 
-        import asyncio
-        result = asyncio.get_event_loop().run_until_complete(
-            processor.process(msg)
-        )
+        result = asyncio.get_event_loop().run_until_complete(processor.process(msg))
 
         assert result["roe_applied"] is True
 
@@ -298,7 +286,6 @@ class TestIngestProcessor:
             payload={},
         )
 
-        import asyncio
         loop = asyncio.get_event_loop()
 
         # Process a few messages
@@ -477,7 +464,6 @@ class TestEndToEnd:
 
         # Process
         processor = IngestProcessor()
-        import asyncio
         result = asyncio.get_event_loop().run_until_complete(
             processor.process(restored)
         )
@@ -505,7 +491,6 @@ class TestEndToEnd:
             payload={"path": "/api/health"},
         )
 
-        import asyncio
         loop = asyncio.get_event_loop()
 
         result1 = loop.run_until_complete(processor.process(msg1))

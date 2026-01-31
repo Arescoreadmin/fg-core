@@ -274,7 +274,7 @@ class TestSCAPScan:
         from scripts.scap_scan import scan_file
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-            f.write('result = eval(user_input)\n')
+            f.write("result = eval(user_input)\n")
             f.flush()
 
             findings = scan_file(Path(f.name))
@@ -290,7 +290,7 @@ class TestSCAPScan:
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
             f.write('# password = "supersecret123"\n')
-            f.write('# This is a comment about os.system\n')
+            f.write("# This is a comment about os.system\n")
             f.flush()
 
             findings = scan_file(Path(f.name))
@@ -306,7 +306,7 @@ class TestSCAPScan:
 
         # Python-specific rule should not fire on JS file
         with tempfile.NamedTemporaryFile(mode="w", suffix=".js", delete=False) as f:
-            f.write('pickle.loads(data)\n')  # Python-specific
+            f.write("pickle.loads(data)\n")  # Python-specific
             f.flush()
 
             findings = scan_file(Path(f.name))
@@ -324,7 +324,7 @@ class TestSCAPScan:
             project_dir = Path(tmpdir)
 
             # Create a file with an issue
-            (project_dir / "test.py").write_text('eval(user_input)\n')
+            (project_dir / "test.py").write_text("eval(user_input)\n")
 
             result = run_scan(project_dir)
 
@@ -338,7 +338,7 @@ class TestSCAPScan:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             project_dir = Path(tmpdir)
-            (project_dir / "test.py").write_text('x = 1\n')
+            (project_dir / "test.py").write_text("x = 1\n")
 
             result = run_scan(project_dir)
             d = result_to_dict(result)
@@ -376,7 +376,7 @@ class TestComplianceIntegration:
             assert len(sbom["components"]) > 0
 
             # Generate provenance
-            prov = generate_provenance(project_dir, artifacts_dir / "provenance.json")
+            _ = generate_provenance(project_dir, artifacts_dir / "provenance.json")
             is_valid, _ = verify_provenance(artifacts_dir / "provenance.json")
             assert is_valid
 
@@ -406,7 +406,12 @@ class TestComplianceIntegration:
             scap = result_to_dict(run_scan(project_dir))
 
             # All should be JSON serializable
-            for name, artifact in [("sbom", sbom), ("prov", prov), ("cis", cis), ("scap", scap)]:
+            for name, artifact in [
+                ("sbom", sbom),
+                ("prov", prov),
+                ("cis", cis),
+                ("scap", scap),
+            ]:
                 try:
                     json.dumps(artifact)
                 except (TypeError, ValueError) as e:

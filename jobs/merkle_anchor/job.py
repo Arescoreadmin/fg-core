@@ -92,7 +92,11 @@ class MerkleTree:
             if sibling_idx < len(level):
                 sibling = level[sibling_idx]
                 direction = "left" if is_right else "right"
-                proof.append((sibling, direction))
+            else:
+                # Odd leaf at end pairs with itself (duplicated)
+                sibling = level[idx]
+                direction = "right"
+            proof.append((sibling, direction))
             idx //= 2
         return proof
 

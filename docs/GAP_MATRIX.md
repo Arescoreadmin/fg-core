@@ -39,10 +39,6 @@ A gap is `Post-launch` if:
 | ID | Gap | Severity | Evidence (file / test / CI lane) | Owner | ETA / Milestone | Definition of Done |
 |----|-----|----------|----------------------------------|-------|-----------------|--------------------|
 | G001 | Auth fallback defaults to true in docker-compose | Launch-risk | `docker-compose.yml:67` / `scripts/prod_profile_check.py` / `.github/workflows/ci.yml` / `unit` | repo | V2 | `FG_AUTH_ALLOW_FALLBACK` defaults to `false` in docker-compose.yml and prod_profile_check.py fails if truthy |
-| G002 | ~~SLSA provenance attestations not generated~~ | ~~Launch-risk~~ | `scripts/provenance.py` / `tests/test_compliance_gates.py` / `.github/workflows/ci.yml:compliance` | infra | CLOSED | Evidence bundle includes SLSA provenance JSON; CI verifies provenance attestation |
-| G003 | ~~OpenSCAP/STIG compliance scan not in CI~~ | ~~Launch-risk~~ | `scripts/scap_scan.py` / `tests/test_compliance_gates.py` / `.github/workflows/ci.yml:compliance` | infra | CLOSED | CI job runs SCAP-style static scan; results in evidence bundle |
-| G004 | ~~CIS K8s v1.9 benchmark not enforced~~ | ~~Launch-risk~~ | `scripts/cis_check.py` / `tests/test_compliance_gates.py` / `.github/workflows/ci.yml:compliance` | infra | CLOSED | CI runs CIS-style config checks; gate fails if score < 70% |
-| G005 | ~~Merkle anchor job placeholder~~ | ~~Launch-risk~~ | `jobs/merkle_anchor/job.py` / `tests/test_merkle_anchor.py` / `fg-fast` | repo | CLOSED | `merkle-anchor` job computes real Merkle root, anchors to hash-chained log; verification test passes |
 | G006 | Chaos testing jobs not implemented | Post-launch | `docs/FrostGateCore_Buildout_vNext.md:57` | docs | V2+ | Litmus v3 chaos scenarios defined and pass in staging |
 | G007 | AI model drift monitoring not implemented | Post-launch | `docs/FrostGateCore_Buildout_vNext.md:207` | docs | V2+ | Drift threshold alerts configured; retrain runbook tested |
 
@@ -50,12 +46,15 @@ A gap is `Post-launch` if:
 
 ## Closed Gaps (Implemented in This Release)
 
-| ID | Gap | Closed Date | Evidence |
-|----|-----|-------------|----------|
-| G002 | SLSA provenance attestations | 2026-01-31 | `scripts/provenance.py` generates SLSA v1.0 format; `tests/test_compliance_gates.py::TestProvenanceGeneration` validates |
-| G003 | Security static scan | 2026-01-31 | `scripts/scap_scan.py` performs SCAP-style code scanning; CI uploads `scap_scan.json` artifact |
-| G004 | CIS config checks | 2026-01-31 | `scripts/cis_check.py` runs 10 CIS-aligned checks; CI fails if score < 70% |
-| G005 | Merkle anchor job | 2026-01-31 | `jobs/merkle_anchor/job.py` computes Merkle root over audit entries; `tests/test_merkle_anchor.py::TestTamperDetection` proves tamper detection works |
+The following gaps were closed on 2026-01-31:
+
+- **Former G002 - SLSA provenance attestations**: Now generated via `scripts/provenance.py` (SLSA v1.0 format). Validated by `tests/test_compliance_gates.py::TestProvenanceGeneration`.
+
+- **Former G003 - Security static scan**: SCAP-style scanning via `scripts/scap_scan.py`. CI uploads `scap_scan.json` artifact.
+
+- **Former G004 - CIS config checks**: 10 CIS-aligned checks in `scripts/cis_check.py`. CI gate fails if score < 70%.
+
+- **Former G005 - Merkle anchor job**: Real Merkle tree in `jobs/merkle_anchor/job.py`. Tamper detection proven by `tests/test_merkle_anchor.py::TestTamperDetection`.
 
 ---
 

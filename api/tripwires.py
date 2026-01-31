@@ -13,7 +13,6 @@ Security principle: Assume breach, detect early, alert fast.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 import time
@@ -122,6 +121,7 @@ class WebhookDeliveryService:
         if self._http_client is None:
             try:
                 import httpx
+
                 self._http_client = httpx.AsyncClient(
                     timeout=self.timeout,
                     follow_redirects=True,
@@ -130,11 +130,14 @@ class WebhookDeliveryService:
                 # Fallback to aiohttp if httpx not available
                 try:
                     import aiohttp
+
                     self._http_client = aiohttp.ClientSession(
                         timeout=aiohttp.ClientTimeout(total=self.timeout)
                     )
                 except ImportError:
-                    raise RuntimeError("No HTTP client available (install httpx or aiohttp)")
+                    raise RuntimeError(
+                        "No HTTP client available (install httpx or aiohttp)"
+                    )
         return self._http_client
 
     async def close(self):
@@ -195,16 +198,18 @@ class WebhookDeliveryService:
 
                 # 2xx = success
                 if 200 <= status_code < 300:
-                    self.audit_logger({
-                        "event_type": "webhook_delivered",
-                        "url": url,
-                        "alert_type": alert_type,
-                        "severity": severity,
-                        "status_code": status_code,
-                        "attempt": attempt,
-                        "response_time_ms": response_time,
-                        "success": True,
-                    })
+                    self.audit_logger(
+                        {
+                            "event_type": "webhook_delivered",
+                            "url": url,
+                            "alert_type": alert_type,
+                            "severity": severity,
+                            "status_code": status_code,
+                            "attempt": attempt,
+                            "response_time_ms": response_time,
+                            "success": True,
+                        }
+                    )
                     return DeliveryResult(
                         success=True,
                         status_code=status_code,
@@ -215,17 +220,19 @@ class WebhookDeliveryService:
                 # 4xx = client error, don't retry
                 if 400 <= status_code < 500:
                     error = f"Client error: {status_code}"
-                    self.audit_logger({
-                        "event_type": "webhook_failed",
-                        "url": url,
-                        "alert_type": alert_type,
-                        "severity": severity,
-                        "status_code": status_code,
-                        "attempt": attempt,
-                        "error": error,
-                        "success": False,
-                        "permanent_failure": True,
-                    })
+                    self.audit_logger(
+                        {
+                            "event_type": "webhook_failed",
+                            "url": url,
+                            "alert_type": alert_type,
+                            "severity": severity,
+                            "status_code": status_code,
+                            "attempt": attempt,
+                            "error": error,
+                            "success": False,
+                            "permanent_failure": True,
+                        }
+                    )
                     return DeliveryResult(
                         success=False,
                         status_code=status_code,
@@ -249,29 +256,33 @@ class WebhookDeliveryService:
                     f"Webhook delivery failed (attempt {attempt}/{self.max_attempts}), "
                     f"retrying in {backoff}s: {last_error}"
                 )
-                self.audit_logger({
-                    "event_type": "webhook_retry",
-                    "url": url,
-                    "alert_type": alert_type,
-                    "attempt": attempt,
-                    "max_attempts": self.max_attempts,
-                    "error": last_error,
-                    "backoff_seconds": backoff,
-                })
+                self.audit_logger(
+                    {
+                        "event_type": "webhook_retry",
+                        "url": url,
+                        "alert_type": alert_type,
+                        "attempt": attempt,
+                        "max_attempts": self.max_attempts,
+                        "error": last_error,
+                        "backoff_seconds": backoff,
+                    }
+                )
                 await asyncio.sleep(backoff)
 
         # All attempts exhausted
-        self.audit_logger({
-            "event_type": "webhook_failed",
-            "url": url,
-            "alert_type": alert_type,
-            "severity": severity,
-            "status_code": last_status,
-            "attempt": self.max_attempts,
-            "error": last_error,
-            "success": False,
-            "permanent_failure": True,
-        })
+        self.audit_logger(
+            {
+                "event_type": "webhook_failed",
+                "url": url,
+                "alert_type": alert_type,
+                "severity": severity,
+                "status_code": last_status,
+                "attempt": self.max_attempts,
+                "error": last_error,
+                "success": False,
+                "permanent_failure": True,
+            }
+        )
 
         return DeliveryResult(
             success=False,

@@ -13,7 +13,6 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pytest
 
 from jobs.merkle_anchor.job import (
     MerkleTree,
@@ -33,7 +32,9 @@ class TestSha256Hex:
     def test_string_input(self):
         result = sha256_hex("hello")
         assert len(result) == 64
-        assert result == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        assert (
+            result == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        )
 
     def test_bytes_input(self):
         result = sha256_hex(b"hello")
@@ -43,7 +44,9 @@ class TestSha256Hex:
         result = sha256_hex("")
         assert len(result) == 64
         # Known hash of empty string
-        assert result == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        assert (
+            result == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        )
 
 
 class TestCanonicalJson:
@@ -250,7 +253,7 @@ class TestVerifyAnchorRecord:
         )
 
         # Tamper with merkle root (but not anchor_hash)
-        original_hash = record["anchor_hash"]
+        # Note: anchor_hash will change after tampering merkle_root
         record["merkle_root"] = "tampered_root"
         # This should fail because anchor_hash no longer matches
         is_valid, msg = verify_anchor_record(record)
@@ -330,7 +333,8 @@ class TestVerifyAnchorChain:
                     leaves = [sha256_hex(f"data{i}")]
                     record = create_anchor_record(
                         merkle_root=MerkleTree(leaves).root,
-                        window_start=datetime.now(timezone.utc) - timedelta(hours=3 - i),
+                        window_start=datetime.now(timezone.utc)
+                        - timedelta(hours=3 - i),
                         window_end=datetime.now(timezone.utc) - timedelta(hours=2 - i),
                         leaf_count=1,
                         leaf_hashes=leaves,
@@ -451,9 +455,24 @@ class TestTamperDetection:
         """
         # Create audit entries
         entries = [
-            {"id": 1, "created_at": "2024-01-01T00:00:00Z", "event_type": "auth_success", "user": "alice"},
-            {"id": 2, "created_at": "2024-01-01T00:01:00Z", "event_type": "auth_failure", "user": "bob"},
-            {"id": 3, "created_at": "2024-01-01T00:02:00Z", "event_type": "data_access", "user": "charlie"},
+            {
+                "id": 1,
+                "created_at": "2024-01-01T00:00:00Z",
+                "event_type": "auth_success",
+                "user": "alice",
+            },
+            {
+                "id": 2,
+                "created_at": "2024-01-01T00:01:00Z",
+                "event_type": "auth_failure",
+                "user": "bob",
+            },
+            {
+                "id": 3,
+                "created_at": "2024-01-01T00:02:00Z",
+                "event_type": "data_access",
+                "user": "charlie",
+            },
         ]
 
         # Compute leaf hashes for original entries
@@ -484,7 +503,9 @@ class TestTamperDetection:
 
         # Verification of mutated entry MUST fail
         is_valid, msg = verify_entry_in_anchor(mutated_entry, record)
-        assert not is_valid, "Mutated entry MUST fail verification - tamper detection failed!"
+        assert not is_valid, (
+            "Mutated entry MUST fail verification - tamper detection failed!"
+        )
 
         # Attempting to create a new anchor with mutated entries would have different root
         mutated_entries = entries.copy()

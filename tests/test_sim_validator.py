@@ -8,14 +8,8 @@ Tests verify:
 - Golden output management
 """
 
-import json
-import tempfile
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any
+from datetime import datetime
 
-import pytest
 
 from jobs.sim_validator.job import (
     GOLDEN_VERSION,
@@ -351,7 +345,7 @@ class TestDriftDetection:
     def test_validate_all_detects_drift(self):
         """validate_all correctly identifies drift across all simulations."""
         # Run simulations to get current outputs
-        outputs = run_all_simulations()
+        # Run simulations (output used for comparison)
 
         # Create fake golden with one different hash
         first_name = SIMULATION_INPUTS[0].name
@@ -370,9 +364,7 @@ class TestDriftDetection:
     def test_drift_causes_validation_failure_when_fail_on_drift_true(self):
         """With fail_on_drift=True, drift causes validation to fail."""
         fake_golden = {
-            "outputs": {
-                SIMULATION_INPUTS[0].name: {"output_hash": "wrong_hash"}
-            }
+            "outputs": {SIMULATION_INPUTS[0].name: {"output_hash": "wrong_hash"}}
         }
         result = validate_all(golden=fake_golden, fail_on_drift=True)
         # Should fail because there's drift (even if expectations match)
