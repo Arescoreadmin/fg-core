@@ -142,10 +142,13 @@ class TestStartupValidation:
         from api.config.startup_validation import StartupValidator
 
         # Test with production environment and insecure API key
-        with patch.dict(os.environ, {
-            "FG_ENV": "prod",
-            "FG_API_KEY": "secret",  # Insecure default
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "FG_ENV": "prod",
+                "FG_API_KEY": "secret",  # Insecure default
+            },
+        ):
             validator = StartupValidator()
             report = validator.validate()
 
@@ -160,10 +163,13 @@ class TestStartupValidation:
             StartupValidator,
         )
 
-        with patch.dict(os.environ, {
-            "FG_ENV": "dev",
-            "FG_API_KEY": "secret",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "FG_ENV": "dev",
+                "FG_API_KEY": "secret",
+            },
+        ):
             validator = StartupValidator()
             report = validator.validate()
 
@@ -180,17 +186,21 @@ class TestSQLiteInProduction:
         """
         from api.config.startup_validation import StartupValidator
 
-        with patch.dict(os.environ, {
-            "FG_ENV": "prod",
-            "FG_DB_URL": "",  # No PostgreSQL configured
-            "FG_API_KEY": "a" * 32,  # Valid key length
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "FG_ENV": "prod",
+                "FG_DB_URL": "",  # No PostgreSQL configured
+                "FG_API_KEY": "a" * 32,  # Valid key length
+            },
+        ):
             validator = StartupValidator()
             report = validator.validate()
 
             # Should warn about SQLite in prod
             db_warnings = [
-                r for r in report.results
+                r
+                for r in report.results
                 if "database" in r.name.lower() or "sqlite" in r.message.lower()
             ]
             assert len(db_warnings) > 0
@@ -205,18 +215,20 @@ class TestAuthEnabled:
         """
         from api.config.startup_validation import StartupValidator
 
-        with patch.dict(os.environ, {
-            "FG_ENV": "prod",
-            "FG_AUTH_ENABLED": "0",
-            "FG_API_KEY": "",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "FG_ENV": "prod",
+                "FG_AUTH_ENABLED": "0",
+                "FG_API_KEY": "",
+            },
+        ):
             validator = StartupValidator()
             report = validator.validate()
 
             # Should have error for disabled auth
             auth_results = [
-                r for r in report.results
-                if "auth" in r.name.lower() and not r.passed
+                r for r in report.results if "auth" in r.name.lower() and not r.passed
             ]
             assert len(auth_results) > 0
 

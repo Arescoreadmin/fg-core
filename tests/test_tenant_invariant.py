@@ -68,7 +68,9 @@ class TestTenantIsolationInvariants:
 
         # Attempt to access tenant-B
         with pytest.raises(HTTPException) as exc_info:
-            bind_tenant_id(mock_request, "tenant-B", require_explicit_for_unscoped=False)
+            bind_tenant_id(
+                mock_request, "tenant-B", require_explicit_for_unscoped=False
+            )
 
         assert exc_info.value.status_code == 403
         assert "mismatch" in exc_info.value.detail.lower()
@@ -89,7 +91,9 @@ class TestTenantIsolationInvariants:
         mock_request.state.auth = mock_auth
 
         # Even if header says tenant-A (match), we return bound tenant
-        result = bind_tenant_id(mock_request, "tenant-A", require_explicit_for_unscoped=False)
+        result = bind_tenant_id(
+            mock_request, "tenant-A", require_explicit_for_unscoped=False
+        )
         assert result == "tenant-A"
 
     def test_unscoped_key_requires_explicit_tenant_for_writes(self):
