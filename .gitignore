@@ -124,3 +124,36 @@ api/_scratch/
 scripts/diag_*.py
 tests/diag_*.py
 tests/test__something.py
+
+# runtime queue artifacts
+agent_queue/
+agent_queue/**/*.json
+
+# snapshots / local reports
+CONTEXT_SNAPSHOT.md
+frostgate_context_snapshot.txt
+frostgate_tree*.txt
+
+# keys / signing
+keys/
+minisign.key
+minisign.pub
+
+# compiled binaries (unless intentionally committed)
+supervisor-sidecar/supervisor-sidecar
+
+# ---- Runtime queues / artifacts (never commit) ----
+agent_queue/
+agent_queue/**/*.json
+
+# ---- Local snapshots / reports (never commit) ----
+CONTEXT_SNAPSHOT.md
+frostgate_context_snapshot.txt
+frostgate_tree*.txt
+
+# ---- Keys (never commit) ----
+keys/
+
+# ---- Built binaries (never commit; build in CI) ----
+supervisor-sidecar/supervisor-sidecar
+
