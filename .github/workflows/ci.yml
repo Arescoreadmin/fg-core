@@ -250,6 +250,58 @@ jobs:
         run: |
           make ci-pt
 
+  hardening:
+    name: Hardening Gates (ci-hardening)
+    runs-on: ubuntu-latest
+    needs: unit
+    env:
+      FG_ENV: dev
+      FG_AUTH_ENABLED: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate CI secrets
+        run: |
+          python - <<'PY' >> "$GITHUB_ENV"
+          import secrets
+          print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
+          print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
+          print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
+          print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(32)}")
+          PY
+
+      - name: Install OS deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sqlite3 curl zip minisign ripgrep
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build venv + deps
+        run: |
+          make venv
+
+      - name: Verify FG_API_KEY is set
+        run: |
+          python -c "import os; assert os.getenv('FG_API_KEY')"
+
+      - name: Run Hardening Tests - Decision Pipeline Unity
+        run: |
+          make test-decision-unified
+
+      - name: Run Hardening Tests - Tenant Isolation
+        run: |
+          make test-tenant-isolation
+
+      - name: Run Hardening Tests - Auth Hardening
+        run: |
+          make test-auth-hardening
+
   compliance:
     name: Compliance Gates
     runs-on: ubuntu-latest
