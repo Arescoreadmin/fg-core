@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 
 class TestGlobalKeyBypass:
@@ -139,10 +139,7 @@ class TestStartupValidation:
         """
         Startup validation MUST fail in production with unsafe config.
         """
-        from api.config.startup_validation import (
-            StartupValidator,
-            validate_startup_config,
-        )
+        from api.config.startup_validation import StartupValidator
 
         # Test with production environment and insecure API key
         with patch.dict(os.environ, {

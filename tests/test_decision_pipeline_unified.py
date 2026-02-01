@@ -11,12 +11,10 @@ Hardening Day 1: These tests verify that:
 
 from __future__ import annotations
 
-import pytest
 from engine.pipeline import (
     PipelineInput,
     PipelineResult,
     TieD,
-    Mitigation,
     evaluate,
     evaluate_dict,
     _threat_from_score,

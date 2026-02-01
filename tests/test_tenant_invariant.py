@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import os
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 # Set test environment before imports
 os.environ.setdefault("FG_ENV", "test")
