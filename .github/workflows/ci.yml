@@ -1,3 +1,8 @@
+# NOTE:
+# - Console/Compliance gating uses dorny/paths-filter, because GitHub Actions does not provide reliable
+#   per-job changed-files expressions.
+# - DRY setup is implemented via composite actions in .github/actions/.
+
 name: frostgate-core-ci
 
 on:
@@ -15,9 +20,96 @@ env:
   TZ: "UTC"
 
 jobs:
-  unit:
-    name: Unit (fg-fast)
+  fg_guard:
+    name: Guard (paths + syntax + fg-fast)
     runs-on: ubuntu-latest
+    env:
+      FG_ENV: dev
+      FG_AUTH_ENABLED: "1"
+      FG_ENFORCEMENT_MODE: observe
+      FG_SQLITE_PATH: state/frostgate-ci-guard.db
+
+    outputs:
+      console: ${{ steps.filter.outputs.console }}
+      compliance: ${{ steps.filter.outputs.compliance }}
+      python: ${{ steps.filter.outputs.python }}
+      core: ${{ steps.filter.outputs.core }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          filters: |
+            python:
+              - '**/*.py'
+              - 'pyproject.toml'
+              - 'requirements*.txt'
+              - 'uv.lock'
+              - 'poetry.lock'
+            core:
+              - 'api/**'
+              - 'engine/**'
+              - 'tests/**'
+              - 'Makefile'
+              - '.github/**'
+              - 'CONTRACT.md'
+              - 'README.md'
+            console:
+              - 'console/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/**'
+            compliance:
+              - 'compliance/**'
+              - 'Makefile'
+              - '.github/**'
+              - 'pyproject.toml'
+              - 'requirements*.txt'
+              - 'uv.lock'
+              - 'poetry.lock'
+
+      - name: Generate CI secrets
+        uses: ./.github/actions/fg-secrets
+
+      - name: Python setup (cached)
+        uses: ./.github/actions/fg-python-setup
+        with:
+          python-version: "3.12"
+          install-os-deps: "true"
+          prepare-workspace: "true"
+          build-venv: "true"
+
+      - name: Verify FG_API_KEY is set
+        run: python -c "import os; assert os.getenv('FG_API_KEY')"
+
+      - name: Syntax / import guard (fast fail)
+        run: python -m compileall -q api engine tests
+
+      - name: Run fg-fast guard tests (lock regression)
+        run: pytest -q tests/test_ingest_bus.py tests/test_security_middleware.py
+        env:
+          FG_API_KEY: ${{ env.FG_API_KEY }}
+
+      - name: Upload artifacts (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostgate-guard-artifacts
+          path: |
+            artifacts/**
+            state/**
+          if-no-files-found: ignore
+
+  unit:
+    name: Unit (ci)
+    runs-on: ubuntu-latest
+    needs: fg_guard
+    if: ${{ github.event_name == 'push' || needs.fg_guard.outputs.core == 'true' || needs.fg_guard.outputs.python == 'true' }}
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
@@ -29,48 +121,27 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Generate CI secrets
-        run: |
-          python - <<'PY' >> "$GITHUB_ENV"
-          import secrets
-          print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
-          print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
-          print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
-          print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(32)}")
-          PY
+        uses: ./.github/actions/fg-secrets
 
-      - name: Install OS deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y sqlite3 curl zip minisign ripgrep
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Python setup (cached)
+        uses: ./.github/actions/fg-python-setup
         with:
           python-version: "3.12"
-
-      - name: Prepare workspace
-        run: |
-          mkdir -p state artifacts
-
-      - name: Build venv + deps (Makefile is source of truth)
-        run: |
-          make venv
+          install-os-deps: "true"
+          prepare-workspace: "true"
+          build-venv: "true"
 
       - name: Verify FG_API_KEY is set
-        run: |
-          python -c "import os; assert os.getenv('FG_API_KEY')"
+        run: python -c "import os; assert os.getenv('FG_API_KEY')"
 
       - name: Production profile check (fail-fast on unsafe defaults)
-        run: |
-          make prod-profile-check
+        run: make prod-profile-check
 
       - name: Gap audit (fail if Production-blocking gaps exist)
-        run: |
-          make gap-audit
+        run: make gap-audit
 
       - name: Run unit lane
-        run: |
-          make ci
+        run: make ci
         env:
           FG_API_KEY: ${{ env.FG_API_KEY }}
 
@@ -88,12 +159,12 @@ jobs:
     name: Integration (itest-local)
     runs-on: ubuntu-latest
     needs: unit
+    if: ${{ always() && needs.unit.result == 'success' }}
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
       FG_ENFORCEMENT_MODE: observe
       FG_SQLITE_PATH: state/frostgate-ci-integration.db
-
       ITEST_HOST: 127.0.0.1
       ITEST_PORT: 8001
       ITEST_WIPE_DB: "1"
@@ -103,40 +174,24 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Generate CI secrets
-        run: |
-          python - <<'PY' >> "$GITHUB_ENV"
-          import secrets
-          print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
-          print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
-          print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
-          print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(32)}")
-          PY
+        uses: ./.github/actions/fg-secrets
 
-      - name: Install OS deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y sqlite3 curl zip minisign ripgrep
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Python setup (cached)
+        uses: ./.github/actions/fg-python-setup
         with:
           python-version: "3.12"
-
-      - name: Prepare workspace
-        run: |
-          mkdir -p state artifacts
-
-      - name: Build venv + deps
-        run: |
-          make venv
+          install-os-deps: "true"
+          prepare-workspace: "true"
+          build-venv: "true"
 
       - name: Verify FG_API_KEY is set
-        run: |
-          python -c "import os; assert os.getenv('FG_API_KEY')"
+        run: python -c "import os; assert os.getenv('FG_API_KEY')"
+
+      - name: Syntax / import guard (fast fail)
+        run: python -m compileall -q api engine tests
 
       - name: Run integration lane
-        run: |
-          make ci-integration
+        run: make ci-integration
 
       - name: Upload artifacts (always)
         if: always()
@@ -151,7 +206,8 @@ jobs:
   admin:
     name: Admin Gateway (ci-admin)
     runs-on: ubuntu-latest
-    needs: unit
+    needs: fg_guard
+    if: ${{ github.event_name == 'push' || needs.fg_guard.outputs.core == 'true' || needs.fg_guard.outputs.python == 'true' }}
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
@@ -159,61 +215,52 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Generate CI secrets
-        run: |
-          python - <<'PY' >> "$GITHUB_ENV"
-          import secrets
-          print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
-          print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
-          print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
-          print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(32)}")
-          PY
-
-      - name: Install OS deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y sqlite3 curl zip minisign ripgrep
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: ./.github/actions/fg-secrets
+      - name: Python setup (cached)
+        uses: ./.github/actions/fg-python-setup
         with:
           python-version: "3.12"
-
+          install-os-deps: "true"
+          prepare-workspace: "false"
+          build-venv: "true"
       - name: Verify FG_API_KEY is set
-        run: |
-          python -c "import os; assert os.getenv('FG_API_KEY')"
-
+        run: python -c "import os; assert os.getenv('FG_API_KEY')"
+      - name: Syntax / import guard (fast fail)
+        run: python -m compileall -q api engine tests
       - name: Run admin gateway lane
-        run: |
-          make ci-admin
+        run: make ci-admin
 
   console:
     name: Console (ci-console)
     runs-on: ubuntu-latest
-    needs: unit
+    needs: fg_guard
+    if: ${{ github.event_name == 'push' || needs.fg_guard.outputs.console == 'true' }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node
+      - name: Set up Node (cached)
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: "npm"
+          cache-dependency-path: |
+            console/package-lock.json
+            package-lock.json
 
       - name: Generate CI secrets
-        run: |
-          node -e "const crypto=require('crypto'); console.log('FG_API_KEY='+crypto.randomBytes(32).toString('hex')); console.log('REDIS_PASSWORD='+crypto.randomBytes(24).toString('hex')); console.log('POSTGRES_PASSWORD='+crypto.randomBytes(24).toString('hex')); console.log('FG_AGENT_API_KEY='+crypto.randomBytes(32).toString('hex'));" >> "$GITHUB_ENV"
+        uses: ./.github/actions/fg-secrets
 
       - name: Run console lane
-        run: |
-          make ci-console
+        run: make ci-console
 
   pt:
     name: PT (ci-pt)
     runs-on: ubuntu-latest
-    needs: unit
+    needs: fg_guard
+    if: ${{ github.event_name == 'push' || needs.fg_guard.outputs.core == 'true' || needs.fg_guard.outputs.python == 'true' }}
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
@@ -221,39 +268,27 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Generate CI secrets
-        run: |
-          python - <<'PY' >> "$GITHUB_ENV"
-          import secrets
-          print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
-          print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
-          print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
-          print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(32)}")
-          PY
-
-      - name: Install OS deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y sqlite3 curl zip minisign ripgrep
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: ./.github/actions/fg-secrets
+      - name: Python setup (cached)
+        uses: ./.github/actions/fg-python-setup
         with:
           python-version: "3.12"
-
+          install-os-deps: "true"
+          prepare-workspace: "false"
+          build-venv: "true"
       - name: Verify FG_API_KEY is set
-        run: |
-          python -c "import os; assert os.getenv('FG_API_KEY')"
-
+        run: python -c "import os; assert os.getenv('FG_API_KEY')"
+      - name: Syntax / import guard (fast fail)
+        run: python -m compileall -q api engine tests
       - name: Run PT lane
-        run: |
-          make ci-pt
+        run: make ci-pt
 
   hardening:
     name: Hardening Gates (ci-hardening)
     runs-on: ubuntu-latest
-    needs: unit
+    needs: fg_guard
+    if: ${{ github.event_name == 'push' || needs.fg_guard.outputs.core == 'true' || needs.fg_guard.outputs.python == 'true' }}
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
@@ -261,51 +296,38 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Generate CI secrets
-        run: |
-          python - <<'PY' >> "$GITHUB_ENV"
-          import secrets
-          print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
-          print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
-          print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
-          print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(32)}")
-          PY
-
-      - name: Install OS deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y sqlite3 curl zip minisign ripgrep
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: ./.github/actions/fg-secrets
+      - name: Python setup (cached)
+        uses: ./.github/actions/fg-python-setup
         with:
           python-version: "3.12"
-
-      - name: Build venv + deps
-        run: |
-          make venv
-
+          install-os-deps: "true"
+          prepare-workspace: "false"
+          build-venv: "true"
       - name: Verify FG_API_KEY is set
-        run: |
-          python -c "import os; assert os.getenv('FG_API_KEY')"
+        run: python -c "import os; assert os.getenv('FG_API_KEY')"
 
+      # ✅ NEW: enforce invariants inside hardening job (prevents INV-004 regression)
+      - name: Run Core Invariants (INV-001..INV-007)
+        run: make test-core-invariants
+        env:
+          FG_API_KEY: ${{ env.FG_API_KEY }}
+
+      - name: Syntax / import guard (fast fail)
+        run: python -m compileall -q api engine tests
       - name: Run Hardening Tests - Decision Pipeline Unity
-        run: |
-          make test-decision-unified
-
+        run: make test-decision-unified
       - name: Run Hardening Tests - Tenant Isolation
-        run: |
-          make test-tenant-isolation
-
+        run: make test-tenant-isolation
       - name: Run Hardening Tests - Auth Hardening
-        run: |
-          make test-auth-hardening
+        run: make test-auth-hardening
 
   compliance:
     name: Compliance Gates
     runs-on: ubuntu-latest
-    needs: unit
+    needs: fg_guard
+    if: ${{ github.event_name == 'push' || needs.fg_guard.outputs.compliance == 'true' }}
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
@@ -315,39 +337,30 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Generate CI secrets
-        run: |
-          python - <<'PY' >> "$GITHUB_ENV"
-          import secrets
-          print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
-          print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
-          print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
-          print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(32)}")
-          PY
+        uses: ./.github/actions/fg-secrets
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Python setup (cached)
+        uses: ./.github/actions/fg-python-setup
         with:
           python-version: "3.12"
+          install-os-deps: "false"
+          prepare-workspace: "true"
+          build-venv: "true"
 
-      - name: Build venv + deps
-        run: |
-          make venv
+      - name: Syntax / import guard (fast fail)
+        run: python -m compileall -q api engine tests
 
       - name: Generate SBOM
-        run: |
-          make compliance-sbom
+        run: make compliance-sbom
 
       - name: Generate Provenance
-        run: |
-          make compliance-provenance
+        run: make compliance-provenance
 
       - name: Run CIS Checks
-        run: |
-          make compliance-cis
+        run: make compliance-cis
 
       - name: Run SCAP Scan
-        run: |
-          make compliance-scap
+        run: make compliance-scap
 
       - name: Verify Compliance Artifacts
         run: |
@@ -373,16 +386,15 @@ jobs:
     name: Evidence (ci-evidence)
     runs-on: ubuntu-latest
     needs: integration
+    if: ${{ always() && needs.integration.result == 'success' }}
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
       FG_ENFORCEMENT_MODE: observe
       FG_SQLITE_PATH: state/frostgate-ci-evidence.db
-
       ITEST_HOST: 127.0.0.1
       ITEST_PORT: 8001
       ITEST_WIPE_DB: "1"
-
       SCENARIO: spike
       MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
       MINISIGN_PUBLIC_KEY: ${{ secrets.MINISIGN_PUBLIC_KEY }}
@@ -392,49 +404,31 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Generate CI secrets
-        run: |
-          python - <<'PY' >> "$GITHUB_ENV"
-          import secrets
-          print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
-          print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
-          print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
-          print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(32)}")
-          PY
+        uses: ./.github/actions/fg-secrets
 
-      - name: Install OS deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y sqlite3 curl zip minisign ripgrep
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Python setup (cached)
+        uses: ./.github/actions/fg-python-setup
         with:
           python-version: "3.12"
-
-      - name: Prepare workspace
-        run: |
-          mkdir -p state artifacts keys
-
-      - name: Build venv + deps
-        run: |
-          make venv
+          install-os-deps: "true"
+          prepare-workspace: "true"
+          build-venv: "true"
 
       - name: Verify FG_API_KEY is set
-        run: |
-          python -c "import os; assert os.getenv('FG_API_KEY')"
+        run: python -c "import os; assert os.getenv('FG_API_KEY')"
+
+      - name: Syntax / import guard (fast fail)
+        run: python -m compileall -q api engine tests
 
       - name: Run evidence lane (server + smoke + evidence)
-        run: |
-          make ci-evidence
+        run: make ci-evidence
 
       - name: Verify signature
         run: |
           set -euo pipefail
           out="$(cat artifacts/latest_evidence_dir.txt)"
 
-          # Check if signature file exists
           if [ ! -f "$out/manifest.sha256.minisig" ]; then
-            # If MINISIGN_SECRET_KEY wasn't available, skip verification
             if [ -z "${MINISIGN_SECRET_KEY:-}" ]; then
               echo "⚠️ Skipping signature verification: MINISIGN_SECRET_KEY not available (expected for PRs)"
               exit 0
