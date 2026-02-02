@@ -23,6 +23,7 @@ BAD = [
 
 RX = re.compile("|".join(f"(?:{p})" for p in BAD), re.MULTILINE)
 
+
 def main() -> int:
     hits: list[str] = []
     for p in WATCH:
@@ -38,6 +39,7 @@ def main() -> int:
         return 2
     print("paste-garbage guard: OK")
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

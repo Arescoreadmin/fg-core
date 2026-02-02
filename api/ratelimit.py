@@ -90,11 +90,11 @@ class MemoryRateLimiter:
                 bucket.tokens -= cost
                 remaining = int(bucket.tokens)
                 return True, int(capacity), remaining, 0
-            else:
-                # Calculate reset time
-                needed = cost - bucket.tokens
-                reset = int(max(1, needed / rate_per_sec)) if rate_per_sec > 0 else 1
-                return False, int(capacity), 0, reset
+
+            # Calculate reset time
+            needed = cost - bucket.tokens
+            reset = int(max(1, needed / rate_per_sec)) if rate_per_sec > 0 else 1
+            return False, int(capacity), 0, reset
 
 
 # Global memory limiter instance
@@ -109,7 +109,7 @@ def _get_memory_limiter() -> MemoryRateLimiter:
 
 
 # -----------------------------
-# Config
+# Config helpers
 # -----------------------------
 
 
@@ -117,7 +117,7 @@ def _env_bool(name: str, default: bool) -> bool:
     v = os.getenv(name)
     if v is None:
         return default
-    return v.strip().lower() in ("1", "true", "yes", "on")
+    return v.strip().lower() in ("1", "true", "yes", "y", "on")
 
 
 def _env_int(name: str, default: int) -> int:
@@ -141,10 +141,46 @@ def _env_csv(name: str, default: str = "") -> set[str]:
     return {s.strip() for s in v.split(",") if s.strip()}
 
 
+def _env_bool_any(names: tuple[str, ...], default: bool) -> bool:
+    """
+    Read the first env var that exists from `names`, else `default`.
+    Supports legacy env-var names used by older tests/CI.
+    """
+    for n in names:
+        if os.getenv(n) is not None:
+            return _env_bool(n, default)
+    return default
+
+
+def fail_open_acknowledged() -> bool:
+    """
+    Stable helper for invariants/tests.
+
+    True only if fail-open is explicitly enabled AND explicitly acknowledged.
+
+    Supports both env var name schemes:
+      - Legacy tests: FG_RATE_LIMIT_FAIL_OPEN / FG_RATE_LIMIT_FAIL_OPEN_ACKNOWLEDGED
+      - Current:      FG_RL_FAIL_OPEN / FG_RL_FAIL_OPEN_ACKNOWLEDGED
+    """
+    fail_open = _env_bool_any(("FG_RATE_LIMIT_FAIL_OPEN", "FG_RL_FAIL_OPEN"), False)
+    ack = _env_bool_any(
+        ("FG_RATE_LIMIT_FAIL_OPEN_ACKNOWLEDGED", "FG_RL_FAIL_OPEN_ACKNOWLEDGED"), False
+    )
+    return bool(fail_open and ack)
+
+
+def _fail_open_acknowledged() -> bool:
+    """
+    Legacy/private alias kept for backward-compatibility with tests.
+    Do not use in new code.
+    """
+    return fail_open_acknowledged()
+
+
 @dataclass(frozen=True)
 class RLConfig:
     enabled: bool
-    backend: str  # "redis" (recommended) | "memory" (not provided here)
+    backend: str  # "redis" (recommended) | "memory"
     scope: str  # "tenant" | "source" | "ip"
     paths: set[str]
     bypass_keys: set[str]
@@ -158,7 +194,8 @@ class RLConfig:
     prefix: str  # key namespace
 
     # Failure behavior
-    fail_open: bool  # if redis fails, allow requests
+    fail_open: bool  # if backend fails, allow requests
+    fail_open_acknowledged: bool  # MUST be true to honor fail_open
 
 
 def load_config() -> RLConfig:
@@ -174,11 +211,15 @@ def load_config() -> RLConfig:
     redis_url = os.getenv("FG_REDIS_URL", "redis://localhost:6379/0").strip()
     prefix = os.getenv("FG_RL_PREFIX", "fg:rl").strip()
 
-    # P0: Default to fail-closed (deny on backend failure)
-    fail_open = _env_bool("FG_RL_FAIL_OPEN", False)
+    # Default to fail-closed unless explicitly enabled + acknowledged.
+    # Support legacy env var names used by tests.
+    fail_open = _env_bool_any(("FG_RATE_LIMIT_FAIL_OPEN", "FG_RL_FAIL_OPEN"), False)
+    fail_open_acknowledged = _env_bool_any(
+        ("FG_RATE_LIMIT_FAIL_OPEN_ACKNOWLEDGED", "FG_RL_FAIL_OPEN_ACKNOWLEDGED"), False
+    )
 
     if backend not in ("redis", "memory"):
-        backend = "memory"  # Default to memory for dev/test
+        backend = "memory"
     if scope not in ("tenant", "source", "ip"):
         scope = "tenant"
 
@@ -198,6 +239,7 @@ def load_config() -> RLConfig:
         redis_url=redis_url,
         prefix=prefix,
         fail_open=fail_open,
+        fail_open_acknowledged=fail_open_acknowledged,
     )
 
 
@@ -220,10 +262,7 @@ def _extract_client_ip(request: Request) -> str:
     3. CF-Connecting-IP (Cloudflare)
     4. True-Client-IP (Akamai/Cloudflare)
     5. request.client.host
-
-    Security: Only trust proxy headers in production if behind a trusted proxy.
     """
-    # Try proxy headers in order of preference
     for header in (
         "x-forwarded-for",
         "x-real-ip",
@@ -232,15 +271,10 @@ def _extract_client_ip(request: Request) -> str:
     ):
         value = request.headers.get(header)
         if value:
-            # X-Forwarded-For can be comma-separated, take first (client) IP
             ip = value.split(",")[0].strip()
-            # Basic validation: must be non-empty and reasonable length
-            if ip and len(ip) <= 45:
-                # Sanitize: only allow valid IP characters
-                if all(c.isalnum() or c in ".:" for c in ip):
-                    return ip
+            if ip and len(ip) <= 45 and all(c.isalnum() or c in ".:" for c in ip):
+                return ip
 
-    # Fallback to direct client
     if request.client and request.client.host:
         return request.client.host
 
@@ -260,7 +294,6 @@ def _key_from_request(request: Request, cfg: RLConfig) -> str:
     if cfg.scope == "source" and source:
         return f"source:{source}"
 
-    # IP-based rate limiting (improved extraction)
     client_ip = _extract_client_ip(request)
     return f"ip:{client_ip}"
 
@@ -268,26 +301,13 @@ def _key_from_request(request: Request, cfg: RLConfig) -> str:
 # -----------------------------
 # Redis token bucket (atomic)
 # -----------------------------
-# State per key:
-#  - tokens (float)
-#  - last_ts (float seconds)
-#
-# Capacity = burst + rate_per_sec (optional) ??? No, keep it simple:
-# capacity = burst + rate_per_sec * 1 second? not meaningful.
-# Standard token bucket: capacity = burst (or burst + base). Here:
-# capacity = burst + (rate_per_sec) so you can always do at least ~1s worth after idle.
-#
-# We'll set capacity = burst + max(1, rate_per_sec) to avoid tiny caps.
-#
-# Returns:
-#  allowed (0/1), limit, remaining, reset_seconds
-#
+
 _LUA_TOKEN_BUCKET = r"""
 -- KEYS[1] = bucket key
 -- ARGV[1] = now (float seconds)
 -- ARGV[2] = rate_per_sec (float)
 -- ARGV[3] = capacity (float)
--- ARGV[4] = cost (float) (usually 1)
+-- ARGV[4] = cost (float)
 
 local key = KEYS[1]
 local now = tonumber(ARGV[1])
@@ -325,7 +345,7 @@ else
   remaining = 0
 end
 
--- compute reset: time until 1 token available
+-- compute reset: time until token available
 local reset = 0
 if allowed == 0 then
   local needed = cost - tokens
@@ -336,14 +356,11 @@ end
 -- persist
 redis.call("HMSET", key, "tokens", tokens, "ts", ts)
 
--- set expiry to avoid infinite key growth:
--- expire after enough time to refill to capacity plus some slack
+-- expiry
 local ttl = math.ceil((capacity / rate) * 2)
 if ttl < 60 then ttl = 60 end
 redis.call("EXPIRE", key, ttl)
 
--- "limit" here is effectively capacity per burst, not a window cap.
--- We'll present it as a per-second rate + burst in headers in a consistent way.
 return {allowed, capacity, math.floor(remaining), reset}
 """
 
@@ -365,13 +382,12 @@ def _get_redis(cfg: RLConfig):
 
 
 def _capacity(cfg: RLConfig) -> float:
-    # Give at least 1 token base, plus burst.
     base = max(1.0, cfg.rate_per_sec)
     return float(cfg.burst) + base
 
 
 def _allow_redis(key: str, cfg: RLConfig) -> Tuple[bool, int, int, int]:
-    r, script = _get_redis(cfg)
+    _unused_client, script = _get_redis(cfg)
 
     now = time.time()
     cap = _capacity(cfg)
@@ -384,19 +400,16 @@ def _allow_redis(key: str, cfg: RLConfig) -> Tuple[bool, int, int, int]:
     )
 
     ok = bool(int(allowed))
-    # limit as int for headers
     return ok, int(float(limit)), int(float(remaining)), int(float(reset))
 
 
 def _allow_memory(key: str, cfg: RLConfig) -> Tuple[bool, int, int, int]:
-    """Use in-memory token bucket for rate limiting."""
     limiter = _get_memory_limiter()
     cap = _capacity(cfg)
     return limiter.allow(key, cfg.rate_per_sec, cap, cost=1.0)
 
 
 def _allow(key: str, cfg: RLConfig) -> Tuple[bool, int, int, int]:
-    """Route to appropriate backend based on config."""
     if cfg.backend == "memory":
         return _allow_memory(key, cfg)
     return _allow_redis(key, cfg)
@@ -427,29 +440,47 @@ async def rate_limit_guard(
     try:
         ok, limit, remaining, reset = _allow(key, cfg)
     except Exception as e:
-        log.warning(f"Rate limiter error: {e}")
-        if cfg.fail_open:
-            # P0: Explicit fail-open requires loud logging
+        log.warning("Rate limiter error: %s", e)
+
+        # INV-003: fail-open is honored ONLY if explicitly acknowledged.
+        if _fail_open_acknowledged():
             log.error(
-                "SECURITY: Rate limiter fail-open triggered - allowing request. "
-                "Set FG_RL_FAIL_OPEN=false for fail-closed behavior. "
+                "SECURITY: Rate limiter fail-open triggered (ACKNOWLEDGED) - allowing request. "
                 "Error: %s, Key: %s",
                 e,
                 key,
             )
             return
-        raise HTTPException(status_code=503, detail="Rate limiter unavailable")
+
+        # If fail-open requested but not acknowledged, be explicit in logs.
+        if cfg.fail_open and not cfg.fail_open_acknowledged:
+            log.critical(
+                "SECURITY: Rate limiter fail-open requested but NOT ACKNOWLEDGED - FAILING CLOSED. "
+                "To allow fail-open, set FG_RL_FAIL_OPEN_ACKNOWLEDGED=true (or legacy FG_RATE_LIMIT_FAIL_OPEN_ACKNOWLEDGED=true). "
+                "Error: %s, Key: %s",
+                e,
+                key,
+            )
+
+        # Default: fail-closed
+        raise HTTPException(
+            status_code=503,
+            detail="Rate limiter unavailable",
+        ) from e
 
     headers = {
         "Retry-After": str(reset if not ok else 0),
         "X-RateLimit-Limit": str(limit),
         "X-RateLimit-Remaining": str(remaining),
         "X-RateLimit-Reset": str(reset if not ok else 0),
-        # helpful for debugging clients:
-        "X-RateLimit-Policy": f"tb;rate={cfg.rate_per_sec}/s;burst={cfg.burst};scope={cfg.scope}",
+        "X-RateLimit-Policy": (
+            f"tb;rate={cfg.rate_per_sec}/s;burst={cfg.burst};scope={cfg.scope}"
+        ),
     }
 
     if not ok:
         raise HTTPException(
-            status_code=429, detail="Rate limit exceeded", headers=headers
+            status_code=429,
+            detail="Rate limit exceeded",
+            headers=headers,
         )

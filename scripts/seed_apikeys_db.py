@@ -50,13 +50,17 @@ def upsert_key(raw: str, scopes_csv: str) -> None:
             row.scopes_csv = scopes_csv
             db.add(row)
             db.commit()
-            print(f"ok existing key_hash match prefix={row.prefix} scopes={row.scopes_csv}")
+            print(
+                f"ok existing key_hash match prefix={row.prefix} scopes={row.scopes_csv}"
+            )
             return
 
         # else: upsert by prefix (ONLY safe here during seeding)
         row = db.query(ApiKey).filter(ApiKey.prefix == prefix).first()
         if not row:
-            row = ApiKey(prefix=prefix, key_hash=key_h, scopes_csv=scopes_csv, enabled=True)
+            row = ApiKey(
+                prefix=prefix, key_hash=key_h, scopes_csv=scopes_csv, enabled=True
+            )
         else:
             row.key_hash = key_h
             row.scopes_csv = scopes_csv

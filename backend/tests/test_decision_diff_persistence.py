@@ -1,5 +1,4 @@
 import os
-import pytest
 from fastapi.testclient import TestClient
 
 from api.db import reset_engine_cache

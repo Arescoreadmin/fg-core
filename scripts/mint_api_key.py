@@ -13,7 +13,9 @@ def utcnow():
 
 def main():
     prefix = os.getenv("FG_MINT_PREFIX", "ADMIN").strip().upper()
-    scopes = os.getenv("FG_MINT_SCOPES", "feed:read,ingest:write,decisions:read").strip()
+    scopes = os.getenv(
+        "FG_MINT_SCOPES", "feed:read,ingest:write,decisions:read"
+    ).strip()
     name = os.getenv("FG_MINT_NAME", f"{prefix.lower()}-{utcnow().isoformat()}").strip()
 
     if not prefix:

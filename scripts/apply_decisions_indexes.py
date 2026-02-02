@@ -1,16 +1,18 @@
-from pathlib import Path
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from pathlib import Path
 import os
-import sys
 from typing import List, Tuple
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
-DB_URL = os.getenv("FG_DB_URL", f"sqlite:////{(Path(os.getenv('FG_STATE_DIR', '/var/lib/frostgate/state')) / 'frostgate.db').as_posix()}").strip()
+DB_URL = os.getenv(
+    "FG_DB_URL",
+    f"sqlite:////{(Path(os.getenv('FG_STATE_DIR', '/var/lib/frostgate/state')) / 'frostgate.db').as_posix()}",
+).strip()
 
 IS_SQLITE = DB_URL.startswith("sqlite")
 IS_POSTGRES = DB_URL.startswith("postgresql")
@@ -30,12 +32,30 @@ engine: Engine = create_engine(
 )
 
 INDEXES: List[Tuple[str, str]] = [
-    ("ix_decisions_created_id", "CREATE INDEX IF NOT EXISTS ix_decisions_created_id ON decisions(created_at, id)"),
-    ("ix_decisions_tenant_created", "CREATE INDEX IF NOT EXISTS ix_decisions_tenant_created ON decisions(tenant_id, created_at)"),
-    ("ix_decisions_event_created", "CREATE INDEX IF NOT EXISTS ix_decisions_event_created ON decisions(event_type, created_at)"),
-    ("ix_decisions_threat_created", "CREATE INDEX IF NOT EXISTS ix_decisions_threat_created ON decisions(threat_level, created_at)"),
-    ("ix_decisions_source_created", "CREATE INDEX IF NOT EXISTS ix_decisions_source_created ON decisions(source, created_at)"),
-    ("ix_decisions_tenant_threat_created", "CREATE INDEX IF NOT EXISTS ix_decisions_tenant_threat_created ON decisions(tenant_id, threat_level, created_at)"),
+    (
+        "ix_decisions_created_id",
+        "CREATE INDEX IF NOT EXISTS ix_decisions_created_id ON decisions(created_at, id)",
+    ),
+    (
+        "ix_decisions_tenant_created",
+        "CREATE INDEX IF NOT EXISTS ix_decisions_tenant_created ON decisions(tenant_id, created_at)",
+    ),
+    (
+        "ix_decisions_event_created",
+        "CREATE INDEX IF NOT EXISTS ix_decisions_event_created ON decisions(event_type, created_at)",
+    ),
+    (
+        "ix_decisions_threat_created",
+        "CREATE INDEX IF NOT EXISTS ix_decisions_threat_created ON decisions(threat_level, created_at)",
+    ),
+    (
+        "ix_decisions_source_created",
+        "CREATE INDEX IF NOT EXISTS ix_decisions_source_created ON decisions(source, created_at)",
+    ),
+    (
+        "ix_decisions_tenant_threat_created",
+        "CREATE INDEX IF NOT EXISTS ix_decisions_tenant_threat_created ON decisions(tenant_id, threat_level, created_at)",
+    ),
 ]
 
 
@@ -51,7 +71,9 @@ def _detect_backend(url: str) -> str:
 def _list_indexes(conn, backend: str) -> list[str]:
     if backend == "sqlite":
         rows = conn.execute(
-            text("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='decisions'")
+            text(
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='decisions'"
+            )
         ).fetchall()
         return [r[0] for r in rows]
 
@@ -74,15 +96,23 @@ def main() -> int:
             # Ensure table exists
             if backend == "sqlite":
                 t = conn.execute(
-                    text("SELECT name FROM sqlite_master WHERE type='table' AND name='decisions'")
+                    text(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name='decisions'"
+                    )
                 ).fetchone()
                 if not t:
-                    print("ERROR: table 'decisions' not found. Start frostgate-core once to init_db.")
+                    print(
+                        "ERROR: table 'decisions' not found. Start frostgate-core once to init_db."
+                    )
                     return 2
             elif backend == "postgres":
-                t = conn.execute(text("SELECT to_regclass('public.decisions')")).fetchone()
+                t = conn.execute(
+                    text("SELECT to_regclass('public.decisions')")
+                ).fetchone()
                 if not t or t[0] is None:
-                    print("ERROR: table 'decisions' not found. Start frostgate-core once to init_db.")
+                    print(
+                        "ERROR: table 'decisions' not found. Start frostgate-core once to init_db."
+                    )
                     return 2
 
             for name, ddl in INDEXES:

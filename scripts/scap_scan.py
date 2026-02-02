@@ -34,7 +34,15 @@ ARTIFACTS_DIR = Path(os.getenv("FG_ARTIFACTS_DIR", "artifacts"))
 SCAN_PATTERNS = ["**/*.py", "**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"]
 
 # Directories to exclude
-EXCLUDE_DIRS = {".venv", "node_modules", ".git", "__pycache__", ".pytest_cache", "dist", "build"}
+EXCLUDE_DIRS = {
+    ".venv",
+    "node_modules",
+    ".git",
+    "__pycache__",
+    ".pytest_cache",
+    "dist",
+    "build",
+}
 
 
 @dataclass
@@ -261,16 +269,18 @@ def scan_file(filepath: Path) -> list[Finding]:
 
             match = pattern.search(line)
             if match:
-                findings.append(Finding(
-                    rule_id=rule["id"],
-                    title=rule["title"],
-                    severity=rule["severity"],
-                    description=rule["description"],
-                    file=str(filepath),
-                    line=i,
-                    match=match.group(0)[:100],  # Truncate long matches
-                    remediation=rule.get("remediation"),
-                ))
+                findings.append(
+                    Finding(
+                        rule_id=rule["id"],
+                        title=rule["title"],
+                        severity=rule["severity"],
+                        description=rule["description"],
+                        file=str(filepath),
+                        line=i,
+                        match=match.group(0)[:100],  # Truncate long matches
+                        remediation=rule.get("remediation"),
+                    )
+                )
 
     return findings
 
@@ -338,7 +348,8 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description="Run SCAP-style security scan")
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         type=Path,
         default=ARTIFACTS_DIR / "scap_scan.json",
         help="Output path for scan results",
@@ -406,7 +417,9 @@ def main() -> int:
 
     # Determine exit code
     if args.fail_on_high:
-        high_or_critical = result.findings_by_severity.get("critical", 0) + result.findings_by_severity.get("high", 0)
+        high_or_critical = result.findings_by_severity.get(
+            "critical", 0
+        ) + result.findings_by_severity.get("high", 0)
         if high_or_critical > 0:
             if not args.json:
                 print(f"\nFAILED: {high_or_critical} high/critical findings")

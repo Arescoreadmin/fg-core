@@ -72,7 +72,10 @@ def check_auth_fallback_disabled() -> CheckResult:
     if docker_compose.exists():
         content = docker_compose.read_text()
         # Check if fallback defaults to true
-        if "FG_AUTH_ALLOW_FALLBACK:-true" in content or "FG_AUTH_ALLOW_FALLBACK: true" in content:
+        if (
+            "FG_AUTH_ALLOW_FALLBACK:-true" in content
+            or "FG_AUTH_ALLOW_FALLBACK: true" in content
+        ):
             return CheckResult(
                 id="CIS-FG-001",
                 name="Auth Fallback Disabled",
@@ -433,7 +436,9 @@ def check_healthcheck_configured() -> CheckResult:
 
     for service in services:
         # Simple check for healthcheck in service section
-        service_match = re.search(rf"^\s*{service}:\s*$(.*?)^\s*\w+:", content, re.MULTILINE | re.DOTALL)
+        service_match = re.search(
+            rf"^\s*{service}:\s*$(.*?)^\s*\w+:", content, re.MULTILINE | re.DOTALL
+        )
         if service_match:
             if "healthcheck:" not in service_match.group(1):
                 missing.append(service)
@@ -519,7 +524,8 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description="Run CIS-style compliance checks")
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         type=Path,
         default=ARTIFACTS_DIR / "cis_check.json",
         help="Output path for report JSON",
@@ -550,7 +556,9 @@ def main() -> int:
         print("=" * 60)
         print("CIS Compliance Check Results")
         print("=" * 60)
-        print(f"Score: {report.score:.1f}% ({report.passed}/{report.total_checks} passed)")
+        print(
+            f"Score: {report.score:.1f}% ({report.passed}/{report.total_checks} passed)"
+        )
         print()
 
         # Print failed checks
@@ -569,7 +577,9 @@ def main() -> int:
     # Determine exit code
     if report.score < args.fail_threshold:
         if not args.json:
-            print(f"\nFAILED: Score {report.score:.1f}% below threshold {args.fail_threshold}%")
+            print(
+                f"\nFAILED: Score {report.score:.1f}% below threshold {args.fail_threshold}%"
+            )
         return 1
 
     if not args.json:

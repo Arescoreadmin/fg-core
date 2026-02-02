@@ -134,7 +134,9 @@ def run_readiness_checks(
                 )
             results.append(("scorecard-drift", passed, msg))
         else:
-            results.append(("scorecard-drift", False, "Skipped (generate-scorecard failed)"))
+            results.append(
+                ("scorecard-drift", False, "Skipped (generate-scorecard failed)")
+            )
 
     return results
 
@@ -249,7 +251,9 @@ def run_release_gate(
         for error in result.evidence_verification_errors[:5]:  # Show first 5
             lines.append(f"  - {error}")
         if len(result.evidence_verification_errors) > 5:
-            lines.append(f"  ... and {len(result.evidence_verification_errors) - 5} more")
+            lines.append(
+                f"  ... and {len(result.evidence_verification_errors) - 5} more"
+            )
         lines.append("")
 
     # Owner/evidence mismatch errors (blocking)

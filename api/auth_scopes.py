@@ -4,18 +4,17 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import secrets
 import sqlite3
 import time
 from typing import Callable, Optional, Set, Tuple
-from api.db import _resolve_sqlite_path
 
 from fastapi import Depends, Header, HTTPException, Request
-from api.db import init_db
 
-import logging
+from api.db import _resolve_sqlite_path, init_db
 
 log = logging.getLogger("frostgate")
 _security_log = logging.getLogger("frostgate.security")
@@ -35,6 +34,7 @@ def _sha256_hex(s: str) -> str:
 
 
 def _is_production_env() -> bool:
+    # Keep staging treated as prod-like for safety gates.
     env = os.getenv("FG_ENV", "dev").strip().lower()
     return env in {"prod", "production", "staging"}
 
@@ -47,7 +47,6 @@ def _constant_time_compare(a: str, b: str) -> bool:
 def _decode_token_payload(token: str) -> Optional[dict]:
     """Decode base64url-encoded token payload, return None on failure."""
     try:
-        # Add padding if needed
         padding = 4 - (len(token) % 4)
         if padding != 4:
             token += "=" * padding
@@ -82,11 +81,9 @@ def _validate_tenant_id(tenant_id: Optional[str]) -> Tuple[bool, str]:
     if not tenant_id:
         return True, ""
 
-    # Max length check
     if len(tenant_id) > 128:
         return False, "tenant_id exceeds maximum length"
 
-    # Alphanumeric, dash, underscore only (prevent injection)
     if not re.match(r"^[a-zA-Z0-9_-]+$", tenant_id):
         return False, "tenant_id contains invalid characters"
 
@@ -144,27 +141,17 @@ def _extract_key(request: Request, x_api_key: Optional[str]) -> Optional[str]:
       1. X-API-Key header (preferred)
       2. Cookie (for UI sessions)
 
-    Query parameters are NOT supported to prevent credential leakage via:
-      - Server access logs
-      - Browser history
-      - Referrer headers
-      - Proxy logs
+    Query parameters are NOT supported.
     """
-    # Header first (preferred method)
     if x_api_key and str(x_api_key).strip():
         return str(x_api_key).strip()
 
-    # Cookie (UI sessions only)
     cookie_name = (
         os.getenv("FG_UI_COOKIE_NAME") or "fg_api_key"
     ).strip() or "fg_api_key"
     ck = (request.cookies.get(cookie_name) or "").strip()
     if ck:
         return ck
-
-    # SECURITY: Query parameter extraction intentionally removed.
-    # API keys in URLs are logged by proxies, appear in referrer headers,
-    # and persist in browser history - all credential leak vectors.
 
     return None
 
@@ -182,22 +169,14 @@ def mint_key(
 
     Returned key format (NEW):
       <prefix>.<token>.<secret>
-
-    Where:
-      key_hash stored = sha256(secret)
-      token is base64url(json payload)
     """
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
     if not sqlite_path:
         sqlite_path = str(_resolve_sqlite_path())
 
-    # Ensure schema exists in the exact sqlite file (safe/idempotent).
-    # This prevents "no such table: api_keys/decisions" when tests call mint_key early.
     try:
         init_db(sqlite_path=sqlite_path)
     except Exception:
-        # Best effort: mint_key should still fail later if DB truly unusable,
-        # but schema init errors shouldn't crash import-time.
         log.exception("init_db failed in mint_key (best effort)")
 
     now_i = int(now) if now is not None else int(time.time())
@@ -220,11 +199,9 @@ def mint_key(
     key_hash = hashlib.sha256(secret.encode("utf-8")).hexdigest()
     scopes_csv = ",".join(scopes)
 
-    # Persist key into sqlite (schema-aware)
     con = sqlite3.connect(sqlite_path)
     try:
         cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
-        # (cid, name, type, notnull, dflt_value, pk)
         names = [r[1] for r in cols]
         notnull = {r[1] for r in cols if int(r[3] or 0) == 1 and r[4] is None}
 
@@ -235,11 +212,9 @@ def mint_key(
             "enabled": 1,
         }
 
-        # Newer schema requires name (NOT NULL)
         if "name" in names:
             values["name"] = "minted:" + (scopes_csv or "none")
 
-        # Optional schema evolution support
         if "tenant_id" in names:
             values["tenant_id"] = tenant_id
         if "created_at" in names and "created_at" in notnull:
@@ -247,7 +222,6 @@ def mint_key(
         if "expires_at" in names:
             values["expires_at"] = exp_i
 
-        # SaaS schema evolution - version and use_count (NOT NULL with defaults)
         if "version" in names:
             values["version"] = 1
         if "use_count" in names:
@@ -312,14 +286,10 @@ class AuthResult:
 
 
 def _update_key_usage(sqlite_path: str, prefix: str, key_hash: str) -> None:
-    """
-    Atomically update last_used_at and use_count for a key.
-    Best-effort for SQLite (no true atomic increment, but close enough).
-    """
+    """Atomically update last_used_at and use_count for a key (best effort)."""
     try:
         con = sqlite3.connect(sqlite_path, timeout=5.0)
         try:
-            # Check if columns exist
             cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
             col_names = {r[1] for r in cols}
 
@@ -335,12 +305,10 @@ def _update_key_usage(sqlite_path: str, prefix: str, key_hash: str) -> None:
         finally:
             con.close()
     except Exception:
-        # Best effort - don't fail auth on usage tracking errors
         pass
 
 
 def _env_bool_auth(name: str, default: bool) -> bool:
-    """Parse boolean env var for auth module."""
     v = os.getenv(name)
     if v is None:
         return default
@@ -350,10 +318,16 @@ def _env_bool_auth(name: str, default: bool) -> bool:
 def _check_db_expiration(sqlite_path: str, prefix: str, key_hash: str) -> bool:
     """
     Check if key is expired based on DB expires_at column.
-    Returns True if expired, False if not expired or no expiration set.
+    Returns True if expired (deny), False if not expired or no expiration set (allow).
 
     P0: Fail-closed by default - DB errors return True (expired = deny).
-    Set FG_AUTH_DB_FAIL_OPEN=true to allow on DB errors (NOT recommended).
+
+    INV-003: Fail-open behavior:
+      - In prod/staging: requires BOTH
+          FG_AUTH_DB_FAIL_OPEN=true
+          FG_AUTH_DB_FAIL_OPEN_ACKNOWLEDGED=true
+        otherwise deny.
+      - In dev/test: FG_AUTH_DB_FAIL_OPEN=true is sufficient (no ack required).
     """
     try:
         con = sqlite3.connect(sqlite_path)
@@ -372,50 +346,61 @@ def _check_db_expiration(sqlite_path: str, prefix: str, key_hash: str) -> bool:
             if not row or row[0] is None:
                 return False
 
-            # expires_at could be int timestamp or ISO string
             expires_at = row[0]
             now_ts = int(time.time())
 
             if isinstance(expires_at, (int, float)):
                 return now_ts > int(expires_at)
-            elif isinstance(expires_at, str):
-                # Try to parse ISO format
+
+            if isinstance(expires_at, str):
                 try:
                     from datetime import datetime
 
                     dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
                     return now_ts > int(dt.timestamp())
                 except Exception:
-                    # P0: Fail-closed on parse error - treat as expired
                     log.warning(
                         "SECURITY: Failed to parse expires_at=%r for key prefix=%s, treating as expired",
                         expires_at,
                         prefix,
                     )
                     return True
+
             return False
         finally:
             con.close()
+
     except Exception as e:
-        # P0: Fail-closed by default on DB errors
         fail_open = _env_bool_auth("FG_AUTH_DB_FAIL_OPEN", False)
+        ack = _env_bool_auth("FG_AUTH_DB_FAIL_OPEN_ACKNOWLEDGED", False)
+
         if fail_open:
+            if _is_production_env() and not ack:
+                log.critical(
+                    "SECURITY: DB expiration check fail-open requested but NOT ACKNOWLEDGED - DENYING (fail-closed). "
+                    "To allow fail-open in prod/staging, set FG_AUTH_DB_FAIL_OPEN_ACKNOWLEDGED=true. "
+                    "Error: %s, Prefix: %s",
+                    e,
+                    prefix,
+                )
+                return True  # deny (treat as expired)
+
+            # dev/test OR acknowledged prod
             log.error(
-                "SECURITY: DB expiration check fail-open triggered - allowing request. "
-                "Set FG_AUTH_DB_FAIL_OPEN=false for fail-closed behavior. "
+                "SECURITY: DB expiration check failed - FAIL-OPEN enabled, allowing request. "
                 "Error: %s, Prefix: %s",
                 e,
                 prefix,
             )
-            return False  # Allow (not expired)
-        else:
-            log.error(
-                "SECURITY: DB expiration check failed - denying request (fail-closed). "
-                "Error: %s, Prefix: %s",
-                e,
-                prefix,
-            )
-            return True  # Deny (treat as expired)
+            return False  # allow (treat as not expired)
+
+        log.error(
+            "SECURITY: DB expiration check failed - denying request (fail-closed). "
+            "Error: %s, Prefix: %s",
+            e,
+            prefix,
+        )
+        return True  # deny (treat as expired)
 
 
 def verify_api_key_raw(
@@ -427,29 +412,6 @@ def verify_api_key_raw(
     request: Optional[Request] = None,
     **_ignored,
 ) -> bool:
-    """
-    SINGLE SOURCE OF TRUTH for API key validity.
-
-    Verifies:
-      1) Global FG_API_KEY matches exactly (constant-time comparison)
-      2) DB-backed keys in sqlite `api_keys` table
-
-    Supports TWO DB key formats:
-      A) NEW: <prefix>.<token>.<secret>
-         - prefix stored as `prefix`
-         - key_hash stored = sha256(secret)
-         - token contains expiration info
-      B) LEGACY (tests): raw="TEST_<uuidhex>" (no dots)
-         - prefix stored = raw[:16]
-         - key_hash stored = api.db_models.hash_api_key(raw)
-
-    Security features:
-      - Constant-time comparison to prevent timing attacks
-      - Token expiration checking (payload AND DB expires_at)
-      - Atomic usage tracking (last_used_at, use_count)
-      - Canary token detection (tripwire alerts)
-      - Audit logging for all auth attempts
-    """
     result = verify_api_key_detailed(
         raw=raw,
         required_scopes=required_scopes,
@@ -470,21 +432,10 @@ def verify_api_key_detailed(
     request: Optional[Request] = None,
     **_ignored,
 ) -> AuthResult:
-    """
-    SINGLE SOURCE OF TRUTH for API key validity with detailed result.
-
-    Returns AuthResult with:
-      - valid: bool
-      - reason: str (for logging/debugging)
-      - is_missing_key: bool (for 401 vs 403 distinction)
-      - is_invalid_key: bool
-    """
-    # Extract request context for audit logging
     request_path = None
     client_ip = None
     if request:
         request_path = str(request.url.path) if request.url else None
-        # Extract client IP with proxy header handling
         for header in ("x-forwarded-for", "x-real-ip", "cf-connecting-ip"):
             value = request.headers.get(header) if hasattr(request, "headers") else None
             if value:
@@ -544,7 +495,6 @@ def verify_api_key_detailed(
         con = sqlite3.connect(sqlite_path)
         try:
             try:
-                # Include tenant_id if available
                 cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
                 col_names = {r[1] for r in cols}
                 if "tenant_id" in col_names:
@@ -552,12 +502,11 @@ def verify_api_key_detailed(
                         "SELECT scopes_csv, enabled, tenant_id FROM api_keys WHERE prefix=? AND key_hash=? LIMIT 1",
                         (prefix, key_hash),
                     ).fetchone()
-                else:
-                    row = con.execute(
-                        "SELECT scopes_csv, enabled FROM api_keys WHERE prefix=? AND key_hash=? LIMIT 1",
-                        (prefix, key_hash),
-                    ).fetchone()
-                    return (*row, None) if row else None
+                row = con.execute(
+                    "SELECT scopes_csv, enabled FROM api_keys WHERE prefix=? AND key_hash=? LIMIT 1",
+                    (prefix, key_hash),
+                ).fetchone()
+                return (*row, None) if row else None
             except sqlite3.OperationalError:
                 return None
         finally:
@@ -572,13 +521,11 @@ def verify_api_key_detailed(
 
     parts = raw.split(".")
     if len(parts) >= 3:
-        # NEW: prefix.token.secret
         key_prefix = parts[0]
         token = parts[1] if len(parts) > 1 else ""
         secret_val = parts[-1]
         key_hash = _sha256_hex(secret_val)
 
-        # TRIPWIRE: Check for canary token BEFORE any other validation
         try:
             from api.tripwires import check_canary_key
 
@@ -591,17 +538,14 @@ def verify_api_key_detailed(
                     request_path=request_path,
                     client_ip=client_ip,
                 )
-                # Still return invalid - canary keys should never auth
                 return AuthResult(
                     valid=False, reason="canary_token", key_prefix=key_prefix
                 )
         except ImportError:
             pass
 
-        # Decode token to check expiration
         token_payload = _decode_token_payload(token)
 
-        # Check expiration from token payload (fail fast)
         if check_expiration and _is_key_expired(token_payload):
             _log_auth_event(
                 "auth_attempt",
@@ -619,10 +563,8 @@ def verify_api_key_detailed(
         if row:
             scopes_csv, enabled, tenant_id = row
     else:
-        # LEGACY: raw key stored hashed by api.db_models.hash_api_key(raw), prefix=raw[:16]
         key_prefix = raw[:16]
 
-        # TRIPWIRE: Check for canary token
         try:
             from api.tripwires import check_canary_key
 
@@ -674,7 +616,6 @@ def verify_api_key_detailed(
         )
         return AuthResult(valid=False, reason="key_disabled", key_prefix=key_prefix)
 
-    # Check DB-backed expiration (expires_at column) - fail closed
     if (
         check_expiration
         and key_hash
@@ -690,7 +631,6 @@ def verify_api_key_detailed(
         )
         return AuthResult(valid=False, reason="key_expired_db", key_prefix=key_prefix)
 
-    # Scope enforcement (if requested)
     have = _parse_scopes_csv(scopes_csv)
 
     if required_scopes is not None:
@@ -719,7 +659,6 @@ def verify_api_key_detailed(
                 scopes=have,
             )
 
-    # SUCCESS: Update usage stats atomically (best-effort)
     if key_hash:
         _update_key_usage(sqlite_path, key_prefix, key_hash)
 
@@ -745,12 +684,6 @@ def require_api_key_always(
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
     required_scopes: Set[str] | None = None,
 ) -> str:
-    """
-    Extract and verify API key with proper HTTP status codes:
-      - 401 Unauthorized: Missing key
-      - 401 Unauthorized: Invalid key (wrong, expired, disabled, etc.)
-      - 403 Forbidden: Valid key, insufficient scope
-    """
     got = _extract_key(request, x_api_key)
     if not got:
         raise HTTPException(status_code=401, detail=ERR_INVALID)
@@ -760,25 +693,20 @@ def require_api_key_always(
     )
 
     if result.valid:
-        if request is not None:
-            request.state.auth = result
+        request.state.auth = result
         return got
 
-    # Distinguish between missing and invalid for proper status code
     if result.is_missing_key:
         raise HTTPException(status_code=401, detail=ERR_INVALID)
     if result.reason.startswith("missing_scopes:"):
         raise HTTPException(status_code=403, detail=ERR_INVALID)
     raise HTTPException(status_code=401, detail=ERR_INVALID)
 
-    return got
-
 
 def verify_api_key(
     request: Request,
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ) -> str:
-    # compatibility dep expected by modules
     return require_api_key_always(request, x_api_key, required_scopes=None)
 
 
@@ -789,43 +717,16 @@ def bind_tenant_id(
     require_explicit_for_unscoped: bool = False,
     default_unscoped: str = "unknown",
 ) -> str:
-    """
-    Clamp request tenant_id to the authenticated key's tenant scope.
-
-    Rules:
-      - If key is tenant-scoped, requested tenant must match or be omitted.
-        When omitted, defaults to the key's bound tenant.
-      - If key is unscoped (no tenant binding):
-        - If require_explicit_for_unscoped=True: tenant_id is required (400 error).
-        - Otherwise: uses requested tenant_id or falls back to default_unscoped.
-
-    Args:
-        request: The FastAPI request object (must have state.auth set)
-        requested_tenant: The tenant_id from the request (query param or body)
-        require_explicit_for_unscoped: If True, unscoped keys MUST provide tenant_id
-        default_unscoped: Default tenant_id for unscoped keys when not required
-
-    Returns:
-        The effective tenant_id to use for the request.
-
-    Raises:
-        HTTPException(403): Tenant mismatch (scoped key accessing wrong tenant)
-        HTTPException(400): tenant_id required for unscoped keys (when required)
-        HTTPException(400): Invalid tenant_id format
-    """
     requested = (str(requested_tenant).strip() if requested_tenant else "") or None
     auth = getattr(getattr(request, "state", None), "auth", None)
     auth_tenant = getattr(auth, "tenant_id", None)
 
-    # Tenant-scoped key: clamp to auth tenant
     if auth_tenant:
         if requested and requested != auth_tenant:
             raise HTTPException(status_code=403, detail="Tenant mismatch")
         return auth_tenant
 
-    # Unscoped key: handle based on require_explicit_for_unscoped flag
     if requested:
-        # Validate tenant_id format
         valid, error = _validate_tenant_id(requested)
         if not valid:
             raise HTTPException(status_code=400, detail=error)
@@ -840,13 +741,6 @@ def bind_tenant_id(
 
 
 def require_scopes(*scopes: str) -> Callable[..., None]:
-    """
-    Returns a dependency that enforces the provided scopes.
-
-    IMPORTANT: No untyped lambda params.
-    If you use `lambda request, ...` without type hints, FastAPI may treat `request`
-    as a query param and you'll see: {"loc":["query","request"],"msg":"Field required"}.
-    """
     needed: Set[str] = {str(s).strip() for s in scopes if str(s).strip()}
 
     if not needed:
@@ -869,10 +763,6 @@ def require_scopes(*scopes: str) -> Callable[..., None]:
 
 
 def revoke_api_key(key_prefix: str, key_hash: Optional[str] = None) -> bool:
-    """
-    Revoke (disable) an API key by prefix and optionally key_hash.
-    Returns True if key was found and disabled, False otherwise.
-    """
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
     if not sqlite_path:
         return False
@@ -886,17 +776,12 @@ def revoke_api_key(key_prefix: str, key_hash: Optional[str] = None) -> bool:
             )
         else:
             cur = con.execute(
-                "UPDATE api_keys SET enabled=0 WHERE prefix=?",
-                (key_prefix,),
+                "UPDATE api_keys SET enabled=0 WHERE prefix=?", (key_prefix,)
             )
         con.commit()
         revoked = cur.rowcount > 0
         if revoked:
-            _log_auth_event(
-                "key_revoked",
-                success=True,
-                key_prefix=key_prefix,
-            )
+            _log_auth_event("key_revoked", success=True, key_prefix=key_prefix)
         return revoked
     except Exception:
         log.exception("Failed to revoke API key")
@@ -911,12 +796,6 @@ def rotate_api_key_by_prefix(
     tenant_id: Optional[str] = None,
     revoke_old: bool = True,
 ) -> dict:
-    """
-    Rotate an API key by prefix.
-
-    Returns a dict containing the new key and metadata.
-    Raises ValueError on invalid input or missing key.
-    """
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
     if not sqlite_path:
         sqlite_path = str(_resolve_sqlite_path())
@@ -982,17 +861,12 @@ def list_api_keys(
     tenant_id: Optional[str] = None,
     include_disabled: bool = False,
 ) -> list[dict]:
-    """
-    List API keys (prefix, name, scopes, enabled, created_at).
-    Never returns the actual key hash or secret.
-    """
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
     if not sqlite_path:
         return []
 
     con = sqlite3.connect(sqlite_path)
     try:
-        # Check what columns exist
         cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
         col_names = {r[1] for r in cols}
 
@@ -1029,7 +903,6 @@ def list_api_keys(
         result = []
         for row in rows:
             item = dict(zip(select_cols, row))
-            # Parse scopes_csv to list
             scopes_csv = item.get("scopes_csv", "")
             item["scopes"] = [
                 s.strip() for s in (scopes_csv or "").split(",") if s.strip()
@@ -1045,7 +918,6 @@ def list_api_keys(
         con.close()
 
 
-# Export validation functions for use in other modules
 __all__ = [
     "AuthResult",
     "mint_key",

@@ -1,0 +1,99 @@
+name: "fg-python-setup"
+description: "Install OS deps, setup Python with cache, prepare workspace, build venv, and expose venv tools on PATH"
+
+inputs:
+  python-version:
+    description: "Python version"
+    required: false
+    default: "3.12"
+
+  install-os-deps:
+    description: "Whether to install OS deps"
+    required: false
+    default: "true"
+
+  prepare-workspace:
+    description: "Whether to create state/artifacts dirs"
+    required: false
+    default: "true"
+
+  build-venv:
+    description: "Whether to run make venv"
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install OS deps (retrying)
+      if: ${{ inputs.install-os-deps == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        export DEBIAN_FRONTEND=noninteractive
+
+        retry() {
+          local n=0
+          local max=3
+          local delay=5
+          until "$@"; do
+            n=$((n+1))
+            if [ "$n" -ge "$max" ]; then
+              echo "❌ command failed after ${n} attempts: $*"
+              return 1
+            fi
+            echo "⚠️ command failed: $* (retry ${n}/${max} in ${delay}s)"
+            sleep "$delay"
+            delay=$((delay*2))
+          done
+        }
+
+        retry sudo apt-get update
+        retry sudo apt-get install -y --no-install-recommends \
+          sqlite3 curl zip minisign ripgrep
+
+    - name: Set up Python (cached)
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: "pip"
+        cache-dependency-path: |
+          pyproject.toml
+          requirements.txt
+          requirements-dev.txt
+          requirements-test.txt
+          uv.lock
+          poetry.lock
+
+    - name: Prepare workspace
+      if: ${{ inputs.prepare-workspace == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p state artifacts keys
+
+    - name: Build venv + deps
+      if: ${{ inputs.build-venv == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        make venv
+
+        # Expose venv-installed tools (pytest, ruff, etc.) to subsequent workflow steps.
+        if [ -d ".venv/bin" ]; then
+          echo "$(pwd)/.venv/bin" >> "$GITHUB_PATH"
+        else
+          echo "❌ .venv/bin missing after make venv"
+          exit 1
+        fi
+
+    - name: Sanity check tooling
+      if: ${{ inputs.build-venv == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        command -v python
+        command -v pip
+        command -v pytest
+        python -V
+        pytest --version

@@ -64,8 +64,7 @@ def get_git_info() -> dict[str, Any]:
     try:
         # Commit SHA
         result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True, text=True, timeout=5
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=5
         )
         if result.returncode == 0:
             info["commit"] = result.stdout.strip()
@@ -73,7 +72,9 @@ def get_git_info() -> dict[str, Any]:
         # Branch name
         result = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True, text=True, timeout=5
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0:
             info["branch"] = result.stdout.strip()
@@ -81,7 +82,9 @@ def get_git_info() -> dict[str, Any]:
         # Tag if on tag
         result = subprocess.run(
             ["git", "describe", "--tags", "--exact-match"],
-            capture_output=True, text=True, timeout=5
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0:
             info["tag"] = result.stdout.strip()
@@ -89,15 +92,16 @@ def get_git_info() -> dict[str, Any]:
         # Remote URL
         result = subprocess.run(
             ["git", "remote", "get-url", "origin"],
-            capture_output=True, text=True, timeout=5
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0:
             info["remote"] = result.stdout.strip()
 
         # Check if working tree is dirty
         result = subprocess.run(
-            ["git", "status", "--porcelain"],
-            capture_output=True, text=True, timeout=5
+            ["git", "status", "--porcelain"], capture_output=True, text=True, timeout=5
         )
         if result.returncode == 0:
             info["dirty"] = len(result.stdout.strip()) > 0
@@ -174,33 +178,39 @@ def generate_provenance(
 
     # Git repository as primary material
     if git_info.get("remote"):
-        materials.append({
-            "uri": git_info["remote"],
-            "digest": {
-                "sha1": git_info.get("commit", "unknown"),
-            },
-        })
+        materials.append(
+            {
+                "uri": git_info["remote"],
+                "digest": {
+                    "sha1": git_info.get("commit", "unknown"),
+                },
+            }
+        )
 
     # Dockerfile
     dockerfile_digest = get_dockerfile_digest(project_dir)
     if dockerfile_digest:
-        materials.append({
-            "uri": "file://Dockerfile",
-            "digest": {
-                "sha256": dockerfile_digest,
-            },
-        })
+        materials.append(
+            {
+                "uri": "file://Dockerfile",
+                "digest": {
+                    "sha256": dockerfile_digest,
+                },
+            }
+        )
 
     # Requirements files
     for req_file in ["requirements.txt", "requirements-dev.txt"]:
         req_path = project_dir / req_file
         if req_path.exists():
-            materials.append({
-                "uri": f"file://{req_file}",
-                "digest": {
-                    "sha256": sha256_file(req_path),
-                },
-            })
+            materials.append(
+                {
+                    "uri": f"file://{req_file}",
+                    "digest": {
+                        "sha256": sha256_file(req_path),
+                    },
+                }
+            )
 
     # Build subject (output)
     subjects = []
@@ -208,27 +218,32 @@ def generate_provenance(
     # Add SBOM as subject if it exists
     sbom_path = ARTIFACTS_DIR / "sbom.json"
     if sbom_path.exists():
-        subjects.append({
-            "name": "sbom.json",
-            "digest": {
-                "sha256": sha256_file(sbom_path),
-            },
-        })
+        subjects.append(
+            {
+                "name": "sbom.json",
+                "digest": {
+                    "sha256": sha256_file(sbom_path),
+                },
+            }
+        )
 
     # Add image digest if available
     image_digest = get_image_digest()
     if image_digest:
-        subjects.append({
-            "name": f"{subject_name}:latest",
-            "digest": {
-                "sha256": image_digest,
-            },
-        })
+        subjects.append(
+            {
+                "name": f"{subject_name}:latest",
+                "digest": {
+                    "sha256": image_digest,
+                },
+            }
+        )
 
     # Build SLSA Provenance
     provenance = {
         "_type": "https://in-toto.io/Statement/v1",
-        "subject": subjects or [
+        "subject": subjects
+        or [
             {
                 "name": subject_name,
                 "digest": {
@@ -259,7 +274,8 @@ def generate_provenance(
                     },
                 },
                 "metadata": {
-                    "invocationId": build_env.get("ci_run_id") or sha256_string(timestamp)[:16],
+                    "invocationId": build_env.get("ci_run_id")
+                    or sha256_string(timestamp)[:16],
                     "startedOn": timestamp,
                     "finishedOn": datetime.now(timezone.utc).isoformat(),
                 },
@@ -319,9 +335,12 @@ def main() -> int:
     """CLI entry point."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Generate SLSA provenance for FrostGate Core")
+    parser = argparse.ArgumentParser(
+        description="Generate SLSA provenance for FrostGate Core"
+    )
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         type=Path,
         default=ARTIFACTS_DIR / "provenance.json",
         help="Output path for provenance JSON",
@@ -349,7 +368,7 @@ def main() -> int:
                 print(f"Provenance invalid: {errors}")
                 return 1
 
-        provenance = generate_provenance(args.project_dir, args.output)
+        generate_provenance(args.project_dir, args.output)
         print("Provenance generation complete")
         return 0
     except Exception as e:

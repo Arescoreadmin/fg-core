@@ -433,7 +433,19 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     @app.get("/health/ready")
     async def health_ready() -> dict:
-        """Kubernetes readiness probe - can the service handle traffic?"""
+        """
+        Kubernetes readiness probe - can the service handle traffic?
+
+        INV-007: Checks ALL configured dependencies, not just DB.
+        Returns 503 if any critical dependency is unhealthy.
+        """
+        # Local imports to avoid startup-time import cycles
+        from api.health import get_health_checker, HealthStatus
+
+        deps_status: dict = {"db": "unknown"}
+        failures: list[str] = []
+
+        # 1) Database check (always required)
         if not bool(app.state.db_init_ok):
             raise HTTPException(
                 status_code=503,
@@ -441,12 +453,83 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             )
 
         if (os.getenv("FG_DB_URL") or "").strip():
-            return {"status": "ready", "db": "url"}
+            deps_status["db"] = "postgres"
+        else:
+            p = Path(_resolve_sqlite_path())
+            if not p.exists():
+                raise HTTPException(status_code=503, detail=f"DB missing: {p}")
+            deps_status["db"] = "sqlite"
 
-        p = Path(_resolve_sqlite_path())
-        if not p.exists():
-            raise HTTPException(status_code=503, detail=f"DB missing: {p}")
-        return {"status": "ready", "db": "sqlite", "path": str(p)}
+        checker = None
+        try:
+            checker = get_health_checker()
+        except Exception as e:
+            # If we can't construct a checker, we can still be "ready" as long as
+            # no configured external dependency requires it. We'll treat that below.
+            deps_status["checker"] = f"error: {type(e).__name__}"
+            checker = None
+
+        # 2) Redis check (when rate limiting uses Redis backend)
+        rl_enabled = (os.getenv("FG_RL_ENABLED", "true") or "true").strip().lower()
+        rl_backend = (os.getenv("FG_RL_BACKEND", "memory") or "memory").strip().lower()
+
+        if rl_enabled in ("1", "true", "yes") and rl_backend == "redis":
+            if checker is None:
+                deps_status["redis"] = "error"
+                failures.append("redis: health checker unavailable")
+            else:
+                try:
+                    redis_check = checker.check_redis()
+                    if redis_check is not None:
+                        deps_status["redis"] = redis_check.status.value
+                        if redis_check.status == HealthStatus.UNHEALTHY:
+                            failures.append(
+                                f"redis: {redis_check.message or 'unhealthy'}"
+                            )
+                    else:
+                        # If checker returns None, treat as unknown, but not a hard fail.
+                        deps_status["redis"] = "unknown"
+                except Exception as e:
+                    deps_status["redis"] = "error"
+                    failures.append(f"redis: {type(e).__name__}: {e}")
+
+        # 3) NATS check (when enabled)
+        nats_enabled = (
+            (os.getenv("FG_NATS_ENABLED", "false") or "false").strip().lower()
+        )
+        if nats_enabled in ("1", "true", "yes"):
+            if checker is None:
+                deps_status["nats"] = "error"
+                failures.append("nats: health checker unavailable")
+            else:
+                check_nats = getattr(checker, "check_nats", None)
+                if not callable(check_nats):
+                    # Don’t silently pretend readiness is honest if we can’t check NATS.
+                    deps_status["nats"] = "not_supported"
+                    failures.append("nats: enabled but no check_nats() available")
+                else:
+                    try:
+                        nats_check = check_nats()
+                        if nats_check is not None:
+                            deps_status["nats"] = nats_check.status.value
+                            if nats_check.status == HealthStatus.UNHEALTHY:
+                                failures.append(
+                                    f"nats: {nats_check.message or 'unhealthy'}"
+                                )
+                        else:
+                            deps_status["nats"] = "unknown"
+                    except Exception as e:
+                        deps_status["nats"] = "error"
+                        failures.append(f"nats: {type(e).__name__}: {e}")
+
+        # 4) Return failure if any critical dependency is down
+        if failures:
+            raise HTTPException(
+                status_code=503,
+                detail=f"dependencies_unhealthy: {'; '.join(failures)}",
+            )
+
+        return {"status": "ready", "dependencies": deps_status}
 
     @app.get("/health/detailed")
     async def health_detailed(_: None = Depends(require_status_auth)) -> dict:

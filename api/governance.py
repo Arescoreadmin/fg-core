@@ -11,11 +11,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import verify_api_key
+from api.auth_scopes import require_scopes, verify_api_key
 from api.db import get_db
 from api.db_models import PolicyChangeRequest as PolicyChangeRequestModel
 
 log = logging.getLogger("frostgate.governance")
+_security_log = logging.getLogger("frostgate.security")
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -98,15 +99,16 @@ def _model_to_response(m: PolicyChangeRequestModel) -> PolicyChangeResponse:
 
 
 # -----------------------------------------------------------------------------
-# Router with authentication on ALL endpoints
+# Router with authentication + governance scope on ALL endpoints
 # -----------------------------------------------------------------------------
 
 router = APIRouter(
     prefix="/governance",
     tags=["governance"],
     dependencies=[
-        Depends(verify_api_key)
-    ],  # P0: Auth required on all governance endpoints
+        Depends(verify_api_key),
+        Depends(require_scopes("governance:write")),  # INV-005: Scope required
+    ],
 )
 
 
@@ -115,7 +117,7 @@ def list_changes(db: Session = Depends(get_db)) -> List[PolicyChangeResponse]:
     """
     List all policy change requests.
 
-    Security: Requires authentication (P0).
+    Security: Requires authentication + governance scope (INV-005).
     Persistence: Database-backed, survives restart (P0).
     """
     try:
@@ -141,7 +143,7 @@ def create_change(
     """
     Create a new policy change request.
 
-    Security: Requires authentication (P0).
+    Security: Requires authentication + governance scope (INV-005).
     Persistence: Database-backed, survives restart (P0).
     Audit: Timestamp and proposer recorded.
     """
@@ -195,7 +197,7 @@ def approve_change(
     """
     Approve a policy change request.
 
-    Security: Requires authentication (P0).
+    Security: Requires authentication + governance scope (INV-005).
     Persistence: Database-backed, survives restart (P0).
     Audit: Approval timestamp and approver recorded.
     """

@@ -6,6 +6,9 @@ from typing import Optional
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from engine.doctrine import apply_doctrine
+from engine.evaluate import Mitigation as EngineMitigation
+
 
 def _env_bool(name: str, default: bool = False) -> bool:
     v = os.getenv(name)
@@ -17,7 +20,7 @@ def _env_bool(name: str, default: bool = False) -> bool:
 class ROEPolicy(BaseModel):
     policy_id: str = "roe-default"
     max_disruption: int = 1
-    ao_required_actions: list[str] = Field(default_factory=list)
+    ao_required_actions: list[str] = Field(default_factory=lambda: ["block_ip"])
 
 
 class ROEEvaluationRequest(BaseModel):
@@ -32,33 +35,6 @@ class ROEEvaluationResponse(BaseModel):
     policy: ROEPolicy
 
 
-class ROEEngine:
-    def __init__(self, policy: Optional[ROEPolicy] = None) -> None:
-        self.policy = policy or ROEPolicy()
-
-    def evaluate(self, req: ROEEvaluationRequest) -> ROEEvaluationResponse:
-        persona = (req.persona or "").strip().lower()
-        classification = (req.classification or "").strip().upper()
-        actions = [m.get("action") for m in req.mitigations if isinstance(m, dict)]
-
-        if (
-            persona == "guardian"
-            and classification == "SECRET"
-            and "block_ip" in actions
-        ):
-            return ROEEvaluationResponse(
-                gating_decision="require_approval",
-                reason="Guardian persona requires approval for disruptive actions.",
-                policy=self.policy,
-            )
-
-        return ROEEvaluationResponse(
-            gating_decision="allow",
-            reason="No ROE constraints triggered.",
-            policy=self.policy,
-        )
-
-
 router = APIRouter(prefix="/roe", tags=["roe"])
 
 
@@ -69,8 +45,34 @@ async def get_policy() -> ROEPolicy:
 
 @router.post("/evaluate", response_model=ROEEvaluationResponse)
 async def evaluate_roe(req: ROEEvaluationRequest) -> ROEEvaluationResponse:
-    engine = ROEEngine()
-    return engine.evaluate(req)
+    # Convert dict mitigations into engine Mitigation objects
+    mits: list[EngineMitigation] = []
+    for m in req.mitigations or []:
+        if not isinstance(m, dict):
+            continue
+        mits.append(
+            EngineMitigation(
+                action=str(m.get("action", "")),
+                target=m.get("target"),
+                reason=str(m.get("reason", "")),
+                confidence=float(m.get("confidence", 1.0) or 1.0),
+                meta=m.get("meta"),
+            )
+        )
+
+    _, tie_d = apply_doctrine(req.persona, req.classification, mits)
+
+    gating = str(tie_d.get("gating_decision", "allow"))
+    if gating == "require_approval":
+        reason = "Guardian persona requires approval for disruptive actions."
+    else:
+        reason = "No ROE constraints triggered."
+
+    return ROEEvaluationResponse(
+        gating_decision=gating,
+        reason=reason,
+        policy=ROEPolicy(),
+    )
 
 
 def roe_engine_enabled() -> bool:

@@ -76,7 +76,10 @@ def main() -> int:
         print("✅ Makefile target audit: no duplicate explicit targets.")
         return 0
 
-    print("❌ Makefile target audit FAILED. Duplicate targets detected:\n", file=sys.stderr)
+    print(
+        "❌ Makefile target audit FAILED. Duplicate targets detected:\n",
+        file=sys.stderr,
+    )
     for t, lns in sorted(dups.items()):
         print(f"  - {t}: lines {', '.join(map(str, lns))}", file=sys.stderr)
 

@@ -10,6 +10,7 @@ REQUIRED = [
     ("contract:", "contract marker missing"),
 ]
 
+
 def main() -> int:
     p = Path("pytest.ini")
     if not p.exists():
@@ -25,6 +26,7 @@ def main() -> int:
             return 2
     print("pytest.ini guard: OK")
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

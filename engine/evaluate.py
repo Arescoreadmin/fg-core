@@ -1,84 +1,137 @@
 from __future__ import annotations
 
-"""
-Compatibility shim.
+from dataclasses import dataclass
+from typing import Any, Literal, Optional, Tuple
 
-Rules engine currently returns a legacy tuple:
-    (threat_level, mitigations, rules_triggered, anomaly_score, ai_adv_score)
-
-For /ingest (telemetry ingest), we want a normalized JSON-safe decision dict.
-"""
-
-from typing import Any, Dict, List
-
-try:
-    from engine import evaluate_rules as _evaluate_rules  # type: ignore
-except Exception:
-    from engine.rules import evaluate_rules as _evaluate_rules  # type: ignore
+ThreatLevel = Literal["none", "low", "medium", "high", "critical"]
 
 
-def _to_jsonable_mitigations(mits: Any) -> List[Dict[str, Any]]:
-    if not mits:
-        return []
-    out: List[Dict[str, Any]] = []
-    for m in mits:
-        # Pydantic v2
-        if hasattr(m, "model_dump"):
-            out.append(m.model_dump())
-        # Pydantic v1
-        elif hasattr(m, "dict"):
-            out.append(m.dict())
-        # plain dict already
-        elif isinstance(m, dict):
-            out.append(m)
-        else:
-            # last resort: string it
-            out.append({"raw": str(m)})
-    return out
+@dataclass(frozen=True)
+class Mitigation:
+    action: str
+    target: Optional[str]
+    reason: str
+    confidence: float = 1.0
+    meta: Optional[dict[str, Any]] = None
 
 
-def evaluate(telemetry: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Evaluate telemetry envelope and return normalized decision dict.
+# =============================================================================
+# Normalization helpers (engine-owned)
+# =============================================================================
 
-    telemetry is expected to include:
-      tenant_id, source, event_type, payload
-    """
-    result = _evaluate_rules(telemetry)
 
-    # If someone later upgrades rules engine to return dict, support that.
-    if isinstance(result, dict):
-        # make sure mitigations are JSON-safe
-        result = dict(result)
-        result["mitigations"] = _to_jsonable_mitigations(result.get("mitigations"))
-        # normalize key naming
-        if "rules_triggered" in result and "rules" not in result:
-            result["rules"] = result.pop("rules_triggered")
-        return result
+def _coerce_event_type(req: Any) -> str:
+    et = getattr(req, "event_type", None)
+    payload = getattr(req, "payload", None)
+    event = getattr(req, "event", None)
 
-    # Legacy tuple normalization
+    if not et and isinstance(payload, dict):
+        et = payload.get("event_type")
+    if not et and isinstance(event, dict):
+        et = event.get("event_type")
+
+    et = (et or "").strip()
+    return et or "unknown"
+
+
+def _coerce_event_payload(req: Any) -> dict[str, Any]:
+    event = getattr(req, "event", None)
+    payload = getattr(req, "payload", None)
+
+    if isinstance(event, dict) and event:
+        return dict(event)
+    if isinstance(payload, dict) and payload:
+        return dict(payload)
+    return {}
+
+
+def _normalize_ip(payload: dict[str, Any]) -> Optional[str]:
+    v = (
+        payload.get("src_ip")
+        or payload.get("source_ip")
+        or payload.get("source_ip_addr")
+        or payload.get("ip")
+        or payload.get("remote_ip")
+    )
+    if v is None:
+        return None
+    s = str(v).strip()
+    return s or None
+
+
+def _normalize_failed_auths(payload: dict[str, Any]) -> int:
+    raw = (
+        payload.get("failed_auths")
+        or payload.get("fail_count")
+        or payload.get("failures")
+        or payload.get("attempts")
+        or payload.get("failed_attempts")
+        or 0
+    )
     try:
-        threat_level, mitigations, rules_triggered, anomaly_score, ai_adv_score = result
+        return int(raw)
     except Exception:
-        return {
-            "tenant_id": telemetry.get("tenant_id", "unknown"),
-            "source": telemetry.get("source", "unknown"),
-            "event_type": telemetry.get("event_type", "unknown"),
-            "threat_level": "low",
-            "mitigations": [],
-            "rules": [],
-            "anomaly_score": 0.0,
-            "ai_adversarial_score": 0.0,
-            "error": f"Unexpected evaluate_rules return: {type(result)}",
-        }
+        return 0
 
-    return {
-        "tenant_id": telemetry.get("tenant_id", "unknown"),
-        "source": telemetry.get("source", "unknown"),
-        "event_type": telemetry.get("event_type", "unknown"),
-        "threat_level": threat_level,
-        "mitigations": _to_jsonable_mitigations(mitigations),
-        "rules": list(rules_triggered or []),
-        "anomaly_score": float(anomaly_score or 0.0),
-        "ai_adversarial_score": float(ai_adv_score or 0.0),
-    }
+
+# =============================================================================
+# Scoring (engine-owned)
+# =============================================================================
+
+RULE_SCORES: dict[str, int] = {
+    "rule:ssh_bruteforce": 90,
+    "rule:default_allow": 0,
+}
+
+
+def _threat_from_score(score: int) -> ThreatLevel:
+    if score >= 95:
+        return "critical"
+    if score >= 80:
+        return "high"
+    if score >= 50:
+        return "medium"
+    if score >= 20:
+        return "low"
+    return "none"
+
+
+def evaluate(req: Any) -> Tuple[ThreatLevel, list[str], list[Mitigation], float, int]:
+    """
+    Canonical evaluation entrypoint (INV-004).
+
+    Returns:
+      (threat_level, rules_triggered, mitigations, anomaly_score, score)
+    """
+    et = _coerce_event_type(req)
+    body = _coerce_event_payload(req)
+
+    failed_auths = _normalize_failed_auths(body)
+    src_ip = _normalize_ip(body)
+
+    rules_triggered: list[str] = []
+    mitigations: list[Mitigation] = []
+    anomaly_score = 0.1
+
+    # MVP rule: auth brute force => block_ip
+    if (
+        et in ("auth", "auth.bruteforce", "auth_attempt")
+        and failed_auths >= 5
+        and src_ip
+    ):
+        rules_triggered.append("rule:ssh_bruteforce")
+        mitigations.append(
+            Mitigation(
+                action="block_ip",
+                target=src_ip,
+                reason=f"{failed_auths} failed auth attempts detected",
+                confidence=0.92,
+            )
+        )
+        anomaly_score = 0.8
+    else:
+        rules_triggered.append("rule:default_allow")
+
+    score = sum(RULE_SCORES.get(r, 0) for r in rules_triggered)
+    threat_level = _threat_from_score(score)
+    return threat_level, rules_triggered, mitigations, anomaly_score, score

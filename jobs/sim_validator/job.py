@@ -16,7 +16,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Optional
 
 from loguru import logger
 
@@ -240,7 +240,7 @@ def run_simulation(sim_input: SimulationInput) -> SimulationOutput:
 
     Uses the same evaluation logic as the /defend endpoint.
     """
-    from api.defend import MitigationAction, evaluate, _apply_doctrine
+    from api.defend import evaluate, _apply_doctrine
     from api.schemas import TelemetryInput
 
     # Create TelemetryInput

@@ -1,7 +1,7 @@
-import json
 import subprocess
 import requests
 import pytest
+
 pytestmark = pytest.mark.integration
 
 REQUIRED_KEYS = {
@@ -15,6 +15,7 @@ REQUIRED_KEYS = {
     "trend_flag",
     "headline",
 }
+
 
 def _run_seed(mode: str, base_url: str, api_key: str, sqlite_path: str):
     env = {
@@ -32,16 +33,21 @@ def _run_seed(mode: str, base_url: str, api_key: str, sqlite_path: str):
         check=True,
     )
 
+
 def test_stats_summary_contract_steady(base_url, api_key, sqlite_path, clear_decisions):
     _run_seed("steady", base_url, api_key, sqlite_path)
 
-    r = requests.get(f"{base_url}/stats/summary", headers={"X-API-Key": api_key}, timeout=10)
+    r = requests.get(
+        f"{base_url}/stats/summary", headers={"X-API-Key": api_key}, timeout=10
+    )
     assert r.status_code == 200, r.text
     data = r.json()
 
     missing = REQUIRED_KEYS - set(data.keys())
     assert not missing, f"Missing keys in /stats/summary: {sorted(missing)}"
 
-    assert data["trend_flag"] == "steady", f"Expected steady, got {data['trend_flag']}: {data}"
+    assert data["trend_flag"] == "steady", (
+        f"Expected steady, got {data['trend_flag']}: {data}"
+    )
     # “Alive” check: should have *some* risk activity in steady mode
     assert int(data["risk_score_24h"]) >= 0

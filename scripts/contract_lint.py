@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 CONTRACT_PATH = Path("CONTRACT.md")
 
@@ -41,7 +41,7 @@ REQUIRED_PHRASES = [
     "severity",
     "FG_DEV_EVENTS_ENABLED=1",
     "POST /dev/seed",
-    "source == \"dev_seed\"",
+    'source == "dev_seed"',
 ]
 
 HEADER_RE = re.compile(r"^##\s+(.+?)\s*$", re.M)
@@ -92,7 +92,10 @@ def main() -> int:
     # 3) Required phrases exist (simple but effective)
     missing = [p for p in REQUIRED_PHRASES if p not in md]
     if missing:
-        return _die("Missing required contract phrases: " + ", ".join([f"`{m}`" for m in missing]))
+        return _die(
+            "Missing required contract phrases: "
+            + ", ".join([f"`{m}`" for m in missing])
+        )
 
     # 4) Basic sanity: enforce a Table of Contents exists
     if "Table of Contents" not in md:

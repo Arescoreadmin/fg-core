@@ -432,7 +432,7 @@ class TestRateLimitFailureBehavior:
 
     @pytest.mark.asyncio
     async def test_fail_open_allows_on_redis_error(self):
-        """Fail-open mode must allow requests when Redis is unavailable."""
+        """Fail-open mode must allow requests when Redis is unavailable (acknowledged)."""
         from unittest.mock import MagicMock
 
         from api.ratelimit import rate_limit_guard
@@ -443,6 +443,7 @@ class TestRateLimitFailureBehavior:
                 "FG_RL_ENABLED": "1",
                 "FG_RL_BACKEND": "redis",
                 "FG_RL_FAIL_OPEN": "true",
+                "FG_RL_FAIL_OPEN_ACKNOWLEDGED": "true",
                 "FG_RL_PATHS": "/defend",
             },
         ):

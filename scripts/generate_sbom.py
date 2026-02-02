@@ -117,15 +117,16 @@ def get_git_info() -> dict[str, str]:
     info = {}
     try:
         result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True, text=True, timeout=5
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=5
         )
         if result.returncode == 0:
             info["commit"] = result.stdout.strip()
 
         result = subprocess.run(
             ["git", "describe", "--tags", "--always"],
-            capture_output=True, text=True, timeout=5
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0:
             info["version"] = result.stdout.strip()
@@ -221,7 +222,8 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description="Generate SBOM for FrostGate Core")
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         type=Path,
         default=ARTIFACTS_DIR / "sbom.json",
         help="Output path for SBOM JSON",

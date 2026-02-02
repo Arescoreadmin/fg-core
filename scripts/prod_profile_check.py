@@ -71,7 +71,7 @@ class ProductionProfileChecker:
         self._check_core_env(core_env)
 
         # Check admin-gateway service
-        admin_env = services.get("admin-gateway", {}).get("environment", {})
+        _ = services.get("admin-gateway", {})
 
     def _check_core_env(self, env: dict) -> None:
         """Validate core service environment variables."""

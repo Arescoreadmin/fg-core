@@ -19,6 +19,9 @@ export PYTHONPATH := .
 
 PYTEST_ENV := env PYTHONHASHSEED=0 TZ=UTC
 
+# Ruff (format/lint)
+RUFF ?= $(VENV)/bin/ruff
+
 # =============================================================================
 # Runtime defaults
 # =============================================================================
@@ -83,6 +86,10 @@ help:
 	"" \
 	"Setup:" \
 	"  make venv" \
+	"" \
+	"Formatting:" \
+	"  make fmt        # auto-fix lint + format" \
+	"  make fmt-check  # check-only (CI)" \
 	"" \
 	"CI:" \
 	"  make ci" \
@@ -150,14 +157,30 @@ generate-scorecard:
 	@PYTHONPATH=scripts $(PY_CONTRACT) scripts/generate_scorecard.py
 
 # =============================================================================
+# Formatting / Lint (ruff)
+# =============================================================================
+
+.PHONY: fmt fmt-check
+
+# Auto-fix lint + apply formatting (local dev)
+fmt:
+	@$(RUFF) check --fix api tests scripts
+	@$(RUFF) format api tests scripts
+	@$(RUFF) check api tests scripts
+	@$(RUFF) format --check api tests scripts
+
+# Verify formatting + lint without modifying files (CI-safe)
+fmt-check:
+	@$(RUFF) check api tests scripts
+	@$(RUFF) format --check api tests scripts
+
+# =============================================================================
 # Lint
 # =============================================================================
 
 .PHONY: fg-lint
-fg-lint:
+fg-lint: fmt-check
 	@$(PY) -m py_compile api/middleware/auth_gate.py
-	@$(PY) -m ruff check api tests
-	@$(PY) -m ruff format --check api tests
 
 # =============================================================================
 # Fast lane
@@ -331,6 +354,15 @@ ci-pt: venv
 	@$(PYTEST_ENV) $(PY) -m pytest -q tests/test_security_hardening.py tests/test_security_middleware.py
 
 # =============================================================================
+# Core Invariant Tests (INV-001 through INV-007)
+# =============================================================================
+
+.PHONY: test-core-invariants
+
+test-core-invariants: venv
+	@echo "Running core invariant tests (INV-001 through INV-007)."
+	@$(PYTEST_ENV) $(PY) -m pytest -v tests/test_core_invariants.py
+
 # Hardening Test Lanes (Day 1-7 hardening plan)
 # =============================================================================
 
@@ -349,7 +381,7 @@ test-auth-hardening: venv
 	@$(PYTEST_ENV) $(PY) -m pytest -q tests/test_auth_hardening.py tests/test_auth.py tests/test_auth_contract.py
 
 # All hardening tests
-test-hardening-all: test-decision-unified test-tenant-isolation test-auth-hardening
+test-hardening-all: test-core-invariants test-decision-unified test-tenant-isolation test-auth-hardening
 	@echo "✅ All hardening tests passed"
 
 # CI lane for hardening (run on every PR)
@@ -484,3 +516,35 @@ console-test: console-deps
 	@cd $(CONSOLE_DIR) && npm run test
 
 ci-console: console-lint console-test
+
+
+guard-no-trash:
+	@bad=$$(git ls-files | grep -E '^(agent_queue/|keys/|secrets/|state/|artifacts/|logs/|CONTEXT_SNAPSHOT\.md|supervisor-sidecar/supervisor-sidecar)' || true); \
+	if [ -n "$$bad" ]; then \
+	  echo "Forbidden tracked paths:"; echo "$$bad"; exit 1; \
+	fi
+
+
+.PHONY: deps-up deps-down
+
+deps-up:
+	@docker ps >/dev/null 2>&1 || (echo "Docker not running"; exit 1)
+	@docker inspect fg-redis >/dev/null 2>&1 || \
+	  docker run -d --name fg-redis -p 6379:6379 redis:7
+	@echo "✅ deps up (redis on :6379)"
+
+deps-down:
+	@docker rm -f fg-redis >/dev/null 2>&1 || true
+	@echo "✅ deps down"
+
+.PHONY: fg-restart
+fg-restart:
+	@$(MAKE) -s fg-down || true
+	@$(MAKE) -s fg-up
+
+
+# =============================================================================
+# Test Core Invariants
+# =============================================================================
+
+.PHONY: test-core-invariants

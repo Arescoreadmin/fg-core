@@ -1,0 +1,38 @@
+name: "fg-secrets"
+description: "Generate CI secrets and export them to GITHUB_ENV"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Generate CI secrets
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        gen() {
+          # Prefer Python if available
+          if command -v python >/dev/null 2>&1; then
+            python - <<'PY'
+        import secrets
+        print(secrets.token_urlsafe(32))
+        PY
+                    return 0
+                  fi
+
+          # Fallback to OpenSSL
+          if command -v openssl >/dev/null 2>&1; then
+            openssl rand -base64 48 | tr -d '\n' | tr '/+=' '___'
+            echo
+            return 0
+          fi
+
+          echo "❌ No python or openssl available to generate secrets" >&2
+          exit 1
+        }
+
+        {
+          echo "FG_API_KEY=$(gen)"
+          echo "REDIS_PASSWORD=$(gen | cut -c1-32)"
+          echo "POSTGRES_PASSWORD=$(gen | cut -c1-32)"
+          echo "FG_AGENT_API_KEY=$(gen)"
+        } >> "$GITHUB_ENV"

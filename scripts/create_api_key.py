@@ -6,10 +6,15 @@ from pathlib import Path
 
 DEFAULT_KEYS_FILE = Path("secrets/fg_api_keys.txt")
 
+
 def main() -> None:
     if len(sys.argv) < 3:
-        print("usage: python scripts/create_api_key.py <PREFIX> <scopes_csv> [name] [keys_file]")
-        print('example: python scripts/create_api_key.py ADMIN "decisions:read,defend:write,ingest:write" "Admin Key"')
+        print(
+            "usage: python scripts/create_api_key.py <PREFIX> <scopes_csv> [name] [keys_file]"
+        )
+        print(
+            'example: python scripts/create_api_key.py ADMIN "decisions:read,defend:write,ingest:write" "Admin Key"'
+        )
         raise SystemExit(2)
 
     prefix_in = sys.argv[1].strip().upper()
@@ -44,6 +49,7 @@ def main() -> None:
     if name:
         print("name=" + name)
     print("file=" + str(keys_file.resolve()))
+
 
 if __name__ == "__main__":
     main()

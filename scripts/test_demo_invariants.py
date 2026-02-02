@@ -2,7 +2,9 @@ import subprocess
 import requests
 import os
 import pytest
+
 pytestmark = pytest.mark.integration
+
 
 def _run_seed(mode: str, base_url: str, api_key: str, sqlite_path: str):
     env = {
@@ -14,12 +16,17 @@ def _run_seed(mode: str, base_url: str, api_key: str, sqlite_path: str):
         "FG_SQLITE_PATH": sqlite_path,
         "QUIET": "1",
     }
-    subprocess.run(["bash", "-lc", "./scripts/seed_demo_decisions.sh"], env=env, check=True)
+    subprocess.run(
+        ["bash", "-lc", "./scripts/seed_demo_decisions.sh"], env=env, check=True
+    )
+
 
 def test_demo_invariants_spike(base_url, api_key, sqlite_path, clear_decisions):
     _run_seed("spike", base_url, api_key, sqlite_path)
 
-    r = requests.get(f"{base_url}/stats/summary", headers={"X-API-Key": api_key}, timeout=10)
+    r = requests.get(
+        f"{base_url}/stats/summary", headers={"X-API-Key": api_key}, timeout=10
+    )
     assert r.status_code == 200, r.text
     s = r.json()
 
@@ -30,10 +37,13 @@ def test_demo_invariants_spike(base_url, api_key, sqlite_path, clear_decisions):
     # “hot window” should generally be riskier than overall 24h
     assert int(s["risk_score_1h"]) >= int(s["risk_score_24h"]), s
 
+
 def test_demo_invariants_drop(base_url, api_key, sqlite_path, clear_decisions):
     _run_seed("drop", base_url, api_key, sqlite_path)
 
-    r = requests.get(f"{base_url}/stats/summary", headers={"X-API-Key": api_key}, timeout=10)
+    r = requests.get(
+        f"{base_url}/stats/summary", headers={"X-API-Key": api_key}, timeout=10
+    )
     assert r.status_code == 200, r.text
     s = r.json()
 

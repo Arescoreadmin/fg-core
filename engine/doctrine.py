@@ -1,128 +1,75 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import List
+from typing import Any, Literal, Optional, Tuple
 
-from .types import (
-    TelemetryInput,
-    ThreatLevel,
-    MitigationAction,
-    ExplainBlock,
-    ClassificationRing,
-    Persona,
-)
+from engine.evaluate import Mitigation
+
+GatingDecision = Literal["allow", "require_approval", "reject"]
 
 
-@dataclass
-class DoctrineDecision:
-    threat_level: ThreatLevel
-    mitigations: List[MitigationAction]
-    explain: ExplainBlock
-    ai_adversarial_score: float
-    pq_fallback: bool
-    clock_drift_ms: int
-
-
-def _compute_tied_for_auth(telemetry: TelemetryInput) -> dict:
+def apply_doctrine(
+    persona: Optional[str],
+    classification: Optional[str],
+    mitigations: list[Mitigation],
+) -> Tuple[list[Mitigation], dict[str, Any]]:
     """
-    Very dumb "TIED" model:
-      - base off failed_auths in payload
+    Engine-owned doctrine / ROE bundling.
+
+    Contract expected by API layer:
+      returns (mitigations_after_doctrine, tie_d_dict)
+
+    tie_d_dict keys align with api.schemas_doctrine.TieD.
     """
-    payload = telemetry.payload or {}
-    failed_auths = int(payload.get("failed_auths", 0))
+    persona_v = (persona or "").strip().lower() or None
+    class_v = (classification or "").strip().upper() or None
 
-    # Service / user impact as simple scaled scores
-    service_impact = min(1.0, failed_auths / 10.0)
-    user_impact = min(1.0, 0.7 + failed_auths / 100.0)
-
-    return {
-        "service_impact": round(service_impact, 3),
-        "user_impact": round(user_impact, 3),
-    }
-
-
-def evaluate_with_doctrine(
-    telemetry: TelemetryInput,
-    base_threat_level: ThreatLevel,
-    base_mitigations: List[MitigationAction],
-    base_explain: ExplainBlock,
-    base_ai_adv_score: float,
-    pq_fallback: bool,
-    clock_drift_ms: int,
-) -> DoctrineDecision:
-    """
-    Wrap rules decision with persona / classification aware doctrine.
-
-    Tests care about:
-      - guardian + SECRET caps disruption (block_ip) and sets roe_applied = True
-      - sentinel is NOT weaker than guardian for same scenario (can allow more disruption)
-      - tie_d + persona + classification surfaced in explain
-    """
-    persona = getattr(telemetry, "persona", None)
-    classification = getattr(telemetry, "classification", None)
-
-    # Deep copy explain so we don't mutate shared instance
-    explain = base_explain.model_copy(deep=True)
-
-    explain.classification = classification
-    explain.persona = persona
-
-    # Base mitigations copy
-    mitigations = [m for m in base_mitigations]
-
-    # Simple TIED payload
-    tied = _compute_tied_for_auth(telemetry)
-
-    # Default gating
-    gating_decision = "observe"
     roe_applied = False
     disruption_limited = False
     ao_required = False
 
-    # Persona & classification-aware doctrine
-    if classification == ClassificationRing.SECRET and persona == Persona.GUARDIAN:
-        # Guardian is conservative: cap disruptive mitigations
-        block_ips = [m for m in mitigations if m.action == "block_ip"]
-        non_block = [m for m in mitigations if m.action != "block_ip"]
+    out = list(mitigations or [])
 
-        if block_ips:
-            # At most one block_ip (what tests assert)
-            mitigations = [block_ips[0]] + non_block
-            disruption_limited = True
-        else:
-            mitigations = non_block
+    # baseline impact model (simple deterministic placeholders)
+    base_impact = 0.0
+    base_user_impact = 0.0
+    if any(m.action == "block_ip" for m in out):
+        base_impact = 0.35
+        base_user_impact = 0.20
 
-        gating_decision = "reject"
+    gating_decision: GatingDecision = "allow"
+
+    # Guardian + SECRET: conservative doctrine
+    if persona_v == "guardian" and class_v == "SECRET":
         roe_applied = True
         ao_required = True
 
-    elif classification == ClassificationRing.SECRET and persona == Persona.SENTINEL:
-        # Sentinel can be more aggressive than guardian: keep all mitigations
-        gating_decision = "escalate"
-        roe_applied = True
-        disruption_limited = False
-        ao_required = False
+        # cap disruptive mitigations to 1 block_ip
+        block_ips = [m for m in out if m.action == "block_ip"]
+        if len(block_ips) > 1:
+            disruption_limited = True
+            first = block_ips[0]
+            out = [m for m in out if m.action != "block_ip"]
+            out.insert(0, first)
 
-    else:
-        # Default path: pass-through; still surface meta
-        gating_decision = "observe"
-        roe_applied = False
-        disruption_limited = False
-        ao_required = False
+        # approval required if any disruptive action present
+        gating_decision = (
+            "require_approval" if any(m.action == "block_ip" for m in out) else "allow"
+        )
 
-    tied["gating_decision"] = gating_decision
+        # blast radius reduction when limiting
+        if disruption_limited:
+            base_impact = max(0.0, base_impact - 0.10)
+            base_user_impact = max(0.0, base_user_impact - 0.05)
 
-    explain.tie_d = tied
-    explain.roe_applied = roe_applied
-    explain.disruption_limited = disruption_limited
-    explain.ao_required = ao_required
+    tie_d = {
+        "roe_applied": bool(roe_applied),
+        "disruption_limited": bool(disruption_limited),
+        "ao_required": bool(ao_required),
+        "persona": persona_v,
+        "classification": class_v,
+        "service_impact": float(min(1.0, max(0.0, base_impact))),
+        "user_impact": float(min(1.0, max(0.0, base_user_impact))),
+        "gating_decision": gating_decision,
+    }
 
-    # For now, do not change threat_level or ai_adv_score
-    return DoctrineDecision(
-        threat_level=base_threat_level,
-        mitigations=mitigations,
-        explain=explain,
-        ai_adversarial_score=base_ai_adv_score,
-        pq_fallback=pq_fallback,
-        clock_drift_ms=clock_drift_ms,
-    )
+    return out, tie_d
