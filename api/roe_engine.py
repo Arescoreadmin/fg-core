@@ -36,16 +36,12 @@ class ROEEngine:
     def __init__(self, policy: Optional[ROEPolicy] = None) -> None:
         self.policy = policy or ROEPolicy()
 
-    def evaluate(self, req: ROEEvaluationRequest) -> ROEEvaluationResponse:
+    def assess(self, req: ROEEvaluationRequest) -> ROEEvaluationResponse:
         persona = (req.persona or "").strip().lower()
         classification = (req.classification or "").strip().upper()
         actions = [m.get("action") for m in req.mitigations if isinstance(m, dict)]
 
-        if (
-            persona == "guardian"
-            and classification == "SECRET"
-            and "block_ip" in actions
-        ):
+        if persona == "guardian" and classification == "SECRET" and "block_ip" in actions:
             return ROEEvaluationResponse(
                 gating_decision="require_approval",
                 reason="Guardian persona requires approval for disruptive actions.",
@@ -70,7 +66,7 @@ async def get_policy() -> ROEPolicy:
 @router.post("/evaluate", response_model=ROEEvaluationResponse)
 async def evaluate_roe(req: ROEEvaluationRequest) -> ROEEvaluationResponse:
     engine = ROEEngine()
-    return engine.evaluate(req)
+    return engine.assess(req)
 
 
 def roe_engine_enabled() -> bool:
