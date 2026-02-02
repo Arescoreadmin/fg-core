@@ -1,0 +1,15 @@
+name: "fg-secrets"
+description: "Generate CI secrets and export them to GITHUB_ENV"
+runs:
+  using: "composite"
+  steps:
+    - name: Generate CI secrets
+      shell: bash
+      run: |
+        python - <<'PY' >> "$GITHUB_ENV"
+        import secrets
+        print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
+        print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
+        print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
+        print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(32)}")
+        PY

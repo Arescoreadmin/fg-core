@@ -19,7 +19,13 @@ RESTART_IF_RUNNING="${FG_RESTART_IF_RUNNING:-0}"
 
 START_TIMEOUT_SEC="${FG_START_TIMEOUT_SEC:-10}"
 READY_TIMEOUT_SEC="${FG_READY_TIMEOUT_SEC:-10}"
-STOP_TIMEOUT_SEC="${FG_STOP_TIMEOUT_SEC:-8}"
+
+# Stop behavior:
+# - first SIGTERM and wait STOP_GRACE_SEC
+# - then SIGKILL and wait STOP_FORCE_SEC
+STOP_GRACE_SEC="${FG_STOP_GRACE_SEC:-30}"
+STOP_FORCE_SEC="${FG_STOP_FORCE_SEC:-5}"
+
 POLL_INTERVAL_SEC="${FG_POLL_INTERVAL_SEC:-0.1}"
 
 FORCE="${FG_FORCE:-0}"
@@ -47,15 +53,17 @@ _read_pidfile() {
 _pid_alive() { kill -0 "$1" 2>/dev/null; }
 
 _port_owner_pid() {
+  # Robust-ish: parse pid from ss output (can be multiple lines)
   ss -lptn "sport = :$PORT" 2>/dev/null \
-    | awk -F'pid=' 'NR==2{print $2}' \
+    | awk -F'pid=' '/pid=/{print $2}' \
     | awk -F',' '{print $1}' \
     | tr -d '[:space:]' \
     | head -n 1
 }
 
 _wait_for_port_free() {
-  local deadline_ms="$(( $(_now_ms) + STOP_TIMEOUT_SEC*1000 ))"
+  local timeout_sec="${1:-10}"
+  local deadline_ms="$(( $(_now_ms) + timeout_sec*1000 ))"
   while (( $(_now_ms) < deadline_ms )); do
     local opid
     opid="$(_port_owner_pid || true)"
@@ -187,7 +195,7 @@ _apply_default_env() {
   export FG_STATE_DIR="${FG_STATE_DIR:-$(pwd)/artifacts}"
   export FG_SQLITE_PATH="${FG_SQLITE_PATH:-$(pwd)/artifacts/frostgate.db}"
   export FG_DEV_EVENTS_ENABLED="${FG_DEV_EVENTS_ENABLED:-0}"
-FG_UI_TOKEN_GET_ENABLED="${FG_UI_TOKEN_GET_ENABLED:-0}"
+  export FG_UI_TOKEN_GET_ENABLED="${FG_UI_TOKEN_GET_ENABLED:-0}"
   export FG_BASE_URL="${FG_BASE_URL:-$BASE_URL}"
 
   export BASE_URL="${BASE_URL:-$BASE_URL}"
@@ -219,11 +227,11 @@ start() {
   if [[ -n "${opid:-}" ]]; then
     if [[ "$FORCE" == "1" ]]; then
       echo "⚠️  Port $PORT owned by pid=$opid. FG_FORCE=1 set, terminating."
-      kill "$opid" 2>/dev/null || true
-      if ! _wait_for_port_free; then
+      kill -TERM "$opid" 2>/dev/null || true
+      if ! _wait_for_port_free 10; then
         echo "⚠️  Port still owned after grace. SIGKILL pid=$opid"
-        kill -9 "$opid" 2>/dev/null || true
-        _wait_for_port_free || true
+        kill -KILL "$opid" 2>/dev/null || true
+        _wait_for_port_free 5 || true
       fi
     else
       echo "❌ Port $PORT is already in use by pid=$opid. Stop that process first (or set FG_FORCE=1)." >&2
@@ -254,6 +262,35 @@ start() {
   fi
 }
 
+_stop_pid_gracefully() {
+  local pid="$1"
+
+  if ! _pid_alive "$pid"; then
+    return 0
+  fi
+
+  # 1) SIGTERM first (graceful)
+  kill -TERM "$pid" 2>/dev/null || true
+
+  local deadline_ms="$(( $(_now_ms) + STOP_GRACE_SEC*1000 ))"
+  while (( $(_now_ms) < deadline_ms )); do
+    ! _pid_alive "$pid" && return 0
+    sleep "$POLL_INTERVAL_SEC"
+  done
+
+  # 2) SIGKILL last resort
+  echo "⚠️  pid=$pid still alive after ${STOP_GRACE_SEC}s, SIGKILL"
+  kill -KILL "$pid" 2>/dev/null || true
+
+  local deadline2_ms="$(( $(_now_ms) + STOP_FORCE_SEC*1000 ))"
+  while (( $(_now_ms) < deadline2_ms )); do
+    ! _pid_alive "$pid" && return 0
+    sleep "$POLL_INTERVAL_SEC"
+  done
+
+  return 1
+}
+
 stop() {
   _clean_stale_pidfile_if_needed
 
@@ -270,21 +307,14 @@ stop() {
     return 0
   fi
 
-  _pid_alive "$pid" && kill "$pid" 2>/dev/null || true
-
-  local deadline_ms="$(( $(_now_ms) + STOP_TIMEOUT_SEC*1000 ))"
-  while (( $(_now_ms) < deadline_ms )); do
-    ! _pid_alive "$pid" && break
-    sleep "$POLL_INTERVAL_SEC"
-  done
-
-  if _pid_alive "$pid"; then
-    echo "⚠️  pid=$pid still alive after ${STOP_TIMEOUT_SEC}s, SIGKILL"
-    kill -9 "$pid" 2>/dev/null || true
+  if ! _stop_pid_gracefully "$pid"; then
+    echo "❌ Failed to stop uvicorn pid=$pid cleanly" >&2
+    echo "---- last logs ----" >&2
+    tail -n 200 "$LOGFILE" 2>/dev/null || true
   fi
 
   rm -f "$PIDFILE"
-  _wait_for_port_free || true
+  _wait_for_port_free 10 || true
   echo "✅ Stopped uvicorn"
 }
 

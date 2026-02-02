@@ -2,11 +2,6 @@
 from __future__ import annotations
 
 import json
-from api.decision_diff import (
-    compute_decision_diff,
-    snapshot_from_current,
-    snapshot_from_record,
-)
 import logging
 import time
 import uuid
@@ -19,6 +14,11 @@ from sqlalchemy.orm import Session
 from api.auth_scopes import bind_tenant_id, require_scopes
 from api.db import get_db
 from api.db_models import DecisionRecord
+from api.decision_diff import (
+    compute_decision_diff,
+    snapshot_from_current,
+    snapshot_from_record,
+)
 from api.ingest_schemas import IngestResponse
 from api.schemas import TelemetryInput
 from engine.evaluate import evaluate
@@ -61,8 +61,17 @@ def _safe_json(obj: Any) -> str:
 def _resolve_tenant_id(
     req: TelemetryInput, x_tenant_id: Optional[str], request: Request
 ) -> str:
+    """
+    INV-002: Reject silent 'unknown' tenant writes for unscoped keys unless tenant_id is explicit.
+    Prefer header X-Tenant-Id, then body tenant_id.
+    """
     requested = (x_tenant_id or req.tenant_id or "").strip() or None
-    tid = bind_tenant_id(request, requested)
+
+    # HARDENING: require explicit tenant id when the API key is unscoped.
+    tid = bind_tenant_id(request, requested, require_explicit_for_unscoped=True)
+
+    # Make tenancy explicit everywhere downstream.
+    req.tenant_id = tid
     request.state.tenant_id = tid
     return tid
 
@@ -200,6 +209,7 @@ async def ingest(
     try:
         rules = decision.get("rules_triggered") or decision.get("rules") or []
         summary = decision.get("summary") or ""
+
         # --- Decision Diff (compute + persist) ---
         try:
             prev = (

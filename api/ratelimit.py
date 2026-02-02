@@ -157,7 +157,7 @@ class RLConfig:
 
     # Failure behavior
     fail_open: bool  # if backend fails, allow requests
-    fail_open_acknowledged: bool  # tracked for ops/audit
+    fail_open_acknowledged: bool  # MUST be true to honor fail_open
 
 
 def load_config() -> RLConfig:
@@ -173,7 +173,7 @@ def load_config() -> RLConfig:
     redis_url = os.getenv("FG_REDIS_URL", "redis://localhost:6379/0").strip()
     prefix = os.getenv("FG_RL_PREFIX", "fg:rl").strip()
 
-    # Default to fail-closed unless explicitly enabled
+    # Default to fail-closed unless explicitly enabled + acknowledged.
     fail_open = _env_bool("FG_RL_FAIL_OPEN", False)
     fail_open_acknowledged = _env_bool("FG_RL_FAIL_OPEN_ACKNOWLEDGED", False)
 
@@ -396,24 +396,23 @@ async def rate_limit_guard(
     except Exception as e:
         log.warning("Rate limiter error: %s", e)
 
-        # Fail-open: allow when explicitly enabled.
-        # If not acknowledged, still allow (tests expect this), but scream loudly.
-        if cfg.fail_open:
-            if cfg.fail_open_acknowledged:
-                log.error(
-                    "SECURITY: Rate limiter fail-open triggered (ACKNOWLEDGED) - allowing request. "
-                    "Error: %s, Key: %s",
-                    e,
-                    key,
-                )
-            else:
-                log.critical(
-                    "SECURITY: Rate limiter fail-open triggered (NOT ACKNOWLEDGED) - allowing request anyway. "
-                    "Set FG_RL_FAIL_OPEN_ACKNOWLEDGED=true to silence this. Error: %s, Key: %s",
-                    e,
-                    key,
-                )
+        # INV-003: fail-open is honored ONLY if explicitly acknowledged.
+        if cfg.fail_open and cfg.fail_open_acknowledged:
+            log.error(
+                "SECURITY: Rate limiter fail-open triggered (ACKNOWLEDGED) - allowing request. "
+                "Error: %s, Key: %s",
+                e,
+                key,
+            )
             return
+
+        if cfg.fail_open and not cfg.fail_open_acknowledged:
+            log.critical(
+                "SECURITY: Rate limiter fail-open requested but NOT ACKNOWLEDGED - FAILING CLOSED. "
+                "To allow fail-open, set FG_RL_FAIL_OPEN_ACKNOWLEDGED=true. Error: %s, Key: %s",
+                e,
+                key,
+            )
 
         # Default: fail-closed
         raise HTTPException(
