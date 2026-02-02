@@ -16,7 +16,9 @@ DEFAULT_BANNED_PATTERNS: list[str] = [
     r"^PY\s+.*$",  # heredoc terminator followed by garbage
 ]
 
-_RX_DEFAULT = re.compile("|".join(f"(?:{p})" for p in DEFAULT_BANNED_PATTERNS), re.MULTILINE)
+_RX_DEFAULT = re.compile(
+    "|".join(f"(?:{p})" for p in DEFAULT_BANNED_PATTERNS), re.MULTILINE
+)
 
 
 def _atomic_write_text(dest: Path, text: str) -> None:
@@ -36,11 +38,26 @@ def _atomic_write_text(dest: Path, text: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="write_file.py", description="Atomic write stdin to a file with paste-garbage guard.")
+    ap = argparse.ArgumentParser(
+        prog="write_file.py",
+        description="Atomic write stdin to a file with paste-garbage guard.",
+    )
     ap.add_argument("path", help="Destination path")
-    ap.add_argument("--no-guard", action="store_true", help="Disable paste-garbage detection")
-    ap.add_argument("--allow", action="append", default=[], help="Regex patterns to allow (advanced)")
-    ap.add_argument("--require", action="append", default=[], help="Regex patterns that must appear (advanced)")
+    ap.add_argument(
+        "--no-guard", action="store_true", help="Disable paste-garbage detection"
+    )
+    ap.add_argument(
+        "--allow",
+        action="append",
+        default=[],
+        help="Regex patterns to allow (advanced)",
+    )
+    ap.add_argument(
+        "--require",
+        action="append",
+        default=[],
+        help="Regex patterns that must appear (advanced)",
+    )
     args = ap.parse_args(argv)
 
     dest = Path(args.path)
@@ -59,13 +76,23 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
     if not args.no_guard:
-        allow_rx = re.compile("|".join(f"(?:{p})" for p in args.allow), re.MULTILINE) if args.allow else None
+        allow_rx = (
+            re.compile("|".join(f"(?:{p})" for p in args.allow), re.MULTILINE)
+            if args.allow
+            else None
+        )
         if _RX_DEFAULT.search(content):
             if allow_rx and allow_rx.search(content):
                 pass
             else:
-                print("ERROR: Detected terminal paste-garbage in content. Refusing to write.", file=sys.stderr)
-                print("Hint: do NOT paste command output into file content.", file=sys.stderr)
+                print(
+                    "ERROR: Detected terminal paste-garbage in content. Refusing to write.",
+                    file=sys.stderr,
+                )
+                print(
+                    "Hint: do NOT paste command output into file content.",
+                    file=sys.stderr,
+                )
                 return 3
 
     _atomic_write_text(dest, content)

@@ -8,19 +8,19 @@ s = p.read_text()
 # We match from ".PHONY: kill-uvicorn" through the next blank line or next .PHONY/target header
 pattern = re.compile(
     r"(?ms)^\.PHONY:\s*kill-uvicorn\s*\n"
-    r"(?:^[^\S\r\n].*\n)*"             # indented junk lines (broken recipes)
+    r"(?:^[^\S\r\n].*\n)*"  # indented junk lines (broken recipes)
     r"(?:^kill-uvicorn\s*:.*\n(?:^\t.*\n)*)?"  # optional proper target+recipe
 )
 
 replacement = (
     ".PHONY: kill-uvicorn\n"
     "kill-uvicorn:\n"
-    "\t-@echo \"Killing stray uvicorn processes...\"\n"
-    "\t-sudo pkill -f \"uvicorn app.main:app\" || true\n"
-    "\t-sudo pkill -f \"python -m uvicorn app.main:app\" || true\n"
-    "\t-pkill -f \"uvicorn api.main:app\" || true\n"
-    "\t-pkill -f \"python -m uvicorn api.main:app\" || true\n"
-    "\t-pkill -f \".venv/bin/uvicorn api.main:app\" || true\n"
+    '\t-@echo "Killing stray uvicorn processes..."\n'
+    '\t-sudo pkill -f "uvicorn app.main:app" || true\n'
+    '\t-sudo pkill -f "python -m uvicorn app.main:app" || true\n'
+    '\t-pkill -f "uvicorn api.main:app" || true\n'
+    '\t-pkill -f "python -m uvicorn api.main:app" || true\n'
+    '\t-pkill -f ".venv/bin/uvicorn api.main:app" || true\n'
     "\t-@lsof -iTCP:8000 -sTCP:LISTEN -nP || true\n"
     "\t-@lsof -iTCP:8080 -sTCP:LISTEN -nP || true\n"
     "\n"

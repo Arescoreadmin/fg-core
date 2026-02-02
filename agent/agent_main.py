@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import time
 import uuid
 import hashlib
@@ -10,7 +9,7 @@ import pathlib
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterator, Optional
+from typing import Any, Dict, Iterator
 from urllib import request as urlrequest
 from urllib.error import URLError, HTTPError
 

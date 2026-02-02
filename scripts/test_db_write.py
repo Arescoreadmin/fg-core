@@ -3,7 +3,9 @@ import sqlite3
 import time
 import requests
 import pytest
+
 pytestmark = pytest.mark.integration
+
 
 def test_defend_persists_decision(base_url, api_key, sqlite_path, clear_decisions):
     payload = {

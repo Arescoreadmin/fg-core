@@ -35,7 +35,6 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Callable
 
 # Valid severity levels (canonical)
 SEVERITY_LEVELS = frozenset({"Production-blocking", "Launch-risk", "Post-launch"})
@@ -80,6 +79,7 @@ def normalize_gap_id(gap_id: str) -> str:
     # Return as-is if unrecognized (validation will catch it)
     return gap_id
 
+
 # Expected GAP_MATRIX table header columns (canonical)
 EXPECTED_MATRIX_COLUMNS = [
     "ID",
@@ -120,7 +120,14 @@ KNOWN_CI_LANES = frozenset(
 )
 
 # Infra-related path prefixes (for owner=infra validation)
-INFRA_PATH_PREFIXES = (".github/", "Makefile", "docker-compose", "Dockerfile", "k8s/", "infra/")
+INFRA_PATH_PREFIXES = (
+    ".github/",
+    "Makefile",
+    "docker-compose",
+    "Dockerfile",
+    "k8s/",
+    "infra/",
+)
 
 # Docs-related path prefixes (for owner=docs validation)
 DOCS_PATH_PREFIXES = ("docs/", "README", "CHANGELOG", "LICENSE", "*.md")
@@ -141,9 +148,7 @@ def extract_file_paths(evidence: str) -> list[str]:
 
     # Pattern for file paths: word chars, /, ., -, _ with optional :line_number
     # Must have an extension (.) or be a well-known file like Makefile
-    path_pattern = re.compile(
-        r"(?:`)?([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)(?::\d+)?(?:`)?"
-    )
+    path_pattern = re.compile(r"(?:`)?([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)(?::\d+)?(?:`)?")
 
     for match in path_pattern.finditer(evidence):
         candidate = match.group(1)
@@ -170,7 +175,9 @@ def extract_test_references(evidence: str) -> list[str]:
     refs: list[str] = []
 
     # Test file pattern: tests/test_*.py or just test_*
-    test_pattern = re.compile(r"(tests?/)?test_[a-zA-Z0-9_]+(?:\.py)?(?:::test_[a-zA-Z0-9_]+)?")
+    test_pattern = re.compile(
+        r"(tests?/)?test_[a-zA-Z0-9_]+(?:\.py)?(?:::test_[a-zA-Z0-9_]+)?"
+    )
 
     for match in test_pattern.finditer(evidence):
         refs.append(match.group(0))
@@ -280,7 +287,7 @@ def verify_ci_lane_exists(lane: str, repo_root: Path | None = None) -> bool:
         repo_root = Path.cwd()
 
     # Check if in static KNOWN_CI_LANES
-    if lane.lower() in {l.lower() for l in KNOWN_CI_LANES}:
+    if lane.lower() in {known_lane.lower() for known_lane in KNOWN_CI_LANES}:
         return True
 
     # Check Makefile for target
@@ -347,8 +354,7 @@ def validate_owner_evidence_match(owner: str, evidence: str) -> list[str]:
     if owner == "repo":
         # Must have repo file path or test reference (not infra/docs paths)
         has_repo_file = any(
-            p for p in file_paths
-            if not is_infra_path(p) and not is_docs_path(p)
+            p for p in file_paths if not is_infra_path(p) and not is_docs_path(p)
         )
         has_test = len(test_refs) > 0
         has_ci = len(ci_lanes) > 0

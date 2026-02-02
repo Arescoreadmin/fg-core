@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import importlib.metadata as metadata
-import sys
 from pathlib import Path
 
 

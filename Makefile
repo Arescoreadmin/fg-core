@@ -19,6 +19,9 @@ export PYTHONPATH := .
 
 PYTEST_ENV := env PYTHONHASHSEED=0 TZ=UTC
 
+# Ruff (format/lint)
+RUFF ?= $(VENV)/bin/ruff
+
 # =============================================================================
 # Runtime defaults
 # =============================================================================
@@ -83,6 +86,10 @@ help:
 	"" \
 	"Setup:" \
 	"  make venv" \
+	"" \
+	"Formatting:" \
+	"  make fmt        # auto-fix lint + format" \
+	"  make fmt-check  # check-only (CI)" \
 	"" \
 	"CI:" \
 	"  make ci" \
@@ -150,14 +157,30 @@ generate-scorecard:
 	@PYTHONPATH=scripts $(PY_CONTRACT) scripts/generate_scorecard.py
 
 # =============================================================================
+# Formatting / Lint (ruff)
+# =============================================================================
+
+.PHONY: fmt fmt-check
+
+# Auto-fix lint + apply formatting (local dev)
+fmt:
+	@$(RUFF) check --fix api tests scripts
+	@$(RUFF) format api tests scripts
+	@$(RUFF) check api tests scripts
+	@$(RUFF) format --check api tests scripts
+
+# Verify formatting + lint without modifying files (CI-safe)
+fmt-check:
+	@$(RUFF) check api tests scripts
+	@$(RUFF) format --check api tests scripts
+
+# =============================================================================
 # Lint
 # =============================================================================
 
 .PHONY: fg-lint
-fg-lint:
+fg-lint: fmt-check
 	@$(PY) -m py_compile api/middleware/auth_gate.py
-	@$(PY) -m ruff check api tests
-	@$(PY) -m ruff format --check api tests
 
 # =============================================================================
 # Fast lane
@@ -329,8 +352,6 @@ ci-evidence: venv itest-down itest-up
 .PHONY: ci-pt
 ci-pt: venv
 	@$(PYTEST_ENV) $(PY) -m pytest -q tests/test_security_hardening.py tests/test_security_middleware.py
-
-# =============================================================================
 
 # =============================================================================
 # Core Invariant Tests (INV-001 through INV-007)

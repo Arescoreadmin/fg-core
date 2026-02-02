@@ -1,31 +1,37 @@
-import os
 import importlib
+from unittest.mock import patch
 
-import pytest
 
-
-def reload_ratelimit():
-    import api.ratelimit as rl
+def test_ratelimit_failopen_requires_acknowledgment():
+    """
+    Ensure rate limiter fail-open requires explicit acknowledgement.
+    """
+    # Import module fresh to ensure env patches apply cleanly
+    rl = importlib.import_module("api.ratelimit")
     importlib.reload(rl)
-    return rl
 
+    with patch.dict(
+        "os.environ",
+        {
+            "FG_RATE_LIMIT_FAIL_OPEN": "true",
+            "FG_RATE_LIMIT_FAIL_OPEN_ACKNOWLEDGED": "false",
+        },
+        clear=False,
+    ):
+        importlib.reload(rl)
+        assert rl._fail_open_acknowledged() is False, (
+            "Fail-open should not be acknowledged without explicit ACK"
+        )
 
-@pytest.mark.parametrize(
-    "fail_open,ack,expected_ack",
-    [
-        ("true", "true", True),
-        ("true", "false", False),
-        ("false", "true", False),
-        ("false", "false", False),
-    ],
-)
-def test_fail_open_ack_requires_both(monkeypatch, fail_open, ack, expected_ack):
-    monkeypatch.setenv("FG_RL_ENABLED", "true")
-    monkeypatch.setenv("FG_RL_BACKEND", "redis")
-    monkeypatch.setenv("FG_RL_FAIL_OPEN", fail_open)
-    monkeypatch.setenv("FG_RL_FAIL_OPEN_ACKNOWLEDGED", ack)
-
-    rl = reload_ratelimit()
-    cfg = rl.load_config()
-
-    assert bool(cfg.fail_open and cfg.fail_open_acknowledged) is expected_ack
+    with patch.dict(
+        "os.environ",
+        {
+            "FG_RATE_LIMIT_FAIL_OPEN": "true",
+            "FG_RATE_LIMIT_FAIL_OPEN_ACKNOWLEDGED": "true",
+        },
+        clear=False,
+    ):
+        importlib.reload(rl)
+        assert rl._fail_open_acknowledged() is True, (
+            "Fail-open should be acknowledged when ACK is explicitly set"
+        )

@@ -55,7 +55,9 @@ class MemoryRateLimiter:
         max_idle = (capacity * 2) / rate if rate > 0 else 3600
 
         with self._lock:
-            expired = [k for k, v in self._buckets.items() if now - v.last_ts > max_idle]
+            expired = [
+                k for k, v in self._buckets.items() if now - v.last_ts > max_idle
+            ]
             for k in expired:
                 del self._buckets[k]
             self._last_cleanup = now
@@ -107,7 +109,7 @@ def _get_memory_limiter() -> MemoryRateLimiter:
 
 
 # -----------------------------
-# Config
+# Config helpers
 # -----------------------------
 
 
@@ -115,7 +117,7 @@ def _env_bool(name: str, default: bool) -> bool:
     v = os.getenv(name)
     if v is None:
         return default
-    return v.strip().lower() in ("1", "true", "yes", "on")
+    return v.strip().lower() in ("1", "true", "yes", "y", "on")
 
 
 def _env_int(name: str, default: int) -> int:
@@ -137,6 +139,42 @@ def _env_csv(name: str, default: str = "") -> set[str]:
     if not v:
         return set()
     return {s.strip() for s in v.split(",") if s.strip()}
+
+
+def _env_bool_any(names: tuple[str, ...], default: bool) -> bool:
+    """
+    Read the first env var that exists from `names`, else `default`.
+    Supports legacy env-var names used by older tests/CI.
+    """
+    for n in names:
+        if os.getenv(n) is not None:
+            return _env_bool(n, default)
+    return default
+
+
+def fail_open_acknowledged() -> bool:
+    """
+    Stable helper for invariants/tests.
+
+    True only if fail-open is explicitly enabled AND explicitly acknowledged.
+
+    Supports both env var name schemes:
+      - Legacy tests: FG_RATE_LIMIT_FAIL_OPEN / FG_RATE_LIMIT_FAIL_OPEN_ACKNOWLEDGED
+      - Current:      FG_RL_FAIL_OPEN / FG_RL_FAIL_OPEN_ACKNOWLEDGED
+    """
+    fail_open = _env_bool_any(("FG_RATE_LIMIT_FAIL_OPEN", "FG_RL_FAIL_OPEN"), False)
+    ack = _env_bool_any(
+        ("FG_RATE_LIMIT_FAIL_OPEN_ACKNOWLEDGED", "FG_RL_FAIL_OPEN_ACKNOWLEDGED"), False
+    )
+    return bool(fail_open and ack)
+
+
+def _fail_open_acknowledged() -> bool:
+    """
+    Legacy/private alias kept for backward-compatibility with tests.
+    Do not use in new code.
+    """
+    return fail_open_acknowledged()
 
 
 @dataclass(frozen=True)
@@ -174,8 +212,11 @@ def load_config() -> RLConfig:
     prefix = os.getenv("FG_RL_PREFIX", "fg:rl").strip()
 
     # Default to fail-closed unless explicitly enabled + acknowledged.
-    fail_open = _env_bool("FG_RL_FAIL_OPEN", False)
-    fail_open_acknowledged = _env_bool("FG_RL_FAIL_OPEN_ACKNOWLEDGED", False)
+    # Support legacy env var names used by tests.
+    fail_open = _env_bool_any(("FG_RATE_LIMIT_FAIL_OPEN", "FG_RL_FAIL_OPEN"), False)
+    fail_open_acknowledged = _env_bool_any(
+        ("FG_RATE_LIMIT_FAIL_OPEN_ACKNOWLEDGED", "FG_RL_FAIL_OPEN_ACKNOWLEDGED"), False
+    )
 
     if backend not in ("redis", "memory"):
         backend = "memory"
@@ -222,7 +263,12 @@ def _extract_client_ip(request: Request) -> str:
     4. True-Client-IP (Akamai/Cloudflare)
     5. request.client.host
     """
-    for header in ("x-forwarded-for", "x-real-ip", "cf-connecting-ip", "true-client-ip"):
+    for header in (
+        "x-forwarded-for",
+        "x-real-ip",
+        "cf-connecting-ip",
+        "true-client-ip",
+    ):
         value = request.headers.get(header)
         if value:
             ip = value.split(",")[0].strip()
@@ -397,7 +443,7 @@ async def rate_limit_guard(
         log.warning("Rate limiter error: %s", e)
 
         # INV-003: fail-open is honored ONLY if explicitly acknowledged.
-        if cfg.fail_open and cfg.fail_open_acknowledged:
+        if _fail_open_acknowledged():
             log.error(
                 "SECURITY: Rate limiter fail-open triggered (ACKNOWLEDGED) - allowing request. "
                 "Error: %s, Key: %s",
@@ -406,10 +452,12 @@ async def rate_limit_guard(
             )
             return
 
+        # If fail-open requested but not acknowledged, be explicit in logs.
         if cfg.fail_open and not cfg.fail_open_acknowledged:
             log.critical(
                 "SECURITY: Rate limiter fail-open requested but NOT ACKNOWLEDGED - FAILING CLOSED. "
-                "To allow fail-open, set FG_RL_FAIL_OPEN_ACKNOWLEDGED=true. Error: %s, Key: %s",
+                "To allow fail-open, set FG_RL_FAIL_OPEN_ACKNOWLEDGED=true (or legacy FG_RATE_LIMIT_FAIL_OPEN_ACKNOWLEDGED=true). "
+                "Error: %s, Key: %s",
                 e,
                 key,
             )

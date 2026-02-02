@@ -337,7 +337,9 @@ class TestINV005_GovernanceControls:
                 if "verify_api_key" in func_name:
                     has_verify_api_key = True
 
-        assert has_verify_api_key, "Governance router must have verify_api_key dependency"
+        assert has_verify_api_key, (
+            "Governance router must have verify_api_key dependency"
+        )
 
     def test_governance_router_has_scope_check(self):
         """

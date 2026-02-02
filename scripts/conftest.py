@@ -6,10 +6,9 @@ import pytest
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 
 if "pytest" in sys.modules:
-    os.environ.setdefault(
-        "FG_API_KEY", "ci-test-key-00000000000000000000000000000000"
-    )
+    os.environ.setdefault("FG_API_KEY", "ci-test-key-00000000000000000000000000000000")
     os.environ.setdefault("FG_ENV", "test")
+
 
 def _env(name: str, default: str | None = None) -> str | None:
     v = os.getenv(name)
@@ -17,9 +16,11 @@ def _env(name: str, default: str | None = None) -> str | None:
         return default
     return v.strip()
 
+
 @pytest.fixture(scope="session")
 def base_url() -> str:
     return _env("BASE_URL", DEFAULT_BASE_URL)  # type: ignore[return-value]
+
 
 @pytest.fixture(scope="session")
 def api_key() -> str:
@@ -29,13 +30,17 @@ def api_key() -> str:
         raise RuntimeError("FG_API_KEY is required for script-based tests.")
     return v
 
+
 @pytest.fixture(scope="session")
 def sqlite_path() -> str:
     p = _env("FG_SQLITE_PATH")
     if not p:
         # don’t guess silently; tests should be deterministic
-        raise RuntimeError("FG_SQLITE_PATH is required for tests (path to frostgate.db)")
+        raise RuntimeError(
+            "FG_SQLITE_PATH is required for tests (path to frostgate.db)"
+        )
     return p
+
 
 @pytest.fixture()
 def clear_decisions(sqlite_path: str):

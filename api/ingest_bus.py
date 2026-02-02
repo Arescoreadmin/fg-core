@@ -60,7 +60,9 @@ class IngestMessage:
     payload: dict[str, Any]
     version: str = MESSAGE_SCHEMA_VERSION
     message_id: str = field(default_factory=lambda: str(uuid4()))
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_json(self) -> str:
@@ -211,7 +213,9 @@ class IngestConsumer:
         self._subscriptions.clear()
         await self._conn.close()
 
-    async def subscribe(self, tenant_id: str, handler: MessageHandler, event_type: str = "*") -> None:
+    async def subscribe(
+        self, tenant_id: str, handler: MessageHandler, event_type: str = "*"
+    ) -> None:
         safe_tenant = tenant_id.replace(".", "_")
         safe_event = event_type.replace(".", "_") if event_type != "*" else "*"
         subject = f"{NATS_SUBJECT_PREFIX}.{safe_tenant}.{safe_event}"
@@ -223,7 +227,9 @@ class IngestConsumer:
             except Exception as e:
                 log.exception(f"Error processing message on {msg.subject}: {e}")
 
-        sub = await self._conn.client.subscribe(subject, queue=self._queue_group, cb=msg_handler)
+        sub = await self._conn.client.subscribe(
+            subject, queue=self._queue_group, cb=msg_handler
+        )
         self._subscriptions.append(sub)
         log.info(f"Subscribed to {subject} (queue: {self._queue_group})")
 
@@ -237,7 +243,9 @@ class IngestConsumer:
             except Exception as e:
                 log.exception(f"Error processing message on {msg.subject}: {e}")
 
-        sub = await self._conn.client.subscribe(subject, queue=self._queue_group, cb=msg_handler)
+        sub = await self._conn.client.subscribe(
+            subject, queue=self._queue_group, cb=msg_handler
+        )
         self._subscriptions.append(sub)
         log.info(f"Subscribed to {subject} (all tenants, queue: {self._queue_group})")
 
@@ -269,10 +277,15 @@ def _apply_doctrine(
     disruption_limited = False
 
     # If SECRET + guardian, clamp disruptive actions (basic “limits exist” behavior)
-    if str(persona or "").lower() == "guardian" and str(classification or "").upper() == "SECRET":
+    if (
+        str(persona or "").lower() == "guardian"
+        and str(classification or "").upper() == "SECRET"
+    ):
         # If any mitigation looks disruptive, mark limited (best-effort)
         for m in mitigations:
-            action = getattr(m, "action", None) or (m.get("action") if isinstance(m, dict) else None)
+            action = getattr(m, "action", None) or (
+                m.get("action") if isinstance(m, dict) else None
+            )
             if action and str(action).lower() in {"block", "drop", "kill", "terminate"}:
                 disruption_limited = True
                 break
@@ -291,7 +304,9 @@ class IngestProcessor:
         """
         Process an ingest message through the decision engine.
         """
-        from engine.evaluate import evaluate  # temporary until renamed to evaluate_telemetry
+        from engine.evaluate import (
+            evaluate,
+        )  # temporary until renamed to evaluate_telemetry
         from api.schemas import TelemetryInput
 
         def _jsonable_mit(m: Any) -> dict[str, Any]:
@@ -305,15 +320,31 @@ class IngestProcessor:
                 }
             if hasattr(m, "model_dump"):
                 d = m.model_dump()
-                return {"action": d.get("action", "unknown"), "target": d.get("target"), "reason": d.get("reason")}
+                return {
+                    "action": d.get("action", "unknown"),
+                    "target": d.get("target"),
+                    "reason": d.get("reason"),
+                }
             if hasattr(m, "dict"):
                 d = m.dict()
-                return {"action": d.get("action", "unknown"), "target": d.get("target"), "reason": d.get("reason")}
-            return {"action": getattr(m, "action", "unknown"), "target": getattr(m, "target", None), "reason": getattr(m, "reason", None)}
+                return {
+                    "action": d.get("action", "unknown"),
+                    "target": d.get("target"),
+                    "reason": d.get("reason"),
+                }
+            return {
+                "action": getattr(m, "action", "unknown"),
+                "target": getattr(m, "target", None),
+                "reason": getattr(m, "reason", None),
+            }
 
         def _mit_obj(m: Any) -> Any:
             if isinstance(m, dict):
-                return SimpleNamespace(action=m.get("action", "unknown"), target=m.get("target"), reason=m.get("reason"))
+                return SimpleNamespace(
+                    action=m.get("action", "unknown"),
+                    target=m.get("target"),
+                    reason=m.get("reason"),
+                )
             return m
 
         def _looks_empty(dec: dict[str, Any]) -> bool:
@@ -369,7 +400,11 @@ class IngestProcessor:
                         "threat_level": "high",
                         "rules_triggered": ["rule:ssh_bruteforce"],
                         "mitigations": [
-                            {"action": "alert", "target": payload.get("src_ip"), "reason": "failed_auths>=5"}
+                            {
+                                "action": "alert",
+                                "target": payload.get("src_ip"),
+                                "reason": "failed_auths>=5",
+                            }
                         ],
                         "anomaly_score": 0.0,
                         "score": 80,
@@ -409,7 +444,11 @@ class IngestProcessor:
                 event_type=message.event_type,
                 payload=message.payload,
             )
-            telemetry_payload = telemetry.model_dump() if hasattr(telemetry, "model_dump") else telemetry.dict()  # type: ignore[attr-defined]
+            telemetry_payload = (
+                telemetry.model_dump()
+                if hasattr(telemetry, "model_dump")
+                else telemetry.dict()
+            )  # type: ignore[attr-defined]
 
             decision = evaluate(telemetry_payload)
             if not isinstance(decision, dict):
@@ -417,7 +456,9 @@ class IngestProcessor:
 
             # Some engines expect payload-only; try a second shape
             if _looks_empty(decision):
-                decision2 = evaluate({"event_type": message.event_type, **(message.payload or {})})
+                decision2 = evaluate(
+                    {"event_type": message.event_type, **(message.payload or {})}
+                )
                 if isinstance(decision2, dict) and not _looks_empty(decision2):
                     decision = decision2
 
@@ -426,7 +467,9 @@ class IngestProcessor:
                 decision = _heuristic_fallback()
 
             threat_level = decision.get("threat_level", "unknown")
-            rules_triggered = decision.get("rules_triggered") or decision.get("rules") or []
+            rules_triggered = (
+                decision.get("rules_triggered") or decision.get("rules") or []
+            )
             mitigations_raw = decision.get("mitigations") or []
             anomaly_score = float(decision.get("anomaly_score") or 0.0)
             score = int(decision.get("score") or 0)
@@ -435,19 +478,37 @@ class IngestProcessor:
             persona = message.metadata.get("persona")
             classification = message.metadata.get("classification")
 
-            roe_applied = bool(tie_d.get("roe_applied")) if isinstance(tie_d, dict) else bool(getattr(tie_d, "roe_applied", False))
-            disruption_limited = bool(tie_d.get("disruption_limited")) if isinstance(tie_d, dict) else bool(getattr(tie_d, "disruption_limited", False))
+            roe_applied = (
+                bool(tie_d.get("roe_applied"))
+                if isinstance(tie_d, dict)
+                else bool(getattr(tie_d, "roe_applied", False))
+            )
+            disruption_limited = (
+                bool(tie_d.get("disruption_limited"))
+                if isinstance(tie_d, dict)
+                else bool(getattr(tie_d, "disruption_limited", False))
+            )
 
             mit_objs = [_mit_obj(m) for m in mitigations_raw]
 
             # Doctrine application (required by tests)
             if persona or classification:
-                mit_after, tie_after = _apply_doctrine(persona, classification, mit_objs)
+                mit_after, tie_after = _apply_doctrine(
+                    persona, classification, mit_objs
+                )
                 mit_objs = list(mit_after or [])
                 tie_d = tie_after
 
-                roe_applied = bool(tie_after.get("roe_applied")) if isinstance(tie_after, dict) else bool(getattr(tie_after, "roe_applied", False))
-                disruption_limited = bool(tie_after.get("disruption_limited")) if isinstance(tie_after, dict) else bool(getattr(tie_after, "disruption_limited", False))
+                roe_applied = (
+                    bool(tie_after.get("roe_applied"))
+                    if isinstance(tie_after, dict)
+                    else bool(getattr(tie_after, "roe_applied", False))
+                )
+                disruption_limited = (
+                    bool(tie_after.get("disruption_limited"))
+                    if isinstance(tie_after, dict)
+                    else bool(getattr(tie_after, "disruption_limited", False))
+                )
 
             # Canonicalize rule IDs for output stability
             rules_triggered = _normalize_rules(rules_triggered)
@@ -461,7 +522,9 @@ class IngestProcessor:
                 "mitigations": [_jsonable_mit(m) for m in mit_objs],
                 "anomaly_score": anomaly_score,
                 "score": score,
-                "tie_d": tie_d if isinstance(tie_d, dict) else getattr(tie_d, "__dict__", {}),
+                "tie_d": tie_d
+                if isinstance(tie_d, dict)
+                else getattr(tie_d, "__dict__", {}),
                 "roe_applied": roe_applied,
                 "disruption_limited": disruption_limited,
                 "processed_at": datetime.now(timezone.utc).isoformat(),

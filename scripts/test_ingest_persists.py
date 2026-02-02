@@ -4,20 +4,21 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
-from sqlalchemy.orm import Session
 
 from api.main import app
-from api.db import get_db
+
+scopes = os.getenv("FG_TEST_SCOPES", "defend,feed").strip()
+
 
 @pytest.fixture()
 def client():
     return TestClient(app)
+
+
 def _create_api_key(db):
     """
     Create an API key row compatible with current ApiKey ORM/table schema.
     """
-    import uuid
     from api.db_models import ApiKey, hash_api_key
 
     raw = f"TEST_{uuid.uuid4().hex}"
@@ -40,7 +41,6 @@ def _create_api_key(db):
     db.commit()
     return raw
 
-
     raw = "TEST_" + uuid.uuid4().hex
     hashed = hash_api_key(raw)
 
@@ -53,4 +53,3 @@ def _create_api_key(db):
     db.add(obj)
     db.commit()
     return raw
-

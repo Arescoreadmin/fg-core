@@ -1,8 +1,7 @@
 # agent/app/core_client.py
 from __future__ import annotations
 
-import os
-from typing import Any, Dict, Tuple, Optional
+from typing import Any, Dict, Tuple
 
 import requests
 

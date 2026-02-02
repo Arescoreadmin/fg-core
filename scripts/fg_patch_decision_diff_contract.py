@@ -4,7 +4,10 @@ import re
 p = Path("api/decision_diff.py")
 s = p.read_text()
 
-m = re.search(r"(?ms)^def\s+compute_decision_diff\([^\)]*\)\s*->\s*Optional\[Dict\[str,\s*Any\]\]\s*:\s*\n(.*?)(?=^\S)", s)
+m = re.search(
+    r"(?ms)^def\s+compute_decision_diff\([^\)]*\)\s*->\s*Optional\[Dict\[str,\s*Any\]\]\s*:\s*\n(.*?)(?=^\S)",
+    s,
+)
 if not m:
     raise SystemExit("❌ compute_decision_diff() not found in api/decision_diff.py")
 
@@ -49,7 +52,7 @@ new_func = """def compute_decision_diff(prev: Optional[Dict[str, Any]], curr: Di
 """
 
 # Replace the whole function definition block
-s2 = s[:m.start()] + new_func + "\n\n" + s[m.end():]
+s2 = s[: m.start()] + new_func + "\n\n" + s[m.end() :]
 p.write_text(s2)
 
 print("✅ Patched compute_decision_diff() contract + change detection")

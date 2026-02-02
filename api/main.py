@@ -494,7 +494,9 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                     failures.append(f"redis: {type(e).__name__}: {e}")
 
         # 3) NATS check (when enabled)
-        nats_enabled = (os.getenv("FG_NATS_ENABLED", "false") or "false").strip().lower()
+        nats_enabled = (
+            (os.getenv("FG_NATS_ENABLED", "false") or "false").strip().lower()
+        )
         if nats_enabled in ("1", "true", "yes"):
             if checker is None:
                 deps_status["nats"] = "error"

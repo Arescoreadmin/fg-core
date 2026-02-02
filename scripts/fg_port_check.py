@@ -1,4 +1,7 @@
-import socket, sys, subprocess, shutil
+import socket
+import sys
+import subprocess
+import shutil
 
 host = sys.argv[1]
 port = int(sys.argv[2])
