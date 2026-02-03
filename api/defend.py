@@ -513,17 +513,25 @@ def legacy_evaluate(req: Any):
     elif isinstance(req, dict):
         payload = req
     else:
-        payload = {"payload": req}
+        payload = {}
+    req_payload = payload.get("payload")
+    if req_payload is None and hasattr(req, "payload"):
+        req_payload = getattr(req, "payload")
+    if not isinstance(req_payload, dict):
+        req_payload = {}
     inp = PipelineInput(
-        tenant_id=payload.get("tenant_id") or "unknown",
-        source=payload.get("source") or "unknown",
-        event_type=payload.get("event_type") or "unknown",
-        payload=payload.get("payload") or {},
-        timestamp=payload.get("timestamp"),
-        persona=payload.get("persona"),
-        classification=payload.get("classification"),
-        event_id=payload.get("event_id"),
-        meta=payload.get("meta"),
+        tenant_id=payload.get("tenant_id") or getattr(req, "tenant_id", None) or "unknown",
+        source=payload.get("source") or getattr(req, "source", None) or "unknown",
+        event_type=payload.get("event_type")
+        or getattr(req, "event_type", None)
+        or "unknown",
+        payload=req_payload,
+        timestamp=payload.get("timestamp") or getattr(req, "timestamp", None),
+        persona=payload.get("persona") or getattr(req, "persona", None),
+        classification=payload.get("classification")
+        or getattr(req, "classification", None),
+        event_id=payload.get("event_id") or getattr(req, "event_id", None),
+        meta=payload.get("meta") or getattr(req, "meta", None),
     )
     result = pipeline_evaluate(inp)
     return (

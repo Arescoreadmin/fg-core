@@ -299,12 +299,12 @@ def _evaluate_rules(inp: PipelineInput) -> tuple:
         anomaly_score = 0.8
 
     # Rule: High threshold bruteforce (implicit from count)
-    elif failed_auths >= 10:
+    elif failed_auths >= 10 and src_ip:
         rules_triggered.append("rule:ssh_bruteforce")
         mitigations.append(
             Mitigation(
                 action="block_ip",
-                target=src_ip or "unknown",
+                target=src_ip,
                 reason=f"{failed_auths} failed auth attempts detected (implicit)",
                 confidence=0.85,
             )
