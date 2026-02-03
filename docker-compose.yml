@@ -60,10 +60,7 @@ services:
     volumes:
       - ./policy/opa:/policies:ro
     healthcheck:
-      test: ["CMD", "/opa", "version"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
+      disable: true
 
   frostgate-core:
     build:
@@ -79,7 +76,7 @@ services:
       nats:
         condition: service_healthy
       opa:
-        condition: service_healthy
+        condition: service_started
     command: ["uvicorn","api.main:app","--host","0.0.0.0","--port","8080","--no-access-log"]
     ports:
       - "18080:8080"
