@@ -13,12 +13,14 @@ def _setenv(key: str, val: str) -> None:
 
 def pytest_configure() -> None:
     os.environ.setdefault("FG_API_KEY", "ci-test-key-00000000000000000000000000000000")
+    os.environ.setdefault("FG_KEY_PEPPER", "ci-test-pepper")
     os.environ.setdefault("FG_ENV", "test")
 
 
 @pytest.fixture(scope="session", autouse=True)
 def _test_env_defaults() -> None:
     os.environ.setdefault("FG_API_KEY", "ci-test-key-00000000000000000000000000000000")
+    os.environ.setdefault("FG_KEY_PEPPER", "ci-test-pepper")
     os.environ.setdefault("FG_ENV", "test")
 
 
@@ -47,6 +49,7 @@ def _session_env(tmp_path_factory: pytest.TempPathFactory):
     _setenv("FG_ENV", "test")
     _setenv("FG_SQLITE_PATH", db_path)
     _setenv("FG_API_KEY", _require_api_key())
+    _setenv("FG_KEY_PEPPER", "ci-test-pepper")
     _setenv("FG_UI_TOKEN_GET_ENABLED", "1")
 
     # Critical: make sure schema exists in this session DB
@@ -76,6 +79,7 @@ def build_app(tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch)
         monkeypatch.setenv("FG_ENV", "test")
         monkeypatch.setenv("FG_AUTH_ENABLED", "1" if auth_enabled else "0")
         monkeypatch.setenv("FG_API_KEY", api_key_value)
+        monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
         monkeypatch.setenv("FG_DEV_EVENTS_ENABLED", "1" if dev_events_enabled else "0")
         monkeypatch.setenv(
             "FG_UI_TOKEN_GET_ENABLED", "1" if ui_token_get_enabled else "0"

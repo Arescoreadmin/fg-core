@@ -23,7 +23,6 @@ from api.auth_scopes import (
     mint_key,
     revoke_api_key,
     list_api_keys,
-    verify_api_key,
     require_scopes,
     _validate_tenant_id,
     DEFAULT_TTL_SECONDS,
@@ -36,7 +35,6 @@ router = APIRouter(
     prefix="/keys",
     tags=["keys"],
     dependencies=[
-        Depends(verify_api_key),
         Depends(require_scopes("keys:admin")),
     ],
 )
@@ -353,7 +351,12 @@ def rotate_key(
     import sqlite3
     import os
     from api.db import _resolve_sqlite_path
-    from api.auth_scopes import _sha256_hex, _parse_scopes_csv
+    from api.auth_scopes import (
+        _get_key_pepper,
+        _key_lookup_hash,
+        _parse_scopes_csv,
+        _sha256_hex,
+    )
 
     current_key = req.current_key.strip()
     if not current_key:
@@ -371,7 +374,10 @@ def rotate_key(
 
     old_prefix = parts[0]
     secret_val = parts[-1]
-    old_key_hash = _sha256_hex(secret_val)
+    try:
+        old_key_lookup = _key_lookup_hash(secret_val, _get_key_pepper())
+    except Exception:
+        old_key_lookup = None
 
     try:
         bound_tenant = bind_tenant_id(
@@ -381,15 +387,24 @@ def rotate_key(
         )
         con = sqlite3.connect(sqlite_path)
         try:
-            row = con.execute(
-                "SELECT id, scopes_csv, enabled, tenant_id FROM api_keys WHERE prefix=? AND key_hash=? LIMIT 1",
-                (old_prefix, old_key_hash),
-            ).fetchone()
+            cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
+            col_names = {r[1] for r in cols}
+            if "key_lookup" in col_names and old_key_lookup:
+                row = con.execute(
+                    "SELECT id, scopes_csv, enabled, tenant_id, key_hash FROM api_keys WHERE prefix=? AND key_lookup=? LIMIT 1",
+                    (old_prefix, old_key_lookup),
+                ).fetchone()
+            else:
+                old_key_hash = _sha256_hex(secret_val)
+                row = con.execute(
+                    "SELECT id, scopes_csv, enabled, tenant_id, key_hash FROM api_keys WHERE prefix=? AND key_hash=? LIMIT 1",
+                    (old_prefix, old_key_hash),
+                ).fetchone()
 
             if not row:
                 raise HTTPException(status_code=404, detail="Key not found")
 
-            key_id, scopes_csv, enabled, db_tenant_id = row
+            key_id, scopes_csv, enabled, db_tenant_id, old_key_hash = row
 
             if not enabled:
                 raise HTTPException(status_code=400, detail="Key is already disabled")
@@ -412,11 +427,15 @@ def rotate_key(
 
             # Link the new key to the old key for audit trail
             new_secret = new_parts[-1]
-            new_key_hash = _sha256_hex(new_secret)
-            con.execute(
-                "UPDATE api_keys SET rotated_from=? WHERE key_hash=?",
-                (old_key_hash, new_key_hash),
-            )
+            try:
+                new_key_lookup = _key_lookup_hash(new_secret, _get_key_pepper())
+            except Exception:
+                new_key_lookup = None
+            if new_key_lookup and "key_lookup" in col_names:
+                con.execute(
+                    "UPDATE api_keys SET rotated_from=? WHERE key_lookup=?",
+                    (old_key_hash, new_key_lookup),
+                )
 
             # Revoke old key if requested
             old_key_revoked = False

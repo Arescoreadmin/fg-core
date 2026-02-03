@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import bind_tenant_id, require_api_key_always
+from api.auth_scopes import bind_tenant_id, require_scopes
 from api.db import get_db
 from api.db_models import DecisionRecord
 
@@ -359,7 +359,7 @@ class StatsSummaryResponse(BaseModel):
 router = APIRouter(
     prefix="/stats",
     tags=["stats"],
-    dependencies=[Depends(require_api_key_always)],
+    dependencies=[Depends(require_scopes("stats:read"))],
 )
 
 

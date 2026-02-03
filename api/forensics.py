@@ -6,11 +6,13 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from api.auth_scopes import require_scopes
 from api.db import get_db
 from api.db_models import DecisionRecord
+from api.evidence_chain import verify_chain_for_tenant
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -48,7 +50,10 @@ def _maybe_load_json(value: Any) -> Any:
 router = APIRouter(prefix="/forensics", tags=["forensics"])
 
 
-@router.get("/snapshot/{event_id}")
+@router.get(
+    "/snapshot/{event_id}",
+    dependencies=[Depends(require_scopes("forensics:read"))],
+)
 async def snapshot(event_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     record = (
         db.query(DecisionRecord).filter(DecisionRecord.event_id == event_id).first()
@@ -77,7 +82,10 @@ async def snapshot(event_id: str, db: Session = Depends(get_db)) -> dict[str, An
     }
 
 
-@router.get("/audit_trail/{event_id}")
+@router.get(
+    "/audit_trail/{event_id}",
+    dependencies=[Depends(require_scopes("forensics:read"))],
+)
 async def audit_trail(event_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     record = (
         db.query(DecisionRecord).filter(DecisionRecord.event_id == event_id).first()
@@ -102,6 +110,18 @@ async def audit_trail(event_id: str, db: Session = Depends(get_db)) -> dict[str,
         "chain_hash": chain_hash,
         "prev_hash": prev_hash,
     }
+
+
+@router.get(
+    "/chain/verify",
+    dependencies=[Depends(require_scopes("forensics:verify"))],
+)
+async def verify_chain(
+    tenant_id: str = Query(..., min_length=1, max_length=128),
+    limit: int | None = Query(None, ge=1, le=10000),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    return verify_chain_for_tenant(db, tenant_id=tenant_id, limit=limit)
 
 
 def forensics_enabled() -> bool:
