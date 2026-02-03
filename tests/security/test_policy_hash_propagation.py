@@ -12,9 +12,11 @@ from api.db import get_engine
 from api.db_models import DecisionRecord
 from api.ingest import router as ingest_router
 from engine.pipeline import PipelineInput, evaluate as pipeline_evaluate
+from engine.policy_fingerprint import get_active_policy_fingerprint
 
 
 def test_pipeline_policy_hash_propagates():
+    expected = get_active_policy_fingerprint().policy_hash
     inp = PipelineInput(
         tenant_id="tenant-1",
         source="unit-test",
@@ -24,11 +26,14 @@ def test_pipeline_policy_hash_propagates():
     result = pipeline_evaluate(inp)
 
     assert re.fullmatch(r"[0-9a-f]{64}", result.policy_hash)
+    assert result.policy_hash == expected
     result_dict = result.to_dict()
     assert re.fullmatch(r"[0-9a-f]{64}", result_dict["policy_hash"])
+    assert result_dict["policy_hash"] == expected
 
 
 def test_defend_response_includes_policy_hash(build_app, monkeypatch):
+    expected = get_active_policy_fingerprint().policy_hash
     monkeypatch.setenv("FG_RL_ENABLED", "0")
     app = build_app()
     client = TestClient(app)
@@ -51,9 +56,11 @@ def test_defend_response_includes_policy_hash(build_app, monkeypatch):
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert re.fullmatch(r"[0-9a-f]{64}", body.get("policy_hash", ""))
+    assert body["policy_hash"] == expected
 
 
 def test_ingest_persists_policy_hash(build_app):
+    expected = get_active_policy_fingerprint().policy_hash
     app = build_app()
     app.include_router(ingest_router)
     client = TestClient(app)
@@ -87,5 +94,6 @@ def test_ingest_persists_policy_hash(build_app):
         assert record is not None
         assert record.policy_hash is not None
         assert re.fullmatch(r"[0-9a-f]{64}", record.policy_hash)
+        assert record.policy_hash == expected
     finally:
         session.close()
