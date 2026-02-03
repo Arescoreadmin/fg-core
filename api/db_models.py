@@ -11,6 +11,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     Integer,
+    event,
     func,
 )
 from sqlalchemy.orm import declarative_base
@@ -151,6 +152,33 @@ class DecisionRecord(Base):
     chain_hash = Column(String(64), nullable=True)
     chain_alg = Column(String(64), nullable=True)
     chain_ts = Column(DateTime(timezone=True), nullable=True)
+
+
+class DecisionEvidenceArtifact(Base):
+    __tablename__ = "decision_evidence_artifacts"
+
+    id = Column(Integer, primary_key=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+    tenant_id = Column(String, nullable=True, index=True)
+    decision_id = Column(Integer, nullable=False, index=True)
+    evidence_sha256 = Column(String(64), nullable=False)
+    storage_path = Column(Text, nullable=False)
+    payload_json = Column(JSON, nullable=False)
+
+
+def _raise_immutable(mapper, connection, target) -> None:
+    raise ValueError(f"{target.__class__.__name__} rows are append-only")
+
+
+event.listen(DecisionRecord, "before_update", _raise_immutable)
+event.listen(DecisionRecord, "before_delete", _raise_immutable)
+event.listen(DecisionEvidenceArtifact, "before_update", _raise_immutable)
+event.listen(DecisionEvidenceArtifact, "before_delete", _raise_immutable)
 
 
 class PolicyChangeRequest(Base):

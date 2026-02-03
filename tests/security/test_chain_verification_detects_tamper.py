@@ -76,15 +76,13 @@ def test_chain_verification_detects_tamper(tmp_path):
         event_id=rec2.event_id,
     )
     rec2.prev_hash = chain2["prev_hash"]
-    rec2.chain_hash = chain2["chain_hash"]
+    rec2.chain_hash = f"tampered-{chain2['chain_hash']}"
     rec2.chain_alg = chain2["chain_alg"]
     rec2.chain_ts = chain2["chain_ts"]
     db.add(rec2)
     db.commit()
 
-    rec1.threat_level = "critical"
-    db.commit()
-
     result = verify_chain_for_tenant(db, tenant_id="tenant-a")
     assert result["ok"] is False
-    assert result["first_bad_id"] == rec1.id
+    # rec2 was inserted with a tampered chain_hash, so it should be the first failure.
+    assert result["first_bad_id"] == rec2.id

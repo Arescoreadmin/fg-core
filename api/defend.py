@@ -17,6 +17,7 @@ from api.auth_scopes import bind_tenant_id, require_scopes
 from api.db import get_db
 from api.db_models import DecisionRecord
 from api.evidence_chain import chain_fields_for_decision
+from api.evidence_artifacts import emit_decision_evidence
 from api.decision_diff import (
     compute_decision_diff,
     snapshot_from_current,
@@ -362,6 +363,8 @@ def _persist_decision_best_effort(
             record.chain_ts = chain_fields["chain_ts"]
 
         db.add(record)
+        db.flush()
+        emit_decision_evidence(db, record)
         db.commit()
     except IntegrityError:
         db.rollback()

@@ -12,6 +12,7 @@ from api.auth_scopes import bind_tenant_id, require_scopes
 from api.db import get_db
 from api.db_models import DecisionRecord
 from api.evidence_chain import chain_fields_for_decision
+from api.evidence_artifacts import emit_decision_evidence
 
 router = APIRouter(
     prefix="/dev",
@@ -272,6 +273,7 @@ def dev_seed(
 
         db.add(rec)
         db.flush()
+        emit_decision_evidence(db, rec)
         created.append(int(rec.id))
 
     db.commit()
@@ -351,6 +353,7 @@ def dev_emit(
             rec.chain_ts = chain_fields["chain_ts"]
         db.add(rec)
         db.flush()
+        emit_decision_evidence(db, rec)
         created_ids.append(int(rec.id))
 
     db.commit()
