@@ -20,7 +20,6 @@ import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from types import SimpleNamespace
 from typing import Any, Callable, Optional
 from uuid import uuid4
 
@@ -250,50 +249,6 @@ class IngestConsumer:
         log.info(f"Subscribed to {subject} (all tenants, queue: {self._queue_group})")
 
 
-def _apply_doctrine(
-    persona: Optional[str], classification: Optional[str], mitigations: list[Any]
-) -> tuple[list[Any], Any]:
-    """
-    Apply doctrine/ROE to mitigations. If engine.doctrine exists, use it.
-    Otherwise, fall back to minimal local doctrine that satisfies invariants/tests.
-    """
-    # Prefer engine-provided doctrine if present.
-    try:
-        from engine.doctrine import apply_doctrine as fn  # type: ignore
-
-        return fn(persona, classification, mitigations)
-    except Exception:
-        pass
-
-    try:
-        from engine.doctrine import _apply_doctrine as fn  # type: ignore
-
-        return fn(persona, classification, mitigations)
-    except Exception:
-        pass
-
-    # Minimal local doctrine fallback:
-    roe_applied = bool(persona or classification)
-    disruption_limited = False
-
-    # If SECRET + guardian, clamp disruptive actions (basic “limits exist” behavior)
-    if (
-        str(persona or "").lower() == "guardian"
-        and str(classification or "").upper() == "SECRET"
-    ):
-        # If any mitigation looks disruptive, mark limited (best-effort)
-        for m in mitigations:
-            action = getattr(m, "action", None) or (
-                m.get("action") if isinstance(m, dict) else None
-            )
-            if action and str(action).lower() in {"block", "drop", "kill", "terminate"}:
-                disruption_limited = True
-                break
-
-    tie_d = {"roe_applied": roe_applied, "disruption_limited": disruption_limited}
-    return mitigations, tie_d
-
-
 class IngestProcessor:
     def __init__(self, db_session_factory: Optional[Callable] = None):
         self._db_session_factory = db_session_factory
@@ -304,10 +259,7 @@ class IngestProcessor:
         """
         Process an ingest message through the decision engine.
         """
-        from engine.evaluate import (
-            evaluate,
-        )  # temporary until renamed to evaluate_telemetry
-        from api.schemas import TelemetryInput
+        from engine.pipeline import PipelineInput, evaluate as pipeline_evaluate
 
         def _jsonable_mit(m: Any) -> dict[str, Any]:
             if m is None:
@@ -337,20 +289,6 @@ class IngestProcessor:
                 "target": getattr(m, "target", None),
                 "reason": getattr(m, "reason", None),
             }
-
-        def _mit_obj(m: Any) -> Any:
-            if isinstance(m, dict):
-                return SimpleNamespace(
-                    action=m.get("action", "unknown"),
-                    target=m.get("target"),
-                    reason=m.get("reason"),
-                )
-            return m
-
-        def _looks_empty(dec: dict[str, Any]) -> bool:
-            tl = str(dec.get("threat_level", "")).lower()
-            rules = dec.get("rules_triggered") or dec.get("rules") or []
-            return (not rules) and (tl in ("", "low", "none"))
 
         def _normalize_rules(rules: Any) -> list[str]:
             """
@@ -383,132 +321,29 @@ class IngestProcessor:
                     deduped.append(r)
             return deduped
 
-        def _heuristic_fallback() -> dict[str, Any]:
-            """
-            Deterministic fallback to satisfy ingest-bus tests when the engine
-            returns a no-op decision.
-            """
-            et = str(message.event_type or "").lower()
-            payload = message.payload or {}
-
-            # Expected by tests:
-            # - auth with failed_auths >= 5 -> high
-            if et == "auth":
-                failed = int(payload.get("failed_auths") or 0)
-                if failed >= 5:
-                    return {
-                        "threat_level": "high",
-                        "rules_triggered": ["rule:ssh_bruteforce"],
-                        "mitigations": [
-                            {
-                                "action": "alert",
-                                "target": payload.get("src_ip"),
-                                "reason": "failed_auths>=5",
-                            }
-                        ],
-                        "anomaly_score": 0.0,
-                        "score": 80,
-                    }
-                return {
-                    "threat_level": "low",
-                    "rules_triggered": [],
-                    "mitigations": [],
-                    "anomaly_score": 0.0,
-                    "score": 0,
-                }
-
-            # - http_request to /api/health -> none
-            if et == "http_request":
-                path = str(payload.get("path") or "")
-                if path in ("/api/health", "/health", "/health/live", "/health/ready"):
-                    return {
-                        "threat_level": "none",
-                        "rules_triggered": [],
-                        "mitigations": [],
-                        "anomaly_score": 0.0,
-                        "score": 0,
-                    }
-
-            return {
-                "threat_level": "low",
-                "rules_triggered": [],
-                "mitigations": [],
-                "anomaly_score": 0.0,
-                "score": 0,
-            }
-
         try:
-            telemetry = TelemetryInput(
+            pipeline_input = PipelineInput(
                 tenant_id=message.tenant_id,
                 source=message.source,
                 event_type=message.event_type,
                 payload=message.payload,
+                timestamp=message.timestamp,
+                persona=message.metadata.get("persona"),
+                classification=message.metadata.get("classification"),
+                event_id=message.message_id,
+                meta=message.metadata,
             )
-            telemetry_payload = (
-                telemetry.model_dump()
-                if hasattr(telemetry, "model_dump")
-                else telemetry.dict()
-            )  # type: ignore[attr-defined]
+            result = pipeline_evaluate(pipeline_input)
 
-            decision = evaluate(telemetry_payload)
-            if not isinstance(decision, dict):
-                decision = {}
+            threat_level = result.threat_level
+            rules_triggered = result.rules_triggered
+            mitigations_raw = result.mitigations
+            anomaly_score = float(result.anomaly_score or 0.0)
+            score = int(result.score or 0)
+            tie_d = result.tie_d.to_dict()
 
-            # Some engines expect payload-only; try a second shape
-            if _looks_empty(decision):
-                decision2 = evaluate(
-                    {"event_type": message.event_type, **(message.payload or {})}
-                )
-                if isinstance(decision2, dict) and not _looks_empty(decision2):
-                    decision = decision2
-
-            # If still no-op, apply deterministic fallback (tests expect it)
-            if _looks_empty(decision):
-                decision = _heuristic_fallback()
-
-            threat_level = decision.get("threat_level", "unknown")
-            rules_triggered = (
-                decision.get("rules_triggered") or decision.get("rules") or []
-            )
-            mitigations_raw = decision.get("mitigations") or []
-            anomaly_score = float(decision.get("anomaly_score") or 0.0)
-            score = int(decision.get("score") or 0)
-            tie_d = decision.get("tie_d") or {}
-
-            persona = message.metadata.get("persona")
-            classification = message.metadata.get("classification")
-
-            roe_applied = (
-                bool(tie_d.get("roe_applied"))
-                if isinstance(tie_d, dict)
-                else bool(getattr(tie_d, "roe_applied", False))
-            )
-            disruption_limited = (
-                bool(tie_d.get("disruption_limited"))
-                if isinstance(tie_d, dict)
-                else bool(getattr(tie_d, "disruption_limited", False))
-            )
-
-            mit_objs = [_mit_obj(m) for m in mitigations_raw]
-
-            # Doctrine application (required by tests)
-            if persona or classification:
-                mit_after, tie_after = _apply_doctrine(
-                    persona, classification, mit_objs
-                )
-                mit_objs = list(mit_after or [])
-                tie_d = tie_after
-
-                roe_applied = (
-                    bool(tie_after.get("roe_applied"))
-                    if isinstance(tie_after, dict)
-                    else bool(getattr(tie_after, "roe_applied", False))
-                )
-                disruption_limited = (
-                    bool(tie_after.get("disruption_limited"))
-                    if isinstance(tie_after, dict)
-                    else bool(getattr(tie_after, "disruption_limited", False))
-                )
+            roe_applied = bool(tie_d.get("roe_applied"))
+            disruption_limited = bool(tie_d.get("disruption_limited"))
 
             # Canonicalize rule IDs for output stability
             rules_triggered = _normalize_rules(rules_triggered)
@@ -519,12 +354,10 @@ class IngestProcessor:
                 "event_type": message.event_type,
                 "threat_level": threat_level,
                 "rules_triggered": list(rules_triggered or []),
-                "mitigations": [_jsonable_mit(m) for m in mit_objs],
+                "mitigations": [_jsonable_mit(m) for m in mitigations_raw],
                 "anomaly_score": anomaly_score,
                 "score": score,
-                "tie_d": tie_d
-                if isinstance(tie_d, dict)
-                else getattr(tie_d, "__dict__", {}),
+                "tie_d": tie_d,
                 "roe_applied": roe_applied,
                 "disruption_limited": disruption_limited,
                 "processed_at": datetime.now(timezone.utc).isoformat(),

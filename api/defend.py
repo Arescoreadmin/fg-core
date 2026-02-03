@@ -26,9 +26,9 @@ from api.ratelimit import rate_limit_guard
 from api.schemas import TelemetryInput
 from api.schemas_doctrine import TieD
 
-from engine.doctrine import apply_doctrine as _engine_apply_doctrine
-from engine.evaluate import Mitigation as EngineMitigation
-from engine.evaluate import evaluate as _engine_evaluate
+from engine.pipeline import Mitigation as PipelineMitigation
+from engine.pipeline import PipelineInput, evaluate as pipeline_evaluate
+from engine.pipeline import _apply_doctrine as pipeline_apply_doctrine
 
 log = logging.getLogger("frostgate.defend")
 
@@ -201,15 +201,8 @@ def _event_id(req: TelemetryInput) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def _event_age_ms(event_ts: datetime | str) -> int:
-    now = _utcnow()
-    return int((now - _to_utc(event_ts)).total_seconds() * 1000)
 
 
-def _clock_drift_ms(event_ts: datetime | str) -> int:
-    age_ms = _event_age_ms(event_ts)
-    stale_ms = int(os.getenv("FG_CLOCK_STALE_MS", "300000"))
-    return 0 if abs(age_ms) > stale_ms else abs(age_ms)
 
 
 # =============================================================================
@@ -409,23 +402,27 @@ def defend(
     event_id = _event_id(req)
 
     ts_val = getattr(req, "timestamp", _utcnow())
-    clock_drift = _clock_drift_ms(ts_val)
 
-    # INV-004: canonical engine evaluator (single decision path)
-    threat_level, rules_triggered, mitigations, anomaly_score, score = _engine_evaluate(
-        req
+    pipeline_input = PipelineInput(
+        tenant_id=req.tenant_id,
+        source=req.source,
+        event_type=event_type,
+        payload=_coerce_event_payload(req),
+        timestamp=_iso(_to_utc(ts_val)),
+        persona=getattr(req, "persona", None),
+        classification=getattr(req, "classification", None),
+        event_id=event_id,
+        meta=getattr(req, "meta", None),
     )
+    result = pipeline_evaluate(pipeline_input)
 
-    persona = getattr(req, "persona", None)
-    classification = getattr(req, "classification", None)
-
-    # Engine-owned doctrine
-    mitigations2, tie_d_dict = _engine_apply_doctrine(
-        persona, classification, mitigations
-    )
-    tie_d = TieD(**tie_d_dict)
-
-    summary = f"{event_type}: {threat_level} ({score})"
+    threat_level = result.threat_level
+    rules_triggered = result.rules_triggered
+    mitigations = result.mitigations
+    anomaly_score = result.anomaly_score
+    score = result.score
+    tie_d = TieD(**result.tie_d.to_dict())
+    summary = result.explanation_brief
 
     explain = DecisionExplain(
         summary=summary,
@@ -441,8 +438,8 @@ def defend(
     )
 
     api_mitigations: list[MitigationAction] = []
-    for m in mitigations2 or []:
-        if isinstance(m, EngineMitigation):
+    for m in mitigations or []:
+        if isinstance(m, PipelineMitigation):
             api_mitigations.append(
                 MitigationAction(
                     action=m.action,
@@ -478,10 +475,10 @@ def defend(
         threat_level=threat_level,
         mitigations=api_mitigations,
         explain=explain,
-        ai_adversarial_score=0.0,
+        ai_adversarial_score=float(result.ai_adversarial_score or 0.0),
         pq_fallback=False,
-        clock_drift_ms=int(clock_drift or 0),
-        event_id=event_id,
+        clock_drift_ms=int(result.clock_drift_ms or 0),
+        event_id=result.event_id,
     )
 
     latency_ms = int((time.time() - t0) * 1000)
@@ -509,16 +506,54 @@ def defend(
 
 
 def legacy_evaluate(req: Any):
-    return _engine_evaluate(req)
+    if hasattr(req, "model_dump"):
+        payload = req.model_dump()
+    elif hasattr(req, "dict"):
+        payload = req.dict()
+    elif isinstance(req, dict):
+        payload = req
+    else:
+        payload = {"payload": req}
+    inp = PipelineInput(
+        tenant_id=payload.get("tenant_id") or "unknown",
+        source=payload.get("source") or "unknown",
+        event_type=payload.get("event_type") or "unknown",
+        payload=payload.get("payload") or {},
+        timestamp=payload.get("timestamp"),
+        persona=payload.get("persona"),
+        classification=payload.get("classification"),
+        event_id=payload.get("event_id"),
+        meta=payload.get("meta"),
+    )
+    result = pipeline_evaluate(inp)
+    return (
+        result.threat_level,
+        result.rules_triggered,
+        result.mitigations,
+        result.anomaly_score,
+        result.score,
+    )
 
 
 def legacy_apply_doctrine(
     persona: Optional[str],
     classification: Optional[str],
-    mitigations: list[EngineMitigation],
+    mitigations: list[PipelineMitigation],
 ):
-    mits, tie_d_dict = _engine_apply_doctrine(persona, classification, mitigations)
-    return mits, TieD(**tie_d_dict)
+    filtered, tie_d, _, _, _ = pipeline_apply_doctrine(
+        PipelineInput(
+            tenant_id="unknown",
+            source="legacy",
+            event_type="doctrine_only",
+            payload={},
+            persona=persona,
+            classification=classification,
+        ),
+        "none",
+        list(mitigations),
+        0,
+    )
+    return filtered, TieD(**tie_d.to_dict())
 
 
 # Legacy names expected by old tests/sim validator:

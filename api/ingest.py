@@ -22,7 +22,7 @@ from api.decision_diff import (
 )
 from api.ingest_schemas import IngestResponse
 from api.schemas import TelemetryInput
-from engine.evaluate import evaluate
+from engine.pipeline import PipelineInput, evaluate as pipeline_evaluate
 
 log = logging.getLogger("frostgate.ingest")
 
@@ -166,17 +166,22 @@ async def ingest(
 
     # ---- evaluate (never crash ingest) ----
     try:
-        decision = (
-            evaluate(
-                {
-                    "tenant_id": tenant_id,
-                    "source": source,
-                    "event_type": event_type,
-                    "payload": payload,
-                }
-            )
-            or {}
+        pipeline_input = PipelineInput(
+            tenant_id=tenant_id,
+            source=source,
+            event_type=event_type,
+            payload=payload,
+            timestamp=getattr(req, "timestamp", None) or _isoz(ts),
+            persona=getattr(req, "persona", None),
+            classification=getattr(req, "classification", None),
+            event_id=event_id,
+            meta=getattr(req, "meta", None),
         )
+        result = pipeline_evaluate(pipeline_input)
+        decision = result.to_dict()
+        decision["summary"] = result.explanation_brief
+        decision["rules"] = list(result.rules_triggered or [])
+        decision["pq_fallback"] = False
     except Exception:
         log.exception("evaluation failed")
         decision = {

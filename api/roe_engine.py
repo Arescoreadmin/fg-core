@@ -7,7 +7,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from engine.doctrine import apply_doctrine
-from engine.evaluate import Mitigation as EngineMitigation
+from engine.pipeline import Mitigation as PipelineMitigation
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -46,12 +46,12 @@ async def get_policy() -> ROEPolicy:
 @router.post("/evaluate", response_model=ROEEvaluationResponse)
 async def evaluate_roe(req: ROEEvaluationRequest) -> ROEEvaluationResponse:
     # Convert dict mitigations into engine Mitigation objects
-    mits: list[EngineMitigation] = []
+    mits: list[PipelineMitigation] = []
     for m in req.mitigations or []:
         if not isinstance(m, dict):
             continue
         mits.append(
-            EngineMitigation(
+            PipelineMitigation(
                 action=str(m.get("action", "")),
                 target=m.get("target"),
                 reason=str(m.get("reason", "")),
