@@ -11,3 +11,10 @@
 
 
 # fg-core
+
+## Dashboards & audit packet export
+- Tenant dashboards (UI): `/ui/dash/posture`, `/ui/dash/forensics`, `/ui/dash/controls`
+- Admin console (UI): `/admin/dashboard`
+- Evidence export API: `POST /ui/audit/packet` returns a download URL for a deterministic bundle
+  containing `decisions.jsonl`, `chain_verification.json`, and `manifest.json` (plus `sbom.json`
+  and `provenance.json` when present).

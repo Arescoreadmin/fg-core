@@ -19,6 +19,7 @@ from api.feed import router as feed_router
 from api.keys import router as keys_router
 from api.stats import router as stats_router
 from api.ui import router as ui_router
+from api.ui_dashboards import router as ui_dashboards_router
 
 # Optional "spine" modules (feature-flag gated, fail-open)
 try:
@@ -395,6 +396,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(decisions_router)
     app.include_router(stats_router)
     app.include_router(ui_router)
+    app.include_router(ui_dashboards_router)
     app.include_router(keys_router)
     if mission_router is not None and mission_envelope_enabled():
         app.include_router(mission_router)
