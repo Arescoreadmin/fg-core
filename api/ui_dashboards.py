@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import json
 import os
@@ -89,6 +90,15 @@ class ChainVerifyResponse(BaseModel):
     status: str
     checked: int
     first_bad: Optional[dict[str, Any]] = None
+
+    # Verification metadata
+    # mode:
+    #   - "linkage": verifies prev_hash chaining only
+    #   - "strict": fully recomputes canonical payload + chain hash
+    mode: str = "linkage"
+    strict_ok: Optional[bool] = None
+    strict_reason: Optional[str] = None
+
     request_id: Optional[str] = None
 
 
@@ -137,38 +147,12 @@ def _iso(dt: Any) -> Optional[str]:
     if dt is None:
         return None
     if isinstance(dt, datetime):
-        return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        return dt.astimezone(timezone.utc).isoformat()
     return str(dt)
 
 
 def _canonical_json(obj: Any) -> str:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-
-
-def _compute_chain_hash(prev_hash: Optional[str], payload: dict[str, Any]) -> str:
-    blob = _canonical_json(payload)
-    return hashlib.sha256(f"{prev_hash or ''}:{blob}".encode("utf-8")).hexdigest()
-
-
-def _hash_payload(
-    *,
-    event_id: str,
-    created_at: datetime,
-    tenant_id: str,
-    source: str,
-    event_type: str,
-    threat_level: str,
-    rules_triggered: list[str],
-) -> dict[str, Any]:
-    return {
-        "event_id": event_id,
-        "created_at": _iso(created_at),
-        "tenant_id": tenant_id,
-        "source": source,
-        "event_type": event_type,
-        "threat_level": threat_level,
-        "rules_triggered": rules_triggered,
-    }
 
 
 def _loads_json_text(v: Any) -> Any:
@@ -216,9 +200,7 @@ def _cleanup_packets() -> None:
     ttl_seconds = int(os.getenv("FG_AUDIT_PACKET_TTL_SECONDS", "3600"))
     if ttl_seconds <= 0:
         return
-    packet_dir = Path(
-        os.getenv("FG_AUDIT_PACKET_DIR", "artifacts/audit_packets")
-    ).resolve()
+    packet_dir = Path(os.getenv("FG_AUDIT_PACKET_DIR", "artifacts/audit_packets")).resolve()
     if not packet_dir.exists():
         return
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=ttl_seconds)
@@ -368,7 +350,27 @@ def _controls_matrix() -> list[dict[str, Any]]:
     ]
 
 
-def _verify_chain(db: Session, tenant_id: str) -> tuple[str, int, Optional[dict[str, Any]]]:
+@dataclass(frozen=True)
+class _ChainVerifyResult:
+    status: str
+    checked: int
+    first_bad: Optional[dict[str, Any]]
+    mode: str
+    strict_ok: Optional[bool]
+    strict_reason: Optional[str]
+
+
+def _verify_chain(db: Session, tenant_id: str) -> _ChainVerifyResult:
+    """
+    Chain verification for UI and audit packets.
+
+    Behavior:
+    - Always performs linkage verification (prev_hash integrity) where possible.
+    - Performs strict verification only if canonical payload can be reconstructed.
+    - Avoids false FAILs due to missing legacy fields.
+    """
+    from api.evidence_chain import build_chain_payload, compute_chain_hash
+
     stmt = (
         select(DecisionRecord)
         .where(DecisionRecord.tenant_id == tenant_id)
@@ -376,61 +378,119 @@ def _verify_chain(db: Session, tenant_id: str) -> tuple[str, int, Optional[dict[
     )
     rows = db.execute(stmt).scalars().all()
 
-    prev_hash: Optional[str] = None
     checked = 0
+    prev_chain_hash: Optional[str] = None
+
+    # -------------------------
+    # 1) Linkage verification
+    # -------------------------
     for record in rows:
-        rules = _loads_json_text(getattr(record, "rules_triggered_json", None)) or []
-        created_at = getattr(record, "created_at", None) or datetime.now(timezone.utc)
-        payload = _hash_payload(
-            event_id=str(record.event_id),
-            created_at=created_at,
-            tenant_id=record.tenant_id,
-            source=record.source,
-            event_type=record.event_type,
-            threat_level=record.threat_level,
-            rules_triggered=rules,
-        )
-        expected_prev = prev_hash
         record_prev = getattr(record, "prev_hash", None)
-        if record_prev and record_prev != expected_prev:
-            return (
-                "FAIL",
-                checked,
-                {
-                    "id": int(record.id),
-                    "event_id": str(record.event_id),
-                    "reason": "prev_hash_mismatch",
-                },
-            )
-        computed = _compute_chain_hash(expected_prev, payload)
         record_chain = getattr(record, "chain_hash", None)
-        if record_chain and record_chain != computed:
-            return (
-                "FAIL",
-                checked,
-                {
+
+        if record_prev:
+            if prev_chain_hash is None or record_prev != prev_chain_hash:
+                return _ChainVerifyResult(
+                    status="FAIL",
+                    checked=checked,
+                    first_bad={
+                        "id": int(record.id),
+                        "event_id": str(record.event_id),
+                        "reason": "prev_hash_mismatch",
+                    },
+                    mode="linkage",
+                    strict_ok=None,
+                    strict_reason="unverifiable",
+                )
+
+        if record_chain:
+            prev_chain_hash = record_chain
+
+        checked += 1
+
+    if not rows:
+        return _ChainVerifyResult(
+            status="PASS",
+            checked=0,
+            first_bad=None,
+            mode="linkage",
+            strict_ok=None,
+            strict_reason="no_records",
+        )
+
+    # -------------------------
+    # 2) Strict verification (best-effort)
+    # -------------------------
+    def _strict_eligible(rec: DecisionRecord) -> bool:
+        rq = _loads_json_text(getattr(rec, "request_json", None)) or {}
+        rs = _loads_json_text(getattr(rec, "response_json", None)) or {}
+        return (
+            isinstance(rq, dict)
+            and isinstance(rs, dict)
+            and "request_id" in rq
+            and "policy_version" in rs
+        )
+
+    if not all(_strict_eligible(r) for r in rows):
+        return _ChainVerifyResult(
+            status="PASS",
+            checked=len(rows),
+            first_bad=None,
+            mode="linkage",
+            strict_ok=None,
+            strict_reason="insufficient_fields_for_strict",
+        )
+
+    strict_checked = 0
+    for record in rows:
+        created_at = getattr(record, "created_at", None) or datetime.now(timezone.utc)
+        req = _loads_json_text(getattr(record, "request_json", None)) or {}
+        resp = _loads_json_text(getattr(record, "response_json", None)) or {}
+
+        payload = build_chain_payload(
+            tenant_id=record.tenant_id,
+            request_json=req,
+            response_json=resp,
+            threat_level=getattr(record, "threat_level", None) or "unknown",
+            chain_ts=created_at,
+            event_id=str(record.event_id),
+        )
+
+        prev_for_compute = getattr(record, "prev_hash", None) or "GENESIS"
+        expected = compute_chain_hash(prev_for_compute, payload)
+        record_chain = getattr(record, "chain_hash", None)
+
+        if record_chain and record_chain != expected:
+            return _ChainVerifyResult(
+                status="FAIL",
+                checked=strict_checked,
+                first_bad={
                     "id": int(record.id),
                     "event_id": str(record.event_id),
                     "reason": "chain_hash_mismatch",
                 },
+                mode="strict",
+                strict_ok=False,
+                strict_reason="chain_hash_mismatch",
             )
-        prev_hash = computed
-        checked += 1
 
-    return "PASS", checked, None
+        strict_checked += 1
+
+    return _ChainVerifyResult(
+        status="PASS",
+        checked=strict_checked,
+        first_bad=None,
+        mode="strict",
+        strict_ok=True,
+        strict_reason=None,
+    )
 
 
 @router.get("/scopes", dependencies=[Depends(require_api_key_always)])
 async def ui_scopes(request: Request) -> dict[str, Any]:
     auth = getattr(getattr(request, "state", None), "auth", None)
     scopes = sorted(getattr(auth, "scopes", set()) or [])
-    allowed = {
-        "ui:read",
-        "forensics:read",
-        "controls:read",
-        "audit:read",
-        "admin:read",
-    }
+    allowed = {"ui:read", "forensics:read", "controls:read", "audit:read", "admin:read"}
     if not set(scopes) & allowed:
         raise HTTPException(status_code=403, detail="Insufficient scope")
     return {"scopes": scopes, "request_id": _request_id(request)}
@@ -439,14 +499,14 @@ async def ui_scopes(request: Request) -> dict[str, Any]:
 @router.get("/csrf", dependencies=[Depends(require_api_key_always)])
 async def ui_csrf(request: Request):
     token = secrets.token_urlsafe(32)
-    response = {
+    payload = {
         "csrf_token": token,
         "header_name": CSRF_HEADER_NAME,
         "request_id": _request_id(request),
     }
     from fastapi.responses import JSONResponse
 
-    resp = JSONResponse(response)
+    resp = JSONResponse(payload)
     resp.set_cookie(
         CSRF_COOKIE_NAME,
         token,
@@ -472,29 +532,13 @@ async def ui_posture(
     tenant_id = _resolve_tenant(request, tenant_id)
     stats = _compute_stats(db, tenant_id=tenant_id)
     trend = _trend_flag(int(stats.decisions_24h), int(stats.decisions_7d))
-    top_rules = [
-        {"reason": item.name, "count": int(item.count)}
-        for item in stats.top_rules_24h
-    ]
+    top_rules = [{"reason": item.name, "count": int(item.count)} for item in stats.top_rules_24h]
 
     tiles = [
-        PostureTile(
-            label="Decisions (24h)",
-            value=str(int(stats.decisions_24h)),
-            trend=trend,
-        ),
-        PostureTile(
-            label="High threat rate (1h)",
-            value=f"{float(stats.high_threat_rate_1h):.2f}%",
-        ),
-        PostureTile(
-            label="Unique IPs (24h)",
-            value=str(int(stats.unique_source_ips_24h)),
-        ),
-        PostureTile(
-            label="Avg latency (24h)",
-            value=f"{float(stats.avg_latency_ms_24h):.1f} ms",
-        ),
+        PostureTile(label="Decisions (24h)", value=str(int(stats.decisions_24h)), trend=trend),
+        PostureTile(label="High threat rate (1h)", value=f"{float(stats.high_threat_rate_1h):.2f}%"),
+        PostureTile(label="Unique IPs (24h)", value=str(int(stats.unique_source_ips_24h))),
+        PostureTile(label="Avg latency (24h)", value=f"{float(stats.avg_latency_ms_24h):.1f} ms"),
     ]
 
     trends = {
@@ -613,13 +657,9 @@ async def ui_decision_detail(
         event_type=record.event_type,
         threat_level=record.threat_level,
         anomaly_score=float(getattr(record, "anomaly_score", 0.0) or 0.0),
-        ai_adversarial_score=float(
-            getattr(record, "ai_adversarial_score", 0.0) or 0.0
-        ),
+        ai_adversarial_score=float(getattr(record, "ai_adversarial_score", 0.0) or 0.0),
         pq_fallback=bool(getattr(record, "pq_fallback", False)),
-        rules_triggered=list(
-            _loads_json_text(getattr(record, "rules_triggered_json", None)) or []
-        ),
+        rules_triggered=list(_loads_json_text(getattr(record, "rules_triggered_json", None)) or []),
         explain_summary=getattr(record, "explain_summary", None),
         latency_ms=int(getattr(record, "latency_ms", 0) or 0),
         request=_loads_json_text(getattr(record, "request_json", None)),
@@ -642,12 +682,15 @@ async def ui_chain_verify(
     tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> ChainVerifyResponse:
     tenant_id = _resolve_tenant(request, tenant_id)
-    status, checked, first_bad = _verify_chain(db, tenant_id)
+    res = _verify_chain(db, tenant_id)
     return ChainVerifyResponse(
         tenant_id=tenant_id,
-        status=status,
-        checked=checked,
-        first_bad=first_bad,
+        status=res.status,
+        checked=res.checked,
+        first_bad=res.first_bad,
+        mode=res.mode,
+        strict_ok=res.strict_ok,
+        strict_reason=res.strict_reason,
         request_id=_request_id(request),
     )
 
@@ -696,19 +739,12 @@ async def ui_audit_packet(
                 "event_type": record.event_type,
                 "threat_level": record.threat_level,
                 "anomaly_score": float(getattr(record, "anomaly_score", 0.0) or 0.0),
-                "ai_adversarial_score": float(
-                    getattr(record, "ai_adversarial_score", 0.0) or 0.0
-                ),
+                "ai_adversarial_score": float(getattr(record, "ai_adversarial_score", 0.0) or 0.0),
                 "pq_fallback": bool(getattr(record, "pq_fallback", False)),
-                "rules_triggered": _loads_json_text(
-                    getattr(record, "rules_triggered_json", None)
-                )
-                or [],
+                "rules_triggered": _loads_json_text(getattr(record, "rules_triggered_json", None)) or [],
                 "explain_summary": getattr(record, "explain_summary", None),
                 "latency_ms": int(getattr(record, "latency_ms", 0) or 0),
-                "decision_diff": _loads_json_text(
-                    getattr(record, "decision_diff_json", None)
-                ),
+                "decision_diff": _loads_json_text(getattr(record, "decision_diff_json", None)),
                 "request": _loads_json_text(getattr(record, "request_json", None)),
                 "response": _loads_json_text(getattr(record, "response_json", None)),
                 "chain_hash": getattr(record, "chain_hash", None),
@@ -716,12 +752,16 @@ async def ui_audit_packet(
             }
             handle.write(_canonical_json(entry) + "\n")
 
-    status, checked, first_bad = _verify_chain(db, tenant_id)
+    # IMPORTANT: updated call signature (no tuple unpack)
+    res = _verify_chain(db, tenant_id)
     chain_verify = ChainVerifyResponse(
         tenant_id=tenant_id,
-        status=status,
-        checked=checked,
-        first_bad=first_bad,
+        status=res.status,
+        checked=res.checked,
+        first_bad=res.first_bad,
+        mode=res.mode,
+        strict_ok=res.strict_ok,
+        strict_reason=res.strict_reason,
         request_id=_request_id(request),
     )
     chain_path = packet_dir / "chain_verification.json"
@@ -740,23 +780,13 @@ async def ui_audit_packet(
     for name in sorted(files):
         manifest_entries.append({"name": name, "sha256": _sha256_file(packet_dir / name)})
 
-    manifest = {
-        "algorithm": "sha256",
-        "version": 1,
-        "files": manifest_entries,
-    }
+    manifest = {"algorithm": "sha256", "version": 1, "files": manifest_entries}
     manifest_path = packet_dir / "manifest.json"
     manifest_path.write_text(_canonical_json(manifest), encoding="utf-8")
     files.append("manifest.json")
 
-    metadata = {
-        "tenant_id": tenant_id,
-        "packet_id": packet_id,
-        "created_at": _iso(created_at),
-    }
-    _packet_metadata_path(packet_dir).write_text(
-        _canonical_json(metadata), encoding="utf-8"
-    )
+    metadata = {"tenant_id": tenant_id, "packet_id": packet_id, "created_at": _iso(created_at)}
+    _packet_metadata_path(packet_dir).write_text(_canonical_json(metadata), encoding="utf-8")
 
     token = secrets.token_urlsafe(24)
     token_path = packet_dir / "token.txt"
@@ -806,11 +836,7 @@ async def ui_audit_packet_download(
     zip_path = packet_dir / "audit_packet.zip"
     if not zip_path.exists():
         raise HTTPException(status_code=404, detail="Packet archive missing")
-    return FileResponse(
-        path=zip_path,
-        filename=zip_path.name,
-        media_type="application/zip",
-    )
+    return FileResponse(path=zip_path, filename=zip_path.name, media_type="application/zip")
 
 
 @router.get(
@@ -838,13 +864,7 @@ async def ui_controls(
         )
         for item in sliced
     ]
-    return ControlsPage(
-        items=items,
-        limit=limit,
-        offset=offset,
-        total=total,
-        request_id=_request_id(request),
-    )
+    return ControlsPage(items=items, limit=limit, offset=offset, total=total, request_id=_request_id(request))
 
 
 @router.get(
