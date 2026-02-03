@@ -422,6 +422,7 @@ def _allow(key: str, cfg: RLConfig) -> Tuple[bool, int, int, int]:
 
 async def rate_limit_guard(
     request: Request,
+    _: Any = None,
 ) -> None:
     cfg = load_config()
     if not cfg.enabled:
