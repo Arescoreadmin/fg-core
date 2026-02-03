@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frostgate.ai/contracts/artifacts/decision.schema.json",
+  "title": "Decision Artifact Schema",
+  "description": "Canonical decision artifact emitted by the core decision pipeline.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "tenant_id",
+    "request_id",
+    "policy_hash",
+    "input_hash",
+    "output_hash",
+    "timestamp",
+    "decision",
+    "reasons",
+    "schema_version"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0"]
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "policy_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "input_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "output_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["allow", "deny", "require_approval"]
+    },
+    "reasons": {
+      "type": "array",
+      "items": {"type": "string"},
+      "minItems": 1
+    },
+    "policy_version": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  }
+}
