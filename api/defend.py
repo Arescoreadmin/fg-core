@@ -239,6 +239,7 @@ class DefendResponse(BaseModel):
     pq_fallback: bool = False
     clock_drift_ms: int
     event_id: str
+    policy_hash: str = ""
 
 
 # =============================================================================
@@ -302,6 +303,7 @@ def _persist_decision_best_effort(
             "pq_fallback": bool(decision.pq_fallback),
             "explain_summary": decision.explain.summary,
             "latency_ms": int(latency_ms or 0),
+            "policy_hash": getattr(decision, "policy_hash", None),
         }
 
         rules_value = list(rules_triggered or [])
@@ -475,6 +477,7 @@ def defend(
         pq_fallback=False,
         clock_drift_ms=int(result.clock_drift_ms or 0),
         event_id=result.event_id,
+        policy_hash=result.policy_hash,
     )
 
     latency_ms = int((time.time() - t0) * 1000)
@@ -546,6 +549,9 @@ def legacy_apply_doctrine(
     classification: Optional[str],
     mitigations: list[PipelineMitigation],
 ):
+    from engine.policy_fingerprint import get_active_policy_fingerprint
+
+    fingerprint = get_active_policy_fingerprint()
     filtered, tie_d, _, _, _ = pipeline_apply_doctrine(
         PipelineInput(
             tenant_id="unknown",
@@ -558,6 +564,8 @@ def legacy_apply_doctrine(
         "none",
         list(mitigations),
         0,
+        policy_id=fingerprint.policy_id,
+        policy_hash=fingerprint.policy_hash,
     )
     return filtered, TieD(**tie_d.to_dict())
 

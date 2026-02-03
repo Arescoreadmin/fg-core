@@ -71,6 +71,7 @@ class DefendResponse(BaseModel):
     ai_adversarial_score: float = 0.0
     pq_fallback: bool = False
     clock_drift_ms: int
+    policy_hash: Optional[str] = None
 
 
 __all__ = [

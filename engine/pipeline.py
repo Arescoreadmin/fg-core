@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
+from engine.policy_fingerprint import get_active_policy_fingerprint
+
 log = logging.getLogger("frostgate.pipeline")
 
 # Type alias for threat levels
@@ -72,6 +74,7 @@ class TieD:
 
     gating_decision: Literal["allow", "require_approval", "reject"] = "allow"
     policy_version: str = "doctrine-v1"
+    policy_hash: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -84,6 +87,7 @@ class TieD:
             "user_impact": self.user_impact,
             "gating_decision": self.gating_decision,
             "policy_version": self.policy_version,
+            "policy_hash": self.policy_hash,
         }
 
 
@@ -137,6 +141,7 @@ class PipelineResult:
     roe_applied: bool = False
     disruption_limited: bool = False
     ao_required: bool = False
+    policy_hash: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -153,6 +158,7 @@ class PipelineResult:
             "roe_applied": self.roe_applied,
             "disruption_limited": self.disruption_limited,
             "ao_required": self.ao_required,
+            "policy_hash": self.policy_hash,
         }
 
 
@@ -342,6 +348,9 @@ def _apply_doctrine(
     threat_level: ThreatLevel,
     mitigations: List[Mitigation],
     score: int,
+    *,
+    policy_id: str,
+    policy_hash: str,
 ) -> tuple:
     """
     Apply doctrine rules to mitigations.
@@ -413,7 +422,8 @@ def _apply_doctrine(
         service_impact=float(min(1.0, max(0.0, base_impact))),
         user_impact=float(min(1.0, max(0.0, base_user_impact))),
         gating_decision=gating_decision,
-        policy_version="doctrine-v1",
+        policy_version=policy_id,
+        policy_hash=policy_hash,
     )
 
     return out, tie_d, roe_applied, disruption_limited, ao_required
@@ -444,9 +454,15 @@ def evaluate(inp: PipelineInput) -> PipelineResult:
         _evaluate_rules(inp)
     )
 
-    # 3. Apply doctrine
+    # 3. Policy selection + doctrine application
+    fingerprint = get_active_policy_fingerprint()
     filtered_mits, tie_d, roe_applied, disruption_limited, ao_required = _apply_doctrine(
-        inp, threat_level, mitigations, score
+        inp,
+        threat_level,
+        mitigations,
+        score,
+        policy_id=fingerprint.policy_id,
+        policy_hash=fingerprint.policy_hash,
     )
 
     # 4. Build explanation
@@ -466,6 +482,7 @@ def evaluate(inp: PipelineInput) -> PipelineResult:
         roe_applied=roe_applied,
         disruption_limited=disruption_limited,
         ao_required=ao_required,
+        policy_hash=fingerprint.policy_hash,
     )
 
 

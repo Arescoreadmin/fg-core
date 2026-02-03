@@ -199,6 +199,7 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
         "chain_hash": "TEXT",
         "chain_alg": "TEXT",
         "chain_ts": "TIMESTAMP",
+        "policy_hash": "TEXT",
     }
     api_keys_columns = {
         "key_lookup": "TEXT",

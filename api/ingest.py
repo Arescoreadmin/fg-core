@@ -215,6 +215,13 @@ async def ingest(
     try:
         rules = decision.get("rules_triggered") or decision.get("rules") or []
         summary = decision.get("summary") or ""
+        policy_hash = None
+        if isinstance(decision, dict):
+            policy_hash = decision.get("policy_hash")
+            if not policy_hash:
+                tie_d = decision.get("tie_d") or {}
+                if isinstance(tie_d, dict):
+                    policy_hash = tie_d.get("policy_hash")
 
         # --- Decision Diff (compute + persist) ---
         try:
@@ -244,6 +251,7 @@ async def ingest(
             source=source,
             event_id=event_id,
             event_type=event_type,
+            policy_hash=policy_hash,
             threat_level=threat_level,
             anomaly_score=float(decision.get("anomaly_score") or 0.0),
             ai_adversarial_score=float(decision.get("ai_adversarial_score") or 0.0),
