@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frostgate.ai/contracts/artifacts/defend_decision.v1.json",
+  "title": "Defend Decision Artifact v1",
+  "description": "Schema for decision artifacts emitted by /defend.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "explanation_brief",
+    "threat_level",
+    "mitigations",
+    "explain",
+    "ai_adversarial_score",
+    "pq_fallback",
+    "clock_drift_ms",
+    "event_id",
+    "policy_hash"
+  ],
+  "properties": {
+    "explanation_brief": {"type": "string"},
+    "threat_level": {
+      "type": "string",
+      "enum": ["none", "low", "medium", "high", "critical"]
+    },
+    "mitigations": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/mitigationAction"}
+    },
+    "explain": {"$ref": "#/$defs/decisionExplain"},
+    "ai_adversarial_score": {"type": "number"},
+    "pq_fallback": {"type": "boolean"},
+    "clock_drift_ms": {"type": "integer"},
+    "event_id": {"type": "string"},
+    "policy_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "mitigationAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "reason", "confidence"],
+      "properties": {
+        "action": {"type": "string"},
+        "target": {"type": ["string", "null"]},
+        "reason": {"type": "string"},
+        "confidence": {"type": "number"},
+        "meta": {"type": ["object", "null"], "additionalProperties": true}
+      }
+    },
+    "tieD": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "roe_applied",
+        "disruption_limited",
+        "ao_required",
+        "persona",
+        "classification",
+        "service_impact",
+        "user_impact",
+        "gating_decision",
+        "policy_version",
+        "policy_hash"
+      ],
+      "properties": {
+        "roe_applied": {"type": "boolean"},
+        "disruption_limited": {"type": "boolean"},
+        "ao_required": {"type": "boolean"},
+        "persona": {"type": ["string", "null"]},
+        "classification": {"type": ["string", "null"]},
+        "service_impact": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        "user_impact": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        "gating_decision": {
+          "type": "string",
+          "enum": ["allow", "require_approval", "reject"]
+        },
+        "policy_version": {"type": "string"},
+        "policy_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "decisionExplain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "rules_triggered", "anomaly_score", "tie_d", "score"],
+      "properties": {
+        "summary": {"type": "string"},
+        "rules_triggered": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "anomaly_score": {"type": "number"},
+        "llm_note": {"type": ["string", "null"]},
+        "tie_d": {"$ref": "#/$defs/tieD"},
+        "score": {"type": "integer"},
+        "roe_applied": {"type": "boolean"},
+        "disruption_limited": {"type": "boolean"},
+        "ao_required": {"type": "boolean"},
+        "persona": {"type": ["string", "null"]},
+        "classification": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

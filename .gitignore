@@ -44,6 +44,8 @@ logs/
 artifacts/**/*.json
 state/**/*.json
 agent_queue/**/*.json
+!contracts/artifacts/
+!contracts/artifacts/*.json
 
 
 # local state
@@ -157,3 +159,6 @@ keys/
 # ---- Built binaries (never commit; build in CI) ----
 supervisor-sidecar/supervisor-sidecar
 
+# ---- Contracted artifacts (versioned schemas) ----
+!contracts/artifacts/
+!contracts/artifacts/*.json

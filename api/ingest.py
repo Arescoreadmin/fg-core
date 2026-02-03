@@ -22,7 +22,7 @@ from api.decision_diff import (
 )
 from api.ingest_schemas import IngestResponse
 from api.schemas import TelemetryInput
-from engine.pipeline import PipelineInput, evaluate as pipeline_evaluate
+from engine.pipeline import PipelineInput, TieD, evaluate as pipeline_evaluate
 from engine.policy_fingerprint import get_active_policy_fingerprint
 
 log = logging.getLogger("frostgate.ingest")
@@ -186,17 +186,26 @@ async def ingest(
     except Exception:
         log.exception("evaluation failed")
         fingerprint = get_active_policy_fingerprint()
+        fallback_summary = "evaluation error; defaulted to low threat"
+        fallback_tie_d = TieD(policy_hash=fingerprint.policy_hash)
         decision = {
             "tenant_id": tenant_id,
             "source": source,
             "event_type": event_type,
             "threat_level": "low",
             "mitigations": [],
+            "rules_triggered": ["rule:evaluate_exception"],
             "rules": ["rule:evaluate_exception"],
+            "score": 0,
             "anomaly_score": 0.0,
             "ai_adversarial_score": 0.0,
-            "summary": "evaluation error; defaulted to low threat",
+            "tie_d": fallback_tie_d.to_dict(),
+            "event_id": event_id,
+            "clock_drift_ms": 0,
+            "explanation_brief": fallback_summary,
+            "summary": fallback_summary,
             "policy_hash": fingerprint.policy_hash,
+            "pq_fallback": False,
         }
 
     threat_level = str(decision.get("threat_level") or "low").lower()
