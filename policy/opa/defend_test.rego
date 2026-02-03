@@ -20,7 +20,7 @@ test_deny_missing_tenant {
   }
   not allow with input as input
   reasons_with := reasons with input as input
-  "missing_tenant" in reasons_with
+  reasons_with[_] == "missing_tenant"
 }
 
 test_deny_bruteforce_threshold {
@@ -32,5 +32,5 @@ test_deny_bruteforce_threshold {
   }
   not allow with input as input
   reasons_with := reasons with input as input
-  "bruteforce_threshold" in reasons_with
+  reasons_with[_] == "bruteforce_threshold"
 }
