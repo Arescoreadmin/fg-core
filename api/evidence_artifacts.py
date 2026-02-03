@@ -51,7 +51,9 @@ def build_decision_evidence_payload(record: DecisionRecord) -> dict[str, Any]:
     }
 
 
-def emit_decision_evidence(db: Session, record: DecisionRecord) -> DecisionEvidenceArtifact:
+def emit_decision_evidence(
+    db: Session, record: DecisionRecord
+) -> DecisionEvidenceArtifact:
     if record.id is None:
         raise ValueError("DecisionRecord must be flushed before evidence emission")
 
