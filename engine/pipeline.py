@@ -62,6 +62,7 @@ class TieD:
     P0: This MUST always be present in pipeline output (never None).
     """
 
+    policy_hash: str
     roe_applied: bool = False
     disruption_limited: bool = False
     ao_required: bool = False
@@ -74,7 +75,6 @@ class TieD:
 
     gating_decision: Literal["allow", "require_approval", "reject"] = "allow"
     policy_version: str = "doctrine-v1"
-    policy_hash: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -138,10 +138,10 @@ class PipelineResult:
     explanation_brief: str
 
     # Doctrine flags (surfaced for backward compat)
+    policy_hash: str
     roe_applied: bool = False
     disruption_limited: bool = False
     ao_required: bool = False
-    policy_hash: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {

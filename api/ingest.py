@@ -23,6 +23,7 @@ from api.decision_diff import (
 from api.ingest_schemas import IngestResponse
 from api.schemas import TelemetryInput
 from engine.pipeline import PipelineInput, evaluate as pipeline_evaluate
+from engine.policy_fingerprint import get_active_policy_fingerprint
 
 log = logging.getLogger("frostgate.ingest")
 
@@ -184,6 +185,7 @@ async def ingest(
         decision["pq_fallback"] = False
     except Exception:
         log.exception("evaluation failed")
+        fingerprint = get_active_policy_fingerprint()
         decision = {
             "tenant_id": tenant_id,
             "source": source,
@@ -194,6 +196,7 @@ async def ingest(
             "anomaly_score": 0.0,
             "ai_adversarial_score": 0.0,
             "summary": "evaluation error; defaulted to low threat",
+            "policy_hash": fingerprint.policy_hash,
         }
 
     threat_level = str(decision.get("threat_level") or "low").lower()
@@ -214,7 +217,6 @@ async def ingest(
     # ---- persist (best effort) ----
     try:
         rules = decision.get("rules_triggered") or decision.get("rules") or []
-        summary = decision.get("summary") or ""
         policy_hash = None
         if isinstance(decision, dict):
             policy_hash = decision.get("policy_hash")
@@ -256,12 +258,10 @@ async def ingest(
             anomaly_score=float(decision.get("anomaly_score") or 0.0),
             ai_adversarial_score=float(decision.get("ai_adversarial_score") or 0.0),
             pq_fallback=bool(decision.get("pq_fallback") or False),
-            latency_ms=latency_ms,
             # IMPORTANT: these field names MUST match your model/table
-            request_json=_safe_json(canonical_request),
-            response_json=_safe_json(resp.model_dump()),
-            rules_triggered_json=_safe_json(rules),
-            explain_summary=str(summary),
+            request_json=canonical_request,
+            response_json=resp.model_dump(),
+            rules_triggered_json=rules,
             decision_diff_json=decision_diff_obj,
         )
         if (
