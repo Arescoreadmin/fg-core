@@ -201,10 +201,6 @@ def _event_id(req: TelemetryInput) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-
-
-
-
 # =============================================================================
 # API models
 # =============================================================================
@@ -520,7 +516,9 @@ def legacy_evaluate(req: Any):
     if not isinstance(req_payload, dict):
         req_payload = {}
     inp = PipelineInput(
-        tenant_id=payload.get("tenant_id") or getattr(req, "tenant_id", None) or "unknown",
+        tenant_id=payload.get("tenant_id")
+        or getattr(req, "tenant_id", None)
+        or "unknown",
         source=payload.get("source") or getattr(req, "source", None) or "unknown",
         event_type=payload.get("event_type")
         or getattr(req, "event_type", None)

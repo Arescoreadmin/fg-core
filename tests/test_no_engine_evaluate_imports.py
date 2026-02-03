@@ -22,6 +22,6 @@ def test_no_engine_evaluate_imports_in_api() -> None:
                 violations.append(str(path))
                 break
 
-    assert not violations, (
-        "Forbidden engine.evaluate usage in api/: " + ", ".join(sorted(violations))
+    assert not violations, "Forbidden engine.evaluate usage in api/: " + ", ".join(
+        sorted(violations)
     )
