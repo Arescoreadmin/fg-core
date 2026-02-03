@@ -207,7 +207,12 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
     }
 
     with engine.begin() as conn:
-        tables = {row[0] for row in conn.exec_driver_sql("SELECT name FROM sqlite_master WHERE type='table'")}
+        tables = {
+            row[0]
+            for row in conn.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
         if "decisions" in tables:
             _sqlite_add_columns(conn, "decisions", decisions_columns)
         if "api_keys" in tables:
@@ -216,8 +221,7 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
 
 def _sqlite_add_columns(conn, table: str, columns: dict[str, str]) -> None:
     existing = {
-        row[1]
-        for row in conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
+        row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
     }
     for col, col_type in columns.items():
         if col in existing:

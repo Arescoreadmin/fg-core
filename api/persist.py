@@ -5,7 +5,12 @@ import logging
 from datetime import datetime, timezone
 from sqlalchemy import text
 from .db import engine
-from api.evidence_chain import CHAIN_ALG, build_chain_payload, compute_chain_hash, GENESIS_HASH
+from api.evidence_chain import (
+    CHAIN_ALG,
+    build_chain_payload,
+    compute_chain_hash,
+    GENESIS_HASH,
+)
 
 log = logging.getLogger("frostgate.persist")
 

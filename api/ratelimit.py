@@ -10,7 +10,6 @@ from typing import Any, Dict, Optional, Tuple
 from fastapi import HTTPException, Request
 
 
-
 log = logging.getLogger("frostgate.ratelimit")
 
 try:

@@ -263,7 +263,11 @@ def mint_key(
         names = [r[1] for r in cols]
         notnull = {r[1] for r in cols if int(r[3] or 0) == 1 and r[4] is None}
 
-        if "hash_alg" not in names or "hash_params" not in names or "key_lookup" not in names:
+        if (
+            "hash_alg" not in names
+            or "hash_params" not in names
+            or "key_lookup" not in names
+        ):
             raise RuntimeError("api_keys schema missing hash columns; run migrations")
 
         values = {
@@ -271,7 +275,9 @@ def mint_key(
             "key_hash": key_hash,
             "key_lookup": key_lookup,
             "hash_alg": hash_alg,
-            "hash_params": json.dumps(hash_params, separators=(",", ":"), sort_keys=True),
+            "hash_params": json.dumps(
+                hash_params, separators=(",", ":"), sort_keys=True
+            ),
             "scopes_csv": scopes_csv,
             "enabled": 1,
         }
@@ -805,7 +811,9 @@ def verify_api_key_detailed(
                             (
                                 new_hash,
                                 new_alg,
-                                json.dumps(new_params, separators=(",", ":"), sort_keys=True),
+                                json.dumps(
+                                    new_params, separators=(",", ":"), sort_keys=True
+                                ),
                                 new_lookup,
                                 row.get("id"),
                             ),
@@ -951,7 +959,9 @@ def require_scopes(*scopes: str) -> Callable[..., None]:
         request: Request,
         x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
     ) -> str:
-        return require_api_key_always(request, x_api_key, required_scopes=needed or None)
+        return require_api_key_always(
+            request, x_api_key, required_scopes=needed or None
+        )
 
     def _dep(_: str = Depends(_scoped_key_dep)) -> None:
         return None

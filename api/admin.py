@@ -987,8 +987,7 @@ async def get_key_rotation_status(
     response_model=List[KeyRotationStatusResponse],
     dependencies=[Depends(require_scopes("admin:read"))],
 )
-async def get_keys_needing_rotation(
-) -> List[KeyRotationStatusResponse]:
+async def get_keys_needing_rotation() -> List[KeyRotationStatusResponse]:
     """Get all keys that need rotation."""
     try:
         from api.key_rotation import get_rotation_manager
@@ -1060,8 +1059,7 @@ async def rotate_key(
     response_model=SystemHealthResponse,
     dependencies=[Depends(require_scopes("admin:read"))],
 )
-async def get_system_health(
-) -> SystemHealthResponse:
+async def get_system_health() -> SystemHealthResponse:
     """Get detailed system health including circuit breakers and alerts."""
     # Get shutdown state
     shutdown_state = "running"
