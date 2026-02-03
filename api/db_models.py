@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
-from sqlalchemy import Column, String
+from sqlalchemy import Column, String, text
 from sqlalchemy import JSON, Text
 
 from sqlalchemy import (
@@ -63,13 +63,13 @@ class ApiKey(Base):
     )
 
     # Key rotation and lifecycle support (SaaS-ready)
-    version = Column(Integer, nullable=False, default=1)
+    version = Column(Integer, nullable=False, default=1, server_default=text("1"))
     expires_at = Column(DateTime(timezone=True), nullable=True)
     rotated_from = Column(
         String(64), nullable=True
     )  # Previous key_hash for rotation chain
     last_used_at = Column(DateTime(timezone=True), nullable=True)
-    use_count = Column(Integer, nullable=False, default=0)
+    use_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
 
     # Tenant isolation (multi-tenant SaaS)
     tenant_id = Column(String(128), nullable=True, index=True)

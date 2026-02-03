@@ -90,6 +90,7 @@ def build_chain_payload(
         "tenant_id": tenant_id,
         "request_id": _extract_request_id(request_json),
         "decision_outcome": _decision_outcome(threat_level, response_json),
+        "threat_level": threat_level,
         "policy_version": _extract_policy_version(response_json),
         "inputs_fingerprint": _inputs_fingerprint(request_json),
         "chain_ts": _iso(chain_ts),

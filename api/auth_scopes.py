@@ -389,7 +389,10 @@ def _env_bool_auth(name: str, default: bool) -> bool:
 
 
 def _check_db_expiration(
-    sqlite_path: str, prefix: str, identifier_col: str, identifier: str
+    sqlite_path: str,
+    prefix: str,
+    identifier_col: str,
+    identifier: Optional[str] = None,
 ) -> bool:
     """
     Check if key is expired based on DB expires_at column.
@@ -412,6 +415,10 @@ def _check_db_expiration(
 
             if "expires_at" not in col_names:
                 return False
+
+            if identifier is None:
+                identifier = identifier_col
+                identifier_col = "key_hash"
 
             if identifier_col not in col_names:
                 return True
