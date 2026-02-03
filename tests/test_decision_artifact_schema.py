@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -10,7 +11,6 @@ from jsonschema import Draft202012Validator
 
 from api.auth_scopes import mint_key
 from api.ingest import router as ingest_router
-from api.main import app as main_app
 
 DEFEND_SCHEMA_PATH = Path("contracts/artifacts/defend_decision.v1.json")
 INGEST_SCHEMA_PATH = Path("contracts/artifacts/ingest_decision.v1.json")
@@ -51,6 +51,12 @@ def test_schema_exists() -> None:
 def test_defend_response_matches_schema(
     defend_schema_validator: Draft202012Validator,
 ) -> None:
+    # Schema validation should not require Redis.
+    # Ensure rate limiting is disabled BEFORE importing api.main (app is built at import time).
+    os.environ["FG_RL_ENABLED"] = "0"
+
+    from api.main import app as main_app  # import after env is set
+
     client = TestClient(main_app)
     key = mint_key("defend:write")
 
