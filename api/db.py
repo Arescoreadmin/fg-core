@@ -184,6 +184,49 @@ def init_db(
     """
     eng = engine or get_engine(sqlite_path=sqlite_path, db_url=db_url)
     Base.metadata.create_all(bind=eng)
+    if eng.dialect.name == "sqlite":
+        _auto_migrate_sqlite(eng)
+
+
+def _auto_migrate_sqlite(engine: Engine) -> None:
+    """
+    Best-effort SQLite column additions for dev/test.
+
+    NOTE: Production/Postgres requires explicit migrations.
+    """
+    decisions_columns = {
+        "prev_hash": "TEXT",
+        "chain_hash": "TEXT",
+        "chain_alg": "TEXT",
+        "chain_ts": "TIMESTAMP",
+    }
+    api_keys_columns = {
+        "key_lookup": "TEXT",
+        "hash_alg": "TEXT",
+        "hash_params": "TEXT",
+    }
+
+    with engine.begin() as conn:
+        tables = {
+            row[0]
+            for row in conn.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        if "decisions" in tables:
+            _sqlite_add_columns(conn, "decisions", decisions_columns)
+        if "api_keys" in tables:
+            _sqlite_add_columns(conn, "api_keys", api_keys_columns)
+
+
+def _sqlite_add_columns(conn, table: str, columns: dict[str, str]) -> None:
+    existing = {
+        row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
+    }
+    for col, col_type in columns.items():
+        if col in existing:
+            continue
+        conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
 
 
 def get_db() -> Iterator[Session]:

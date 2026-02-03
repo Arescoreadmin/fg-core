@@ -35,7 +35,6 @@ from api.auth_scopes import (
     require_scopes,
     revoke_api_key,
     rotate_api_key_by_prefix,
-    verify_api_key,
 )
 from api.db import get_engine
 from api.db_models import SecurityAuditLog
@@ -348,7 +347,6 @@ def _audit_meta(
 async def get_tenant_usage(
     tenant_id: str,
     request: Request,
-    _: str = Depends(verify_api_key),
 ) -> TenantUsageResponse:
     """Get usage statistics for a tenant."""
     bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
@@ -409,7 +407,6 @@ async def update_tenant_quota(
     tenant_id: str,
     update: TenantQuotaUpdate,
     request: Request,
-    _: str = Depends(verify_api_key),
 ) -> Dict[str, Any]:
     """Update custom quota for a tenant."""
     bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
@@ -446,7 +443,6 @@ async def update_tenant_tier(
     tenant_id: str,
     update: TenantTierUpdate,
     request: Request,
-    _: str = Depends(verify_api_key),
 ) -> Dict[str, Any]:
     """Update subscription tier for a tenant."""
     bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
@@ -492,7 +488,6 @@ async def update_tenant_tier(
 async def suspend_tenant(
     tenant_id: str,
     request: Request,
-    _: str = Depends(verify_api_key),
 ) -> Dict[str, Any]:
     """Suspend a tenant (block all requests)."""
     bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
@@ -544,7 +539,6 @@ async def suspend_tenant(
 async def activate_tenant(
     tenant_id: str,
     request: Request,
-    _: str = Depends(verify_api_key),
 ) -> Dict[str, Any]:
     """Activate a suspended tenant."""
     bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
@@ -586,7 +580,6 @@ async def admin_list_keys(
     request: Request,
     tenant_id: Optional[str] = Query(default=None, max_length=128),
     include_disabled: bool = Query(default=False),
-    _: str = Depends(verify_api_key),
 ) -> ListKeysResponse:
     """List API keys for admin usage."""
     bound_tenant = bind_tenant_id(
@@ -618,7 +611,6 @@ async def search_audit_events(
     to_ts: Optional[datetime] = Query(None, description="End time (RFC3339)"),
     cursor: Optional[str] = Query(None, description="Cursor for pagination"),
     page_size: int = Query(100, ge=1, le=1000),
-    _: str = Depends(verify_api_key),
 ) -> AuditSearchResponse:
     """Search audit events with tenant scoping enforced."""
     # Enforce tenant binding:
@@ -734,7 +726,6 @@ class AuditExportRequest(BaseModel):
 async def export_audit_events(
     request: Request,
     payload: AuditExportRequest,
-    _: str = Depends(verify_api_key),
 ) -> StreamingResponse:
     """Export audit events as NDJSON or CSV with tenant scoping enforced."""
     # Enforce tenant binding:
@@ -863,7 +854,6 @@ async def export_audit_events(
 async def admin_create_key(
     req: AdminCreateKeyRequest,
     request: Request,
-    _: str = Depends(verify_api_key),
 ) -> CreateKeyResponse:
     """Create a new API key via admin."""
     bound_tenant = bind_tenant_id(
@@ -910,7 +900,6 @@ async def admin_revoke_key(
     key_prefix: str,
     request: Request,
     tenant_id: Optional[str] = Query(default=None, max_length=128),
-    _: str = Depends(verify_api_key),
 ) -> RevokeKeyResponse:
     """Revoke an API key by prefix."""
     bound_tenant = bind_tenant_id(
@@ -947,7 +936,6 @@ async def admin_rotate_key(
     key_prefix: str,
     req: AdminRotateKeyRequest,
     request: Request,
-    _: str = Depends(verify_api_key),
 ) -> RotateKeyResponse:
     """Rotate an API key by prefix."""
     try:
@@ -996,7 +984,6 @@ async def admin_rotate_key(
 )
 async def get_key_rotation_status(
     key_prefix: str,
-    _: str = Depends(verify_api_key),
 ) -> KeyRotationStatusResponse:
     """Get rotation status for an API key."""
     try:
@@ -1027,9 +1014,7 @@ async def get_key_rotation_status(
     response_model=List[KeyRotationStatusResponse],
     dependencies=[Depends(require_scopes("admin:read"))],
 )
-async def get_keys_needing_rotation(
-    _: str = Depends(verify_api_key),
-) -> List[KeyRotationStatusResponse]:
+async def get_keys_needing_rotation() -> List[KeyRotationStatusResponse]:
     """Get all keys that need rotation."""
     try:
         from api.key_rotation import get_rotation_manager
@@ -1063,7 +1048,6 @@ async def get_keys_needing_rotation(
 )
 async def rotate_key(
     key_prefix: str,
-    _: str = Depends(verify_api_key),
 ) -> KeyRotationResponse:
     """Rotate an API key."""
     try:
@@ -1102,9 +1086,7 @@ async def rotate_key(
     response_model=SystemHealthResponse,
     dependencies=[Depends(require_scopes("admin:read"))],
 )
-async def get_system_health(
-    _: str = Depends(verify_api_key),
-) -> SystemHealthResponse:
+async def get_system_health() -> SystemHealthResponse:
     """Get detailed system health including circuit breakers and alerts."""
     # Get shutdown state
     shutdown_state = "running"
@@ -1164,7 +1146,6 @@ async def get_system_health(
 )
 async def get_all_usage(
     period: Optional[str] = Query(None, description="Period in YYYY-MM-DD format"),
-    _: str = Depends(verify_api_key),
 ) -> Dict[str, Any]:
     """Get usage for all tenants (admin endpoint)."""
     try:

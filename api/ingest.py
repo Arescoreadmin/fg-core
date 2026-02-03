@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from api.auth_scopes import bind_tenant_id, require_scopes
 from api.db import get_db
 from api.db_models import DecisionRecord
+from api.evidence_chain import chain_fields_for_decision
 from api.decision_diff import (
     compute_decision_diff,
     snapshot_from_current,
@@ -250,6 +251,25 @@ async def ingest(
             explain_summary=str(summary),
             decision_diff_json=decision_diff_obj,
         )
+        if (
+            hasattr(DecisionRecord, "prev_hash")
+            and hasattr(DecisionRecord, "chain_hash")
+            and hasattr(DecisionRecord, "chain_alg")
+            and hasattr(DecisionRecord, "chain_ts")
+        ):
+            chain_fields = chain_fields_for_decision(
+                db,
+                tenant_id=tenant_id,
+                request_json=canonical_request,
+                response_json=resp.model_dump(),
+                threat_level=threat_level,
+                chain_ts=datetime.now(timezone.utc),
+                event_id=event_id,
+            )
+            rec.prev_hash = chain_fields["prev_hash"]
+            rec.chain_hash = chain_fields["chain_hash"]
+            rec.chain_alg = chain_fields["chain_alg"]
+            rec.chain_ts = chain_fields["chain_ts"]
         db.add(rec)
         db.commit()
     except Exception:

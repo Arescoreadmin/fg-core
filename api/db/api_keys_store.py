@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import hashlib
+import json
 from typing import Iterable
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-
-def _sha256_hex(s: str) -> str:
-    return hashlib.sha256(s.encode("utf-8")).hexdigest()
+from api.auth_scopes import hash_key
 
 
 def insert_api_key(
@@ -35,7 +33,8 @@ def insert_api_key(
     else:
         prefix = raw_key[:8] + "_"
 
-    key_hash = _sha256_hex(raw_key)
+    key_hash, hash_alg, hash_params, key_lookup = hash_key(raw_key)
+    hash_params_json = json.dumps(hash_params, separators=(",", ":"), sort_keys=True)
 
     if isinstance(scopes, str):
         scopes_csv = scopes.strip()
@@ -46,9 +45,9 @@ def insert_api_key(
 
     sql = text(
         """
-        INSERT INTO api_keys (name, prefix, key_hash, scopes_csv, enabled)
-        VALUES (:name, :prefix, :key_hash, :scopes_csv, :enabled)
-        RETURNING id, name, prefix, key_hash, scopes_csv, enabled
+        INSERT INTO api_keys (name, prefix, key_hash, key_lookup, hash_alg, hash_params, scopes_csv, enabled)
+        VALUES (:name, :prefix, :key_hash, :key_lookup, :hash_alg, :hash_params, :scopes_csv, :enabled)
+        RETURNING id, name, prefix, key_hash, key_lookup, hash_alg, hash_params, scopes_csv, enabled
         """
     )
 
@@ -60,6 +59,9 @@ def insert_api_key(
                     name=name,
                     prefix=prefix,
                     key_hash=key_hash,
+                    key_lookup=key_lookup,
+                    hash_alg=hash_alg,
+                    hash_params=hash_params_json,
                     scopes_csv=scopes_csv,
                     enabled=enabled,
                 ),
@@ -74,6 +76,9 @@ def insert_api_key(
         else {
             "prefix": prefix,
             "key_hash": key_hash,
+            "key_lookup": key_lookup,
+            "hash_alg": hash_alg,
+            "hash_params": hash_params_json,
             "scopes_csv": scopes_csv,
             "enabled": enabled,
         }

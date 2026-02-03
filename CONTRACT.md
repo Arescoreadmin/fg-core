@@ -148,10 +148,15 @@ The system supports DB-backed scoped keys stored in sqlite table `api_keys`.
 **Key formats supported:**
 - **Global key:** exact string match to `FG_API_KEY` (bypass, no scope check).
 - **Scoped key (NEW):** `<prefix>.<token>.<secret>`
-  - `key_hash` stored = `sha256(secret)`
+  - `key_hash` stored = `argon2id(secret + ":" + FG_KEY_PEPPER)`
+  - `key_lookup` stored = `HMAC-SHA256(FG_KEY_PEPPER, secret)` for deterministic lookup
+  - `hash_alg` + `hash_params` persisted alongside `key_hash`
   - `token` is base64url(json payload), used for client-side introspection only
 - **Legacy (compat):** raw keys may exist for older
 tests/fixtures if present in DB.
+
+**Required env (prod/staging):**
+- `FG_KEY_PEPPER` MUST be set for key hashing/verification.
 
 ### 3.3 Scope requirements
 
@@ -362,11 +367,20 @@ not silently mint unusable keys.
 
 ### 10.1 Definition (MVP)
 
-If DecisionRecord supports `prev_hash` and `chain_hash`, the system SHOULD:
-- Set `prev_hash` to the previous record’s `chain_hash`
-- Compute `chain_hash = sha256(prev_hash + canonical_payload)`
+If DecisionRecord supports `prev_hash`, `chain_hash`, `chain_alg`, and `chain_ts`, the system MUST:
+- Scope the chain per `tenant_id`
+- Set `prev_hash` to the previous record’s `chain_hash` for the same tenant (or `GENESIS`)
+- Compute `chain_hash = sha256(prev_hash + ":" + sha256(canonical_payload))`
+- Record `chain_alg = sha256/canonical-json/v1` and `chain_ts` used for payload
 
 ### 10.2 Non-guarantees
+
+Verification is available via `GET /forensics/chain/verify` (admin/forensics scope).
+
+**Migration note:** production databases must add decision chain columns
+(`prev_hash`, `chain_hash`, `chain_alg`, `chain_ts`) and API key hash columns
+(`key_lookup`, `hash_alg`, `hash_params`). SQLite dev/test auto-migrates; Postgres
+requires explicit migrations.
 
 This does NOT guarantee tamper resistance against:
 - DB admins rewriting history
@@ -543,6 +557,7 @@ When enabled, the API MUST expose:
 
 - `GET /forensics/snapshot/{event_id}`
 - `GET /forensics/audit_trail/{event_id}`
+- `GET /forensics/chain/verify`
 
 ---
 

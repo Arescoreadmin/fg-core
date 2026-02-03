@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import bind_tenant_id, verify_api_key
+from api.auth_scopes import bind_tenant_id, require_scopes
 from api.db import get_db
 from api.db_models import DecisionRecord
 from api.decisions import _loads_json_text
@@ -77,7 +77,7 @@ def _fg_norm_bool(v):
 router = APIRouter(
     prefix="/feed",
     tags=["feed"],
-    dependencies=[Depends(rate_limit_guard), Depends(verify_api_key)],
+    dependencies=[Depends(rate_limit_guard), Depends(require_scopes("feed:read"))],
 )
 
 # -----------------------------

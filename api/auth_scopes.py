@@ -12,6 +12,9 @@ import sqlite3
 import time
 from typing import Callable, Optional, Set, Tuple
 
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
+
 from fastapi import Depends, Header, HTTPException, Request
 
 from api.config.env import is_production_env
@@ -32,6 +35,66 @@ DEFAULT_TTL_SECONDS = 24 * 3600
 
 def _sha256_hex(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
+
+
+def _get_key_pepper() -> str:
+    pepper = (os.getenv("FG_KEY_PEPPER") or "").strip()
+    if pepper:
+        return pepper
+    if is_production_env():
+        raise RuntimeError("FG_KEY_PEPPER is required in production")
+    log.warning("FG_KEY_PEPPER not set; using dev default pepper")
+    return "dev-unsafe-pepper"
+
+
+def _key_lookup_hash(secret: str, pepper: str) -> str:
+    return hmac.new(
+        pepper.encode("utf-8"), secret.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+
+
+def _argon2_params() -> dict[str, int]:
+    return {
+        "time_cost": int(os.getenv("FG_KEY_HASH_TIME_COST", "2")),
+        "memory_cost": int(os.getenv("FG_KEY_HASH_MEMORY_KIB", "65536")),
+        "parallelism": int(os.getenv("FG_KEY_HASH_PARALLELISM", "1")),
+        "hash_len": int(os.getenv("FG_KEY_HASH_HASH_LEN", "32")),
+        "salt_len": int(os.getenv("FG_KEY_HASH_SALT_LEN", "16")),
+    }
+
+
+def _argon2_hasher(params: Optional[dict[str, int]] = None) -> PasswordHasher:
+    p = params or _argon2_params()
+    return PasswordHasher(
+        time_cost=p["time_cost"],
+        memory_cost=p["memory_cost"],
+        parallelism=p["parallelism"],
+        hash_len=p["hash_len"],
+        salt_len=p["salt_len"],
+    )
+
+
+def hash_key(secret: str) -> tuple[str, str, dict[str, int], str]:
+    pepper = _get_key_pepper()
+    params = _argon2_params()
+    hasher = _argon2_hasher(params)
+    hashed = hasher.hash(f"{secret}:{pepper}")
+    lookup = _key_lookup_hash(secret, pepper)
+    return hashed, "argon2id", params, lookup
+
+
+def verify_key(secret: str, stored_hash: str, hash_alg: Optional[str]) -> bool:
+    if hash_alg == "argon2id":
+        try:
+            pepper = _get_key_pepper()
+            hasher = _argon2_hasher()
+            return hasher.verify(stored_hash, f"{secret}:{pepper}")
+        except VerifyMismatchError:
+            return False
+        except Exception:
+            log.exception("argon2 verify failed")
+            return False
+    return _constant_time_compare(_sha256_hex(secret), stored_hash)
 
 
 def _constant_time_compare(a: str, b: str) -> bool:
@@ -191,7 +254,7 @@ def mint_key(
     token = _b64url(
         json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
     )
-    key_hash = hashlib.sha256(secret.encode("utf-8")).hexdigest()
+    key_hash, hash_alg, hash_params, key_lookup = hash_key(secret)
     scopes_csv = ",".join(scopes)
 
     con = sqlite3.connect(sqlite_path)
@@ -200,9 +263,21 @@ def mint_key(
         names = [r[1] for r in cols]
         notnull = {r[1] for r in cols if int(r[3] or 0) == 1 and r[4] is None}
 
+        if (
+            "hash_alg" not in names
+            or "hash_params" not in names
+            or "key_lookup" not in names
+        ):
+            raise RuntimeError("api_keys schema missing hash columns; run migrations")
+
         values = {
             "prefix": prefix,
             "key_hash": key_hash,
+            "key_lookup": key_lookup,
+            "hash_alg": hash_alg,
+            "hash_params": json.dumps(
+                hash_params, separators=(",", ":"), sort_keys=True
+            ),
             "scopes_csv": scopes_csv,
             "enabled": 1,
         }
@@ -228,6 +303,9 @@ def mint_key(
                 "name",
                 "prefix",
                 "key_hash",
+                "key_lookup",
+                "hash_alg",
+                "hash_params",
                 "scopes_csv",
                 "tenant_id",
                 "created_at",
@@ -280,7 +358,9 @@ class AuthResult:
         return not self.valid and not self.is_missing_key
 
 
-def _update_key_usage(sqlite_path: str, prefix: str, key_hash: str) -> None:
+def _update_key_usage(
+    sqlite_path: str, prefix: str, identifier_col: str, identifier: str
+) -> None:
     """Atomically update last_used_at and use_count for a key (best effort)."""
     try:
         con = sqlite3.connect(sqlite_path, timeout=5.0)
@@ -288,13 +368,17 @@ def _update_key_usage(sqlite_path: str, prefix: str, key_hash: str) -> None:
             cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
             col_names = {r[1] for r in cols}
 
-            if "last_used_at" in col_names and "use_count" in col_names:
+            if (
+                "last_used_at" in col_names
+                and "use_count" in col_names
+                and identifier_col in col_names
+            ):
                 now_ts = int(time.time())
                 con.execute(
                     """UPDATE api_keys
                        SET last_used_at = ?, use_count = use_count + 1
-                       WHERE prefix = ? AND key_hash = ?""",
-                    (now_ts, prefix, key_hash),
+                       WHERE prefix = ? AND {col} = ?""".format(col=identifier_col),
+                    (now_ts, prefix, identifier),
                 )
                 con.commit()
         finally:
@@ -310,7 +394,12 @@ def _env_bool_auth(name: str, default: bool) -> bool:
     return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-def _check_db_expiration(sqlite_path: str, prefix: str, key_hash: str) -> bool:
+def _check_db_expiration(
+    sqlite_path: str,
+    prefix: str,
+    identifier_col: str,
+    identifier: Optional[str] = None,
+) -> bool:
     """
     Check if key is expired based on DB expires_at column.
     Returns True if expired (deny), False if not expired or no expiration set (allow).
@@ -333,9 +422,16 @@ def _check_db_expiration(sqlite_path: str, prefix: str, key_hash: str) -> bool:
             if "expires_at" not in col_names:
                 return False
 
+            if identifier is None:
+                identifier = identifier_col
+                identifier_col = "key_hash"
+
+            if identifier_col not in col_names:
+                return True
+
             row = con.execute(
-                "SELECT expires_at FROM api_keys WHERE prefix=? AND key_hash=? LIMIT 1",
-                (prefix, key_hash),
+                f"SELECT expires_at FROM api_keys WHERE prefix=? AND {identifier_col}=? LIMIT 1",
+                (prefix, identifier),
             ).fetchone()
 
             if not row or row[0] is None:
@@ -486,24 +582,42 @@ def verify_api_key_detailed(
         )
         return AuthResult(valid=False, reason="no_db_configured")
 
-    def _row_for(prefix: str, key_hash: str):
+    def _row_for(prefix: str, lookup_hash: Optional[str], legacy_hash: Optional[str]):
         con = sqlite3.connect(sqlite_path)
         try:
             try:
                 cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
                 col_names = {r[1] for r in cols}
-                if "tenant_id" in col_names:
-                    return con.execute(
-                        "SELECT scopes_csv, enabled, tenant_id FROM api_keys WHERE prefix=? AND key_hash=? LIMIT 1",
-                        (prefix, key_hash),
+                base_cols = ["id", "scopes_csv", "enabled", "tenant_id", "key_hash"]
+                select_cols = [c for c in base_cols if c in col_names]
+                if "hash_alg" in col_names:
+                    select_cols.append("hash_alg")
+                if "hash_params" in col_names:
+                    select_cols.append("hash_params")
+                if "key_lookup" in col_names:
+                    select_cols.append("key_lookup")
+
+                select_clause = ",".join(select_cols)
+
+                if lookup_hash and "key_lookup" in col_names:
+                    row = con.execute(
+                        f"SELECT {select_clause} FROM api_keys WHERE prefix=? AND key_lookup=? LIMIT 1",
+                        (prefix, lookup_hash),
                     ).fetchone()
-                row = con.execute(
-                    "SELECT scopes_csv, enabled FROM api_keys WHERE prefix=? AND key_hash=? LIMIT 1",
-                    (prefix, key_hash),
-                ).fetchone()
-                return (*row, None) if row else None
+                    if row:
+                        return dict(zip(select_cols, row)), "key_lookup", col_names
+
+                if legacy_hash:
+                    row = con.execute(
+                        f"SELECT {select_clause} FROM api_keys WHERE prefix=? AND key_hash=? LIMIT 1",
+                        (prefix, legacy_hash),
+                    ).fetchone()
+                    if row:
+                        return dict(zip(select_cols, row)), "key_hash", col_names
+
+                return None, None, col_names
             except sqlite3.OperationalError:
-                return None
+                return None, None, set()
         finally:
             con.close()
 
@@ -513,12 +627,22 @@ def verify_api_key_detailed(
     token_payload = None
     key_prefix = None
     key_hash = None
+    key_lookup = None
+    hash_alg = None
+    identifier_col = None
+    col_names: Set[str] = set()
+    secret_for_verify: Optional[str] = None
 
     parts = raw.split(".")
     if len(parts) >= 3:
         key_prefix = parts[0]
         token = parts[1] if len(parts) > 1 else ""
         secret_val = parts[-1]
+        secret_for_verify = secret_val
+        try:
+            key_lookup = _key_lookup_hash(secret_val, _get_key_pepper())
+        except Exception:
+            key_lookup = None
         key_hash = _sha256_hex(secret_val)
 
         try:
@@ -554,9 +678,14 @@ def verify_api_key_detailed(
                 valid=False, reason="key_expired_token", key_prefix=key_prefix
             )
 
-        row = _row_for(key_prefix, key_hash)
+        row, identifier_col, col_names = _row_for(key_prefix, key_lookup, key_hash)
         if row:
-            scopes_csv, enabled, tenant_id = row
+            scopes_csv = row.get("scopes_csv")
+            enabled = row.get("enabled")
+            tenant_id = row.get("tenant_id")
+            key_hash = row.get("key_hash")
+            hash_alg = row.get("hash_alg")
+            key_lookup = row.get("key_lookup") or key_lookup
     else:
         key_prefix = raw[:16]
 
@@ -578,6 +707,7 @@ def verify_api_key_detailed(
         except ImportError:
             pass
 
+        secret_for_verify = raw
         try:
             from api.db_models import hash_api_key as _hash_api_key
 
@@ -585,9 +715,19 @@ def verify_api_key_detailed(
         except Exception:
             key_hash = _sha256_hex(raw)
 
-        row = _row_for(key_prefix, key_hash)
+        try:
+            key_lookup = _key_lookup_hash(raw, _get_key_pepper())
+        except Exception:
+            key_lookup = None
+
+        row, identifier_col, col_names = _row_for(key_prefix, key_lookup, key_hash)
         if row:
-            scopes_csv, enabled, tenant_id = row
+            scopes_csv = row.get("scopes_csv")
+            enabled = row.get("enabled")
+            tenant_id = row.get("tenant_id")
+            key_hash = row.get("key_hash")
+            hash_alg = row.get("hash_alg")
+            key_lookup = row.get("key_lookup") or key_lookup
 
     if scopes_csv is None or enabled is None:
         _log_auth_event(
@@ -613,8 +753,15 @@ def verify_api_key_detailed(
 
     if (
         check_expiration
-        and key_hash
-        and _check_db_expiration(sqlite_path, key_prefix, key_hash)
+        and identifier_col
+        and key_prefix
+        and (key_lookup or key_hash)
+        and _check_db_expiration(
+            sqlite_path,
+            key_prefix,
+            identifier_col,
+            key_lookup if identifier_col == "key_lookup" else key_hash,
+        )
     ):
         _log_auth_event(
             "auth_attempt",
@@ -627,6 +774,58 @@ def verify_api_key_detailed(
         return AuthResult(valid=False, reason="key_expired_db", key_prefix=key_prefix)
 
     have = _parse_scopes_csv(scopes_csv)
+
+    if key_hash and secret_for_verify:
+        if not verify_key(secret_for_verify, key_hash, hash_alg):
+            _log_auth_event(
+                "auth_attempt",
+                success=False,
+                key_prefix=key_prefix,
+                tenant_id=tenant_id,
+                reason="key_hash_mismatch",
+                request_path=request_path,
+                client_ip=client_ip,
+            )
+            return AuthResult(
+                valid=False,
+                reason="key_hash_mismatch",
+                key_prefix=key_prefix,
+                tenant_id=tenant_id,
+                scopes=have,
+            )
+
+        if hash_alg != "argon2id":
+            if (
+                "hash_alg" in col_names
+                and "hash_params" in col_names
+                and "key_lookup" in col_names
+            ):
+                try:
+                    new_hash, new_alg, new_params, new_lookup = hash_key(
+                        secret_for_verify
+                    )
+                    con = sqlite3.connect(sqlite_path)
+                    try:
+                        con.execute(
+                            "UPDATE api_keys SET key_hash=?, hash_alg=?, hash_params=?, key_lookup=? WHERE id=?",
+                            (
+                                new_hash,
+                                new_alg,
+                                json.dumps(
+                                    new_params, separators=(",", ":"), sort_keys=True
+                                ),
+                                new_lookup,
+                                row.get("id"),
+                            ),
+                        )
+                        con.commit()
+                        key_hash = new_hash
+                        key_lookup = new_lookup
+                        identifier_col = "key_lookup"
+                    finally:
+                        con.close()
+                except Exception:
+                    log.exception("Failed to upgrade legacy key hash")
 
     if required_scopes is not None:
         needed = (
@@ -654,8 +853,13 @@ def verify_api_key_detailed(
                 scopes=have,
             )
 
-    if key_hash:
-        _update_key_usage(sqlite_path, key_prefix, key_hash)
+    if identifier_col and (key_lookup or key_hash):
+        _update_key_usage(
+            sqlite_path,
+            key_prefix,
+            identifier_col,
+            key_lookup if identifier_col == "key_lookup" else key_hash,
+        )
 
     _log_auth_event(
         "auth_attempt",
@@ -751,18 +955,13 @@ def _is_production_env() -> bool:
 def require_scopes(*scopes: str) -> Callable[..., None]:
     needed: Set[str] = {str(s).strip() for s in scopes if str(s).strip()}
 
-    if not needed:
-
-        def _noop() -> None:
-            return None
-
-        return _noop
-
     def _scoped_key_dep(
         request: Request,
         x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
     ) -> str:
-        return require_api_key_always(request, x_api_key, required_scopes=needed)
+        return require_api_key_always(
+            request, x_api_key, required_scopes=needed or None
+        )
 
     def _dep(_: str = Depends(_scoped_key_dep)) -> None:
         return None
@@ -842,15 +1041,18 @@ def rotate_api_key_by_prefix(
         parts = new_key.split(".")
         new_prefix = parts[0] if parts else "fgk"
         new_secret = parts[-1]
-        new_key_hash = _sha256_hex(new_secret)
+        try:
+            new_lookup = _key_lookup_hash(new_secret, _get_key_pepper())
+        except Exception:
+            new_lookup = None
 
         cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
         col_names = {r[1] for r in cols}
 
-        if "rotated_from" in col_names:
+        if "rotated_from" in col_names and new_lookup and "key_lookup" in col_names:
             con.execute(
-                "UPDATE api_keys SET rotated_from=? WHERE key_hash=?",
-                (old_key_hash, new_key_hash),
+                "UPDATE api_keys SET rotated_from=? WHERE key_lookup=?",
+                (old_key_hash, new_lookup),
             )
 
         old_key_revoked = False

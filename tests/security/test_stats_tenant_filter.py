@@ -32,7 +32,7 @@ def _seed_decision(session: Session, tenant_id: str, event_id: str) -> None:
 def test_stats_requires_tenant_filter(build_app):
     app = build_app(auth_enabled=True)
     client = TestClient(app)
-    key = mint_key(tenant_id="tenant-a")
+    key = mint_key("stats:read", tenant_id="tenant-a")
 
     engine = get_engine()
     with Session(engine) as session:

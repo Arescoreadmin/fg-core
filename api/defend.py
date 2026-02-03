@@ -13,9 +13,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import bind_tenant_id, require_scopes, verify_api_key
+from api.auth_scopes import bind_tenant_id, require_scopes
 from api.db import get_db
 from api.db_models import DecisionRecord
+from api.evidence_chain import chain_fields_for_decision
 from api.decision_diff import (
     compute_decision_diff,
     snapshot_from_current,
@@ -35,7 +36,6 @@ router = APIRouter(
     prefix="/defend",
     tags=["defend"],
     dependencies=[
-        Depends(verify_api_key),
         Depends(require_scopes("defend:write")),
         Depends(rate_limit_guard),
     ],
@@ -261,38 +261,13 @@ def _sha256_hex(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
 
-def _compute_chain_hash(prev_hash: Optional[str], payload: dict[str, Any]) -> str:
-    blob = json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    )
-    return _sha256_hex(f"{prev_hash or ''}:{blob}")
-
-
 def _supports_chain_fields() -> bool:
-    return hasattr(DecisionRecord, "prev_hash") and hasattr(
-        DecisionRecord, "chain_hash"
+    return (
+        hasattr(DecisionRecord, "prev_hash")
+        and hasattr(DecisionRecord, "chain_hash")
+        and hasattr(DecisionRecord, "chain_alg")
+        and hasattr(DecisionRecord, "chain_ts")
     )
-
-
-def _hash_payload(
-    *,
-    event_id: str,
-    created_at: datetime,
-    tenant_id: str,
-    source: str,
-    event_type: str,
-    threat_level: str,
-    rules_triggered: list[str],
-) -> dict[str, Any]:
-    return {
-        "event_id": event_id,
-        "created_at": _iso(created_at),
-        "tenant_id": tenant_id,
-        "source": source,
-        "event_type": event_type,
-        "threat_level": threat_level,
-        "rules_triggered": rules_triggered,
-    }
 
 
 # =============================================================================
@@ -381,21 +356,19 @@ def _persist_decision_best_effort(
         record = DecisionRecord(**_filter_model_kwargs(DecisionRecord, record_kwargs))
 
         if _supports_chain_fields():
-            last = db.query(DecisionRecord).order_by(DecisionRecord.id.desc()).first()
-            prev_hash = getattr(last, "chain_hash", None) if last else None
-            record.prev_hash = prev_hash
-            record.chain_hash = _compute_chain_hash(
-                prev_hash,
-                _hash_payload(
-                    event_id=event_id,
-                    created_at=created_at,
-                    tenant_id=req.tenant_id,
-                    source=req.source,
-                    event_type=event_type,
-                    threat_level=str(decision.threat_level),
-                    rules_triggered=rules_value,
-                ),
+            chain_fields = chain_fields_for_decision(
+                db,
+                tenant_id=req.tenant_id,
+                request_json=req_value,
+                response_json=resp_value,
+                threat_level=str(decision.threat_level),
+                chain_ts=created_at,
+                event_id=event_id,
             )
+            record.prev_hash = chain_fields["prev_hash"]
+            record.chain_hash = chain_fields["chain_hash"]
+            record.chain_alg = chain_fields["chain_alg"]
+            record.chain_ts = chain_fields["chain_ts"]
 
         db.add(record)
         db.commit()
