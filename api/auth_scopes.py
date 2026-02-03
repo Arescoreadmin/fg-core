@@ -623,7 +623,6 @@ def verify_api_key_detailed(
     key_hash = None
     key_lookup = None
     hash_alg = None
-    hash_params = None
     identifier_col = None
     col_names: Set[str] = set()
     secret_for_verify: Optional[str] = None
