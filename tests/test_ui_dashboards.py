@@ -16,7 +16,9 @@ from api.db_models import DecisionRecord
 def _compute_chain_hash(prev_hash: str | None, payload: dict) -> str:
     import hashlib
 
-    blob = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    blob = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    )
     return hashlib.sha256(f"{prev_hash or ''}:{blob}".encode("utf-8")).hexdigest()
 
 
@@ -30,7 +32,9 @@ def _hash_payload(
     threat_level: str,
     rules_triggered: list[str],
 ) -> dict:
-    created_at_iso = created_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    created_at_iso = (
+        created_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    )
     return {
         "event_id": event_id,
         "created_at": created_at_iso,
@@ -96,7 +100,9 @@ def _sha256_file(path: Path) -> str:
 def test_ui_dashboards_tenant_scoping(build_app, tmp_path):
     app = build_app(auth_enabled=True)
     client = TestClient(app)
-    key = mint_key("ui:read", "forensics:read", "controls:read", "audit:read", tenant_id="t1")
+    key = mint_key(
+        "ui:read", "forensics:read", "controls:read", "audit:read", tenant_id="t1"
+    )
 
     engine = get_engine()
     with Session(engine) as session:
@@ -113,7 +119,9 @@ def test_ui_dashboards_tenant_scoping(build_app, tmp_path):
     list_ok = client.get("/ui/decisions?tenant_id=t1", headers={"X-API-Key": key})
     assert list_ok.status_code == 200
 
-    list_forbidden = client.get("/ui/decisions?tenant_id=t2", headers={"X-API-Key": key})
+    list_forbidden = client.get(
+        "/ui/decisions?tenant_id=t2", headers={"X-API-Key": key}
+    )
     assert list_forbidden.status_code == 403
 
     decision_id = list_ok.json()["items"][0]["id"]
@@ -137,9 +145,7 @@ def test_ui_dashboards_tenant_scoping(build_app, tmp_path):
     )
     assert chain_forbidden.status_code == 403
 
-    controls_ok = client.get(
-        "/ui/controls?tenant_id=t1", headers={"X-API-Key": key}
-    )
+    controls_ok = client.get("/ui/controls?tenant_id=t1", headers={"X-API-Key": key})
     assert controls_ok.status_code == 200
 
     controls_forbidden = client.get(
@@ -185,7 +191,9 @@ def test_chain_verify_pass_fail(build_app):
     assert ok.json()["status"] == "PASS"
 
     with Session(engine) as session:
-        _seed_record(session, "t1", "evt-3", now + timedelta(seconds=20), "bad", tamper=True)
+        _seed_record(
+            session, "t1", "evt-3", now + timedelta(seconds=20), "bad", tamper=True
+        )
         session.commit()
 
     fail = client.get(

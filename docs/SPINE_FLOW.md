@@ -1,5 +1,6 @@
 **Generated**: 2026-02-01
-**Status**: AUTHORITATIVE - Derived from code analysis against HARDENING_PLAN_7DAY.md
+**Status**: Informational (non-authoritative). Canonical requirements live in `BLUEPRINT_STAGED.md`.
+**Derived From**: Code analysis of auth/tenant/rate-limit flow.
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ INCOMING REQUEST │
@@ -46,14 +47,3 @@
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ 6. ENDPOINT HANDLER │
 └─────────────────────────────────────────────────────────────────────────────┘
-EOF
-
-BATTLE_READINESS_REPORT.md
-
-cat > docs/BATTLE_READINESS_REPORT.md <<'EOF'
-
-FrostGate Core - Battle-Readiness Report
-
-Generated: 2026-02-01
-Session: Hardening execution against HARDENING_PLAN_7DAY.md
-Status: IN PROGRESS - ~75% Battle-Ready

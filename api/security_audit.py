@@ -384,6 +384,7 @@ class SecurityAuditor:
                 details=details or {},
             )
         )
+
     def _extract_request_context(self, request: Optional[Request]) -> dict[str, Any]:
         """Extract context from FastAPI request."""
         if request is None:

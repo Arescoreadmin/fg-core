@@ -200,7 +200,9 @@ def _cleanup_packets() -> None:
     ttl_seconds = int(os.getenv("FG_AUDIT_PACKET_TTL_SECONDS", "3600"))
     if ttl_seconds <= 0:
         return
-    packet_dir = Path(os.getenv("FG_AUDIT_PACKET_DIR", "artifacts/audit_packets")).resolve()
+    packet_dir = Path(
+        os.getenv("FG_AUDIT_PACKET_DIR", "artifacts/audit_packets")
+    ).resolve()
     if not packet_dir.exists():
         return
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=ttl_seconds)
@@ -532,13 +534,24 @@ async def ui_posture(
     tenant_id = _resolve_tenant(request, tenant_id)
     stats = _compute_stats(db, tenant_id=tenant_id)
     trend = _trend_flag(int(stats.decisions_24h), int(stats.decisions_7d))
-    top_rules = [{"reason": item.name, "count": int(item.count)} for item in stats.top_rules_24h]
+    top_rules = [
+        {"reason": item.name, "count": int(item.count)} for item in stats.top_rules_24h
+    ]
 
     tiles = [
-        PostureTile(label="Decisions (24h)", value=str(int(stats.decisions_24h)), trend=trend),
-        PostureTile(label="High threat rate (1h)", value=f"{float(stats.high_threat_rate_1h):.2f}%"),
-        PostureTile(label="Unique IPs (24h)", value=str(int(stats.unique_source_ips_24h))),
-        PostureTile(label="Avg latency (24h)", value=f"{float(stats.avg_latency_ms_24h):.1f} ms"),
+        PostureTile(
+            label="Decisions (24h)", value=str(int(stats.decisions_24h)), trend=trend
+        ),
+        PostureTile(
+            label="High threat rate (1h)",
+            value=f"{float(stats.high_threat_rate_1h):.2f}%",
+        ),
+        PostureTile(
+            label="Unique IPs (24h)", value=str(int(stats.unique_source_ips_24h))
+        ),
+        PostureTile(
+            label="Avg latency (24h)", value=f"{float(stats.avg_latency_ms_24h):.1f} ms"
+        ),
     ]
 
     trends = {
@@ -659,7 +672,9 @@ async def ui_decision_detail(
         anomaly_score=float(getattr(record, "anomaly_score", 0.0) or 0.0),
         ai_adversarial_score=float(getattr(record, "ai_adversarial_score", 0.0) or 0.0),
         pq_fallback=bool(getattr(record, "pq_fallback", False)),
-        rules_triggered=list(_loads_json_text(getattr(record, "rules_triggered_json", None)) or []),
+        rules_triggered=list(
+            _loads_json_text(getattr(record, "rules_triggered_json", None)) or []
+        ),
         explain_summary=getattr(record, "explain_summary", None),
         latency_ms=int(getattr(record, "latency_ms", 0) or 0),
         request=_loads_json_text(getattr(record, "request_json", None)),
@@ -739,12 +754,19 @@ async def ui_audit_packet(
                 "event_type": record.event_type,
                 "threat_level": record.threat_level,
                 "anomaly_score": float(getattr(record, "anomaly_score", 0.0) or 0.0),
-                "ai_adversarial_score": float(getattr(record, "ai_adversarial_score", 0.0) or 0.0),
+                "ai_adversarial_score": float(
+                    getattr(record, "ai_adversarial_score", 0.0) or 0.0
+                ),
                 "pq_fallback": bool(getattr(record, "pq_fallback", False)),
-                "rules_triggered": _loads_json_text(getattr(record, "rules_triggered_json", None)) or [],
+                "rules_triggered": _loads_json_text(
+                    getattr(record, "rules_triggered_json", None)
+                )
+                or [],
                 "explain_summary": getattr(record, "explain_summary", None),
                 "latency_ms": int(getattr(record, "latency_ms", 0) or 0),
-                "decision_diff": _loads_json_text(getattr(record, "decision_diff_json", None)),
+                "decision_diff": _loads_json_text(
+                    getattr(record, "decision_diff_json", None)
+                ),
                 "request": _loads_json_text(getattr(record, "request_json", None)),
                 "response": _loads_json_text(getattr(record, "response_json", None)),
                 "chain_hash": getattr(record, "chain_hash", None),
@@ -778,15 +800,23 @@ async def ui_audit_packet(
 
     manifest_entries: list[dict[str, Any]] = []
     for name in sorted(files):
-        manifest_entries.append({"name": name, "sha256": _sha256_file(packet_dir / name)})
+        manifest_entries.append(
+            {"name": name, "sha256": _sha256_file(packet_dir / name)}
+        )
 
     manifest = {"algorithm": "sha256", "version": 1, "files": manifest_entries}
     manifest_path = packet_dir / "manifest.json"
     manifest_path.write_text(_canonical_json(manifest), encoding="utf-8")
     files.append("manifest.json")
 
-    metadata = {"tenant_id": tenant_id, "packet_id": packet_id, "created_at": _iso(created_at)}
-    _packet_metadata_path(packet_dir).write_text(_canonical_json(metadata), encoding="utf-8")
+    metadata = {
+        "tenant_id": tenant_id,
+        "packet_id": packet_id,
+        "created_at": _iso(created_at),
+    }
+    _packet_metadata_path(packet_dir).write_text(
+        _canonical_json(metadata), encoding="utf-8"
+    )
 
     token = secrets.token_urlsafe(24)
     token_path = packet_dir / "token.txt"
@@ -836,7 +866,9 @@ async def ui_audit_packet_download(
     zip_path = packet_dir / "audit_packet.zip"
     if not zip_path.exists():
         raise HTTPException(status_code=404, detail="Packet archive missing")
-    return FileResponse(path=zip_path, filename=zip_path.name, media_type="application/zip")
+    return FileResponse(
+        path=zip_path, filename=zip_path.name, media_type="application/zip"
+    )
 
 
 @router.get(
@@ -864,7 +896,13 @@ async def ui_controls(
         )
         for item in sliced
     ]
-    return ControlsPage(items=items, limit=limit, offset=offset, total=total, request_id=_request_id(request))
+    return ControlsPage(
+        items=items,
+        limit=limit,
+        offset=offset,
+        total=total,
+        request_id=_request_id(request),
+    )
 
 
 @router.get(
