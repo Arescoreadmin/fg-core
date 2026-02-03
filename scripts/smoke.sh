@@ -6,6 +6,7 @@ SERVICE="frostgate-core"
 HOST_BASE_URL="${FG_SMOKE_BASE_URL:-http://localhost:18080}"
 TIMEOUT_SECS="${FG_SMOKE_TIMEOUT_SECS:-120}"
 SLEEP_SECS="${FG_SMOKE_POLL_SECS:-0.5}"
+OPA_HEALTH_URL="${FG_OPA_HEALTH_URL:-http://localhost:18181/health}"
 
 # If you want raw request/response validation, set FG_SMOKE_INCLUDE_RAW=true
 INCLUDE_RAW="${FG_SMOKE_INCLUDE_RAW:-false}"
@@ -28,6 +29,8 @@ print_debug() {
   docker compose ps || true
   log "---- frostgate-core logs (tail 250) ----"
   docker compose logs --no-log-prefix --tail=250 "$SERVICE" || true
+  log "---- opa logs (tail 120) ----"
+  docker compose logs --no-log-prefix --tail=120 opa || true
   log "---- postgres logs (tail 120) ----"
   docker compose logs --no-log-prefix --tail=120 postgres || true
   log "---- redis logs (tail 120) ----"
@@ -124,12 +127,16 @@ need_cmd python
 wait_for_compose_service
 require_admin_key
 
-log "[3] health endpoints..."
+log "[3] OPA health..."
+curl -fsS "${OPA_HEALTH_URL}" >/dev/null || { print_debug; die "OPA health failed"; }
+log "ok"
+
+log "[4] health endpoints..."
 curl -fsS "${HOST_BASE_URL}/health/live" >/dev/null || { print_debug; die "health/live failed"; }
 curl -fsS "${HOST_BASE_URL}/health/ready" >/dev/null || { print_debug; die "health/ready failed"; }
 log "ok"
 
-log "[4] unauthorized must NOT be 200..."
+log "[5] unauthorized must NOT be 200..."
 code="$(http_code "${HOST_BASE_URL}/decisions")"
 if [[ "$code" == "200" ]]; then
   print_debug
@@ -137,7 +144,7 @@ if [[ "$code" == "200" ]]; then
 fi
 log "ok (unauthorized code=$code)"
 
-log "[5] generate a defend decision..."
+log "[6] generate a defend decision..."
 NOW="$(python - <<'PY'
 import datetime
 print(datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00","Z"))
@@ -146,7 +153,7 @@ PY
 post_defend "$NOW"
 log "ok"
 
-log "[6] verify decisions list returns at least 1 item..."
+log "[7] verify decisions list returns at least 1 item..."
 resp="$(curl_json "${HOST_BASE_URL}/decisions?limit=10&include_raw=${INCLUDE_RAW}" -H "X-API-Key: ${ADMIN_KEY}")" || {
   print_debug
   die "/decisions request failed"
@@ -171,7 +178,7 @@ if [[ "$count" -lt 1 || "$total" -lt 1 ]]; then
 fi
 log "ok total=$total returned=$count"
 
-log "[7] verify newest decision fields..."
+log "[8] verify newest decision fields..."
 echo "$resp" | jq -e '
   .items[0].tenant_id == "local" and
   .items[0].source == "smoke" and
@@ -188,7 +195,7 @@ echo "$resp" | jq -e '
 log "ok"
 
 if [[ "${INCLUDE_RAW}" == "true" ]]; then
-  log "[8] include_raw=true: verify request/response are present..."
+  log "[9] include_raw=true: verify request/response are present..."
   echo "$resp" | jq -e '.items[0].request != null and .items[0].response != null' >/dev/null || {
     log "response was:"
     echo "$resp" | jq . || true
@@ -197,7 +204,7 @@ if [[ "${INCLUDE_RAW}" == "true" ]]; then
   }
   log "ok"
 else
-  log "[8] include_raw=false: request/response should be null (expected)…"
+  log "[9] include_raw=false: request/response should be null (expected)…"
   echo "$resp" | jq -e '.items[0].request == null and .items[0].response == null' >/dev/null || {
     log "response was:"
     echo "$resp" | jq . || true

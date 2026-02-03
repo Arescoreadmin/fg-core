@@ -332,6 +332,7 @@ class IngestProcessor:
                 classification=message.metadata.get("classification"),
                 event_id=message.message_id,
                 meta=message.metadata,
+                path="/ingest",
             )
             result = pipeline_evaluate(pipeline_input)
 
@@ -360,6 +361,7 @@ class IngestProcessor:
                 "tie_d": tie_d,
                 "roe_applied": roe_applied,
                 "disruption_limited": disruption_limited,
+                "policy": result.policy.to_dict(),
                 "processed_at": datetime.now(timezone.utc).isoformat(),
             }
 

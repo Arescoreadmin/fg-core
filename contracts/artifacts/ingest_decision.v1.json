@@ -16,7 +16,8 @@
     "event_id",
     "clock_drift_ms",
     "explanation_brief",
-    "policy_hash"
+    "policy_hash",
+    "policy"
   ],
   "properties": {
     "threat_level": {
@@ -39,6 +40,15 @@
     "clock_drift_ms": {"type": "integer"},
     "explanation_brief": {"type": "string"},
     "policy_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allow", "reasons"],
+      "properties": {
+        "allow": {"type": "boolean"},
+        "reasons": {"type": "array", "items": {"type": "string"}}
+      }
+    },
     "roe_applied": {"type": "boolean"},
     "disruption_limited": {"type": "boolean"},
     "ao_required": {"type": "boolean"},

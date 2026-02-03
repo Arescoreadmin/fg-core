@@ -112,7 +112,7 @@ venv:
 # Guards / audits
 # =============================================================================
 
-.PHONY: guard-scripts fg-audit-make fg-contract fg-compile contracts-gen check-no-engine-evaluate
+.PHONY: guard-scripts fg-audit-make fg-contract fg-compile contracts-gen check-no-engine-evaluate opa-check
 
 guard-scripts:
 	@$(PY_CONTRACT) scripts/guard_no_paste_garbage.py
@@ -124,6 +124,16 @@ check-no-engine-evaluate:
 		echo "$$matches"; \
 		echo "Forbidden engine.evaluate usage found in api/."; \
 		exit 1; \
+	fi
+
+opa-check:
+	@if command -v opa >/dev/null 2>&1; then \
+		opa check --strict policy/opa; \
+		opa test policy/opa; \
+	else \
+		command -v docker >/dev/null 2>&1 || (echo "missing dependency: docker" && exit 1); \
+		docker run --rm -v "$$PWD/policy/opa:/policies" openpolicyagent/opa:0.64.1 check --strict /policies; \
+		docker run --rm -v "$$PWD/policy/opa:/policies" openpolicyagent/opa:0.64.1 test /policies; \
 	fi
 
 fg-audit-make: guard-scripts
@@ -195,7 +205,7 @@ fg-lint: fmt-check
 # =============================================================================
 
 .PHONY: fg-fast
-fg-fast: fg-audit-make fg-contract fg-compile prod-profile-check gap-audit
+fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check gap-audit
 	@$(PYTEST_ENV) $(PY) -m pytest -q
 	@$(MAKE) -s fg-lint
 
