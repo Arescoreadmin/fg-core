@@ -680,7 +680,6 @@ def verify_api_key_detailed(
             tenant_id = row.get("tenant_id")
             key_hash = row.get("key_hash")
             hash_alg = row.get("hash_alg")
-            hash_params = row.get("hash_params")
             key_lookup = row.get("key_lookup") or key_lookup
     else:
         key_prefix = raw[:16]
@@ -723,7 +722,6 @@ def verify_api_key_detailed(
             tenant_id = row.get("tenant_id")
             key_hash = row.get("key_hash")
             hash_alg = row.get("hash_alg")
-            hash_params = row.get("hash_params")
             key_lookup = row.get("key_lookup") or key_lookup
 
     if scopes_csv is None or enabled is None:
