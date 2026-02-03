@@ -12,6 +12,7 @@ import os
 from dataclasses import dataclass, field
 from typing import List
 
+from api.config.env import resolve_env
 log = logging.getLogger("frostgate.startup")
 _security_log = logging.getLogger("frostgate.security")
 
@@ -98,7 +99,7 @@ class StartupValidator:
     }
 
     def __init__(self):
-        self.env = _env_str("FG_ENV", "dev").lower()
+        self.env = resolve_env()
         self.is_production = self.env in ("prod", "production", "staging")
 
     def validate(self) -> StartupValidationReport:
@@ -529,7 +530,7 @@ def validate_startup_config(
     if log_results:
         _log_validation_report(report)
 
-    if fail_on_error and report.has_errors and report.is_production:
+    if fail_on_error and report.has_errors:
         error_messages = [
             r.message for r in report.results if r.severity == "error" and not r.passed
         ]

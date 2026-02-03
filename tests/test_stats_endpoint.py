@@ -12,7 +12,10 @@ def test_stats_requires_auth():
 
 
 def test_stats_schema_with_auth():
-    r = client.get("/stats", headers={"x-api-key": os.environ["FG_API_KEY"]})
+    r = client.get(
+        "/stats?tenant_id=test-tenant",
+        headers={"x-api-key": os.environ["FG_API_KEY"]},
+    )
     assert r.status_code == 200
     data = r.json()
 

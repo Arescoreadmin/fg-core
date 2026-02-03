@@ -342,9 +342,11 @@ def _audit_meta(
 )
 async def get_tenant_usage(
     tenant_id: str,
+    request: Request,
     _: str = Depends(verify_api_key),
 ) -> TenantUsageResponse:
     """Get usage statistics for a tenant."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
     try:
         from api.tenant_usage import get_usage_tracker
     except ImportError:
@@ -401,9 +403,11 @@ async def get_tenant_usage(
 async def update_tenant_quota(
     tenant_id: str,
     update: TenantQuotaUpdate,
+    request: Request,
     _: str = Depends(verify_api_key),
 ) -> Dict[str, Any]:
     """Update custom quota for a tenant."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
     try:
         from api.tenant_usage import get_usage_tracker
     except ImportError:
@@ -430,9 +434,11 @@ async def update_tenant_quota(
 async def update_tenant_tier(
     tenant_id: str,
     update: TenantTierUpdate,
+    request: Request,
     _: str = Depends(verify_api_key),
 ) -> Dict[str, Any]:
     """Update subscription tier for a tenant."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
     try:
         from api.tenant_usage import SubscriptionTier, get_usage_tracker
     except ImportError:
@@ -468,9 +474,11 @@ async def update_tenant_tier(
 )
 async def suspend_tenant(
     tenant_id: str,
+    request: Request,
     _: str = Depends(verify_api_key),
 ) -> Dict[str, Any]:
     """Suspend a tenant (block all requests)."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
     try:
         from api.tenant_usage import get_usage_tracker
     except ImportError:
@@ -513,9 +521,11 @@ async def suspend_tenant(
 )
 async def activate_tenant(
     tenant_id: str,
+    request: Request,
     _: str = Depends(verify_api_key),
 ) -> Dict[str, Any]:
     """Activate a suspended tenant."""
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
     try:
         from api.tenant_usage import get_usage_tracker
     except ImportError:
@@ -546,17 +556,19 @@ async def activate_tenant(
     dependencies=[Depends(require_scopes("keys:read"))],
 )
 async def admin_list_keys(
+    request: Request,
     tenant_id: Optional[str] = Query(default=None, max_length=128),
     include_disabled: bool = Query(default=False),
     _: str = Depends(verify_api_key),
 ) -> ListKeysResponse:
     """List API keys for admin usage."""
-    if tenant_id:
-        is_valid, error = _validate_tenant_id(tenant_id)
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=error)
+    bound_tenant = bind_tenant_id(
+        request,
+        tenant_id,
+        require_explicit_for_unscoped=True,
+    )
 
-    keys = list_api_keys(tenant_id=tenant_id, include_disabled=include_disabled)
+    keys = list_api_keys(tenant_id=bound_tenant, include_disabled=include_disabled)
     key_infos = [KeyInfo(**k) for k in keys]
     return ListKeysResponse(keys=key_infos, total=len(key_infos))
 
@@ -827,14 +839,16 @@ async def admin_create_key(
     _: str = Depends(verify_api_key),
 ) -> CreateKeyResponse:
     """Create a new API key via admin."""
-    is_valid, error = _validate_tenant_id(req.tenant_id)
-    if not is_valid:
-        raise HTTPException(status_code=400, detail=error)
+    bound_tenant = bind_tenant_id(
+        request,
+        req.tenant_id,
+        require_explicit_for_unscoped=True,
+    )
 
     key = mint_key(
         *req.scopes,
         ttl_seconds=req.ttl_seconds,
-        tenant_id=req.tenant_id,
+        tenant_id=bound_tenant,
     )
 
     parts = key.split(".")
@@ -845,7 +859,7 @@ async def admin_create_key(
     audit_key_created(
         key_prefix=prefix,
         scopes=req.scopes,
-        tenant_id=req.tenant_id,
+        tenant_id=bound_tenant,
         request=request,
         ttl_seconds=req.ttl_seconds,
     )
@@ -854,7 +868,7 @@ async def admin_create_key(
         key=key,
         prefix=prefix,
         scopes=req.scopes,
-        tenant_id=req.tenant_id,
+        tenant_id=bound_tenant,
         ttl_seconds=req.ttl_seconds,
         expires_at=expires_at,
     )
@@ -872,15 +886,16 @@ async def admin_revoke_key(
     _: str = Depends(verify_api_key),
 ) -> RevokeKeyResponse:
     """Revoke an API key by prefix."""
-    if tenant_id:
-        is_valid, error = _validate_tenant_id(tenant_id)
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=error)
-        keys = list_api_keys(tenant_id=tenant_id, include_disabled=True)
-        if not any(k.get("prefix") == key_prefix for k in keys):
-            raise HTTPException(status_code=404, detail="Key not found")
+    bound_tenant = bind_tenant_id(
+        request,
+        tenant_id,
+        require_explicit_for_unscoped=True,
+    )
+    keys = list_api_keys(tenant_id=bound_tenant, include_disabled=True)
+    if not any(k.get("prefix") == key_prefix for k in keys):
+        raise HTTPException(status_code=404, detail="Key not found")
 
-    revoked = revoke_api_key(key_prefix)
+    revoked = revoke_api_key(key_prefix, tenant_id=bound_tenant)
     if revoked:
         audit_key_revoked(key_prefix=key_prefix, request=request)
         return RevokeKeyResponse(
@@ -909,10 +924,15 @@ async def admin_rotate_key(
 ) -> RotateKeyResponse:
     """Rotate an API key by prefix."""
     try:
+        bound_tenant = bind_tenant_id(
+            request,
+            req.tenant_id,
+            require_explicit_for_unscoped=True,
+        )
         result = rotate_api_key_by_prefix(
             key_prefix=key_prefix,
             ttl_seconds=req.ttl_seconds,
-            tenant_id=req.tenant_id,
+            tenant_id=bound_tenant,
             revoke_old=req.revoke_old,
         )
     except ValueError as exc:

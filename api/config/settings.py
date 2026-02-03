@@ -7,11 +7,12 @@ from pathlib import Path
 # Keep settings extremely boring and predictable.
 # Anything path-related should come from api.config.paths to ensure one source of truth.
 from .paths import STATE_DIR, AGENT_QUEUE_DIR, PYCACHE_DIR
+from .env import resolve_env
 
 
 @dataclass(frozen=True)
 class Settings:
-    env: str = os.getenv("FG_ENV", os.getenv("ENV", "dev")).strip() or "dev"
+    env: str = resolve_env()
     db_url: str = os.getenv("FG_DB_URL", "").strip()
 
     # Canonical runtime dirs (already centralized in paths.py)

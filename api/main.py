@@ -89,6 +89,7 @@ from api.middleware.request_validation import (
 
 # Startup validation (fail-soft import)
 try:
+    from api.config.env import is_production_env, is_strict_env_required, resolve_env
     from api.config.startup_validation import validate_startup_config
 except ImportError:  # pragma: no cover
 
@@ -201,11 +202,9 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # Run startup validation (fails closed in prod, logs in all envs)
+        is_production = False
         try:
-            is_production = os.getenv("FG_ENV", "dev").strip().lower() in {
-                "prod",
-                "production",
-            }
+            is_production = is_production_env()
             validation_report = validate_startup_config(
                 fail_on_error=is_production,
                 log_results=True,
@@ -214,6 +213,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         except Exception as e:
             log.warning(f"Startup validation failed: {e}")
             app.state.startup_validation = None
+            if is_production or is_strict_env_required():
+                raise
 
         try:
             # sqlite mode: ensure dir exists BEFORE init_db()
@@ -287,7 +288,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     # Frozen state
     app.state.auth_enabled = bool(resolved_auth_enabled)
     app.state.service = os.getenv("FG_SERVICE", "frostgate-core")
-    app.state.env = os.getenv("FG_ENV", "dev")
+    app.state.env = resolve_env()
     app.state.app_instance_id = str(uuid.uuid4())
     app.state.app_version = APP_VERSION
     app.state.api_version = API_VERSION

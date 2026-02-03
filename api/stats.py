@@ -6,11 +6,11 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import require_api_key_always
+from api.auth_scopes import bind_tenant_id, require_api_key_always
 from api.db import get_db
 from api.db_models import DecisionRecord
 
@@ -400,7 +400,7 @@ class _Computed:
         self.threat_counts_1h = threat_counts_1h
 
 
-def _compute_stats(db: Session) -> _Computed:
+def _compute_stats(db: Session, tenant_id: str) -> _Computed:
     now = _utcnow()
     cut_1h = now - timedelta(hours=1)
     cut_24h = now - timedelta(hours=24)
@@ -408,7 +408,7 @@ def _compute_stats(db: Session) -> _Computed:
 
     # Pull a reasonable slice. We'll classify by _event_time(rec), not just created_at.
     try:
-        q = db.query(DecisionRecord)
+        q = db.query(DecisionRecord).filter(DecisionRecord.tenant_id == tenant_id)
         if hasattr(DecisionRecord, "created_at"):
             q = q.filter(
                 DecisionRecord.created_at >= (cut_7d - timedelta(days=2))
@@ -538,8 +538,22 @@ def _compute_stats(db: Session) -> _Computed:
 
 
 @router.get("", response_model=StatsResponse)
-def get_stats(db: Session = Depends(get_db)) -> StatsResponse:
-    c = _compute_stats(db)
+def get_stats(
+    request: Request,
+    db: Session = Depends(get_db),
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
+) -> StatsResponse:
+    tenant_id = bind_tenant_id(
+        request,
+        tenant_id,
+        require_explicit_for_unscoped=True,
+    )
+    if not tenant_id or tenant_id == "unknown":
+        raise HTTPException(
+            status_code=400,
+            detail="tenant_id is required and must be a known tenant",
+        )
+    c = _compute_stats(db, tenant_id=tenant_id)
     return StatsResponse(
         generated_at=_iso(c.now),
         decisions_1h=c.decisions_1h,
@@ -557,12 +571,26 @@ def get_stats(db: Session = Depends(get_db)) -> StatsResponse:
 
 
 @router.get("/summary", response_model=StatsSummaryResponse)
-def get_stats_summary(db: Session = Depends(get_db)) -> StatsSummaryResponse:
+def get_stats_summary(
+    request: Request,
+    db: Session = Depends(get_db),
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
+) -> StatsSummaryResponse:
     """
     Marketing-friendly summary payload for dashboard headers.
     Built from the same underlying computation to avoid drift.
     """
-    c = _compute_stats(db)
+    tenant_id = bind_tenant_id(
+        request,
+        tenant_id,
+        require_explicit_for_unscoped=True,
+    )
+    if not tenant_id or tenant_id == "unknown":
+        raise HTTPException(
+            status_code=400,
+            detail="tenant_id is required and must be a known tenant",
+        )
+    c = _compute_stats(db, tenant_id=tenant_id)
 
     threat_counts_24h = c.threat_counts_24h.model_dump()
     risk_24h = _risk_score_from_counts(threat_counts_24h)

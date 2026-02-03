@@ -87,7 +87,13 @@ API key MUST accept request header `X-API-Key`
 Expected global key is:
 - `FG_API_KEY` if set (no default fallback; production fails closed when missing)
 
-### 1.3 Tenant auth (if present)
+### 1.3 Environment strictness
+
+- `FG_ENV` MUST be explicitly set in production/prod-like deployments.
+- If `FG_REQUIRE_STRICT_ENV=1` or `FG_FAIL_CLOSED=1`, startup MUST fail when
+  `FG_ENV` is missing or invalid.
+
+### 1.4 Tenant auth (if present)
 
 If `X-Tenant-Id` is present, tenant validation is
 - enforced regardless of global auth setting:
@@ -110,7 +116,7 @@ SQLite path resolution MUST follow:
 2) else:
    - if `FG_ENV` is `prod` (or production equivalent), default MUST be:
      - `/var/lib/frostgate/state/frostgate.db` (container-oriented)
-   - if `FG_ENV` is `dev` or `test` (or unset), default MUST be:
+   - if `FG_ENV` is `dev` or `test` (or unset in non-strict mode), default MUST be:
      - `<repo>/state/frostgate.db`
 
 ### 2.2 Anti-drift guard (must fail in tests)

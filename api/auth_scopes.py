@@ -14,6 +14,7 @@ from typing import Callable, Optional, Set, Tuple
 
 from fastapi import Depends, Header, HTTPException, Request
 
+from api.config.env import is_production_env
 from api.db import _resolve_sqlite_path, init_db
 
 log = logging.getLogger("frostgate")
@@ -31,12 +32,6 @@ DEFAULT_TTL_SECONDS = 24 * 3600
 
 def _sha256_hex(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
-
-
-def _is_production_env() -> bool:
-    # Keep staging treated as prod-like for safety gates.
-    env = os.getenv("FG_ENV", "dev").strip().lower()
-    return env in {"prod", "production", "staging"}
 
 
 def _constant_time_compare(a: str, b: str) -> bool:
@@ -375,7 +370,7 @@ def _check_db_expiration(sqlite_path: str, prefix: str, key_hash: str) -> bool:
         ack = _env_bool_auth("FG_AUTH_DB_FAIL_OPEN_ACKNOWLEDGED", False)
 
         if fail_open:
-            if _is_production_env() and not ack:
+            if is_production_env() and not ack:
                 log.critical(
                     "SECURITY: DB expiration check fail-open requested but NOT ACKNOWLEDGED - DENYING (fail-closed). "
                     "To allow fail-open in prod/staging, set FG_AUTH_DB_FAIL_OPEN_ACKNOWLEDGED=true. "
@@ -449,7 +444,7 @@ def verify_api_key_detailed(
     # 1) global key bypass (constant-time comparison)
     global_key = (os.getenv("FG_API_KEY") or "").strip()
     if raw and global_key and _constant_time_compare(raw, global_key):
-        if _is_production_env():
+        if is_production_env():
             log.warning(
                 "FG_API_KEY env key rejected in production path",
                 extra={"path": request_path},
@@ -720,16 +715,20 @@ def bind_tenant_id(
     requested = (str(requested_tenant).strip() if requested_tenant else "") or None
     auth = getattr(getattr(request, "state", None), "auth", None)
     auth_tenant = getattr(auth, "tenant_id", None)
+    auth_reason = getattr(auth, "reason", None)
+    is_global_key = auth_reason == "global_key"
 
     if auth_tenant:
         if requested and requested != auth_tenant:
             raise HTTPException(status_code=403, detail="Tenant mismatch")
+        request.state.tenant_id = auth_tenant
         return auth_tenant
 
     if requested:
         valid, error = _validate_tenant_id(requested)
         if not valid:
             raise HTTPException(status_code=400, detail=error)
+        request.state.tenant_id = requested
         return requested
 
     if require_explicit_for_unscoped:
@@ -737,6 +736,11 @@ def bind_tenant_id(
             status_code=400, detail="tenant_id required for unscoped keys"
         )
 
+    if is_global_key:
+        request.state.tenant_id = default_unscoped
+        return default_unscoped
+
+    request.state.tenant_id = default_unscoped
     return default_unscoped
 
 
@@ -762,22 +766,32 @@ def require_scopes(*scopes: str) -> Callable[..., None]:
     return _dep
 
 
-def revoke_api_key(key_prefix: str, key_hash: Optional[str] = None) -> bool:
+def revoke_api_key(
+    key_prefix: str,
+    key_hash: Optional[str] = None,
+    *,
+    tenant_id: Optional[str] = None,
+) -> bool:
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
     if not sqlite_path:
         return False
 
     con = sqlite3.connect(sqlite_path)
     try:
+        cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
+        col_names = {r[1] for r in cols}
+        if tenant_id and "tenant_id" not in col_names:
+            return False
         if key_hash:
-            cur = con.execute(
-                "UPDATE api_keys SET enabled=0 WHERE prefix=? AND key_hash=?",
-                (key_prefix, key_hash),
-            )
+            query = "UPDATE api_keys SET enabled=0 WHERE prefix=? AND key_hash=?"
+            params = [key_prefix, key_hash]
         else:
-            cur = con.execute(
-                "UPDATE api_keys SET enabled=0 WHERE prefix=?", (key_prefix,)
-            )
+            query = "UPDATE api_keys SET enabled=0 WHERE prefix=?"
+            params = [key_prefix]
+        if tenant_id:
+            query += " AND tenant_id=?"
+            params.append(tenant_id)
+        cur = con.execute(query, params)
         con.commit()
         revoked = cur.rowcount > 0
         if revoked:
@@ -812,8 +826,9 @@ def rotate_api_key_by_prefix(
 
         key_id, scopes_csv, enabled, db_tenant_id, old_key_hash = row
 
-        if tenant_id and db_tenant_id and tenant_id != db_tenant_id:
-            raise ValueError("Key not found for tenant")
+        if tenant_id:
+            if not db_tenant_id or tenant_id != db_tenant_id:
+                raise ValueError("Key not found for tenant")
 
         if not int(enabled):
             raise ValueError("Key is disabled")
@@ -891,7 +906,9 @@ def list_api_keys(
         if not include_disabled:
             conditions.append("enabled=1")
 
-        if tenant_id and "tenant_id" in col_names:
+        if tenant_id:
+            if "tenant_id" not in col_names:
+                return []
             conditions.append("tenant_id=?")
             params.append(tenant_id)
 
@@ -903,6 +920,9 @@ def list_api_keys(
         result = []
         for row in rows:
             item = dict(zip(select_cols, row))
+            for ts_field in ("created_at", "expires_at", "last_used_at"):
+                if ts_field in item and item[ts_field] is not None:
+                    item[ts_field] = str(item[ts_field])
             scopes_csv = item.get("scopes_csv", "")
             item["scopes"] = [
                 s.strip() for s in (scopes_csv or "").split(",") if s.strip()
