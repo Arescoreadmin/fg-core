@@ -45,7 +45,12 @@ from api.keys import (
     RevokeKeyResponse,
     RotateKeyResponse,
 )
-from api.security_audit import audit_key_created, audit_key_revoked, audit_key_rotated
+from api.security_audit import (
+    audit_admin_action,
+    audit_key_created,
+    audit_key_revoked,
+    audit_key_rotated,
+)
 
 log = logging.getLogger("frostgate.admin")
 
@@ -415,6 +420,12 @@ async def update_tenant_quota(
 
     tracker = get_usage_tracker()
     tracker.set_custom_quota(tenant_id, update.quota)
+    audit_admin_action(
+        action="tenant_quota_updated",
+        tenant_id=tenant_id,
+        request=request,
+        details={"quota": update.quota},
+    )
 
     return {
         "success": True,
@@ -455,6 +466,12 @@ async def update_tenant_tier(
 
     tracker = get_usage_tracker()
     tracker.set_tenant_tier(tenant_id, tier)
+    audit_admin_action(
+        action="tenant_tier_updated",
+        tenant_id=tenant_id,
+        request=request,
+        details={"tier": tier.value},
+    )
 
     return {
         "success": True,
@@ -484,6 +501,11 @@ async def suspend_tenant(
 
     tracker = get_usage_tracker()
     tracker.suspend_tenant(tenant_id)
+    audit_admin_action(
+        action="tenant_suspended",
+        tenant_id=tenant_id,
+        request=request,
+    )
 
     # Log security alert
     try:
@@ -530,6 +552,11 @@ async def activate_tenant(
 
     tracker = get_usage_tracker()
     tracker.activate_tenant(tenant_id)
+    audit_admin_action(
+        action="tenant_activated",
+        tenant_id=tenant_id,
+        request=request,
+    )
 
     return {
         "success": True,

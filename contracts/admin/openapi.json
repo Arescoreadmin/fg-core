@@ -1098,6 +1098,28 @@
         ]
       }
     },
+    "/admin/dashboard": {
+      "get": {
+        "description": "Admin console dashboard (HTML).",
+        "operationId": "admin_dashboard_admin_dashboard_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Admin Dashboard",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/admin/keys": {
       "get": {
         "description": "List API keys (proxied to core).\n\nRequires keys:read or higher scope.",
@@ -1574,6 +1596,50 @@
           }
         },
         "summary": "List Tenants",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/tenants/{tenant_id}/usage": {
+      "get": {
+        "description": "Proxy tenant usage to core (tenant-scoped).",
+        "operationId": "get_usage_admin_tenants__tenant_id__usage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "title": "Tenant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Usage Admin Tenants  Tenant Id  Usage Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Usage",
         "tags": [
           "admin"
         ]

@@ -17,9 +17,6 @@ from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
 
-prev_hash = Column(String(64), nullable=True)
-chain_hash = Column(String(64), nullable=True)
-
 
 def utcnow():
     return datetime.now(timezone.utc)

@@ -361,7 +361,7 @@ ci-pt: venv
 
 test-core-invariants: venv
 	@echo "Running core invariant tests (INV-001 through INV-007)."
-	@$(PYTEST_ENV) $(PY) -m pytest -v tests/test_core_invariants.py
+	@$(PYTEST_ENV) $(PY) -m pytest -v tests/test_core_invariants.py tests/test_ui_dashboards.py
 
 # Hardening Test Lanes (Day 1-7 hardening plan)
 # =============================================================================

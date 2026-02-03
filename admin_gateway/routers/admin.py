@@ -12,7 +12,7 @@ from typing import Any, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from admin_gateway.auth import (
@@ -22,6 +22,7 @@ from admin_gateway.auth import (
     require_scope_dependency,
     verify_csrf,
 )
+from admin_gateway.auth.scopes import get_all_scopes, has_scope
 from admin_gateway.auth.tenant import get_allowed_tenants
 
 log = logging.getLogger("admin-gateway.admin-router")
@@ -268,12 +269,239 @@ async def list_scopes(
     session: Session = Depends(get_current_session),
 ) -> dict[str, Any]:
     """List all available scopes and user's current scopes."""
-    from admin_gateway.auth.scopes import get_all_scopes
-
     return {
         "available_scopes": get_all_scopes(),
         "user_scopes": sorted(session.scopes),
     }
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+async def admin_dashboard(
+    request: Request,
+    session: Session = Depends(get_current_session),
+) -> HTMLResponse:
+    """Admin console dashboard (HTML)."""
+    allowed = any(
+        has_scope(session.scopes, scope)
+        for scope in (
+            Scope.CONSOLE_ADMIN,
+            Scope.KEYS_READ,
+            Scope.AUDIT_READ,
+            Scope.PRODUCT_READ,
+        )
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    html = """\
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>FrostGate Admin Console</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --fg-blue: #2b5cff;
+      --fg-orange: #ff7a1a;
+      --fg-bg: #05070b;
+      --fg-panel: rgba(12, 16, 24, 0.92);
+      --fg-border: rgba(255,255,255,0.08);
+      --fg-text: #eef2ff;
+      --fg-muted: #a0a9bb;
+    }
+    body {
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(circle at top left, rgba(43,92,255,0.18), transparent 45%),
+                  radial-gradient(circle at top right, rgba(255,122,26,0.22), transparent 45%),
+                  var(--fg-bg);
+      color: var(--fg-text);
+    }
+    .wrap { padding: 20px; }
+    .panel {
+      background: var(--fg-panel);
+      border: 1px solid var(--fg-border);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .row { display:flex; gap:12px; flex-wrap: wrap; align-items:center; }
+    .title { font-size: 20px; font-weight: 600; }
+    .chip {
+      padding: 4px 10px; border-radius: 999px;
+      border: 1px solid var(--fg-border); color: var(--fg-muted); font-size: 12px;
+    }
+    .table { width:100%; border-collapse: collapse; font-size: 13px; }
+    .table th, .table td { padding: 8px; border-bottom: 1px solid var(--fg-border); text-align: left; }
+    .table th { color: var(--fg-muted); font-weight: 500; }
+    select, button {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--fg-border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      color: var(--fg-text);
+    }
+    button.primary {
+      background: linear-gradient(120deg, rgba(43,92,255,0.8), rgba(255,122,26,0.8));
+      border: none;
+      color: #fff;
+    }
+    .muted { color: var(--fg-muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <div class="row">
+        <div class="title">Admin Console</div>
+        <span class="chip" id="sessionMeta">session: --</span>
+        <span class="chip" id="requestMeta">request_id: --</span>
+        <div class="row" style="margin-left:auto;">
+          <label class="muted">Tenant
+            <select id="tenantSelect"></select>
+          </label>
+          <button id="refreshBtn">Refresh</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="usagePanel">
+      <div class="row">
+        <div>
+          <strong>Usage & Quota</strong>
+          <div class="muted">Tenant-scoped usage from core</div>
+        </div>
+      </div>
+      <div id="usageSummary" class="row" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="panel" id="keysPanel">
+      <div class="row">
+        <div>
+          <strong>API Keys</strong>
+          <div class="muted">Tenant key inventory</div>
+        </div>
+      </div>
+      <table class="table" id="keysTable">
+        <thead>
+          <tr><th>Prefix</th><th>Name</th><th>Scopes</th><th>Status</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="panel" id="auditPanel">
+      <div class="row">
+        <div>
+          <strong>Audit Log</strong>
+          <div class="muted">Latest tenant audit events</div>
+        </div>
+      </div>
+      <table class="table" id="auditTable">
+        <thead>
+          <tr><th>Time</th><th>Action</th><th>Actor</th><th>Status</th><th>Request ID</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+<script>
+const tenantSelect = document.getElementById("tenantSelect");
+const refreshBtn = document.getElementById("refreshBtn");
+const sessionMeta = document.getElementById("sessionMeta");
+const requestMeta = document.getElementById("requestMeta");
+const usageSummary = document.getElementById("usageSummary");
+const keysTable = document.querySelector("#keysTable tbody");
+const auditTable = document.querySelector("#auditTable tbody");
+const usagePanel = document.getElementById("usagePanel");
+const keysPanel = document.getElementById("keysPanel");
+const auditPanel = document.getElementById("auditPanel");
+
+async function loadSession() {
+  const resp = await fetch("/admin/me");
+  if (!resp.ok) return;
+  const data = await resp.json();
+  sessionMeta.textContent = `session: ${data.user_id}`;
+  tenantSelect.innerHTML = (data.tenants || []).map(t => `<option value="${t}">${t}</option>`).join("");
+  if (data.current_tenant) tenantSelect.value = data.current_tenant;
+}
+
+async function loadScopes() {
+  const resp = await fetch("/admin/scopes");
+  if (!resp.ok) return;
+  const data = await resp.json();
+  requestMeta.textContent = resp.headers.get("X-Request-Id") || "request_id: --";
+  const scopes = new Set(data.user_scopes || []);
+  if (!scopes.has("keys:read")) keysPanel.style.display = "none";
+  if (!scopes.has("audit:read")) auditPanel.style.display = "none";
+  if (!scopes.has("product:read")) usagePanel.style.display = "none";
+}
+
+async function loadUsage() {
+  if (usagePanel.style.display === "none") return;
+  const tenant = tenantSelect.value;
+  const resp = await fetch(`/admin/tenants/${tenant}/usage`);
+  if (!resp.ok) return;
+  const data = await resp.json();
+  usageSummary.innerHTML = `
+    <span class="chip">Requests: ${data.request_count}</span>
+    <span class="chip">Decisions: ${data.decision_count}</span>
+    <span class="chip">Quota: ${data.quota_remaining}/${data.quota_limit}</span>
+    <span class="chip">Tier: ${data.tier}</span>
+  `;
+}
+
+async function loadKeys() {
+  if (keysPanel.style.display === "none") return;
+  const tenant = tenantSelect.value;
+  const resp = await fetch(`/admin/keys?tenant_id=${encodeURIComponent(tenant)}`);
+  if (!resp.ok) return;
+  const data = await resp.json();
+  const items = data.items || data.keys || [];
+  keysTable.innerHTML = items.map(item => `
+    <tr>
+      <td>${item.prefix || ""}</td>
+      <td>${item.name || ""}</td>
+      <td>${(item.scopes || []).join(", ")}</td>
+      <td>${item.enabled ? "active" : "disabled"}</td>
+    </tr>
+  `).join("");
+}
+
+async function loadAudit() {
+  if (auditPanel.style.display === "none") return;
+  const tenant = tenantSelect.value;
+  const resp = await fetch(`/admin/audit/search?tenant_id=${encodeURIComponent(tenant)}&page_size=10`);
+  if (!resp.ok) return;
+  const data = await resp.json();
+  const items = data.items || [];
+  auditTable.innerHTML = items.map(item => `
+    <tr>
+      <td>${item.timestamp || ""}</td>
+      <td>${item.action || ""}</td>
+      <td>${item.actor || ""}</td>
+      <td>${item.status || ""}</td>
+      <td>${item.request_id || ""}</td>
+    </tr>
+  `).join("");
+}
+
+async function refreshAll() {
+  await loadUsage();
+  await loadKeys();
+  await loadAudit();
+}
+
+refreshBtn.addEventListener("click", refreshAll);
+
+loadSession().then(() => loadScopes().then(refreshAll));
+</script>
+</body>
+</html>
+"""
+    return HTMLResponse(html)
 
 
 @router.get(
@@ -349,6 +577,26 @@ async def list_keys(
             user_agent=request.headers.get("user-agent"),
         )
 
+    return payload
+
+
+@router.get(
+    "/tenants/{tenant_id}/usage",
+    dependencies=[Depends(require_scope_dependency(Scope.PRODUCT_READ))],
+)
+async def get_usage(
+    tenant_id: str,
+    request: Request,
+    session: Session = Depends(get_current_session),
+) -> dict[str, Any]:
+    """Proxy tenant usage to core (tenant-scoped)."""
+    effective = _clamp_tenant_id(session, tenant_id)
+    payload = await _proxy_to_core(
+        request,
+        "GET",
+        f"/admin/tenants/{effective}/usage",
+    )
+    payload["request_id"] = getattr(request.state, "request_id", "unknown")
     return payload
 
 

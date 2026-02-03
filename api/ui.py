@@ -89,6 +89,165 @@ def _require_ui_key(req: Request) -> None:
     raise HTTPException(status_code=401, detail=ERR_INVALID)
 
 
+def _dashboard_shell(title: str, body: str, extra_script: str = "") -> str:
+    return rf"""\
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>{title}</title>
+  <style>
+    :root {{
+      color-scheme: dark;
+      --fg-blue: #2b5cff;
+      --fg-orange: #ff7a1a;
+      --fg-bg: #07090e;
+      --fg-panel: rgba(12, 16, 24, 0.9);
+      --fg-border: rgba(255,255,255,0.08);
+      --fg-text: #e5e9f5;
+      --fg-muted: #98a2b3;
+      --fg-glow: rgba(43, 92, 255, 0.25);
+    }}
+    body {{
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(circle at top left, rgba(43,92,255,0.18), transparent 45%),
+                  radial-gradient(circle at top right, rgba(255,122,26,0.2), transparent 45%),
+                  var(--fg-bg);
+      color: var(--fg-text);
+    }}
+    a {{ color: inherit; text-decoration: none; }}
+    .shell {{ min-height: 100vh; display: flex; flex-direction: column; }}
+    .topbar {{
+      position: sticky; top: 0; z-index: 10;
+      background: rgba(7, 9, 14, 0.9);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--fg-border);
+    }}
+    .topbar .wrap {{ display: flex; gap: 16px; align-items: center; padding: 16px 20px; }}
+    .brand {{ display: flex; align-items: center; gap: 10px; font-weight: 600; }}
+    .shield {{
+      width: 28px; height: 28px; border-radius: 8px;
+      background: linear-gradient(140deg, var(--fg-blue), var(--fg-orange));
+      box-shadow: 0 0 16px var(--fg-glow);
+    }}
+    nav {{ display: flex; gap: 12px; margin-left: auto; flex-wrap: wrap; }}
+    nav a {{
+      padding: 8px 12px; border-radius: 10px; border: 1px solid transparent;
+      color: var(--fg-muted);
+    }}
+    nav a.active {{
+      color: var(--fg-text);
+      border-color: var(--fg-border);
+      background: rgba(255,255,255,0.04);
+    }}
+    .content {{ padding: 24px; flex: 1; }}
+    .panel {{
+      background: var(--fg-panel);
+      border: 1px solid var(--fg-border);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    }}
+    .grid {{ display: grid; gap: 16px; }}
+    .grid.cols-3 {{ grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }}
+    .tile {{
+      background: rgba(12, 16, 24, 0.9);
+      border: 1px solid var(--fg-border);
+      border-radius: 14px;
+      padding: 14px;
+    }}
+    .tile .label {{ color: var(--fg-muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }}
+    .tile .value {{ font-size: 22px; font-weight: 600; margin-top: 8px; }}
+    .chip {{
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 999px;
+      border: 1px solid var(--fg-border); font-size: 12px; color: var(--fg-muted);
+    }}
+    .table {{
+      width: 100%; border-collapse: collapse; font-size: 13px;
+    }}
+    .table th, .table td {{
+      padding: 10px 8px; border-bottom: 1px solid var(--fg-border);
+      text-align: left;
+    }}
+    .table th {{ color: var(--fg-muted); font-weight: 500; }}
+    .muted {{ color: var(--fg-muted); }}
+    .row {{ display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }}
+    .btn {{
+      border: 1px solid var(--fg-border);
+      background: rgba(255,255,255,0.04);
+      color: var(--fg-text);
+      border-radius: 10px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }}
+    .btn.primary {{
+      background: linear-gradient(120deg, rgba(43,92,255,0.8), rgba(255,122,26,0.8));
+      border: 0;
+    }}
+    input, select {{
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--fg-border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      color: var(--fg-text);
+    }}
+    .footer {{ padding: 16px 24px; font-size: 12px; color: var(--fg-muted); }}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="topbar">
+      <div class="wrap">
+        <div class="brand"><span class="shield"></span> FrostGate Dashboards</div>
+        <nav>
+          <a href="/ui/dash/posture" data-scope="ui:read">Posture</a>
+          <a href="/ui/dash/forensics" data-scope="forensics:read">Evidence</a>
+          <a href="/ui/dash/controls" data-scope="controls:read">Controls</a>
+        </nav>
+      </div>
+    </div>
+    <div class="content">{body}</div>
+    <div class="footer" id="footerMeta">request_id: -</div>
+  </div>
+<script>
+const navLinks = document.querySelectorAll("nav a[data-scope]");
+function setActiveNav() {{
+  const path = window.location.pathname;
+  navLinks.forEach(link => {{
+    if (path.startsWith(link.getAttribute("href"))) {{
+      link.classList.add("active");
+    }}
+  }});
+}}
+async function applyScopes() {{
+  try {{
+    const resp = await fetch("/ui/scopes");
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const scopes = new Set(data.scopes || []);
+    navLinks.forEach(link => {{
+      const scope = link.getAttribute("data-scope");
+      if (!scopes.has(scope)) {{
+        link.style.display = "none";
+      }}
+    }});
+    const footer = document.getElementById("footerMeta");
+    if (footer && data.request_id) footer.textContent = `request_id: ${{data.request_id}}`;
+  }} catch (err) {{
+    console.warn("scope fetch failed", err);
+  }}
+}}
+setActiveNav();
+applyScopes();
+{extra_script}
+</script>
+</body>
+</html>
+"""
+
 # =============================================================================
 # === FG:UI_FEED:BEGIN ===
 # =============================================================================
@@ -448,6 +607,373 @@ def ui_feed(request: Request) -> HTMLResponse:
 </html>
 
 """)
+
+
+@router.get(
+    "/dash/posture",
+    response_class=HTMLResponse,
+    operation_id="ui_posture_page",
+    dependencies=[Depends(rate_limit_guard)],
+)
+def ui_posture_page(request: Request) -> HTMLResponse:
+    _require_ui_key(request)
+    body = r"""
+<div class="grid cols-3" id="tiles"></div>
+
+<div class="panel" style="margin-top:16px;">
+  <div class="row">
+    <div>
+      <strong>Top deny reasons</strong>
+      <div class="muted">Last 24 hours</div>
+    </div>
+    <div class="row" style="margin-left:auto;">
+      <label class="muted">Tenant <input id="tenantId" placeholder="tenant-id"/></label>
+      <button class="btn" id="refreshBtn">Refresh</button>
+    </div>
+  </div>
+  <div class="row" id="denyList" style="margin-top:12px;"></div>
+</div>
+
+<div class="panel" style="margin-top:16px;">
+  <div class="row">
+    <div>
+      <strong>Recent decisions</strong>
+      <div class="muted">Tenant-scoped, server-paginated</div>
+    </div>
+    <div class="row" style="margin-left:auto;">
+      <label class="muted">Limit
+        <select id="limit">
+          <option>10</option>
+          <option selected>25</option>
+          <option>50</option>
+        </select>
+      </label>
+      <button class="btn" id="prevBtn">Prev</button>
+      <button class="btn" id="nextBtn">Next</button>
+    </div>
+  </div>
+  <table class="table" id="decisionsTable">
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Event</th>
+        <th>Source</th>
+        <th>Threat</th>
+        <th>Action</th>
+        <th>Latency</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div class="panel" style="margin-top:16px;">
+  <div class="row">
+    <strong>Decision detail</strong>
+    <span class="muted" id="detailHint">Select a decision row</span>
+  </div>
+  <pre id="detailJson" style="white-space:pre-wrap; font-size:12px; margin-top:12px;"></pre>
+</div>
+"""
+    script = r"""
+const tenantInput = document.getElementById("tenantId");
+const refreshBtn = document.getElementById("refreshBtn");
+const limitEl = document.getElementById("limit");
+const prevBtn = document.getElementById("prevBtn");
+const nextBtn = document.getElementById("nextBtn");
+const tilesEl = document.getElementById("tiles");
+const denyList = document.getElementById("denyList");
+const tbody = document.querySelector("#decisionsTable tbody");
+const detailJson = document.getElementById("detailJson");
+const detailHint = document.getElementById("detailHint");
+let offset = 0;
+
+tenantInput.value = localStorage.getItem("fgTenant") || "";
+
+function tenantParam() {
+  const t = tenantInput.value.trim();
+  if (t) {
+    localStorage.setItem("fgTenant", t);
+  }
+  return t;
+}
+
+function setFooter(reqId) {
+  const footer = document.getElementById("footerMeta");
+  if (footer && reqId) footer.textContent = `request_id: ${reqId}`;
+}
+
+async function loadPosture() {
+  const tenant = tenantParam();
+  const resp = await fetch(`/ui/posture?tenant_id=${encodeURIComponent(tenant)}`);
+  if (!resp.ok) return;
+  const data = await resp.json();
+  setFooter(data.request_id);
+  tilesEl.innerHTML = (data.tiles || []).map(tile => `
+    <div class="tile">
+      <div class="label">${tile.label}</div>
+      <div class="value">${tile.value}</div>
+      ${tile.trend ? `<div class="muted">trend: ${tile.trend}</div>` : ""}
+    </div>
+  `).join("");
+  denyList.innerHTML = (data.top_deny_reasons || []).map(item => `
+    <span class="chip">${item.reason} • ${item.count}</span>
+  `).join("");
+}
+
+async function loadDecisions() {
+  const tenant = tenantParam();
+  const limit = parseInt(limitEl.value || "25", 10);
+  const resp = await fetch(`/ui/decisions?tenant_id=${encodeURIComponent(tenant)}&limit=${limit}&offset=${offset}`);
+  if (!resp.ok) return;
+  const data = await resp.json();
+  setFooter(data.request_id);
+  tbody.innerHTML = (data.items || []).map(item => `
+    <tr data-id="${item.id}">
+      <td>${item.created_at || "-"}</td>
+      <td>${item.event_type}</td>
+      <td>${item.source}</td>
+      <td>${item.threat_level}</td>
+      <td>${item.action_taken || "-"}</td>
+      <td>${item.latency_ms} ms</td>
+    </tr>
+  `).join("");
+}
+
+tbody.addEventListener("click", async (evt) => {
+  const row = evt.target.closest("tr");
+  if (!row) return;
+  const id = row.getAttribute("data-id");
+  const tenant = tenantParam();
+  const resp = await fetch(`/ui/decision/${id}?tenant_id=${encodeURIComponent(tenant)}`);
+  if (!resp.ok) return;
+  const data = await resp.json();
+  detailHint.textContent = `Decision ${id}`;
+  detailJson.textContent = JSON.stringify(data, null, 2);
+  setFooter(data.request_id);
+});
+
+refreshBtn.addEventListener("click", () => { offset = 0; loadPosture(); loadDecisions(); });
+limitEl.addEventListener("change", () => { offset = 0; loadDecisions(); });
+prevBtn.addEventListener("click", () => { offset = Math.max(0, offset - parseInt(limitEl.value || "25", 10)); loadDecisions(); });
+nextBtn.addEventListener("click", () => { offset = offset + parseInt(limitEl.value || "25", 10); loadDecisions(); });
+
+loadPosture();
+loadDecisions();
+"""
+    return HTMLResponse(_dashboard_shell("FrostGate Posture", body, script))
+
+
+@router.get(
+    "/dash/forensics",
+    response_class=HTMLResponse,
+    operation_id="ui_forensics_page",
+    dependencies=[Depends(rate_limit_guard)],
+)
+def ui_forensics_page(request: Request) -> HTMLResponse:
+    _require_ui_key(request)
+    body = r"""
+<div class="panel">
+  <div class="row">
+    <div>
+      <strong>Chain verification</strong>
+      <div class="muted">Tamper-evident decision ledger</div>
+    </div>
+    <div class="row" style="margin-left:auto;">
+      <label class="muted">Tenant <input id="tenantId" placeholder="tenant-id"/></label>
+      <button class="btn" id="verifyBtn">Verify</button>
+    </div>
+  </div>
+  <div class="row" style="margin-top:12px;">
+    <span class="chip" id="verifyStatus">Status: --</span>
+    <span class="muted" id="verifyMeta"></span>
+  </div>
+</div>
+
+<div class="panel" style="margin-top:16px;">
+  <div class="row">
+    <div>
+      <strong>Audit packet export</strong>
+      <div class="muted">Deterministic evidence bundle</div>
+    </div>
+    <div class="row" style="margin-left:auto;">
+      <button class="btn primary" id="exportBtn">Export Packet</button>
+    </div>
+  </div>
+  <div class="muted" id="exportStatus" style="margin-top:12px;">No packet generated yet.</div>
+  <div id="exportManifest" style="margin-top:12px;"></div>
+</div>
+"""
+    script = r"""
+const tenantInput = document.getElementById("tenantId");
+const verifyBtn = document.getElementById("verifyBtn");
+const verifyStatus = document.getElementById("verifyStatus");
+const verifyMeta = document.getElementById("verifyMeta");
+const exportBtn = document.getElementById("exportBtn");
+const exportStatus = document.getElementById("exportStatus");
+const exportManifest = document.getElementById("exportManifest");
+let csrfToken = null;
+
+tenantInput.value = localStorage.getItem("fgTenant") || "";
+
+function tenantParam() {
+  const t = tenantInput.value.trim();
+  if (t) localStorage.setItem("fgTenant", t);
+  return t;
+}
+
+function setFooter(reqId) {
+  const footer = document.getElementById("footerMeta");
+  if (footer && reqId) footer.textContent = `request_id: ${reqId}`;
+}
+
+async function ensureCsrf() {
+  if (csrfToken) return csrfToken;
+  const resp = await fetch("/ui/csrf");
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  csrfToken = data.csrf_token;
+  return csrfToken;
+}
+
+async function verifyChain() {
+  const tenant = tenantParam();
+  const resp = await fetch(`/ui/forensics/chain/verify?tenant_id=${encodeURIComponent(tenant)}`);
+  if (!resp.ok) return;
+  const data = await resp.json();
+  verifyStatus.textContent = `Status: ${data.status}`;
+  verifyMeta.textContent = `Checked ${data.checked} records`;
+  setFooter(data.request_id);
+}
+
+async function exportPacket() {
+  const tenant = tenantParam();
+  const token = await ensureCsrf();
+  if (!token) {
+    exportStatus.textContent = "CSRF token unavailable.";
+    return;
+  }
+  exportStatus.textContent = "Building packet...";
+  const resp = await fetch("/ui/audit/packet", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": token,
+    },
+    body: JSON.stringify({ tenant_id: tenant })
+  });
+  if (!resp.ok) {
+    exportStatus.textContent = "Export failed.";
+    return;
+  }
+  const data = await resp.json();
+  setFooter(data.request_id);
+  exportStatus.innerHTML = `Packet ready: <a href="${data.download_url}">${data.packet_id}</a>`;
+  exportManifest.innerHTML = `<pre style="white-space:pre-wrap; font-size:12px;">${JSON.stringify(data.manifest, null, 2)}</pre>`;
+}
+
+verifyBtn.addEventListener("click", verifyChain);
+exportBtn.addEventListener("click", exportPacket);
+
+verifyChain();
+"""
+    return HTMLResponse(_dashboard_shell("FrostGate Evidence & Forensics", body, script))
+
+
+@router.get(
+    "/dash/controls",
+    response_class=HTMLResponse,
+    operation_id="ui_controls_page",
+    dependencies=[Depends(rate_limit_guard)],
+)
+def ui_controls_page(request: Request) -> HTMLResponse:
+    _require_ui_key(request)
+    body = r"""
+<div class="panel">
+  <div class="row">
+    <div>
+      <strong>Invariant Proof Matrix</strong>
+      <div class="muted">Mapped evidence + remediation guidance</div>
+    </div>
+    <div class="row" style="margin-left:auto;">
+      <label class="muted">Tenant <input id="tenantId" placeholder="tenant-id"/></label>
+      <button class="btn" id="refreshBtn">Refresh</button>
+    </div>
+  </div>
+  <table class="table" id="controlsTable" style="margin-top:12px;">
+    <thead>
+      <tr>
+        <th>Invariant</th>
+        <th>Status</th>
+        <th>Evidence</th>
+        <th>Remediation</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div class="panel" style="margin-top:16px;">
+  <div class="row">
+    <strong>Control detail</strong>
+    <span class="muted" id="detailHint">Select an invariant</span>
+  </div>
+  <pre id="detailJson" style="white-space:pre-wrap; font-size:12px; margin-top:12px;"></pre>
+</div>
+"""
+    script = r"""
+const tenantInput = document.getElementById("tenantId");
+const refreshBtn = document.getElementById("refreshBtn");
+const tbody = document.querySelector("#controlsTable tbody");
+const detailJson = document.getElementById("detailJson");
+const detailHint = document.getElementById("detailHint");
+
+tenantInput.value = localStorage.getItem("fgTenant") || "";
+
+function tenantParam() {
+  const t = tenantInput.value.trim();
+  if (t) localStorage.setItem("fgTenant", t);
+  return t;
+}
+
+function setFooter(reqId) {
+  const footer = document.getElementById("footerMeta");
+  if (footer && reqId) footer.textContent = `request_id: ${reqId}`;
+}
+
+async function loadControls() {
+  const tenant = tenantParam();
+  const resp = await fetch(`/ui/controls?tenant_id=${encodeURIComponent(tenant)}&limit=50&offset=0`);
+  if (!resp.ok) return;
+  const data = await resp.json();
+  setFooter(data.request_id);
+  tbody.innerHTML = (data.items || []).map(item => `
+    <tr data-id="${item.inv_id}">
+      <td>${item.inv_id} — ${item.name}</td>
+      <td>${item.status}</td>
+      <td>${item.evidence_count}</td>
+      <td>${item.remediation}</td>
+    </tr>
+  `).join("");
+}
+
+tbody.addEventListener("click", async (evt) => {
+  const row = evt.target.closest("tr");
+  if (!row) return;
+  const id = row.getAttribute("data-id");
+  const tenant = tenantParam();
+  const resp = await fetch(`/ui/controls/${id}?tenant_id=${encodeURIComponent(tenant)}`);
+  if (!resp.ok) return;
+  const data = await resp.json();
+  detailHint.textContent = data.name;
+  detailJson.textContent = JSON.stringify(data, null, 2);
+  setFooter(data.request_id);
+});
+
+refreshBtn.addEventListener("click", loadControls);
+loadControls();
+"""
+    return HTMLResponse(_dashboard_shell("FrostGate Controls", body, script))
 
 
 @router.get("/token")
