@@ -64,6 +64,14 @@ class MitigationAction(BaseModel):
     meta: Optional[Dict[str, Any]] = None
 
 
+class PolicyDecision(BaseModel):
+    allow: bool
+    reasons: List[str] = Field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return self.model_dump()
+
+
 class legacyTelemetryInput(BaseModel):
     source: str
     tenant_id: str
@@ -81,6 +89,7 @@ class DefendResponse(BaseModel):
     ai_adversarial_score: float = 0.0
     pq_fallback: bool = False
     clock_drift_ms: int = 0
+    policy: Optional[PolicyDecision] = None
 
 
 __all__ = [
@@ -93,4 +102,5 @@ __all__ = [
     "MitigationAction",
     "TelemetryInput",
     "DefendResponse",
+    "PolicyDecision",
 ]

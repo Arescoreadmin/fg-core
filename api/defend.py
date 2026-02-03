@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -29,6 +29,7 @@ from api.schemas_doctrine import TieD
 from engine.pipeline import Mitigation as PipelineMitigation
 from engine.pipeline import PipelineInput, evaluate as pipeline_evaluate
 from engine.pipeline import _apply_doctrine as pipeline_apply_doctrine
+from engine.types import PolicyDecision
 
 log = logging.getLogger("frostgate.defend")
 
@@ -240,6 +241,7 @@ class DefendResponse(BaseModel):
     clock_drift_ms: int
     event_id: str
     policy_hash: str
+    policy: PolicyDecision
 
 
 # =============================================================================
@@ -411,8 +413,18 @@ def defend(
         classification=getattr(req, "classification", None),
         event_id=event_id,
         meta=getattr(req, "meta", None),
+        path="/defend",
     )
     result = pipeline_evaluate(pipeline_input)
+
+    if _env_bool("FG_OPA_ENFORCE", False) and not result.policy.allow:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "message": "OPA policy denied request",
+                "policy": result.policy.to_dict(),
+            },
+        )
 
     threat_level = result.threat_level
     rules_triggered = result.rules_triggered
@@ -478,6 +490,10 @@ def defend(
         clock_drift_ms=int(result.clock_drift_ms or 0),
         event_id=result.event_id,
         policy_hash=result.policy_hash,
+        policy=PolicyDecision(
+            allow=bool(result.policy.allow),
+            reasons=list(result.policy.reasons or []),
+        ),
     )
 
     latency_ms = int((time.time() - t0) * 1000)
@@ -533,6 +549,7 @@ def legacy_evaluate(req: Any):
         or getattr(req, "classification", None),
         event_id=payload.get("event_id") or getattr(req, "event_id", None),
         meta=payload.get("meta") or getattr(req, "meta", None),
+        path="/defend",
     )
     result = pipeline_evaluate(inp)
     return (

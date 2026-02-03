@@ -14,7 +14,8 @@
     "pq_fallback",
     "clock_drift_ms",
     "event_id",
-    "policy_hash"
+    "policy_hash",
+    "policy"
   ],
   "properties": {
     "explanation_brief": {"type": "string"},
@@ -31,7 +32,16 @@
     "pq_fallback": {"type": "boolean"},
     "clock_drift_ms": {"type": "integer"},
     "event_id": {"type": "string"},
-    "policy_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+    "policy_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allow", "reasons"],
+      "properties": {
+        "allow": {"type": "boolean"},
+        "reasons": {"type": "array", "items": {"type": "string"}}
+      }
+    }
   },
   "$defs": {
     "mitigationAction": {

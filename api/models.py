@@ -6,6 +6,7 @@ from typing import Any, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 from api.schemas import TelemetryInput
+from engine.types import PolicyDecision
 
 from sqlalchemy import Column, DateTime, text
 
@@ -72,6 +73,7 @@ class DefendResponse(BaseModel):
     pq_fallback: bool = False
     clock_drift_ms: int
     policy_hash: Optional[str] = None
+    policy: Optional[PolicyDecision] = None
 
 
 __all__ = [
@@ -80,4 +82,5 @@ __all__ = [
     "MitigationAction",
     "DecisionExplain",
     "DefendResponse",
+    "PolicyDecision",
 ]

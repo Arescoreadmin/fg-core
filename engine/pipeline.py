@@ -23,7 +23,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
+import httpx
+
 from engine.policy_fingerprint import get_active_policy_fingerprint
+from engine.types import PolicyDecision
 
 log = logging.getLogger("frostgate.pipeline")
 
@@ -52,6 +55,7 @@ class PipelineInput:
     # Optional metadata
     event_id: Optional[str] = None
     meta: Optional[Dict[str, Any]] = None
+    path: Optional[str] = None
 
 
 @dataclass
@@ -136,6 +140,7 @@ class PipelineResult:
     event_id: str
     clock_drift_ms: int
     explanation_brief: str
+    policy: PolicyDecision
 
     # Doctrine flags (surfaced for backward compat)
     policy_hash: str
@@ -155,6 +160,7 @@ class PipelineResult:
             "event_id": self.event_id,
             "clock_drift_ms": self.clock_drift_ms,
             "explanation_brief": self.explanation_brief,
+            "policy": self.policy.to_dict(),
             "roe_applied": self.roe_applied,
             "disruption_limited": self.disruption_limited,
             "ao_required": self.ao_required,
@@ -267,6 +273,49 @@ def _normalize_failed_auths(payload: Dict[str, Any]) -> int:
             except (ValueError, TypeError):
                 continue
     return 0
+
+
+def _opa_payload(inp: PipelineInput) -> Dict[str, Any]:
+    payload = dict(inp.payload or {})
+    if "fail_count" not in payload:
+        payload["fail_count"] = _normalize_failed_auths(payload)
+    return {
+        "path": inp.path,
+        "tenant_id": inp.tenant_id,
+        "source": inp.source,
+        "event_type": inp.event_type,
+        "payload": payload,
+        "timestamp": inp.timestamp,
+        "persona": inp.persona,
+        "classification": inp.classification,
+        "event_id": inp.event_id,
+    }
+
+
+def _evaluate_policy(inp: PipelineInput) -> PolicyDecision:
+    opa_url = os.getenv("FG_OPA_URL", "").strip()
+    if not opa_url:
+        return PolicyDecision(allow=True, reasons=[])
+
+    opa_path = os.getenv("FG_OPA_PATH", "/v1/data/frostgate/defend")
+    timeout = float(os.getenv("FG_OPA_TIMEOUT_SEC", "0.25"))
+    payload = {"input": _opa_payload(inp)}
+    url = f"{opa_url.rstrip('/')}{opa_path}"
+
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.post(url, json=payload)
+            resp.raise_for_status()
+        data = resp.json().get("result", {})
+    except Exception as exc:
+        log.warning("OPA policy check failed: %s", exc)
+        return PolicyDecision(allow=True, reasons=["opa_unreachable"])
+
+    allow = bool(data.get("allow", False))
+    reasons = data.get("reasons") or []
+    if not isinstance(reasons, list):
+        reasons = [reasons]
+    return PolicyDecision(allow=allow, reasons=[str(r) for r in reasons])
 
 
 def _evaluate_rules(inp: PipelineInput) -> tuple:
@@ -465,7 +514,10 @@ def evaluate(inp: PipelineInput) -> PipelineResult:
         policy_hash=fingerprint.policy_hash,
     )
 
-    # 4. Build explanation
+    # 4. Policy decision (OPA)
+    policy_decision = _evaluate_policy(inp)
+
+    # 5. Build explanation
     explanation_brief = f"{inp.event_type}: {threat_level} ({score})"
 
     return PipelineResult(
@@ -479,6 +531,7 @@ def evaluate(inp: PipelineInput) -> PipelineResult:
         event_id=event_id,
         clock_drift_ms=clock_drift_ms,
         explanation_brief=explanation_brief,
+        policy=policy_decision,
         roe_applied=roe_applied,
         disruption_limited=disruption_limited,
         ao_required=ao_required,
@@ -502,6 +555,7 @@ def evaluate_dict(telemetry: Dict[str, Any]) -> Dict[str, Any]:
         classification=telemetry.get("classification"),
         event_id=telemetry.get("event_id"),
         meta=telemetry.get("meta"),
+        path=telemetry.get("path"),
     )
 
     result = evaluate(inp)

@@ -177,6 +177,7 @@ async def ingest(
             classification=getattr(req, "classification", None),
             event_id=event_id,
             meta=getattr(req, "meta", None),
+            path="/ingest",
         )
         result = pipeline_evaluate(pipeline_input)
         decision = result.to_dict()
@@ -205,6 +206,7 @@ async def ingest(
             "explanation_brief": fallback_summary,
             "summary": fallback_summary,
             "policy_hash": fingerprint.policy_hash,
+            "policy": {"allow": False, "reasons": ["evaluation_error"]},
             "pq_fallback": False,
         }
 
