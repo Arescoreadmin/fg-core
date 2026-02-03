@@ -7,9 +7,9 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import HTTPException, Request
 
-from api.auth_scopes import verify_api_key
+
 
 log = logging.getLogger("frostgate.ratelimit")
 
@@ -422,7 +422,6 @@ def _allow(key: str, cfg: RLConfig) -> Tuple[bool, int, int, int]:
 
 async def rate_limit_guard(
     request: Request,
-    _: Any = Depends(verify_api_key),
 ) -> None:
     cfg = load_config()
     if not cfg.enabled:

@@ -47,7 +47,10 @@ class ApiKey(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(128), nullable=False, default="default")
     prefix = Column(String(64), nullable=False, index=True)
-    key_hash = Column(String(64), nullable=False, unique=True, index=True)
+    key_hash = Column(Text, nullable=False, unique=True, index=True)
+    key_lookup = Column(String(64), nullable=True, index=True)
+    hash_alg = Column(String(32), nullable=True)
+    hash_params = Column(JSON, nullable=True)
     scopes_csv = Column(Text, nullable=True)
     enabled = Column(Boolean, nullable=False, default=True)
 
@@ -146,6 +149,10 @@ class DecisionRecord(Base):
     decision_diff_json = Column(JSON, nullable=True)
     request_json = Column(JSON, nullable=False)
     response_json = Column(JSON, nullable=False)
+    prev_hash = Column(String(64), nullable=True)
+    chain_hash = Column(String(64), nullable=True)
+    chain_alg = Column(String(64), nullable=True)
+    chain_ts = Column(DateTime(timezone=True), nullable=True)
 
 
 class PolicyChangeRequest(Base):

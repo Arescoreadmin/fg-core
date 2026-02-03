@@ -8,14 +8,15 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import bind_tenant_id, verify_api_key
+from api.auth_scopes import bind_tenant_id, require_scopes
 from api.db import get_db
 from api.db_models import DecisionRecord
+from api.evidence_chain import chain_fields_for_decision
 
 router = APIRouter(
     prefix="/dev",
     tags=["dev"],
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[Depends(require_scopes("dev:write"))],
 )
 
 # -----------------------------
@@ -243,6 +244,26 @@ def dev_seed(
             existed.append(event_id)
             continue
 
+        if (
+            hasattr(DecisionRecord, "prev_hash")
+            and hasattr(DecisionRecord, "chain_hash")
+            and hasattr(DecisionRecord, "chain_alg")
+            and hasattr(DecisionRecord, "chain_ts")
+        ):
+            chain_fields = chain_fields_for_decision(
+                db,
+                tenant_id=tenant_id,
+                request_json=rec.request_json,
+                response_json=rec.response_json,
+                threat_level=rec.threat_level,
+                chain_ts=rec.created_at,
+                event_id=rec.event_id,
+            )
+            rec.prev_hash = chain_fields["prev_hash"]
+            rec.chain_hash = chain_fields["chain_hash"]
+            rec.chain_alg = chain_fields["chain_alg"]
+            rec.chain_ts = chain_fields["chain_ts"]
+
         db.add(rec)
         db.flush()
         created.append(int(rec.id))
@@ -303,6 +324,25 @@ def dev_emit(
             seed_tag="dev emit",
             stable_key=None,
         )
+        if (
+            hasattr(DecisionRecord, "prev_hash")
+            and hasattr(DecisionRecord, "chain_hash")
+            and hasattr(DecisionRecord, "chain_alg")
+            and hasattr(DecisionRecord, "chain_ts")
+        ):
+            chain_fields = chain_fields_for_decision(
+                db,
+                tenant_id=tenant_id,
+                request_json=rec.request_json,
+                response_json=rec.response_json,
+                threat_level=rec.threat_level,
+                chain_ts=rec.created_at,
+                event_id=rec.event_id,
+            )
+            rec.prev_hash = chain_fields["prev_hash"]
+            rec.chain_hash = chain_fields["chain_hash"]
+            rec.chain_alg = chain_fields["chain_alg"]
+            rec.chain_ts = chain_fields["chain_ts"]
         db.add(rec)
         db.flush()
         created_ids.append(int(rec.id))

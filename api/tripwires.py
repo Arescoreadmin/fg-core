@@ -550,17 +550,35 @@ def seed_canary_key_if_missing() -> Optional[str]:
 
             # Seed a new canary key (disabled, but present)
             import secrets
-            import hashlib
+            import json
+            from api.auth_scopes import hash_key
 
             canary_prefix = f"{CANARY_KEY_PREFIX}{secrets.token_hex(4)}"
             canary_secret = secrets.token_urlsafe(32)
-            canary_hash = hashlib.sha256(canary_secret.encode()).hexdigest()
+            canary_hash, hash_alg, hash_params, key_lookup = hash_key(canary_secret)
+            hash_params_json = json.dumps(
+                hash_params, separators=(",", ":"), sort_keys=True
+            )
 
             # Check schema for required columns
             cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
             col_names = {r[1] for r in cols}
 
-            if "name" in col_names:
+            if {"key_lookup", "hash_alg", "hash_params"}.issubset(col_names):
+                con.execute(
+                    "INSERT INTO api_keys (name, prefix, key_hash, key_lookup, hash_alg, hash_params, scopes_csv, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        "CANARY_DO_NOT_USE",
+                        canary_prefix,
+                        canary_hash,
+                        key_lookup,
+                        hash_alg,
+                        hash_params_json,
+                        "",
+                        0,
+                    ),
+                )
+            elif "name" in col_names:
                 con.execute(
                     "INSERT INTO api_keys (name, prefix, key_hash, scopes_csv, enabled) VALUES (?, ?, ?, ?, ?)",
                     (

@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import require_scopes, verify_api_key
+from api.auth_scopes import require_scopes
 from api.db import get_db
 from api.db_models import PolicyChangeRequest as PolicyChangeRequestModel
 
@@ -106,7 +106,6 @@ router = APIRouter(
     prefix="/governance",
     tags=["governance"],
     dependencies=[
-        Depends(verify_api_key),
         Depends(require_scopes("governance:write")),  # INV-005: Scope required
     ],
 )
