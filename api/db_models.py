@@ -17,9 +17,6 @@ from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
 
-prev_hash = Column(String(64), nullable=True)
-chain_hash = Column(String(64), nullable=True)
-
 
 def utcnow():
     return datetime.now(timezone.utc)
@@ -146,6 +143,8 @@ class DecisionRecord(Base):
     decision_diff_json = Column(JSON, nullable=True)
     request_json = Column(JSON, nullable=False)
     response_json = Column(JSON, nullable=False)
+    prev_hash = Column(String(64), nullable=True)
+    chain_hash = Column(String(64), nullable=True)
 
 
 class PolicyChangeRequest(Base):
