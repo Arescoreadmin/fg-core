@@ -216,6 +216,9 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
         }
         if "decisions" in tables:
             _sqlite_add_columns(conn, "decisions", decisions_columns)
+            _sqlite_add_immutable_triggers(conn, "decisions")
+        if "decision_evidence_artifacts" in tables:
+            _sqlite_add_immutable_triggers(conn, "decision_evidence_artifacts")
         if "api_keys" in tables:
             _sqlite_add_columns(conn, "api_keys", api_keys_columns)
 
@@ -228,6 +231,27 @@ def _sqlite_add_columns(conn, table: str, columns: dict[str, str]) -> None:
         if col in existing:
             continue
         conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
+
+
+def _sqlite_add_immutable_triggers(conn, table: str) -> None:
+    conn.exec_driver_sql(
+        f"""
+        CREATE TRIGGER IF NOT EXISTS {table}_immutable_update
+        BEFORE UPDATE ON {table}
+        BEGIN
+            SELECT RAISE(ABORT, '{table} is append-only');
+        END;
+        """
+    )
+    conn.exec_driver_sql(
+        f"""
+        CREATE TRIGGER IF NOT EXISTS {table}_immutable_delete
+        BEFORE DELETE ON {table}
+        BEGIN
+            SELECT RAISE(ABORT, '{table} is append-only');
+        END;
+        """
+    )
 
 
 def get_db() -> Iterator[Session]:

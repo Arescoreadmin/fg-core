@@ -15,6 +15,7 @@ from api.auth_scopes import bind_tenant_id, require_scopes
 from api.db import get_db
 from api.db_models import DecisionRecord
 from api.evidence_chain import chain_fields_for_decision
+from api.evidence_artifacts import emit_decision_evidence
 from api.decision_diff import (
     compute_decision_diff,
     snapshot_from_current,
@@ -293,6 +294,8 @@ async def ingest(
             rec.chain_alg = chain_fields["chain_alg"]
             rec.chain_ts = chain_fields["chain_ts"]
         db.add(rec)
+        db.flush()
+        emit_decision_evidence(db, rec)
         db.commit()
     except Exception:
         resp.persisted = False
