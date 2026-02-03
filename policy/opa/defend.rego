@@ -15,7 +15,7 @@ deny_reason["bruteforce_threshold"] {
 }
 
 allow {
-  not deny_reason[_]
+  count(deny_reason) == 0
 }
 
 reasons := [r | deny_reason[r]]
