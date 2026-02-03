@@ -217,7 +217,6 @@ async def ingest(
     # ---- persist (best effort) ----
     try:
         rules = decision.get("rules_triggered") or decision.get("rules") or []
-        summary = decision.get("summary") or ""
         policy_hash = None
         if isinstance(decision, dict):
             policy_hash = decision.get("policy_hash")
