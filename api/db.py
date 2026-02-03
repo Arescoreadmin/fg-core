@@ -10,6 +10,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import QueuePool
 
+from api.config.env import resolve_env
 from api.config.paths import (
     STATE_DIR,
 )  # tests assert this symbol is referenced in this file
@@ -52,7 +53,7 @@ _SESSIONMAKER: sessionmaker | None = None
 
 
 def _env() -> str:
-    return os.getenv("FG_ENV", "dev").lower()
+    return resolve_env()
 
 
 def _resolve_sqlite_path(sqlite_path: Optional[str] = None) -> Path:

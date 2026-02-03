@@ -6,6 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 
+from api.config.env import is_production_env
 from api.ratelimit import rate_limit_guard
 
 router = APIRouter(
@@ -34,7 +35,7 @@ def _auth_enabled() -> bool:
 
 
 def _is_prod() -> bool:
-    return os.getenv("FG_ENV", "dev").strip().lower() in {"prod", "production"}
+    return is_production_env()
 
 
 def _html_headers() -> dict[str, str]:

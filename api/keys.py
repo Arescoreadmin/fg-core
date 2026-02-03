@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 
 from api.auth_scopes import (
+    bind_tenant_id,
     mint_key,
     revoke_api_key,
     list_api_keys,
@@ -153,10 +154,15 @@ def create_key(req: CreateKeyRequest, request: Request) -> CreateKeyResponse:
     Requires `keys:admin` scope.
     """
     try:
+        bound_tenant = bind_tenant_id(
+            request,
+            req.tenant_id,
+            require_explicit_for_unscoped=True,
+        )
         key = mint_key(
             *req.scopes,
             ttl_seconds=req.ttl_seconds,
-            tenant_id=req.tenant_id,
+            tenant_id=bound_tenant,
         )
 
         # Extract prefix from key
@@ -171,7 +177,7 @@ def create_key(req: CreateKeyRequest, request: Request) -> CreateKeyResponse:
             extra={
                 "prefix": prefix,
                 "scopes": req.scopes,
-                "tenant_id": req.tenant_id,
+                "tenant_id": bound_tenant,
                 "ttl_seconds": req.ttl_seconds,
             },
         )
@@ -180,7 +186,7 @@ def create_key(req: CreateKeyRequest, request: Request) -> CreateKeyResponse:
         audit_key_created(
             key_prefix=prefix,
             scopes=req.scopes,
-            tenant_id=req.tenant_id,
+            tenant_id=bound_tenant,
             request=request,
             ttl_seconds=req.ttl_seconds,
         )
@@ -189,10 +195,12 @@ def create_key(req: CreateKeyRequest, request: Request) -> CreateKeyResponse:
             key=key,
             prefix=prefix,
             scopes=req.scopes,
-            tenant_id=req.tenant_id,
+            tenant_id=bound_tenant,
             ttl_seconds=req.ttl_seconds,
             expires_at=expires_at,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         log.exception("Failed to create API key")
         raise HTTPException(status_code=500, detail=f"Failed to create key: {e}")
@@ -200,6 +208,7 @@ def create_key(req: CreateKeyRequest, request: Request) -> CreateKeyResponse:
 
 @router.get("", response_model=ListKeysResponse)
 def get_keys(
+    request: Request,
     tenant_id: Optional[str] = Query(default=None, max_length=128),
     include_disabled: bool = Query(default=False),
 ) -> ListKeysResponse:
@@ -210,29 +219,43 @@ def get_keys(
     Does not return the actual key secrets.
     """
     # Validate tenant_id if provided
-    if tenant_id:
-        is_valid, error = _validate_tenant_id(tenant_id)
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=error)
-
     try:
-        keys = list_api_keys(tenant_id=tenant_id, include_disabled=include_disabled)
+        bound_tenant = bind_tenant_id(
+            request,
+            tenant_id,
+            require_explicit_for_unscoped=True,
+        )
+        keys = list_api_keys(
+            tenant_id=bound_tenant,
+            include_disabled=include_disabled,
+        )
         key_infos = [KeyInfo(**k) for k in keys]
         return ListKeysResponse(keys=key_infos, total=len(key_infos))
+    except HTTPException:
+        raise
     except Exception as e:
         log.exception("Failed to list API keys")
         raise HTTPException(status_code=500, detail=f"Failed to list keys: {e}")
 
 
 @router.post("/revoke", response_model=RevokeKeyResponse)
-def revoke_key(req: RevokeKeyRequest, request: Request) -> RevokeKeyResponse:
+def revoke_key(
+    req: RevokeKeyRequest,
+    request: Request,
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
+) -> RevokeKeyResponse:
     """
     Revoke (disable) an API key by prefix.
 
     Requires `keys:admin` scope.
     """
     try:
-        revoked = revoke_api_key(req.prefix)
+        bound_tenant = bind_tenant_id(
+            request,
+            tenant_id,
+            require_explicit_for_unscoped=True,
+        )
+        revoked = revoke_api_key(req.prefix, tenant_id=bound_tenant)
 
         if revoked:
             log.info("API key revoked", extra={"prefix": req.prefix})
@@ -249,13 +272,19 @@ def revoke_key(req: RevokeKeyRequest, request: Request) -> RevokeKeyResponse:
                 prefix=req.prefix,
                 message="Key not found or already revoked",
             )
+    except HTTPException:
+        raise
     except Exception as e:
         log.exception("Failed to revoke API key")
         raise HTTPException(status_code=500, detail=f"Failed to revoke key: {e}")
 
 
 @router.delete("/{prefix}", response_model=RevokeKeyResponse)
-def delete_key(prefix: str, request: Request) -> RevokeKeyResponse:
+def delete_key(
+    prefix: str,
+    request: Request,
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
+) -> RevokeKeyResponse:
     """
     Delete (revoke) an API key by prefix.
 
@@ -265,7 +294,7 @@ def delete_key(prefix: str, request: Request) -> RevokeKeyResponse:
     if not prefix or len(prefix) > 64:
         raise HTTPException(status_code=400, detail="Invalid prefix")
 
-    return revoke_key(RevokeKeyRequest(prefix=prefix), request)
+    return revoke_key(RevokeKeyRequest(prefix=prefix), request, tenant_id=tenant_id)
 
 
 # =============================================================================
@@ -306,7 +335,11 @@ class RotateKeyResponse(BaseModel):
 
 
 @router.post("/rotate", response_model=RotateKeyResponse)
-def rotate_key(req: RotateKeyRequest, request: Request) -> RotateKeyResponse:
+def rotate_key(
+    req: RotateKeyRequest,
+    request: Request,
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
+) -> RotateKeyResponse:
     """
     Rotate an API key, creating a new key with the same scopes.
 
@@ -341,6 +374,11 @@ def rotate_key(req: RotateKeyRequest, request: Request) -> RotateKeyResponse:
     old_key_hash = _sha256_hex(secret_val)
 
     try:
+        bound_tenant = bind_tenant_id(
+            request,
+            tenant_id,
+            require_explicit_for_unscoped=True,
+        )
         con = sqlite3.connect(sqlite_path)
         try:
             row = con.execute(
@@ -351,10 +389,13 @@ def rotate_key(req: RotateKeyRequest, request: Request) -> RotateKeyResponse:
             if not row:
                 raise HTTPException(status_code=404, detail="Key not found")
 
-            key_id, scopes_csv, enabled, tenant_id = row
+            key_id, scopes_csv, enabled, db_tenant_id = row
 
             if not enabled:
                 raise HTTPException(status_code=400, detail="Key is already disabled")
+
+            if not db_tenant_id or db_tenant_id != bound_tenant:
+                raise HTTPException(status_code=403, detail="Tenant mismatch")
 
             # Parse scopes from old key
             scopes = list(_parse_scopes_csv(scopes_csv))
@@ -363,7 +404,7 @@ def rotate_key(req: RotateKeyRequest, request: Request) -> RotateKeyResponse:
             new_key = mint_key(
                 *scopes,
                 ttl_seconds=req.ttl_seconds,
-                tenant_id=tenant_id,
+                tenant_id=db_tenant_id,
             )
 
             new_parts = new_key.split(".")
@@ -396,7 +437,7 @@ def rotate_key(req: RotateKeyRequest, request: Request) -> RotateKeyResponse:
                 extra={
                     "old_prefix": old_prefix,
                     "new_prefix": new_prefix,
-                    "tenant_id": tenant_id,
+                    "tenant_id": db_tenant_id,
                     "old_key_revoked": old_key_revoked,
                 },
             )
@@ -405,7 +446,7 @@ def rotate_key(req: RotateKeyRequest, request: Request) -> RotateKeyResponse:
             audit_key_rotated(
                 old_prefix=old_prefix,
                 new_prefix=new_prefix,
-                tenant_id=tenant_id,
+                tenant_id=db_tenant_id,
                 request=request,
                 old_key_revoked=old_key_revoked,
             )
@@ -415,7 +456,7 @@ def rotate_key(req: RotateKeyRequest, request: Request) -> RotateKeyResponse:
                 new_prefix=new_prefix,
                 old_prefix=old_prefix,
                 scopes=scopes,
-                tenant_id=tenant_id,
+                tenant_id=db_tenant_id,
                 expires_at=expires_at,
                 old_key_revoked=old_key_revoked,
             )

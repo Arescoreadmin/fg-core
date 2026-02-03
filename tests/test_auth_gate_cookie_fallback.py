@@ -20,6 +20,6 @@ def test_auth_gate_accepts_cookie_when_header_missing(monkeypatch):
         client.cookies.set(cookie_name, api_key)
 
         # Hit a protected endpoint WITHOUT header, ONLY cookie
-        r = client.get("/stats")
+        r = client.get("/stats?tenant_id=test-tenant")
 
         assert r.status_code == 200, r.text
