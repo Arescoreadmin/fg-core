@@ -223,24 +223,19 @@ class TestINV003_FailClosed:
 class TestINV004_SingleDecisionPath:
     """
     INV-004: There must be exactly ONE decision evaluation path.
-    All decision endpoints must use engine/evaluate.py.
+    All decision endpoints must use engine/pipeline.py.
     """
 
     def test_defend_uses_unified_pipeline(self):
         """
-        /defend must use the unified engine/evaluate.py pipeline.
-
-        This is allowed to be SKIPPED until refactor is complete.
+        /defend must use the unified engine/pipeline.py entrypoint.
         """
         defend_path = Path("api/defend.py")
         if not defend_path.exists():
             pytest.skip("api/defend.py not found")
 
         content = defend_path.read_text(encoding="utf-8")
-
-        uses_engine = ("from engine.evaluate import" in content) or (
-            "import engine.evaluate" in content
-        )
+        assert "engine.pipeline" in content, "/defend must use engine/pipeline.py"
 
         tree = ast.parse(content)
         local_evaluate_funcs = [
@@ -249,19 +244,11 @@ class TestINV004_SingleDecisionPath:
             if isinstance(node, ast.FunctionDef) and node.name == "evaluate"
         ]
 
-        # If defend still defines local evaluate and doesn't import the engine evaluator, skip as blocker.
-        if local_evaluate_funcs and not uses_engine:
-            pytest.skip(
-                "INV-004 BLOCKER: defend.py defines local evaluate() and does not "
-                "import engine evaluator. Consolidate decision path to engine/evaluate.py"
-            )
-
-        # If it imports engine evaluator, great. If it doesn't define local evaluate, also fine.
-        assert True
+        assert not local_evaluate_funcs, "api/defend.py must not define evaluate()"
 
     def test_ingest_uses_unified_pipeline(self):
         """
-        /ingest must use the unified engine/evaluate.py pipeline.
+        /ingest must use the unified engine/pipeline.py entrypoint.
         """
         ingest_path = Path("api/ingest.py")
         if not ingest_path.exists():
@@ -270,12 +257,12 @@ class TestINV004_SingleDecisionPath:
         content = ingest_path.read_text(encoding="utf-8")
 
         # Don’t make this fragile to exact function name during refactor.
-        assert "engine.evaluate" in content, "/ingest must use engine/evaluate.py"
+        assert "engine.pipeline" in content, "/ingest must use engine/pipeline.py"
 
     def test_no_duplicate_evaluate_definitions(self):
         """
         There must be only ONE evaluate() function in api/ (none allowed).
-        Allowed: engine/evaluate.py
+        Allowed: engine/pipeline.py
         """
         api_files = list(Path("api").glob("*.py"))
         violations = []
@@ -300,7 +287,7 @@ class TestINV004_SingleDecisionPath:
     def test_no_direct_rules_import(self):
         """
         Endpoints must NOT directly import from engine/rules.py.
-        Must go through engine/evaluate.py.
+        Must go through engine/pipeline.py.
         """
         api_files = list(Path("api").glob("*.py"))
         violations = []
@@ -529,7 +516,7 @@ class TestCIGateReadiness:
             "api/ratelimit.py",
             "api/health.py",
             "api/config/startup_validation.py",
-            "engine/evaluate.py",
+            "engine/pipeline.py",
             "engine/rules.py",
         ]
 

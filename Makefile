@@ -112,11 +112,19 @@ venv:
 # Guards / audits
 # =============================================================================
 
-.PHONY: guard-scripts fg-audit-make fg-contract fg-compile contracts-gen
+.PHONY: guard-scripts fg-audit-make fg-contract fg-compile contracts-gen check-no-engine-evaluate
 
 guard-scripts:
 	@$(PY_CONTRACT) scripts/guard_no_paste_garbage.py
 	@$(PY_CONTRACT) scripts/guard_makefile_sanity.py
+
+check-no-engine-evaluate:
+	@matches="$$(rg -n "from engine\\.evaluate import|import engine\\.evaluate|engine\\.evaluate\\(" api || true)"; \
+	if [ -n "$$matches" ]; then \
+		echo "$$matches"; \
+		echo "Forbidden engine.evaluate usage found in api/."; \
+		exit 1; \
+	fi
 
 fg-audit-make: guard-scripts
 	@$(PY) scripts/audit_make_targets.py
