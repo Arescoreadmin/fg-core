@@ -1,5 +1,8 @@
 # FrostGate-Core — Hardening Plan
 
+> Planning aid only. Authoritative requirements are defined in
+> `BLUEPRINT_STAGED.md`.
+
 **Derived From:** BLUEPRINT_STAGED.md  
 **Current Stage:** Stage 0  
 **Target Stage:** MVP 1  

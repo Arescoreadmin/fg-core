@@ -1,5 +1,9 @@
 # FrostGate Core — CONTRACT (MVP Invariants)
 
+> **Non-authoritative implementation contract.** This file exists for current
+> test/CI enforcement and is derived from the canonical requirements in
+> `BLUEPRINT_STAGED.md`.
+
 <!-- CONTRACT_LINT_ANCHORS
 0) Principles
 1) Configuration and Environment Precedence

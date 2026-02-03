@@ -30,7 +30,7 @@ Launch Readiness = 1 - (open Launch-risk gaps / total Launch-risk gaps)
 |----------|------|--------|-------|
 | Production-blocking | 0 | 0 | 0 |
 | Launch-risk | 1 | 0 | 1 |
-| Post-launch | 2 | 0 | 2 |
+| Post-launch | 0 | 0 | 0 |
 
 ---
 
@@ -40,7 +40,7 @@ Launch Readiness = 1 - (open Launch-risk gaps / total Launch-risk gaps)
 |-------|------|-------|
 | repo | 1 | 1 |
 | infra | 0 | 0 |
-| docs | 2 | 2 |
+| docs | 0 | 0 |
 
 ---
 
@@ -71,9 +71,4 @@ All Production-blocking gaps resolved. Release may proceed.
 
 ### Post-launch
 
-- **G006**: Chaos testing jobs not implemented
-  - Evidence: ``docs/FrostGateCore_Buildout_vNext.md:57``
-  - Owner: docs
-- **G007**: AI model drift monitoring not implemented
-  - Evidence: ``docs/FrostGateCore_Buildout_vNext.md:207``
-  - Owner: docs
+_None_

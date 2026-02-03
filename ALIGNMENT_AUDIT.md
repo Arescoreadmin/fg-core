@@ -1,5 +1,7 @@
 # FrostGate-Core Blueprint v2 Alignment Audit (Staged)
 
+> Non-authoritative audit snapshot derived from `BLUEPRINT_STAGED.md`.
+
 ## Executive Verdict
 This repository is **~25% aligned** with Blueprint v2. It is **not safe to call a control plane** yet. The codebase has a functional core API with tenant-bound decisions, audit logging, and a basic evidence chain, but it lacks contract enforcement for core APIs/events/artifacts, missing required governance interfaces, no drift engine, and no container-per-feature separation for the core control-plane services.
 
@@ -197,4 +199,3 @@ This repository is **~25% aligned** with Blueprint v2. It is **not safe to call 
 - **Stop calling the system a control plane.** It lacks required governance and contracts.
 - **Stop trusting in‑code message schemas.** Without external schemas and CI gates, drift is guaranteed.
 - **Stop relying on implicit tenant defaults in any environment.** Explicit tenant binding must be required everywhere.
-

@@ -1,7 +1,7 @@
 # Gap Matrix — FrostGate Production Readiness
 
-> **Source of Truth** for all production gaps.
-> CI fails if ANY `Production-blocking` gaps remain open.
+> Tracking matrix derived from `BLUEPRINT_STAGED.md` and current CI gates.
+> This is not an authoritative requirements source.
 
 ## Severity Classification Rules
 
@@ -39,8 +39,6 @@ A gap is `Post-launch` if:
 | ID | Gap | Severity | Evidence (file / test / CI lane) | Owner | ETA / Milestone | Definition of Done |
 |----|-----|----------|----------------------------------|-------|-----------------|--------------------|
 | G001 | Auth fallback defaults to true in docker-compose | Launch-risk | `docker-compose.yml:67` / `scripts/prod_profile_check.py` / `.github/workflows/ci.yml` / `unit` | repo | V2 | `FG_AUTH_ALLOW_FALLBACK` defaults to `false` in docker-compose.yml and prod_profile_check.py fails if truthy |
-| G006 | Chaos testing jobs not implemented | Post-launch | `docs/FrostGateCore_Buildout_vNext.md:57` | docs | V2+ | Litmus v3 chaos scenarios defined and pass in staging |
-| G007 | AI model drift monitoring not implemented | Post-launch | `docs/FrostGateCore_Buildout_vNext.md:207` | docs | V2+ | Drift threshold alerts configured; retrain runbook tested |
 
 ---
 

@@ -12,6 +12,8 @@
 
 # fg-core
 
+Authoritative requirements live in `BLUEPRINT_STAGED.md`.
+
 ## Dashboards & audit packet export
 - Tenant dashboards (UI): `/ui/dash/posture`, `/ui/dash/forensics`, `/ui/dash/controls`
 - Admin console (UI): `/admin/dashboard`
