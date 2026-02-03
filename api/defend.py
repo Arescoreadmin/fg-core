@@ -239,7 +239,7 @@ class DefendResponse(BaseModel):
     pq_fallback: bool = False
     clock_drift_ms: int
     event_id: str
-    policy_hash: str = ""
+    policy_hash: str
 
 
 # =============================================================================

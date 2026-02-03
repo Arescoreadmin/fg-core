@@ -11,6 +11,7 @@ Hardening Day 1: These tests verify that:
 
 from __future__ import annotations
 
+from engine.policy_fingerprint import get_active_policy_fingerprint
 from engine.pipeline import (
     PipelineInput,
     PipelineResult,
@@ -223,7 +224,9 @@ class TestTieD:
 
     def test_tied_to_dict(self):
         """TieD.to_dict() returns proper dict."""
+        fingerprint = get_active_policy_fingerprint()
         tie_d = TieD(
+            policy_hash=fingerprint.policy_hash,
             roe_applied=True,
             disruption_limited=False,
             ao_required=True,
