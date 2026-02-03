@@ -20,3 +20,4 @@ Authoritative requirements live in `BLUEPRINT_STAGED.md`.
 - Evidence export API: `POST /ui/audit/packet` returns a download URL for a deterministic bundle
   containing `decisions.jsonl`, `chain_verification.json`, and `manifest.json` (plus `sbom.json`
   and `provenance.json` when present).
+- Audit packet export is experimental until MVP-3 verification APIs are complete.

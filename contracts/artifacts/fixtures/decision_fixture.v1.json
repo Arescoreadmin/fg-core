@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "tenant_id": "tenant-123",
+  "request_id": "req-2024-01-01T00:00:00Z",
+  "policy_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "input_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "output_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "timestamp": "2024-01-01T00:00:00Z",
+  "decision": "allow",
+  "reasons": ["rule:allowlist"]
+}
