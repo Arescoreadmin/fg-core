@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import List
 
 from api.config.env import resolve_env
+
 log = logging.getLogger("frostgate.startup")
 _security_log = logging.getLogger("frostgate.security")
 
