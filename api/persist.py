@@ -30,6 +30,7 @@ def persist_decision(
     latency_ms: int,
     request_obj: dict,
     response_obj: dict,
+    policy_hash: str | None = None,
 ) -> None:
     started = time.time()
     payload = dict(
@@ -46,6 +47,7 @@ def persist_decision(
         latency_ms=int(latency_ms or 0),
         request_json=json.dumps(request_obj or {}),
         response_json=json.dumps(response_obj or {}),
+        policy_hash=policy_hash,
     )
 
     chain_ts = datetime.now(timezone.utc)
@@ -89,12 +91,12 @@ def persist_decision(
 
     sql = text("""
         INSERT INTO decisions
-        (tenant_id, source, event_id, event_type, threat_level,
+        (tenant_id, source, event_id, event_type, threat_level, policy_hash,
          anomaly_score, ai_adversarial_score, pq_fallback,
          rules_triggered_json, explain_summary, latency_ms,
          request_json, response_json, prev_hash, chain_hash, chain_alg, chain_ts)
         VALUES
-        (:tenant_id, :source, :event_id, :event_type, :threat_level,
+        (:tenant_id, :source, :event_id, :event_type, :threat_level, :policy_hash,
          :anomaly_score, :ai_adversarial_score, :pq_fallback,
          :rules_triggered_json, :explain_summary, :latency_ms,
          :request_json, :response_json, :prev_hash, :chain_hash, :chain_alg, :chain_ts)

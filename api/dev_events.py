@@ -90,6 +90,9 @@ def _make_record(
     Returns (event_id, DecisionRecord).
     If stable_key is provided, event_id is deterministic across runs.
     """
+    from engine.policy_fingerprint import get_active_policy_fingerprint
+
+    fingerprint = get_active_policy_fingerprint()
     base_anom = (
         0.0
         if threat_level == "none"
@@ -121,6 +124,8 @@ def _make_record(
         "summary": f"{severity}/{threat_level} {action_taken}".strip(),
         "decision": decision,
         "pq_fallback": pq_fallback,
+        "policy_version": fingerprint.policy_id,
+        "policy_hash": fingerprint.policy_hash,
     }
 
     rules = _default_rules(threat_level, action_taken)
@@ -148,6 +153,7 @@ def _make_record(
         source=src,
         event_id=event_id,
         event_type=kind,
+        policy_hash=fingerprint.policy_hash,
         threat_level=threat_level,
         anomaly_score=base_anom,
         ai_adversarial_score=base_adv,

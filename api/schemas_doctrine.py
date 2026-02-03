@@ -16,3 +16,4 @@ class TieD(BaseModel):
 
     gating_decision: Literal["allow", "require_approval", "reject"] = "allow"
     policy_version: str = "doctrine-v1"
+    policy_hash: str = Field(..., pattern=r"^[0-9a-f]{64}$")

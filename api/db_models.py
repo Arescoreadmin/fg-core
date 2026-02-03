@@ -136,6 +136,7 @@ class DecisionRecord(Base):
     source = Column(String, nullable=True)
     event_id = Column(String, nullable=True)
     event_type = Column(String, nullable=True)
+    policy_hash = Column(String(64), nullable=True)
 
     threat_level = Column(String, nullable=True)
     anomaly_score = Column(Float, nullable=True)
