@@ -2,7 +2,15 @@ from __future__ import annotations
 
 import os
 
-VALID_FG_ENVS = {"dev", "test", "staging", "prod", "production"}
+VALID_FG_ENVS = {
+    "dev",
+    "test",
+    "staging",
+    "prod",
+    "production",
+    "development",
+    "local",
+}
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -31,7 +39,11 @@ def fg_env(*, require_explicit: bool = False) -> str:
     if env not in VALID_FG_ENVS:
         raise RuntimeError("FG_ENV must be set to one of: dev, test, staging, prod.")
 
-    return "prod" if env == "production" else env
+    if env in {"production"}:
+        return "prod"
+    if env in {"development", "local"}:
+        return "dev"
+    return env
 
 
 def resolve_env() -> str:
@@ -40,4 +52,3 @@ def resolve_env() -> str:
 
 def is_production_env() -> bool:
     return resolve_env() in {"prod", "staging"}
-

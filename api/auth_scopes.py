@@ -731,7 +731,7 @@ def bind_tenant_id(
         request.state.tenant_id = requested
         return requested
 
-    if require_explicit_for_unscoped:
+    if require_explicit_for_unscoped and not is_global_key:
         raise HTTPException(
             status_code=400, detail="tenant_id required for unscoped keys"
         )
@@ -742,6 +742,10 @@ def bind_tenant_id(
 
     request.state.tenant_id = default_unscoped
     return default_unscoped
+
+
+def _is_production_env() -> bool:
+    return is_production_env()
 
 
 def require_scopes(*scopes: str) -> Callable[..., None]:

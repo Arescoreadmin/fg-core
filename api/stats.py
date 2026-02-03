@@ -548,7 +548,9 @@ def get_stats(
         tenant_id,
         require_explicit_for_unscoped=True,
     )
-    if not tenant_id or tenant_id == "unknown":
+    auth = getattr(getattr(request, "state", None), "auth", None)
+    is_global_key = getattr(auth, "reason", None) == "global_key"
+    if not tenant_id or (tenant_id == "unknown" and not is_global_key):
         raise HTTPException(
             status_code=400,
             detail="tenant_id is required and must be a known tenant",
@@ -585,7 +587,9 @@ def get_stats_summary(
         tenant_id,
         require_explicit_for_unscoped=True,
     )
-    if not tenant_id or tenant_id == "unknown":
+    auth = getattr(getattr(request, "state", None), "auth", None)
+    is_global_key = getattr(auth, "reason", None) == "global_key"
+    if not tenant_id or (tenant_id == "unknown" and not is_global_key):
         raise HTTPException(
             status_code=400,
             detail="tenant_id is required and must be a known tenant",
