@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import bind_tenant_id, verify_api_key
+from api.auth_scopes import bind_tenant_id, require_scopes
 from api.db import get_db
 from api.db_models import DecisionRecord
 
@@ -102,7 +102,7 @@ class DecisionsPage(BaseModel):
 @router.get(
     "",
     response_model=DecisionsPage,
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[Depends(require_scopes("decisions:read"))],
 )
 def list_decisions(
     request: Request,
@@ -201,7 +201,7 @@ def list_decisions(
 @router.get(
     "/{decision_id}",
     response_model=DecisionOut,
-    dependencies=[Depends(verify_api_key)],
+    dependencies=[Depends(require_scopes("decisions:read"))],
 )
 def get_decision(
     decision_id: int,

@@ -56,17 +56,17 @@ class TestExpiredKeys:
         parts = key.split(".")
         prefix = parts[0]
         secret = parts[-1]
-        import hashlib
+        from api.auth_scopes import _get_key_pepper, _key_lookup_hash
 
-        key_hash = hashlib.sha256(secret.encode()).hexdigest()
+        key_lookup = _key_lookup_hash(secret, _get_key_pepper())
 
         con = sqlite3.connect(fresh_db)
         try:
             # Update expires_at to past timestamp
             past_ts = int(time.time()) - 3600
             con.execute(
-                "UPDATE api_keys SET expires_at = ? WHERE prefix = ? AND key_hash = ?",
-                (past_ts, prefix, key_hash),
+                "UPDATE api_keys SET expires_at = ? WHERE prefix = ? AND key_lookup = ?",
+                (past_ts, prefix, key_lookup),
             )
             con.commit()
         finally:
@@ -94,15 +94,15 @@ class TestUsageTracking:
         parts = key.split(".")
         prefix = parts[0]
         secret = parts[-1]
-        import hashlib
+        from api.auth_scopes import _get_key_pepper, _key_lookup_hash
 
-        key_hash = hashlib.sha256(secret.encode()).hexdigest()
+        key_lookup = _key_lookup_hash(secret, _get_key_pepper())
 
         con = sqlite3.connect(fresh_db)
         try:
             row = con.execute(
-                "SELECT use_count FROM api_keys WHERE prefix = ? AND key_hash = ?",
-                (prefix, key_hash),
+                "SELECT use_count FROM api_keys WHERE prefix = ? AND key_lookup = ?",
+                (prefix, key_lookup),
             ).fetchone()
             initial_count = row[0] if row else 0
         finally:
@@ -117,8 +117,8 @@ class TestUsageTracking:
         con = sqlite3.connect(fresh_db)
         try:
             row = con.execute(
-                "SELECT use_count FROM api_keys WHERE prefix = ? AND key_hash = ?",
-                (prefix, key_hash),
+                "SELECT use_count FROM api_keys WHERE prefix = ? AND key_lookup = ?",
+                (prefix, key_lookup),
             ).fetchone()
             final_count = row[0] if row else 0
         finally:
@@ -133,9 +133,9 @@ class TestUsageTracking:
         parts = key.split(".")
         prefix = parts[0]
         secret = parts[-1]
-        import hashlib
+        from api.auth_scopes import _get_key_pepper, _key_lookup_hash
 
-        key_hash = hashlib.sha256(secret.encode()).hexdigest()
+        key_lookup = _key_lookup_hash(secret, _get_key_pepper())
 
         before_auth = int(time.time())
 
@@ -147,8 +147,8 @@ class TestUsageTracking:
         con = sqlite3.connect(fresh_db)
         try:
             row = con.execute(
-                "SELECT last_used_at FROM api_keys WHERE prefix = ? AND key_hash = ?",
-                (prefix, key_hash),
+                "SELECT last_used_at FROM api_keys WHERE prefix = ? AND key_lookup = ?",
+                (prefix, key_lookup),
             ).fetchone()
             after = row[0] if row else None
         finally:
@@ -164,17 +164,17 @@ class TestUsageTracking:
         parts = key.split(".")
         prefix = parts[0]
         secret = parts[-1]
-        import hashlib
+        from api.auth_scopes import _get_key_pepper, _key_lookup_hash
 
-        key_hash = hashlib.sha256(secret.encode()).hexdigest()
+        key_lookup = _key_lookup_hash(secret, _get_key_pepper())
 
         verify_api_key_raw(raw=key)
 
         con = sqlite3.connect(fresh_db)
         try:
             row = con.execute(
-                "SELECT use_count, last_used_at FROM api_keys WHERE prefix = ? AND key_hash = ?",
-                (prefix, key_hash),
+                "SELECT use_count, last_used_at FROM api_keys WHERE prefix = ? AND key_lookup = ?",
+                (prefix, key_lookup),
             ).fetchone()
             use_count, last_used_at = row if row else (0, None)
         finally:

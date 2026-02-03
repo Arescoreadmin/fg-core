@@ -378,7 +378,7 @@ test-tenant-isolation: venv
 
 # Day 3: Auth hardening and config fail-fast
 test-auth-hardening: venv
-	@$(PYTEST_ENV) $(PY) -m pytest -q tests/test_auth_hardening.py tests/test_auth.py tests/test_auth_contract.py
+	@$(PYTEST_ENV) $(PY) -m pytest -q tests/test_auth_hardening.py tests/test_auth.py tests/test_auth_contract.py tests/security/test_evidence_chain_persistence.py tests/security/test_chain_verification_detects_tamper.py tests/security/test_scope_enforcement.py tests/security/test_key_hashing_kdf.py
 
 # All hardening tests
 test-hardening-all: test-core-invariants test-decision-unified test-tenant-isolation test-auth-hardening
