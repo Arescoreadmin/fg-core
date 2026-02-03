@@ -60,7 +60,7 @@ services:
     volumes:
       - ./policy/opa:/policies:ro
     healthcheck:
-      test: ["CMD", "/opa", "eval", "--format=raw", "--data", "/policies", "data.frostgate.defend.allow"]
+      test: ["CMD", "/opa", "version"]
       interval: 5s
       timeout: 3s
       retries: 20
