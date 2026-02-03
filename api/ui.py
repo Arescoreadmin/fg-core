@@ -248,6 +248,7 @@ applyScopes();
 </html>
 """
 
+
 # =============================================================================
 # === FG:UI_FEED:BEGIN ===
 # =============================================================================
@@ -877,7 +878,9 @@ exportBtn.addEventListener("click", exportPacket);
 
 verifyChain();
 """
-    return HTMLResponse(_dashboard_shell("FrostGate Evidence & Forensics", body, script))
+    return HTMLResponse(
+        _dashboard_shell("FrostGate Evidence & Forensics", body, script)
+    )
 
 
 @router.get(
