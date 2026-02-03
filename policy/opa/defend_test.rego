@@ -8,7 +8,8 @@ test_allow_default {
     "payload": {}
   }
   allow with input as input
-  count(reasons with input as input) == 0
+  reasons_with := reasons with input as input
+  count(reasons_with) == 0
 }
 
 test_deny_missing_tenant {
@@ -18,7 +19,8 @@ test_deny_missing_tenant {
     "payload": {}
   }
   not allow with input as input
-  "missing_tenant" in (reasons with input as input)
+  reasons_with := reasons with input as input
+  "missing_tenant" in reasons_with
 }
 
 test_deny_bruteforce_threshold {
@@ -29,5 +31,6 @@ test_deny_bruteforce_threshold {
     "payload": {"fail_count": 10}
   }
   not allow with input as input
-  "bruteforce_threshold" in (reasons with input as input)
+  reasons_with := reasons with input as input
+  "bruteforce_threshold" in reasons_with
 }
