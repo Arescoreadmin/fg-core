@@ -54,6 +54,9 @@ class EventType(str, Enum):
     STARTUP = "startup"
     SHUTDOWN = "shutdown"
 
+    # Admin actions
+    ADMIN_ACTION = "admin_action"
+
 
 class Severity(str, Enum):
     """Severity levels for audit events."""
@@ -361,6 +364,26 @@ class SecurityAuditor:
             )
         )
 
+    def log_admin_action(
+        self,
+        *,
+        action: str,
+        tenant_id: Optional[str] = None,
+        request: Optional[Request] = None,
+        details: Optional[dict[str, Any]] = None,
+    ) -> None:
+        """Log state-changing admin actions."""
+        self.log_event(
+            AuditEvent(
+                event_type=EventType.ADMIN_ACTION,
+                success=True,
+                severity=Severity.INFO,
+                tenant_id=tenant_id,
+                reason=action,
+                **self._extract_request_context(request),
+                details=details or {},
+            )
+        )
     def _extract_request_context(self, request: Optional[Request]) -> dict[str, Any]:
         """Extract context from FastAPI request."""
         if request is None:
@@ -451,3 +474,19 @@ def audit_key_rotated(old_prefix: str, new_prefix: str, **kwargs) -> None:
 def audit_rate_limit(**kwargs) -> None:
     """Log rate limit exceeded."""
     get_auditor().log_rate_limit(**kwargs)
+
+
+def audit_admin_action(
+    *,
+    action: str,
+    tenant_id: Optional[str] = None,
+    request: Optional[Request] = None,
+    details: Optional[dict[str, Any]] = None,
+) -> None:
+    """Log state-changing admin actions."""
+    get_auditor().log_admin_action(
+        action=action,
+        tenant_id=tenant_id,
+        request=request,
+        details=details,
+    )
