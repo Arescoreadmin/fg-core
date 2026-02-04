@@ -15,10 +15,6 @@ def _postgres_url() -> str | None:
     return url
 
 
-def pytest_configure() -> None:
-    os.environ.setdefault("FG_DB_BACKEND", "postgres")
-
-
 @pytest.fixture(scope="session")
 def postgres_url() -> str:
     url = _postgres_url()
