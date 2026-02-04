@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Iterable
 
 import sqlparse
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
 
@@ -73,8 +73,8 @@ def apply_migrations(engine: Engine) -> list[str]:
                 continue
             sql = migration.path.read_text(encoding="utf-8")
             _apply_sql(conn, sql)
-            conn.exec_driver_sql(
-                "INSERT INTO schema_migrations (version) VALUES (:version)",
+            conn.execute(
+                text("INSERT INTO schema_migrations (version) VALUES (:version)"),
                 {"version": migration.version},
             )
             applied.append(migration.version)

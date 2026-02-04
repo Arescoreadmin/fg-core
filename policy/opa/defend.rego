@@ -18,4 +18,4 @@ allow {
   count(reasons_set) == 0
 }
 
-reasons := [r | r := keys(reasons_set)[_]]
+reasons := [r | reasons_set[r]]
