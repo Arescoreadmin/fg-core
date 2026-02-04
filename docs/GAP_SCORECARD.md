@@ -68,7 +68,3 @@ All Production-blocking gaps resolved. Release may proceed.
 - **G001**: Auth fallback defaults to true in docker-compose
   - Evidence: ``docker-compose.yml:67` / `scripts/prod_profile_check.py` / `.github/workflows/ci.yml` / `unit``
   - Owner: repo
-
-### Post-launch
-
-_None_
