@@ -5,6 +5,9 @@ import os
 import pytest
 
 pytestmark = pytest.mark.postgres
+
+if not (os.getenv("FG_DB_URL") or "").strip():
+    pytest.skip("FG_DB_URL is required for postgres tests", allow_module_level=True)
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 

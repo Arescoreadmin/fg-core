@@ -1,8 +1,9 @@
 CREATE OR REPLACE FUNCTION fg_append_only_enforcer()
 RETURNS trigger AS $$
 BEGIN
-    RAISE EXCEPTION 'append-only violation on ' || TG_TABLE_NAME
-        USING ERRCODE = 'check_violation';
+    RAISE EXCEPTION USING
+        MESSAGE = 'append-only violation on ' || TG_TABLE_NAME,
+        ERRCODE = 'check_violation';
 END;
 $$ LANGUAGE plpgsql;
 
