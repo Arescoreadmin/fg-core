@@ -82,9 +82,7 @@ def test_append_only_blocks_update_delete(pg_engine) -> None:
         set_tenant_context(session, "tenant-a")
         with pytest.raises(SQLAlchemyError):
             session.execute(
-                text(
-                    "UPDATE decision_evidence_artifacts SET storage_path = '/tmp/alt'"
-                )
+                text("UPDATE decision_evidence_artifacts SET storage_path = '/tmp/alt'")
             )
             session.commit()
 

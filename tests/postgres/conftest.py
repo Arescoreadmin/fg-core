@@ -26,3 +26,18 @@ def pg_engine() -> Engine:
     engine = create_engine(_require_db_url(), future=True)
     apply_migrations(engine)
     return engine
+
+
+@pytest.fixture(autouse=True)
+def _clean_postgres_tables(pg_engine: Engine) -> None:
+    with pg_engine.begin() as conn:
+        conn.exec_driver_sql(
+            """
+            TRUNCATE TABLE
+                decision_evidence_artifacts,
+                decisions,
+                api_keys,
+                security_audit_log
+            RESTART IDENTITY CASCADE
+            """
+        )
