@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+psql -v ON_ERROR_STOP=1 \
+  -v POSTGRES_APP_USER="${POSTGRES_APP_USER}" \
+  -v POSTGRES_APP_PASSWORD="${POSTGRES_APP_PASSWORD}" \
+  -v POSTGRES_APP_DB="${POSTGRES_APP_DB}" \
+  --username "${POSTGRES_USER}" --dbname "${POSTGRES_DB}" <<'SQL'
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'POSTGRES_APP_USER') THEN
+        EXECUTE 'CREATE ROLE '
+            || quote_ident(:'POSTGRES_APP_USER')
+            || ' LOGIN PASSWORD '
+            || quote_literal(:'POSTGRES_APP_PASSWORD')
+            || ' NOSUPERUSER NOBYPASSRLS';
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'POSTGRES_APP_DB') THEN
+        EXECUTE 'CREATE DATABASE '
+            || quote_ident(:'POSTGRES_APP_DB')
+            || ' OWNER '
+            || quote_ident(:'POSTGRES_APP_USER');
+    ELSE
+        EXECUTE 'ALTER DATABASE '
+            || quote_ident(:'POSTGRES_APP_DB')
+            || ' OWNER TO '
+            || quote_ident(:'POSTGRES_APP_USER');
+    END IF;
+END $$;
+
+GRANT CONNECT ON DATABASE :"POSTGRES_APP_DB" TO :"POSTGRES_APP_USER";
+SQL
+
+psql -v ON_ERROR_STOP=1 \
+  -v POSTGRES_APP_USER="${POSTGRES_APP_USER}" \
+  -v POSTGRES_APP_DB="${POSTGRES_APP_DB}" \
+  --username "${POSTGRES_USER}" --dbname "${POSTGRES_APP_DB}" <<'SQL'
+GRANT USAGE, CREATE ON SCHEMA public TO :"POSTGRES_APP_USER";
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"POSTGRES_APP_USER";
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO :"POSTGRES_APP_USER";
+SQL

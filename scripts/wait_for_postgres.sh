@@ -11,7 +11,8 @@ while true; do
   if command -v docker >/dev/null 2>&1; then
     container_id="$(docker compose ps -q "${SERVICE_NAME}" 2>/dev/null || true)"
     if [ -n "${container_id}" ]; then
-      if docker compose exec -T "${SERVICE_NAME}" pg_isready -U "${POSTGRES_USER:-fg_user}" -d "${POSTGRES_DB:-frostgate}" -h 127.0.0.1 >/dev/null 2>&1; then
+      pg_user="${POSTGRES_BOOTSTRAP_USER:-${POSTGRES_USER:-fg_user}}"
+      if docker compose exec -T "${SERVICE_NAME}" pg_isready -U "${pg_user}" -d "${POSTGRES_DB:-frostgate}" -h 127.0.0.1 >/dev/null 2>&1; then
         echo "Postgres is ready (via docker compose)."
         exit 0
       fi
@@ -19,7 +20,8 @@ while true; do
   fi
 
   if command -v pg_isready >/dev/null 2>&1; then
-    if pg_isready -h "${PGHOST:-127.0.0.1}" -p "${PGPORT:-5432}" -U "${PGUSER:-fg_user}" -d "${PGDATABASE:-frostgate}" >/dev/null 2>&1; then
+    pg_user="${PGUSER:-${POSTGRES_BOOTSTRAP_USER:-${POSTGRES_USER:-fg_user}}}"
+    if pg_isready -h "${PGHOST:-127.0.0.1}" -p "${PGPORT:-5432}" -U "${pg_user}" -d "${PGDATABASE:-frostgate}" >/dev/null 2>&1; then
       echo "Postgres is ready."
       exit 0
     fi

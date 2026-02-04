@@ -244,6 +244,7 @@ def init_db(
 
     from api.db_migrations import (
         assert_append_only_triggers,
+        assert_db_role_safe,
         assert_migrations_applied,
         assert_tenant_rls,
     )
@@ -251,6 +252,7 @@ def init_db(
     assert_migrations_applied(eng)
     assert_append_only_triggers(eng)
     assert_tenant_rls(eng)
+    assert_db_role_safe(eng)
 
 
 def _auto_migrate_sqlite(engine: Engine) -> None:

@@ -152,6 +152,24 @@ def assert_tenant_rls(engine: Engine) -> None:
             raise RuntimeError(f"Tenant isolation policy missing on {table}")
 
 
+def assert_db_role_safe(engine: Engine) -> None:
+    with engine.begin() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT rolsuper, rolbypassrls
+                FROM pg_roles
+                WHERE rolname = current_user
+                """
+            )
+        ).one()
+    if row[0] or row[1]:
+        raise RuntimeError(
+            "DB role must not be superuser and must not have BYPASSRLS; "
+            "fix Postgres role provisioning."
+        )
+
+
 def migration_status(engine: Engine) -> list[str]:
     migrations = _load_migrations()
     with engine.begin() as conn:
@@ -199,6 +217,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         assert_migrations_applied(engine)
         assert_append_only_triggers(engine)
         assert_tenant_rls(engine)
+        assert_db_role_safe(engine)
         print("Migration assertions: OK")
 
     if not (args.apply or args.status or args.do_assert):
