@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Iterable
 
 import sqlparse
-from sqlalchemy import create_engine, text
+from sqlalchemy import bindparam, create_engine, text
 from sqlalchemy.engine import Engine
 
 
@@ -124,9 +124,9 @@ def assert_tenant_rls(engine: Engine) -> None:
                 """
                 SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
                 FROM pg_class c
-                WHERE c.relname = ANY(:tables)
+                WHERE c.relname IN :tables
                 """
-            ),
+            ).bindparams(bindparam("tables", expanding=True)),
             {"tables": list(expected_tables)},
         ).fetchall()
         rls_status = {row[0]: (row[1], row[2]) for row in rows}
@@ -136,9 +136,9 @@ def assert_tenant_rls(engine: Engine) -> None:
                 """
                 SELECT tablename, policyname
                 FROM pg_policies
-                WHERE tablename = ANY(:tables)
+                WHERE tablename IN :tables
                 """
-            ),
+            ).bindparams(bindparam("tables", expanding=True)),
             {"tables": list(expected_tables)},
         ).fetchall()
         policy_names = {(row[0], row[1]) for row in policies}
