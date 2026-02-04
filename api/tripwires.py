@@ -562,7 +562,13 @@ def seed_canary_key_if_missing() -> Optional[str]:
 
                 conn.execute(
                     text(
-                        \"\"\"\n                        INSERT INTO api_keys\n                        (name, prefix, key_hash, key_lookup, hash_alg, hash_params, scopes_csv, enabled)\n                        VALUES\n                        (:name, :prefix, :key_hash, :key_lookup, :hash_alg, :hash_params, :scopes_csv, :enabled)\n                        \"\"\"\n                    ),
+                        """
+                        INSERT INTO api_keys
+                        (name, prefix, key_hash, key_lookup, hash_alg, hash_params, scopes_csv, enabled)
+                        VALUES
+                        (:name, :prefix, :key_hash, :key_lookup, :hash_alg, :hash_params, :scopes_csv, :enabled)
+                        """
+                    ),
                     {
                         "name": "CANARY_DO_NOT_USE",
                         "prefix": canary_prefix,
