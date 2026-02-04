@@ -38,7 +38,7 @@ A gap is `Post-launch` if:
 
 | ID | Gap | Severity | Evidence (file / test / CI lane) | Owner | ETA / Milestone | Definition of Done |
 |----|-----|----------|----------------------------------|-------|-----------------|--------------------|
-| G001 | Auth fallback defaults to true in docker-compose | Launch-risk | `docker-compose.yml:67` / `scripts/prod_profile_check.py` / `.github/workflows/ci.yml` / `unit` | repo | V2 | `FG_AUTH_ALLOW_FALLBACK` defaults to `false` in docker-compose.yml and prod_profile_check.py fails if truthy |
+| G001 | Auth fallback must be OFF by default (compose + prod-like) | Launch-risk | `docker-compose.yml:96` / `scripts/prod_profile_check.py` / `.github/workflows/ci.yml` / `unit` | repo | V2 | fallback off by default; only enabled in explicit dev profile |
 
 ---
 
