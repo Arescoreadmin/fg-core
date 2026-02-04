@@ -9,7 +9,7 @@ test_allow_default {
   }
   allow with input as test_input
   reasons_with := reasons with input as test_input
-  count(reasons_with) == 0
+  not reasons_with[_]
 }
 
 test_deny_missing_tenant {
