@@ -319,20 +319,28 @@ def _sqlite_add_immutable_triggers(conn, table: str) -> None:
     )
 
 
-def get_db(request: Request | None = None) -> Iterator[Session]:
+def get_db(request: Request) -> Iterator[Session]:
     SessionLocal = _get_sessionmaker()
     db = SessionLocal()
-    if request is not None:
-        try:
-            request.state.db_session = db
-            tenant_id = getattr(request.state, "tenant_id", None)
-            mode = (os.getenv("FG_TENANT_CONTEXT_MODE") or "db_session").strip().lower()
-            if tenant_id and mode == "db_session":
-                set_tenant_context(db, tenant_id)
-        except Exception:
-            if is_production_env():
-                db.close()
-                raise
+    try:
+        request.state.db_session = db
+        tenant_id = getattr(request.state, "tenant_id", None)
+        mode = (os.getenv("FG_TENANT_CONTEXT_MODE") or "db_session").strip().lower()
+        if tenant_id and mode == "db_session":
+            set_tenant_context(db, tenant_id)
+    except Exception:
+        if is_production_env():
+            db.close()
+            raise
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def get_db_no_request() -> Iterator[Session]:
+    SessionLocal = _get_sessionmaker()
+    db = SessionLocal()
     try:
         yield db
     finally:
