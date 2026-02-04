@@ -16,8 +16,16 @@ BEGIN
         SELECT 1 FROM pg_policies WHERE policyname = 'decisions_tenant_isolation'
     ) THEN
         CREATE POLICY decisions_tenant_isolation ON decisions
-            USING (tenant_id = current_setting('app.tenant_id', true))
-            WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+            USING (
+                tenant_id IS NOT NULL
+                AND current_setting('app.tenant_id', true) IS NOT NULL
+                AND tenant_id = current_setting('app.tenant_id', true)
+            )
+            WITH CHECK (
+                tenant_id IS NOT NULL
+                AND current_setting('app.tenant_id', true) IS NOT NULL
+                AND tenant_id = current_setting('app.tenant_id', true)
+            );
     END IF;
 
     IF NOT EXISTS (
@@ -25,23 +33,47 @@ BEGIN
     ) THEN
         CREATE POLICY decision_evidence_artifacts_tenant_isolation
             ON decision_evidence_artifacts
-            USING (tenant_id = current_setting('app.tenant_id', true))
-            WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+            USING (
+                tenant_id IS NOT NULL
+                AND current_setting('app.tenant_id', true) IS NOT NULL
+                AND tenant_id = current_setting('app.tenant_id', true)
+            )
+            WITH CHECK (
+                tenant_id IS NOT NULL
+                AND current_setting('app.tenant_id', true) IS NOT NULL
+                AND tenant_id = current_setting('app.tenant_id', true)
+            );
     END IF;
 
     IF NOT EXISTS (
         SELECT 1 FROM pg_policies WHERE policyname = 'api_keys_tenant_isolation'
     ) THEN
         CREATE POLICY api_keys_tenant_isolation ON api_keys
-            USING (tenant_id = current_setting('app.tenant_id', true))
-            WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+            USING (
+                tenant_id IS NOT NULL
+                AND current_setting('app.tenant_id', true) IS NOT NULL
+                AND tenant_id = current_setting('app.tenant_id', true)
+            )
+            WITH CHECK (
+                tenant_id IS NOT NULL
+                AND current_setting('app.tenant_id', true) IS NOT NULL
+                AND tenant_id = current_setting('app.tenant_id', true)
+            );
     END IF;
 
     IF NOT EXISTS (
         SELECT 1 FROM pg_policies WHERE policyname = 'security_audit_log_tenant_isolation'
     ) THEN
         CREATE POLICY security_audit_log_tenant_isolation ON security_audit_log
-            USING (tenant_id = current_setting('app.tenant_id', true))
-            WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+            USING (
+                tenant_id IS NOT NULL
+                AND current_setting('app.tenant_id', true) IS NOT NULL
+                AND tenant_id = current_setting('app.tenant_id', true)
+            )
+            WITH CHECK (
+                tenant_id IS NOT NULL
+                AND current_setting('app.tenant_id', true) IS NOT NULL
+                AND tenant_id = current_setting('app.tenant_id', true)
+            );
     END IF;
 END $$;
