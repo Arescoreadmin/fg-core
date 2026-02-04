@@ -56,7 +56,7 @@ All Production-blocking gaps resolved. Release may proceed.
 
 ### Active Launch Risks
 
-- **G001**: Auth fallback defaults to true in docker-compose
+- **G001**: Auth fallback must be OFF by default (compose + prod-like)
 
 
 ---
@@ -65,6 +65,6 @@ All Production-blocking gaps resolved. Release may proceed.
 
 ### Launch-risk
 
-- **G001**: Auth fallback defaults to true in docker-compose
-  - Evidence: ``docker-compose.yml:67` / `scripts/prod_profile_check.py` / `.github/workflows/ci.yml` / `unit``
+- **G001**: Auth fallback must be OFF by default (compose + prod-like)
+  - Evidence: ``docker-compose.yml:96` / `scripts/prod_profile_check.py` / `.github/workflows/ci.yml` / `unit``
   - Owner: repo
