@@ -16,5 +16,5 @@ reasons[reason] {
 }
 
 allow {
-  not reasons[_]
+  count(reasons) == 0
 }
