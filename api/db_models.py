@@ -72,7 +72,7 @@ class ApiKey(Base):
     # Tenant isolation (multi-tenant SaaS)
     tenant_id = Column(
         String(128),
-        nullable=False,
+        nullable=True,
         index=True,
         default="unknown",
         server_default=text("'unknown'"),

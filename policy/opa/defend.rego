@@ -1,21 +1,17 @@
 package frostgate.defend
 
 default allow = false
-default reasons = []
-
-reasons_set["missing_tenant"] {
+reasons["missing_tenant"] {
   input.path == "/defend"
   not input.tenant_id
 }
 
-reasons_set["bruteforce_threshold"] {
+reasons["bruteforce_threshold"] {
   input.path == "/defend"
   input.event_type == "auth.bruteforce"
   input.payload.fail_count >= 10
 }
 
 allow {
-  count(reasons_set) == 0
+  count(reasons) == 0
 }
-
-reasons := [r | reasons_set[r]]

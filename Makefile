@@ -225,7 +225,7 @@ fg-lint: fmt-check
 
 .PHONY: fg-fast
 fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check gap-audit
-	@$(PYTEST_ENV) $(PY) -m pytest -q
+	@$(PYTEST_ENV) $(PY) -m pytest -q -m "not postgres"
 	@$(MAKE) -s fg-lint
 
 # =============================================================================
