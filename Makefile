@@ -108,6 +108,12 @@ venv:
 	"$(PIP)" install --upgrade pip
 	"$(PIP)" install -r requirements.txt -r requirements-dev.txt
 
+# Install repo deps (explicit target so other targets can depend on it cleanly)
+.PHONY: dev-deps
+dev-deps: venv
+	@# Intentionally uses the repo venv pip
+	"$(PIP)" install -r requirements.txt -r requirements-dev.txt
+
 # =============================================================================
 # Guards / audits
 # =============================================================================
@@ -127,14 +133,24 @@ check-no-engine-evaluate:
 	fi
 
 opa-check:
-	@if command -v opa >/dev/null 2>&1; then \
+	@set -euo pipefail; \
+	if command -v opa >/dev/null 2>&1; then \
 		opa check --strict policy/opa; \
 		opa test policy/opa; \
-	else \
-		command -v docker >/dev/null 2>&1 || (echo "missing dependency: docker" && exit 1); \
-		docker run --rm -v "$$PWD/policy/opa:/policies" openpolicyagent/opa:0.64.1 check --strict /policies; \
-		docker run --rm -v "$$PWD/policy/opa:/policies" openpolicyagent/opa:0.64.1 test /policies; \
-	fi
+		exit 0; \
+	fi; \
+	if ! command -v docker >/dev/null 2>&1; then \
+		if [ "$${CI:-}" = "true" ] || [ "$${FG_STRICT_DOCKER:-0}" = "1" ]; then \
+			echo "ERROR: docker not available (required for opa-check)"; \
+			exit 1; \
+		else \
+			echo "SKIP: docker not available; skipping opa-check (set FG_STRICT_DOCKER=1 to force)"; \
+			exit 0; \
+		fi; \
+	fi; \
+	docker --version >/dev/null; \
+	docker run --rm -v "$$PWD/policy/opa:/policies" openpolicyagent/opa:0.64.1 check --strict /policies; \
+	docker run --rm -v "$$PWD/policy/opa:/policies" openpolicyagent/opa:0.64.1 test /policies
 
 fg-audit-make: guard-scripts
 	@$(PY) scripts/audit_make_targets.py
@@ -152,7 +168,7 @@ contracts-core-diff:
 artifact-contract-check:
 	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) scripts/artifact_schema_check.py
 
-fg-contract: guard-scripts contracts-gen
+fg-contract: dev-deps guard-scripts contracts-gen
 	@$(PY_CONTRACT) scripts/contract_toolchain_check.py
 	@$(PY_CONTRACT) scripts/contract_lint.py
 	@git diff --exit-code contracts/admin
