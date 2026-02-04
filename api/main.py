@@ -230,6 +230,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             app.state.db_init_ok = False
             app.state.db_init_error = f"{type(e).__name__}: {e}"
             log.exception("DB init failed")
+            if is_production or is_strict_env_required():
+                raise
 
         # Setup graceful shutdown handler
         if get_shutdown_manager is not None:

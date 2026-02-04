@@ -180,9 +180,9 @@ class TestStartupValidation:
 class TestSQLiteInProduction:
     """Tests for SQLite restrictions in production."""
 
-    def test_sqlite_in_prod_is_warning(self):
+    def test_sqlite_in_prod_is_error(self):
         """
-        SQLite in production SHOULD generate a warning.
+        SQLite in production SHOULD generate an error.
         """
         from api.config.startup_validation import StartupValidator
 
@@ -197,13 +197,13 @@ class TestSQLiteInProduction:
             validator = StartupValidator()
             report = validator.validate()
 
-            # Should warn about SQLite in prod
-            db_warnings = [
+            # Should error about SQLite in prod
+            db_errors = [
                 r
                 for r in report.results
                 if "database" in r.name.lower() or "sqlite" in r.message.lower()
             ]
-            assert len(db_warnings) > 0
+            assert any(r.severity == "error" for r in db_errors)
 
 
 class TestAuthEnabled:

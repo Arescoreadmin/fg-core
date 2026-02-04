@@ -1,0 +1,43 @@
+from __future__ import annotations
+
+import os
+
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
+
+from api.db_migrations import apply_migrations
+
+pytestmark = pytest.mark.postgres
+
+if not (os.getenv("FG_DB_URL") or "").strip():
+    pytest.skip("FG_DB_URL is required for postgres tests", allow_module_level=True)
+
+
+def _require_db_url() -> str:
+    db_url = (os.getenv("FG_DB_URL") or "").strip()
+    if not db_url:
+        raise RuntimeError("FG_DB_URL is required for postgres tests")
+    return db_url
+
+
+@pytest.fixture(scope="session")
+def pg_engine() -> Engine:
+    engine = create_engine(_require_db_url(), future=True)
+    apply_migrations(engine)
+    return engine
+
+
+@pytest.fixture(autouse=True)
+def _clean_postgres_tables(pg_engine: Engine) -> None:
+    with pg_engine.begin() as conn:
+        conn.exec_driver_sql(
+            """
+            TRUNCATE TABLE
+                decision_evidence_artifacts,
+                decisions,
+                api_keys,
+                security_audit_log
+            RESTART IDENTITY CASCADE
+            """
+        )

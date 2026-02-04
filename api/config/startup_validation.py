@@ -170,18 +170,44 @@ class StartupValidator:
         """Check database configuration."""
         db_url = _env_str("FG_DB_URL", "")
         sqlite_path = _env_str("FG_SQLITE_PATH", "")
+        db_backend = _env_str("FG_DB_BACKEND", "").lower()
+        tenant_mode = _env_str("FG_TENANT_CONTEXT_MODE", "db_session").lower()
 
-        if self.is_production and not db_url:
+        if tenant_mode not in {"db_session", "app_only"}:
             report.add(
-                name="database_production",
+                name="tenant_context_mode",
                 passed=False,
-                message="FG_DB_URL not set. Production should use PostgreSQL, not SQLite.",
-                severity="warning",
+                message="FG_TENANT_CONTEXT_MODE must be 'db_session' or 'app_only'.",
+                severity="error" if self.is_production else "warning",
             )
-        elif db_url:
-            # Check for credentials in URL (basic check)
+
+        if self.is_production and tenant_mode != "db_session":
+            report.add(
+                name="tenant_context_mode_production",
+                passed=False,
+                message="Production requires FG_TENANT_CONTEXT_MODE=db_session.",
+                severity="error",
+            )
+
+        if self.is_production:
+            if db_backend and db_backend != "postgres":
+                report.add(
+                    name="database_backend",
+                    passed=False,
+                    message="Production requires FG_DB_BACKEND=postgres.",
+                    severity="error",
+                )
+            if not db_url:
+                report.add(
+                    name="database_production",
+                    passed=False,
+                    message="FG_DB_URL not set. Production must use PostgreSQL.",
+                    severity="error",
+                )
+                return
+
+        if db_url:
             if "@" in db_url and "://" in db_url:
-                # Has credentials, which is expected for database connections
                 report.add(
                     name="database_config",
                     passed=True,

@@ -10,8 +10,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import bind_tenant_id, require_scopes
-from api.db import get_db
+from api.auth_scopes import require_scopes
+from api.db import tenant_db_required
 from api.db_models import DecisionRecord
 from api.decisions import _loads_json_text
 from api.ratelimit import rate_limit_guard
@@ -287,7 +287,7 @@ class FeedLiveResponse(BaseModel):
 @router.get("/live", response_model=FeedLiveResponse)
 def feed_live(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_required),
     # pagination/incremental
     limit: int = Query(default=50, ge=1, le=200),
     since_id: int | None = Query(default=None, ge=0),
@@ -333,12 +333,7 @@ def feed_live(
         qry = qry.filter(DecisionRecord.source == source)
 
     # P0: Require tenant_id for all requests - no cross-tenant access allowed
-    tenant_id = bind_tenant_id(
-        request,
-        tenant_id,
-        require_explicit_for_unscoped=True,  # P0: Reject unscoped keys without tenant_id
-    )
-    request.state.tenant_id = tenant_id
+    tenant_id = request.state.tenant_id
 
     # P0: Reject "unknown" tenant bucket - fail closed
     if not tenant_id or tenant_id == "unknown":
@@ -427,7 +422,7 @@ def feed_stream_head() -> Response:
 @router.get("/stream")
 async def feed_stream(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_required),
     # pacing
     interval: float = Query(default=1.0, ge=0.2, le=10.0),
     heartbeat: float = Query(default=10.0, ge=2.0, le=60.0),
@@ -466,12 +461,7 @@ async def feed_stream(
         threat_level = severity
 
     # P0: Require tenant_id for all requests - no cross-tenant access allowed
-    tenant_id = bind_tenant_id(
-        request,
-        tenant_id,
-        require_explicit_for_unscoped=True,  # P0: Reject unscoped keys without tenant_id
-    )
-    request.state.tenant_id = tenant_id
+    tenant_id = request.state.tenant_id
 
     # P0: Reject "unknown" tenant bucket - fail closed
     if not tenant_id or tenant_id == "unknown":

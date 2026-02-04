@@ -10,8 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import bind_tenant_id, require_scopes
-from api.db import get_db
+from api.auth_scopes import require_scopes
+from api.db import tenant_db_required
 from api.db_models import DecisionRecord
 
 
@@ -540,14 +540,10 @@ def _compute_stats(db: Session, tenant_id: str) -> _Computed:
 @router.get("", response_model=StatsResponse)
 def get_stats(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_required),
     tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> StatsResponse:
-    tenant_id = bind_tenant_id(
-        request,
-        tenant_id,
-        require_explicit_for_unscoped=True,
-    )
+    tenant_id = request.state.tenant_id
     auth = getattr(getattr(request, "state", None), "auth", None)
     is_global_key = getattr(auth, "reason", None) == "global_key"
     if not tenant_id or (tenant_id == "unknown" and not is_global_key):
@@ -575,18 +571,14 @@ def get_stats(
 @router.get("/summary", response_model=StatsSummaryResponse)
 def get_stats_summary(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_required),
     tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> StatsSummaryResponse:
     """
     Marketing-friendly summary payload for dashboard headers.
     Built from the same underlying computation to avoid drift.
     """
-    tenant_id = bind_tenant_id(
-        request,
-        tenant_id,
-        require_explicit_for_unscoped=True,
-    )
+    tenant_id = request.state.tenant_id
     auth = getattr(getattr(request, "state", None), "auth", None)
     is_global_key = getattr(auth, "reason", None) == "global_key"
     if not tenant_id or (tenant_id == "unknown" and not is_global_key):

@@ -70,7 +70,13 @@ class ApiKey(Base):
     use_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
 
     # Tenant isolation (multi-tenant SaaS)
-    tenant_id = Column(String(128), nullable=True, index=True)
+    tenant_id = Column(
+        String(128),
+        nullable=True,
+        index=True,
+        default="unknown",
+        server_default=text("'unknown'"),
+    )
 
     # Security metadata
     created_by = Column(String(128), nullable=True)  # Who created the key

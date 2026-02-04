@@ -8,8 +8,8 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import bind_tenant_id, require_scopes
-from api.db import get_db
+from api.auth_scopes import require_scopes
+from api.db import tenant_db
 from api.db_models import DecisionRecord
 from api.evidence_chain import chain_fields_for_decision
 from api.evidence_artifacts import emit_decision_evidence
@@ -176,7 +176,7 @@ def _make_record(
 def dev_seed(
     request: Request,
     tenant_id: Optional[str] = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db),
 ) -> Dict[str, Any]:
     """
     Create a deterministic set of dev events for tests/demos.
@@ -185,8 +185,7 @@ def dev_seed(
     if not _dev_enabled():
         raise HTTPException(status_code=404, detail="Not Found")
 
-    tenant_id = bind_tenant_id(request, tenant_id)
-    request.state.tenant_id = tenant_id
+    tenant_id = request.state.tenant_id
 
     now = _utcnow_naive()
     src = "dev_seed"
@@ -305,13 +304,12 @@ def dev_emit(
     tenant_id: Optional[str] = None,
     source: Optional[str] = None,
     pq_fallback: bool = False,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db),
 ) -> Dict[str, Any]:
     if not _dev_enabled():
         raise HTTPException(status_code=404, detail="Not Found")
 
-    tenant_id = bind_tenant_id(request, tenant_id)
-    request.state.tenant_id = tenant_id
+    tenant_id = request.state.tenant_id
 
     src = source or kind
     created_ids: List[int] = []

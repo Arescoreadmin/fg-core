@@ -17,7 +17,7 @@ from sqlalchemy import asc, desc, func, select
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import bind_tenant_id, require_api_key_always, require_scopes
-from api.db import get_db
+from api.db import get_db, tenant_db_required
 from api.db_models import DecisionRecord
 from api.security_audit import audit_admin_action
 from api.stats import _compute_stats, _trend_flag
@@ -178,6 +178,11 @@ def _request_id(request: Request) -> Optional[str]:
 
 
 def _resolve_tenant(request: Request, tenant_id: Optional[str]) -> str:
+    existing = getattr(getattr(request, "state", None), "tenant_id", None)
+    if existing:
+        if tenant_id and tenant_id != existing:
+            raise HTTPException(status_code=403, detail="Tenant mismatch")
+        return existing
     bound = bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
     if not bound or bound == "unknown":
         raise HTTPException(
@@ -528,7 +533,7 @@ async def ui_csrf(request: Request):
 )
 async def ui_posture(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_required),
     tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> PostureResponse:
     tenant_id = _resolve_tenant(request, tenant_id)
@@ -579,7 +584,7 @@ async def ui_posture(
 )
 async def ui_decisions(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_required),
     limit: int = Query(25, ge=1, le=200),
     offset: int = Query(0, ge=0, le=200000),
     tenant_id: Optional[str] = Query(default=None, max_length=128),
@@ -651,7 +656,7 @@ async def ui_decisions(
 async def ui_decision_detail(
     decision_id: int,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_required),
     tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> DecisionDetail:
     tenant_id = _resolve_tenant(request, tenant_id)
@@ -693,7 +698,7 @@ async def ui_decision_detail(
 )
 async def ui_chain_verify(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_required),
     tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> ChainVerifyResponse:
     tenant_id = _resolve_tenant(request, tenant_id)

@@ -1,6 +1,6 @@
 package frostgate.defend
 
-test_allow_default if {
+test_allow_default {
   test_input := {
     "path": "/defend",
     "tenant_id": "t1",
@@ -12,7 +12,7 @@ test_allow_default if {
   count(reasons_with) == 0
 }
 
-test_deny_missing_tenant if {
+test_deny_missing_tenant {
   test_input := {
     "path": "/defend",
     "event_type": "auth.login",
@@ -20,10 +20,10 @@ test_deny_missing_tenant if {
   }
   not allow with input as test_input
   reasons_with := reasons with input as test_input
-  reasons_with[_] == "missing_tenant"
+  reasons_with["missing_tenant"]
 }
 
-test_deny_bruteforce_threshold if {
+test_deny_bruteforce_threshold {
   test_input := {
     "path": "/defend",
     "tenant_id": "t1",
@@ -32,5 +32,5 @@ test_deny_bruteforce_threshold if {
   }
   not allow with input as test_input
   reasons_with := reasons with input as test_input
-  reasons_with[_] == "bruteforce_threshold"
+  reasons_with["bruteforce_threshold"]
 }
