@@ -14,6 +14,6 @@ reasons["bruteforce_threshold"] {
   input.payload.fail_count >= 10
 }
 
-allow if {
+allow {
   count(reasons) == 0
 }
