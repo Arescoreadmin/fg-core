@@ -3,12 +3,12 @@ package frostgate.defend
 default allow = false
 default reasons = []
 
-deny_reason contains "missing_tenant" if {
+deny_reason["missing_tenant"] {
   input.path == "/defend"
   not input.tenant_id
 }
 
-deny_reason contains "bruteforce_threshold" if {
+deny_reason["bruteforce_threshold"] {
   input.path == "/defend"
   input.event_type == "auth.bruteforce"
   input.payload.fail_count >= 10
