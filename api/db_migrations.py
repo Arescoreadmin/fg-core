@@ -119,22 +119,26 @@ def assert_tenant_rls(engine: Engine) -> None:
         "security_audit_log",
     }
     with engine.begin() as conn:
-        rows = conn.exec_driver_sql(
-            """
-            SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
-            FROM pg_class c
-            WHERE c.relname = ANY(:tables)
-            """,
+        rows = conn.execute(
+            text(
+                """
+                SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
+                FROM pg_class c
+                WHERE c.relname = ANY(:tables)
+                """
+            ),
             {"tables": list(expected_tables)},
         ).fetchall()
         rls_status = {row[0]: (row[1], row[2]) for row in rows}
 
-        policies = conn.exec_driver_sql(
-            """
-            SELECT tablename, policyname
-            FROM pg_policies
-            WHERE tablename = ANY(:tables)
-            """,
+        policies = conn.execute(
+            text(
+                """
+                SELECT tablename, policyname
+                FROM pg_policies
+                WHERE tablename = ANY(:tables)
+                """
+            ),
             {"tables": list(expected_tables)},
         ).fetchall()
         policy_names = {(row[0], row[1]) for row in policies}
