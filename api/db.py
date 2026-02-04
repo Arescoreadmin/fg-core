@@ -175,7 +175,7 @@ def set_tenant_context(session: Session, tenant_id: str) -> None:
     if not tenant_id:
         raise RuntimeError("tenant_id required to set DB session context")
     session.execute(
-        text("SET app.tenant_id = :tenant_id"),
+        text("SELECT set_config('app.tenant_id', :tenant_id, false)"),
         {"tenant_id": tenant_id},
     )
 
