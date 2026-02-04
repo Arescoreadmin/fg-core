@@ -203,6 +203,38 @@ jobs:
             state/**
           if-no-files-found: ignore
 
+  db_postgres_verify:
+    name: DB Postgres Verify
+    runs-on: ubuntu-latest
+    needs: fg_guard
+    env:
+      FG_ENV: test
+      FG_DB_BACKEND: postgres
+      POSTGRES_USER: fg_user
+      POSTGRES_DB: frostgate
+      POSTGRES_PASSWORD: fg_password
+      FG_DB_URL: postgresql+psycopg://fg_user:fg_password@127.0.0.1:5432/frostgate
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python setup (cached)
+        uses: ./.github/actions/fg-python-setup
+        with:
+          python-version: "3.12"
+          install-os-deps: "true"
+          prepare-workspace: "true"
+          build-venv: "true"
+
+      - name: Create .env for compose
+        run: |
+          printf "POSTGRES_USER=%s\nPOSTGRES_DB=%s\nPOSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\n" \
+            "${POSTGRES_USER}" "${POSTGRES_DB}" "${POSTGRES_PASSWORD}" "devredis" > .env
+
+      - name: Run Postgres verification lane
+        run: make db-postgres-verify
+
   admin:
     name: Admin Gateway (ci-admin)
     runs-on: ubuntu-latest

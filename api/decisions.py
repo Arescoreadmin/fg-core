@@ -10,8 +10,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import bind_tenant_id, require_scopes
-from api.db import get_db
+from api.auth_scopes import require_scopes
+from api.db import tenant_db_required
 from api.db_models import DecisionRecord
 
 log = logging.getLogger("frostgate.decisions")
@@ -106,7 +106,7 @@ class DecisionsPage(BaseModel):
 )
 def list_decisions(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_required),
     limit: int = Query(20, ge=1, le=200),
     offset: int = Query(0, ge=0, le=200000),
     include_raw: bool = Query(
@@ -118,12 +118,7 @@ def list_decisions(
 ) -> DecisionsPage:
     try:
         # P0: Require tenant_id for all requests - no cross-tenant access allowed
-        tenant_id = bind_tenant_id(
-            request,
-            tenant_id,
-            require_explicit_for_unscoped=True,  # P0: Reject unscoped keys without tenant_id
-        )
-        request.state.tenant_id = tenant_id
+        tenant_id = request.state.tenant_id
 
         # P0: Reject "unknown" tenant bucket - fail closed
         if not tenant_id or tenant_id == "unknown":
@@ -206,18 +201,13 @@ def list_decisions(
 def get_decision(
     decision_id: int,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_required),
     include_raw: bool = Query(True, description="Include request/response JSON blobs"),
     tenant_id: Optional[str] = Query(None, min_length=1),
 ) -> DecisionOut:
     try:
         # P0: Require tenant_id for all requests - no cross-tenant access allowed
-        resolved_tenant = bind_tenant_id(
-            request,
-            tenant_id,
-            require_explicit_for_unscoped=True,  # P0: Reject unscoped keys without tenant_id
-        )
-        request.state.tenant_id = resolved_tenant
+        resolved_tenant = request.state.tenant_id
 
         # P0: Reject "unknown" tenant bucket - fail closed
         if not resolved_tenant or resolved_tenant == "unknown":

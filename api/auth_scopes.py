@@ -18,6 +18,7 @@ from argon2.exceptions import VerifyMismatchError
 from fastapi import Depends, Header, HTTPException, Request
 
 from api.config.env import is_production_env
+from api.db import set_tenant_context
 from api.db import _resolve_sqlite_path, init_db
 
 log = logging.getLogger("frostgate")
@@ -926,6 +927,7 @@ def bind_tenant_id(
         if requested and requested != auth_tenant:
             raise HTTPException(status_code=403, detail="Tenant mismatch")
         request.state.tenant_id = auth_tenant
+        _apply_tenant_context(request, auth_tenant)
         return auth_tenant
 
     if requested:
@@ -933,6 +935,7 @@ def bind_tenant_id(
         if not valid:
             raise HTTPException(status_code=400, detail=error)
         request.state.tenant_id = requested
+        _apply_tenant_context(request, requested)
         return requested
 
     if require_explicit_for_unscoped and not is_global_key:
@@ -940,12 +943,33 @@ def bind_tenant_id(
             status_code=400, detail="tenant_id required for unscoped keys"
         )
 
+    if _is_production_env():
+        raise HTTPException(status_code=400, detail="tenant_id required")
+
     if is_global_key:
         request.state.tenant_id = default_unscoped
+        _apply_tenant_context(request, default_unscoped)
         return default_unscoped
 
     request.state.tenant_id = default_unscoped
+    _apply_tenant_context(request, default_unscoped)
     return default_unscoped
+
+
+def _apply_tenant_context(request: Request, tenant_id: Optional[str]) -> None:
+    if not tenant_id:
+        return
+    mode = (os.getenv("FG_TENANT_CONTEXT_MODE") or "db_session").strip().lower()
+    if mode != "db_session":
+        return
+    db_session = getattr(getattr(request, "state", None), "db_session", None)
+    if db_session is None:
+        return
+    try:
+        set_tenant_context(db_session, tenant_id)
+    except Exception:
+        if _is_production_env():
+            raise
 
 
 def _is_production_env() -> bool:

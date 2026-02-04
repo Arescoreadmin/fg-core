@@ -5,12 +5,13 @@ import os
 from pathlib import Path
 from typing import Iterator, Optional
 
-from sqlalchemy import create_engine
+from fastapi import Query, Request
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import QueuePool
 
-from api.config.env import resolve_env
+from api.config.env import is_production_env, resolve_env
 from api.config.paths import (
     STATE_DIR,
 )  # tests assert this symbol is referenced in this file
@@ -42,8 +43,10 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 # Pool configuration for production readiness
-POOL_SIZE = _env_int("FG_DB_POOL_SIZE", 5)
-POOL_MAX_OVERFLOW = _env_int("FG_DB_POOL_MAX_OVERFLOW", 10)
+POOL_SIZE = _env_int("FG_DB_POOL_SIZE", 10)
+POOL_MAX_OVERFLOW = _env_int(
+    "FG_DB_MAX_OVERFLOW", _env_int("FG_DB_POOL_MAX_OVERFLOW", 20)
+)
 POOL_TIMEOUT = _env_int("FG_DB_POOL_TIMEOUT", 30)
 POOL_RECYCLE = _env_int("FG_DB_POOL_RECYCLE", 1800)  # 30 minutes
 POOL_PRE_PING = _env_bool("FG_DB_POOL_PRE_PING", True)
@@ -87,8 +90,16 @@ def _make_engine(
     *, sqlite_path: Optional[str] = None, db_url: Optional[str] = None
 ) -> Engine:
     env = _env()
+    backend = _resolve_db_backend(env)
+    db_url = db_url or (os.getenv("FG_DB_URL") or "").strip() or None
 
-    if db_url:
+    if backend == "postgres" and not db_url:
+        raise RuntimeError("FG_DB_URL is required when FG_DB_BACKEND=postgres")
+    if backend == "sqlite" and db_url:
+        log.warning("FG_DB_BACKEND=sqlite set, ignoring FG_DB_URL")
+        db_url = None
+
+    if backend == "postgres":
         # Production PostgreSQL with connection pooling
         engine = create_engine(
             db_url,
@@ -107,6 +118,9 @@ def _make_engine(
             POOL_RECYCLE,
         )
         return engine
+
+    if backend != "sqlite":
+        raise RuntimeError(f"Unsupported FG_DB_BACKEND={backend}")
 
     pth = _resolve_sqlite_path(sqlite_path)
 
@@ -132,6 +146,37 @@ def _make_engine(
         f"sqlite+pysqlite:///{pth}",
         future=True,
         connect_args={"check_same_thread": False},
+    )
+
+
+def _resolve_db_backend(env: Optional[str] = None) -> str:
+    env = env or _env()
+    backend = (os.getenv("FG_DB_BACKEND") or "").strip().lower()
+
+    if not backend:
+        if env in {"prod", "staging"}:
+            return "postgres"
+        if (os.getenv("FG_DB_URL") or "").strip():
+            return "postgres"
+        return "sqlite"
+
+    if backend not in {"postgres", "sqlite"}:
+        raise RuntimeError("FG_DB_BACKEND must be 'postgres' or 'sqlite'")
+
+    if env in {"prod", "staging"} and backend != "postgres":
+        raise RuntimeError("Production requires FG_DB_BACKEND=postgres")
+
+    return backend
+
+
+def set_tenant_context(session: Session, tenant_id: str) -> None:
+    if session.bind is None or session.bind.dialect.name != "postgresql":
+        return
+    if not tenant_id:
+        raise RuntimeError("tenant_id required to set DB session context")
+    session.execute(
+        text("SET LOCAL app.tenant_id = :tenant_id"),
+        {"tenant_id": tenant_id},
     )
 
 
@@ -183,9 +228,29 @@ def init_db(
     Tests call init_db(sqlite_path=...).
     """
     eng = engine or get_engine(sqlite_path=sqlite_path, db_url=db_url)
-    Base.metadata.create_all(bind=eng)
     if eng.dialect.name == "sqlite":
+        Base.metadata.create_all(bind=eng)
         _auto_migrate_sqlite(eng)
+        return
+
+    if eng.dialect.name != "postgresql":
+        raise RuntimeError(f"Unsupported DB dialect: {eng.dialect.name}")
+
+    try:
+        with eng.connect() as conn:
+            conn.exec_driver_sql("SELECT 1")
+    except Exception as exc:
+        raise RuntimeError(f"Postgres connection failed: {exc}") from exc
+
+    from api.db_migrations import (
+        assert_append_only_triggers,
+        assert_migrations_applied,
+        assert_tenant_rls,
+    )
+
+    assert_migrations_applied(eng)
+    assert_append_only_triggers(eng)
+    assert_tenant_rls(eng)
 
 
 def _auto_migrate_sqlite(engine: Engine) -> None:
@@ -254,10 +319,57 @@ def _sqlite_add_immutable_triggers(conn, table: str) -> None:
     )
 
 
-def get_db() -> Iterator[Session]:
+def get_db(request: Request | None = None) -> Iterator[Session]:
     SessionLocal = _get_sessionmaker()
     db = SessionLocal()
+    if request is not None:
+        try:
+            request.state.db_session = db
+            tenant_id = getattr(request.state, "tenant_id", None)
+            mode = (os.getenv("FG_TENANT_CONTEXT_MODE") or "db_session").strip().lower()
+            if tenant_id and mode == "db_session":
+                set_tenant_context(db, tenant_id)
+        except Exception:
+            if is_production_env():
+                db.close()
+                raise
     try:
         yield db
     finally:
         db.close()
+
+
+def tenant_db(
+    request: Request,
+    tenant_id: Optional[str] = None,
+    *,
+    require_explicit_for_unscoped: bool = False,
+) -> Iterator[Session]:
+    from api.auth_scopes import bind_tenant_id
+
+    bound_tenant = bind_tenant_id(
+        request,
+        tenant_id,
+        require_explicit_for_unscoped=require_explicit_for_unscoped,
+    )
+    SessionLocal = _get_sessionmaker()
+    db = SessionLocal()
+    try:
+        request.state.db_session = db
+        request.state.tenant_id = bound_tenant
+        mode = (os.getenv("FG_TENANT_CONTEXT_MODE") or "db_session").strip().lower()
+        if bound_tenant and mode == "db_session":
+            set_tenant_context(db, bound_tenant)
+        yield db
+    finally:
+        db.close()
+
+
+def tenant_db_required(
+    request: Request, tenant_id: Optional[str] = Query(None)
+) -> Iterator[Session]:
+    yield from tenant_db(
+        request,
+        tenant_id,
+        require_explicit_for_unscoped=True,
+    )

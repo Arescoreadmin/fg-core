@@ -103,6 +103,8 @@ services:
       FG_API_KEYS_FILE: /run/secrets/fg_api_keys
 
       # DB/Redis - POSTGRES_PASSWORD must be set (no default)
+      FG_DB_BACKEND: ${FG_DB_BACKEND:-postgres}
+      FG_TENANT_CONTEXT_MODE: ${FG_TENANT_CONTEXT_MODE:-db_session}
       FG_DB_URL: postgresql+psycopg://${POSTGRES_USER:-fg_user}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-frostgate}
       # Redis URL with authentication (password must match redis service)
       FG_REDIS_URL: ${FG_REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379/0}
