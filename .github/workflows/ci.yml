@@ -229,8 +229,8 @@ jobs:
 
       - name: Create .env for compose
         run: |
-          printf "POSTGRES_USER=%s\nPOSTGRES_DB=%s\nPOSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nFG_AGENT_API_KEY=%s\n" \
-            "${POSTGRES_USER}" "${POSTGRES_DB}" "${POSTGRES_PASSWORD}" "devredis" "dev-agent-key" > .env
+          printf "POSTGRES_USER=%s\nPOSTGRES_DB=%s\nPOSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nFG_AGENT_API_KEY=%s\nAG_CORS_ORIGINS=%s\n" \
+            "${POSTGRES_USER}" "${POSTGRES_DB}" "${POSTGRES_PASSWORD}" "devredis" "dev-agent-key" "http://localhost:13000" > .env
 
       - name: Run Postgres verification lane
         run: make db-postgres-verify
