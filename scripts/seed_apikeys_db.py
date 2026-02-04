@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from typing import Iterable, Tuple
 
-from api.db import init_db, get_db
+from api.db import get_db_no_request, init_db
 from api.db_models import ApiKey, hash_api_key
 
 
@@ -39,7 +39,7 @@ def _prefix(raw: str) -> str:
 
 def upsert_key(raw: str, scopes_csv: str) -> None:
     init_db()
-    for db in get_db():
+    for db in get_db_no_request():
         prefix = _prefix(raw)
         key_h = hash_api_key(raw)
 

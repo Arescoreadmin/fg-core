@@ -151,7 +151,7 @@ echo "==> [4/4] Add DB-asserting test (real verification, no API surface changes
 cat > tests/test_decision_diff_db.py <<'PY'
 import os
 from api.main import app
-from api.db import get_db
+from api.db import get_db_no_request
 from api.db_models import DecisionRecord
 from fastapi.testclient import TestClient
 
@@ -178,7 +178,7 @@ def test_decision_diff_is_persisted_in_db_after_second_event():
     )
     assert r2.status_code in (200, 201), r2.text
 
-    db = next(get_db())
+    db = next(get_db_no_request())
     try:
         rec = _latest_decision(db)
         assert rec is not None
