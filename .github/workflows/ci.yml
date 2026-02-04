@@ -210,12 +210,10 @@ jobs:
     env:
       FG_ENV: test
       FG_DB_BACKEND: postgres
-      POSTGRES_BOOTSTRAP_USER: postgres
       POSTGRES_USER: fg_user
       POSTGRES_DB: frostgate
       POSTGRES_PASSWORD: fg_password
-      POSTGRES_APP_PASSWORD: fg_password
-      FG_DB_URL: postgresql+psycopg://fg_user:fg_password@127.0.0.1:5432/frostgate
+      FG_DB_URL: postgresql+psycopg://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@127.0.0.1:5432/${{ env.POSTGRES_DB }}
 
     steps:
       - name: Checkout
@@ -231,8 +229,8 @@ jobs:
 
       - name: Create .env for compose
         run: |
-          printf "POSTGRES_BOOTSTRAP_USER=%s\nPOSTGRES_USER=%s\nPOSTGRES_DB=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_APP_PASSWORD=%s\nREDIS_PASSWORD=%s\nFG_AGENT_API_KEY=%s\nAG_CORS_ORIGINS=%s\n" \
-            "${POSTGRES_BOOTSTRAP_USER}" "${POSTGRES_USER}" "${POSTGRES_DB}" "${POSTGRES_PASSWORD}" "${POSTGRES_APP_PASSWORD}" "devredis" "dev-agent-key" "http://localhost:13000" > .env
+          printf "POSTGRES_USER=%s\nPOSTGRES_DB=%s\nPOSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nFG_AGENT_API_KEY=%s\nAG_CORS_ORIGINS=%s\n" \
+            "${POSTGRES_USER}" "${POSTGRES_DB}" "${POSTGRES_PASSWORD}" "devredis" "dev-agent-key" "http://localhost:13000" > .env
 
       - name: Run Postgres verification lane
         run: make db-postgres-verify

@@ -34,13 +34,10 @@ services:
     env_file:
       - .env
     environment:
-      POSTGRES_USER: ${POSTGRES_BOOTSTRAP_USER:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-fg_user}
       POSTGRES_DB: ${POSTGRES_DB:-frostgate}
       # Security: POSTGRES_PASSWORD must be set in .env - no default provided
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-      POSTGRES_APP_USER: ${POSTGRES_USER:-fg_user}
-      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?set POSTGRES_APP_PASSWORD in .env}
-      POSTGRES_APP_DB: ${POSTGRES_DB:-frostgate}
       FG_INGEST_LOG_EVERY: ${FG_INGEST_LOG_EVERY:-200}
       FG_STATE_DIR: /var/lib/frostgate/state
       FG_AGENT_QUEUE_DIR: /var/lib/frostgate/agent_queue
@@ -109,7 +106,7 @@ services:
       # DB/Redis - POSTGRES_PASSWORD must be set (no default)
       FG_DB_BACKEND: ${FG_DB_BACKEND:-postgres}
       FG_TENANT_CONTEXT_MODE: ${FG_TENANT_CONTEXT_MODE:-db_session}
-      FG_DB_URL: postgresql+psycopg://${POSTGRES_USER:-fg_user}:${POSTGRES_APP_PASSWORD:?set POSTGRES_APP_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-frostgate}
+      FG_DB_URL: postgresql+psycopg://${POSTGRES_USER:-fg_user}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-frostgate}
       # Redis URL with authentication (password must match redis service)
       FG_REDIS_URL: ${FG_REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379/0}
 

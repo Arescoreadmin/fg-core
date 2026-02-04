@@ -45,14 +45,12 @@ STATE_DIR     ?= state
 FG_STATE_DIR   ?= $(CURDIR)/$(ARTIFACTS_DIR)
 FG_SQLITE_PATH ?= $(FG_STATE_DIR)/frostgate.db
 
-POSTGRES_BOOTSTRAP_USER ?= postgres
 POSTGRES_USER     ?= fg_user
-POSTGRES_APP_PASSWORD ?= $(POSTGRES_PASSWORD)
 POSTGRES_DB       ?= frostgate
 POSTGRES_PASSWORD ?= fg_password
 POSTGRES_HOST     ?= 127.0.0.1
 POSTGRES_PORT     ?= 5432
-POSTGRES_URL      ?= postgresql+psycopg://$(POSTGRES_USER):$(POSTGRES_APP_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)
+POSTGRES_URL      ?= postgresql+psycopg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)
 
 export API_KEY := $(FG_API_KEY)
 
@@ -238,13 +236,21 @@ fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check gap-a
 
 db-postgres-up:
 	@if [ ! -f .env ]; then \
-		printf "POSTGRES_BOOTSTRAP_USER=%s\nPOSTGRES_USER=%s\nPOSTGRES_DB=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_APP_PASSWORD=%s\nREDIS_PASSWORD=%s\nFG_AGENT_API_KEY=%s\nAG_CORS_ORIGINS=%s\n" \
-			"$(POSTGRES_BOOTSTRAP_USER)" "$(POSTGRES_USER)" "$(POSTGRES_DB)" "$(POSTGRES_PASSWORD)" "$(POSTGRES_APP_PASSWORD)" "devredis" "dev-agent-key" "http://localhost:13000" > .env; \
+		printf "POSTGRES_USER=%s\nPOSTGRES_DB=%s\nPOSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nFG_AGENT_API_KEY=%s\nAG_CORS_ORIGINS=%s\n" \
+			"$(POSTGRES_USER)" "$(POSTGRES_DB)" "$(POSTGRES_PASSWORD)" "devredis" "dev-agent-key" "http://localhost:13000" > .env; \
 	fi
-	@POSTGRES_BOOTSTRAP_USER="$(POSTGRES_BOOTSTRAP_USER)" POSTGRES_USER="$(POSTGRES_USER)" POSTGRES_PASSWORD="$(POSTGRES_PASSWORD)" POSTGRES_APP_PASSWORD="$(POSTGRES_APP_PASSWORD)" POSTGRES_DB="$(POSTGRES_DB)" \
+	@POSTGRES_USER="$(POSTGRES_USER)" POSTGRES_PASSWORD="$(POSTGRES_PASSWORD)" POSTGRES_DB="$(POSTGRES_DB)" \
+		docker compose down -v --remove-orphans || true
+	@POSTGRES_USER="$(POSTGRES_USER)" POSTGRES_PASSWORD="$(POSTGRES_PASSWORD)" POSTGRES_DB="$(POSTGRES_DB)" \
 		docker compose up -d postgres
-	@POSTGRES_BOOTSTRAP_USER="$(POSTGRES_BOOTSTRAP_USER)" POSTGRES_USER="$(POSTGRES_USER)" POSTGRES_PASSWORD="$(POSTGRES_PASSWORD)" POSTGRES_APP_PASSWORD="$(POSTGRES_APP_PASSWORD)" POSTGRES_DB="$(POSTGRES_DB)" \
+	@PGHOST="$(POSTGRES_HOST)" PGPORT="$(POSTGRES_PORT)" PGUSER="$(POSTGRES_USER)" PGDATABASE="$(POSTGRES_DB)" \
 		./scripts/wait_for_postgres.sh
+	@docker compose exec -T postgres psql -U "$(POSTGRES_USER)" -d "$(POSTGRES_DB)" -c "SELECT 1;" >/dev/null || { \
+		echo "Postgres auth check failed."; \
+		echo "POSTGRES_USER=$(POSTGRES_USER) POSTGRES_DB=$(POSTGRES_DB)"; \
+		docker compose exec -T postgres sh -c 'env | grep "^POSTGRES_"' || true; \
+		exit 1; \
+	}
 
 db-postgres-migrate:
 	@FG_DB_URL="$(POSTGRES_URL)" FG_DB_BACKEND="postgres" $(PY) -m api.db_migrations --backend postgres --apply
