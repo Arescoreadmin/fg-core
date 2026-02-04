@@ -170,8 +170,54 @@ class StartupValidator:
         """Check database configuration."""
         db_url = _env_str("FG_DB_URL", "")
         sqlite_path = _env_str("FG_SQLITE_PATH", "")
+        db_backend = _env_str("FG_DB_BACKEND", "").lower()
 
-        if self.is_production and not db_url:
+        if db_backend and db_backend not in {"sqlite", "postgres"}:
+            report.add(
+                name="database_backend",
+                passed=False,
+                message=f"FG_DB_BACKEND={db_backend} is invalid (use sqlite|postgres).",
+                severity="error",
+            )
+            return
+
+        if self.is_production and not db_backend:
+            report.add(
+                name="database_backend",
+                passed=False,
+                message="FG_DB_BACKEND is required in production (must be postgres).",
+                severity="error",
+            )
+            return
+
+        if self.is_production and db_backend == "sqlite":
+            report.add(
+                name="database_backend",
+                passed=False,
+                message="SQLite is not permitted in production; set FG_DB_BACKEND=postgres.",
+                severity="error",
+            )
+            return
+
+        if db_backend == "postgres" and not db_url:
+            report.add(
+                name="database_config",
+                passed=False,
+                message="FG_DB_URL not set. Postgres backend requires FG_DB_URL.",
+                severity="error",
+            )
+            return
+
+        if db_backend == "sqlite" and db_url:
+            report.add(
+                name="database_config",
+                passed=False,
+                message="FG_DB_URL is set but FG_DB_BACKEND=sqlite. Remove FG_DB_URL or set backend to postgres.",
+                severity="error",
+            )
+            return
+
+        if self.is_production and not db_url and db_backend != "postgres":
             report.add(
                 name="database_production",
                 passed=False,

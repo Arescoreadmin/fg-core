@@ -19,7 +19,9 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Callable, List, Optional
 
-from api.db import _resolve_sqlite_path
+from sqlalchemy import text
+
+from api.db import _resolve_sqlite_path, get_db_backend, get_engine
 
 log = logging.getLogger("frostgate.key_rotation")
 
@@ -43,6 +45,10 @@ def _env_bool(name: str, default: bool) -> bool:
     if v is None:
         return default
     return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _backend() -> str:
+    return get_db_backend()
 
 
 # Rotation configuration
@@ -126,6 +132,86 @@ class KeyRotationManager:
 
     def get_key_info(self, key_prefix: str) -> Optional[KeyRotationInfo]:
         """Get rotation info for a specific key."""
+        if _backend() == "postgres":
+            engine = get_engine()
+            select = [
+                "prefix",
+                "enabled",
+                "created_at",
+                "expires_at",
+                "rotated_from",
+            ]
+            stmt = text(
+                f"SELECT {', '.join(select)} FROM api_keys WHERE prefix = :prefix"
+            )
+            with engine.begin() as conn:
+                row = conn.execute(stmt, {"prefix": key_prefix}).fetchone()
+            if not row:
+                return None
+
+            data = dict(zip(select, row))
+            enabled = bool(data.get("enabled", True))
+
+            created_at = data.get("created_at") or datetime.now(timezone.utc)
+            if isinstance(created_at, str):
+                created_at = datetime.fromisoformat(
+                    created_at.replace("Z", "+00:00")
+                )
+
+            expires_at = data.get("expires_at")
+            if isinstance(expires_at, str):
+                expires_at = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+
+            now = datetime.now(timezone.utc)
+            days_until_expiration = None
+            rotation_recommended = False
+            status = KeyRotationStatus.ACTIVE
+            message = None
+
+            if not enabled:
+                status = KeyRotationStatus.REVOKED
+                message = "Key has been revoked"
+            elif expires_at:
+                delta = expires_at - now
+                days_until_expiration = delta.days
+                if delta.total_seconds() <= 0:
+                    status = KeyRotationStatus.EXPIRED
+                    message = "Key has expired"
+                elif delta.days <= self.warning_days:
+                    status = KeyRotationStatus.WARNING
+                    rotation_recommended = True
+                    message = f"Key expires in {delta.days} days"
+            else:
+                age = now - created_at
+                if age.days >= self.max_age_days:
+                    status = KeyRotationStatus.WARNING
+                    rotation_recommended = True
+                    message = f"Key is {age.days} days old (max recommended: {self.max_age_days})"
+
+            successor_prefix = None
+            with engine.begin() as conn:
+                successor = conn.execute(
+                    text("SELECT prefix FROM api_keys WHERE rotated_from = :prefix"),
+                    {"prefix": key_prefix},
+                ).fetchone()
+            if successor:
+                successor_prefix = successor[0]
+                if enabled:
+                    status = KeyRotationStatus.EXPIRING
+                    message = "Key has been rotated, in grace period"
+
+            return KeyRotationInfo(
+                prefix=key_prefix,
+                status=status,
+                created_at=created_at,
+                expires_at=expires_at,
+                days_until_expiration=days_until_expiration,
+                rotation_recommended=rotation_recommended,
+                successor_prefix=successor_prefix,
+                predecessor_prefix=data.get("rotated_from"),
+                message=message,
+            )
+
         sqlite_path = self._get_sqlite_path()
 
         con = sqlite3.connect(sqlite_path)
@@ -242,6 +328,18 @@ class KeyRotationManager:
         sqlite_path = self._get_sqlite_path()
         results = []
 
+        if _backend() == "postgres":
+            engine = get_engine()
+            with engine.begin() as conn:
+                rows = conn.execute(
+                    text("SELECT prefix FROM api_keys WHERE enabled = true")
+                ).fetchall()
+            for (prefix,) in rows:
+                info = self.get_key_info(prefix)
+                if info and info.rotation_recommended:
+                    results.append(info)
+            return results
+
         con = sqlite3.connect(sqlite_path)
         try:
             rows = con.execute(
@@ -273,8 +371,6 @@ class KeyRotationManager:
         """
         from api.auth_scopes import mint_key
 
-        sqlite_path = self._get_sqlite_path()
-
         # Get old key info
         old_info = self.get_key_info(old_key_prefix)
         if not old_info:
@@ -298,13 +394,15 @@ class KeyRotationManager:
             )
 
         # Get old key's scopes if not specified
-        con = sqlite3.connect(sqlite_path)
-        try:
-            row = con.execute(
-                "SELECT scopes_csv, tenant_id FROM api_keys WHERE prefix = ?",
-                (old_key_prefix,),
-            ).fetchone()
-
+        if _backend() == "postgres":
+            engine = get_engine()
+            with engine.begin() as conn:
+                row = conn.execute(
+                    text(
+                        "SELECT scopes_csv, tenant_id FROM api_keys WHERE prefix = :prefix"
+                    ),
+                    {"prefix": old_key_prefix},
+                ).fetchone()
             if not row:
                 return RotationResult(
                     success=False,
@@ -314,7 +412,6 @@ class KeyRotationManager:
                     grace_period_until=None,
                     message=f"Key not found in database: {old_key_prefix}",
                 )
-
             old_scopes_csv, old_tenant_id = row
             scopes = (
                 new_scopes
@@ -322,9 +419,39 @@ class KeyRotationManager:
                 else [s.strip() for s in (old_scopes_csv or "").split(",") if s.strip()]
             )
             tenant = tenant_id or old_tenant_id
+        else:
+            sqlite_path = self._get_sqlite_path()
+            con = sqlite3.connect(sqlite_path)
+            try:
+                row = con.execute(
+                    "SELECT scopes_csv, tenant_id FROM api_keys WHERE prefix = ?",
+                    (old_key_prefix,),
+                ).fetchone()
 
-        finally:
-            con.close()
+                if not row:
+                    return RotationResult(
+                        success=False,
+                        old_key_prefix=old_key_prefix,
+                        new_key=None,
+                        new_key_prefix=None,
+                        grace_period_until=None,
+                        message=f"Key not found in database: {old_key_prefix}",
+                    )
+
+                old_scopes_csv, old_tenant_id = row
+                scopes = (
+                    new_scopes
+                    if new_scopes is not None
+                    else [
+                        s.strip()
+                        for s in (old_scopes_csv or "").split(",")
+                        if s.strip()
+                    ]
+                )
+                tenant = tenant_id or old_tenant_id
+
+            finally:
+                con.close()
 
         # Mint new key
         ttl = new_ttl_seconds or KEY_DEFAULT_TTL_SECONDS
@@ -349,21 +476,32 @@ class KeyRotationManager:
             hours=self.grace_period_hours
         )
 
-        con = sqlite3.connect(sqlite_path)
-        try:
-            # Check if rotated_from column exists
-            cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
-            col_names = {r[1] for r in cols}
-
-            if "rotated_from" in col_names:
-                con.execute(
-                    "UPDATE api_keys SET rotated_from = ? WHERE prefix = ?",
-                    (old_key_prefix, new_key_prefix),
+        if _backend() == "postgres":
+            engine = get_engine()
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "UPDATE api_keys SET rotated_from = :rotated_from WHERE prefix = :prefix"
+                    ),
+                    {"rotated_from": old_key_prefix, "prefix": new_key_prefix},
                 )
-                con.commit()
+        else:
+            sqlite_path = self._get_sqlite_path()
+            con = sqlite3.connect(sqlite_path)
+            try:
+                # Check if rotated_from column exists
+                cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
+                col_names = {r[1] for r in cols}
 
-        finally:
-            con.close()
+                if "rotated_from" in col_names:
+                    con.execute(
+                        "UPDATE api_keys SET rotated_from = ? WHERE prefix = ?",
+                        (old_key_prefix, new_key_prefix),
+                    )
+                    con.commit()
+
+            finally:
+                con.close()
 
         result = RotationResult(
             success=True,
@@ -394,9 +532,37 @@ class KeyRotationManager:
 
         Returns list of expired key prefixes.
         """
-        sqlite_path = self._get_sqlite_path()
         expired = []
 
+        if _backend() == "postgres":
+            engine = get_engine()
+            now = datetime.now(timezone.utc)
+            grace_cutoff = now - timedelta(hours=self.grace_period_hours)
+            with engine.begin() as conn:
+                rows = conn.execute(
+                    text(
+                        """
+                        SELECT DISTINCT old.prefix
+                        FROM api_keys old
+                        INNER JOIN api_keys new ON new.rotated_from = old.prefix
+                        WHERE old.enabled = true
+                        AND old.created_at < :cutoff
+                        """
+                    ),
+                    {"cutoff": grace_cutoff},
+                ).fetchall()
+
+                for (prefix,) in rows:
+                    conn.execute(
+                        text("UPDATE api_keys SET enabled = false WHERE prefix = :prefix"),
+                        {"prefix": prefix},
+                    )
+                    expired.append(prefix)
+                    log.info(f"Expired rotated key: {prefix}")
+
+            return expired
+
+        sqlite_path = self._get_sqlite_path()
         con = sqlite3.connect(sqlite_path)
         try:
             # Check table schema

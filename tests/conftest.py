@@ -45,16 +45,18 @@ def _session_env(tmp_path_factory: pytest.TempPathFactory):
     Ensure a deterministic sqlite path + schema exists even for tests that call mint_key()
     before building an app.
     """
-    db_path = str(tmp_path_factory.mktemp("fg-session") / "fg-session.db")
+    db_backend = os.getenv("FG_DB_BACKEND", "sqlite").strip().lower()
     _setenv("FG_ENV", "test")
-    _setenv("FG_SQLITE_PATH", db_path)
     _setenv("FG_API_KEY", _require_api_key())
     _setenv("FG_KEY_PEPPER", "ci-test-pepper")
     _setenv("FG_UI_TOKEN_GET_ENABLED", "1")
 
-    # Critical: make sure schema exists in this session DB
-    reset_engine_cache()
-    init_db(sqlite_path=db_path)
+    if db_backend == "sqlite":
+        db_path = str(tmp_path_factory.mktemp("fg-session") / "fg-session.db")
+        _setenv("FG_SQLITE_PATH", db_path)
+        # Critical: make sure schema exists in this session DB
+        reset_engine_cache()
+        init_db(sqlite_path=db_path)
 
     yield
 
@@ -72,10 +74,12 @@ def build_app(tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch)
         api_key: str | None = None,
         ui_token_get_enabled: bool = True,
     ):
+        db_backend = os.getenv("FG_DB_BACKEND", "sqlite").strip().lower()
         api_key_value = api_key or _require_api_key()
         db_path = sqlite_path or str(tmp_path / "fg-test.db")
 
-        monkeypatch.setenv("FG_SQLITE_PATH", db_path)
+        if db_backend == "sqlite":
+            monkeypatch.setenv("FG_SQLITE_PATH", db_path)
         monkeypatch.setenv("FG_ENV", "test")
         monkeypatch.setenv("FG_AUTH_ENABLED", "1" if auth_enabled else "0")
         monkeypatch.setenv("FG_API_KEY", api_key_value)
@@ -86,7 +90,8 @@ def build_app(tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch)
         )
 
         reset_engine_cache()
-        init_db(sqlite_path=db_path)
+        if db_backend == "sqlite":
+            init_db(sqlite_path=db_path)
 
         return _build_app()
 

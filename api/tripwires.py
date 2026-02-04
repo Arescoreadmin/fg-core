@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
+from sqlalchemy import text
+
 log = logging.getLogger("frostgate.tripwire")
 _security_log = logging.getLogger("frostgate.security")
 
@@ -530,12 +532,56 @@ def seed_canary_key_if_missing() -> Optional[str]:
     """
     import sqlite3
 
-    sqlite_path = os.getenv("FG_SQLITE_PATH", "").strip()
-    if not sqlite_path:
-        log.debug("No SQLite path configured, skipping canary seed")
-        return None
+    from api.auth_scopes import hash_key
+    from api.db import get_db_backend, get_engine
 
     try:
+        backend = get_db_backend()
+        if backend == "postgres":
+            engine = get_engine()
+            with engine.begin() as conn:
+                row = conn.execute(
+                    text(
+                        "SELECT prefix FROM api_keys WHERE prefix LIKE :prefix LIMIT 1"
+                    ),
+                    {"prefix": f"{CANARY_KEY_PREFIX}%"},
+                ).fetchone()
+                if row:
+                    log.debug(f"Canary key already exists: {row[0]}")
+                    return None
+
+                import secrets
+                import json
+
+                canary_prefix = f"{CANARY_KEY_PREFIX}{secrets.token_hex(4)}"
+                canary_secret = secrets.token_urlsafe(32)
+                canary_hash, hash_alg, hash_params, key_lookup = hash_key(canary_secret)
+                hash_params_json = json.dumps(
+                    hash_params, separators=(",", ":"), sort_keys=True
+                )
+
+                conn.execute(
+                    text(
+                        \"\"\"\n                        INSERT INTO api_keys\n                        (name, prefix, key_hash, key_lookup, hash_alg, hash_params, scopes_csv, enabled)\n                        VALUES\n                        (:name, :prefix, :key_hash, :key_lookup, :hash_alg, :hash_params, :scopes_csv, :enabled)\n                        \"\"\"\n                    ),
+                    {
+                        "name": "CANARY_DO_NOT_USE",
+                        "prefix": canary_prefix,
+                        "key_hash": canary_hash,
+                        "key_lookup": key_lookup,
+                        "hash_alg": hash_alg,
+                        "hash_params": hash_params_json,
+                        "scopes_csv": "",
+                        "enabled": False,
+                    },
+                )
+            log.info(f"Seeded canary API key: {canary_prefix}")
+            return canary_prefix
+
+        sqlite_path = os.getenv("FG_SQLITE_PATH", "").strip()
+        if not sqlite_path:
+            log.debug("No SQLite path configured, skipping canary seed")
+            return None
+
         con = sqlite3.connect(sqlite_path)
         try:
             # Check if canary key already exists
@@ -551,7 +597,6 @@ def seed_canary_key_if_missing() -> Optional[str]:
             # Seed a new canary key (disabled, but present)
             import secrets
             import json
-            from api.auth_scopes import hash_key
 
             canary_prefix = f"{CANARY_KEY_PREFIX}{secrets.token_hex(4)}"
             canary_secret = secrets.token_urlsafe(32)

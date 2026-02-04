@@ -47,6 +47,17 @@ def _env_falsy(value: str | bool | None) -> bool:
     return False
 
 
+def _normalize_env_value(value: str | bool | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    val = str(value).strip()
+    if val.startswith("${") and ":-" in val:
+        return val.split(":-", 1)[1].rstrip("}").strip()
+    return val
+
+
 class ProductionProfileChecker:
     """Validates production configuration for safety."""
 
@@ -75,6 +86,48 @@ class ProductionProfileChecker:
 
     def _check_core_env(self, env: dict) -> None:
         """Validate core service environment variables."""
+        db_backend = _normalize_env_value(env.get("FG_DB_BACKEND"))
+        db_url = _normalize_env_value(env.get("FG_DB_URL"))
+
+        if not db_backend:
+            self.errors.append(
+                "CRITICAL: FG_DB_BACKEND is not set in core. Production MUST use Postgres."
+            )
+        elif str(db_backend).lower() != "postgres":
+            self.errors.append(
+                f"CRITICAL: FG_DB_BACKEND={db_backend} in core. Production MUST use Postgres."
+            )
+
+        if not db_url:
+            self.errors.append(
+                "CRITICAL: FG_DB_URL is not set in core. Production MUST configure Postgres."
+            )
+
+        opa_enforce = env.get("FG_OPA_ENFORCE")
+        if opa_enforce is None or _env_falsy(opa_enforce):
+            self.errors.append(
+                "CRITICAL: FG_OPA_ENFORCE is disabled in core. Production MUST enforce policy."
+            )
+
+        triggers_sql = Path("migrations/postgres/0002_append_only_triggers.sql")
+        if not triggers_sql.exists():
+            self.errors.append(
+                "CRITICAL: Append-only trigger migration missing. Production MUST enforce append-only."
+            )
+        else:
+            content = triggers_sql.read_text(encoding="utf-8")
+            required = [
+                "decisions_append_only_update",
+                "decisions_append_only_delete",
+                "decision_evidence_artifacts_append_only_update",
+                "decision_evidence_artifacts_append_only_delete",
+            ]
+            missing = [name for name in required if name not in content]
+            if missing:
+                self.errors.append(
+                    f"CRITICAL: Append-only trigger migration missing definitions: {missing}"
+                )
+
         # FG_RL_FAIL_OPEN must be explicitly false
         fail_open = env.get("FG_RL_FAIL_OPEN")
         if fail_open is None:

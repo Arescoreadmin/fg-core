@@ -348,24 +348,14 @@ def rotate_key(
 
     Requires the current key to be valid and active.
     """
-    import sqlite3
-    import os
-    from api.db import _resolve_sqlite_path
     from api.auth_scopes import (
-        _get_key_pepper,
-        _key_lookup_hash,
-        _parse_scopes_csv,
-        _sha256_hex,
+        rotate_api_key_by_prefix,
+        verify_api_key_detailed,
     )
 
     current_key = req.current_key.strip()
     if not current_key:
         raise HTTPException(status_code=400, detail="Current key is required")
-
-    # Validate the current key exists and is active
-    sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
-    if not sqlite_path:
-        sqlite_path = str(_resolve_sqlite_path())
 
     # Parse the current key to extract components
     parts = current_key.split(".")
@@ -373,11 +363,6 @@ def rotate_key(
         raise HTTPException(status_code=400, detail="Invalid key format")
 
     old_prefix = parts[0]
-    secret_val = parts[-1]
-    try:
-        old_key_lookup = _key_lookup_hash(secret_val, _get_key_pepper())
-    except Exception:
-        old_key_lookup = None
 
     try:
         bound_tenant = bind_tenant_id(
@@ -385,103 +370,49 @@ def rotate_key(
             tenant_id,
             require_explicit_for_unscoped=True,
         )
-        con = sqlite3.connect(sqlite_path)
-        try:
-            cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
-            col_names = {r[1] for r in cols}
-            if "key_lookup" in col_names and old_key_lookup:
-                row = con.execute(
-                    "SELECT id, scopes_csv, enabled, tenant_id, key_hash FROM api_keys WHERE prefix=? AND key_lookup=? LIMIT 1",
-                    (old_prefix, old_key_lookup),
-                ).fetchone()
-            else:
-                old_key_hash = _sha256_hex(secret_val)
-                row = con.execute(
-                    "SELECT id, scopes_csv, enabled, tenant_id, key_hash FROM api_keys WHERE prefix=? AND key_hash=? LIMIT 1",
-                    (old_prefix, old_key_hash),
-                ).fetchone()
+        auth_result = verify_api_key_detailed(
+            raw=current_key, required_scopes=None, request=request
+        )
+        if not auth_result.valid:
+            raise HTTPException(status_code=401, detail="Invalid key")
+        if auth_result.tenant_id and auth_result.tenant_id != bound_tenant:
+            raise HTTPException(status_code=403, detail="Tenant mismatch")
 
-            if not row:
-                raise HTTPException(status_code=404, detail="Key not found")
+        rotation = rotate_api_key_by_prefix(
+            old_prefix,
+            ttl_seconds=req.ttl_seconds,
+            tenant_id=auth_result.tenant_id,
+            revoke_old=req.revoke_old,
+        )
 
-            key_id, scopes_csv, enabled, db_tenant_id, old_key_hash = row
+        log.info(
+            "API key rotated",
+            extra={
+                "old_prefix": old_prefix,
+                "new_prefix": rotation["new_prefix"],
+                "tenant_id": rotation["tenant_id"],
+                "old_key_revoked": rotation["old_key_revoked"],
+            },
+        )
 
-            if not enabled:
-                raise HTTPException(status_code=400, detail="Key is already disabled")
+        # Audit log the rotation
+        audit_key_rotated(
+            old_prefix=old_prefix,
+            new_prefix=rotation["new_prefix"],
+            tenant_id=rotation["tenant_id"],
+            request=request,
+            old_key_revoked=rotation["old_key_revoked"],
+        )
 
-            if not db_tenant_id or db_tenant_id != bound_tenant:
-                raise HTTPException(status_code=403, detail="Tenant mismatch")
-
-            # Parse scopes from old key
-            scopes = list(_parse_scopes_csv(scopes_csv))
-
-            # Create new key with same scopes
-            new_key = mint_key(
-                *scopes,
-                ttl_seconds=req.ttl_seconds,
-                tenant_id=db_tenant_id,
-            )
-
-            new_parts = new_key.split(".")
-            new_prefix = new_parts[0] if new_parts else "fgk"
-
-            # Link the new key to the old key for audit trail
-            new_secret = new_parts[-1]
-            try:
-                new_key_lookup = _key_lookup_hash(new_secret, _get_key_pepper())
-            except Exception:
-                new_key_lookup = None
-            if new_key_lookup and "key_lookup" in col_names:
-                con.execute(
-                    "UPDATE api_keys SET rotated_from=? WHERE key_lookup=?",
-                    (old_key_hash, new_key_lookup),
-                )
-
-            # Revoke old key if requested
-            old_key_revoked = False
-            if req.revoke_old:
-                con.execute(
-                    "UPDATE api_keys SET enabled=0 WHERE id=?",
-                    (key_id,),
-                )
-                old_key_revoked = True
-
-            con.commit()
-
-            now = int(time.time())
-            expires_at = now + req.ttl_seconds
-
-            log.info(
-                "API key rotated",
-                extra={
-                    "old_prefix": old_prefix,
-                    "new_prefix": new_prefix,
-                    "tenant_id": db_tenant_id,
-                    "old_key_revoked": old_key_revoked,
-                },
-            )
-
-            # Audit log the rotation
-            audit_key_rotated(
-                old_prefix=old_prefix,
-                new_prefix=new_prefix,
-                tenant_id=db_tenant_id,
-                request=request,
-                old_key_revoked=old_key_revoked,
-            )
-
-            return RotateKeyResponse(
-                new_key=new_key,
-                new_prefix=new_prefix,
-                old_prefix=old_prefix,
-                scopes=scopes,
-                tenant_id=db_tenant_id,
-                expires_at=expires_at,
-                old_key_revoked=old_key_revoked,
-            )
-
-        finally:
-            con.close()
+        return RotateKeyResponse(
+            new_key=rotation["new_key"],
+            new_prefix=rotation["new_prefix"],
+            old_prefix=rotation["old_prefix"],
+            scopes=rotation["scopes"],
+            tenant_id=rotation["tenant_id"],
+            expires_at=rotation["expires_at"],
+            old_key_revoked=rotation["old_key_revoked"],
+        )
 
     except HTTPException:
         raise

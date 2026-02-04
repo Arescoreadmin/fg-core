@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from api.db import init_db, _resolve_sqlite_path
+from api.db import get_db_backend, init_db, _resolve_sqlite_path
 from api.decisions import router as decisions_router
 from api.defend import router as defend_router
 from api.dev_events import router as dev_events_router
@@ -219,7 +219,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
         try:
             # sqlite mode: ensure dir exists BEFORE init_db()
-            if not (os.getenv("FG_DB_URL") or "").strip():
+            if get_db_backend() == "sqlite":
                 p = _resolve_sqlite_path()
                 Path(p).parent.mkdir(parents=True, exist_ok=True)
 
@@ -455,7 +455,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 detail=f"db_init_failed: {app.state.db_init_error or 'unknown'}",
             )
 
-        if (os.getenv("FG_DB_URL") or "").strip():
+        if get_db_backend() == "postgres":
             deps_status["db"] = "postgres"
         else:
             p = Path(_resolve_sqlite_path())

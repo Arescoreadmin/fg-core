@@ -180,9 +180,9 @@ class TestStartupValidation:
 class TestSQLiteInProduction:
     """Tests for SQLite restrictions in production."""
 
-    def test_sqlite_in_prod_is_warning(self):
+    def test_sqlite_in_prod_is_error(self):
         """
-        SQLite in production SHOULD generate a warning.
+        SQLite in production MUST be an error.
         """
         from api.config.startup_validation import StartupValidator
 
@@ -190,6 +190,7 @@ class TestSQLiteInProduction:
             os.environ,
             {
                 "FG_ENV": "prod",
+                "FG_DB_BACKEND": "sqlite",
                 "FG_DB_URL": "",  # No PostgreSQL configured
                 "FG_API_KEY": "a" * 32,  # Valid key length
             },
@@ -197,13 +198,14 @@ class TestSQLiteInProduction:
             validator = StartupValidator()
             report = validator.validate()
 
-            # Should warn about SQLite in prod
-            db_warnings = [
+            # Should error about SQLite in prod
+            db_errors = [
                 r
                 for r in report.results
-                if "database" in r.name.lower() or "sqlite" in r.message.lower()
+                if not r.passed
+                and ("database" in r.name.lower() or "sqlite" in r.message.lower())
             ]
-            assert len(db_warnings) > 0
+            assert len(db_errors) > 0
 
 
 class TestAuthEnabled:

@@ -31,6 +31,8 @@ def _artifact_root() -> Path:
 
 
 def build_decision_evidence_payload(record: DecisionRecord) -> dict[str, Any]:
+    request_hash = _sha256_hex(_canonical_json(record.request_json or {}))
+    response_hash = _sha256_hex(_canonical_json(record.response_json or {}))
     return {
         "decision_id": int(record.id),
         "created_at": record.created_at.isoformat() if record.created_at else None,
@@ -40,6 +42,8 @@ def build_decision_evidence_payload(record: DecisionRecord) -> dict[str, Any]:
         "source": record.source,
         "threat_level": record.threat_level,
         "policy_hash": record.policy_hash,
+        "request_hash": request_hash,
+        "response_hash": response_hash,
         "request": record.request_json,
         "response": record.response_json,
         "rules_triggered": record.rules_triggered_json,

@@ -9,6 +9,7 @@ prometheus-fastapi-instrumentator==7.1.0
 redis==7.1.0
 alembic==1.11.1
 psycopg[binary]==3.3.2
+jsonschema==4.23.0
 sqlalchemy==2.0.20
 python-jose>=3.3.0
 itsdangerous>=2.1.2

@@ -293,8 +293,14 @@ def _opa_payload(inp: PipelineInput) -> Dict[str, Any]:
 
 
 def _evaluate_policy(inp: PipelineInput) -> PolicyDecision:
+    enforce = (
+        (os.getenv("FG_OPA_ENFORCE") or "").strip().lower()
+        in {"1", "true", "yes", "y", "on"}
+    )
     opa_url = os.getenv("FG_OPA_URL", "").strip()
     if not opa_url:
+        if enforce:
+            return PolicyDecision(allow=False, reasons=["opa_missing"])
         return PolicyDecision(allow=True, reasons=[])
 
     opa_path = os.getenv("FG_OPA_PATH", "/v1/data/frostgate/defend")
@@ -309,6 +315,8 @@ def _evaluate_policy(inp: PipelineInput) -> PolicyDecision:
         data = resp.json().get("result", {})
     except Exception as exc:
         log.warning("OPA policy check failed: %s", exc)
+        if enforce:
+            return PolicyDecision(allow=False, reasons=["opa_unreachable"])
         return PolicyDecision(allow=True, reasons=["opa_unreachable"])
 
     allow = bool(data.get("allow", False))

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import logging
 import os
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Iterator, Optional
 
-from sqlalchemy import create_engine
-from sqlalchemy.engine import Engine
+from fastapi import Request
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import QueuePool
 
@@ -14,7 +16,7 @@ from api.config.env import resolve_env
 from api.config.paths import (
     STATE_DIR,
 )  # tests assert this symbol is referenced in this file
-from api.db_models import Base
+from api.db_migrations import run_migrations
 
 log = logging.getLogger("frostgate")
 
@@ -50,6 +52,9 @@ POOL_PRE_PING = _env_bool("FG_DB_POOL_PRE_PING", True)
 
 _ENGINE: Engine | None = None
 _SESSIONMAKER: sessionmaker | None = None
+_CURRENT_TENANT_ID: ContextVar[str | None] = ContextVar(
+    "frostgate_current_tenant_id", default=None
+)
 
 
 def _env() -> str:
@@ -83,15 +88,61 @@ def _resolve_sqlite_path(sqlite_path: Optional[str] = None) -> Path:
     return (Path.cwd() / "state" / "frostgate.db").resolve()
 
 
+def _resolve_db_backend() -> str:
+    backend = (os.getenv("FG_DB_BACKEND") or "").strip().lower()
+    env = _env()
+
+    if backend and backend not in {"sqlite", "postgres"}:
+        raise RuntimeError(f"Unsupported FG_DB_BACKEND={backend}")
+
+    if not backend:
+        if env in {"prod", "production", "staging"}:
+            raise RuntimeError("FG_DB_BACKEND is required in production/staging")
+        backend = "sqlite"
+
+    if backend == "sqlite" and env in {"prod", "production"}:
+        raise RuntimeError("SQLite is not permitted in production")
+
+    return backend
+
+
+def _resolve_db_url(backend: str) -> Optional[str]:
+    db_url = (os.getenv("FG_DB_URL") or "").strip()
+    if backend == "postgres":
+        if not db_url:
+            raise RuntimeError("FG_DB_URL is required when FG_DB_BACKEND=postgres")
+        return db_url
+    if db_url:
+        raise RuntimeError("FG_DB_URL is set but FG_DB_BACKEND is not postgres")
+    return None
+
+
+def get_db_backend() -> str:
+    return _resolve_db_backend()
+
+
+def set_current_tenant_id(tenant_id: Optional[str]) -> None:
+    _CURRENT_TENANT_ID.set(tenant_id)
+
+
+def _current_tenant_id() -> Optional[str]:
+    return _CURRENT_TENANT_ID.get()
+
+
 def _make_engine(
     *, sqlite_path: Optional[str] = None, db_url: Optional[str] = None
 ) -> Engine:
     env = _env()
+    backend = _resolve_db_backend()
 
-    if db_url:
+    if db_url and backend != "postgres":
+        raise RuntimeError("db_url provided but FG_DB_BACKEND is not postgres")
+
+    if backend == "postgres":
+        resolved_url = db_url or _resolve_db_url(backend)
         # Production PostgreSQL with connection pooling
         engine = create_engine(
-            db_url,
+            resolved_url,
             future=True,
             poolclass=QueuePool,
             pool_size=POOL_SIZE,
@@ -183,81 +234,37 @@ def init_db(
     Tests call init_db(sqlite_path=...).
     """
     eng = engine or get_engine(sqlite_path=sqlite_path, db_url=db_url)
-    Base.metadata.create_all(bind=eng)
-    if eng.dialect.name == "sqlite":
-        _auto_migrate_sqlite(eng)
+    backend = _resolve_db_backend()
+    run_migrations(eng, backend=backend)
 
 
-def _auto_migrate_sqlite(engine: Engine) -> None:
-    """
-    Best-effort SQLite column additions for dev/test.
-
-    NOTE: Production/Postgres requires explicit migrations.
-    """
-    decisions_columns = {
-        "prev_hash": "TEXT",
-        "chain_hash": "TEXT",
-        "chain_alg": "TEXT",
-        "chain_ts": "TIMESTAMP",
-        "policy_hash": "TEXT",
-    }
-    api_keys_columns = {
-        "key_lookup": "TEXT",
-        "hash_alg": "TEXT",
-        "hash_params": "TEXT",
-    }
-
-    with engine.begin() as conn:
-        tables = {
-            row[0]
-            for row in conn.exec_driver_sql(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
-        }
-        if "decisions" in tables:
-            _sqlite_add_columns(conn, "decisions", decisions_columns)
-            _sqlite_add_immutable_triggers(conn, "decisions")
-        if "decision_evidence_artifacts" in tables:
-            _sqlite_add_immutable_triggers(conn, "decision_evidence_artifacts")
-        if "api_keys" in tables:
-            _sqlite_add_columns(conn, "api_keys", api_keys_columns)
-
-
-def _sqlite_add_columns(conn, table: str, columns: dict[str, str]) -> None:
-    existing = {
-        row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
-    }
-    for col, col_type in columns.items():
-        if col in existing:
-            continue
-        conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
-
-
-def _sqlite_add_immutable_triggers(conn, table: str) -> None:
-    conn.exec_driver_sql(
-        f"""
-        CREATE TRIGGER IF NOT EXISTS {table}_immutable_update
-        BEFORE UPDATE ON {table}
-        BEGIN
-            SELECT RAISE(ABORT, '{table} is append-only');
-        END;
-        """
-    )
-    conn.exec_driver_sql(
-        f"""
-        CREATE TRIGGER IF NOT EXISTS {table}_immutable_delete
-        BEFORE DELETE ON {table}
-        BEGIN
-            SELECT RAISE(ABORT, '{table} is append-only');
-        END;
-        """
-    )
-
-
-def get_db() -> Iterator[Session]:
+def get_db(request: Request = None) -> Iterator[Session]:
     SessionLocal = _get_sessionmaker()
     db = SessionLocal()
     try:
+        if request is not None:
+            request.state.db_session = db
+            tenant_id = getattr(request.state, "tenant_id", None)
+            if tenant_id:
+                apply_tenant_context(db, tenant_id)
+        else:
+            tenant_id = _current_tenant_id()
+            if tenant_id:
+                apply_tenant_context(db, tenant_id)
         yield db
     finally:
         db.close()
+
+
+def apply_tenant_context(conn_or_session: Session | Connection, tenant_id: str) -> None:
+    if not tenant_id:
+        return
+    if _resolve_db_backend() != "postgres":
+        return
+    try:
+        conn_or_session.execute(
+            text("SET LOCAL app.tenant_id = :tenant_id"),
+            {"tenant_id": tenant_id},
+        )
+    except Exception:
+        log.exception("Failed to apply tenant context")

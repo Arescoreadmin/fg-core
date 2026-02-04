@@ -9,8 +9,8 @@
     "tenant_id",
     "request_id",
     "policy_hash",
-    "input_hash",
-    "output_hash",
+    "request_hash",
+    "response_hash",
     "timestamp",
     "decision",
     "reasons",
@@ -33,11 +33,11 @@
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },
-    "input_hash": {
+    "request_hash": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },
-    "output_hash": {
+    "response_hash": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },

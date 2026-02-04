@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -114,7 +115,31 @@ def run_readiness_checks(
     )
     results.append(("fg-lint", passed, msg))
 
-    # Check 5: scorecard drift check (generate and verify no changes)
+    # Check 5: SQLite fast lane
+    passed, msg = run_command(
+        ["make", "db-sqlite-fast"],
+        "db-sqlite-fast",
+    )
+    results.append(("db-sqlite-fast", passed, msg))
+
+    # Check 6: Postgres verification lane (allow explicit waiver)
+    waive_postgres = str(os.getenv("FG_RELEASE_WAIVE_POSTGRES_VERIFY", "")).strip()
+    if waive_postgres in {"1", "true", "yes"}:
+        results.append(
+            (
+                "db-postgres-verify",
+                True,
+                "waived via FG_RELEASE_WAIVE_POSTGRES_VERIFY",
+            )
+        )
+    else:
+        passed, msg = run_command(
+            ["make", "db-postgres-verify"],
+            "db-postgres-verify",
+        )
+        results.append(("db-postgres-verify", passed, msg))
+
+    # Check 7: scorecard drift check (generate and verify no changes)
     if scorecard_path is not None:
         passed, msg = run_command(
             ["make", "generate-scorecard"],

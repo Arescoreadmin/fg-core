@@ -54,6 +54,8 @@ The following gaps were closed on 2026-01-31:
 
 - **Former G005 - Merkle anchor job**: Real Merkle tree in `jobs/merkle_anchor/job.py`. Tamper detection proven by `tests/test_merkle_anchor.py::TestTamperDetection`.
 
+- **Former G006 - Postgres enforcement + append-only guarantees**: Dual-backend configuration with Postgres migrations, append-only triggers, and tenant RLS (`api/db_migrations.py`, `migrations/postgres/0002_append_only_triggers.sql`, `migrations/postgres/0003_tenant_rls.sql`). Verified by `tests/postgres/test_append_only_postgres.py` and `tests/postgres/test_tenant_isolation_postgres.py` in the `db-postgres-verify` lane.
+
 ---
 
 ## New Systems Implemented

@@ -37,6 +37,7 @@ FG_API_KEY              ?=
 FG_ENFORCEMENT_MODE     ?= observe
 FG_DEV_EVENTS_ENABLED   ?= 0
 FG_UI_TOKEN_GET_ENABLED ?= 1
+FG_DB_BACKEND           ?= sqlite
 ADMIN_SKIP_PIP_INSTALL  ?= 0
 
 ARTIFACTS_DIR ?= artifacts
@@ -59,6 +60,7 @@ FG_API_KEY="$(FG_API_KEY)" \
 FG_ENFORCEMENT_MODE="$(FG_ENFORCEMENT_MODE)" \
 FG_STATE_DIR="$(FG_STATE_DIR)" \
 FG_SQLITE_PATH="$(FG_SQLITE_PATH)" \
+FG_DB_BACKEND="$(FG_DB_BACKEND)" \
 FG_DEV_EVENTS_ENABLED="$(FG_DEV_EVENTS_ENABLED)" \
 FG_UI_TOKEN_GET_ENABLED="$(FG_UI_TOKEN_GET_ENABLED)" \
 FG_BASE_URL="$(BASE_URL)" \
@@ -119,10 +121,10 @@ guard-scripts:
 	@$(PY_CONTRACT) scripts/guard_makefile_sanity.py
 
 check-no-engine-evaluate:
-	@matches="$$(rg -n "from engine\\.evaluate import|import engine\\.evaluate|engine\\.evaluate\\(" api || true)"; \
+	@matches="$$(rg -n "engine\\.evaluate\\(" api engine jobs backend admin_gateway main scripts || true)"; \
 	if [ -n "$$matches" ]; then \
 		echo "$$matches"; \
-		echo "Forbidden engine.evaluate usage found in api/."; \
+		echo "Forbidden engine.evaluate usage found (repo-wide)."; \
 		exit 1; \
 	fi
 
@@ -217,9 +219,32 @@ fg-lint: fmt-check
 # =============================================================================
 
 .PHONY: fg-fast
-fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check gap-audit
+fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check gap-audit check-no-engine-evaluate
 	@$(PYTEST_ENV) $(PY) -m pytest -q
 	@$(MAKE) -s fg-lint
+
+# =============================================================================
+# Database lanes
+# =============================================================================
+
+.PHONY: db-sqlite-fast db-postgres-verify
+
+db-sqlite-fast: fg-fast
+
+db-postgres-verify:
+	@set -euo pipefail; \
+	command -v docker >/dev/null 2>&1 || (echo "missing dependency: docker" && exit 1); \
+	docker compose up -d postgres; \
+	./scripts/wait_for_postgres.sh; \
+	PGUSER="$$(docker compose exec -T postgres sh -lc 'printf "%s" "$$POSTGRES_USER"')"; \
+	PGDB="$$(docker compose exec -T postgres sh -lc 'printf "%s" "$$POSTGRES_DB"')"; \
+	PGPASS="$$(docker compose exec -T postgres sh -lc 'printf "%s" "$$POSTGRES_PASSWORD"')"; \
+	FG_DB_BACKEND=postgres \
+	FG_DB_URL="postgresql+psycopg://$${PGUSER}:$${PGPASS}@localhost:5432/$${PGDB}" \
+	$(PY) -m api.db_migrations --backend postgres --apply --assert-append-only --assert-rls; \
+	FG_DB_BACKEND=postgres \
+	FG_DB_URL="postgresql+psycopg://$${PGUSER}:$${PGPASS}@localhost:5432/$${PGDB}" \
+	$(PYTEST_ENV) $(PY) -m pytest -q tests/postgres
 
 # =============================================================================
 # Live port guard

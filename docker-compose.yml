@@ -103,6 +103,7 @@ services:
       FG_API_KEYS_FILE: /run/secrets/fg_api_keys
 
       # DB/Redis - POSTGRES_PASSWORD must be set (no default)
+      FG_DB_BACKEND: ${FG_DB_BACKEND:-postgres}
       FG_DB_URL: postgresql+psycopg://${POSTGRES_USER:-fg_user}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-frostgate}
       # Redis URL with authentication (password must match redis service)
       FG_REDIS_URL: ${FG_REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379/0}
@@ -114,7 +115,7 @@ services:
       FG_OPA_URL: ${FG_OPA_URL:-http://opa:8181}
       FG_OPA_PATH: ${FG_OPA_PATH:-/v1/data/frostgate/defend}
       FG_OPA_TIMEOUT_SEC: ${FG_OPA_TIMEOUT_SEC:-0.25}
-      FG_OPA_ENFORCE: ${FG_OPA_ENFORCE:-false}
+      FG_OPA_ENFORCE: ${FG_OPA_ENFORCE:-true}
 
       # Rate limiting
       FG_RL_ENABLED: ${FG_RL_ENABLED:-true}

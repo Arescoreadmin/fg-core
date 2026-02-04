@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frostgate.ai/contracts/artifacts/decision_evidence.schema.json",
+  "title": "Decision Evidence Artifact Schema",
+  "description": "Evidence artifact emitted for each decision record.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "decision_id",
+    "created_at",
+    "tenant_id",
+    "policy_hash",
+    "request_hash",
+    "response_hash",
+    "request",
+    "response",
+    "chain_hash",
+    "prev_hash",
+    "chain_alg",
+    "chain_ts"
+  ],
+  "properties": {
+    "decision_id": {"type": "integer"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "tenant_id": {"type": ["string", "null"]},
+    "event_id": {"type": ["string", "null"]},
+    "event_type": {"type": ["string", "null"]},
+    "source": {"type": ["string", "null"]},
+    "threat_level": {"type": ["string", "null"]},
+    "policy_hash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "request_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "response_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "request": {"type": ["object", "array", "string", "number", "boolean", "null"]},
+    "response": {"type": ["object", "array", "string", "number", "boolean", "null"]},
+    "rules_triggered": {"type": ["array", "null"], "items": {"type": ["string", "object"]}},
+    "decision_diff": {"type": ["object", "array", "string", "number", "boolean", "null"]},
+    "chain_hash": {"type": ["string", "null"]},
+    "prev_hash": {"type": ["string", "null"]},
+    "chain_alg": {"type": ["string", "null"]},
+    "chain_ts": {"type": ["string", "null"], "format": "date-time"}
+  }
+}

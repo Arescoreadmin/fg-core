@@ -10,18 +10,52 @@ import re
 import secrets
 import sqlite3
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional, Set, Tuple
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
 from fastapi import Depends, Header, HTTPException, Request
+from sqlalchemy import text
 
 from api.config.env import is_production_env
-from api.db import _resolve_sqlite_path, init_db
+from api.db import (
+    _resolve_sqlite_path,
+    apply_tenant_context,
+    get_db_backend,
+    get_engine,
+    init_db,
+    set_current_tenant_id,
+)
 
 log = logging.getLogger("frostgate")
 _security_log = logging.getLogger("frostgate.security")
+
+_POSTGRES_API_KEY_COLUMNS: Set[str] = {
+    "id",
+    "name",
+    "prefix",
+    "key_hash",
+    "key_lookup",
+    "hash_alg",
+    "hash_params",
+    "scopes_csv",
+    "enabled",
+    "created_at",
+    "expires_at",
+    "version",
+    "rotated_from",
+    "last_used_at",
+    "use_count",
+    "tenant_id",
+    "created_by",
+    "description",
+}
+
+
+def _db_backend() -> str:
+    return get_db_backend()
 
 
 def _b64url(b: bytes) -> str:
@@ -228,12 +262,13 @@ def mint_key(
     Returned key format (NEW):
       <prefix>.<token>.<secret>
     """
+    backend = _db_backend()
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
     if not sqlite_path:
         sqlite_path = str(_resolve_sqlite_path())
 
     try:
-        init_db(sqlite_path=sqlite_path)
+        init_db(sqlite_path=sqlite_path if backend == "sqlite" else None)
     except Exception:
         log.exception("init_db failed in mint_key (best effort)")
 
@@ -257,20 +292,12 @@ def mint_key(
     key_hash, hash_alg, hash_params, key_lookup = hash_key(secret)
     scopes_csv = ",".join(scopes)
 
-    con = sqlite3.connect(sqlite_path)
-    try:
-        cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
-        names = [r[1] for r in cols]
-        notnull = {r[1] for r in cols if int(r[3] or 0) == 1 and r[4] is None}
-
-        if (
-            "hash_alg" not in names
-            or "hash_params" not in names
-            or "key_lookup" not in names
-        ):
-            raise RuntimeError("api_keys schema missing hash columns; run migrations")
-
+    if backend == "postgres":
+        engine = get_engine()
+        created_at = datetime.now(timezone.utc)
+        expires_at = created_at + timedelta(seconds=int(ttl_seconds))
         values = {
+            "name": f"minted:{scopes_csv or 'none'}",
             "prefix": prefix,
             "key_hash": key_hash,
             "key_lookup": key_lookup,
@@ -279,25 +306,14 @@ def mint_key(
                 hash_params, separators=(",", ":"), sort_keys=True
             ),
             "scopes_csv": scopes_csv,
-            "enabled": 1,
+            "tenant_id": tenant_id,
+            "created_at": created_at,
+            "expires_at": expires_at,
+            "enabled": True,
+            "version": 1,
+            "use_count": 0,
         }
-
-        if "name" in names:
-            values["name"] = "minted:" + (scopes_csv or "none")
-
-        if "tenant_id" in names:
-            values["tenant_id"] = tenant_id
-        if "created_at" in names and "created_at" in notnull:
-            values["created_at"] = now_i
-        if "expires_at" in names:
-            values["expires_at"] = exp_i
-
-        if "version" in names:
-            values["version"] = 1
-        if "use_count" in names:
-            values["use_count"] = 0
-
-        ordered = [
+        cols = [
             c
             for c in (
                 "name",
@@ -314,18 +330,82 @@ def mint_key(
                 "version",
                 "use_count",
             )
-            if c in names and c in values
+            if c in _POSTGRES_API_KEY_COLUMNS
         ]
-        if not ordered:
-            raise RuntimeError("api_keys table has no usable columns for insert")
+        placeholders = ", ".join([f":{c}" for c in cols])
+        stmt = text(f"INSERT INTO api_keys ({', '.join(cols)}) VALUES ({placeholders})")
+        with engine.begin() as conn:
+            conn.execute(stmt, {c: values[c] for c in cols})
+    else:
+        con = sqlite3.connect(sqlite_path)
+        try:
+            cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
+            names = [r[1] for r in cols]
+            notnull = {r[1] for r in cols if int(r[3] or 0) == 1 and r[4] is None}
 
-        qcols = ",".join(ordered)
-        qmarks = ",".join(["?"] * len(ordered))
-        params = tuple(values[c] for c in ordered)
-        con.execute(f"INSERT INTO api_keys({qcols}) VALUES({qmarks})", params)
-        con.commit()
-    finally:
-        con.close()
+            if (
+                "hash_alg" not in names
+                or "hash_params" not in names
+                or "key_lookup" not in names
+            ):
+                raise RuntimeError("api_keys schema missing hash columns; run migrations")
+
+            values = {
+                "prefix": prefix,
+                "key_hash": key_hash,
+                "key_lookup": key_lookup,
+                "hash_alg": hash_alg,
+                "hash_params": json.dumps(
+                    hash_params, separators=(",", ":"), sort_keys=True
+                ),
+                "scopes_csv": scopes_csv,
+                "enabled": 1,
+            }
+
+            if "name" in names:
+                values["name"] = "minted:" + (scopes_csv or "none")
+
+            if "tenant_id" in names:
+                values["tenant_id"] = tenant_id
+            if "created_at" in names and "created_at" in notnull:
+                values["created_at"] = now_i
+            if "expires_at" in names:
+                values["expires_at"] = exp_i
+
+            if "version" in names:
+                values["version"] = 1
+            if "use_count" in names:
+                values["use_count"] = 0
+
+            ordered = [
+                c
+                for c in (
+                    "name",
+                    "prefix",
+                    "key_hash",
+                    "key_lookup",
+                    "hash_alg",
+                    "hash_params",
+                    "scopes_csv",
+                    "tenant_id",
+                    "created_at",
+                    "expires_at",
+                    "enabled",
+                    "version",
+                    "use_count",
+                )
+                if c in names and c in values
+            ]
+            if not ordered:
+                raise RuntimeError("api_keys table has no usable columns for insert")
+
+            qcols = ",".join(ordered)
+            qmarks = ",".join(["?"] * len(ordered))
+            params = tuple(values[c] for c in ordered)
+            con.execute(f"INSERT INTO api_keys({qcols}) VALUES({qmarks})", params)
+            con.commit()
+        finally:
+            con.close()
 
     return f"{prefix}.{token}.{secret}"
 
@@ -363,6 +443,28 @@ def _update_key_usage(
 ) -> None:
     """Atomically update last_used_at and use_count for a key (best effort)."""
     try:
+        if _db_backend() == "postgres":
+            engine = get_engine()
+            if identifier_col not in _POSTGRES_API_KEY_COLUMNS:
+                return
+            stmt = text(
+                f"""
+                UPDATE api_keys
+                SET last_used_at = :now_ts, use_count = use_count + 1
+                WHERE prefix = :prefix AND {identifier_col} = :identifier
+                """
+            )
+            with engine.begin() as conn:
+                conn.execute(
+                    stmt,
+                    {
+                        "now_ts": datetime.now(timezone.utc),
+                        "prefix": prefix,
+                        "identifier": identifier,
+                    },
+                )
+            return
+
         con = sqlite3.connect(sqlite_path, timeout=5.0)
         try:
             cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
@@ -414,6 +516,41 @@ def _check_db_expiration(
       - In dev/test: FG_AUTH_DB_FAIL_OPEN=true is sufficient (no ack required).
     """
     try:
+        if _db_backend() == "postgres":
+            engine = get_engine()
+            if identifier is None:
+                identifier = identifier_col
+                identifier_col = "key_hash"
+            if identifier_col not in _POSTGRES_API_KEY_COLUMNS:
+                return True
+            stmt = text(
+                f"SELECT expires_at FROM api_keys WHERE prefix=:prefix AND {identifier_col}=:identifier LIMIT 1"
+            )
+            with engine.begin() as conn:
+                row = conn.execute(
+                    stmt, {"prefix": prefix, "identifier": identifier}
+                ).fetchone()
+            if not row or row[0] is None:
+                return False
+            expires_at = row[0]
+            now = datetime.now(timezone.utc)
+            if isinstance(expires_at, datetime):
+                return now > expires_at
+            if isinstance(expires_at, (int, float)):
+                return int(time.time()) > int(expires_at)
+            if isinstance(expires_at, str):
+                try:
+                    dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                    return now > dt
+                except Exception:
+                    log.warning(
+                        "SECURITY: Failed to parse expires_at=%r for key prefix=%s, treating as expired",
+                        expires_at,
+                        prefix,
+                    )
+                    return True
+            return False
+
         con = sqlite3.connect(sqlite_path)
         try:
             cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
@@ -445,8 +582,6 @@ def _check_db_expiration(
 
             if isinstance(expires_at, str):
                 try:
-                    from datetime import datetime
-
                     dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
                     return now_ts > int(dt.timestamp())
                 except Exception:
@@ -571,8 +706,9 @@ def verify_api_key_detailed(
         )
         return AuthResult(valid=False, reason="no_key_provided")
 
+    backend = _db_backend()
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
-    if not sqlite_path:
+    if backend == "sqlite" and not sqlite_path:
         _log_auth_event(
             "auth_attempt",
             success=False,
@@ -583,6 +719,33 @@ def verify_api_key_detailed(
         return AuthResult(valid=False, reason="no_db_configured")
 
     def _row_for(prefix: str, lookup_hash: Optional[str], legacy_hash: Optional[str]):
+        if backend == "postgres":
+            engine = get_engine()
+            base_cols = ["id", "scopes_csv", "enabled", "tenant_id", "key_hash"]
+            select_cols = base_cols + ["hash_alg", "hash_params", "key_lookup"]
+            select_clause = ", ".join(select_cols)
+            if lookup_hash:
+                stmt = text(
+                    f"SELECT {select_clause} FROM api_keys WHERE prefix=:prefix AND key_lookup=:lookup_hash LIMIT 1"
+                )
+                with engine.begin() as conn:
+                    row = conn.execute(
+                        stmt, {"prefix": prefix, "lookup_hash": lookup_hash}
+                    ).fetchone()
+                if row:
+                    return dict(zip(select_cols, row)), "key_lookup", set(select_cols)
+            if legacy_hash:
+                stmt = text(
+                    f"SELECT {select_clause} FROM api_keys WHERE prefix=:prefix AND key_hash=:legacy_hash LIMIT 1"
+                )
+                with engine.begin() as conn:
+                    row = conn.execute(
+                        stmt, {"prefix": prefix, "legacy_hash": legacy_hash}
+                    ).fetchone()
+                if row:
+                    return dict(zip(select_cols, row)), "key_hash", set(select_cols)
+            return None, None, set(select_cols)
+
         con = sqlite3.connect(sqlite_path)
         try:
             try:
@@ -804,26 +967,57 @@ def verify_api_key_detailed(
                     new_hash, new_alg, new_params, new_lookup = hash_key(
                         secret_for_verify
                     )
-                    con = sqlite3.connect(sqlite_path)
-                    try:
-                        con.execute(
-                            "UPDATE api_keys SET key_hash=?, hash_alg=?, hash_params=?, key_lookup=? WHERE id=?",
-                            (
-                                new_hash,
-                                new_alg,
-                                json.dumps(
-                                    new_params, separators=(",", ":"), sort_keys=True
-                                ),
-                                new_lookup,
-                                row.get("id"),
-                            ),
+                    if backend == "postgres":
+                        engine = get_engine()
+                        stmt = text(
+                            """
+                            UPDATE api_keys
+                            SET key_hash = :key_hash,
+                                hash_alg = :hash_alg,
+                                hash_params = :hash_params,
+                                key_lookup = :key_lookup
+                            WHERE id = :id
+                            """
                         )
-                        con.commit()
+                        with engine.begin() as conn:
+                            conn.execute(
+                                stmt,
+                                {
+                                    "key_hash": new_hash,
+                                    "hash_alg": new_alg,
+                                    "hash_params": json.dumps(
+                                        new_params,
+                                        separators=(",", ":"),
+                                        sort_keys=True,
+                                    ),
+                                    "key_lookup": new_lookup,
+                                    "id": row.get("id"),
+                                },
+                            )
                         key_hash = new_hash
                         key_lookup = new_lookup
                         identifier_col = "key_lookup"
-                    finally:
-                        con.close()
+                    else:
+                        con = sqlite3.connect(sqlite_path)
+                        try:
+                            con.execute(
+                                "UPDATE api_keys SET key_hash=?, hash_alg=?, hash_params=?, key_lookup=? WHERE id=?",
+                                (
+                                    new_hash,
+                                    new_alg,
+                                    json.dumps(
+                                        new_params, separators=(",", ":"), sort_keys=True
+                                    ),
+                                    new_lookup,
+                                    row.get("id"),
+                                ),
+                            )
+                            con.commit()
+                            key_hash = new_hash
+                            key_lookup = new_lookup
+                            identifier_col = "key_lookup"
+                        finally:
+                            con.close()
                 except Exception:
                     log.exception("Failed to upgrade legacy key hash")
 
@@ -926,6 +1120,10 @@ def bind_tenant_id(
         if requested and requested != auth_tenant:
             raise HTTPException(status_code=403, detail="Tenant mismatch")
         request.state.tenant_id = auth_tenant
+        set_current_tenant_id(auth_tenant)
+        db_session = getattr(request.state, "db_session", None)
+        if db_session is not None:
+            apply_tenant_context(db_session, auth_tenant)
         return auth_tenant
 
     if requested:
@@ -933,6 +1131,10 @@ def bind_tenant_id(
         if not valid:
             raise HTTPException(status_code=400, detail=error)
         request.state.tenant_id = requested
+        set_current_tenant_id(requested)
+        db_session = getattr(request.state, "db_session", None)
+        if db_session is not None:
+            apply_tenant_context(db_session, requested)
         return requested
 
     if require_explicit_for_unscoped and not is_global_key:
@@ -942,9 +1144,17 @@ def bind_tenant_id(
 
     if is_global_key:
         request.state.tenant_id = default_unscoped
+        set_current_tenant_id(default_unscoped)
+        db_session = getattr(request.state, "db_session", None)
+        if db_session is not None:
+            apply_tenant_context(db_session, default_unscoped)
         return default_unscoped
 
     request.state.tenant_id = default_unscoped
+    set_current_tenant_id(default_unscoped)
+    db_session = getattr(request.state, "db_session", None)
+    if db_session is not None:
+        apply_tenant_context(db_session, default_unscoped)
     return default_unscoped
 
 
@@ -975,9 +1185,32 @@ def revoke_api_key(
     *,
     tenant_id: Optional[str] = None,
 ) -> bool:
+    backend = _db_backend()
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
-    if not sqlite_path:
+    if backend == "sqlite" and not sqlite_path:
         return False
+
+    if backend == "postgres":
+        engine = get_engine()
+        if key_hash:
+            query = "UPDATE api_keys SET enabled=false WHERE prefix=:prefix AND key_hash=:key_hash"
+            params = {"prefix": key_prefix, "key_hash": key_hash}
+        else:
+            query = "UPDATE api_keys SET enabled=false WHERE prefix=:prefix"
+            params = {"prefix": key_prefix}
+        if tenant_id:
+            query += " AND tenant_id=:tenant_id"
+            params["tenant_id"] = tenant_id
+        try:
+            with engine.begin() as conn:
+                result = conn.execute(text(query), params)
+            revoked = result.rowcount > 0
+            if revoked:
+                _log_auth_event("key_revoked", success=True, key_prefix=key_prefix)
+            return revoked
+        except Exception:
+            log.exception("Failed to revoke API key")
+            return False
 
     con = sqlite3.connect(sqlite_path)
     try:
@@ -1013,9 +1246,65 @@ def rotate_api_key_by_prefix(
     tenant_id: Optional[str] = None,
     revoke_old: bool = True,
 ) -> dict:
+    backend = _db_backend()
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
     if not sqlite_path:
         sqlite_path = str(_resolve_sqlite_path())
+
+    if backend == "postgres":
+        engine = get_engine()
+        stmt = text(
+            "SELECT id, scopes_csv, enabled, tenant_id, key_hash FROM api_keys WHERE prefix=:prefix LIMIT 1"
+        )
+        with engine.begin() as conn:
+            row = conn.execute(stmt, {"prefix": key_prefix}).fetchone()
+        if not row:
+            raise ValueError("Key not found")
+        key_id, scopes_csv, enabled, db_tenant_id, old_key_hash = row
+
+        if tenant_id and (not db_tenant_id or tenant_id != db_tenant_id):
+            raise ValueError("Key not found for tenant")
+
+        if not bool(enabled):
+            raise ValueError("Key is disabled")
+
+        scopes = list(_parse_scopes_csv(scopes_csv))
+        new_key = mint_key(*scopes, ttl_seconds=ttl_seconds, tenant_id=db_tenant_id)
+        parts = new_key.split(".")
+        new_prefix = parts[0] if parts else "fgk"
+        new_secret = parts[-1]
+        try:
+            new_lookup = _key_lookup_hash(new_secret, _get_key_pepper())
+        except Exception:
+            new_lookup = None
+
+        with engine.begin() as conn:
+            if new_lookup:
+                conn.execute(
+                    text("UPDATE api_keys SET rotated_from=:rotated_from WHERE key_lookup=:lookup"),
+                    {"rotated_from": old_key_hash, "lookup": new_lookup},
+                )
+
+            old_key_revoked = False
+            if revoke_old:
+                conn.execute(
+                    text("UPDATE api_keys SET enabled=false WHERE id=:id"),
+                    {"id": key_id},
+                )
+                old_key_revoked = True
+
+        now = int(time.time())
+        expires_at = now + int(ttl_seconds)
+
+        return {
+            "new_key": new_key,
+            "new_prefix": new_prefix,
+            "old_prefix": key_prefix,
+            "scopes": scopes,
+            "tenant_id": db_tenant_id,
+            "expires_at": expires_at,
+            "old_key_revoked": old_key_revoked,
+        }
 
     con = sqlite3.connect(sqlite_path)
     try:
@@ -1082,9 +1371,57 @@ def list_api_keys(
     tenant_id: Optional[str] = None,
     include_disabled: bool = False,
 ) -> list[dict]:
+    backend = _db_backend()
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
-    if not sqlite_path:
+    if backend == "sqlite" and not sqlite_path:
         return []
+
+    if backend == "postgres":
+        engine = get_engine()
+        select_cols = [
+            "prefix",
+            "name",
+            "scopes_csv",
+            "enabled",
+            "created_at",
+            "tenant_id",
+            "expires_at",
+            "last_used_at",
+            "use_count",
+        ]
+        query = f"SELECT {', '.join(select_cols)} FROM api_keys"
+        conditions = []
+        params: dict[str, object] = {}
+
+        if not include_disabled:
+            conditions.append("enabled=true")
+
+        if tenant_id:
+            conditions.append("tenant_id=:tenant_id")
+            params["tenant_id"] = tenant_id
+
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+
+        try:
+            with engine.begin() as conn:
+                rows = conn.execute(text(query), params).fetchall()
+            result = []
+            for row in rows:
+                item = dict(zip(select_cols, row))
+                for ts_field in ("created_at", "expires_at", "last_used_at"):
+                    if ts_field in item and item[ts_field] is not None:
+                        item[ts_field] = str(item[ts_field])
+                scopes_csv = item.get("scopes_csv", "")
+                item["scopes"] = [
+                    s.strip() for s in (scopes_csv or "").split(",") if s.strip()
+                ]
+                del item["scopes_csv"]
+                result.append(item)
+            return result
+        except Exception:
+            log.exception("Failed to list API keys")
+            return []
 
     con = sqlite3.connect(sqlite_path)
     try:
