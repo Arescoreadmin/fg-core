@@ -174,8 +174,12 @@ fg-compile: guard-scripts
 # Production Profile Validation
 # =============================================================================
 
-.PHONY: prod-profile-check
+.PHONY: prod-profile-check dos-hardening-check
 prod-profile-check:
+	@$(PY_CONTRACT) scripts/prod_profile_check.py
+
+dos-hardening-check:
+	@$(PYTEST_ENV) $(PY_CONTRACT) -m pytest -q -p no:unraisableexception tests/test_dos_guard.py
 	@$(PY_CONTRACT) scripts/prod_profile_check.py
 
 # =============================================================================
@@ -224,7 +228,7 @@ fg-lint: fmt-check
 # =============================================================================
 
 .PHONY: fg-fast
-fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check gap-audit
+fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check dos-hardening-check gap-audit
 	@$(PYTEST_ENV) $(PY) -m pytest -q -m "not postgres"
 	@$(MAKE) -s fg-lint
 

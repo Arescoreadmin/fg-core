@@ -78,7 +78,7 @@ services:
         condition: service_healthy
       opa:
         condition: service_started
-    command: ["uvicorn","api.main:app","--host","0.0.0.0","--port","8080","--no-access-log"]
+    command: ["uvicorn","api.main:app","--host","0.0.0.0","--port","8080","--no-access-log","--timeout-keep-alive","5","--timeout-graceful-shutdown","15","--limit-concurrency","100","--h11-max-incomplete-event-size","16384"]
     ports:
       - "18080:8080"
     env_file:
@@ -118,6 +118,20 @@ services:
       FG_OPA_PATH: ${FG_OPA_PATH:-/v1/data/frostgate/defend}
       FG_OPA_TIMEOUT_SEC: ${FG_OPA_TIMEOUT_SEC:-0.25}
       FG_OPA_ENFORCE: ${FG_OPA_ENFORCE:-false}
+
+      # HTTP DoS hardening (explicit in production)
+      FG_DOS_GUARD_ENABLED: ${FG_DOS_GUARD_ENABLED:-true}
+      FG_MAX_BODY_BYTES: ${FG_MAX_BODY_BYTES:-1048576}
+      FG_MAX_QUERY_BYTES: ${FG_MAX_QUERY_BYTES:-8192}
+      FG_MAX_PATH_BYTES: ${FG_MAX_PATH_BYTES:-2048}
+      FG_MAX_HEADERS_COUNT: ${FG_MAX_HEADERS_COUNT:-100}
+      FG_MAX_HEADERS_BYTES: ${FG_MAX_HEADERS_BYTES:-16384}
+      FG_MAX_HEADER_LINE_BYTES: ${FG_MAX_HEADER_LINE_BYTES:-8192}
+      FG_MULTIPART_MAX_BYTES: ${FG_MULTIPART_MAX_BYTES:-5242880}
+      FG_MULTIPART_MAX_PARTS: ${FG_MULTIPART_MAX_PARTS:-50}
+      FG_REQUEST_TIMEOUT_SEC: ${FG_REQUEST_TIMEOUT_SEC:-15}
+      FG_KEEPALIVE_TIMEOUT_SEC: ${FG_KEEPALIVE_TIMEOUT_SEC:-5}
+      FG_MAX_CONCURRENT_REQUESTS: ${FG_MAX_CONCURRENT_REQUESTS:-100}
 
       # Rate limiting
       FG_RL_ENABLED: ${FG_RL_ENABLED:-true}
