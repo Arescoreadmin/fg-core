@@ -212,7 +212,9 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 log_results=True,
             )
             app.state.startup_validation = validation_report
-            if is_production and not bool(getattr(app.state, "dos_guard_enabled", False)):
+            if is_production and not bool(
+                getattr(app.state, "dos_guard_enabled", False)
+            ):
                 raise RuntimeError("DoS guard middleware must be enabled in production")
         except Exception as e:
             log.warning(f"Startup validation failed: {e}")

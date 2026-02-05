@@ -89,7 +89,11 @@ async def test_large_query_returns_414(dos_env):
 @pytest.mark.asyncio
 async def test_multipart_oversize_returns_413(dos_env):
     app = _build_hardened_app(dos_env)
-    body = b"--abc\r\nContent-Disposition: form-data; name=\"f\"\r\n\r\n" + (b"z" * 1024) + b"\r\n--abc--\r\n"
+    body = (
+        b'--abc\r\nContent-Disposition: form-data; name="f"\r\n\r\n'
+        + (b"z" * 1024)
+        + b"\r\n--abc--\r\n"
+    )
     headers = {"Content-Type": "multipart/form-data; boundary=abc"}
     resp = await _request(app, "POST", "/defend", content=body, headers=headers)
     assert resp.status_code == 413

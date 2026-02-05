@@ -588,7 +588,9 @@ class StartupValidator:
                 message="FG_REQUEST_TIMEOUT_SEC must be > 0.",
                 severity="error" if self.is_production else "warning",
             )
-        elif self.is_production and (request_timeout_raw is None or request_timeout_raw.strip() == ""):
+        elif self.is_production and (
+            request_timeout_raw is None or request_timeout_raw.strip() == ""
+        ):
             report.add(
                 name="request_timeout_missing",
                 passed=False,
@@ -603,7 +605,6 @@ class StartupValidator:
                 message="DoS hardening checks completed.",
                 severity="info",
             )
-
 
 
 def validate_startup_config(

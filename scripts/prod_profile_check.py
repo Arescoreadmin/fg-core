@@ -29,7 +29,7 @@ def _env_truthy(value: str | bool | None) -> bool:
     if val in ("1", "true", "yes", "on"):
         return True
     if ":-" in val:
-        default = val.split(':-', 1)[1].rstrip('}')
+        default = val.split(":-", 1)[1].rstrip("}")
         return default in ("1", "true", "yes", "on")
     return False
 
@@ -86,9 +86,13 @@ class ProductionProfileChecker:
         # DoS hardening must be enabled and finite in production
         dos_enabled = env.get("FG_DOS_GUARD_ENABLED")
         if dos_enabled is None:
-            self.errors.append("CRITICAL: FG_DOS_GUARD_ENABLED must be explicitly set in production.")
+            self.errors.append(
+                "CRITICAL: FG_DOS_GUARD_ENABLED must be explicitly set in production."
+            )
         elif not _env_truthy(dos_enabled):
-            self.errors.append("CRITICAL: FG_DOS_GUARD_ENABLED must be true in production.")
+            self.errors.append(
+                "CRITICAL: FG_DOS_GUARD_ENABLED must be true in production."
+            )
 
         required_positive = [
             "FG_MAX_BODY_BYTES",
@@ -106,14 +110,22 @@ class ProductionProfileChecker:
         for key in required_positive:
             value = env.get(key)
             if value is None:
-                self.errors.append(f"CRITICAL: {key} must be explicitly set in production.")
+                self.errors.append(
+                    f"CRITICAL: {key} must be explicitly set in production."
+                )
                 continue
             try:
-                parsed = float(str(value).split(':-')[-1].rstrip('}')) if isinstance(value, str) and ':-' in value else float(value)
+                parsed = (
+                    float(str(value).split(":-")[-1].rstrip("}"))
+                    if isinstance(value, str) and ":-" in value
+                    else float(value)
+                )
                 if parsed <= 0:
                     raise ValueError
             except Exception:
-                self.errors.append(f"CRITICAL: {key} must be a positive number in production (got {value!r}).")
+                self.errors.append(
+                    f"CRITICAL: {key} must be a positive number in production (got {value!r})."
+                )
 
         fail_open = env.get("FG_RL_FAIL_OPEN")
         if fail_open is None:
