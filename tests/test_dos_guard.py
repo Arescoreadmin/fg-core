@@ -46,6 +46,24 @@ async def _request(app, method: str, path: str, **kwargs):
     return resp
 
 
+def _build_dos_guard_only_app(env: dict[str, str]):
+    from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
+
+    async def _downstream(scope, receive, send):
+        while True:
+            message = await receive()
+            if message.get("type") != "http.request":
+                break
+            if not message.get("more_body", False):
+                break
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok", "more_body": False})
+
+    with patch.dict(os.environ, env, clear=False):
+        config = DoSGuardConfig.from_env()
+    return DoSGuardMiddleware(_downstream, config=config)
+
+
 @pytest.mark.asyncio
 async def test_body_too_large_returns_413(dos_env):
     app = _build_hardened_app(dos_env)
@@ -75,8 +93,6 @@ async def test_multipart_oversize_returns_413(dos_env):
     headers = {"Content-Type": "multipart/form-data; boundary=abc"}
     resp = await _request(app, "POST", "/defend", content=body, headers=headers)
     assert resp.status_code == 413
-
-
 
 
 @pytest.mark.asyncio
@@ -109,11 +125,12 @@ async def test_health_and_core_routes_still_work_under_limits(dos_env):
     status = await _request(app, "GET", "/v1/status")
     assert status.status_code == 200
 
+
 @pytest.mark.asyncio
 async def test_slow_body_times_out_without_hanging(dos_env):
     env = dict(dos_env)
     env["FG_REQUEST_TIMEOUT_SEC"] = "0.05"
-    app = _build_hardened_app(env)
+    app = _build_dos_guard_only_app(env)
 
     scope = {
         "type": "http",
