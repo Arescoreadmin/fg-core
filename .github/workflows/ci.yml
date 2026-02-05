@@ -112,7 +112,6 @@ jobs:
     name: Unit (ci)
     runs-on: ubuntu-latest
     needs: fg_guard
-    # Full PR workflow: always run on PR; gate on push using path filters.
     if: ${{ github.event_name == 'pull_request' || needs.fg_guard.outputs.core == 'true' || needs.fg_guard.outputs.python == 'true' }}
     env:
       FG_ENV: dev
@@ -211,7 +210,6 @@ jobs:
     name: DB Postgres Verify
     runs-on: ubuntu-latest
     needs: fg_guard
-    # Full PR workflow: always run on PR; gate on push using path filters.
     if: ${{ github.event_name == 'pull_request' || needs.fg_guard.outputs.core == 'true' || needs.fg_guard.outputs.python == 'true' }}
     env:
       FG_ENV: test
@@ -496,3 +494,4 @@ jobs:
             artifacts/**
             state/**
           if-no-files-found: error
+
