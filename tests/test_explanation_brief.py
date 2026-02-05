@@ -1,6 +1,5 @@
 import os
 
-import pytest
 from fastapi.testclient import TestClient
 
 try:
@@ -11,17 +10,9 @@ except Exception as e:
     ) from e
 
 
-@pytest.fixture()
-def client():
-    # Ensures startup/shutdown (lifespan) runs and resources get closed.
-    with TestClient(app) as c:
-        yield c
-
-
-def test_defend_returns_explanation_brief(client: TestClient):
+def test_defend_returns_explanation_brief():
     api_key = os.getenv("FG_API_KEY")
-    if not api_key:
-        pytest.skip("FG_API_KEY not set; skipping API-key protected /defend test")
+    assert api_key, "FG_API_KEY must be set for this test (env var missing)."
 
     payload = {
         "event_type": "auth_attempt",
@@ -34,7 +25,10 @@ def test_defend_returns_explanation_brief(client: TestClient):
         },
     }
 
-    r = client.post("/defend", json=payload, headers={"x-api-key": api_key})
+    # IMPORTANT: Use context manager so startup/shutdown runs and resources close.
+    with TestClient(app) as client:
+        r = client.post("/defend", json=payload, headers={"x-api-key": api_key})
+
     assert r.status_code in (200, 201), r.text
     data = r.json()
 
