@@ -87,6 +87,7 @@ from api.middleware.request_validation import (
     RequestValidationMiddleware,
     RequestValidationConfig,
 )
+from api.middleware.dos_guard import DoSGuardMiddleware, DoSGuardConfig
 
 # Startup validation (fail-soft import)
 try:
@@ -211,6 +212,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 log_results=True,
             )
             app.state.startup_validation = validation_report
+            if is_production and not bool(getattr(app.state, "dos_guard_enabled", False)):
+                raise RuntimeError("DoS guard middleware must be enabled in production")
         except Exception as e:
             log.warning(f"Startup validation failed: {e}")
             app.state.startup_validation = None
@@ -283,6 +286,10 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         max_age=cors_config.max_age,
     )
 
+    # DoS guard middleware (headers/query/path/body/concurrency/timeouts)
+    dos_guard_config = DoSGuardConfig.from_env()
+    app.add_middleware(DoSGuardMiddleware, config=dos_guard_config)
+
     # Request validation middleware (body size limits, content-type validation)
     app.add_middleware(
         RequestValidationMiddleware, config=RequestValidationConfig.from_env()
@@ -298,6 +305,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.state.db_init_ok = False
     app.state.db_init_error = None
     app.state.startup_validation = None
+    app.state.dos_guard_enabled = bool(dos_guard_config.enabled)
 
     def _fail(detail: str = ERR_INVALID) -> None:
         raise HTTPException(status_code=401, detail=detail)

@@ -123,6 +123,7 @@ class StartupValidator:
         self._check_redis_config(report)
         self._check_quota_enforcement(report)
         self._check_encryption_keys(report)
+        self._check_dos_hardening(report)
 
         return report
 
@@ -535,6 +536,74 @@ class StartupValidator:
                     message="FG_JWT_SECRET is too short. Use at least 32 characters.",
                     severity="error",
                 )
+
+    def _check_dos_hardening(self, report: StartupValidationReport) -> None:
+        """Check DoS guard and transport hardening configuration."""
+        enabled = _env_bool("FG_DOS_GUARD_ENABLED", True)
+        if self.is_production and not enabled:
+            report.add(
+                name="dos_guard_enabled",
+                passed=False,
+                message="FG_DOS_GUARD_ENABLED must be true in production.",
+                severity="error",
+            )
+
+        required_positive_ints = {
+            "FG_MAX_BODY_BYTES": 1024 * 1024,
+            "FG_MAX_QUERY_BYTES": 8 * 1024,
+            "FG_MAX_PATH_BYTES": 2 * 1024,
+            "FG_MAX_HEADERS_COUNT": 100,
+            "FG_MAX_HEADERS_BYTES": 16 * 1024,
+            "FG_MAX_HEADER_LINE_BYTES": 8 * 1024,
+            "FG_MULTIPART_MAX_BYTES": 5 * 1024 * 1024,
+            "FG_MULTIPART_MAX_PARTS": 50,
+            "FG_MAX_CONCURRENT_REQUESTS": 100,
+            "FG_KEEPALIVE_TIMEOUT_SEC": 5,
+        }
+        for key, default in required_positive_ints.items():
+            raw = os.getenv(key)
+            value = _env_int(key, default)
+            if value <= 0:
+                report.add(
+                    name=f"{key.lower()}_invalid",
+                    passed=False,
+                    message=f"{key} must be > 0.",
+                    severity="error" if self.is_production else "warning",
+                )
+                continue
+            if self.is_production and (raw is None or raw.strip() == ""):
+                report.add(
+                    name=f"{key.lower()}_missing",
+                    passed=False,
+                    message=f"{key} must be explicitly set in production.",
+                    severity="error",
+                )
+
+        request_timeout_raw = os.getenv("FG_REQUEST_TIMEOUT_SEC")
+        request_timeout = _env_int("FG_REQUEST_TIMEOUT_SEC", 15)
+        if request_timeout <= 0:
+            report.add(
+                name="request_timeout_invalid",
+                passed=False,
+                message="FG_REQUEST_TIMEOUT_SEC must be > 0.",
+                severity="error" if self.is_production else "warning",
+            )
+        elif self.is_production and (request_timeout_raw is None or request_timeout_raw.strip() == ""):
+            report.add(
+                name="request_timeout_missing",
+                passed=False,
+                message="FG_REQUEST_TIMEOUT_SEC must be explicitly set in production.",
+                severity="error",
+            )
+
+        if not self.is_production:
+            report.add(
+                name="dos_hardening",
+                passed=True,
+                message="DoS hardening checks completed.",
+                severity="info",
+            )
+
 
 
 def validate_startup_config(

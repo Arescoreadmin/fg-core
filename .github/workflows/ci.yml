@@ -90,6 +90,11 @@ jobs:
       - name: Syntax / import guard (fast fail)
         run: python -m compileall -q api engine tests
 
+      - name: Run DoS hardening guard checks
+        run: make dos-hardening-check
+        env:
+          FG_API_KEY: ${{ env.FG_API_KEY }}
+
       - name: Run fg-fast guard tests (lock regression)
         run: pytest -q tests/test_ingest_bus.py tests/test_security_middleware.py
         env:
