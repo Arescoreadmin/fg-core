@@ -1,4 +1,6 @@
 import os
+
+import pytest
 from fastapi.testclient import TestClient
 
 try:
@@ -8,10 +10,19 @@ except Exception as e:
         "Could not import api.main:app. Adjust import in tests/test_explanation_brief.py"
     ) from e
 
-client = TestClient(app)
+
+@pytest.fixture()
+def client():
+    # Ensures startup/shutdown (lifespan) runs and resources get closed.
+    with TestClient(app) as c:
+        yield c
 
 
-def test_defend_returns_explanation_brief():
+def test_defend_returns_explanation_brief(client: TestClient):
+    api_key = os.getenv("FG_API_KEY")
+    if not api_key:
+        pytest.skip("FG_API_KEY not set; skipping API-key protected /defend test")
+
     payload = {
         "event_type": "auth_attempt",
         "source": "pytest",
@@ -22,9 +33,8 @@ def test_defend_returns_explanation_brief():
             "failed_attempts": 10,
         },
     }
-    r = client.post(
-        "/defend", json=payload, headers={"x-api-key": os.environ["FG_API_KEY"]}
-    )
+
+    r = client.post("/defend", json=payload, headers={"x-api-key": api_key})
     assert r.status_code in (200, 201), r.text
     data = r.json()
 
