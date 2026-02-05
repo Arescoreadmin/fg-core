@@ -77,6 +77,38 @@ async def test_multipart_oversize_returns_413(dos_env):
     assert resp.status_code == 413
 
 
+
+
+@pytest.mark.asyncio
+async def test_path_too_long_returns_414(dos_env):
+    app = _build_hardened_app(dos_env)
+    resp = await _request(app, "GET", "/" + ("x" * 256))
+    assert resp.status_code == 414
+
+
+@pytest.mark.asyncio
+async def test_compressed_body_rejected_by_default(dos_env):
+    app = _build_hardened_app(dos_env)
+    resp = await _request(
+        app,
+        "POST",
+        "/defend",
+        content=b"{}",
+        headers={"Content-Encoding": "gzip", "Content-Type": "application/json"},
+    )
+    assert resp.status_code == 413
+
+
+@pytest.mark.asyncio
+async def test_health_and_core_routes_still_work_under_limits(dos_env):
+    app = _build_hardened_app(dos_env)
+
+    health = await _request(app, "GET", "/health")
+    assert health.status_code == 200
+
+    status = await _request(app, "GET", "/v1/status")
+    assert status.status_code == 200
+
 @pytest.mark.asyncio
 async def test_slow_body_times_out_without_hanging(dos_env):
     env = dict(dos_env)

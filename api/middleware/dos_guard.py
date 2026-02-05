@@ -52,6 +52,7 @@ class DoSGuardConfig:
     request_timeout_sec: float
     max_concurrent_requests: int
     trusted_proxy_cidrs: tuple[str, ...]
+    allowed_content_encodings: tuple[str, ...]
 
     @classmethod
     def from_env(cls) -> "DoSGuardConfig":
@@ -68,6 +69,7 @@ class DoSGuardConfig:
             request_timeout_sec=_env_float("FG_REQUEST_TIMEOUT_SEC", 15.0),
             max_concurrent_requests=_env_int("FG_MAX_CONCURRENT_REQUESTS", 100),
             trusted_proxy_cidrs=_env_csv("FG_TRUSTED_PROXY_CIDRS", "127.0.0.1/32,::1/128"),
+            allowed_content_encodings=_env_csv("FG_ALLOWED_CONTENT_ENCODINGS", "identity"),
         )
 
 
@@ -96,6 +98,7 @@ class DoSGuardMiddleware:
 
         try:
             self._enforce_scope_limits(scope)
+            self._enforce_content_encoding(scope)
             content_type, boundary = self._content_type(scope)
             if content_type == "multipart/form-data":
                 self._validate_boundary(boundary)
@@ -266,6 +269,21 @@ class DoSGuardMiddleware:
                 boundary = p.split("=", 1)[1].strip().strip('"')
                 break
         return media_type, boundary
+
+    def _enforce_content_encoding(self, scope) -> None:
+        encoding = (self._header(scope, b"content-encoding") or "identity").strip().lower()
+        if not encoding:
+            encoding = "identity"
+        if encoding in self.config.allowed_content_encodings:
+            return
+        raise _RejectRequest(
+            413,
+            "content_encoding_not_allowed",
+            {
+                "content_encoding": encoding,
+                "allowed": ",".join(self.config.allowed_content_encodings),
+            },
+        )
 
     def _validate_boundary(self, boundary: Optional[str]) -> None:
         if not boundary:
