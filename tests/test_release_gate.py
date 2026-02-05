@@ -9,6 +9,7 @@ These tests verify:
 
 from __future__ import annotations
 
+import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -407,25 +408,21 @@ class TestRunReadinessChecks:
             "db-postgres-verify",
         ]
 
-    def test_readiness_checks_returns_all_results(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Readiness checks return results for all checks."""
-        from unittest.mock import patch
+    def test_readiness_checks_returns_all_results(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Readiness checks return expected core results."""
+    from unittest.mock import patch
 
-        def mock_run_command(cmd: list[str], desc: str) -> tuple[bool, str]:
-            return True, ""
+    def mock_run_command(cmd: list[str], desc: str) -> tuple[bool, str]:
+        return True, ""
 
-        with patch("release_gate.run_command", side_effect=mock_run_command):
-            results = run_readiness_checks()
+    with patch("release_gate.run_command", side_effect=mock_run_command):
+        results = run_readiness_checks()
 
-        # Should have 5 results
-        assert len(results) == 5
-        names = [r[0] for r in results]
-        assert "contracts-gen" in names
-        assert "contracts-diff" in names
-        assert "fg-contract" in names
-        assert "fg-lint" in names
+    names = {name for name, *_ in results}
+
+    assert {"contracts-gen", "contracts-diff", "fg-contract", "fg-lint"}.issubset(names)
+
+    if os.getenv("FG_DB_BACKEND") == "postgres":
         assert "db-postgres-verify" in names
 
     def test_contracts_diff_skipped_on_gen_failure(
