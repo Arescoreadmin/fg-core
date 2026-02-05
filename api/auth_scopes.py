@@ -348,7 +348,9 @@ def mint_key(
                 or "hash_params" not in names
                 or "key_lookup" not in names
             ):
-                raise RuntimeError("api_keys schema missing hash columns; run migrations")
+                raise RuntimeError(
+                    "api_keys schema missing hash columns; run migrations"
+                )
 
             values = {
                 "prefix": prefix,
@@ -1006,7 +1008,9 @@ def verify_api_key_detailed(
                                     new_hash,
                                     new_alg,
                                     json.dumps(
-                                        new_params, separators=(",", ":"), sort_keys=True
+                                        new_params,
+                                        separators=(",", ":"),
+                                        sort_keys=True,
                                     ),
                                     new_lookup,
                                     row.get("id"),
@@ -1281,7 +1285,9 @@ def rotate_api_key_by_prefix(
         with engine.begin() as conn:
             if new_lookup:
                 conn.execute(
-                    text("UPDATE api_keys SET rotated_from=:rotated_from WHERE key_lookup=:lookup"),
+                    text(
+                        "UPDATE api_keys SET rotated_from=:rotated_from WHERE key_lookup=:lookup"
+                    ),
                     {"rotated_from": old_key_hash, "lookup": new_lookup},
                 )
 

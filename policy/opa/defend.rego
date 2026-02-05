@@ -1,20 +1,20 @@
 package frostgate.defend
 
-default allow = false
+default allow := false
 
-reasons[reason] {
-  reason := "missing_tenant"
-  input.path == "/defend"
-  not input.tenant_id
+# "reasons" is a set of strings (Rego v1)
+reasons contains "missing_tenant" if {
+	input.path == "/defend"
+	not input.tenant_id
 }
 
-reasons[reason] {
-  reason := "bruteforce_threshold"
-  input.path == "/defend"
-  input.event_type == "auth.bruteforce"
-  input.payload.fail_count >= 10
+reasons contains "bruteforce_threshold" if {
+	input.path == "/defend"
+	input.event_type == "auth.bruteforce"
+	input.payload.fail_count >= 10
 }
 
-allow {
-  count(reasons) == 0
+# allow if there are no reasons
+allow if {
+	count(reasons) == 0
 }

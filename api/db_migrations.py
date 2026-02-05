@@ -126,7 +126,9 @@ def _apply_schema(engine: Engine) -> None:
 
 
 def _rollback_schema(_engine: Engine) -> None:
-    log.warning("Rollback for base schema is not supported; manual intervention required")
+    log.warning(
+        "Rollback for base schema is not supported; manual intervention required"
+    )
 
 
 def _apply_append_only_triggers(engine: Engine) -> None:

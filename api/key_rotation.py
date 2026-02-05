@@ -154,9 +154,7 @@ class KeyRotationManager:
 
             created_at = data.get("created_at") or datetime.now(timezone.utc)
             if isinstance(created_at, str):
-                created_at = datetime.fromisoformat(
-                    created_at.replace("Z", "+00:00")
-                )
+                created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
 
             expires_at = data.get("expires_at")
             if isinstance(expires_at, str):
@@ -554,7 +552,9 @@ class KeyRotationManager:
 
                 for (prefix,) in rows:
                     conn.execute(
-                        text("UPDATE api_keys SET enabled = false WHERE prefix = :prefix"),
+                        text(
+                            "UPDATE api_keys SET enabled = false WHERE prefix = :prefix"
+                        ),
                         {"prefix": prefix},
                     )
                     expired.append(prefix)

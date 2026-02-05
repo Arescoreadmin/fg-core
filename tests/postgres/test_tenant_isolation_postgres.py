@@ -53,7 +53,9 @@ def test_tenant_isolation_rls_blocks_cross_tenant_reads(postgres_engine) -> None
         _insert_decision(conn, "tenant-b", "event-b")
 
     with postgres_engine.begin() as conn:
-        conn.execute(text("SET LOCAL app.tenant_id = :tenant_id"), {"tenant_id": "tenant-a"})
+        conn.execute(
+            text("SET LOCAL app.tenant_id = :tenant_id"), {"tenant_id": "tenant-a"}
+        )
         rows = conn.execute(text("SELECT tenant_id FROM decisions"))
         tenants = {row[0] for row in rows.fetchall()}
         assert tenants == {"tenant-a"}

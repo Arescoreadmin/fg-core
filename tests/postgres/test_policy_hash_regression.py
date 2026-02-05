@@ -3,7 +3,10 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from engine.policy_fingerprint import build_opa_bundle_bytes, get_active_policy_fingerprint
+from engine.policy_fingerprint import (
+    build_opa_bundle_bytes,
+    get_active_policy_fingerprint,
+)
 
 
 def _sha256_hex(payload: bytes) -> str:

@@ -40,7 +40,10 @@ def test_decision_evidence_artifact_matches_schema(tmp_path) -> None:
             pq_fallback=False,
             rules_triggered_json=["rule:baseline"],
             request_json={"request_id": "req-1", "payload": {"foo": "bar"}},
-            response_json={"decision": "allow", "policy_version": fingerprint.policy_id},
+            response_json={
+                "decision": "allow",
+                "policy_version": fingerprint.policy_id,
+            },
             prev_hash="GENESIS",
             chain_hash="chain-hash",
             chain_alg="sha256/canonical-json/v1",
@@ -48,11 +51,12 @@ def test_decision_evidence_artifact_matches_schema(tmp_path) -> None:
         )
         from sqlalchemy.orm import Session
 
-        session = Session(bind=conn)
+        session = Session(bind=conn, expire_on_commit=False)
         session.add(record)
         session.flush()
         artifact = emit_decision_evidence(session, record)
         session.commit()
 
+    payload = artifact.payload_json
     schema = _load_schema()
-    Draft202012Validator(schema).validate(artifact.payload_json)
+    Draft202012Validator(schema).validate(payload)
