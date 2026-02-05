@@ -1,5 +1,6 @@
 package frostgate.defend
 
+import rego.v1
 default allow := false
 
 # reasons is a SET of strings (Rego v1)

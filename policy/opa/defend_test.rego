@@ -1,5 +1,6 @@
 package frostgate.defend
 
+import rego.v1
 test_allow_default if {
   inp := {
     "path": "/defend",
