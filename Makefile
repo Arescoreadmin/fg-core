@@ -236,7 +236,7 @@ fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check dos-h
 # Postgres verification (CI + local)
 # =============================================================================
 
-.PHONY: db-postgres-up db-postgres-migrate db-postgres-assert db-postgres-test db-postgres-verify db-postgres-down
+.PHONY: db-postgres-up db-postgres-demote db-postgres-migrate db-postgres-assert db-postgres-test db-postgres-verify db-postgres-down
 
 db-postgres-up:
 	@if [ ! -f .env ]; then \
@@ -256,6 +256,10 @@ db-postgres-up:
 		exit 1; \
 	}
 
+db-postgres-demote:
+	@docker compose exec -T postgres psql -U "$(POSTGRES_USER)" -d "$(POSTGRES_DB)" \
+		-c "ALTER ROLE CURRENT_USER NOSUPERUSER NOBYPASSRLS;"
+
 db-postgres-migrate:
 	@FG_DB_URL="$(POSTGRES_URL)" FG_DB_BACKEND="postgres" $(PY) -m api.db_migrations --backend postgres --apply
 
@@ -265,7 +269,7 @@ db-postgres-assert:
 db-postgres-test:
 	@FG_DB_URL="$(POSTGRES_URL)" FG_DB_BACKEND="postgres" $(PYTEST_ENV) $(PY) -m pytest -q tests/postgres
 
-db-postgres-verify: db-postgres-up db-postgres-migrate db-postgres-assert db-postgres-test
+db-postgres-verify: db-postgres-up db-postgres-demote db-postgres-migrate db-postgres-assert db-postgres-test
 
 db-postgres-down:
 	@docker compose stop postgres || true
