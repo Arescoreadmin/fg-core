@@ -168,7 +168,7 @@ def assert_db_role_safe(engine: Engine) -> None:
         raise RuntimeError(
             f"DB role {role_name!r} must not be superuser (got {is_super}) "
             f"and must not have BYPASSRLS (got {has_bypass}); "
-            f"run: ALTER ROLE \"{role_name}\" NOSUPERUSER NOBYPASSRLS;"
+            f'run: ALTER ROLE "{role_name}" NOSUPERUSER NOBYPASSRLS;'
         )
 
 
