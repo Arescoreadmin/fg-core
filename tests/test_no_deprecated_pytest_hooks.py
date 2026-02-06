@@ -71,13 +71,10 @@ class TestNoDeprecatedPytestHooks:
         assert not violations, (
             "Deprecated pytest_ignore_collect(path=...) signature found.\n"
             "This triggers PytestRemovedIn9Warning (fatal with filterwarnings=error).\n"
-            "Use 'collection_path: pathlib.Path' instead:\n"
-            + "\n".join(violations)
+            "Use 'collection_path: pathlib.Path' instead:\n" + "\n".join(violations)
         )
 
-    def test_no_py_path_local_in_conftest(
-        self, conftest_files: list[Path]
-    ) -> None:
+    def test_no_py_path_local_in_conftest(self, conftest_files: list[Path]) -> None:
         """Fail if any conftest uses py.path.local (deprecated in favor of
         pathlib.Path since pytest 7)."""
         violations: list[str] = []

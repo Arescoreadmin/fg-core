@@ -56,7 +56,10 @@ class DoSGuardConfig:
     @classmethod
     def from_env(cls) -> "DoSGuardConfig":
         return cls(
-            enabled=(os.getenv("FG_DOS_GUARD_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}),
+            enabled=(
+                os.getenv("FG_DOS_GUARD_ENABLED", "true").strip().lower()
+                in {"1", "true", "yes", "on"}
+            ),
             max_body_bytes=_env_int("FG_MAX_BODY_BYTES", 1024 * 1024),
             max_query_bytes=_env_int("FG_MAX_QUERY_BYTES", 8 * 1024),
             max_path_bytes=_env_int("FG_MAX_PATH_BYTES", 2 * 1024),
@@ -67,12 +70,16 @@ class DoSGuardConfig:
             multipart_max_parts=_env_int("FG_MULTIPART_MAX_PARTS", 50),
             request_timeout_sec=_env_float("FG_REQUEST_TIMEOUT_SEC", 15.0),
             max_concurrent_requests=_env_int("FG_MAX_CONCURRENT_REQUESTS", 100),
-            trusted_proxy_cidrs=_env_csv("FG_TRUSTED_PROXY_CIDRS", "127.0.0.1/32,::1/128"),
+            trusted_proxy_cidrs=_env_csv(
+                "FG_TRUSTED_PROXY_CIDRS", "127.0.0.1/32,::1/128"
+            ),
         )
 
 
 class _RejectRequest(Exception):
-    def __init__(self, status_code: int, reason_code: str, details: dict[str, int | str]):
+    def __init__(
+        self, status_code: int, reason_code: str, details: dict[str, int | str]
+    ):
         self.status_code = status_code
         self.reason_code = reason_code
         self.details = details
@@ -109,10 +116,17 @@ class DoSGuardMiddleware:
                 raise _RejectRequest(
                     413,
                     "body_too_large_content_length",
-                    {"content_length": int(self._header(scope, b"content-length") or 0), "limit": limit},
+                    {
+                        "content_length": int(
+                            self._header(scope, b"content-length") or 0
+                        ),
+                        "limit": limit,
+                    },
                 )
         except _RejectRequest as e:
-            await self._log_and_reject(scope, receive, send, e, request_id, client_ip, tenant_id)
+            await self._log_and_reject(
+                scope, receive, send, e, request_id, client_ip, tenant_id
+            )
             return
 
         if self._semaphore.locked():
@@ -121,7 +135,9 @@ class DoSGuardMiddleware:
                 "concurrency_limit_exceeded",
                 {"max_concurrent_requests": self.config.max_concurrent_requests},
             )
-            await self._log_and_reject(scope, receive, send, reject, request_id, client_ip, tenant_id)
+            await self._log_and_reject(
+                scope, receive, send, reject, request_id, client_ip, tenant_id
+            )
             return
 
         await self._semaphore.acquire()
@@ -140,12 +156,14 @@ class DoSGuardMiddleware:
         trailing = b""
         content_type, boundary = self._content_type(scope)
         if content_type == "multipart/form-data" and boundary:
-            needle = (b"--" + boundary.encode("ascii", errors="ignore"))
+            needle = b"--" + boundary.encode("ascii", errors="ignore")
 
         async def guarded_receive():
             nonlocal body_seen, first_body_at, boundary_hits, trailing
             try:
-                message = await asyncio.wait_for(receive(), timeout=self.config.request_timeout_sec)
+                message = await asyncio.wait_for(
+                    receive(), timeout=self.config.request_timeout_sec
+                )
             except TimeoutError as ex:
                 raise _RejectRequest(
                     408,
@@ -177,7 +195,10 @@ class DoSGuardMiddleware:
                         raise _RejectRequest(
                             413,
                             "multipart_too_many_parts",
-                            {"parts_seen": boundary_hits - 1, "limit": self.config.multipart_max_parts},
+                            {
+                                "parts_seen": boundary_hits - 1,
+                                "limit": self.config.multipart_max_parts,
+                            },
                         )
                     trailing = scan[-max(0, len(needle) - 1) :]
             return message
@@ -194,11 +215,15 @@ class DoSGuardMiddleware:
                     "request_timeout",
                     {"timeout_sec": self.config.request_timeout_sec},
                 )
-                await self._log_and_reject(scope, receive, send, reject, request_id, client_ip, tenant_id)
+                await self._log_and_reject(
+                    scope, receive, send, reject, request_id, client_ip, tenant_id
+                )
             return
         except _RejectRequest as e:
             if not started:
-                await self._log_and_reject(scope, receive, send, e, request_id, client_ip, tenant_id)
+                await self._log_and_reject(
+                    scope, receive, send, e, request_id, client_ip, tenant_id
+                )
             return
         finally:
             self._semaphore.release()
@@ -239,22 +264,54 @@ class DoSGuardMiddleware:
         headers = scope.get("headers", [])
 
         if len(path.encode("utf-8", errors="ignore")) > self.config.max_path_bytes:
-            raise _RejectRequest(414, "path_too_long", {"path_bytes": len(path.encode("utf-8", errors="ignore")), "limit": self.config.max_path_bytes})
+            raise _RejectRequest(
+                414,
+                "path_too_long",
+                {
+                    "path_bytes": len(path.encode("utf-8", errors="ignore")),
+                    "limit": self.config.max_path_bytes,
+                },
+            )
 
         if len(query_string) > self.config.max_query_bytes:
-            raise _RejectRequest(414, "query_too_long", {"query_bytes": len(query_string), "limit": self.config.max_query_bytes})
+            raise _RejectRequest(
+                414,
+                "query_too_long",
+                {
+                    "query_bytes": len(query_string),
+                    "limit": self.config.max_query_bytes,
+                },
+            )
 
         if len(headers) > self.config.max_headers_count:
-            raise _RejectRequest(431, "too_many_headers", {"header_count": len(headers), "limit": self.config.max_headers_count})
+            raise _RejectRequest(
+                431,
+                "too_many_headers",
+                {"header_count": len(headers), "limit": self.config.max_headers_count},
+            )
 
         total_header_bytes = 0
         for name, value in headers:
             line_len = len(name) + len(value) + 4
             if line_len > self.config.max_header_line_bytes:
-                raise _RejectRequest(431, "header_line_too_large", {"header_line_bytes": line_len, "limit": self.config.max_header_line_bytes})
+                raise _RejectRequest(
+                    431,
+                    "header_line_too_large",
+                    {
+                        "header_line_bytes": line_len,
+                        "limit": self.config.max_header_line_bytes,
+                    },
+                )
             total_header_bytes += line_len
             if total_header_bytes > self.config.max_headers_bytes:
-                raise _RejectRequest(431, "headers_too_large", {"headers_bytes": total_header_bytes, "limit": self.config.max_headers_bytes})
+                raise _RejectRequest(
+                    431,
+                    "headers_too_large",
+                    {
+                        "headers_bytes": total_header_bytes,
+                        "limit": self.config.max_headers_bytes,
+                    },
+                )
 
     def _content_type(self, scope) -> tuple[str, Optional[str]]:
         content_type = self._header(scope, b"content-type") or ""
@@ -271,7 +328,9 @@ class DoSGuardMiddleware:
         if not boundary:
             raise _RejectRequest(400, "multipart_boundary_missing", {})
         if not _BOUNDARY_RE.match(boundary):
-            raise _RejectRequest(400, "multipart_boundary_invalid", {"boundary_len": len(boundary)})
+            raise _RejectRequest(
+                400, "multipart_boundary_invalid", {"boundary_len": len(boundary)}
+            )
 
     def _content_length_exceeds(self, scope, content_type: str) -> bool:
         content_length = self._header(scope, b"content-length")
@@ -281,10 +340,23 @@ class DoSGuardMiddleware:
             length = int(content_length)
         except ValueError:
             return False
-        limit = self.config.multipart_max_bytes if content_type == "multipart/form-data" else self.config.max_body_bytes
+        limit = (
+            self.config.multipart_max_bytes
+            if content_type == "multipart/form-data"
+            else self.config.max_body_bytes
+        )
         return length > limit
 
-    async def _log_and_reject(self, scope, receive, send, reject: _RejectRequest, request_id: str, client_ip: str, tenant_id: Optional[str]) -> None:
+    async def _log_and_reject(
+        self,
+        scope,
+        receive,
+        send,
+        reject: _RejectRequest,
+        request_id: str,
+        client_ip: str,
+        tenant_id: Optional[str],
+    ) -> None:
         log.warning(
             "security_event: dos_guard_reject",
             extra={
