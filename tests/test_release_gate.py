@@ -408,8 +408,11 @@ class TestRunReadinessChecks:
             "db-postgres-verify",
         ]
 
-    def test_readiness_checks_returns_all_results(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_readiness_checks_returns_all_results(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Readiness checks return expected core results."""
+
     from unittest.mock import patch
 
     def mock_run_command(cmd: list[str], desc: str) -> tuple[bool, str]:

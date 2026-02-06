@@ -157,16 +157,18 @@ def assert_db_role_safe(engine: Engine) -> None:
         row = conn.execute(
             text(
                 """
-                SELECT rolsuper, rolbypassrls
+                SELECT current_user, rolsuper, rolbypassrls
                 FROM pg_roles
                 WHERE rolname = current_user
                 """
             )
         ).one()
-    if row[0] or row[1]:
+    role_name, is_super, has_bypass = row[0], row[1], row[2]
+    if is_super or has_bypass:
         raise RuntimeError(
-            "DB role must not be superuser and must not have BYPASSRLS; "
-            "fix Postgres role provisioning."
+            f"DB role {role_name!r} must not be superuser (got {is_super}) "
+            f"and must not have BYPASSRLS (got {has_bypass}); "
+            f'run: ALTER ROLE "{role_name}" NOSUPERUSER NOBYPASSRLS;'
         )
 
 
