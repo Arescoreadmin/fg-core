@@ -1,0 +1,23 @@
+Would reformat: agent/agent_main.py
+Would reformat: agent/app/agent_main.py
+Would reformat: agent/app/main.py
+Would reformat: agent/app/scripts/create_api_key.py
+Would reformat: backend/tests/_harness.py
+Would reformat: backend/tests/conftest.py
+Would reformat: backend/tests/test_decision_diff_persistence.py
+Would reformat: backend/tests/test_feed_live_presentation.py
+Would reformat: backend/tests/test_feed_live_timestamp.py
+Would reformat: backend/tests/test_health.py
+Would reformat: backend/tests/test_intel.py
+Would reformat: backend/tests/test_missions.py
+Would reformat: backend/tests/test_stats_endpoint.py
+Would reformat: contracts/admin/__init__.py
+Would reformat: contracts/admin/schemas.py
+Would reformat: engine/pipeline.py
+Would reformat: engine/rules.py
+Would reformat: engine/types.py
+Would reformat: jobs/__init__.py
+Would reformat: jobs/merkle_anchor/job.py
+Would reformat: jobs/sim_validator/job.py
+Would reformat: tools/tenants/registry.py
+22 files would be reformatted, 240 files already formatted

@@ -1,0 +1,36 @@
+ssss.................................................................... [ 12%]
+..........................ss.................s.......s.................. [ 24%]
+...........................sssss.....s.................................. [ 36%]
+........................................................................ [ 48%]
+..............................s......................................... [ 60%]
+........................................................................ [ 72%]
+........................................................................ [ 84%]
+.......................................................sss.............. [ 96%]
+....................                                                     [100%]
+============================= slowest 25 durations =============================
+3.44s call     tests/test_ui_dashboards.py::test_ui_dashboards_tenant_scoping
+1.63s call     tests/test_security_audit_fixes.py::test_governance_persistence_survives_restart
+1.44s call     tests/security/test_keys_admin_tenant_scope.py::test_keys_admin_tenant_scope
+1.11s call     tests/security/test_scope_enforcement.py::test_scope_enforcement
+1.10s call     tests/test_tripwire_delivery.py::TestIntegration::test_backoff_timing
+1.03s call     tests/test_tenant_binding.py::test_unscoped_key_requires_tenant_id_on_decisions[None]
+1.03s call     tests/security/test_stats_tenant_filter.py::test_stats_requires_tenant_filter
+1.02s call     tests/test_ui_dashboards.py::test_audit_packet_manifest
+1.01s call     tests/test_tripwire_delivery.py::TestWebhookDeliveryService::test_retry_on_server_error
+1.01s call     tests/test_tripwire_delivery.py::TestWebhookDeliveryService::test_permanent_failure_after_max_attempts
+1.01s call     tests/test_security_audit_fixes.py::test_scoped_key_allows_matching_tenant
+1.00s call     tests/test_tripwire_delivery.py::TestWebhookDeliveryService::test_retry_on_connection_error
+1.00s call     tests/test_ui_dashboards.py::test_chain_verify_pass_fail
+0.97s call     tests/test_decision_diff_surfaces.py::test_decision_diff_exposed_in_decisions_and_feed
+0.94s call     tests/test_security_audit_fixes.py::test_governance_fails_closed_on_db_error
+0.93s call     tests/test_key_lifecycle.py::TestKeyRotation::test_rotate_invalidates_prior
+0.91s call     tests/test_security_audit_fixes.py::test_feed_requires_tenant_id
+0.84s call     tests/test_key_lifecycle.py::TestUsageTracking::test_use_count_increments_on_auth
+0.83s call     tests/security/test_policy_hash_propagation.py::test_ingest_persists_policy_hash
+0.82s call     tests/test_tenant_binding.py::test_unscoped_key_requires_tenant_id_on_decisions[]
+0.80s call     tests/test_security_audit_fixes.py::test_cross_tenant_access_impossible
+0.79s call     tests/test_decision_artifact_schema.py::test_ingest_decision_matches_schema
+0.77s call     tests/test_security_audit_fixes.py::test_feed_stream_requires_tenant_id
+0.77s call     tests/security/test_policy_hash_propagation.py::test_defend_response_includes_policy_hash
+0.77s call     tests/security/test_admin_tenant_scope.py::test_admin_tenant_scope_enforced
+578 passed, 20 skipped in 73.96s (0:01:13)

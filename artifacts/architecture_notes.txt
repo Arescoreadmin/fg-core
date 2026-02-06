@@ -1,0 +1,80 @@
+FrostGate Core - Architecture & Maintainability Report
+=======================================================
+Generated: 2026-02-06
+
+1. MODULE BOUNDARIES
+--------------------
+api/          - Core API layer (FastAPI app, routes, middleware, auth, DB)
+              ~30 modules, 8000+ lines. This is the largest module.
+engine/       - Decision engine (pipeline, rules, doctrine, ROE, types)
+              Policy evaluation core. 7 modules.
+admin_gateway/ - Separate admin UI API (auth, routers, middleware, DB)
+              Independent FastAPI app with own auth stack.
+jobs/         - Background jobs (merkle_anchor, sim_validator, chaos)
+backend/      - Backend test fixtures and additional tests
+contracts/    - Contract schemas and admin contract definitions
+tools/        - Tenant registry and CLI tools
+scripts/      - Operational scripts (audits, migrations, checks)
+deploy/       - Deployment configs and migration helpers
+security/     - Security policy files
+console/      - Frontend console (Node.js)
+
+2. DEPENDENCY DIRECTION VIOLATIONS
+-----------------------------------
+CRITICAL: engine/ depends on api/
+- engine/tied.py:5 imports from api.schemas (TIEDEstimate, ClassificationRing, Persona)
+- engine/roe.py:4 imports from api.schemas (Persona, ClassificationRing, TIEDEstimate)
+- engine/persona.py:3 imports from api.schemas (Persona)
+- engine/rules.py imports from engine.types (correct)
+- engine/pipeline.py:11+ imports from engine.types (correct)
+
+The engine should be a pure domain module with no API dependencies.
+These types should live in engine/types.py and api should import from engine, not vice versa.
+
+api/ has circular risk:
+- api/roe_engine.py:63 bridges api -> engine, importing engine.evaluate and engine.pipeline
+- api/main.py imports from many api/ submodules (expected for composition root)
+
+3. TEST STRUCTURE
+-----------------
+tests/                  - 60+ test files, mostly unit/integration
+tests/security/         - 12 dedicated security test files (excellent)
+tests/postgres/         - PostgreSQL-specific tests (low coverage: 16-50%)
+backend/tests/          - Additional integration tests
+admin_gateway/tests/    - Admin gateway unit tests (0% coverage - not run in main suite)
+scripts/                - Script-level tests (conftest exists but 0% coverage)
+
+Good: Security tests are comprehensive and well-organized
+Gap: admin_gateway/tests/ has 0% coverage across all test files
+Gap: Postgres tests are not in main test suite (require running Postgres)
+
+4. DUPLICATION HOTSPOTS
+-----------------------
+- .gitignore: Massive duplication (165 lines, patterns repeated 3-4x)
+- Auth stacks: api/auth.py, api/auth_scopes.py (1186 lines), admin_gateway/auth/ (7 files)
+  Two completely separate auth systems with different patterns
+- Config loading: api/config/ vs api/config.py (old module) both exist
+- DB abstractions: api/db.py vs admin_gateway/db/ (separate DB layers)
+
+5. RISKY COUPLING POINTS
+-------------------------
+- api/main.py (351 lines, 55% coverage): Composition root with many imports,
+  acts as both app factory and route registrar
+- api/auth_scopes.py (1186 lines): Monolithic auth module doing key generation,
+  verification, rotation, usage tracking, RBAC, and admin functions
+- api/admin.py (1068 lines): Large admin route file
+- api/ingest_bus.py: Bridges ingest -> pipeline -> governance
+
+6. CODE ORGANIZATION
+--------------------
+Generally good separation of concerns:
++ Security middleware is well-layered (dos_guard, auth_gate, security_headers, request_validation)
++ Pipeline pattern in engine/ is clean
++ Contract testing pattern (tests/test_*_contract.py) is excellent
++ Evidence chain and merkle anchor are well-isolated
+
+Concerns:
+- api/ is too large (30+ modules) without sub-package organization
+- auth_scopes.py is doing too many things (1186 lines)
+- Stale/dead files: api/config.py (old), api/persist.py (31 lines, 0% coverage),
+  api/models.py (42 lines, 0% coverage), api/rate_limit.py (3 lines, 0% coverage)

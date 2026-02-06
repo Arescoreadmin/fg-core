@@ -1,0 +1,10 @@
+./scripts/scap_scan.py:100:        "description": "os.system() can lead to command injection",
+./scripts/scap_scan.py:147:        "description": "yaml.load() without SafeLoader can execute arbitrary code",
+./scripts/scap_scan.py:202:        "title": "Dangerous eval() Usage",
+./scripts/scap_scan.py:205:        "description": "eval() can execute arbitrary code",
+./scripts/scap_scan.py:206:        "remediation": "Use ast.literal_eval() for safe evaluation or avoid eval entirely",
+./tests/test_compliance_gates.py:247:            f.write('os.system("ls " + user_input)\n')
+./tests/test_compliance_gates.py:272:    def test_scan_detects_unsafe_eval(self):
+./tests/test_compliance_gates.py:277:            f.write("result = eval(user_input)\n")
+./tests/test_compliance_gates.py:309:            f.write("pickle.loads(data)\n")  # Python-specific
+./tests/test_compliance_gates.py:327:            (project_dir / "test.py").write_text("eval(user_input)\n")

@@ -1,0 +1,66 @@
+FrostGate Core - Operational Readiness Report
+==============================================
+Generated: 2026-02-06
+
+1. HEALTH ENDPOINTS
+-------------------
+- api/health.py: Full liveness/readiness probe system (HealthStatus enum: HEALTHY/DEGRADED/UNHEALTHY)
+- Dockerfile:59: HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD curl -fsS http://127.0.0.1:8080/health
+- DependencyCheck dataclass (api/health.py:33) tracks per-dependency latency
+- Missing: no /ready separate from /health (single endpoint serves both)
+
+2. STRUCTURED LOGGING
+---------------------
+- loguru (0.7.2) is the primary logging framework (api/main.py imports, requirements.txt)
+- python-json-logger in requirements for JSON output
+- api/logging_config.py exists but is minimal (7 lines, 0% coverage)
+- admin_gateway/middleware/logging.py: request logging middleware
+- admin_gateway/middleware/request_id.py: request ID generation middleware
+- Correlation IDs: request_id middleware exists in admin_gateway but NOT in main api/ path
+- Gap: main api/ has no request correlation ID middleware
+
+3. CONFIG MANAGEMENT
+--------------------
+- api/config/env.py: centralized env var loading with defaults
+- api/config/settings.py: Pydantic settings
+- api/config/startup_validation.py: 235 lines of startup validation (85% covered)
+- .env.example: documents all expected vars
+- python-dotenv for .env loading
+- Good: POSTGRES_PASSWORD and REDIS_PASSWORD have no defaults (fail-closed)
+- Risk: AG_CORS_ORIGINS=* in .env.example (wildcard CORS default)
+
+4. ERROR HANDLING
+-----------------
+- api/middleware/request_validation.py: input validation middleware (86% covered)
+- api/middleware/security_headers.py: security headers (98% covered)
+- api/circuit_breaker.py: circuit breaker pattern (75% covered)
+- api/middleware/dos_guard.py: DoS protection middleware (84% covered)
+- Good: security_headers prevents info leakage headers
+- No evidence of stack trace leakage in production error responses
+
+5. DATABASE MIGRATION SAFETY
+-----------------------------
+- alembic==1.11.1 in requirements.txt
+- migrations/ directory present with migration scripts
+- deploy/migrations/: additional migration support
+- PostgreSQL Row-Level Security policies defined for tenant isolation
+- api/db.py: database abstraction (76% covered)
+- api/db_migrations.py: migration runner (0% covered - risk)
+- Risk: db_migrations.py is completely untested
+
+6. STARTUP/SHUTDOWN LIFECYCLES
+-------------------------------
+- api/graceful_shutdown.py: Production-grade shutdown (SIGTERM/SIGINT, draining, cleanup hooks)
+- FG_SHUTDOWN_TIMEOUT (default 30s), FG_DRAIN_TIMEOUT (default 10s) configurable
+- 63% coverage - shutdown paths partially tested
+
+7. DOCKER / COMPOSE / CI
+--------------------------
+- Dockerfile: Multi-stage build, non-root user (frostgate), slim base
+- docker-compose.yml: Full stack with profiles
+- .github/workflows/ci.yml: Comprehensive CI with 10 parallel jobs
+  - Guard, Unit, Integration, DB Postgres, Admin, Console, PT, Hardening, Compliance, Evidence
+- .github/workflows/docker-ci.yml: Docker build CI
+- .github/workflows/release-images.yml: Release pipeline
+- CI runs: compileall, prod-profile-check, gap-audit, core-invariants, tenant-isolation, auth-hardening
+- Missing from CI: coverage enforcement, dependency vulnerability scanning, ruff check/format
