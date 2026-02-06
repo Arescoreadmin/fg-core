@@ -45,7 +45,7 @@ def _rls_diagnostics(session: Session) -> dict[str, object]:
        FROM pg_policies
        WHERE tablename IN ('decisions','decision_evidence_artifacts','api_keys','security_audit_log');
     3) Tenant setting after set_tenant_context:
-       SELECT current_setting('app.tenant_id', true);
+       SELECT NULLIF(current_setting('app.tenant_id', true), '');
     4) Role bypass:
        SELECT rolname, rolsuper, rolbypassrls
        FROM pg_roles
@@ -133,7 +133,7 @@ def test_tenant_rls_enforces_isolation(pg_engine) -> None:
     with Session(pg_engine) as session:
         set_tenant_context(session, "tenant-a")
         current_tenant = session.execute(
-            text("SELECT current_setting('app.tenant_id', true)")
+            text("SELECT NULLIF(current_setting('app.tenant_id', true), '')")
         ).scalar_one()
         assert current_tenant == "tenant-a"
         rows = session.execute(text("SELECT event_id FROM decisions")).fetchall()
@@ -142,7 +142,7 @@ def test_tenant_rls_enforces_isolation(pg_engine) -> None:
     with Session(pg_engine) as session:
         set_tenant_context(session, "tenant-b")
         current_tenant = session.execute(
-            text("SELECT current_setting('app.tenant_id', true)")
+            text("SELECT NULLIF(current_setting('app.tenant_id', true), '')")
         ).scalar_one()
         assert current_tenant == "tenant-b"
         rows = session.execute(text("SELECT event_id FROM decisions")).fetchall()
@@ -150,7 +150,7 @@ def test_tenant_rls_enforces_isolation(pg_engine) -> None:
 
     with Session(pg_engine) as session:
         current_tenant = session.execute(
-            text("SELECT current_setting('app.tenant_id', true)")
+            text("SELECT NULLIF(current_setting('app.tenant_id', true), '')")
         ).scalar_one()
         assert current_tenant is None
         rows = session.execute(text("SELECT event_id FROM decisions")).fetchall()
