@@ -255,10 +255,15 @@ db-postgres-up:
 		docker compose exec -T postgres sh -c 'env | grep "^POSTGRES_"' || true; \
 		exit 1; \
 	}
+	@echo "Demoting role $(POSTGRES_USER) (NOSUPERUSER NOBYPASSRLS)..."
+	@docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$(POSTGRES_USER)" -d "$(POSTGRES_DB)" \
+		-c "ALTER ROLE \"$(POSTGRES_USER)\" NOSUPERUSER NOBYPASSRLS;"
+	@docker compose exec -T postgres psql -U "$(POSTGRES_USER)" -d "$(POSTGRES_DB)" \
+		-c "SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user;"
 
 db-postgres-demote:
-	@docker compose exec -T postgres psql -U "$(POSTGRES_USER)" -d "$(POSTGRES_DB)" \
-		-c "ALTER ROLE CURRENT_USER NOSUPERUSER NOBYPASSRLS;"
+	@docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$(POSTGRES_USER)" -d "$(POSTGRES_DB)" \
+		-c "ALTER ROLE \"$(POSTGRES_USER)\" NOSUPERUSER NOBYPASSRLS;"
 
 db-postgres-migrate:
 	@FG_DB_URL="$(POSTGRES_URL)" FG_DB_BACKEND="postgres" $(PY) -m api.db_migrations --backend postgres --apply
