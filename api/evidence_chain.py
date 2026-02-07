@@ -181,7 +181,11 @@ def verify_chain_for_tenant(
                 "checked": checked,
             }
         record_prev = getattr(record, "prev_hash", None)
-        if record_prev is None or not hmac.compare_digest(record_prev, prev_hash):
+        if (
+            not isinstance(record_prev, str)
+            or not isinstance(prev_hash, str)
+            or not hmac.compare_digest(record_prev, prev_hash)
+        ):
             return {
                 "ok": False,
                 "first_bad_id": record.id,
@@ -199,8 +203,9 @@ def verify_chain_for_tenant(
         )
         expected = compute_chain_hash(prev_hash, payload)
         record_chain = getattr(record, "chain_hash", None)
-        # record_chain already checked non-None at top of loop
-        if not hmac.compare_digest(record_chain, expected):
+        if not isinstance(record_chain, str) or not hmac.compare_digest(
+            record_chain, expected
+        ):
             return {
                 "ok": False,
                 "first_bad_id": record.id,

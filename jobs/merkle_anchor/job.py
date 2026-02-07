@@ -114,7 +114,11 @@ class MerkleTree:
                 current = sha256_hex(sibling + current)
             else:
                 current = sha256_hex(current + sibling)
-        return hmac.compare_digest(current, root)
+        return (
+            isinstance(current, str)
+            and isinstance(root, str)
+            and hmac.compare_digest(current, root)
+        )
 
 
 def get_audit_entries_in_window(
@@ -259,7 +263,7 @@ def verify_anchor_record(record: dict[str, Any]) -> tuple[bool, str]:
     """
     # Extract and remove anchor_hash for verification
     expected_hash = record.get("anchor_hash")
-    if not expected_hash:
+    if not isinstance(expected_hash, str):
         return False, "Missing anchor_hash"
 
     record_copy = {k: v for k, v in record.items() if k != "anchor_hash"}
@@ -277,7 +281,9 @@ def verify_anchor_record(record: dict[str, Any]) -> tuple[bool, str]:
 
     if leaf_hashes:
         tree = MerkleTree(leaf_hashes)
-        if merkle_root is None or not hmac.compare_digest(tree.root, merkle_root):
+        if not isinstance(merkle_root, str) or not hmac.compare_digest(
+            tree.root, merkle_root
+        ):
             return (
                 False,
                 f"Merkle root mismatch: expected {merkle_root}, got {tree.root}",
@@ -319,9 +325,9 @@ def verify_anchor_chain(log_path: Optional[Path] = None) -> tuple[bool, list[str
 
             # Verify chain linkage
             record_prev = record.get("prev_anchor_hash")
-            if record_prev is None and prev_hash is None:
-                pass  # both None on first record is valid
-            elif record_prev is None or prev_hash is None:
+            if not isinstance(record_prev, str) and not isinstance(prev_hash, str):
+                pass  # both absent on first record is valid
+            elif not isinstance(record_prev, str) or not isinstance(prev_hash, str):
                 errors.append(
                     f"Line {i + 1}: Chain broken - expected prev_hash {prev_hash}, got {record_prev}"
                 )

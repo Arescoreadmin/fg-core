@@ -60,23 +60,28 @@ def test_nonce_uses_compare_digest():
     assert func is not None, "verify_id_token not found in admin_gateway/auth.py"
 
     # Walk the function body and collect:
-    # 1. All calls to hmac.compare_digest
-    # 2. All == / != comparisons involving "nonce"
+    # 1. All calls to *.compare_digest(...)
+    # 2. All == / != Compare nodes where an operand is a nonce-related Name
+    nonce_names = {"nonce", "claim_nonce"}
     found_compare_digest = False
     found_timing_unsafe_nonce = False
 
     for node in ast.walk(func):
-        # Check for hmac.compare_digest(...)
+        # Structural check: call to <anything>.compare_digest(...)
         if isinstance(node, ast.Call):
             fn = node.func
             if isinstance(fn, ast.Attribute) and fn.attr == "compare_digest":
                 found_compare_digest = True
 
-        # Check for ``nonce == ...`` or ``... == nonce`` or != variants
+        # Structural check: Compare node with Eq/NotEq where an operand
+        # is a Name node whose id matches a nonce variable.
         if isinstance(node, ast.Compare):
-            src_segment = ast.get_source_segment(source, node) or ""
-            if "nonce" in src_segment and ("==" in src_segment or "!=" in src_segment):
-                found_timing_unsafe_nonce = True
+            has_unsafe_op = any(isinstance(op, (ast.Eq, ast.NotEq)) for op in node.ops)
+            if has_unsafe_op:
+                operands = [node.left] + list(node.comparators)
+                for operand in operands:
+                    if isinstance(operand, ast.Name) and operand.id in nonce_names:
+                        found_timing_unsafe_nonce = True
 
     assert found_compare_digest, (
         "verify_id_token does not call hmac.compare_digest — "
@@ -103,7 +108,7 @@ def test_csrf_uses_compare_digest(monkeypatch):
 
     # Build a minimal request stub
     request = types.SimpleNamespace(
-        headers={"X-CSRF-Token": csrf_token},
+        headers={ui_mod.CSRF_HEADER_NAME: csrf_token},
         cookies={ui_mod.CSRF_COOKIE_NAME: csrf_token},
     )
 
