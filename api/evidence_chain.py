@@ -180,8 +180,8 @@ def verify_chain_for_tenant(
                 "reason": "missing_chain_ts",
                 "checked": checked,
             }
-        record_prev = getattr(record, "prev_hash", None) or ""
-        if not hmac.compare_digest(str(record_prev), str(prev_hash)):
+        record_prev = getattr(record, "prev_hash", None)
+        if record_prev is None or not hmac.compare_digest(record_prev, prev_hash):
             return {
                 "ok": False,
                 "first_bad_id": record.id,
@@ -198,8 +198,9 @@ def verify_chain_for_tenant(
             event_id=getattr(record, "event_id", None),
         )
         expected = compute_chain_hash(prev_hash, payload)
-        record_chain = getattr(record, "chain_hash", None) or ""
-        if not hmac.compare_digest(str(record_chain), str(expected)):
+        record_chain = getattr(record, "chain_hash", None)
+        # record_chain already checked non-None at top of loop
+        if not hmac.compare_digest(record_chain, expected):
             return {
                 "ok": False,
                 "first_bad_id": record.id,

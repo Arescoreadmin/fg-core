@@ -277,7 +277,7 @@ def verify_anchor_record(record: dict[str, Any]) -> tuple[bool, str]:
 
     if leaf_hashes:
         tree = MerkleTree(leaf_hashes)
-        if not hmac.compare_digest(str(tree.root), str(merkle_root)):
+        if merkle_root is None or not hmac.compare_digest(tree.root, merkle_root):
             return (
                 False,
                 f"Merkle root mismatch: expected {merkle_root}, got {tree.root}",
@@ -319,11 +319,13 @@ def verify_anchor_chain(log_path: Optional[Path] = None) -> tuple[bool, list[str
 
             # Verify chain linkage
             record_prev = record.get("prev_anchor_hash")
-            if (record_prev is None) != (prev_hash is None) or (
-                record_prev is not None
-                and prev_hash is not None
-                and not hmac.compare_digest(str(record_prev), str(prev_hash))
-            ):
+            if record_prev is None and prev_hash is None:
+                pass  # both None on first record is valid
+            elif record_prev is None or prev_hash is None:
+                errors.append(
+                    f"Line {i + 1}: Chain broken - expected prev_hash {prev_hash}, got {record_prev}"
+                )
+            elif not hmac.compare_digest(record_prev, prev_hash):
                 errors.append(
                     f"Line {i + 1}: Chain broken - expected prev_hash {prev_hash}, got {record_prev}"
                 )
