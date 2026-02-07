@@ -21,7 +21,9 @@ from typing import Any, Optional
 from loguru import logger
 
 # State directory for anchor artifacts
-STATE_DIR = Path(os.getenv("FG_STATE_DIR", str(Path(__file__).resolve().parents[2] / "state")))
+STATE_DIR = Path(
+    os.getenv("FG_STATE_DIR", str(Path(__file__).resolve().parents[2] / "state"))
+)
 STATE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Anchor file paths
@@ -42,7 +44,9 @@ def sha256_hex(data: str | bytes) -> str:
 
 def canonical_json(obj: Any) -> str:
     """Produce deterministic JSON representation."""
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+    return json.dumps(
+        obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str
+    )
 
 
 class MerkleTree:
@@ -262,7 +266,10 @@ def verify_anchor_record(record: dict[str, Any]) -> tuple[bool, str]:
     computed_hash = sha256_hex(canonical_json(record_copy))
 
     if not hmac.compare_digest(computed_hash, expected_hash):
-        return False, f"Anchor hash mismatch: expected {expected_hash}, got {computed_hash}"
+        return (
+            False,
+            f"Anchor hash mismatch: expected {expected_hash}, got {computed_hash}",
+        )
 
     # Verify Merkle root by recomputing from leaf hashes
     leaf_hashes = record.get("leaf_hashes", [])
@@ -271,7 +278,10 @@ def verify_anchor_record(record: dict[str, Any]) -> tuple[bool, str]:
     if leaf_hashes:
         tree = MerkleTree(leaf_hashes)
         if not hmac.compare_digest(str(tree.root), str(merkle_root)):
-            return False, f"Merkle root mismatch: expected {merkle_root}, got {tree.root}"
+            return (
+                False,
+                f"Merkle root mismatch: expected {merkle_root}, got {tree.root}",
+            )
 
     return True, "Valid"
 
@@ -298,23 +308,24 @@ def verify_anchor_chain(log_path: Optional[Path] = None) -> tuple[bool, list[str
             try:
                 record = json.loads(line)
             except json.JSONDecodeError as e:
-                errors.append(f"Line {i+1}: Invalid JSON: {e}")
+                errors.append(f"Line {i + 1}: Invalid JSON: {e}")
                 continue
 
             # Verify record integrity
             is_valid, msg = verify_anchor_record(record)
             if not is_valid:
-                errors.append(f"Line {i+1}: {msg}")
+                errors.append(f"Line {i + 1}: {msg}")
                 continue
 
             # Verify chain linkage
             record_prev = record.get("prev_anchor_hash")
             if (record_prev is None) != (prev_hash is None) or (
-                record_prev is not None and prev_hash is not None
+                record_prev is not None
+                and prev_hash is not None
                 and not hmac.compare_digest(str(record_prev), str(prev_hash))
             ):
                 errors.append(
-                    f"Line {i+1}: Chain broken - expected prev_hash {prev_hash}, got {record_prev}"
+                    f"Line {i + 1}: Chain broken - expected prev_hash {prev_hash}, got {record_prev}"
                 )
 
             prev_hash = record.get("anchor_hash")
