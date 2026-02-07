@@ -11,6 +11,7 @@ verified offline (similar to RFC3161 timestamping but self-contained).
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 from datetime import datetime, timedelta, timezone
@@ -109,7 +110,7 @@ class MerkleTree:
                 current = sha256_hex(sibling + current)
             else:
                 current = sha256_hex(current + sibling)
-        return current == root
+        return hmac.compare_digest(current, root)
 
 
 def get_audit_entries_in_window(
@@ -260,7 +261,7 @@ def verify_anchor_record(record: dict[str, Any]) -> tuple[bool, str]:
     record_copy = {k: v for k, v in record.items() if k != "anchor_hash"}
     computed_hash = sha256_hex(canonical_json(record_copy))
 
-    if computed_hash != expected_hash:
+    if not hmac.compare_digest(computed_hash, expected_hash):
         return False, f"Anchor hash mismatch: expected {expected_hash}, got {computed_hash}"
 
     # Verify Merkle root by recomputing from leaf hashes
@@ -269,7 +270,7 @@ def verify_anchor_record(record: dict[str, Any]) -> tuple[bool, str]:
 
     if leaf_hashes:
         tree = MerkleTree(leaf_hashes)
-        if tree.root != merkle_root:
+        if not hmac.compare_digest(str(tree.root), str(merkle_root)):
             return False, f"Merkle root mismatch: expected {merkle_root}, got {tree.root}"
 
     return True, "Valid"
@@ -308,7 +309,10 @@ def verify_anchor_chain(log_path: Optional[Path] = None) -> tuple[bool, list[str
 
             # Verify chain linkage
             record_prev = record.get("prev_anchor_hash")
-            if record_prev != prev_hash:
+            if (record_prev is None) != (prev_hash is None) or (
+                record_prev is not None and prev_hash is not None
+                and not hmac.compare_digest(str(record_prev), str(prev_hash))
+            ):
                 errors.append(
                     f"Line {i+1}: Chain broken - expected prev_hash {prev_hash}, got {record_prev}"
                 )
