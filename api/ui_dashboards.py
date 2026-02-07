@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import hmac
 import json
 import os
 import secrets
@@ -225,7 +226,7 @@ def _cleanup_packets() -> None:
 def _ensure_csrf(request: Request) -> None:
     token = request.headers.get(CSRF_HEADER_NAME)
     cookie = request.cookies.get(CSRF_COOKIE_NAME)
-    if not token or not cookie or token != cookie:
+    if not token or not cookie or not hmac.compare_digest(token, cookie):
         raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
 
 
@@ -861,7 +862,9 @@ async def ui_audit_packet_download(
     if not packet_dir.exists():
         raise HTTPException(status_code=404, detail="Packet not found")
     token_path = packet_dir / "token.txt"
-    if not token_path.exists() or token_path.read_text(encoding="utf-8") != token:
+    if not token_path.exists() or not hmac.compare_digest(
+        token_path.read_text(encoding="utf-8").strip(), token
+    ):
         raise HTTPException(status_code=403, detail="Invalid token")
     meta_path = _packet_metadata_path(packet_dir)
     if meta_path.exists():

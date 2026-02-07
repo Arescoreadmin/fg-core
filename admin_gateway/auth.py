@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import os
 import secrets
 import time
@@ -311,7 +312,12 @@ async def verify_id_token(id_token: str, nonce: str) -> dict:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
         ) from exc
-    if claims.get("nonce") != nonce:
+    claim_nonce = claims.get("nonce")
+    if (
+        not isinstance(claim_nonce, str)
+        or not isinstance(nonce, str)
+        or not hmac.compare_digest(claim_nonce, nonce)
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token nonce"
         )

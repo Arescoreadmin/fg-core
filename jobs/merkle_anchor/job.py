@@ -11,6 +11,7 @@ verified offline (similar to RFC3161 timestamping but self-contained).
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 from datetime import datetime, timedelta, timezone
@@ -20,7 +21,9 @@ from typing import Any, Optional
 from loguru import logger
 
 # State directory for anchor artifacts
-STATE_DIR = Path(os.getenv("FG_STATE_DIR", str(Path(__file__).resolve().parents[2] / "state")))
+STATE_DIR = Path(
+    os.getenv("FG_STATE_DIR", str(Path(__file__).resolve().parents[2] / "state"))
+)
 STATE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Anchor file paths
@@ -41,7 +44,9 @@ def sha256_hex(data: str | bytes) -> str:
 
 def canonical_json(obj: Any) -> str:
     """Produce deterministic JSON representation."""
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+    return json.dumps(
+        obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str
+    )
 
 
 class MerkleTree:
@@ -109,7 +114,11 @@ class MerkleTree:
                 current = sha256_hex(sibling + current)
             else:
                 current = sha256_hex(current + sibling)
-        return current == root
+        return (
+            isinstance(current, str)
+            and isinstance(root, str)
+            and hmac.compare_digest(current, root)
+        )
 
 
 def get_audit_entries_in_window(
@@ -254,14 +263,17 @@ def verify_anchor_record(record: dict[str, Any]) -> tuple[bool, str]:
     """
     # Extract and remove anchor_hash for verification
     expected_hash = record.get("anchor_hash")
-    if not expected_hash:
+    if not isinstance(expected_hash, str):
         return False, "Missing anchor_hash"
 
     record_copy = {k: v for k, v in record.items() if k != "anchor_hash"}
     computed_hash = sha256_hex(canonical_json(record_copy))
 
-    if computed_hash != expected_hash:
-        return False, f"Anchor hash mismatch: expected {expected_hash}, got {computed_hash}"
+    if not hmac.compare_digest(computed_hash, expected_hash):
+        return (
+            False,
+            f"Anchor hash mismatch: expected {expected_hash}, got {computed_hash}",
+        )
 
     # Verify Merkle root by recomputing from leaf hashes
     leaf_hashes = record.get("leaf_hashes", [])
@@ -269,8 +281,13 @@ def verify_anchor_record(record: dict[str, Any]) -> tuple[bool, str]:
 
     if leaf_hashes:
         tree = MerkleTree(leaf_hashes)
-        if tree.root != merkle_root:
-            return False, f"Merkle root mismatch: expected {merkle_root}, got {tree.root}"
+        if not isinstance(merkle_root, str) or not hmac.compare_digest(
+            tree.root, merkle_root
+        ):
+            return (
+                False,
+                f"Merkle root mismatch: expected {merkle_root}, got {tree.root}",
+            )
 
     return True, "Valid"
 
@@ -297,20 +314,26 @@ def verify_anchor_chain(log_path: Optional[Path] = None) -> tuple[bool, list[str
             try:
                 record = json.loads(line)
             except json.JSONDecodeError as e:
-                errors.append(f"Line {i+1}: Invalid JSON: {e}")
+                errors.append(f"Line {i + 1}: Invalid JSON: {e}")
                 continue
 
             # Verify record integrity
             is_valid, msg = verify_anchor_record(record)
             if not is_valid:
-                errors.append(f"Line {i+1}: {msg}")
+                errors.append(f"Line {i + 1}: {msg}")
                 continue
 
             # Verify chain linkage
             record_prev = record.get("prev_anchor_hash")
-            if record_prev != prev_hash:
+            if not isinstance(record_prev, str) and not isinstance(prev_hash, str):
+                pass  # both absent on first record is valid
+            elif not isinstance(record_prev, str) or not isinstance(prev_hash, str):
                 errors.append(
-                    f"Line {i+1}: Chain broken - expected prev_hash {prev_hash}, got {record_prev}"
+                    f"Line {i + 1}: Chain broken - expected prev_hash {prev_hash}, got {record_prev}"
+                )
+            elif not hmac.compare_digest(record_prev, prev_hash):
+                errors.append(
+                    f"Line {i + 1}: Chain broken - expected prev_hash {prev_hash}, got {record_prev}"
                 )
 
             prev_hash = record.get("anchor_hash")

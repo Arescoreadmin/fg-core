@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -179,7 +180,12 @@ def verify_chain_for_tenant(
                 "reason": "missing_chain_ts",
                 "checked": checked,
             }
-        if getattr(record, "prev_hash", None) != prev_hash:
+        record_prev = getattr(record, "prev_hash", None)
+        if (
+            not isinstance(record_prev, str)
+            or not isinstance(prev_hash, str)
+            or not hmac.compare_digest(record_prev, prev_hash)
+        ):
             return {
                 "ok": False,
                 "first_bad_id": record.id,
@@ -196,7 +202,10 @@ def verify_chain_for_tenant(
             event_id=getattr(record, "event_id", None),
         )
         expected = compute_chain_hash(prev_hash, payload)
-        if getattr(record, "chain_hash", None) != expected:
+        record_chain = getattr(record, "chain_hash", None)
+        if not isinstance(record_chain, str) or not hmac.compare_digest(
+            record_chain, expected
+        ):
             return {
                 "ok": False,
                 "first_bad_id": record.id,
