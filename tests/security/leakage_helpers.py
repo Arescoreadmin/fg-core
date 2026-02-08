@@ -4,7 +4,6 @@ from __future__ import annotations
 from typing import Dict, Optional
 
 
-
 def auth_headers(token: str) -> Dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 

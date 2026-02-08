@@ -18,7 +18,9 @@ def _auth_headers_from_key(raw_key: str) -> dict[str, str]:
     return {"X-API-Key": raw_key}
 
 
-def _insert_decision_record_sqlite(db_path: str, *, tenant_id: str, event_id: str) -> None:
+def _insert_decision_record_sqlite(
+    db_path: str, *, tenant_id: str, event_id: str
+) -> None:
     """
     Insert a DecisionRecord row using sqlite directly.
     Avoids needing SQLAlchemy session fixtures.
@@ -148,7 +150,9 @@ def test_forensics_chain_verify_is_bound_to_auth_tenant(
         pytest.fail(f"Expected JSON response, got: {r.text!r}")
 
     if isinstance(body, dict) and "tenant_id" in body:
-        assert body["tenant_id"] != tenant_b_id, "Regression: verify_chain used client-supplied tenant_id"
+        assert body["tenant_id"] != tenant_b_id, (
+            "Regression: verify_chain used client-supplied tenant_id"
+        )
 
 
 def test_forensics_disabled_returns_404(

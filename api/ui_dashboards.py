@@ -18,7 +18,7 @@ from sqlalchemy import asc, desc, func, select
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import bind_tenant_id, require_api_key_always, require_scopes
-from api.db import get_db, tenant_db_required
+from api.deps import get_db, tenant_db_required
 from api.db_models import DecisionRecord
 from api.security_audit import audit_admin_action
 from api.stats import _compute_stats, _trend_flag

@@ -21,4 +21,6 @@ def test_forensics_chain_verify_does_not_accept_tenant_id_param(app):
     assert endpoint is not None, "Route missing endpoint"
 
     names = endpoint.__code__.co_varnames[: endpoint.__code__.co_argcount]
-    assert "tenant_id" not in names, "Regression: tenant_id param reintroduced on /forensics/chain/verify"
+    assert "tenant_id" not in names, (
+        "Regression: tenant_id param reintroduced on /forensics/chain/verify"
+    )

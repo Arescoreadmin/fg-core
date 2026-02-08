@@ -2684,7 +2684,6 @@
             "schema": {
               "anyOf": [
                 {
-                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -2805,7 +2804,6 @@
             "schema": {
               "anyOf": [
                 {
-                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -2870,6 +2868,22 @@
             "required": false,
             "schema": {
               "title": " "
+            }
+          },
+          {
+            "in": "query",
+            "name": "sqlite_path",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sqlite Path"
             }
           },
           {
@@ -3411,6 +3425,234 @@
         ]
       }
     },
+    "/forensics/audit_trail/{event_id}": {
+      "get": {
+        "operationId": "audit_trail_forensics_audit_trail__event_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Audit Trail Forensics Audit Trail  Event Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Audit Trail",
+        "tags": [
+          "forensics"
+        ]
+      }
+    },
+    "/forensics/chain/verify": {
+      "get": {
+        "operationId": "chain_verify_forensics_chain_verify_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Chain Verify Forensics Chain Verify Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chain Verify",
+        "tags": [
+          "forensics"
+        ]
+      }
+    },
+    "/forensics/snapshot/{event_id}": {
+      "get": {
+        "operationId": "snapshot_forensics_snapshot__event_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Snapshot Forensics Snapshot  Event Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Snapshot",
+        "tags": [
+          "forensics"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "health_health_get",
@@ -3432,7 +3674,6 @@
     },
     "/health/detailed": {
       "get": {
-        "description": "Detailed health check with all dependency status.\n\nRequires authentication.\nReturns comprehensive health information including:\n- Database connectivity and latency\n- Redis connectivity (if configured)\n- Disk space status\n- Service uptime",
         "operationId": "health_detailed_health_detailed_get",
         "responses": {
           "200": {
@@ -3472,7 +3713,7 @@
     },
     "/health/ready": {
       "get": {
-        "description": "Kubernetes readiness probe - can the service handle traffic?\n\nINV-007: Checks ALL configured dependencies, not just DB.\nReturns 503 if any critical dependency is unhealthy.",
+        "description": "Kubernetes readiness probe - can the service handle traffic?",
         "operationId": "health_ready_health_ready_get",
         "responses": {
           "200": {
@@ -3866,7 +4107,6 @@
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 128,
                   "type": "string"
                 },
                 {
@@ -3952,7 +4192,6 @@
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 128,
                   "type": "string"
                 },
                 {
@@ -4544,7 +4783,6 @@
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 128,
                   "type": "string"
                 },
                 {
@@ -4634,7 +4872,6 @@
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 128,
                   "type": "string"
                 },
                 {
@@ -4824,7 +5061,6 @@
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 128,
                   "type": "string"
                 },
                 {
@@ -4890,7 +5126,6 @@
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 128,
                   "type": "string"
                 },
                 {
@@ -5045,6 +5280,22 @@
             "required": false,
             "schema": {
               "title": " "
+            }
+          },
+          {
+            "in": "query",
+            "name": "sqlite_path",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sqlite Path"
             }
           },
           {

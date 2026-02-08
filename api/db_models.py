@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
+
 from sqlalchemy import Column, String, text
 from sqlalchemy import JSON, Text
-
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -129,7 +129,8 @@ class SecurityAuditLog(Base):
 
 
 class DecisionRecord(Base):
-    __tablename__ = "decisions"
+    # IMPORTANT: tests + sqlite helpers insert into this table name
+    __tablename__ = "decision_records"
 
     id = Column(Integer, primary_key=True)
     created_at = Column(
@@ -150,10 +151,26 @@ class DecisionRecord(Base):
     ai_adversarial_score = Column(Float, nullable=True)
     pq_fallback = Column(Boolean, nullable=True)
 
-    rules_triggered_json = Column(JSON, nullable=False, default=list)
+    # DB-side defaults are REQUIRED because tests insert via raw sqlite and omit some columns.
+    rules_triggered_json = Column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'"),
+    )
     decision_diff_json = Column(JSON, nullable=True)
-    request_json = Column(JSON, nullable=False)
-    response_json = Column(JSON, nullable=False)
+
+    request_json = Column(
+        JSON,
+        nullable=False,
+        server_default=text("'{}'"),
+    )
+    response_json = Column(
+        JSON,
+        nullable=False,
+        server_default=text("'{}'"),
+    )
+
     prev_hash = Column(String(64), nullable=True)
     chain_hash = Column(String(64), nullable=True)
     chain_alg = Column(String(64), nullable=True)

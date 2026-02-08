@@ -15,14 +15,26 @@ concurrency:
   group: frostgate-core-ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Least-privilege defaults for the whole workflow.
+# Jobs that need more can override.
+permissions:
+  contents: read
+
 env:
   PYTHONHASHSEED: "0"
   TZ: "UTC"
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   fg_guard:
     name: Guard (paths + syntax + fg-fast)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
@@ -38,6 +50,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Detect changed paths
         id: filter
@@ -46,35 +60,35 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           filters: |
             python:
-              - '**/*.py'
-              - 'pyproject.toml'
-              - 'requirements*.txt'
-              - 'uv.lock'
-              - 'poetry.lock'
+              - "**/*.py"
+              - "pyproject.toml"
+              - "requirements*.txt"
+              - "uv.lock"
+              - "poetry.lock"
             core:
-              - 'api/**'
-              - 'engine/**'
-              - 'tests/**'
-              - 'Makefile'
-              - '.github/**'
-              - 'CONTRACT.md'
-              - 'README.md'
-              - 'policy/**'
-              - 'migrations/**'
-              - 'scripts/**'
+              - "api/**"
+              - "engine/**"
+              - "tests/**"
+              - "Makefile"
+              - ".github/**"
+              - "CONTRACT.md"
+              - "README.md"
+              - "policy/**"
+              - "migrations/**"
+              - "scripts/**"
             console:
-              - 'console/**'
-              - 'package.json'
-              - 'package-lock.json'
-              - '.github/**'
+              - "console/**"
+              - "package.json"
+              - "package-lock.json"
+              - ".github/**"
             compliance:
-              - 'compliance/**'
-              - 'Makefile'
-              - '.github/**'
-              - 'pyproject.toml'
-              - 'requirements*.txt'
-              - 'uv.lock'
-              - 'poetry.lock'
+              - "compliance/**"
+              - "Makefile"
+              - ".github/**"
+              - "pyproject.toml"
+              - "requirements*.txt"
+              - "uv.lock"
+              - "poetry.lock"
 
       - name: Generate CI secrets
         uses: ./.github/actions/fg-secrets
@@ -111,8 +125,11 @@ jobs:
   unit:
     name: Unit (ci)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     needs: fg_guard
     if: ${{ github.event_name == 'pull_request' || needs.fg_guard.outputs.core == 'true' || needs.fg_guard.outputs.python == 'true' }}
+    permissions:
+      contents: read
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
@@ -122,6 +139,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Generate CI secrets
         uses: ./.github/actions/fg-secrets
@@ -161,8 +180,11 @@ jobs:
   integration:
     name: Integration (itest-local)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     needs: unit
     if: ${{ always() && needs.unit.result == 'success' }}
+    permissions:
+      contents: read
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
@@ -175,6 +197,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Generate CI secrets
         uses: ./.github/actions/fg-secrets
@@ -209,8 +233,11 @@ jobs:
   db_postgres_verify:
     name: DB Postgres Verify
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     needs: fg_guard
     if: ${{ github.event_name == 'pull_request' || needs.fg_guard.outputs.core == 'true' || needs.fg_guard.outputs.python == 'true' }}
+    permissions:
+      contents: read
     env:
       FG_ENV: test
       FG_DB_BACKEND: postgres
@@ -222,6 +249,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Python setup (cached)
         uses: ./.github/actions/fg-python-setup
@@ -233,6 +262,7 @@ jobs:
 
       - name: Create .env for compose
         run: |
+          set -euo pipefail
           printf "POSTGRES_USER=%s\nPOSTGRES_DB=%s\nPOSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nFG_AGENT_API_KEY=%s\nAG_CORS_ORIGINS=%s\n" \
             "${POSTGRES_USER}" "${POSTGRES_DB}" "${POSTGRES_PASSWORD}" "devredis" "dev-agent-key" "http://localhost:13000" > .env
 
@@ -242,8 +272,11 @@ jobs:
   admin:
     name: Admin Gateway (ci-admin)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: fg_guard
     if: ${{ github.event_name == 'pull_request' || needs.fg_guard.outputs.core == 'true' || needs.fg_guard.outputs.python == 'true' }}
+    permissions:
+      contents: read
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
@@ -251,6 +284,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - name: Generate CI secrets
         uses: ./.github/actions/fg-secrets
       - name: Python setup (cached)
@@ -270,12 +305,17 @@ jobs:
   console:
     name: Console (ci-console)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: fg_guard
     if: ${{ github.event_name == 'pull_request' || needs.fg_guard.outputs.console == 'true' }}
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Set up Node (cached)
         uses: actions/setup-node@v4
@@ -295,8 +335,11 @@ jobs:
   pt:
     name: PT (ci-pt)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     needs: fg_guard
     if: ${{ github.event_name == 'pull_request' || needs.fg_guard.outputs.core == 'true' || needs.fg_guard.outputs.python == 'true' }}
+    permissions:
+      contents: read
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
@@ -304,6 +347,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - name: Generate CI secrets
         uses: ./.github/actions/fg-secrets
       - name: Python setup (cached)
@@ -323,8 +368,11 @@ jobs:
   hardening:
     name: Hardening Gates (ci-hardening)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     needs: fg_guard
     if: ${{ github.event_name == 'pull_request' || needs.fg_guard.outputs.core == 'true' || needs.fg_guard.outputs.python == 'true' }}
+    permissions:
+      contents: read
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
@@ -332,6 +380,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - name: Generate CI secrets
         uses: ./.github/actions/fg-secrets
       - name: Python setup (cached)
@@ -351,6 +401,11 @@ jobs:
 
       - name: Syntax / import guard (fast fail)
         run: python -m compileall -q api engine tests
+
+      # ✅ Added: explicit security regression lane (your request)
+      - name: Security regression tests
+        run: pytest tests/security -q
+
       - name: Run Hardening Tests - Decision Pipeline Unity
         run: make test-decision-unified
       - name: Run Hardening Tests - Tenant Isolation
@@ -361,8 +416,11 @@ jobs:
   compliance:
     name: Compliance Gates
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     needs: fg_guard
     if: ${{ github.event_name == 'pull_request' || needs.fg_guard.outputs.compliance == 'true' }}
+    permissions:
+      contents: read
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
@@ -370,6 +428,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Generate CI secrets
         uses: ./.github/actions/fg-secrets
@@ -399,6 +459,7 @@ jobs:
 
       - name: Verify Compliance Artifacts
         run: |
+          set -euo pipefail
           test -f artifacts/sbom.json || (echo "SBOM missing" && exit 1)
           test -f artifacts/provenance.json || (echo "Provenance missing" && exit 1)
           test -f artifacts/cis_check.json || (echo "CIS check missing" && exit 1)
@@ -420,8 +481,11 @@ jobs:
   evidence:
     name: Evidence (ci-evidence)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: integration
     if: ${{ always() && needs.integration.result == 'success' }}
+    permissions:
+      contents: read
     env:
       FG_ENV: dev
       FG_AUTH_ENABLED: "1"
@@ -431,12 +495,12 @@ jobs:
       ITEST_PORT: 8001
       ITEST_WIPE_DB: "1"
       SCENARIO: spike
-      MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
-      MINISIGN_PUBLIC_KEY: ${{ secrets.MINISIGN_PUBLIC_KEY }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Generate CI secrets
         uses: ./.github/actions/fg-secrets
@@ -458,20 +522,34 @@ jobs:
       - name: Run evidence lane (server + smoke + evidence)
         run: make ci-evidence
 
+      - name: Install minisign (for signature verification)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends minisign
+          minisign -V || true
+
       - name: Verify signature
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY || '' }}
+          MINISIGN_PUBLIC_KEY: ${{ secrets.MINISIGN_PUBLIC_KEY || '' }}
         run: |
           set -euo pipefail
           out="$(cat artifacts/latest_evidence_dir.txt)"
 
+          # If minisig missing:
+          # - On PRs (no secret key), we skip (expected for forks).
+          # - If secret key exists but minisig is missing, fail hard.
           if [ ! -f "$out/manifest.sha256.minisig" ]; then
             if [ -z "${MINISIGN_SECRET_KEY:-}" ]; then
-              echo "⚠️ Skipping signature verification: MINISIGN_SECRET_KEY not available (expected for PRs)"
+              echo "⚠️ Skipping signature verification: MINISIGN_SECRET_KEY not available (expected for PRs/forks)"
               exit 0
             fi
             echo "❌ missing minisig (but MINISIGN_SECRET_KEY was set)"
             exit 1
           fi
 
+          # Prefer repo key if present, else fall back to secret public key
           if [ -f keys/minisign.pub ]; then
             PUB="$(cat keys/minisign.pub)"
           else
@@ -494,4 +572,3 @@ jobs:
             artifacts/**
             state/**
           if-no-files-found: error
-

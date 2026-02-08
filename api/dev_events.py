@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_scopes
-from api.db import tenant_db
+from api.deps import tenant_db
 from api.db_models import DecisionRecord
 from api.evidence_chain import chain_fields_for_decision
 from api.evidence_artifacts import emit_decision_evidence
