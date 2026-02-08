@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import json
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Optional
 
 from sqlalchemy import desc
@@ -25,6 +25,23 @@ def _canonical_json_bytes(obj: Any) -> bytes:
     return json.dumps(
         obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False
     ).encode("utf-8")
+
+
+def _normalize_ts(ts: datetime) -> datetime:
+    """
+    Normalize timestamps so hashing is stable across DB backends.
+
+    Problem we must solve:
+      - SQLite often returns naive datetimes even if tz-aware was inserted.
+      - dt.isoformat() differs between naive and aware, breaking hashes.
+
+    Policy:
+      - Naive => assume UTC
+      - Aware => convert to UTC
+    """
+    if ts.tzinfo is None:
+        return ts.replace(tzinfo=UTC)
+    return ts.astimezone(UTC)
 
 
 def _sanitize_hashish(value: Any) -> Optional[str]:
@@ -75,14 +92,17 @@ def build_chain_payload(
 ) -> dict[str, Any]:
     """
     Canonical payload used for chain hashing.
-    NOTE: prev_hash is NOT inside the payload; it is chained externally.
-    This matches tests + avoids duplicating prev_hash in the hash input.
+
+    NOTE:
+      - prev_hash is NOT inside the payload; it is chained externally.
+      - chain_ts is normalized to UTC so hashes are stable across backends.
     """
+    ts = _normalize_ts(chain_ts)
     return {
         "alg": chain_alg,
         "tenant_id": tenant_id,
         "event_id": event_id,
-        "chain_ts": chain_ts.isoformat(),
+        "chain_ts": ts.isoformat(),
         "threat_level": threat_level,
         "request_json": request_json,
         "response_json": response_json,
@@ -207,10 +227,20 @@ def verify_chain_for_tenant(
                 ),
             }
 
+        ts = rec.chain_ts or rec.created_at
+        if ts is None:
+            # fail closed: missing time breaks canonical payload.
+            return {
+                "ok": False,
+                "checked": checked,
+                "first_bad_id": rec.id,
+                "reason": "missing_chain_ts",
+            }
+
         payload = build_chain_payload(
             tenant_id=rec.tenant_id,
             event_id=str(getattr(rec, "event_id", "")),
-            chain_ts=rec.chain_ts or rec.created_at,
+            chain_ts=ts,
             threat_level=rec.threat_level,
             request_json=rec.request_json,
             response_json=rec.response_json,
