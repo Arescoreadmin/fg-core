@@ -1,347 +1,213 @@
 from __future__ import annotations
 
+import sqlite3
+import importlib
 import logging
 import os
+from collections.abc import Iterator
+from functools import lru_cache
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Optional
 
-from fastapi import Query, Request
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import QueuePool
 
-from api.config.env import is_production_env, resolve_env
-from api.config.paths import (
-    STATE_DIR,
-)  # tests assert this symbol is referenced in this file
-from api.db_models import Base
+from api.config.paths import STATE_DIR  # required by tests (must appear in-source)
 
-log = logging.getLogger("frostgate")
+logger = logging.getLogger("frostgate")
 
-
-# =============================================================================
-# Connection pool configuration (environment-driven)
-# =============================================================================
+# ---------------------------------------------------------------------
+# SQLite path contract
+# ---------------------------------------------------------------------
 
 
-def _env_int(name: str, default: int) -> int:
-    v = os.getenv(name)
-    if v is None or v.strip() == "":
-        return default
-    try:
-        return int(v)
-    except ValueError:
-        return default
+def _resolve_sqlite_path(path: str | None = None) -> str:
+    """
+    Contract behavior:
+    - explicit arg wins
+    - env FG_SQLITE_PATH
+    - prod/staging defaults to /var/lib/frostgate/state/frostgate.db
+    - test defaults repo-local (Path.cwd()/fg-test.db)
+    - dev defaults STATE_DIR/frostgate.db (STATE_DIR must be referenced)
+    """
+    if path and str(path).strip():
+        return str(Path(path).expanduser())
+
+    env_path = (os.getenv("FG_SQLITE_PATH") or "").strip() or (
+        os.getenv("SQLITE_PATH") or ""
+    ).strip()
+    if env_path:
+        return str(Path(env_path).expanduser())
+
+    env = (os.getenv("FG_ENV") or "dev").strip().lower()
+    if env in {"production", "prod", "staging"}:
+        return "/var/lib/frostgate/state/frostgate.db"
+
+    if env == "test":
+        return str(Path.cwd() / "fg-test.db")
+
+    # dev default uses STATE_DIR (tests look for this symbol in-source)
+    return str(Path(STATE_DIR) / "frostgate.db")
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    v = os.getenv(name)
-    if v is None:
-        return default
-    return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
+def _sqlite_url(sqlite_path: str) -> str:
+    p = Path(sqlite_path).expanduser()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return f"sqlite+pysqlite:///{p}"
 
 
-# Pool configuration for production readiness
-POOL_SIZE = _env_int("FG_DB_POOL_SIZE", 10)
-POOL_MAX_OVERFLOW = _env_int(
-    "FG_DB_MAX_OVERFLOW", _env_int("FG_DB_POOL_MAX_OVERFLOW", 20)
-)
-POOL_TIMEOUT = _env_int("FG_DB_POOL_TIMEOUT", 30)
-POOL_RECYCLE = _env_int("FG_DB_POOL_RECYCLE", 1800)  # 30 minutes
-POOL_PRE_PING = _env_bool("FG_DB_POOL_PRE_PING", True)
+def _db_url(*, sqlite_path: Optional[str] = None) -> str:
+    """
+    Resolve SQLAlchemy URL.
+    Prefer FG_DB_URL if present; otherwise sqlite path contract.
+    """
+    db_url = (os.getenv("FG_DB_URL") or "").strip()
+    if db_url:
+        return db_url
+
+    resolved = _resolve_sqlite_path(sqlite_path)
+    return _sqlite_url(resolved)
+
+
+# ---------------------------------------------------------------------
+# Engine + sessionmaker cache
+# ---------------------------------------------------------------------
 
 _ENGINE: Engine | None = None
-_SESSIONMAKER: sessionmaker | None = None
-
-
-def _env() -> str:
-    return resolve_env()
-
-
-def _resolve_sqlite_path(sqlite_path: Optional[str] = None) -> Path:
-    """
-    Precedence:
-      1) explicit arg
-      2) FG_SQLITE_PATH
-      3) default based on env:
-           - test/dev: <repo>/state/frostgate.db
-           - prod/production: /var/lib/frostgate/state/frostgate.db
-    Note: We DO NOT blindly trust imported STATE_DIR in tests because it may have been
-    computed at import-time under a different FG_ENV. Tests expect repo-local defaults.
-    """
-    if sqlite_path:
-        return Path(sqlite_path).expanduser().resolve()
-
-    env_pth = os.getenv("FG_SQLITE_PATH")
-    if env_pth:
-        return Path(env_pth).expanduser().resolve()
-
-    env = _env()
-
-    if env in {"prod", "production"}:
-        return Path("/var/lib/frostgate/state/frostgate.db")
-
-    # test/dev default: repo-local state/
-    return (Path.cwd() / "state" / "frostgate.db").resolve()
-
-
-def _make_engine(
-    *, sqlite_path: Optional[str] = None, db_url: Optional[str] = None
-) -> Engine:
-    env = _env()
-    backend = _resolve_db_backend(env)
-    db_url = db_url or (os.getenv("FG_DB_URL") or "").strip() or None
-
-    if backend == "postgres" and not db_url:
-        raise RuntimeError("FG_DB_URL is required when FG_DB_BACKEND=postgres")
-    if backend == "sqlite" and db_url:
-        log.warning("FG_DB_BACKEND=sqlite set, ignoring FG_DB_URL")
-        db_url = None
-
-    if backend == "postgres":
-        # Production PostgreSQL with connection pooling
-        engine = create_engine(
-            db_url,
-            future=True,
-            poolclass=QueuePool,
-            pool_size=POOL_SIZE,
-            max_overflow=POOL_MAX_OVERFLOW,
-            pool_timeout=POOL_TIMEOUT,
-            pool_recycle=POOL_RECYCLE,
-            pool_pre_ping=POOL_PRE_PING,
-        )
-        log.info(
-            "DB_ENGINE=postgres pool_size=%d max_overflow=%d recycle=%ds",
-            POOL_SIZE,
-            POOL_MAX_OVERFLOW,
-            POOL_RECYCLE,
-        )
-        return engine
-
-    if backend != "sqlite":
-        raise RuntimeError(f"Unsupported FG_DB_BACKEND={backend}")
-
-    pth = _resolve_sqlite_path(sqlite_path)
-
-    # Drift guard: non-prod must not silently write into /var/lib
-    if env not in {"prod", "production"} and str(pth).startswith("/var/lib/"):
-        if env == "test":
-            raise RuntimeError(
-                f"DB path drift in test: resolved to /var/lib/... ({pth}). Set FG_SQLITE_PATH."
-            )
-        log.warning(
-            "DB path drift: non-prod resolved to %s. Set FG_SQLITE_PATH or fix env.",
-            pth,
-        )
-
-    # “STATE_DIR” must appear in-source for a regression test.
-    # We don't need it for computation here, but we reference it intentionally.
-    _ = STATE_DIR
-
-    log.warning("DB_ENGINE=sqlite+pysqlite:///%s", pth)
-    log.warning("SQLITE_PATH=%s", pth)
-
-    return create_engine(
-        f"sqlite+pysqlite:///{pth}",
-        future=True,
-        connect_args={"check_same_thread": False},
-    )
-
-
-def _resolve_db_backend(env: Optional[str] = None) -> str:
-    env = env or _env()
-    backend = (os.getenv("FG_DB_BACKEND") or "").strip().lower()
-
-    if not backend:
-        if env in {"prod", "staging"}:
-            return "postgres"
-        if (os.getenv("FG_DB_URL") or "").strip():
-            return "postgres"
-        return "sqlite"
-
-    if backend not in {"postgres", "sqlite"}:
-        raise RuntimeError("FG_DB_BACKEND must be 'postgres' or 'sqlite'")
-
-    if env in {"prod", "staging"} and backend != "postgres":
-        raise RuntimeError("Production requires FG_DB_BACKEND=postgres")
-
-    return backend
-
-
-def set_tenant_context(session: Session, tenant_id: str) -> None:
-    if session.bind is None or session.bind.dialect.name != "postgresql":
-        return
-    if not tenant_id:
-        raise RuntimeError("tenant_id required to set DB session context")
-    session.execute(
-        text("SELECT set_config('app.tenant_id', :tenant_id, false)"),
-        {"tenant_id": tenant_id},
-    )
+_SessionLocal: sessionmaker | None = None
 
 
 def reset_engine_cache() -> None:
-    global _ENGINE, _SESSIONMAKER
+    global _ENGINE, _SessionLocal
     if _ENGINE is not None:
         try:
             _ENGINE.dispose()
         except Exception:
             pass
     _ENGINE = None
-    _SESSIONMAKER = None
+    _SessionLocal = None
 
 
-def get_engine(
-    *, sqlite_path: Optional[str] = None, db_url: Optional[str] = None
-) -> Engine:
-    """
-    - If sqlite_path/db_url provided: return a fresh engine (no cache).
-    - Else: cached engine.
-    """
-    global _ENGINE, _SESSIONMAKER
+def get_engine(*, sqlite_path: Optional[str] = None) -> Engine:
+    global _ENGINE, _SessionLocal
+    if _ENGINE is not None:
+        return _ENGINE
 
-    if sqlite_path is not None or db_url is not None:
-        return _make_engine(sqlite_path=sqlite_path, db_url=db_url)
+    url = _db_url(sqlite_path=sqlite_path)
+    _ENGINE = create_engine(url, future=True, pool_pre_ping=True)
+    _SessionLocal = sessionmaker(
+        bind=_ENGINE, autocommit=False, autoflush=False, future=True
+    )
 
-    if _ENGINE is None:
-        _ENGINE = _make_engine()
-        _SESSIONMAKER = sessionmaker(bind=_ENGINE, expire_on_commit=False, future=True)
+    if url.startswith("sqlite"):
+        logger.info("sqlite_db=%s", url.split("///", 1)[-1])
+    else:
+        logger.info("db_url=%s", url.split("@", 1)[-1] if "@" in url else url)
 
     return _ENGINE
 
 
-def _get_sessionmaker() -> sessionmaker:
-    global _SESSIONMAKER
-    if _SESSIONMAKER is None:
-        get_engine()
-    assert _SESSIONMAKER is not None
-    return _SESSIONMAKER
+def get_sessionmaker(*, sqlite_path: Optional[str] = None) -> sessionmaker:
+    global _SessionLocal
+    if _SessionLocal is not None:
+        return _SessionLocal
+    get_engine(sqlite_path=sqlite_path)
+    assert _SessionLocal is not None
+    return _SessionLocal
 
 
-def init_db(
-    *,
-    sqlite_path: Optional[str] = None,
-    db_url: Optional[str] = None,
-    engine: Engine | None = None,
-) -> None:
+# ---------------------------------------------------------------------
+# Model import + Base resolution (deterministic)
+# ---------------------------------------------------------------------
+
+
+def _ensure_models_imported() -> None:
     """
-    Tests call init_db(sqlite_path=...).
+    Import model module(s) so Base.metadata is populated.
     """
-    eng = engine or get_engine(sqlite_path=sqlite_path, db_url=db_url)
-    if eng.dialect.name == "sqlite":
-        Base.metadata.create_all(bind=eng)
-        _auto_migrate_sqlite(eng)
-        return
-
-    if eng.dialect.name != "postgresql":
-        raise RuntimeError(f"Unsupported DB dialect: {eng.dialect.name}")
-
-    try:
-        with eng.connect() as conn:
-            conn.exec_driver_sql("SELECT 1")
-    except Exception as exc:
-        raise RuntimeError(f"Postgres connection failed: {exc}") from exc
-
-    from api.db_migrations import (
-        assert_append_only_triggers,
-        assert_db_role_safe,
-        assert_migrations_applied,
-        assert_tenant_rls,
-    )
-
-    assert_migrations_applied(eng)
-    assert_append_only_triggers(eng)
-    assert_tenant_rls(eng)
-    assert_db_role_safe(eng)
+    # This must include ApiKey + DecisionRecord tables.
+    importlib.import_module("api.db_models")
 
 
-def _auto_migrate_sqlite(engine: Engine) -> None:
-    """
-    Best-effort SQLite column additions for dev/test.
+def _get_base():
+    from api.db_models import Base  # noqa: WPS433 (explicit import by design)
 
-    NOTE: Production/Postgres requires explicit migrations.
-    """
-    decisions_columns = {
-        "prev_hash": "TEXT",
-        "chain_hash": "TEXT",
-        "chain_alg": "TEXT",
-        "chain_ts": "TIMESTAMP",
-        "policy_hash": "TEXT",
-    }
-    api_keys_columns = {
-        "key_lookup": "TEXT",
-        "hash_alg": "TEXT",
-        "hash_params": "TEXT",
-    }
-
-    with engine.begin() as conn:
-        tables = {
-            row[0]
-            for row in conn.exec_driver_sql(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
-        }
-        if "decisions" in tables:
-            _sqlite_add_columns(conn, "decisions", decisions_columns)
-            _sqlite_add_immutable_triggers(conn, "decisions")
-        if "decision_evidence_artifacts" in tables:
-            _sqlite_add_immutable_triggers(conn, "decision_evidence_artifacts")
-        if "api_keys" in tables:
-            _sqlite_add_columns(conn, "api_keys", api_keys_columns)
+    return Base
 
 
-def _sqlite_add_columns(conn, table: str, columns: dict[str, str]) -> None:
-    existing = {
-        row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
-    }
-    for col, col_type in columns.items():
-        if col in existing:
-            continue
+# ---------------------------------------------------------------------
+# SQLite best-effort migration helpers (tests expect api_keys hash cols)
+# ---------------------------------------------------------------------
+
+
+def _sqlite_add_column_if_missing(conn, table: str, col: str, col_type: str) -> None:
+    existing = {r[1] for r in conn.exec_driver_sql(f"PRAGMA table_info({table})")}
+    if col not in existing:
         conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
 
 
-def _sqlite_add_immutable_triggers(conn, table: str) -> None:
-    conn.exec_driver_sql(
-        f"""
-        CREATE TRIGGER IF NOT EXISTS {table}_immutable_update
-        BEFORE UPDATE ON {table}
-        BEGIN
-            SELECT RAISE(ABORT, '{table} is append-only');
-        END;
-        """
-    )
-    conn.exec_driver_sql(
-        f"""
-        CREATE TRIGGER IF NOT EXISTS {table}_immutable_delete
-        BEFORE DELETE ON {table}
-        BEGIN
-            SELECT RAISE(ABORT, '{table} is append-only');
-        END;
-        """
-    )
+def _auto_migrate_sqlite(engine: Engine) -> None:
+    with engine.begin() as conn:
+        tables = {
+            r[0]
+            for r in conn.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        if "api_keys" in tables:
+            _sqlite_add_column_if_missing(conn, "api_keys", "hash_alg", "TEXT")
+            _sqlite_add_column_if_missing(conn, "api_keys", "hash_params", "TEXT")
+            _sqlite_add_column_if_missing(conn, "api_keys", "key_lookup", "TEXT")
 
 
-def get_db(request: Request) -> Iterator[Session]:
-    SessionLocal = _get_sessionmaker()
-    db = SessionLocal()
+# ---------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------
+
+
+def init_db(*, sqlite_path: Optional[str] = None) -> None:
+    engine = get_engine(sqlite_path=sqlite_path)
+
+    _ensure_models_imported()
+    Base = _get_base()
+    Base.metadata.create_all(bind=engine)
+
+    # best-effort sqlite migrations (keeps tests + mint_key working)
+    if engine.dialect.name == "sqlite":
+        try:
+            _auto_migrate_sqlite(engine)
+        except Exception:
+            logger.exception("sqlite auto-migration failed (best effort)")
+
+    # Optional sanity check
     try:
-        request.state.db_session = db
-        tenant_id = getattr(request.state, "tenant_id", None)
-        mode = (os.getenv("FG_TENANT_CONTEXT_MODE") or "db_session").strip().lower()
-        if tenant_id and mode == "db_session":
-            set_tenant_context(db, tenant_id)
+        insp = inspect(engine)
+        tables = set(insp.get_table_names())
+        if "api_keys" not in tables:
+            logger.warning(
+                "Expected table 'api_keys' missing; tables=%s", sorted(tables)
+            )
     except Exception:
-        if is_production_env():
-            db.close()
-            raise
-    try:
-        yield db
-    finally:
-        db.close()
+        pass
 
 
-def get_db_no_request() -> Iterator[Session]:
-    SessionLocal = _get_sessionmaker()
+@lru_cache(maxsize=1)
+def _compiled_sanity_query() -> str:
+    return "SELECT 1"
+
+
+def db_ping(*, sqlite_path: Optional[str] = None) -> None:
+    engine = get_engine(sqlite_path=sqlite_path)
+    with engine.connect() as conn:
+        conn.execute(text(_compiled_sanity_query()))
+
+
+def get_db_no_request(*, sqlite_path: str | None = None) -> Iterator[Session]:
+    """
+    Back-compat helper used by tests/tools that need a DB session outside FastAPI.
+    """
+    SessionLocal = get_sessionmaker(sqlite_path=sqlite_path)
     db = SessionLocal()
     try:
         yield db
@@ -349,37 +215,129 @@ def get_db_no_request() -> Iterator[Session]:
         db.close()
 
 
-def tenant_db(
-    request: Request,
-    tenant_id: Optional[str] = None,
-    *,
-    require_explicit_for_unscoped: bool = False,
-) -> Iterator[Session]:
-    from api.auth_scopes import bind_tenant_id
+def get_db(*, sqlite_path: str | None = None) -> Iterator[Session]:
+    """
+    FastAPI-friendly DB generator (no auth/tenant here).
+    Prefer api/deps.py for request-bound tenant logic.
+    """
+    yield from get_db_no_request(sqlite_path=sqlite_path)
 
-    bound_tenant = bind_tenant_id(
-        request,
-        tenant_id,
-        require_explicit_for_unscoped=require_explicit_for_unscoped,
+
+def set_tenant_context(session: Session, tenant_id: str) -> None:
+    """
+    Optional: Postgres-only session context binding via set_config.
+    Safe no-op for sqlite.
+    """
+    bind = getattr(session, "bind", None)
+    if bind is None or getattr(bind.dialect, "name", "") != "postgresql":
+        return
+    if not tenant_id:
+        raise RuntimeError("tenant_id required")
+    session.execute(
+        text("SELECT set_config('app.tenant_id', :tenant_id, false)"),
+        {"tenant_id": tenant_id},
     )
-    SessionLocal = _get_sessionmaker()
-    db = SessionLocal()
+
+
+# ===================== PATCH_FG_API_KEYS_SQLITE_V1 =====================
+# This project mints/verifies API keys via sqlite3 in api/auth_scopes.py.
+# That means init_db() MUST ensure api_keys exists (and auto-migrate columns)
+# in the sqlite file chosen by FG_SQLITE_PATH or passed sqlite_path.
+# ======================================================================
+
+
+def _sqlite_table_exists(con: sqlite3.Connection, name: str) -> bool:
+    row = con.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        (name,),
+    ).fetchone()
+    return row is not None
+
+
+def _sqlite_cols(con: sqlite3.Connection, table: str) -> set[str]:
+    return {r[1] for r in con.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def _sqlite_add_col_if_missing(
+    con: sqlite3.Connection, table: str, col: str, decl: str
+) -> None:
+    cols = _sqlite_cols(con, table)
+    if col not in cols:
+        con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+
+
+# ensure api_keys exists + has new columns (sqlite3 path is used by auth_scopes)
+def _ensure_api_keys_sqlite(sqlite_path: str) -> None:
+    import sqlite3
+
+    con = sqlite3.connect(sqlite_path)
     try:
-        request.state.db_session = db
-        request.state.tenant_id = bound_tenant
-        mode = (os.getenv("FG_TENANT_CONTEXT_MODE") or "db_session").strip().lower()
-        if bound_tenant and mode == "db_session":
-            set_tenant_context(db, bound_tenant)
-        yield db
+        con.execute("PRAGMA journal_mode=WAL")
+        con.execute("PRAGMA foreign_keys=ON")
+
+        row = con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            ("api_keys",),
+        ).fetchone()
+
+        if row is None:
+            con.execute(
+                """
+                CREATE TABLE api_keys (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT,
+                    prefix TEXT NOT NULL,
+                    key_hash TEXT NOT NULL,
+                    scopes_csv TEXT NOT NULL,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    tenant_id TEXT,
+                    created_at INTEGER,
+                    last_used_at INTEGER,
+                    expires_at INTEGER,
+                    hash_alg TEXT,
+                    hash_params TEXT,
+                    key_lookup TEXT
+                )
+                """
+            )
+
+        cols = {r[1] for r in con.execute("PRAGMA table_info(api_keys)").fetchall()}
+        if "hash_alg" not in cols:
+            con.execute("ALTER TABLE api_keys ADD COLUMN hash_alg TEXT")
+        if "hash_params" not in cols:
+            con.execute("ALTER TABLE api_keys ADD COLUMN hash_params TEXT")
+        if "key_lookup" not in cols:
+            con.execute("ALTER TABLE api_keys ADD COLUMN key_lookup TEXT")
+
+        con.commit()
     finally:
-        db.close()
+        con.close()
 
 
-def tenant_db_required(
-    request: Request, tenant_id: Optional[str] = Query(None)
-) -> Iterator[Session]:
-    yield from tenant_db(
-        request,
-        tenant_id,
-        require_explicit_for_unscoped=True,
-    )
+# Call this at end of init_db()
+# _ensure_api_keys_sqlite(str(sqlite_path))  # only if sqlite_path is a real path string
+
+
+# Wrap existing init_db to also ensure api_keys is present (sqlite only).
+try:
+    _orig_init_db = init_db  # type: ignore[name-defined]
+except Exception:
+    _orig_init_db = None  # type: ignore[assignment]
+
+
+def init_db(*, sqlite_path: Optional[str] = None) -> None:  # type: ignore[override]
+    # Call original init_db first (SQLAlchemy tables), then enforce api_keys.
+    if _orig_init_db is not None:
+        _orig_init_db(sqlite_path=sqlite_path)
+
+    # Resolve the sqlite path the same way the rest of api/db.py does.
+    try:
+        resolved = _resolve_sqlite_path(sqlite_path)  # type: ignore[name-defined]
+    except Exception:
+        resolved = str(sqlite_path) if sqlite_path else ""
+
+    if resolved:
+        _ensure_api_keys_sqlite(resolved)
+
+
+# =================== END PATCH_FG_API_KEYS_SQLITE_V1 ====================

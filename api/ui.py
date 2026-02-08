@@ -839,7 +839,7 @@ async function ensureCsrf() {
 
 async function verifyChain() {
   const tenant = tenantParam();
-  const resp = await fetch(`/ui/forensics/chain/verify?tenant_id=${encodeURIComponent(tenant)}`);
+  const resp = await fetch(`/ui/forensics/chain/verify`)
   if (!resp.ok) return;
   const data = await resp.json();
   verifyStatus.textContent = `Status: ${data.status}`;

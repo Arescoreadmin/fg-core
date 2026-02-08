@@ -18,7 +18,7 @@ from sqlalchemy import asc, desc, func, select
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import bind_tenant_id, require_api_key_always, require_scopes
-from api.db import get_db, tenant_db_required
+from api.deps import get_db, tenant_db_required
 from api.db_models import DecisionRecord
 from api.security_audit import audit_admin_action
 from api.stats import _compute_stats, _trend_flag
@@ -226,7 +226,11 @@ def _cleanup_packets() -> None:
 def _ensure_csrf(request: Request) -> None:
     token = request.headers.get(CSRF_HEADER_NAME)
     cookie = request.cookies.get(CSRF_COOKIE_NAME)
-    if not token or not cookie or not hmac.compare_digest(token, cookie):
+    if (
+        not isinstance(token, str)
+        or not isinstance(cookie, str)
+        or not hmac.compare_digest(token, cookie)
+    ):
         raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
 
 
@@ -862,8 +866,14 @@ async def ui_audit_packet_download(
     if not packet_dir.exists():
         raise HTTPException(status_code=404, detail="Packet not found")
     token_path = packet_dir / "token.txt"
-    if not token_path.exists() or not hmac.compare_digest(
-        token_path.read_text(encoding="utf-8").strip(), token
+    file_token = (
+        token_path.read_text(encoding="utf-8").strip() if token_path.exists() else None
+    )
+    if (
+        not token_path.exists()
+        or not isinstance(token, str)
+        or not isinstance(file_token, str)
+        or not hmac.compare_digest(file_token, token)
     ):
         raise HTTPException(status_code=403, detail="Invalid token")
     meta_path = _packet_metadata_path(packet_dir)

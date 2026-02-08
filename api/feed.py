@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_scopes
-from api.db import tenant_db_required
+from api.deps import tenant_db_required
 from api.db_models import DecisionRecord
 from api.decisions import _loads_json_text
 from api.ratelimit import rate_limit_guard

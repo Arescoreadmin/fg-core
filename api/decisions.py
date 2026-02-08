@@ -11,7 +11,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_scopes
-from api.db import tenant_db_required
+from api.deps import tenant_db_required
 from api.db_models import DecisionRecord
 
 log = logging.getLogger("frostgate.decisions")

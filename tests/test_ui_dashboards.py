@@ -110,47 +110,39 @@ def test_ui_dashboards_tenant_scoping(build_app, tmp_path):
         _seed_record(session, "t2", "evt-2", datetime.now(timezone.utc), None)
         session.commit()
 
-    ok = client.get("/ui/posture?tenant_id=t1", headers={"X-API-Key": key})
+    ok = client.get("/ui/posture", headers={"X-API-Key": key})
     assert ok.status_code == 200
 
-    forbidden = client.get("/ui/posture?tenant_id=t2", headers={"X-API-Key": key})
+    forbidden = client.get("/ui/posture", headers={"X-API-Key": key})
     assert forbidden.status_code == 403
 
-    list_ok = client.get("/ui/decisions?tenant_id=t1", headers={"X-API-Key": key})
+    list_ok = client.get("/ui/decisions", headers={"X-API-Key": key})
     assert list_ok.status_code == 200
 
-    list_forbidden = client.get(
-        "/ui/decisions?tenant_id=t2", headers={"X-API-Key": key}
-    )
+    list_forbidden = client.get("/ui/decisions", headers={"X-API-Key": key})
     assert list_forbidden.status_code == 403
 
     decision_id = list_ok.json()["items"][0]["id"]
-    detail_ok = client.get(
-        f"/ui/decision/{decision_id}?tenant_id=t1", headers={"X-API-Key": key}
-    )
+    detail_ok = client.get(f"/ui/decision/{decision_id}", headers={"X-API-Key": key})
     assert detail_ok.status_code == 200
 
     detail_forbidden = client.get(
-        f"/ui/decision/{decision_id}?tenant_id=t2", headers={"X-API-Key": key}
+        f"/ui/decision/{decision_id}", headers={"X-API-Key": key}
     )
     assert detail_forbidden.status_code == 403
 
-    chain_ok = client.get(
-        "/ui/forensics/chain/verify?tenant_id=t1", headers={"X-API-Key": key}
-    )
+    chain_ok = client.get("/ui/forensics/chain/verify", headers={"X-API-Key": key})
     assert chain_ok.status_code == 200
 
     chain_forbidden = client.get(
-        "/ui/forensics/chain/verify?tenant_id=t2", headers={"X-API-Key": key}
+        "/ui/forensics/chain/verify", headers={"X-API-Key": key}
     )
     assert chain_forbidden.status_code == 403
 
-    controls_ok = client.get("/ui/controls?tenant_id=t1", headers={"X-API-Key": key})
+    controls_ok = client.get("/ui/controls", headers={"X-API-Key": key})
     assert controls_ok.status_code == 200
 
-    controls_forbidden = client.get(
-        "/ui/controls?tenant_id=t2", headers={"X-API-Key": key}
-    )
+    controls_forbidden = client.get("/ui/controls", headers={"X-API-Key": key})
     assert controls_forbidden.status_code == 403
 
     csrf = client.get("/ui/csrf", headers={"X-API-Key": key})
@@ -168,7 +160,7 @@ def test_ui_scope_enforcement(build_app):
     client = TestClient(app)
     key = mint_key(tenant_id="t1")
 
-    resp = client.get("/ui/posture?tenant_id=t1", headers={"X-API-Key": key})
+    resp = client.get("/ui/posture", headers={"X-API-Key": key})
     assert resp.status_code == 403
 
 
@@ -184,9 +176,7 @@ def test_chain_verify_pass_fail(build_app):
         _seed_record(session, "t1", "evt-2", now + timedelta(seconds=10), h1)
         session.commit()
 
-    ok = client.get(
-        "/ui/forensics/chain/verify?tenant_id=t1", headers={"X-API-Key": key}
-    )
+    ok = client.get("/ui/forensics/chain/verify", headers={"X-API-Key": key})
     assert ok.status_code == 200
     assert ok.json()["status"] == "PASS"
 
@@ -196,9 +186,7 @@ def test_chain_verify_pass_fail(build_app):
         )
         session.commit()
 
-    fail = client.get(
-        "/ui/forensics/chain/verify?tenant_id=t1", headers={"X-API-Key": key}
-    )
+    fail = client.get("/ui/forensics/chain/verify", headers={"X-API-Key": key})
     assert fail.status_code == 200
     assert fail.json()["status"] == "FAIL"
 

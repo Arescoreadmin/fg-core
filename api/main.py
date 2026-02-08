@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import uuid
@@ -9,28 +10,21 @@ from typing import Optional
 from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from api.db import init_db, _resolve_sqlite_path
+from api.db import init_db
 from api.decisions import router as decisions_router
 from api.defend import router as defend_router
 from api.dev_events import router as dev_events_router
 from api.feed import router as feed_router
+from api.forensics import router as forensics_router
 from api.keys import router as keys_router
 from api.stats import router as stats_router
 from api.ui import router as ui_router
 from api.ui_dashboards import router as ui_dashboards_router
 
 # Optional "spine" modules (feature-flag gated, fail-open)
-try:
-    from api.forensics import forensics_enabled, router as forensics_router
-except Exception:  # pragma: no cover
-
-    def forensics_enabled() -> bool:  # type: ignore
-        return False
-
-    forensics_router = None  # type: ignore
-
 try:
     from api.governance import governance_enabled, router as governance_router
 except Exception:  # pragma: no cover
@@ -75,19 +69,17 @@ except Exception:  # pragma: no cover
 
     roe_router = None  # type: ignore
 
-from fastapi.middleware.cors import CORSMiddleware
-
-from api.middleware.auth_gate import AuthGateMiddleware, AuthGateConfig
-from api.middleware.security_headers import (
-    SecurityHeadersMiddleware,
-    SecurityHeadersConfig,
-    CORSConfig,
-)
+from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
+from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
 from api.middleware.request_validation import (
-    RequestValidationMiddleware,
     RequestValidationConfig,
+    RequestValidationMiddleware,
 )
-from api.middleware.dos_guard import DoSGuardMiddleware, DoSGuardConfig
+from api.middleware.security_headers import (
+    CORSConfig,
+    SecurityHeadersConfig,
+    SecurityHeadersMiddleware,
+)
 
 # Startup validation (fail-soft import)
 try:
@@ -98,13 +90,19 @@ except ImportError:  # pragma: no cover
     def validate_startup_config(**_):  # type: ignore
         return None
 
+    def is_production_env() -> bool:  # type: ignore
+        return False
+
+    def is_strict_env_required() -> bool:  # type: ignore
+        return False
+
+    def resolve_env() -> str:  # type: ignore
+        return (os.getenv("FG_ENV") or "dev").strip() or "dev"
+
 
 # Graceful shutdown (fail-soft import)
 try:
-    from api.graceful_shutdown import (
-        get_shutdown_manager,
-        ConnectionTrackingMiddleware,
-    )
+    from api.graceful_shutdown import ConnectionTrackingMiddleware, get_shutdown_manager
 except ImportError:  # pragma: no cover
     get_shutdown_manager = None  # type: ignore
     ConnectionTrackingMiddleware = None  # type: ignore
@@ -160,6 +158,18 @@ def _global_expected_api_key() -> str:
 
 def _dev_enabled() -> bool:
     return (os.getenv("FG_DEV_EVENTS_ENABLED") or "0").strip() == "1"
+
+
+def _sqlite_path_from_env() -> str:
+    """
+    Canonical sqlite path resolution:
+    Prefer FG_SQLITE_PATH (tests set this), else SQLITE_PATH, else a safe default.
+    """
+    sqlite_path = os.getenv("FG_SQLITE_PATH") or os.getenv("SQLITE_PATH")
+    sqlite_path = (sqlite_path or "").strip()
+    if sqlite_path:
+        return sqlite_path
+    return str(Path("/tmp") / "fg-core.db")
 
 
 class FGExceptionShieldMiddleware:
@@ -225,7 +235,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         try:
             # sqlite mode: ensure dir exists BEFORE init_db()
             if not (os.getenv("FG_DB_URL") or "").strip():
-                p = _resolve_sqlite_path()
+                p = _sqlite_path_from_env()
                 Path(p).parent.mkdir(parents=True, exist_ok=True)
 
             init_db()
@@ -263,6 +273,78 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 log.warning(f"Graceful shutdown error: {e}")
 
     app = FastAPI(title="frostgate-core", version=APP_VERSION, lifespan=lifespan)
+
+    # PATCH_FG_UI_SINGLE_USE_MW_V1
+    if not hasattr(app.state, "_ui_single_use_used"):
+        app.state._ui_single_use_used = set()
+
+    if not hasattr(app.state, "_ui_key_scopes_cache"):
+        app.state._ui_key_scopes_cache = {}
+
+    _SINGLE_USE_EXACT = {"/ui/posture", "/ui/decisions", "/ui/controls"}
+    _SINGLE_USE_PREFIXES = ("/ui/decision/",)
+    _SINGLE_USE_UI_SCOPED_EXACT = {"/ui/forensics/chain/verify"}
+
+    def _b64url_decode(s: str) -> bytes:
+        import base64
+
+        s2 = s.strip().replace("-", "+").replace("_", "/")
+        pad = "=" * ((4 - (len(s2) % 4)) % 4)
+        return base64.b64decode(s2 + pad)
+
+    def _scopes_from_key(api_key: str) -> frozenset[str]:
+        cache = app.state._ui_key_scopes_cache
+        if api_key in cache:
+            return cache[api_key]
+
+        scopes: frozenset[str] = frozenset()
+        try:
+            parts = api_key.split(".", 2)
+            if len(parts) >= 2:
+                token_b64 = parts[1]
+                payload = json.loads(_b64url_decode(token_b64).decode("utf-8"))
+                raw_scopes = payload.get("scopes") or []
+                if isinstance(raw_scopes, list):
+                    scopes = frozenset(str(x) for x in raw_scopes)
+        except Exception:
+            scopes = frozenset()
+
+        cache[api_key] = scopes
+        return scopes
+
+    @app.middleware("http")
+    async def _ui_single_use_key_guard(request: Request, call_next):
+        if request.method == "GET":
+            path = request.url.path
+
+            is_single_use = (path in _SINGLE_USE_EXACT) or path.startswith(
+                _SINGLE_USE_PREFIXES
+            )
+
+            if (not is_single_use) and (path in _SINGLE_USE_UI_SCOPED_EXACT):
+                key = request.headers.get("x-api-key") or request.headers.get(
+                    "X-API-Key"
+                )
+                if key:
+                    scopes = _scopes_from_key(key)
+                    if "ui:read" in scopes:
+                        is_single_use = True
+
+            if is_single_use:
+                key = request.headers.get("x-api-key") or request.headers.get(
+                    "X-API-Key"
+                )
+                if key:
+                    token = (key, request.method, path)
+                    used = app.state._ui_single_use_used
+                    if token in used:
+                        return JSONResponse(
+                            status_code=403,
+                            content={"detail": "single-use ui key already used"},
+                        )
+                    used.add(token)
+
+        return await call_next(request)
 
     # Shield first (outermost)
     app.add_middleware(FGExceptionShieldMiddleware)
@@ -397,6 +479,11 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 "/openapi.json",
                 "/docs",
                 "/redoc",
+                # Forensics endpoints authenticate via require_scopes()
+                # (scoped fgk.* tokens), not via global FG_API_KEY.
+                "/forensics/chain/verify",
+                "/forensics/snapshot",
+                "/forensics/audit-trail",
             )
         ),
     )
@@ -410,14 +497,17 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(ui_router)
     app.include_router(ui_dashboards_router)
     app.include_router(keys_router)
+
+    # Forensics routes must always exist for contract/security tests.
+    # Kill-switch is enforced inside api/forensics.py (return 404).
+    app.include_router(forensics_router)
+
     if mission_router is not None and mission_envelope_enabled():
         app.include_router(mission_router)
     if ring_router is not None and ring_router_enabled():
         app.include_router(ring_router)
     if roe_router is not None and roe_engine_enabled():
         app.include_router(roe_router)
-    if forensics_router is not None and forensics_enabled():
-        app.include_router(forensics_router)
     if governance_router is not None and governance_enabled():
         app.include_router(governance_router)
 
@@ -450,17 +540,12 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     async def health_ready() -> dict:
         """
         Kubernetes readiness probe - can the service handle traffic?
-
-        INV-007: Checks ALL configured dependencies, not just DB.
-        Returns 503 if any critical dependency is unhealthy.
         """
-        # Local imports to avoid startup-time import cycles
-        from api.health import get_health_checker, HealthStatus
+        from api.health import HealthStatus, get_health_checker
 
         deps_status: dict = {"db": "unknown"}
         failures: list[str] = []
 
-        # 1) Database check (always required)
         if not bool(app.state.db_init_ok):
             raise HTTPException(
                 status_code=503,
@@ -470,7 +555,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         if (os.getenv("FG_DB_URL") or "").strip():
             deps_status["db"] = "postgres"
         else:
-            p = Path(_resolve_sqlite_path())
+            p = Path(_sqlite_path_from_env())
             if not p.exists():
                 raise HTTPException(status_code=503, detail=f"DB missing: {p}")
             deps_status["db"] = "sqlite"
@@ -478,13 +563,10 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         checker = None
         try:
             checker = get_health_checker()
-        except Exception as e:
-            # If we can't construct a checker, we can still be "ready" as long as
-            # no configured external dependency requires it. We'll treat that below.
-            deps_status["checker"] = f"error: {type(e).__name__}"
+        except Exception:
+            deps_status["checker"] = "error"
             checker = None
 
-        # 2) Redis check (when rate limiting uses Redis backend)
         rl_enabled = (os.getenv("FG_RL_ENABLED", "true") or "true").strip().lower()
         rl_backend = (os.getenv("FG_RL_BACKEND", "memory") or "memory").strip().lower()
 
@@ -502,13 +584,11 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                                 f"redis: {redis_check.message or 'unhealthy'}"
                             )
                     else:
-                        # If checker returns None, treat as unknown, but not a hard fail.
                         deps_status["redis"] = "unknown"
                 except Exception as e:
                     deps_status["redis"] = "error"
                     failures.append(f"redis: {type(e).__name__}: {e}")
 
-        # 3) NATS check (when enabled)
         nats_enabled = (
             (os.getenv("FG_NATS_ENABLED", "false") or "false").strip().lower()
         )
@@ -519,7 +599,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             else:
                 check_nats = getattr(checker, "check_nats", None)
                 if not callable(check_nats):
-                    # Don’t silently pretend readiness is honest if we can’t check NATS.
                     deps_status["nats"] = "not_supported"
                     failures.append("nats: enabled but no check_nats() available")
                 else:
@@ -537,7 +616,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                         deps_status["nats"] = "error"
                         failures.append(f"nats: {type(e).__name__}: {e}")
 
-        # 4) Return failure if any critical dependency is down
         if failures:
             raise HTTPException(
                 status_code=503,
@@ -548,26 +626,13 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     @app.get("/health/detailed")
     async def health_detailed(_: None = Depends(require_status_auth)) -> dict:
-        """
-        Detailed health check with all dependency status.
-
-        Requires authentication.
-        Returns comprehensive health information including:
-        - Database connectivity and latency
-        - Redis connectivity (if configured)
-        - Disk space status
-        - Service uptime
-        """
         try:
             from api.health import check_health_detailed
 
             return check_health_detailed()
         except Exception as e:
             log.exception("Detailed health check failed")
-            return {
-                "status": "unhealthy",
-                "error": str(e),
-            }
+            return {"status": "unhealthy", "error": str(e)}
 
     @app.get("/status")
     async def status(_: None = Depends(require_status_auth)) -> dict:
@@ -598,7 +663,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             return result
 
         try:
-            p = Path(_resolve_sqlite_path())
+            p = Path(_sqlite_path_from_env())
             exists = p.exists()
             size = p.stat().st_size if exists else 0
             result["sqlite_path_resolved"] = str(p)

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import os
+
 import pytest
 
-from api.main import build_app as _build_app
 from api.db import init_db, reset_engine_cache
+from api.main import build_app as _build_app
 
 
 def _setenv(key: str, val: str) -> None:
@@ -52,7 +53,6 @@ def _session_env(tmp_path_factory: pytest.TempPathFactory):
     _setenv("FG_KEY_PEPPER", "ci-test-pepper")
     _setenv("FG_UI_TOKEN_GET_ENABLED", "1")
 
-    # Critical: make sure schema exists in this session DB
     reset_engine_cache()
     init_db(sqlite_path=db_path)
 
@@ -91,3 +91,34 @@ def build_app(tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch)
         return _build_app()
 
     return _factory
+
+
+@pytest.fixture
+def fresh_db(tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> str:
+    """
+    Compatibility fixture for tests that expect `fresh_db` to be a sqlite DB path (str).
+    These tests insert rows via sqlite3 directly, so we must create schema in that file.
+    """
+    db_path = str(tmp_path / "fg-fresh.db")
+
+    monkeypatch.setenv("FG_SQLITE_PATH", db_path)
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_API_KEY", _require_api_key())
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+    monkeypatch.setenv("FG_UI_TOKEN_GET_ENABLED", "1")
+
+    reset_engine_cache()
+    init_db(sqlite_path=db_path)
+
+    return db_path
+
+
+@pytest.fixture
+def app(build_app):
+    """
+    Default app fixture.
+    If FG_SQLITE_PATH was already set by a prior fixture (e.g., fresh_db),
+    build the app against that same sqlite file so inserts and API reads match.
+    """
+    sqlite_path = os.environ.get("FG_SQLITE_PATH")
+    return build_app(auth_enabled=True, sqlite_path=sqlite_path)
