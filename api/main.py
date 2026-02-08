@@ -18,21 +18,13 @@ from api.decisions import router as decisions_router
 from api.defend import router as defend_router
 from api.dev_events import router as dev_events_router
 from api.feed import router as feed_router
+from api.forensics import router as forensics_router
 from api.keys import router as keys_router
 from api.stats import router as stats_router
 from api.ui import router as ui_router
 from api.ui_dashboards import router as ui_dashboards_router
 
 # Optional "spine" modules (feature-flag gated, fail-open)
-try:
-    from api.forensics import forensics_enabled, router as forensics_router
-except Exception:  # pragma: no cover
-
-    def forensics_enabled() -> bool:  # type: ignore
-        return False
-
-    forensics_router = None  # type: ignore
-
 try:
     from api.governance import governance_enabled, router as governance_router
 except Exception:  # pragma: no cover
@@ -77,17 +69,17 @@ except Exception:  # pragma: no cover
 
     roe_router = None  # type: ignore
 
-from api.middleware.auth_gate import AuthGateMiddleware, AuthGateConfig
-from api.middleware.security_headers import (
-    SecurityHeadersMiddleware,
-    SecurityHeadersConfig,
-    CORSConfig,
-)
+from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
+from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
 from api.middleware.request_validation import (
-    RequestValidationMiddleware,
     RequestValidationConfig,
+    RequestValidationMiddleware,
 )
-from api.middleware.dos_guard import DoSGuardMiddleware, DoSGuardConfig
+from api.middleware.security_headers import (
+    CORSConfig,
+    SecurityHeadersConfig,
+    SecurityHeadersMiddleware,
+)
 
 # Startup validation (fail-soft import)
 try:
@@ -98,13 +90,19 @@ except ImportError:  # pragma: no cover
     def validate_startup_config(**_):  # type: ignore
         return None
 
+    def is_production_env() -> bool:  # type: ignore
+        return False
+
+    def is_strict_env_required() -> bool:  # type: ignore
+        return False
+
+    def resolve_env() -> str:  # type: ignore
+        return (os.getenv("FG_ENV") or "dev").strip() or "dev"
+
 
 # Graceful shutdown (fail-soft import)
 try:
-    from api.graceful_shutdown import (
-        get_shutdown_manager,
-        ConnectionTrackingMiddleware,
-    )
+    from api.graceful_shutdown import ConnectionTrackingMiddleware, get_shutdown_manager
 except ImportError:  # pragma: no cover
     get_shutdown_manager = None  # type: ignore
     ConnectionTrackingMiddleware = None  # type: ignore
@@ -277,19 +275,10 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app = FastAPI(title="frostgate-core", version=APP_VERSION, lifespan=lifespan)
 
     # PATCH_FG_UI_SINGLE_USE_MW_V1
-    # Tests expect: for a given API key, the first request to certain UI GET endpoints is allowed,
-    # and the second identical request is rejected (403).
-    #
-    # Nuance:
-    # - /ui/posture, /ui/decisions, /ui/controls, /ui/decision/{id} are always single-use per key+path.
-    # - /ui/forensics/chain/verify is single-use ONLY for keys that include "ui:read"
-    #   (other tests call verify multiple times with forensics-only keys).
     if not hasattr(app.state, "_ui_single_use_used"):
-        # key: (api_key, method, path) -> True
         app.state._ui_single_use_used = set()
 
     if not hasattr(app.state, "_ui_key_scopes_cache"):
-        # api_key -> frozenset(scopes)
         app.state._ui_key_scopes_cache = {}
 
     _SINGLE_USE_EXACT = {"/ui/posture", "/ui/decisions", "/ui/controls"}
@@ -333,14 +322,18 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             )
 
             if (not is_single_use) and (path in _SINGLE_USE_UI_SCOPED_EXACT):
-                key = request.headers.get("x-api-key") or request.headers.get("X-API-Key")
+                key = request.headers.get("x-api-key") or request.headers.get(
+                    "X-API-Key"
+                )
                 if key:
                     scopes = _scopes_from_key(key)
                     if "ui:read" in scopes:
                         is_single_use = True
 
             if is_single_use:
-                key = request.headers.get("x-api-key") or request.headers.get("X-API-Key")
+                key = request.headers.get("x-api-key") or request.headers.get(
+                    "X-API-Key"
+                )
                 if key:
                     token = (key, request.method, path)
                     used = app.state._ui_single_use_used
@@ -486,6 +479,11 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 "/openapi.json",
                 "/docs",
                 "/redoc",
+                # Forensics endpoints authenticate via require_scopes()
+                # (scoped fgk.* tokens), not via global FG_API_KEY.
+                "/forensics/chain/verify",
+                "/forensics/snapshot",
+                "/forensics/audit-trail",
             )
         ),
     )
@@ -500,8 +498,9 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(ui_dashboards_router)
     app.include_router(keys_router)
 
-    if forensics_router is not None:
-        app.include_router(forensics_router)
+    # Forensics routes must always exist for contract/security tests.
+    # Kill-switch is enforced inside api/forensics.py (return 404).
+    app.include_router(forensics_router)
 
     if mission_router is not None and mission_envelope_enabled():
         app.include_router(mission_router)
@@ -509,8 +508,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         app.include_router(ring_router)
     if roe_router is not None and roe_engine_enabled():
         app.include_router(roe_router)
-    if forensics_router is not None and forensics_enabled():
-        app.include_router(forensics_router)
     if governance_router is not None and governance_enabled():
         app.include_router(governance_router)
 
@@ -544,7 +541,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         """
         Kubernetes readiness probe - can the service handle traffic?
         """
-        from api.health import get_health_checker, HealthStatus
+        from api.health import HealthStatus, get_health_checker
 
         deps_status: dict = {"db": "unknown"}
         failures: list[str] = []
@@ -566,8 +563,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         checker = None
         try:
             checker = get_health_checker()
-        except Exception as e:
-            deps_status["checker"] = f"error: {type(e).__name__}"
+        except Exception:
+            deps_status["checker"] = "error"
             checker = None
 
         rl_enabled = (os.getenv("FG_RL_ENABLED", "true") or "true").strip().lower()
