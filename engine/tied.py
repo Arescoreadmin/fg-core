@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Final
 
-from api.schemas import TIEDEstimate, ClassificationRing, Persona
+from contracts.engine_types import ClassificationRing, Persona, TIEDEstimate
 
 # Base impact scores by threat level
 _BASE_SERVICE_IMPACT: Final[dict[str, float]] = {

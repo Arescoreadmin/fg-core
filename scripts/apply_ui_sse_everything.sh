@@ -311,7 +311,7 @@ print("✅ Patched ui_feed() in api/ui.py to use SSE + fallback polling")
 PY
 
 echo "==> 3) Compile + restart with FG_UI_TOKEN_GET_ENABLED=1"
-python -m py_compile api/feed.py api/ui.py api/auth_scopes.py api/main.py >/dev/null
+python -m py_compile api/feed.py api/ui.py api/auth_scopes/__init__.py api/main.py >/dev/null
 export FG_UI_TOKEN_GET_ENABLED=1
 make fg-restart
 

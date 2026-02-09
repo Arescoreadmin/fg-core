@@ -508,7 +508,7 @@ class TestCIGateReadiness:
     def test_core_invariant_files_exist(self):
         """All core invariant files must exist."""
         required_files = [
-            "api/auth_scopes.py",
+            "api/auth_scopes/__init__.py",
             "api/middleware/auth_gate.py",
             "api/defend.py",
             "api/ingest.py",

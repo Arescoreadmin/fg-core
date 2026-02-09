@@ -5,26 +5,11 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-from api.schemas import TelemetryInput
-
-
-
+from contracts.engine_types import ClassificationRing, Persona, TelemetryInput
 class ThreatLevel(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
-
-
-class ClassificationRing(str, Enum):
-    PUBLIC = "PUBLIC"
-    INTERNAL = "INTERNAL"
-    SECRET = "SECRET"
-    TOP_SECRET = "TOP_SECRET"
-
-
-class Persona(str, Enum):
-    GUARDIAN = "guardian"
-    SENTINEL = "sentinel"
 
 
 class TieDBlock(BaseModel):
@@ -39,8 +24,8 @@ class ExplainBlock(BaseModel):
     anomaly_score: float
     llm_note: Optional[str] = None
 
-     # Doctrine / TIED metadata that doctrine + tests expect
-    classification: Optional[str] = None        # or Optional[ClassificationRing]
+    # Doctrine / TIED metadata that doctrine + tests expect
+    classification: Optional[str] = None  # or Optional[ClassificationRing]
     persona: Optional[str] = None
     roe_applied: Optional[bool] = None
     disruption_limited: Optional[bool] = None

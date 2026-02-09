@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple, Union
 
-from api.schemas import TelemetryInput, MitigationAction
+from contracts.engine_types import MitigationAction, TelemetryInput
 
 
 def _as_dict(x: Any) -> Dict[str, Any]:

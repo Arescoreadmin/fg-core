@@ -16,6 +16,8 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from contracts.engine_types import TelemetryInput as ContractTelemetryInput
+
 
 # =============================================================================
 # Input validation patterns
@@ -283,3 +285,18 @@ class TelemetryInput(BaseModel):
                     self.src_ip = None  # Invalid IP, ignore
 
         return self
+
+    def to_contract(self) -> ContractTelemetryInput:
+        payload = self.payload if isinstance(self.payload, dict) else {}
+        event = self.event if isinstance(self.event, dict) else {}
+        return ContractTelemetryInput(
+            source=self.source,
+            tenant_id=self.tenant_id,
+            timestamp=self.timestamp,
+            classification=self.classification,
+            persona=self.persona,
+            payload=dict(payload),
+            event=dict(event),
+            event_type=self.event_type,
+            src_ip=self.src_ip,
+        )

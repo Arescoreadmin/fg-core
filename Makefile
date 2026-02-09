@@ -119,7 +119,7 @@ help:
 venv:
 	test -d "$(VENV)" || python -m venv "$(VENV)"
 	"$(PIP)" install --upgrade pip
-	"$(PIP)" install -r requirements.txt -r requirements-dev.txt
+	"$(PIP)" install -c constraints.txt -r requirements.txt -r requirements-dev.txt
 
 # =============================================================================
 # Guards / audits
@@ -174,7 +174,7 @@ fg-contract: guard-scripts contracts-gen
 	@echo "Contract diff: OK (admin/core/artifacts)"
 
 fg-compile: guard-scripts
-	@$(PY) -m py_compile api/main.py api/feed.py api/ui.py api/dev_events.py api/auth_scopes.py
+	@$(PY) -m py_compile api/main.py api/feed.py api/ui.py api/dev_events.py api/auth_scopes/__init__.py
 
 # =============================================================================
 # Production Profile Validation
@@ -389,11 +389,16 @@ itest-local: itest-down itest-up
 # CI lanes
 # =============================================================================
 
-.PHONY: ci ci-integration ci-evidence
+.PHONY: ci ci-integration ci-evidence pip-audit
 
-ci: venv fg-fast
+ci: venv pip-audit fg-fast
 
 ci-integration: venv itest-local
+
+pip-audit: venv
+	"$(PIP)" install --upgrade pip-audit
+	"$(PY)" -m pip_audit -r requirements.txt -r requirements-dev.txt
+	"$(PY)" -m pip_audit -r admin_gateway/requirements.txt -r admin_gateway/requirements-dev.txt
 
 # =============================================================================
 # Evidence
@@ -497,6 +502,20 @@ AG_VENV     ?= admin_gateway/.venv
 ADMIN_PY    ?= python3
 AG_PY       := $(AG_VENV)/bin/python
 AG_PIP      := $(AG_VENV)/bin/pip
+AG_PIP_INDEX_URL ?=
+AG_PIP_FIND_LINKS ?=
+AG_PIP_NO_INDEX ?=
+
+AG_PIP_ENV :=
+ifneq ($(strip $(AG_PIP_INDEX_URL)),)
+AG_PIP_ENV += PIP_INDEX_URL=$(AG_PIP_INDEX_URL)
+endif
+ifneq ($(strip $(AG_PIP_FIND_LINKS)),)
+AG_PIP_ENV += PIP_FIND_LINKS=$(AG_PIP_FIND_LINKS)
+endif
+ifneq ($(strip $(AG_PIP_NO_INDEX)),)
+AG_PIP_ENV += PIP_NO_INDEX=$(AG_PIP_NO_INDEX)
+endif
 
 .PHONY: admin-venv admin-venv-check admin-dev admin-lint admin-test ci-admin
 
@@ -533,8 +552,8 @@ admin-venv:
 		fi; \
 	else \
 		echo "Installing admin-gateway dependencies into $(AG_VENV)."; \
-		env -u HTTP_PROXY -u http_proxy -u HTTPS_PROXY -u https_proxy "$(AG_PIP)" install --upgrade pip; \
-		env -u HTTP_PROXY -u http_proxy -u HTTPS_PROXY -u https_proxy "$(AG_PIP)" install -r admin_gateway/requirements.txt -r admin_gateway/requirements-dev.txt; \
+		env -u HTTP_PROXY -u http_proxy -u HTTPS_PROXY -u https_proxy $(AG_PIP_ENV) "$(AG_PIP)" install --upgrade pip; \
+		env -u HTTP_PROXY -u http_proxy -u HTTPS_PROXY -u https_proxy $(AG_PIP_ENV) "$(AG_PIP)" install -c constraints.txt -r admin_gateway/requirements.txt -r admin_gateway/requirements-dev.txt; \
 		echo "$$REQS_HASH" > "$(AG_REQS_STAMP)"; \
 	fi
 

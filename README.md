@@ -13,6 +13,7 @@
 # fg-core
 
 Authoritative requirements live in `BLUEPRINT_STAGED.md`.
+Note: we hard-block `ecdsa` due to a CVE with no fix versions; do not add `python-jose`.
 
 ## Dashboards & audit packet export
 - Tenant dashboards (UI): `/ui/dash/posture`, `/ui/dash/forensics`, `/ui/dash/controls`
