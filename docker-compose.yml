@@ -70,7 +70,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-frostgate}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       # Tighten init defaults
-      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=trust"
     volumes:
       - fg_pgdata:/var/lib/postgresql/data
       - ./scripts/postgres/init_roles.sh:/docker-entrypoint-initdb.d/init_roles.sh:ro
