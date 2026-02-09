@@ -8,20 +8,15 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.config.startup_validation import compliance_module_enabled
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _env_bool(name: str, default: bool = False) -> bool:
-    v = os.getenv(name)
-    if v is None:
-        return default
-    return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
-
-
 def mission_envelope_enabled() -> bool:
-    return _env_bool("FG_MISSION_ENVELOPE_ENABLED", False)
+    return compliance_module_enabled("mission_envelope")
 
 
 class MissionEnvelope(BaseModel):

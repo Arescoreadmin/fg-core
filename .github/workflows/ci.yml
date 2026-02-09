@@ -177,6 +177,38 @@ jobs:
             state/**
           if-no-files-found: ignore
 
+  contract_authority:
+    name: Contract Authority (prod-spec)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: fg_guard
+    if: ${{ github.event_name == 'pull_request' || needs.fg_guard.outputs.core == 'true' || needs.fg_guard.outputs.python == 'true' }}
+    permissions:
+      contents: read
+    env:
+      FG_ENV: prod
+      FG_CONTRACT_SPEC: prod
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Python setup (cached)
+        uses: ./.github/actions/fg-python-setup
+        with:
+          python-version: "3.12"
+          install-os-deps: "true"
+          prepare-workspace: "true"
+          build-venv: "true"
+
+      - name: Verify prod OpenAPI contract drift
+        run: make contracts-core-diff
+
+      - name: Verify contract authority markers
+        run: make contract-authority-check
+
   integration:
     name: Integration (itest-local)
     runs-on: ubuntu-latest

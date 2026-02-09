@@ -1,8 +1,11 @@
 # FrostGate Core — CONTRACT (MVP Invariants)
 
 > **Non-authoritative implementation contract.** This file exists for current
-> test/CI enforcement and is derived from the canonical requirements in
-> `BLUEPRINT_STAGED.md`.
+> test/CI enforcement and is validated against the prod OpenAPI contract
+> in `contracts/core/openapi.json`.
+
+Contract Authority: contracts/core/openapi.json (prod)
+Contract-Authority-SHA256: 91099b57e8489bcd2c20c3fb6e598a05aaf94f9b0c7b3eccb9b7d5965cfb6d79
 
 <!-- CONTRACT_LINT_ANCHORS
 0) Principles

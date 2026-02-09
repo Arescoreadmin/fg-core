@@ -52,3 +52,7 @@ def resolve_env() -> str:
 
 def is_production_env() -> bool:
     return resolve_env() in {"prod", "staging"}
+
+
+def contract_spec() -> str:
+    return (os.getenv("FG_CONTRACT_SPEC") or "prod").strip().lower() or "prod"

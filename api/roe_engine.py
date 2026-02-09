@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from typing import Optional
 
 from fastapi import APIRouter
@@ -9,12 +8,7 @@ from pydantic import BaseModel, Field
 from engine.doctrine import apply_doctrine
 from engine.pipeline import Mitigation as PipelineMitigation
 
-
-def _env_bool(name: str, default: bool = False) -> bool:
-    v = os.getenv(name)
-    if v is None:
-        return default
-    return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
+from api.config.startup_validation import compliance_module_enabled
 
 
 class ROEPolicy(BaseModel):
@@ -76,4 +70,4 @@ async def evaluate_roe(req: ROEEvaluationRequest) -> ROEEvaluationResponse:
 
 
 def roe_engine_enabled() -> bool:
-    return _env_bool("FG_ROE_ENGINE_ENABLED", False)
+    return compliance_module_enabled("roe_engine")

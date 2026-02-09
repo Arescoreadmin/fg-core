@@ -10,7 +10,9 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import List
+from importlib import import_module
+from pathlib import Path
+from typing import Dict, List, Optional
 
 from api.config.env import resolve_env
 
@@ -39,6 +41,149 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+@dataclass(frozen=True)
+class ResourceRequirement:
+    name: str
+    kind: str  # "file" or "dir"
+    path: Optional[str] = None
+    env_var: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class ComplianceModuleSpec:
+    key: str
+    display_name: str
+    required_env_flags: Dict[str, bool]
+    required_imports: List[str]
+    required_resources: List[ResourceRequirement]
+
+
+@dataclass(frozen=True)
+class ComplianceModuleState:
+    key: str
+    display_name: str
+    enabled: bool
+    import_errors: List[str]
+    resource_errors: List[str]
+
+
+COMPLIANCE_MODULE_SPECS: Dict[str, ComplianceModuleSpec] = {
+    "governance": ComplianceModuleSpec(
+        key="governance",
+        display_name="Governance",
+        required_env_flags={"FG_GOVERNANCE_ENABLED": True},
+        required_imports=["api.governance"],
+        required_resources=[
+            ResourceRequirement(name="migrations", kind="dir", path="migrations"),
+            ResourceRequirement(name="policy", kind="dir", path="policy"),
+        ],
+    ),
+    "roe_engine": ComplianceModuleSpec(
+        key="roe_engine",
+        display_name="ROE Engine",
+        required_env_flags={"FG_ROE_ENGINE_ENABLED": True},
+        required_imports=["api.roe_engine", "engine.doctrine", "engine.pipeline"],
+        required_resources=[
+            ResourceRequirement(
+                name="roe_doctrine", kind="file", path="engine/doctrine.py"
+            ),
+            ResourceRequirement(
+                name="roe_pipeline", kind="file", path="engine/pipeline.py"
+            ),
+        ],
+    ),
+    "ring_router": ComplianceModuleSpec(
+        key="ring_router",
+        display_name="Ring Router",
+        required_env_flags={"FG_RING_ROUTER_ENABLED": True},
+        required_imports=["api.ring_router"],
+        required_resources=[
+            ResourceRequirement(
+                name="ring_state_dir",
+                kind="dir",
+                env_var="FG_RING_STATE_DIR",
+            ),
+            ResourceRequirement(
+                name="ring_model_dir",
+                kind="dir",
+                env_var="FG_RING_MODEL_DIR",
+            ),
+        ],
+    ),
+    "mission_envelope": ComplianceModuleSpec(
+        key="mission_envelope",
+        display_name="Mission Envelope",
+        required_env_flags={"FG_MISSION_ENVELOPE_ENABLED": True},
+        required_imports=["api.mission_envelope"],
+        required_resources=[
+            ResourceRequirement(
+                name="mission_envelope_path",
+                kind="file",
+                env_var="FG_MISSION_ENVELOPE_PATH",
+            )
+        ],
+    ),
+}
+
+
+def compliance_module_enabled(key: str) -> bool:
+    spec = COMPLIANCE_MODULE_SPECS.get(key)
+    if not spec:
+        return False
+    for env_name, required_value in spec.required_env_flags.items():
+        raw = os.getenv(env_name)
+        if raw is None:
+            return False
+        if _env_bool(env_name, default=False) is not bool(required_value):
+            return False
+    return True
+
+
+def resolve_compliance_module_states() -> Dict[str, ComplianceModuleState]:
+    states: Dict[str, ComplianceModuleState] = {}
+    for key, spec in COMPLIANCE_MODULE_SPECS.items():
+        enabled = compliance_module_enabled(key)
+        import_errors: List[str] = []
+        resource_errors: List[str] = []
+
+        for module_path in spec.required_imports:
+            try:
+                import_module(module_path)
+            except Exception:
+                import_errors.append(module_path)
+
+        for resource in spec.required_resources:
+            resolved_path = None
+            if resource.env_var:
+                raw = (os.getenv(resource.env_var) or "").strip()
+                if not raw:
+                    resource_errors.append(f"{resource.env_var} not set")
+                    continue
+                resolved_path = raw
+            elif resource.path:
+                resolved_path = resource.path
+
+            if resolved_path:
+                path = Path(resolved_path)
+                if resource.kind == "file" and not path.is_file():
+                    resource_errors.append(
+                        f"{resource.name} missing at {resolved_path}"
+                    )
+                elif resource.kind == "dir" and not path.is_dir():
+                    resource_errors.append(
+                        f"{resource.name} missing at {resolved_path}"
+                    )
+
+        states[key] = ComplianceModuleState(
+            key=spec.key,
+            display_name=spec.display_name,
+            enabled=enabled,
+            import_errors=import_errors,
+            resource_errors=resource_errors,
+        )
+    return states
+
+
 @dataclass
 class ValidationResult:
     """Result of a single validation check."""
@@ -56,6 +201,7 @@ class StartupValidationReport:
     results: List[ValidationResult] = field(default_factory=list)
     env: str = "dev"
     is_production: bool = False
+    compliance_modules: Dict[str, "ComplianceModuleState"] = field(default_factory=dict)
 
     @property
     def has_errors(self) -> bool:
@@ -110,6 +256,7 @@ class StartupValidator:
             is_production=self.is_production,
         )
 
+        self._check_compliance_modules(report)
         self._check_api_key(report)
         self._check_database(report)
         self._check_rate_limiting(report)
@@ -126,6 +273,39 @@ class StartupValidator:
         self._check_dos_hardening(report)
 
         return report
+
+    def _check_compliance_modules(self, report: StartupValidationReport) -> None:
+        """Check compliance-critical module requirements."""
+        states = resolve_compliance_module_states()
+        report.compliance_modules = dict(states)
+
+        for name, state in states.items():
+            if not state.enabled:
+                report.add(
+                    name=f"compliance_{name}_disabled",
+                    passed=False,
+                    message=f"{state.display_name} disabled. "
+                    "Compliance-critical modules must be enabled.",
+                    severity="error" if self.is_production else "warning",
+                )
+
+            if state.import_errors:
+                report.add(
+                    name=f"compliance_{name}_imports",
+                    passed=False,
+                    message=f"{state.display_name} missing imports: "
+                    f"{', '.join(state.import_errors)}",
+                    severity="error" if self.is_production else "warning",
+                )
+
+            if state.resource_errors:
+                report.add(
+                    name=f"compliance_{name}_resources",
+                    passed=False,
+                    message=f"{state.display_name} missing resources: "
+                    f"{', '.join(state.resource_errors)}",
+                    severity="error" if self.is_production else "warning",
+                )
 
     def _check_api_key(self, report: StartupValidationReport) -> None:
         """Check API key security."""
@@ -191,7 +371,14 @@ class StartupValidator:
             )
 
         if self.is_production:
-            if db_backend and db_backend != "postgres":
+            if not db_backend:
+                report.add(
+                    name="database_backend_missing",
+                    passed=False,
+                    message="Production requires FG_DB_BACKEND=postgres.",
+                    severity="error",
+                )
+            elif db_backend != "postgres":
                 report.add(
                     name="database_backend",
                     passed=False,
@@ -254,15 +441,15 @@ class StartupValidator:
 
     def _check_cors(self, report: StartupValidationReport) -> None:
         """Check CORS configuration."""
-        cors_origins = _env_str("FG_CORS_ORIGINS", "*")
+        cors_origins = _env_str("FG_CORS_ORIGINS", "")
 
-        if self.is_production and cors_origins == "*":
+        if self.is_production and (not cors_origins or cors_origins == "*"):
             report.add(
                 name="cors_wildcard",
                 passed=False,
-                message="CORS allows all origins (*). "
-                "Restrict to specific domains in production.",
-                severity="warning",
+                message="CORS must be explicitly configured in production "
+                "(no wildcard, no empty value).",
+                severity="error",
             )
         else:
             report.add(
@@ -396,7 +583,7 @@ class StartupValidator:
                 passed=False,
                 message="Security audit DB persistence is disabled. "
                 "Enable FG_AUDIT_PERSIST_DB for compliance.",
-                severity="warning",
+                severity="error",
             )
         else:
             report.add(
@@ -425,7 +612,7 @@ class StartupValidator:
                 name="webhook_secret_missing",
                 passed=False,
                 message="FG_WEBHOOK_SECRET not set. Required for secure webhook integration.",
-                severity="warning",
+                severity="error",
             )
         elif webhook_secret and len(webhook_secret) < 32:
             report.add(
@@ -491,7 +678,7 @@ class StartupValidator:
                 name="quota_enforcement_disabled",
                 passed=False,
                 message="Quota enforcement is disabled. Enable for SaaS billing protection.",
-                severity="warning",
+                severity="error",
             )
         elif quota_enabled:
             report.add(
@@ -512,7 +699,7 @@ class StartupValidator:
                     name="encryption_key_missing",
                     passed=False,
                     message="FG_ENCRYPTION_KEY not set. Required for encrypting sensitive data.",
-                    severity="warning",
+                    severity="error",
                 )
             elif len(encryption_key) < 32:
                 report.add(
@@ -526,8 +713,8 @@ class StartupValidator:
                 report.add(
                     name="jwt_secret_missing",
                     passed=False,
-                    message="FG_JWT_SECRET not set. Consider setting for JWT token signing.",
-                    severity="info",
+                    message="FG_JWT_SECRET not set. Required for JWT token signing.",
+                    severity="error",
                 )
             elif len(jwt_secret) < 32:
                 report.add(
@@ -672,5 +859,10 @@ __all__ = [
     "StartupValidator",
     "StartupValidationReport",
     "ValidationResult",
+    "ComplianceModuleSpec",
+    "ComplianceModuleState",
+    "COMPLIANCE_MODULE_SPECS",
+    "compliance_module_enabled",
+    "resolve_compliance_module_states",
     "validate_startup_config",
 ]

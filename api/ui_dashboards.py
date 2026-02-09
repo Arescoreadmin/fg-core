@@ -22,11 +22,16 @@ from api.deps import get_db, tenant_db_required
 from api.db_models import DecisionRecord
 from api.security_audit import audit_admin_action
 from api.stats import _compute_stats, _trend_flag
+from api.ui_guard import ui_enabled_guard
 
 CSRF_COOKIE_NAME = os.getenv("FG_UI_CSRF_COOKIE", "fg_ui_csrf")
 CSRF_HEADER_NAME = "X-CSRF-Token"
 
-router = APIRouter(prefix="/ui", tags=["ui-dashboards"])
+router = APIRouter(
+    prefix="/ui",
+    tags=["ui-dashboards"],
+    dependencies=[Depends(ui_enabled_guard)],
+)
 
 
 class PostureTile(BaseModel):

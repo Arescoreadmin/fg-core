@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, List
@@ -12,18 +11,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_scopes, verify_api_key
+from api.config.startup_validation import compliance_module_enabled
 from api.db import get_db
 from api.db_models import PolicyChangeRequest as PolicyChangeRequestModel
 
 log = logging.getLogger("frostgate.governance")
 _security_log = logging.getLogger("frostgate.security")
-
-
-def _env_bool(name: str, default: bool = False) -> bool:
-    v = os.getenv(name)
-    if v is None:
-        return default
-    return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def _utcnow() -> datetime:
@@ -254,4 +247,4 @@ def approve_change(
 
 def governance_enabled() -> bool:
     """Check if governance feature is enabled."""
-    return _env_bool("FG_GOVERNANCE_ENABLED", False)
+    return compliance_module_enabled("governance")
