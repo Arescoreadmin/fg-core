@@ -59,6 +59,9 @@ API_VERSION = "v1"
 ERR_INVALID = "Invalid or missing API key"
 UI_COOKIE_NAME = os.getenv("FG_UI_COOKIE_NAME", "fg_api_key")
 
+# Back-compat symbol for tests that patch api.main.get_shutdown_manager
+get_shutdown_manager = None
+
 
 def _env_bool(name: str, default: bool = False) -> bool:
     v = os.getenv(name)
