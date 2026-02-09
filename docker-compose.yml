@@ -27,7 +27,7 @@ services:
     security_opt:
       - no-new-privileges:true
     cap_drop: ["ALL"]
-    cap_add: ["SETGID", "SETUID"]
+    cap_add: ["CHOWN", "SETGID", "SETUID"]
     # Redis writes ephemeral state even with appendonly disabled; give it tmpfs
     tmpfs:
       - /data:size=128m,mode=700
