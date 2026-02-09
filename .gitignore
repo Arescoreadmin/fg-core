@@ -163,3 +163,5 @@ supervisor-sidecar/supervisor-sidecar
 # ---- Contracted artifacts (versioned schemas) ----
 !contracts/artifacts/
 !contracts/artifacts/*.json
+!schemas/artifacts/
+!schemas/artifacts/*.json
