@@ -317,91 +317,6 @@
         "title": "AuditExportRequest",
         "type": "object"
       },
-      "AuditPacketRequest": {
-        "properties": {
-          "from_ts": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "From Ts"
-          },
-          "tenant_id": {
-            "anyOf": [
-              {
-                "maxLength": 128,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tenant Id"
-          },
-          "to_ts": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "To Ts"
-          }
-        },
-        "title": "AuditPacketRequest",
-        "type": "object"
-      },
-      "AuditPacketResponse": {
-        "properties": {
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "download_url": {
-            "title": "Download Url",
-            "type": "string"
-          },
-          "manifest": {
-            "title": "Manifest",
-            "type": "object"
-          },
-          "packet_id": {
-            "title": "Packet Id",
-            "type": "string"
-          },
-          "request_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Request Id"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "tenant_id",
-          "packet_id",
-          "created_at",
-          "download_url",
-          "request_id",
-          "manifest"
-        ],
-        "title": "AuditPacketResponse",
-        "type": "object"
-      },
       "AuditSearchResponse": {
         "description": "Audit search response.",
         "properties": {
@@ -428,78 +343,6 @@
           "items"
         ],
         "title": "AuditSearchResponse",
-        "type": "object"
-      },
-      "ChainVerifyResponse": {
-        "properties": {
-          "checked": {
-            "title": "Checked",
-            "type": "integer"
-          },
-          "first_bad": {
-            "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "First Bad"
-          },
-          "mode": {
-            "default": "linkage",
-            "title": "Mode",
-            "type": "string"
-          },
-          "request_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Request Id"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "strict_ok": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Strict Ok"
-          },
-          "strict_reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Strict Reason"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "tenant_id",
-          "status",
-          "checked"
-        ],
-        "title": "ChainVerifyResponse",
         "type": "object"
       },
       "CircuitBreakerStatsResponse": {
@@ -546,134 +389,15 @@
         "title": "CircuitBreakerStatsResponse",
         "type": "object"
       },
-      "ControlDetail": {
-        "properties": {
-          "description": {
-            "title": "Description",
-            "type": "string"
-          },
-          "evidence": {
-            "items": {
-              "type": "object"
-            },
-            "title": "Evidence",
-            "type": "array"
-          },
-          "inv_id": {
-            "title": "Inv Id",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "remediation": {
-            "title": "Remediation",
-            "type": "string"
-          },
-          "request_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Request Id"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "inv_id",
-          "name",
-          "status",
-          "description",
-          "evidence",
-          "remediation",
-          "request_id"
+      "ClassificationRing": {
+        "enum": [
+          "UNCLASS",
+          "CUI",
+          "SECRET",
+          "TOPSECRET"
         ],
-        "title": "ControlDetail",
-        "type": "object"
-      },
-      "ControlSummary": {
-        "properties": {
-          "evidence_count": {
-            "title": "Evidence Count",
-            "type": "integer"
-          },
-          "inv_id": {
-            "title": "Inv Id",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "remediation": {
-            "title": "Remediation",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "inv_id",
-          "name",
-          "status",
-          "evidence_count",
-          "remediation"
-        ],
-        "title": "ControlSummary",
-        "type": "object"
-      },
-      "ControlsPage": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/ControlSummary"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "limit": {
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "title": "Offset",
-            "type": "integer"
-          },
-          "request_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Request Id"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "items",
-          "limit",
-          "offset",
-          "total",
-          "request_id"
-        ],
-        "title": "ControlsPage",
-        "type": "object"
+        "title": "ClassificationRing",
+        "type": "string"
       },
       "CreateKeyRequest": {
         "description": "Request to create a new API key.",
@@ -779,154 +503,6 @@
         "title": "CreateKeyResponse",
         "type": "object"
       },
-      "DecisionDetail": {
-        "properties": {
-          "ai_adversarial_score": {
-            "title": "Ai Adversarial Score",
-            "type": "number"
-          },
-          "anomaly_score": {
-            "title": "Anomaly Score",
-            "type": "number"
-          },
-          "chain_hash": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Chain Hash"
-          },
-          "created_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Created At"
-          },
-          "decision_diff": {
-            "anyOf": [
-              {},
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Decision Diff"
-          },
-          "event_id": {
-            "title": "Event Id",
-            "type": "string"
-          },
-          "event_type": {
-            "title": "Event Type",
-            "type": "string"
-          },
-          "explain_summary": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Explain Summary"
-          },
-          "id": {
-            "title": "Id",
-            "type": "integer"
-          },
-          "latency_ms": {
-            "default": 0,
-            "title": "Latency Ms",
-            "type": "integer"
-          },
-          "pq_fallback": {
-            "title": "Pq Fallback",
-            "type": "boolean"
-          },
-          "prev_hash": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Prev Hash"
-          },
-          "request": {
-            "anyOf": [
-              {},
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Request"
-          },
-          "request_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Request Id"
-          },
-          "response": {
-            "anyOf": [
-              {},
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Response"
-          },
-          "rules_triggered": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Rules Triggered",
-            "type": "array"
-          },
-          "source": {
-            "title": "Source",
-            "type": "string"
-          },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
-          },
-          "threat_level": {
-            "title": "Threat Level",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "created_at",
-          "tenant_id",
-          "source",
-          "event_id",
-          "event_type",
-          "threat_level",
-          "anomaly_score",
-          "ai_adversarial_score",
-          "pq_fallback"
-        ],
-        "title": "DecisionDetail",
-        "type": "object"
-      },
       "DecisionExplain": {
         "properties": {
           "anomaly_score": {
@@ -1006,77 +582,6 @@
           "summary"
         ],
         "title": "DecisionExplain",
-        "type": "object"
-      },
-      "DecisionListItem": {
-        "properties": {
-          "action_taken": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Action Taken"
-          },
-          "created_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Created At"
-          },
-          "event_id": {
-            "title": "Event Id",
-            "type": "string"
-          },
-          "event_type": {
-            "title": "Event Type",
-            "type": "string"
-          },
-          "explain_summary": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Explain Summary"
-          },
-          "id": {
-            "title": "Id",
-            "type": "integer"
-          },
-          "latency_ms": {
-            "default": 0,
-            "title": "Latency Ms",
-            "type": "integer"
-          },
-          "source": {
-            "title": "Source",
-            "type": "string"
-          },
-          "threat_level": {
-            "title": "Threat Level",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "event_id",
-          "event_type",
-          "source",
-          "threat_level"
-        ],
-        "title": "DecisionListItem",
         "type": "object"
       },
       "DecisionOut": {
@@ -1200,6 +705,36 @@
           "pq_fallback"
         ],
         "title": "DecisionOut",
+        "type": "object"
+      },
+      "DecisionsPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DecisionOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "limit",
+          "offset",
+          "total"
+        ],
+        "title": "DecisionsPage",
         "type": "object"
       },
       "DefendResponse": {
@@ -1741,6 +1276,143 @@
         "title": "ListKeysResponse",
         "type": "object"
       },
+      "MissionEnvelope": {
+        "properties": {
+          "allowed_mitigations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Mitigations",
+            "type": "array"
+          },
+          "blast_radius_cap": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blast Radius Cap"
+          },
+          "budget_cap": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Cap"
+          },
+          "classification_level": {
+            "title": "Classification Level",
+            "type": "string"
+          },
+          "forensic_threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forensic Threshold"
+          },
+          "mission_id": {
+            "title": "Mission Id",
+            "type": "string"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "persona": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona"
+          },
+          "risk_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Tier"
+          },
+          "scope_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Hash"
+          },
+          "signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature"
+          },
+          "valid_from": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          }
+        },
+        "required": [
+          "mission_id",
+          "classification_level"
+        ],
+        "title": "MissionEnvelope",
+        "type": "object"
+      },
       "MitigationAction": {
         "properties": {
           "action": {
@@ -1786,6 +1458,184 @@
         "title": "MitigationAction",
         "type": "object"
       },
+      "PolicyApprovalRequest": {
+        "description": "Request model for approving a policy change.",
+        "properties": {
+          "approver": {
+            "title": "Approver",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "required": [
+          "approver"
+        ],
+        "title": "PolicyApprovalRequest",
+        "type": "object"
+      },
+      "PolicyChangeCreate": {
+        "description": "Request model for creating a policy change.",
+        "properties": {
+          "change_type": {
+            "title": "Change Type",
+            "type": "string"
+          },
+          "justification": {
+            "title": "Justification",
+            "type": "string"
+          },
+          "proposed_by": {
+            "title": "Proposed By",
+            "type": "string"
+          },
+          "roe_update": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Roe Update"
+          },
+          "rule_definition": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Definition"
+          }
+        },
+        "required": [
+          "change_type",
+          "proposed_by",
+          "justification"
+        ],
+        "title": "PolicyChangeCreate",
+        "type": "object"
+      },
+      "PolicyChangeResponse": {
+        "description": "Response model for policy change requests.",
+        "properties": {
+          "approvals": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Approvals",
+            "type": "array"
+          },
+          "change_id": {
+            "title": "Change Id",
+            "type": "string"
+          },
+          "change_type": {
+            "title": "Change Type",
+            "type": "string"
+          },
+          "confidence": {
+            "default": "medium",
+            "title": "Confidence",
+            "type": "string"
+          },
+          "deployed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployed At"
+          },
+          "estimated_false_positives": {
+            "default": 0,
+            "title": "Estimated False Positives",
+            "type": "integer"
+          },
+          "estimated_true_positives": {
+            "default": 0,
+            "title": "Estimated True Positives",
+            "type": "integer"
+          },
+          "justification": {
+            "title": "Justification",
+            "type": "string"
+          },
+          "proposed_at": {
+            "format": "date-time",
+            "title": "Proposed At",
+            "type": "string"
+          },
+          "proposed_by": {
+            "title": "Proposed By",
+            "type": "string"
+          },
+          "requires_approval_from": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requires Approval From",
+            "type": "array"
+          },
+          "roe_update": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Roe Update"
+          },
+          "rule_definition": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Definition"
+          },
+          "simulation_results": {
+            "title": "Simulation Results",
+            "type": "object"
+          },
+          "status": {
+            "default": "pending",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "change_id",
+          "change_type",
+          "proposed_by",
+          "proposed_at",
+          "justification"
+        ],
+        "title": "PolicyChangeResponse",
+        "type": "object"
+      },
       "PolicyDecision": {
         "properties": {
           "allow": {
@@ -1806,13 +1656,9 @@
         "title": "PolicyDecision",
         "type": "object"
       },
-      "PostureResponse": {
+      "ROEEvaluationRequest": {
         "properties": {
-          "generated_at": {
-            "title": "Generated At",
-            "type": "string"
-          },
-          "request_id": {
+          "classification": {
             "anyOf": [
               {
                 "type": "string"
@@ -1821,49 +1667,16 @@
                 "type": "null"
               }
             ],
-            "title": "Request Id"
+            "title": "Classification"
           },
-          "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
-          },
-          "tiles": {
-            "items": {
-              "$ref": "#/components/schemas/PostureTile"
-            },
-            "title": "Tiles",
-            "type": "array"
-          },
-          "top_deny_reasons": {
+          "mitigations": {
             "items": {
               "type": "object"
             },
-            "title": "Top Deny Reasons",
+            "title": "Mitigations",
             "type": "array"
           },
-          "trends": {
-            "title": "Trends",
-            "type": "object"
-          }
-        },
-        "required": [
-          "tenant_id",
-          "generated_at",
-          "request_id",
-          "tiles",
-          "trends",
-          "top_deny_reasons"
-        ],
-        "title": "PostureResponse",
-        "type": "object"
-      },
-      "PostureTile": {
-        "properties": {
-          "label": {
-            "title": "Label",
-            "type": "string"
-          },
-          "trend": {
+          "persona": {
             "anyOf": [
               {
                 "type": "string"
@@ -1872,18 +1685,55 @@
                 "type": "null"
               }
             ],
-            "title": "Trend"
+            "title": "Persona"
+          }
+        },
+        "title": "ROEEvaluationRequest",
+        "type": "object"
+      },
+      "ROEEvaluationResponse": {
+        "properties": {
+          "gating_decision": {
+            "title": "Gating Decision",
+            "type": "string"
           },
-          "value": {
-            "title": "Value",
+          "policy": {
+            "$ref": "#/components/schemas/ROEPolicy"
+          },
+          "reason": {
+            "title": "Reason",
             "type": "string"
           }
         },
         "required": [
-          "label",
-          "value"
+          "gating_decision",
+          "reason",
+          "policy"
         ],
-        "title": "PostureTile",
+        "title": "ROEEvaluationResponse",
+        "type": "object"
+      },
+      "ROEPolicy": {
+        "properties": {
+          "ao_required_actions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ao Required Actions",
+            "type": "array"
+          },
+          "max_disruption": {
+            "default": 1,
+            "title": "Max Disruption",
+            "type": "integer"
+          },
+          "policy_id": {
+            "default": "roe-default",
+            "title": "Policy Id",
+            "type": "string"
+          }
+        },
+        "title": "ROEPolicy",
         "type": "object"
       },
       "RevokeKeyRequest": {
@@ -1925,6 +1775,78 @@
           "message"
         ],
         "title": "RevokeKeyResponse",
+        "type": "object"
+      },
+      "RingPolicy": {
+        "properties": {
+          "audit_level": {
+            "default": "basic",
+            "pattern": "^(basic|detailed|comprehensive)$",
+            "title": "Audit Level",
+            "type": "string"
+          },
+          "cross_ring_queries_allowed": {
+            "default": false,
+            "title": "Cross Ring Queries Allowed",
+            "type": "boolean"
+          },
+          "encryption_required": {
+            "default": true,
+            "title": "Encryption Required",
+            "type": "boolean"
+          },
+          "max_retention_days": {
+            "default": 30,
+            "title": "Max Retention Days",
+            "type": "integer"
+          },
+          "model_isolation": {
+            "default": true,
+            "title": "Model Isolation",
+            "type": "boolean"
+          },
+          "ring": {
+            "$ref": "#/components/schemas/ClassificationRing"
+          }
+        },
+        "required": [
+          "ring"
+        ],
+        "title": "RingPolicy",
+        "type": "object"
+      },
+      "RingRouteRequest": {
+        "properties": {
+          "classification": {
+            "$ref": "#/components/schemas/ClassificationRing"
+          }
+        },
+        "required": [
+          "classification"
+        ],
+        "title": "RingRouteRequest",
+        "type": "object"
+      },
+      "RingRouteResponse": {
+        "properties": {
+          "db_path": {
+            "title": "Db Path",
+            "type": "string"
+          },
+          "model_path": {
+            "title": "Model Path",
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/RingPolicy"
+          }
+        },
+        "required": [
+          "db_path",
+          "model_path",
+          "policy"
+        ],
+        "title": "RingRouteResponse",
         "type": "object"
       },
       "RotateKeyRequest": {
@@ -2536,79 +2458,6 @@
         ],
         "title": "ValidationError",
         "type": "object"
-      },
-      "api__decisions__DecisionsPage": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/DecisionOut"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "limit": {
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "title": "Offset",
-            "type": "integer"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "limit",
-          "offset",
-          "total"
-        ],
-        "title": "DecisionsPage",
-        "type": "object"
-      },
-      "api__ui_dashboards__DecisionsPage": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/DecisionListItem"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "limit": {
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "title": "Offset",
-            "type": "integer"
-          },
-          "request_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Request Id"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "items",
-          "limit",
-          "offset",
-          "total",
-          "request_id"
-        ],
-        "title": "DecisionsPage",
-        "type": "object"
       }
     }
   },
@@ -2749,7 +2598,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/api__decisions__DecisionsPage"
+                  "$ref": "#/components/schemas/DecisionsPage"
                 }
               }
             },
@@ -3653,6 +3502,235 @@
         ]
       }
     },
+    "/governance/changes": {
+      "get": {
+        "description": "List all policy change requests.\n\nSecurity: Requires authentication + governance scope (INV-005).\nPersistence: Database-backed, survives restart (P0).",
+        "operationId": "list_changes_governance_changes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "sqlite_path",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sqlite Path"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PolicyChangeResponse"
+                  },
+                  "title": "Response List Changes Governance Changes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Changes",
+        "tags": [
+          "governance"
+        ]
+      },
+      "post": {
+        "description": "Create a new policy change request.\n\nSecurity: Requires authentication + governance scope (INV-005).\nPersistence: Database-backed, survives restart (P0).\nAudit: Timestamp and proposer recorded.",
+        "operationId": "create_change_governance_changes_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "sqlite_path",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sqlite Path"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyChangeCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyChangeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Change",
+        "tags": [
+          "governance"
+        ]
+      }
+    },
+    "/governance/changes/{change_id}/approve": {
+      "post": {
+        "description": "Approve a policy change request.\n\nSecurity: Requires authentication + governance scope (INV-005).\nPersistence: Database-backed, survives restart (P0).\nAudit: Approval timestamp and approver recorded.",
+        "operationId": "approve_change_governance_changes__change_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "change_id",
+            "required": true,
+            "schema": {
+              "title": "Change Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sqlite_path",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sqlite Path"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyApprovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyChangeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Change",
+        "tags": [
+          "governance"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "health_health_get",
@@ -4096,6 +4174,300 @@
         ]
       }
     },
+    "/missions": {
+      "get": {
+        "operationId": "list_missions_missions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MissionEnvelope"
+                  },
+                  "title": "Response List Missions Missions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Missions",
+        "tags": [
+          "missions"
+        ]
+      }
+    },
+    "/missions/{mission_id}": {
+      "get": {
+        "operationId": "get_mission_missions__mission_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mission_id",
+            "required": true,
+            "schema": {
+              "title": "Mission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MissionEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Mission",
+        "tags": [
+          "missions"
+        ]
+      }
+    },
+    "/missions/{mission_id}/status": {
+      "get": {
+        "operationId": "mission_status_missions__mission_id__status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mission_id",
+            "required": true,
+            "schema": {
+              "title": "Mission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Mission Status Missions  Mission Id  Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mission Status",
+        "tags": [
+          "missions"
+        ]
+      }
+    },
+    "/rings/isolation": {
+      "get": {
+        "operationId": "check_isolation_rings_isolation_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "source",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ClassificationRing"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ClassificationRing"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Check Isolation Rings Isolation Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Isolation",
+        "tags": [
+          "rings"
+        ]
+      }
+    },
+    "/rings/policies": {
+      "get": {
+        "operationId": "list_policies_rings_policies_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RingPolicy"
+                  },
+                  "title": "Response List Policies Rings Policies Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Policies",
+        "tags": [
+          "rings"
+        ]
+      }
+    },
+    "/rings/route": {
+      "post": {
+        "operationId": "route_request_rings_route_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RingRouteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RingRouteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Route Request",
+        "tags": [
+          "rings"
+        ]
+      }
+    },
+    "/roe/evaluate": {
+      "post": {
+        "operationId": "evaluate_roe_roe_evaluate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ROEEvaluationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ROEEvaluationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evaluate Roe",
+        "tags": [
+          "roe"
+        ]
+      }
+    },
+    "/roe/policy": {
+      "get": {
+        "operationId": "get_policy_roe_policy_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ROEPolicy"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Policy",
+        "tags": [
+          "roe"
+        ]
+      }
+    },
     "/stats": {
       "get": {
         "operationId": "get_stats_stats_get",
@@ -4263,1011 +4635,6 @@
           }
         },
         "summary": "Status"
-      }
-    },
-    "/ui/audit/packet": {
-      "post": {
-        "operationId": "ui_audit_packet_ui_audit_packet_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "X-API-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AuditPacketRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuditPacketResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Ui Audit Packet",
-        "tags": [
-          "ui-dashboards"
-        ]
-      }
-    },
-    "/ui/audit/packet/{packet_id}/download": {
-      "get": {
-        "operationId": "ui_audit_packet_download_ui_audit_packet__packet_id__download_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "packet_id",
-            "required": true,
-            "schema": {
-              "title": "Packet Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "tenant_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 128,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Tenant Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "token",
-            "required": true,
-            "schema": {
-              "minLength": 8,
-              "title": "Token",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-API-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Ui Audit Packet Download",
-        "tags": [
-          "ui-dashboards"
-        ]
-      }
-    },
-    "/ui/controls": {
-      "get": {
-        "operationId": "ui_controls_ui_controls_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 20,
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "required": false,
-            "schema": {
-              "default": 0,
-              "maximum": 1000,
-              "minimum": 0,
-              "title": "Offset",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "tenant_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 128,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Tenant Id"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-API-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ControlsPage"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Ui Controls",
-        "tags": [
-          "ui-dashboards"
-        ]
-      }
-    },
-    "/ui/controls/{inv_id}": {
-      "get": {
-        "operationId": "ui_control_detail_ui_controls__inv_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "inv_id",
-            "required": true,
-            "schema": {
-              "title": "Inv Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "tenant_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 128,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Tenant Id"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-API-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ControlDetail"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Ui Control Detail",
-        "tags": [
-          "ui-dashboards"
-        ]
-      }
-    },
-    "/ui/csrf": {
-      "get": {
-        "operationId": "ui_csrf_ui_csrf_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "X-API-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "anyOf": [
-                  {
-                    "items": {
-                      "type": "string"
-                    },
-                    "type": "array",
-                    "uniqueItems": true
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Required Scopes"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Ui Csrf",
-        "tags": [
-          "ui-dashboards"
-        ]
-      }
-    },
-    "/ui/dash/controls": {
-      "get": {
-        "operationId": "ui_controls_page",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "_",
-            "required": false,
-            "schema": {
-              "title": " "
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Ui Controls Page",
-        "tags": [
-          "ui"
-        ]
-      }
-    },
-    "/ui/dash/forensics": {
-      "get": {
-        "operationId": "ui_forensics_page",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "_",
-            "required": false,
-            "schema": {
-              "title": " "
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Ui Forensics Page",
-        "tags": [
-          "ui"
-        ]
-      }
-    },
-    "/ui/dash/posture": {
-      "get": {
-        "operationId": "ui_posture_page",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "_",
-            "required": false,
-            "schema": {
-              "title": " "
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Ui Posture Page",
-        "tags": [
-          "ui"
-        ]
-      }
-    },
-    "/ui/decision/{decision_id}": {
-      "get": {
-        "operationId": "ui_decision_detail_ui_decision__decision_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "decision_id",
-            "required": true,
-            "schema": {
-              "title": "Decision Id",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "tenant_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Tenant Id"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-API-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DecisionDetail"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Ui Decision Detail",
-        "tags": [
-          "ui-dashboards"
-        ]
-      }
-    },
-    "/ui/decisions": {
-      "get": {
-        "operationId": "ui_decisions_ui_decisions_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 25,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "required": false,
-            "schema": {
-              "default": 0,
-              "maximum": 200000,
-              "minimum": 0,
-              "title": "Offset",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "tenant_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Tenant Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "event_type",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Event Type"
-            }
-          },
-          {
-            "in": "query",
-            "name": "threat_level",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Threat Level"
-            }
-          },
-          {
-            "in": "query",
-            "name": "source",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Source"
-            }
-          },
-          {
-            "in": "query",
-            "name": "from_ts",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "From Ts"
-            }
-          },
-          {
-            "in": "query",
-            "name": "to_ts",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "To Ts"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-API-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/api__ui_dashboards__DecisionsPage"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Ui Decisions",
-        "tags": [
-          "ui-dashboards"
-        ]
-      }
-    },
-    "/ui/feed": {
-      "get": {
-        "operationId": "ui_feed_page",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "_",
-            "required": false,
-            "schema": {
-              "title": " "
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "text/html": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Ui Feed",
-        "tags": [
-          "ui"
-        ]
-      }
-    },
-    "/ui/forensics/chain/verify": {
-      "get": {
-        "operationId": "ui_chain_verify_ui_forensics_chain_verify_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "tenant_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Tenant Id"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-API-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChainVerifyResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Ui Chain Verify",
-        "tags": [
-          "ui-dashboards"
-        ]
-      }
-    },
-    "/ui/posture": {
-      "get": {
-        "operationId": "ui_posture_ui_posture_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "tenant_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Tenant Id"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-API-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PostureResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Ui Posture",
-        "tags": [
-          "ui-dashboards"
-        ]
-      }
-    },
-    "/ui/scopes": {
-      "get": {
-        "operationId": "ui_scopes_ui_scopes_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "X-API-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "anyOf": [
-                  {
-                    "items": {
-                      "type": "string"
-                    },
-                    "type": "array",
-                    "uniqueItems": true
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Required Scopes"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "title": "Response Ui Scopes Ui Scopes Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Ui Scopes",
-        "tags": [
-          "ui-dashboards"
-        ]
-      }
-    },
-    "/ui/token": {
-      "get": {
-        "operationId": "ui_token_ui_token_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Ui Token",
-        "tags": [
-          "ui"
-        ]
       }
     },
     "/v1/defend": {

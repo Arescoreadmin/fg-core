@@ -24,50 +24,10 @@ from api.stats import router as stats_router
 from api.ui import router as ui_router
 from api.ui_dashboards import router as ui_dashboards_router
 
-# Optional "spine" modules (feature-flag gated, fail-open)
-try:
-    from api.governance import governance_enabled, router as governance_router
-except Exception:  # pragma: no cover
-
-    def governance_enabled() -> bool:  # type: ignore
-        return False
-
-    governance_router = None  # type: ignore
-
-try:
-    # Mission envelope module: accept either exported name, but standardize on mission_envelope_enabled()
-    from api.mission_envelope import router as mission_router
-
-    try:
-        from api.mission_envelope import mission_envelope_enabled  # preferred
-    except Exception:  # pragma: no cover
-        from api.mission_envelope import (
-            mission_envelopes_enabled as mission_envelope_enabled,
-        )  # type: ignore
-except Exception:  # pragma: no cover
-
-    def mission_envelope_enabled() -> bool:  # type: ignore
-        return False
-
-    mission_router = None  # type: ignore
-
-try:
-    from api.ring_router import ring_router_enabled, router as ring_router
-except Exception:  # pragma: no cover
-
-    def ring_router_enabled() -> bool:  # type: ignore
-        return False
-
-    ring_router = None  # type: ignore
-
-try:
-    from api.roe_engine import roe_engine_enabled, router as roe_router
-except Exception:  # pragma: no cover
-
-    def roe_engine_enabled() -> bool:  # type: ignore
-        return False
-
-    roe_router = None  # type: ignore
+from api.governance import router as governance_router
+from api.mission_envelope import router as mission_router
+from api.ring_router import router as ring_router
+from api.roe_engine import router as roe_router
 
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
@@ -81,23 +41,12 @@ from api.middleware.security_headers import (
     SecurityHeadersMiddleware,
 )
 
-# Startup validation (fail-soft import)
-try:
-    from api.config.env import is_production_env, is_strict_env_required, resolve_env
-    from api.config.startup_validation import validate_startup_config
-except ImportError:  # pragma: no cover
-
-    def validate_startup_config(**_):  # type: ignore
-        return None
-
-    def is_production_env() -> bool:  # type: ignore
-        return False
-
-    def is_strict_env_required() -> bool:  # type: ignore
-        return False
-
-    def resolve_env() -> str:  # type: ignore
-        return (os.getenv("FG_ENV") or "dev").strip() or "dev"
+from api.config.env import is_production_env, is_strict_env_required, resolve_env
+from api.config.startup_validation import (
+    compliance_module_enabled,
+    validate_startup_config,
+)
+from api.config.ui import ui_enabled
 
 
 # Graceful shutdown (fail-soft import)
@@ -466,26 +415,26 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     except Exception:
         pass
 
+    public_paths = [
+        "/health",
+        "/health/live",
+        "/health/ready",
+        "/openapi.json",
+        "/docs",
+        "/redoc",
+        # Forensics endpoints authenticate via require_scopes()
+        # (scoped fgk.* tokens), not via global FG_API_KEY.
+        "/forensics/chain/verify",
+        "/forensics/snapshot",
+        "/forensics/audit-trail",
+    ]
+    if not is_production_env() and ui_enabled():
+        public_paths.extend(["/ui", "/ui/token"])
+
     app.add_middleware(
         AuthGateMiddleware,
         require_status_auth=require_status_auth,
-        config=AuthGateConfig(
-            public_paths=(
-                "/health",
-                "/health/live",
-                "/health/ready",
-                "/ui",
-                "/ui/token",
-                "/openapi.json",
-                "/docs",
-                "/redoc",
-                # Forensics endpoints authenticate via require_scopes()
-                # (scoped fgk.* tokens), not via global FG_API_KEY.
-                "/forensics/chain/verify",
-                "/forensics/snapshot",
-                "/forensics/audit-trail",
-            )
-        ),
+        config=AuthGateConfig(public_paths=tuple(public_paths)),
     )
 
     # ---- Routers ----
@@ -494,21 +443,22 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(feed_router)
     app.include_router(decisions_router)
     app.include_router(stats_router)
-    app.include_router(ui_router)
-    app.include_router(ui_dashboards_router)
+    if ui_enabled():
+        app.include_router(ui_router)
+        app.include_router(ui_dashboards_router)
     app.include_router(keys_router)
 
     # Forensics routes must always exist for contract/security tests.
     # Kill-switch is enforced inside api/forensics.py (return 404).
     app.include_router(forensics_router)
 
-    if mission_router is not None and mission_envelope_enabled():
+    if compliance_module_enabled("mission_envelope"):
         app.include_router(mission_router)
-    if ring_router is not None and ring_router_enabled():
+    if compliance_module_enabled("ring_router"):
         app.include_router(ring_router)
-    if roe_router is not None and roe_engine_enabled():
+    if compliance_module_enabled("roe_engine"):
         app.include_router(roe_router)
-    if governance_router is not None and governance_enabled():
+    if compliance_module_enabled("governance"):
         app.include_router(governance_router)
 
     if _dev_enabled():
@@ -545,6 +495,16 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
         deps_status: dict = {"db": "unknown"}
         failures: list[str] = []
+
+        startup_validation = getattr(app.state, "startup_validation", None)
+        if startup_validation is None:
+            raise HTTPException(
+                status_code=503, detail="startup_validation_unavailable"
+            )
+        if startup_validation.has_errors:
+            raise HTTPException(
+                status_code=503, detail="startup_validation_failed"
+            )
 
         if not bool(app.state.db_init_ok):
             raise HTTPException(

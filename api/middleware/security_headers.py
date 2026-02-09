@@ -226,7 +226,7 @@ class CORSConfig:
     @classmethod
     def from_env(cls) -> "CORSConfig":
         """Load CORS configuration from environment."""
-        origins_str = _env_str("FG_CORS_ORIGINS", "*")
+        origins_str = _env_str("FG_CORS_ORIGINS", "")
         origins = [o.strip() for o in origins_str.split(",") if o.strip()]
 
         return cls(

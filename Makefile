@@ -125,7 +125,7 @@ venv:
 # Guards / audits
 # =============================================================================
 
-.PHONY: guard-scripts fg-audit-make fg-contract fg-compile contracts-gen contracts-core-gen contracts-core-diff artifact-contract-check check-no-engine-evaluate opa-check
+.PHONY: guard-scripts fg-audit-make fg-contract fg-compile contracts-gen contracts-core-gen contracts-core-diff artifact-contract-check contract-authority-check check-no-engine-evaluate opa-check
 
 guard-scripts:
 	@$(PY_CONTRACT) scripts/guard_no_paste_garbage.py
@@ -165,11 +165,15 @@ contracts-core-diff:
 artifact-contract-check:
 	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) scripts/artifact_schema_check.py
 
+contract-authority-check:
+	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) scripts/contract_authority_check.py
+
 fg-contract: guard-scripts contracts-gen
 	@$(PY_CONTRACT) scripts/contract_toolchain_check.py
 	@$(PY_CONTRACT) scripts/contract_lint.py
 	@git diff --exit-code contracts/admin
 	@$(PY_CONTRACT) scripts/contracts_diff_core.py
+	@$(PY_CONTRACT) scripts/contract_authority_check.py
 	@$(PY_CONTRACT) scripts/artifact_schema_check.py
 	@echo "Contract diff: OK (admin/core/artifacts)"
 

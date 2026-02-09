@@ -15,15 +15,17 @@ def render_openapi(payload: Dict[str, Any]) -> str:
 
 def _freeze_contract_env() -> None:
     os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
-    os.environ.setdefault("FG_ENV", "test")
+    os.environ.setdefault("FG_CONTRACT_SPEC", "prod")
+    os.environ.setdefault("FG_ENV", "prod")
     os.environ.setdefault("FG_DEV_EVENTS_ENABLED", "0")
-    os.environ.setdefault("FG_AUTH_ENABLED", "0")
+    os.environ.setdefault("FG_AUTH_ENABLED", "1")
+    os.environ.setdefault("FG_UI_ENABLED", "0")
     os.environ.setdefault("FG_UI_TOKEN_GET_ENABLED", "0")
     os.environ.setdefault("FG_FORENSICS_ENABLED", "0")
-    os.environ.setdefault("FG_GOVERNANCE_ENABLED", "0")
-    os.environ.setdefault("FG_MISSION_ENVELOPES_ENABLED", "0")
-    os.environ.setdefault("FG_RING_ROUTER_ENABLED", "0")
-    os.environ.setdefault("FG_ROE_ENGINE_ENABLED", "0")
+    os.environ.setdefault("FG_GOVERNANCE_ENABLED", "1")
+    os.environ.setdefault("FG_MISSION_ENVELOPE_ENABLED", "1")
+    os.environ.setdefault("FG_RING_ROUTER_ENABLED", "1")
+    os.environ.setdefault("FG_ROE_ENGINE_ENABLED", "1")
 
 
 def _filter_admin_paths(openapi: Dict[str, Any]) -> Dict[str, Any]:
@@ -46,7 +48,7 @@ def generate_openapi() -> Dict[str, Any]:
 
     from api.main import build_app
 
-    app = build_app(auth_enabled=False)
+    app = build_app(auth_enabled=True)
     openapi = app.openapi()
     return _filter_admin_paths(openapi)
 

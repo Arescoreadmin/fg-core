@@ -6,12 +6,15 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 
+from api.auth_scopes import require_scopes
 from api.config.env import is_production_env
+from api.ui_guard import ui_enabled_guard
 from api.ratelimit import rate_limit_guard
 
 router = APIRouter(
     prefix="/ui",
     tags=["ui"],
+    dependencies=[Depends(ui_enabled_guard), Depends(require_scopes("ui:read"))],
     # IMPORTANT: do NOT put rate_limit_guard here or it will block /ui/token GET
 )
 

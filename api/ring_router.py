@@ -6,12 +6,11 @@ from enum import Enum
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
+from api.config.startup_validation import compliance_module_enabled
 
-def _env_bool(name: str, default: bool = False) -> bool:
-    v = os.getenv(name)
-    if v is None:
-        return default
-    return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+def _env_str(name: str, default: str) -> str:
+    return (os.getenv(name) or default).strip()
 
 
 class ClassificationRing(str, Enum):
@@ -65,9 +64,11 @@ DEFAULT_POLICIES = {
 
 
 class RingRouter:
-    def __init__(self, state_dir: str = "state", model_dir: str = "models") -> None:
-        self.state_dir = state_dir
-        self.model_dir = model_dir
+    def __init__(
+        self, state_dir: str | None = None, model_dir: str | None = None
+    ) -> None:
+        self.state_dir = state_dir or _env_str("FG_RING_STATE_DIR", "state")
+        self.model_dir = model_dir or _env_str("FG_RING_MODEL_DIR", "models")
         self.ring_policies = dict(DEFAULT_POLICIES)
 
     def route(self, classification: ClassificationRing) -> RingRouteResponse:
@@ -117,4 +118,4 @@ async def check_isolation(
 
 
 def ring_router_enabled() -> bool:
-    return _env_bool("FG_RING_ROUTER_ENABLED", False)
+    return compliance_module_enabled("ring_router")
