@@ -22,6 +22,13 @@ logger = logging.getLogger("frostgate")
 # ---------------------------------------------------------------------
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    v = os.getenv(name)
+    if v is None:
+        return default
+    return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 def _resolve_sqlite_path(path: str | None = None) -> str:
     """
     Contract behavior:
@@ -171,14 +178,20 @@ def init_db(*, sqlite_path: Optional[str] = None) -> None:
 
     _ensure_models_imported()
     Base = _get_base()
-    Base.metadata.create_all(bind=engine)
-
-    # best-effort sqlite migrations (keeps tests + mint_key working)
     if engine.dialect.name == "sqlite":
+        Base.metadata.create_all(bind=engine)
+        # best-effort sqlite migrations (keeps tests + mint_key working)
         try:
             _auto_migrate_sqlite(engine)
         except Exception:
             logger.exception("sqlite auto-migration failed (best effort)")
+    elif engine.dialect.name == "postgresql":
+        if _env_bool("FG_DB_MIGRATIONS_REQUIRED", True):
+            from api.db_migrations import (  # noqa: WPS433 (explicit import)
+                assert_migrations_applied,
+            )
+
+            assert_migrations_applied(engine)
 
     # Optional sanity check
     try:

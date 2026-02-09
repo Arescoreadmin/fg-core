@@ -1,0 +1,39 @@
+{
+  "registry_version": "1",
+  "schemas": [
+    {
+      "id": "api.openapi.v1",
+      "type": "api",
+      "path": "schemas/api/openapi.json",
+      "source_path": "contracts/core/openapi.json"
+    },
+    {
+      "id": "events.ingest_message.v1.0",
+      "type": "events",
+      "path": "schemas/events/ingest_message.schema.json",
+      "code_refs": [
+        {
+          "path": "api/ingest_bus.py",
+          "pattern": "MESSAGE_SCHEMA_VERSION = \"1.0\""
+        }
+      ]
+    },
+    {
+      "id": "artifacts.decision.v1.0",
+      "type": "artifacts",
+      "path": "schemas/artifacts/decision.schema.json",
+      "source_path": "contracts/artifacts/decision.schema.json"
+    },
+    {
+      "id": "artifacts.decision_evidence.v1.0",
+      "type": "artifacts",
+      "path": "schemas/artifacts/decision_evidence.schema.json",
+      "code_refs": [
+        {
+          "path": "api/evidence_artifacts.py",
+          "pattern": "DECISION_EVIDENCE_SCHEMA_VERSION = \"1.0\""
+        }
+      ]
+    }
+  ]
+}

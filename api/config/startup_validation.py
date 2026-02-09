@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from importlib import import_module
 from pathlib import Path
 from typing import Dict, List, Optional
+from urllib.parse import urlparse
 
 from api.config.env import resolve_env
 
@@ -257,6 +258,7 @@ class StartupValidator:
         )
 
         self._check_compliance_modules(report)
+        self._check_spine_modules(report)
         self._check_api_key(report)
         self._check_database(report)
         self._check_rate_limiting(report)
@@ -271,6 +273,9 @@ class StartupValidator:
         self._check_quota_enforcement(report)
         self._check_encryption_keys(report)
         self._check_dos_hardening(report)
+        self._check_opa_enforcement(report)
+        self._check_nats_auth(report)
+        self._check_migrations_required(report)
 
         return report
 
@@ -304,6 +309,29 @@ class StartupValidator:
                     passed=False,
                     message=f"{state.display_name} missing resources: "
                     f"{', '.join(state.resource_errors)}",
+                    severity="error" if self.is_production else "warning",
+                )
+
+    def _check_spine_modules(self, report: StartupValidationReport) -> None:
+        """Check spine module availability when feature flags are enabled."""
+        feature_flags = {
+            "FG_ADMIN_API_ENABLED": ("Admin API", "api.admin"),
+            "FG_GRACEFUL_SHUTDOWN_ENABLED": (
+                "Graceful Shutdown",
+                "api.graceful_shutdown",
+            ),
+        }
+
+        for flag, (label, module_path) in feature_flags.items():
+            if not _env_bool(flag, False if flag == "FG_ADMIN_API_ENABLED" else True):
+                continue
+            try:
+                import_module(module_path)
+            except Exception as exc:
+                report.add(
+                    name=f"spine_module_{module_path}_missing",
+                    passed=False,
+                    message=f"{label} enabled but import failed: {module_path} ({exc})",
                     severity="error" if self.is_production else "warning",
                 )
 
@@ -410,6 +438,23 @@ class StartupValidator:
                 severity="info",
             )
 
+    def _check_migrations_required(self, report: StartupValidationReport) -> None:
+        """Require Postgres migrations in production unless risk is accepted."""
+        if not self.is_production:
+            return
+        db_backend = _env_str("FG_DB_BACKEND", "").lower()
+        if db_backend != "postgres":
+            return
+        if not _env_bool("FG_DB_MIGRATIONS_REQUIRED", True):
+            if not _env_bool("FG_DB_MIGRATIONS_RISK_ACCEPTED", False):
+                report.add(
+                    name="db_migrations_required",
+                    passed=False,
+                    message="FG_DB_MIGRATIONS_REQUIRED is false without "
+                    "FG_DB_MIGRATIONS_RISK_ACCEPTED=1.",
+                    severity="error",
+                )
+
     def _check_rate_limiting(self, report: StartupValidationReport) -> None:
         """Check rate limiting configuration."""
         rl_enabled = _env_bool("FG_RL_ENABLED", True)
@@ -438,6 +483,52 @@ class StartupValidator:
                 message=f"Rate limiting enabled with {rl_backend} backend.",
                 severity="info",
             )
+
+    def _check_opa_enforcement(self, report: StartupValidationReport) -> None:
+        opa_enforce = _env_bool("FG_OPA_ENFORCE", False)
+        opa_url = _env_str("FG_OPA_URL", "")
+
+        if self.is_production and not opa_enforce:
+            if not _env_bool("FG_OPA_RISK_ACCEPTED", False):
+                report.add(
+                    name="opa_enforcement_disabled",
+                    passed=False,
+                    message="OPA enforcement disabled without FG_OPA_RISK_ACCEPTED=1.",
+                    severity="error",
+                )
+        if opa_enforce and not opa_url:
+            report.add(
+                name="opa_url_missing",
+                passed=False,
+                message="FG_OPA_ENFORCE=1 requires FG_OPA_URL.",
+                severity="error" if self.is_production else "warning",
+            )
+
+    def _check_nats_auth(self, report: StartupValidationReport) -> None:
+        nats_url = _env_str("FG_NATS_URL", "")
+        nats_enabled = _env_bool("FG_NATS_ENABLED", False)
+        if not nats_enabled and not nats_url:
+            return
+        if not nats_url:
+            report.add(
+                name="nats_url_missing",
+                passed=False,
+                message="FG_NATS_ENABLED=1 requires FG_NATS_URL.",
+                severity="error" if self.is_production else "warning",
+            )
+            return
+
+        parsed = urlparse(nats_url)
+        has_auth = bool(parsed.username or parsed.password)
+        if self.is_production and not has_auth:
+            if not _env_bool("FG_NATS_RISK_ACCEPTED", False):
+                report.add(
+                    name="nats_auth_missing",
+                    passed=False,
+                    message="FG_NATS_URL has no auth credentials and "
+                    "FG_NATS_RISK_ACCEPTED is not set.",
+                    severity="error",
+                )
 
     def _check_cors(self, report: StartupValidationReport) -> None:
         """Check CORS configuration."""
