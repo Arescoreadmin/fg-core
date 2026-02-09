@@ -75,21 +75,15 @@ def _assert_startup_fails_before_routes(
 
 
 def test_governance_disabled_in_prod_fails_startup(monkeypatch, tmp_path):
-    _assert_startup_fails_before_routes(
-        monkeypatch, tmp_path, "FG_GOVERNANCE_ENABLED"
-    )
+    _assert_startup_fails_before_routes(monkeypatch, tmp_path, "FG_GOVERNANCE_ENABLED")
 
 
 def test_roe_engine_disabled_in_prod_fails_startup(monkeypatch, tmp_path):
-    _assert_startup_fails_before_routes(
-        monkeypatch, tmp_path, "FG_ROE_ENGINE_ENABLED"
-    )
+    _assert_startup_fails_before_routes(monkeypatch, tmp_path, "FG_ROE_ENGINE_ENABLED")
 
 
 def test_ring_router_disabled_in_prod_fails_startup(monkeypatch, tmp_path):
-    _assert_startup_fails_before_routes(
-        monkeypatch, tmp_path, "FG_RING_ROUTER_ENABLED"
-    )
+    _assert_startup_fails_before_routes(monkeypatch, tmp_path, "FG_RING_ROUTER_ENABLED")
 
 
 def test_mission_envelope_disabled_in_prod_fails_startup(monkeypatch, tmp_path):

@@ -502,9 +502,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 status_code=503, detail="startup_validation_unavailable"
             )
         if startup_validation.has_errors:
-            raise HTTPException(
-                status_code=503, detail="startup_validation_failed"
-            )
+            raise HTTPException(status_code=503, detail="startup_validation_failed")
 
         if not bool(app.state.db_init_ok):
             raise HTTPException(

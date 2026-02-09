@@ -24,13 +24,9 @@ def _require_marker(path: Path, expected_hash: str) -> None:
     content = path.read_text(encoding="utf-8")
     marker = f"Contract-Authority-SHA256: {expected_hash}"
     if marker not in content:
-        raise ValueError(
-            f"{path} missing or outdated authority marker: {marker}"
-        )
+        raise ValueError(f"{path} missing or outdated authority marker: {marker}")
     if "Contract Authority: contracts/core/openapi.json (prod)" not in content:
-        raise ValueError(
-            f"{path} missing Contract Authority declaration for prod spec"
-        )
+        raise ValueError(f"{path} missing Contract Authority declaration for prod spec")
 
 
 def main() -> int:

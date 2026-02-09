@@ -166,9 +166,13 @@ def resolve_compliance_module_states() -> Dict[str, ComplianceModuleState]:
             if resolved_path:
                 path = Path(resolved_path)
                 if resource.kind == "file" and not path.is_file():
-                    resource_errors.append(f"{resource.name} missing at {resolved_path}")
+                    resource_errors.append(
+                        f"{resource.name} missing at {resolved_path}"
+                    )
                 elif resource.kind == "dir" and not path.is_dir():
-                    resource_errors.append(f"{resource.name} missing at {resolved_path}")
+                    resource_errors.append(
+                        f"{resource.name} missing at {resolved_path}"
+                    )
 
         states[key] = ComplianceModuleState(
             key=spec.key,
