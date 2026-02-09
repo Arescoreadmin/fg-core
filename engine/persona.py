@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from api.schemas import Persona
+from contracts.engine_types import Persona
 
 
 @dataclass

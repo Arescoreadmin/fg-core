@@ -281,7 +281,11 @@ async def exchange_code_for_tokens(code: str) -> dict:
 
 
 async def verify_id_token(id_token: str, nonce: str) -> dict:
-    from jose import JWTError, jwt
+    import json
+
+    import jwt
+    from jwt import InvalidTokenError
+    from jwt.algorithms import ECAlgorithm, RSAAlgorithm
 
     issuer = os.getenv("FG_OIDC_ISSUER")
     client_id = os.getenv("FG_OIDC_CLIENT_ID")
@@ -301,14 +305,23 @@ async def verify_id_token(id_token: str, nonce: str) -> dict:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
             )
+        alg = header.get("alg", "RS256")
+        if alg.startswith(("RS", "PS")):
+            public_key = RSAAlgorithm.from_jwk(json.dumps(key))
+        elif alg.startswith("ES"):
+            public_key = ECAlgorithm.from_jwk(json.dumps(key))
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+            )
         claims = jwt.decode(
             id_token,
-            key,
-            algorithms=[header.get("alg", "RS256")],
+            public_key,
+            algorithms=[alg],
             audience=client_id,
             issuer=issuer,
         )
-    except JWTError as exc:
+    except (InvalidTokenError, ValueError, TypeError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
         ) from exc

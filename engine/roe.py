@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Iterable, List
 
-from api.schemas import Persona, ClassificationRing, TIEDEstimate
+from contracts.engine_types import ClassificationRing, Persona, TIEDEstimate
 
 
 @dataclass

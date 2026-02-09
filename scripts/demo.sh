@@ -94,7 +94,7 @@ main() {
 
   hr
   say "1) Sanity: compile key modules"
-  run "python -m py_compile api/main.py api/auth_scopes.py api/feed.py api/defend.py"
+  run "python -m py_compile api/main.py api/auth_scopes/__init__.py api/feed.py api/defend.py"
   ok "Compilation OK"
   pause
 

@@ -1,0 +1,5 @@
+# Security constraints shared across environments.
+# CVE-2024-23342 was reported against ecdsa, which was pulled in via python-jose.
+# pip-audit lists no fix_versions for this CVE, so we hard-block ecdsa from being
+# installed until a fixed version is available.
+ecdsa==0

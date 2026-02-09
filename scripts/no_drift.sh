@@ -32,7 +32,7 @@ PY
 echo
 
 echo "[*] key files:"
-for f in api/main.py api/defend.py api/db_models.py api/db.py api/auth_scopes.py api/decisions.py api/feed.py Makefile; do
+for f in api/main.py api/defend.py api/db_models.py api/db.py api/auth_scopes/__init__.py api/decisions.py api/feed.py Makefile; do
   [ -f "$f" ] && echo "---- $f ----" && sed -n '1,220p' "$f" && echo
 done
 

@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path.cwd()
 CHAIN = ROOT / "api" / "evidence_chain.py"
-AUTH = ROOT / "api" / "auth_scopes.py"
+AUTH = ROOT / "api" / "auth_scopes" / "resolution.py"
 
 def die(msg: str) -> None:
     raise SystemExit(msg)
@@ -111,7 +111,9 @@ if marker_auth not in auth_s:
     # 2a) inject helper near bottom (or after imports if file is short)
     if helper_block.strip() not in auth_s:
         auth_s = auth_s.rstrip() + "\n\n" + helper_block + "\n"
-        print("OK: injected _consume_ui_key_once() helper into api/auth_scopes.py")
+        print(
+            "OK: injected _consume_ui_key_once() helper into api/auth_scopes/resolution.py"
+        )
 else:
     print("NOTE: marker exists, will still ensure hook is present")
 
