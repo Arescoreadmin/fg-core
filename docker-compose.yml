@@ -59,8 +59,9 @@ services:
     restart: unless-stopped
     networks:
       - internal
-    # Production note: override with a compose override file to hide this port.
-    # CI and local dev require host access for migrations and tests.
+      - public
+    # CI and local dev need host access for migrations and tests.
+    # Production: use a compose override to remove this.
     ports:
       - "5432:5432"
     env_file:
