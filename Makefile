@@ -664,3 +664,79 @@ fg-restart:
 # =============================================================================
 
 .PHONY: test-core-invariants
+
+# =============================================================================
+# PR Parity Checks (run locally what PR runs)
+# =============================================================================
+
+.PHONY: pr-check pr-check-all pr-check-ci pr-check-verify-targets
+.PHONY: paste-garbage guard makefile-sanity
+.PHONY: pr-check-fast pr-check-lint pr-check-test pr-check-contract pr-check-prod
+
+__mkdb__:
+
+paste-garbage:
+	@$(MAKE) -s guard-no-trash
+	@echo "paste-garbage guard: OK"
+
+guard:
+	@$(MAKE) -s guard-scripts
+	@$(MAKE) -s guard-no-trash
+	@echo "guard: OK"
+
+makefile-sanity:
+	@$(MAKE) -s guard-scripts
+	@echo "Makefile sanity: OK"
+
+pr-check-fast:
+	@$(MAKE) -s fg-fast
+	@echo "pr-check-fast: OK"
+
+pr-check-lint:
+	@$(MAKE) -s fg-lint
+	@echo "pr-check-lint: OK"
+
+pr-check-test:
+	@test -x "$(PY)" || (echo "❌ venv missing. Run: make venv"; exit 1)
+	@$(PYTEST_ENV) $(PY) -m pytest -q -m "not postgres"
+	@echo "pr-check-test: OK"
+
+pr-check-contract:
+	@$(MAKE) -s fg-contract
+	@echo "pr-check-contract: OK"
+
+pr-check-prod:
+	@$(MAKE) -s opa-check prod-profile-check dos-hardening-check gap-audit
+	@echo "pr-check-prod: OK"
+
+PR_CHECK_REQUIRED_TARGETS := \
+	paste-garbage guard makefile-sanity \
+	pr-check-fast pr-check-lint pr-check-test pr-check-contract pr-check-prod
+
+pr-check-verify-targets:
+	@set -euo pipefail; \
+	tmp="$$(mktemp)"; trap 'rm -f "$$tmp"' EXIT; \
+	$(MAKE) -qpRr __mkdb__ > "$$tmp" 2>/dev/null; \
+	missing=0; dup=0; \
+	for t in $(PR_CHECK_REQUIRED_TARGETS); do \
+		cnt="$$(grep -cE "^$${t}:[[:space:]]*($$|[^=])" "$$tmp" || true)"; \
+		if [ "$$cnt" -eq 0 ]; then echo "❌ Missing make target: $$t"; missing=1; \
+		elif [ "$$cnt" -gt 1 ]; then echo "❌ Duplicate make target definition: $$t ($$cnt)"; dup=1; fi; \
+	done; \
+	test $$missing -eq 0; test $$dup -eq 0; \
+	echo "✅ pr-check prerequisites present"
+
+# Minimal parity: cheap repo guard + fg-fast once
+pr-check: pr-check-verify-targets
+	@$(MAKE) -s paste-garbage
+	@$(MAKE) -s pr-check-fast
+	@echo "✅ pr-check: PASS"
+
+pr-check-all: pr-check
+	@$(MAKE) -s release-gate
+	@echo "✅ pr-check-all (includes release-gate): PASS"
+
+pr-check-ci: pr-check-all
+	@echo "✅ pr-check-ci: PASS"
+
+

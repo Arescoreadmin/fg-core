@@ -2,66 +2,108 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    # Security: Require authentication to prevent unauthorized access from other containers
-    # REDIS_PASSWORD must be set in .env - no default provided for security
-    command: ["redis-server", "--save", "", "--appendonly", "no", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}"]
+    networks:
+      - internal
+    # Security: require auth, bind internal only, reduce attack surface
+    command:
+      [
+        "redis-server",
+        "--bind", "0.0.0.0",
+        "--protected-mode", "yes",
+        "--save", "",
+        "--appendonly", "no",
+        "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}",
+        "--rename-command", "FLUSHALL", "",
+        "--rename-command", "FLUSHDB", "",
+        "--rename-command", "CONFIG", "",
+        "--rename-command", "SHUTDOWN", "",
+        "--rename-command", "MODULE", ""
+      ]
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}", "ping"]
       interval: 5s
       timeout: 3s
       retries: 20
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    # Redis writes ephemeral state even with appendonly disabled; give it tmpfs
+    tmpfs:
+      - /data:size=128m,mode=700
 
   nats:
     image: nats:2.10-alpine
     restart: unless-stopped
-    ports:
-      - "4222:4222"
-      - "8222:8222"  # HTTP monitoring
-    command: ["-js", "-m", "8222"]  # Enable JetStream and monitoring
+    networks:
+      - internal
+    # DO NOT publish NATS to host by default. If you need host access, uncomment.
+    # ports:
+    #   - "4222:4222"
+    #   - "8222:8222"
+    command: ["-js", "-m", "8222"]
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8222/healthz"]
       interval: 5s
       timeout: 3s
       retries: 10
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=700
 
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    networks:
+      - internal
     # Production note: do NOT publish 5432 unless you truly need host access.
-    # If you need it locally, keep this. If not, remove it.
-    ports:
-      - "5432:5432"
+    # If you need it locally, uncomment.
+    # ports:
+    #   - "5432:5432"
     env_file:
       - .env
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-fg_user}
       POSTGRES_DB: ${POSTGRES_DB:-frostgate}
-      # Security: POSTGRES_PASSWORD must be set in .env - no default provided
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-      FG_INGEST_LOG_EVERY: ${FG_INGEST_LOG_EVERY:-200}
-      FG_STATE_DIR: /var/lib/frostgate/state
-      FG_AGENT_QUEUE_DIR: /var/lib/frostgate/agent_queue
-      FG_PYCACHE_DIR: /var/lib/frostgate/pycache
+      # Tighten init defaults
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
     volumes:
       - fg_pgdata:/var/lib/postgresql/data
       - ./scripts/postgres/init_roles.sh:/docker-entrypoint-initdb.d/init_roles.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h 127.0.0.1"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h 127.0.0.1 -p 5432"]
       interval: 5s
       timeout: 3s
       retries: 30
       start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    tmpfs:
+      - /tmp:size=128m,mode=700
 
   opa:
     image: openpolicyagent/opa:0.64.1
     restart: unless-stopped
+    networks:
+      - internal
     command: ["run", "--server", "--log-level=info", "/policies"]
-    ports:
-      - "18181:8181"
+    # Do not publish OPA externally by default. If you need host access, uncomment.
+    # ports:
+    #   - "18181:8181"
     volumes:
       - ./policy/opa:/policies:ro
     healthcheck:
       disable: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=700
 
   frostgate-core:
     build:
@@ -69,6 +111,9 @@ services:
       dockerfile: Dockerfile
     image: frostgate-core:latest
     restart: unless-stopped
+    networks:
+      - internal
+      - public
     depends_on:
       postgres:
         condition: service_healthy
@@ -78,7 +123,16 @@ services:
         condition: service_healthy
       opa:
         condition: service_started
-    command: ["uvicorn","api.main:app","--host","0.0.0.0","--port","8080","--no-access-log","--timeout-keep-alive","5","--timeout-graceful-shutdown","15","--limit-concurrency","100","--h11-max-incomplete-event-size","16384"]
+    command:
+      [
+        "uvicorn","api.main:app",
+        "--host","0.0.0.0","--port","8080",
+        "--no-access-log",
+        "--timeout-keep-alive","5",
+        "--timeout-graceful-shutdown","15",
+        "--limit-concurrency","100",
+        "--h11-max-incomplete-event-size","16384"
+      ]
     ports:
       - "18080:8080"
     env_file:
@@ -91,24 +145,20 @@ services:
       FG_AGENT_QUEUE_DIR: /var/lib/frostgate/agent_queue
       FG_PYCACHE_DIR: /var/lib/frostgate/pycache
 
-
       # Auth: env/file key fallback DISABLED by default (P0 security).
-      # Set to true ONLY for initial bootstrap/development.
       FG_AUTH_ALLOW_FALLBACK: ${FG_AUTH_ALLOW_FALLBACK:-false}
-      
-      FG_INGEST_LOG_EVERY: ${FG_INGEST_LOG_EVERY:-200}
-      FG_DEFEND_LOG_EVERY: 200
 
-      
+      FG_INGEST_LOG_EVERY: ${FG_INGEST_LOG_EVERY:-200}
+      FG_DEFEND_LOG_EVERY: ${FG_DEFEND_LOG_EVERY:-200}
+
       # API keys come from Docker secret file
       FG_API_KEYS_FILE: /run/secrets/fg_api_keys
 
-      # DB/Redis - POSTGRES_PASSWORD must be set (no default)
+      # DB/Redis
       FG_DB_BACKEND: ${FG_DB_BACKEND:-postgres}
       FG_TENANT_CONTEXT_MODE: ${FG_TENANT_CONTEXT_MODE:-db_session}
       FG_DB_URL: postgresql+psycopg://${POSTGRES_USER:-fg_user}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-frostgate}
-      # Redis URL with authentication (password must match redis service)
-      FG_REDIS_URL: ${FG_REDIS_URL:-redis://:${REDIS_PASSWORD}@redis:6379/0}
+      FG_REDIS_URL: ${FG_REDIS_URL:-redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}@redis:6379/0}
 
       # NATS URL for ingestion bus
       FG_NATS_URL: ${FG_NATS_URL:-nats://nats:4222}
@@ -144,10 +194,6 @@ services:
       FG_RL_ALLOW_BYPASS_IN_PROD: ${FG_RL_ALLOW_BYPASS_IN_PROD:-false}
       FG_RL_FAIL_OPEN: ${FG_RL_FAIL_OPEN:-false}
 
-      # Back-compat fallback (optional): if your app *only* supports FG_API_KEYS,
-      # uncomment this and accept that it leaks into compose config outputs.
-      # FG_API_KEYS: ${FG_API_KEYS:-}
-
     secrets:
       - fg_api_keys
 
@@ -161,6 +207,15 @@ services:
       retries: 30
       start_period: 10s
 
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    # If your app writes outside ./state, it will crash here. That is the point.
+    # If needed, add tmpfs mounts for specific paths your runtime needs.
+    # read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=700
+
   frostgate-agent:
     profiles: ["agent"]
     build:
@@ -168,27 +223,31 @@ services:
       dockerfile: agent/Dockerfile
     image: frostgate-agent:latest
     restart: unless-stopped
+    networks:
+      - internal
     depends_on:
       frostgate-core:
         condition: service_healthy
-
-    # Give agent the same secret (if the agent ever needs to validate locally)
     secrets:
       - fg_api_keys
-
     environment:
-     FG_AGENT_TENANT_ID: t1
-     FG_AGENT_SOURCE: agent
-     FG_CORE_BASE_URL: http://frostgate-core:8080
-     FG_AGENT_INTERVAL_SEC: 60
-     FG_AGENT_API_KEY: ${FG_AGENT_API_KEY:?set FG_AGENT_API_KEY in .env}
-     FG_INGEST_LOG_EVERY: ${FG_INGEST_LOG_EVERY:-200}
-     FG_AGENT_LOG_EVERY: 30
-     FG_STATE_DIR: /var/lib/frostgate/state
-     FG_AGENT_QUEUE_DIR: /var/lib/frostgate/agent_queue
-     FG_PYCACHE_DIR: /var/lib/frostgate/pycache
+      FG_AGENT_TENANT_ID: t1
+      FG_AGENT_SOURCE: agent
+      FG_CORE_BASE_URL: http://frostgate-core:8080
+      FG_AGENT_INTERVAL_SEC: 60
+      FG_AGENT_API_KEY: ${FG_AGENT_API_KEY:?set FG_AGENT_API_KEY in .env}
+      FG_INGEST_LOG_EVERY: ${FG_INGEST_LOG_EVERY:-200}
+      FG_AGENT_LOG_EVERY: ${FG_AGENT_LOG_EVERY:-30}
+      FG_STATE_DIR: /var/lib/frostgate/state
+      FG_AGENT_QUEUE_DIR: /var/lib/frostgate/agent_queue
+      FG_PYCACHE_DIR: /var/lib/frostgate/pycache
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=700
 
-  # Admin Gateway - FastAPI admin API
   admin-gateway:
     profiles: ["admin"]
     build:
@@ -196,6 +255,9 @@ services:
       dockerfile: admin_gateway/Dockerfile
     image: frostgate-admin-gateway:latest
     restart: unless-stopped
+    networks:
+      - internal
+      - public
     depends_on:
       frostgate-core:
         condition: service_healthy
@@ -207,17 +269,28 @@ services:
       FG_ENV: ${FG_ENV:-prod}
       AG_LOG_LEVEL: ${FG_LOG_LEVEL:-info}
       AG_CORE_BASE_URL: http://frostgate-core:8080
+
+      # G001 killer: explicitly disable fallback by default in admin surface
+      FG_AUTH_ALLOW_FALLBACK: ${FG_AUTH_ALLOW_FALLBACK:-false}
+
       # CORS: No wildcard allowed (P0 security). Specify explicit origins.
       AG_CORS_ORIGINS: ${AG_CORS_ORIGINS:?set AG_CORS_ORIGINS in .env (e.g., http://localhost:13000)}
       AG_AUDIT_ENABLED: ${AG_AUDIT_ENABLED:-true}
+
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()\""]
       interval: 10s
       timeout: 3s
       retries: 10
       start_period: 10s
 
-  # Console - Next.js admin UI
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=700
+
   console:
     profiles: ["admin"]
     build:
@@ -227,6 +300,8 @@ services:
         NEXT_PUBLIC_API_URL: http://admin-gateway:8080
     image: frostgate-console:latest
     restart: unless-stopped
+    networks:
+      - public
     depends_on:
       admin-gateway:
         condition: service_healthy
@@ -236,11 +311,14 @@ services:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: http://admin-gateway:8080
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
       interval: 10s
       timeout: 3s
       retries: 10
       start_period: 15s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]
 
 volumes:
   fg_pgdata:
@@ -248,3 +326,8 @@ volumes:
 secrets:
   fg_api_keys:
     file: ./secrets/fg_api_keys.txt
+
+networks:
+  public:
+  internal:
+    internal: true
