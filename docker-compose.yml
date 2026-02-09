@@ -59,10 +59,10 @@ services:
     restart: unless-stopped
     networks:
       - internal
-    # Production note: do NOT publish 5432 unless you truly need host access.
-    # If you need it locally, uncomment.
-    # ports:
-    #   - "5432:5432"
+    # Production note: override with a compose override file to hide this port.
+    # CI and local dev require host access for migrations and tests.
+    ports:
+      - "5432:5432"
     env_file:
       - .env
     environment:
