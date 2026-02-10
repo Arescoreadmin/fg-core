@@ -3771,6 +3771,7 @@
     },
     "/health/live": {
       "get": {
+        "description": "Kubernetes liveness probe - is the service running?",
         "operationId": "health_live_health_live_get",
         "responses": {
           "200": {
@@ -3790,6 +3791,7 @@
     },
     "/health/ready": {
       "get": {
+        "description": "Kubernetes readiness probe - can the service handle traffic?",
         "operationId": "health_ready_health_ready_get",
         "responses": {
           "200": {
