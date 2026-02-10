@@ -149,6 +149,11 @@ services:
       FG_AGENT_QUEUE_DIR: /var/lib/frostgate/agent_queue
       FG_PYCACHE_DIR: /var/lib/frostgate/pycache
 
+      # Auth (required by current prod startup validation)
+      FG_AUTH_ENABLED: ${FG_AUTH_ENABLED:-1}
+      # Keep secret-file as the real source of truth, but satisfy validator for now.
+      FG_API_KEY: ${FG_API_KEY:?set FG_API_KEY in .env}
+
       # Auth: env/file key fallback DISABLED by default (P0 security).
       FG_AUTH_ALLOW_FALLBACK: ${FG_AUTH_ALLOW_FALLBACK:-false}
 
@@ -206,7 +211,11 @@ services:
       - ./state:/app/state
 
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=1).read()\""]
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=1).read()\""
+        ]
       interval: 5s
       timeout: 2s
       retries: 30
@@ -216,7 +225,6 @@ services:
       - no-new-privileges:true
     cap_drop: ["ALL"]
     # If your app writes outside ./state, it will crash here. That is the point.
-    # If needed, add tmpfs mounts for specific paths your runtime needs.
     # read_only: true
     tmpfs:
       - /tmp:size=128m,mode=700
@@ -283,7 +291,11 @@ services:
       AG_AUDIT_ENABLED: ${AG_AUDIT_ENABLED:-true}
 
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()\""]
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()\""
+        ]
       interval: 10s
       timeout: 3s
       retries: 10
@@ -333,6 +345,6 @@ secrets:
     file: ./secrets/fg_api_keys.txt
 
 networks:
-  public:
+  public: {}
   internal:
     internal: true
