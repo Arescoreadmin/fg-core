@@ -1,0 +1,10 @@
+{
+  "dashboard": {
+    "view_id": "default",
+    "widgets": [
+      "system_health",
+      "recent_decisions",
+      "drift_status"
+    ]
+  }
+}

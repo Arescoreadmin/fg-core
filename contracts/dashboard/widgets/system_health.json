@@ -1,0 +1,5 @@
+{
+  "widget_id": "system_health",
+  "title": "System Health",
+  "contract": "contracts/dashboard/widgets/system_health.json"
+}

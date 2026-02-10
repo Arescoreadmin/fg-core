@@ -1,0 +1,5 @@
+{
+  "widget_id": "recent_decisions",
+  "title": "Recent Decisions",
+  "contract": "contracts/dashboard/widgets/recent_decisions.json"
+}
