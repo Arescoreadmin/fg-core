@@ -44,7 +44,9 @@ NATS_SUBJECT_PREFIX = os.getenv("FG_NATS_SUBJECT_PREFIX", "frostgate.ingest")
 NATS_QUEUE_GROUP = os.getenv("FG_NATS_QUEUE_GROUP", "frostgate-workers")
 
 # Message schema version
-MESSAGE_SCHEMA_VERSION = "1.0"
+INGEST_MESSAGE_SCHEMA_VERSION = "1.0"
+INGEST_MESSAGE_SCHEMA_ID = "ingest_message.v1.0"
+MESSAGE_SCHEMA_VERSION = INGEST_MESSAGE_SCHEMA_VERSION
 
 
 @dataclass
@@ -427,6 +429,8 @@ def validate_message(message: IngestMessage) -> list[str]:
 
 
 __all__ = [
+    "INGEST_MESSAGE_SCHEMA_ID",
+    "INGEST_MESSAGE_SCHEMA_VERSION",
     "MESSAGE_SCHEMA_VERSION",
     "IngestMessage",
     "NatsConnection",

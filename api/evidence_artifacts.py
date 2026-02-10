@@ -11,6 +11,9 @@ from sqlalchemy.orm import Session
 
 from api.db_models import DecisionEvidenceArtifact, DecisionRecord
 
+DECISION_EVIDENCE_SCHEMA_VERSION = "1.0"
+DECISION_EVIDENCE_SCHEMA_ID = "decision_evidence.v1.0"
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -32,6 +35,7 @@ def _artifact_root() -> Path:
 
 def build_decision_evidence_payload(record: DecisionRecord) -> dict[str, Any]:
     return {
+        "schema_version": DECISION_EVIDENCE_SCHEMA_VERSION,
         "decision_id": int(record.id),
         "created_at": record.created_at.isoformat() if record.created_at else None,
         "tenant_id": record.tenant_id,

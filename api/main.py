@@ -42,25 +42,12 @@ from api.middleware.security_headers import (
 )
 
 from api.config.env import is_production_env, is_strict_env_required, resolve_env
+from api.config.spine_modules import load_spine_modules
 from api.config.startup_validation import (
     compliance_module_enabled,
     validate_startup_config,
 )
 from api.config.ui import ui_enabled
-
-
-# Graceful shutdown (fail-soft import)
-try:
-    from api.graceful_shutdown import ConnectionTrackingMiddleware, get_shutdown_manager
-except ImportError:  # pragma: no cover
-    get_shutdown_manager = None  # type: ignore
-    ConnectionTrackingMiddleware = None  # type: ignore
-
-# Admin router (fail-soft import)
-try:
-    from api.admin import router as admin_router
-except ImportError:  # pragma: no cover
-    admin_router = None  # type: ignore
 
 
 log = logging.getLogger("frostgate")
@@ -71,6 +58,9 @@ API_VERSION = "v1"
 
 ERR_INVALID = "Invalid or missing API key"
 UI_COOKIE_NAME = os.getenv("FG_UI_COOKIE_NAME", "fg_api_key")
+
+# Back-compat symbol for tests that patch api.main.get_shutdown_manager
+get_shutdown_manager = None
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -160,6 +150,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         _resolve_auth_enabled_from_env() if auth_enabled is None else bool(auth_enabled)
     )
 
+    spine_modules = load_spine_modules()
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # Run startup validation (fails closed in prod, logs in all envs)
@@ -198,9 +190,9 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 raise
 
         # Setup graceful shutdown handler
-        if get_shutdown_manager is not None:
+        if spine_modules.get_shutdown_manager is not None:
             try:
-                shutdown_manager = get_shutdown_manager()
+                shutdown_manager = spine_modules.get_shutdown_manager()
                 await shutdown_manager.setup()
                 app.state.shutdown_manager = shutdown_manager
                 log.info("Graceful shutdown handler initialized")
@@ -299,8 +291,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.add_middleware(FGExceptionShieldMiddleware)
 
     # Connection tracking middleware (for graceful shutdown)
-    if ConnectionTrackingMiddleware is not None:
-        app.add_middleware(ConnectionTrackingMiddleware)
+    if spine_modules.connection_tracking_middleware is not None:
+        app.add_middleware(spine_modules.connection_tracking_middleware)
 
     # Security headers middleware (after shield, before auth)
     app.add_middleware(
@@ -465,8 +457,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         app.include_router(dev_events_router)
 
     # Admin router for SaaS management
-    if admin_router is not None:
-        app.include_router(admin_router)
+    if spine_modules.admin_router is not None:
+        app.include_router(spine_modules.admin_router)
 
     # ---- Health / Status ----
     @app.get("/health")
