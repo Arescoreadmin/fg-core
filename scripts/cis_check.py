@@ -28,11 +28,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+import yaml
+
 # Output directory
 ARTIFACTS_DIR = Path(os.getenv("FG_ARTIFACTS_DIR", "artifacts"))
 
 # Default pass threshold (percentage)
-DEFAULT_PASS_THRESHOLD = 80
+DEFAULT_PASS_THRESHOLD = 80.0
 
 
 @dataclass
@@ -60,6 +62,28 @@ class ComplianceReport:
     checks: list[CheckResult] = field(default_factory=list)
 
 
+def _read_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def _truthy_env(val: str | None) -> bool:
+    if val is None:
+        return False
+    v = val.strip().lower()
+    return v in {"1", "true", "yes", "on"}
+
+
+def _load_compose() -> dict[str, Any]:
+    compose_path = Path("docker-compose.yml")
+    if not compose_path.exists():
+        return {}
+    try:
+        data = yaml.safe_load(_read_text(compose_path))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
 def check_auth_fallback_disabled() -> CheckResult:
     """
     CIS-FG-001: Auth fallback must be disabled in production.
@@ -67,14 +91,12 @@ def check_auth_fallback_disabled() -> CheckResult:
     The FG_AUTH_ALLOW_FALLBACK setting allows bypassing database key validation.
     This MUST be false in production.
     """
-    # Check docker-compose.yml
     docker_compose = Path("docker-compose.yml")
     if docker_compose.exists():
-        content = docker_compose.read_text()
-        # Check if fallback defaults to true
+        content = _read_text(docker_compose)
         if (
             "FG_AUTH_ALLOW_FALLBACK:-true" in content
-            or "FG_AUTH_ALLOW_FALLBACK: true" in content
+            or re.search(r"FG_AUTH_ALLOW_FALLBACK:\s*true\b", content) is not None
         ):
             return CheckResult(
                 id="CIS-FG-001",
@@ -86,9 +108,8 @@ def check_auth_fallback_disabled() -> CheckResult:
                 remediation="Change default to false: FG_AUTH_ALLOW_FALLBACK:-false",
             )
 
-    # Check current environment
     fallback = os.getenv("FG_AUTH_ALLOW_FALLBACK", "").lower()
-    if fallback == "true" or fallback == "1":
+    if fallback in {"true", "1"}:
         return CheckResult(
             id="CIS-FG-001",
             name="Auth Fallback Disabled",
@@ -113,28 +134,46 @@ def check_no_secrets_in_env() -> CheckResult:
     """
     CIS-FG-002: Secrets must not be hardcoded in configuration files.
 
-    Check for potential secrets in docker-compose.yml and .env files.
+    Check for potential secrets in docker-compose.yml and .env.example files.
     """
-    patterns = [
-        (r"password\s*[:=]\s*['\"][^'\"]+['\"]", "hardcoded password"),
-        (r"secret\s*[:=]\s*['\"][^'\"]+['\"]", "hardcoded secret"),
-        (r"api[_-]?key\s*[:=]\s*['\"][a-zA-Z0-9]{20,}['\"]", "hardcoded API key"),
+    patterns: list[tuple[re.Pattern[str], str]] = [
+        (
+            re.compile(r"password\s*[:=]\s*['\"][^'\"]+['\"]", re.IGNORECASE),
+            "hardcoded password",
+        ),
+        (
+            re.compile(r"secret\s*[:=]\s*['\"][^'\"]+['\"]", re.IGNORECASE),
+            "hardcoded secret",
+        ),
+        (
+            re.compile(
+                r"api[_-]?key\s*[:=]\s*['\"][a-zA-Z0-9]{20,}['\"]", re.IGNORECASE
+            ),
+            "hardcoded API key",
+        ),
     ]
 
-    files_to_check = ["docker-compose.yml", ".env.example"]
-    issues = []
+    files_to_check = [Path("docker-compose.yml"), Path(".env.example")]
+    issues: list[str] = []
 
-    for filepath in files_to_check:
-        path = Path(filepath)
+    for path in files_to_check:
         if not path.exists():
             continue
+        content = _read_text(path)
 
-        content = path.read_text()
-        for pattern, desc in patterns:
-            if re.search(pattern, content, re.IGNORECASE):
-                # Allow variable substitution patterns
-                if not re.search(r"\$\{", content):
-                    issues.append(f"{filepath}: {desc}")
+        for rx, desc in patterns:
+            for m in rx.finditer(content):
+                # If this match is on a line with ${VAR...} substitution, ignore it.
+                line_start = content.rfind("\n", 0, m.start()) + 1
+                line_end = content.find("\n", m.end())
+                if line_end == -1:
+                    line_end = len(content)
+                line = content[line_start:line_end]
+
+                if "${" in line:
+                    continue
+
+                issues.append(f"{path.name}: {desc}")
 
     if issues:
         return CheckResult(
@@ -143,7 +182,7 @@ def check_no_secrets_in_env() -> CheckResult:
             description="Configuration files must not contain hardcoded secrets",
             severity="critical",
             passed=False,
-            message=f"Potential secrets found: {', '.join(issues)}",
+            message=f"Potential secrets found: {', '.join(sorted(set(issues)))}",
             remediation="Use environment variables or secret files for sensitive values",
         )
 
@@ -168,13 +207,12 @@ def check_secret_files_permissions() -> CheckResult:
         Path(".env"),
     ]
 
-    issues = []
+    issues: list[str] = []
     for path in secret_paths:
         if not path.exists():
             continue
 
         mode = path.stat().st_mode
-        # Check if group or others can read
         if mode & (stat.S_IRGRP | stat.S_IROTH):
             issues.append(f"{path}: mode {oct(mode)[-3:]} allows group/other read")
 
@@ -219,18 +257,15 @@ def check_dockerfile_security() -> CheckResult:
             message="No Dockerfile found (skipped)",
         )
 
-    content = dockerfile.read_text()
-    issues = []
+    content = _read_text(dockerfile)
+    issues: list[str] = []
 
-    # Check for USER directive (should not run as root)
     if not re.search(r"^\s*USER\s+", content, re.MULTILINE):
         issues.append("No USER directive (runs as root)")
 
-    # Check for :latest tag
-    if re.search(r"FROM\s+\S+:latest", content, re.IGNORECASE):
+    if re.search(r"FROM\s+\S+:latest\b", content, re.IGNORECASE):
         issues.append("Uses :latest tag (pin specific version)")
 
-    # Check for sensitive ENV
     sensitive_env = ["PASSWORD", "SECRET", "KEY", "TOKEN"]
     for var in sensitive_env:
         if re.search(rf"^\s*ENV\s+.*{var}\s*=", content, re.MULTILINE | re.IGNORECASE):
@@ -261,12 +296,14 @@ def check_rate_limiting_enabled() -> CheckResult:
     """
     CIS-FG-005: Rate limiting must be enabled in production.
 
-    Check that FG_RL_ENABLED is set to true.
+    Check that FG_RL_ENABLED is set to true in compose defaults.
     """
     docker_compose = Path("docker-compose.yml")
     if docker_compose.exists():
-        content = docker_compose.read_text()
-        if "FG_RL_ENABLED:-false" in content or "FG_RL_ENABLED: false" in content:
+        content = _read_text(docker_compose)
+        if "FG_RL_ENABLED:-false" in content or re.search(
+            r"FG_RL_ENABLED:\s*false\b", content
+        ):
             return CheckResult(
                 id="CIS-FG-005",
                 name="Rate Limiting Enabled",
@@ -294,7 +331,7 @@ def check_debug_disabled() -> CheckResult:
     Check that FG_DEBUG is not true.
     """
     debug = os.getenv("FG_DEBUG", "").lower()
-    if debug == "true" or debug == "1":
+    if debug in {"true", "1"}:
         return CheckResult(
             id="CIS-FG-006",
             name="Debug Mode Disabled",
@@ -319,11 +356,11 @@ def check_redis_auth_required() -> CheckResult:
     """
     CIS-FG-007: Redis must require authentication.
 
-    Check that Redis password is required in configuration.
+    Check that Redis config requires a password in compose.
     """
     docker_compose = Path("docker-compose.yml")
     if docker_compose.exists():
-        content = docker_compose.read_text()
+        content = _read_text(docker_compose)
         if "--requirepass" in content or "REDIS_PASSWORD" in content:
             return CheckResult(
                 id="CIS-FG-007",
@@ -333,16 +370,16 @@ def check_redis_auth_required() -> CheckResult:
                 passed=True,
                 message="Redis authentication is configured",
             )
-        else:
-            return CheckResult(
-                id="CIS-FG-007",
-                name="Redis Authentication",
-                description="Redis must require authentication",
-                severity="high",
-                passed=False,
-                message="Redis authentication not configured",
-                remediation="Add --requirepass to Redis command",
-            )
+
+        return CheckResult(
+            id="CIS-FG-007",
+            name="Redis Authentication",
+            description="Redis must require authentication",
+            severity="high",
+            passed=False,
+            message="Redis authentication not configured",
+            remediation="Add --requirepass to Redis command",
+        )
 
     return CheckResult(
         id="CIS-FG-007",
@@ -350,7 +387,7 @@ def check_redis_auth_required() -> CheckResult:
         description="Redis must require authentication",
         severity="high",
         passed=True,
-        message="No Redis configuration found (skipped)",
+        message="No docker-compose.yml found (skipped)",
     )
 
 
@@ -358,9 +395,8 @@ def check_postgres_ssl() -> CheckResult:
     """
     CIS-FG-008: PostgreSQL connections should use SSL in production.
 
-    Check for SSL configuration in database URL.
+    Informational: pass with remediation if sslmode is missing.
     """
-    # This is informational in local/dev mode
     db_url = os.getenv("FG_DB_URL", "")
     if db_url and "sslmode=" not in db_url.lower():
         return CheckResult(
@@ -368,7 +404,7 @@ def check_postgres_ssl() -> CheckResult:
             name="PostgreSQL SSL",
             description="PostgreSQL should use SSL in production",
             severity="medium",
-            passed=True,  # Pass but warn
+            passed=True,
             message="SSL not configured (acceptable for local dev)",
             remediation="Add ?sslmode=require to FG_DB_URL for production",
         )
@@ -387,12 +423,12 @@ def check_no_wildcard_cors() -> CheckResult:
     """
     CIS-FG-009: CORS must not allow wildcard origins in production.
 
-    Check for AG_CORS_ORIGINS=* in configuration.
+    Check for CORS origins explicitly set to wildcard.
     """
     docker_compose = Path("docker-compose.yml")
     if docker_compose.exists():
-        content = docker_compose.read_text()
-        if "CORS_ORIGINS:-*" in content or "CORS_ORIGINS: '*'" in content:
+        content = _read_text(docker_compose)
+        if re.search(r"CORS_ORIGINS\s*:\s*['\"]?\*['\"]?\s*$", content, re.MULTILINE):
             return CheckResult(
                 id="CIS-FG-009",
                 name="CORS Configuration",
@@ -400,7 +436,18 @@ def check_no_wildcard_cors() -> CheckResult:
                 severity="medium",
                 passed=False,
                 message="CORS allows wildcard origins",
-                remediation="Set specific origins in AG_CORS_ORIGINS",
+                remediation="Set specific origins in AG_CORS_ORIGINS / CORS_ORIGINS",
+            )
+
+        if "CORS_ORIGINS:-*" in content:
+            return CheckResult(
+                id="CIS-FG-009",
+                name="CORS Configuration",
+                description="CORS must not allow wildcard origins in production",
+                severity="medium",
+                passed=False,
+                message="CORS defaults to wildcard origins",
+                remediation="Set specific origins in AG_CORS_ORIGINS / CORS_ORIGINS",
             )
 
     return CheckResult(
@@ -415,52 +462,61 @@ def check_no_wildcard_cors() -> CheckResult:
 
 def check_healthcheck_configured() -> CheckResult:
     """
-    CIS-FG-010: Health checks must be configured for all services.
+    CIS-FG-010: Health checks must be configured for critical services.
 
-    Check that docker-compose services have healthchecks.
+    Uses YAML parsing (not regex) to avoid false negatives.
+    Requires healthcheck to be a dict containing a 'test' field.
+    Accepts either 'core' or 'frostgate-core' as the core service name.
     """
-    docker_compose = Path("docker-compose.yml")
-    if not docker_compose.exists():
+    compose = _load_compose()
+    services = (
+        compose.get("services") if isinstance(compose.get("services"), dict) else {}
+    )
+    if not services:
         return CheckResult(
             id="CIS-FG-010",
             name="Health Checks Configured",
-            description="All services must have health checks",
+            description="Critical services must have health checks",
             severity="low",
             passed=True,
-            message="No docker-compose.yml found (skipped)",
+            message="No docker-compose.yml found or no services defined (skipped)",
         )
 
-    content = docker_compose.read_text()
-    services = ["frostgate-core", "postgres", "redis"]
-    missing = []
+    core_name = "frostgate-core" if "frostgate-core" in services else "core"
+    required = {
+        core_name: "frostgate-core",
+        "postgres": "postgres",
+        "redis": "redis",
+    }
 
-    for service in services:
-        # Simple check for healthcheck in service section
-        service_match = re.search(
-            rf"^\s*{service}:\s*$(.*?)^\s*\w+:", content, re.MULTILINE | re.DOTALL
-        )
-        if service_match:
-            if "healthcheck:" not in service_match.group(1):
-                missing.append(service)
+    missing: list[str] = []
+    for svc_name, label in required.items():
+        svc = services.get(svc_name)
+        if not isinstance(svc, dict):
+            missing.append(label)
+            continue
+        hc = svc.get("healthcheck")
+        if not (isinstance(hc, dict) and hc.get("test")):
+            missing.append(label)
 
     if missing:
         return CheckResult(
             id="CIS-FG-010",
             name="Health Checks Configured",
-            description="All services must have health checks",
+            description="Critical services must have health checks",
             severity="low",
             passed=False,
             message=f"Missing healthchecks: {', '.join(missing)}",
-            remediation="Add healthcheck configuration to services",
+            remediation="Add healthcheck configuration (with 'test') to missing services",
         )
 
     return CheckResult(
         id="CIS-FG-010",
         name="Health Checks Configured",
-        description="All services must have health checks",
+        description="Critical services must have health checks",
         severity="low",
         passed=True,
-        message="All services have health checks",
+        message="Healthchecks present for critical services",
     )
 
 
@@ -483,7 +539,7 @@ def run_all_checks() -> ComplianceReport:
 
     passed = sum(1 for c in checks if c.passed)
     failed = len(checks) - passed
-    score = (passed / len(checks)) * 100 if checks else 0
+    score = (passed / len(checks)) * 100 if checks else 0.0
 
     return ComplianceReport(
         timestamp=timestamp,
@@ -543,16 +599,13 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    # Run checks
     report = run_all_checks()
 
-    # Write JSON output
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    with open(args.output, "w") as f:
+    with open(args.output, "w", encoding="utf-8") as f:
         json.dump(report_to_dict(report), f, indent=2)
 
     if not args.json:
-        # Print summary
         print("=" * 60)
         print("CIS Compliance Check Results")
         print("=" * 60)
@@ -561,11 +614,10 @@ def main() -> int:
         )
         print()
 
-        # Print failed checks
-        failed = [c for c in report.checks if not c.passed]
-        if failed:
+        failed_checks = [c for c in report.checks if not c.passed]
+        if failed_checks:
             print("FAILED CHECKS:")
-            for c in failed:
+            for c in failed_checks:
                 print(f"  [{c.severity.upper()}] {c.id}: {c.name}")
                 print(f"    {c.message}")
                 if c.remediation:
@@ -574,7 +626,6 @@ def main() -> int:
 
         print(f"Report written to: {args.output}")
 
-    # Determine exit code
     if report.score < args.fail_threshold:
         if not args.json:
             print(

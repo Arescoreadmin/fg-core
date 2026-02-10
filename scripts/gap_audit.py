@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Gap audit enforcement for FrostGate production readiness.
+"""
+Gap audit enforcement for FrostGate production readiness.
 
-This script parses docs/GAP_MATRIX.md and enforces gap severity rules:
-- Production-blocking gaps → CI FAILS
-- Launch-risk gaps → CI WARNS (unless waived)
-- Post-launch gaps → INFORMATIONAL
+Parses docs/GAP_MATRIX.md and enforces gap severity rules:
+- Production-blocking gaps -> CI FAILS
+- Launch-risk gaps -> CI WARNS (unless waived)
+- Post-launch gaps -> INFORMATIONAL
 
 Waiver-aware: Cross-references docs/RISK_WAIVERS.md to suppress allowed gaps.
 
-Severity Classification Rules (canonical):
+Severity Classification Rules (canonical)
 -----------------------------------------
 Production-blocking if ANY are true:
   - Cross-tenant data access possible
@@ -35,52 +36,19 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Dict, Iterable, Optional, Set
 
-# Valid severity levels (canonical)
+# -----------------------
+# Constants / Canonical
+# -----------------------
+
 SEVERITY_LEVELS = frozenset({"Production-blocking", "Launch-risk", "Post-launch"})
-
-# Valid owner values
 VALID_OWNERS = frozenset({"repo", "infra", "docs"})
-
-# Waiver expiration warning threshold (days)
 WAIVER_WARNING_DAYS = 14
 
-# Gap ID pattern: G followed by exactly 3 digits (e.g., G001)
 GAP_ID_PATTERN = re.compile(r"^G\d{3}$")
-
-# Legacy GAP ID pattern for backward compatibility parsing (GAP-001, GAP-999, etc.)
 LEGACY_GAP_ID_PATTERN = re.compile(r"^GAP-(\d+)$")
 
-
-def normalize_gap_id(gap_id: str) -> str:
-    """Normalize gap ID to G### format.
-
-    Supports both new format (G001) and legacy format (GAP-001).
-    Returns normalized G### format for internal use.
-
-    Examples:
-        G001 -> G001
-        GAP-001 -> G001
-        GAP-42 -> G042
-    """
-    gap_id = gap_id.strip()
-
-    # Already in new format
-    if GAP_ID_PATTERN.match(gap_id):
-        return gap_id
-
-    # Legacy format: GAP-NNN -> G0NN (zero-padded to 3 digits)
-    legacy_match = LEGACY_GAP_ID_PATTERN.match(gap_id)
-    if legacy_match:
-        num = int(legacy_match.group(1))
-        if 1 <= num <= 999:
-            return f"G{num:03d}"
-
-    # Return as-is if unrecognized (validation will catch it)
-    return gap_id
-
-
-# Expected GAP_MATRIX table header columns (canonical)
 EXPECTED_MATRIX_COLUMNS = [
     "ID",
     "Gap",
@@ -91,8 +59,7 @@ EXPECTED_MATRIX_COLUMNS = [
     "Definition of Done",
 ]
 
-# Known CI lanes (from Makefile and .github/workflows/)
-# This is the default set; dynamic discovery can supplement this
+# Static known lanes. Discovery augments this at runtime.
 KNOWN_CI_LANES = frozenset(
     {
         "unit",
@@ -119,7 +86,6 @@ KNOWN_CI_LANES = frozenset(
     }
 )
 
-# Infra-related path prefixes (for owner=infra validation)
 INFRA_PATH_PREFIXES = (
     ".github/",
     "Makefile",
@@ -129,194 +95,50 @@ INFRA_PATH_PREFIXES = (
     "infra/",
 )
 
-# Docs-related path prefixes (for owner=docs validation)
 DOCS_PATH_PREFIXES = ("docs/", "README", "CHANGELOG", "LICENSE", "*.md")
 
 
-def extract_file_paths(evidence: str) -> list[str]:
-    """Extract potential file paths from evidence string.
-
-    Looks for patterns like:
-    - api/foo.py
-    - api/foo.py:123 (with line number)
-    - `path/to/file.ext`
-    - .github/workflows/ci.yml
-    - docker-compose.yml (root level files)
-    - Makefile:123 (with line number)
-    """
-    paths: list[str] = []
-
-    # Pattern for file paths: word chars, /, ., -, _ with optional :line_number
-    # Must have an extension (.) or be a well-known file like Makefile
-    path_pattern = re.compile(r"(?:`)?([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)(?::\d+)?(?:`)?")
-
-    for match in path_pattern.finditer(evidence):
-        candidate = match.group(1)
-        # Accept if it has a directory separator, starts with ., or looks like a known file
-        if "/" in candidate or candidate.startswith(".") or "." in candidate:
-            paths.append(candidate)
-
-    # Also check for Makefile references (no extension)
-    makefile_pattern = re.compile(r"(?:`)?Makefile(?::\d+)?(?:`)?")
-    if makefile_pattern.search(evidence):
-        paths.append("Makefile")
-
-    return paths
+# -----------------------
+# Utilities
+# -----------------------
 
 
-def extract_test_references(evidence: str) -> list[str]:
-    """Extract test function/file references from evidence.
+def normalize_gap_id(gap_id: str) -> str:
+    """Normalize gap ID to G### format; supports legacy GAP-###."""
+    gap_id = gap_id.strip()
+    if GAP_ID_PATTERN.match(gap_id):
+        return gap_id
 
-    Looks for patterns like:
-    - test_foo
-    - tests/test_foo.py::test_bar
-    - test_security_hardening
-    """
-    refs: list[str] = []
+    m = LEGACY_GAP_ID_PATTERN.match(gap_id)
+    if m:
+        num = int(m.group(1))
+        if 1 <= num <= 999:
+            return f"G{num:03d}"
 
-    # Test file pattern: tests/test_*.py or just test_*
-    test_pattern = re.compile(
-        r"(tests?/)?test_[a-zA-Z0-9_]+(?:\.py)?(?:::test_[a-zA-Z0-9_]+)?"
-    )
-
-    for match in test_pattern.finditer(evidence):
-        refs.append(match.group(0))
-
-    return refs
+    return gap_id
 
 
-def extract_ci_lane_references(evidence: str) -> list[str]:
-    """Extract CI lane references from evidence.
-
-    Looks for known CI lane names in evidence string.
-    """
-    refs: list[str] = []
-    evidence_lower = evidence.lower()
-
-    for lane in KNOWN_CI_LANES:
-        if lane in evidence_lower:
-            refs.append(lane)
-
-    return refs
-
-
-def verify_file_exists(path: str, repo_root: Path | None = None) -> bool:
-    """Check if a file exists in the repo.
-
-    Args:
-        path: Relative path to check
-        repo_root: Repository root (defaults to cwd)
-    """
-    if repo_root is None:
-        repo_root = Path.cwd()
-
-    # Strip backticks and line numbers
-    clean_path = path.strip("`").split(":")[0]
-    full_path = repo_root / clean_path
-
-    return full_path.exists()
-
-
-def verify_test_exists(test_ref: str, repo_root: Path | None = None) -> bool:
-    """Verify a test reference exists in the tests/ directory.
-
-    Uses grep to search for test functions/files.
-
-    Args:
-        test_ref: Test reference (e.g., "test_foo" or "tests/test_bar.py::test_baz")
-        repo_root: Repository root (defaults to cwd)
-    """
-    if repo_root is None:
-        repo_root = Path.cwd()
-
-    tests_dir = repo_root / "tests"
-    if not tests_dir.exists():
-        return False
-
-    # Extract test function name if present
-    if "::" in test_ref:
-        # Format: tests/test_file.py::test_function
-        parts = test_ref.split("::")
-        test_file = parts[0]
-        test_func = parts[1] if len(parts) > 1 else None
-
-        # Check file exists
-        file_path = repo_root / test_file if "/" in test_file else tests_dir / test_file
-        if not file_path.exists():
-            return False
-
-        # If function specified, grep for it
-        if test_func:
-            try:
-                result = subprocess.run(
-                    ["grep", "-q", f"def {test_func}", str(file_path)],
-                    capture_output=True,
-                    timeout=5,
-                )
-                return result.returncode == 0
-            except (subprocess.TimeoutExpired, FileNotFoundError):
-                return False
-        return True
-
-    # Just a test name like "test_foo" - search for it
-    # First check if it's a file
-    if test_ref.endswith(".py"):
-        test_path = test_ref if "/" in test_ref else f"tests/{test_ref}"
-        return (repo_root / test_path).exists()
-
-    # Search for test function definition
+def parse_date(date_str: str) -> datetime | None:
+    """Parse YYYY-MM-DD. Returns None if invalid."""
     try:
-        result = subprocess.run(
-            ["grep", "-rq", f"def {test_ref}", str(tests_dir)],
-            capture_output=True,
-            timeout=10,
-        )
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return datetime.strptime(date_str.strip(), "%Y-%m-%d")
+    except ValueError:
+        return None
+
+
+def is_waiver_valid(waiver: "Waiver", today: datetime) -> bool:
+    exp = parse_date(waiver.expiration)
+    return exp is not None and exp >= today
+
+
+def is_waiver_expiring_soon(waiver: "Waiver", today: datetime) -> bool:
+    exp = parse_date(waiver.expiration)
+    if exp is None:
         return False
-
-
-def verify_ci_lane_exists(lane: str, repo_root: Path | None = None) -> bool:
-    """Verify a CI lane exists in Makefile or GitHub workflows.
-
-    Args:
-        lane: CI lane name to verify
-        repo_root: Repository root (defaults to cwd)
-    """
-    if repo_root is None:
-        repo_root = Path.cwd()
-
-    # Check if in static KNOWN_CI_LANES
-    if lane.lower() in {known_lane.lower() for known_lane in KNOWN_CI_LANES}:
-        return True
-
-    # Check Makefile for target
-    makefile = repo_root / "Makefile"
-    if makefile.exists():
-        content = makefile.read_text()
-        # Look for .PHONY declarations or target definitions
-        if re.search(rf"^\.PHONY:.*\b{re.escape(lane)}\b", content, re.MULTILINE):
-            return True
-        if re.search(rf"^{re.escape(lane)}:", content, re.MULTILINE):
-            return True
-
-    # Check GitHub workflows for job names
-    workflows_dir = repo_root / ".github" / "workflows"
-    if workflows_dir.exists():
-        for yml_file in workflows_dir.glob("*.yml"):
-            content = yml_file.read_text()
-            # Look for job names
-            if re.search(rf"^\s+{re.escape(lane)}:", content, re.MULTILINE):
-                return True
-            # Look for job name attributes
-            if re.search(rf'name:\s*["\']?{re.escape(lane)}', content, re.IGNORECASE):
-                return True
-
-    return False
+    return exp <= (today + timedelta(days=WAIVER_WARNING_DAYS))
 
 
 def is_infra_path(path: str) -> bool:
-    """Check if a path is an infra-related path."""
     for prefix in INFRA_PATH_PREFIXES:
         if path.startswith(prefix) or prefix in path:
             return True
@@ -324,10 +146,8 @@ def is_infra_path(path: str) -> bool:
 
 
 def is_docs_path(path: str) -> bool:
-    """Check if a path is a docs-related path."""
     for prefix in DOCS_PATH_PREFIXES:
         if prefix.startswith("*"):
-            # Wildcard pattern
             if path.endswith(prefix[1:]):
                 return True
         elif path.startswith(prefix) or prefix in path:
@@ -335,65 +155,455 @@ def is_docs_path(path: str) -> bool:
     return False
 
 
-def validate_owner_evidence_match(owner: str, evidence: str) -> list[str]:
-    """Validate that evidence matches the owner type.
-
-    Owner semantics:
-    - repo: evidence must include a repo file path or test reference
-    - infra: evidence must include a workflow YAML reference or infra path
-    - docs: evidence must reference a docs path
-
-    Returns list of errors if mismatched.
+def _normalize_known_lanes(known_lanes: Iterable[str] | None) -> Set[str]:
     """
+    Normalize lanes to lowercase set. If None, fallback to static KNOWN_CI_LANES.
+    This keeps unit tests happy when they call functions without passing lanes.
+    """
+    if known_lanes is None:
+        return {x.lower() for x in KNOWN_CI_LANES}
+    return {x.lower() for x in known_lanes if x and str(x).strip()}
+
+
+# -----------------------
+# CI Lane discovery
+# -----------------------
+
+
+def discover_ci_lanes(repo_root: Path) -> Set[str]:
+    """
+    Discover CI lanes from:
+      - Makefile targets
+      - .github/workflows job ids (top-level jobs: keys)
+    Returns a lowercased set.
+    """
+    lanes: set[str] = set()
+
+    # Makefile: simple target definitions "^name:"
+    makefile = repo_root / "Makefile"
+    if makefile.exists():
+        try:
+            content = makefile.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            content = makefile.read_text(errors="ignore")
+        for m in re.finditer(r"^([A-Za-z0-9_.-]+)\s*:", content, re.MULTILINE):
+            lanes.add(m.group(1).strip().lower())
+
+        # .PHONY: x y z
+        for m in re.finditer(r"^\.PHONY:\s*(.+)$", content, re.MULTILINE):
+            toks = [t.strip().lower() for t in m.group(1).split() if t.strip()]
+            lanes.update(toks)
+
+    # GitHub workflows: jobs: then "  job_id:"
+    wf_dir = repo_root / ".github" / "workflows"
+    if wf_dir.exists():
+        for yml in list(wf_dir.glob("*.yml")) + list(wf_dir.glob("*.yaml")):
+            try:
+                content = yml.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                content = yml.read_text(errors="ignore")
+
+            # crude but deterministic enough: find "jobs:" block and then job keys
+            in_jobs = False
+            jobs_indent: Optional[int] = None
+
+            for line in content.splitlines():
+                if re.match(r"^\s*jobs:\s*$", line):
+                    in_jobs = True
+                    jobs_indent = len(line) - len(line.lstrip(" "))
+                    continue
+
+                if not in_jobs:
+                    continue
+
+                # exit jobs block if indent decreases to <= jobs_indent
+                indent = len(line) - len(line.lstrip(" "))
+                if jobs_indent is not None and indent <= jobs_indent and line.strip():
+                    in_jobs = False
+                    jobs_indent = None
+                    continue
+
+                # job id: "  build:" (indent > jobs_indent)
+                jm = re.match(r"^\s{2,}([A-Za-z0-9_.-]+)\s*:\s*$", line)
+                if jm:
+                    lanes.add(jm.group(1).strip().lower())
+
+    return lanes
+
+
+def merged_known_lanes(repo_root: Path | None = None) -> Set[str]:
+    rr = repo_root or Path.cwd()
+    discovered = discover_ci_lanes(rr)
+    static = {x.lower() for x in KNOWN_CI_LANES}
+    return static | discovered
+
+
+# -----------------------
+# Evidence extraction
+# -----------------------
+
+
+def extract_file_paths(evidence: str) -> list[str]:
+    """Extract possible file paths from evidence text."""
+    paths: list[str] = []
+
+    path_pattern = re.compile(r"(?:`)?([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)(?::\d+)?(?:`)?")
+    for m in path_pattern.finditer(evidence):
+        candidate = m.group(1)
+        if "/" in candidate or candidate.startswith(".") or "." in candidate:
+            paths.append(candidate)
+
+    # Makefile references (no extension)
+    if re.search(r"(?:`)?Makefile(?::\d+)?(?:`)?", evidence):
+        paths.append("Makefile")
+
+    return paths
+
+
+def extract_test_references(evidence: str) -> list[str]:
+    refs: list[str] = []
+    test_pattern = re.compile(
+        r"(tests?/)?test_[a-zA-Z0-9_]+(?:\.py)?(?:::test_[a-zA-Z0-9_]+)?"
+    )
+    for m in test_pattern.finditer(evidence):
+        refs.append(m.group(0))
+    return refs
+
+
+def extract_ci_lane_references(
+    evidence: str, known_lanes: Set[str] | None = None
+) -> list[str]:
+    """
+    Extract CI lane references from evidence.
+
+    Rules:
+    - Avoid false positives from file path segments (e.g., Makefile target "api" matching "api/auth.py").
+    - BUT allow the canonical lane "ci" to be inferred from workflow files like "ci.yml"/"ci.yaml"
+      because tests expect ".github/workflows/ci.yml" to count as lane "ci".
+    """
+    refs: list[str] = []
+    lanes = _normalize_known_lanes(known_lanes)
+    e = (evidence or "").lower()
+
+    # Special-case: workflow file names like ci.yml / ci.yaml should imply lane "ci"
+    # because we use that filename as a conventional lane marker.
+    if re.search(r"(?:^|/)(ci)\.(yml|yaml)(?::\w+)?(?:$|\s|`)", e):
+        if "ci" in lanes:
+            refs.append("ci")
+
+    # If evidence includes file paths, collect path tokens to avoid false lane matches.
+    path_tokens: set[str] = set()
+    file_paths = extract_file_paths(evidence or "")
+    if file_paths:
+        for p in file_paths:
+            p_clean = p.split(":", 1)[0]
+            for tok in re.split(r"[\/\.\-_:]+", p_clean.lower()):
+                if tok:
+                    path_tokens.add(tok)
+
+    for lane in sorted(lanes):
+        if not lane:
+            continue
+        lane_l = lane.lower()
+
+        # If we already added "ci" from ci.yml, don't add again.
+        if lane_l == "ci" and "ci" in refs:
+            continue
+
+        # Prevent false positives from file path tokens, EXCEPT:
+        # - allow "ci" if it appears as a real token reference (handled above for ci.yml),
+        #   otherwise normal boundary matching applies.
+        if lane_l in path_tokens and lane_l != "ci":
+            continue
+
+        # token-ish match, not substring inside a longer identifier
+        pattern = rf"(?<![a-z0-9_.-]){re.escape(lane_l)}(?![a-z0-9_.-])"
+        if re.search(pattern, e):
+            refs.append(lane_l)
+
+    # deterministic unique order
+    out: list[str] = []
+    seen: set[str] = set()
+    for r in refs:
+        if r not in seen:
+            out.append(r)
+            seen.add(r)
+    return out
+
+
+# -----------------------
+# Evidence verification
+# -----------------------
+
+FileExistCache = Dict[str, bool]
+
+
+def verify_file_exists(
+    path: str, repo_root: Path, cache: FileExistCache | None = None
+) -> bool:
+    """Verify file exists, cached. Backwards-compatible cache default."""
+    c: FileExistCache = cache if cache is not None else {}
+    clean = path.strip("`").split(":")[0]
+    key = str((repo_root / clean).resolve())
+    if key in c:
+        return c[key]
+    exists = (repo_root / clean).exists()
+    c[key] = exists
+    return exists
+
+
+def verify_test_exists(test_ref: str, repo_root: Path) -> bool:
+    tests_dir = repo_root / "tests"
+    if not tests_dir.exists():
+        return False
+
+    if "::" in test_ref:
+        parts = test_ref.split("::", 1)
+        test_file, test_func = parts[0], parts[1]
+        file_path = repo_root / test_file if "/" in test_file else tests_dir / test_file
+        if not file_path.exists():
+            return False
+        try:
+            r = subprocess.run(
+                ["grep", "-q", f"def {test_func}", str(file_path)],
+                capture_output=True,
+                timeout=5,
+                check=False,
+            )
+            return r.returncode == 0
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return False
+
+    # If it's a file ref
+    if test_ref.endswith(".py"):
+        test_path = test_ref if "/" in test_ref else f"tests/{test_ref}"
+        return (repo_root / test_path).exists()
+
+    # Otherwise grep for def test_ref
+    try:
+        r = subprocess.run(
+            ["grep", "-rq", f"def {test_ref}", str(tests_dir)],
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+        return r.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+
+def verify_ci_lane_exists(
+    lane: str,
+    repo_root: Path | None = None,
+    discovered_lanes: Set[str] | None = None,
+) -> bool:
+    """
+    Verify lane exists by either discovery or static known set.
+    Backwards-compatible: repo_root/discovered_lanes optional for unit tests.
+    """
+    rr = repo_root or Path.cwd()
+    lanes = _normalize_known_lanes(discovered_lanes) | merged_known_lanes(rr)
+
+    lane_l = (lane or "").lower().strip()
+    if not lane_l:
+        return False
+
+    if lane_l in lanes:
+        return True
+
+    # fallback: check Makefile target explicitly (covers cases where discovery missed)
+    makefile = rr / "Makefile"
+    if makefile.exists():
+        try:
+            content = makefile.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            content = makefile.read_text(errors="ignore")
+        if re.search(rf"^{re.escape(lane)}\s*:", content, re.MULTILINE):
+            return True
+        if re.search(rf"^\.PHONY:.*\b{re.escape(lane)}\b", content, re.MULTILINE):
+            return True
+
+    return False
+
+
+def validate_evidence_artifact(
+    evidence: str, known_lanes: Set[str] | None = None
+) -> bool:
+    """
+    Shallow validation: must include at least one repo-backed artifact reference.
+    Backwards-compatible: known_lanes optional for unit tests.
+    """
+    if not (evidence or "").strip():
+        return False
+
+    e = evidence.strip()
+
+    # file-like: path or extension; allow "ci.yml:unit" and "api/auth.py:123"
+    if ("/" in e and "." in e) or any(
+        ext in e for ext in (".py", ".yml", ".yaml", ".md", ".toml", ".json")
+    ):
+        return True
+
+    # test-like
+    if e.startswith("test_") or "test_" in e or "::" in e:
+        return True
+
+    # lane-like
+    lanes = _normalize_known_lanes(known_lanes)
+    el = e.lower()
+    return any(lane in el for lane in lanes)
+
+
+@dataclass
+class EvidenceVerificationResult:
+    valid: bool
+    errors: list[str]
+    warnings: list[str]
+    verified_artifacts: list[str]
+
+
+def verify_evidence_artifacts(
+    evidence: str,
+    repo_root: Path | None = None,
+    discovered_lanes: Set[str] | None = None,
+    cache: FileExistCache | None = None,
+    *,
+    skip_file_checks: bool = False,
+) -> EvidenceVerificationResult:
+    """
+    Deep verification:
+      - file paths exist
+      - tests exist
+      - lanes exist
+      - at least one verified artifact required
+
+    Backwards-compatible defaults:
+      verify_evidence_artifacts("...", skip_file_checks=True)
+    """
+    rr = repo_root or Path.cwd()
+    lanes = _normalize_known_lanes(discovered_lanes) | merged_known_lanes(rr)
+    c: FileExistCache = cache if cache is not None else {}
+
     errors: list[str] = []
+    warnings: list[str] = []
+    verified: list[str] = []
+
+    if not (evidence or "").strip():
+        return EvidenceVerificationResult(
+            valid=False,
+            errors=["Evidence is required"],
+            warnings=[],
+            verified_artifacts=[],
+        )
 
     file_paths = extract_file_paths(evidence)
     test_refs = extract_test_references(evidence)
-    ci_lanes = extract_ci_lane_references(evidence)
+    ci_lanes = extract_ci_lane_references(evidence, lanes)
+
+    for p in file_paths:
+        if skip_file_checks:
+            verified.append(f"file:{p}")
+        elif verify_file_exists(p, rr, c):
+            verified.append(f"file:{p}")
+        else:
+            errors.append(f"Evidence file not found: {p}")
+
+    for t in test_refs:
+        if skip_file_checks:
+            verified.append(f"test:{t}")
+        elif verify_test_exists(t, rr):
+            verified.append(f"test:{t}")
+        else:
+            # allow test file fallback via file existence
+            if t.endswith(".py"):
+                test_path = t if "/" in t else f"tests/{t}"
+                if verify_file_exists(test_path, rr, c):
+                    verified.append(f"test:{t}")
+                    continue
+            errors.append(f"Evidence test reference not found: {t}")
+
+    for lane in ci_lanes:
+        if skip_file_checks:
+            verified.append(f"ci:{lane}")
+        elif verify_ci_lane_exists(lane, rr, lanes):
+            verified.append(f"ci:{lane}")
+        else:
+            errors.append(f"Evidence CI lane not found: {lane}")
+
+    if not verified and not errors:
+        errors.append(
+            "Evidence must contain at least one verifiable repo-backed artifact "
+            "(file path, test reference, or CI lane)."
+        )
+
+    return EvidenceVerificationResult(
+        valid=(len(errors) == 0 and len(verified) > 0),
+        errors=errors,
+        warnings=warnings,
+        verified_artifacts=verified,
+    )
+
+
+def validate_owner_evidence_match(
+    owner: str, evidence: str, known_lanes: Set[str] | None = None
+) -> list[str]:
+    """
+    Owner semantics validation.
+    Backwards-compatible: known_lanes optional for unit tests.
+    """
+    errors: list[str] = []
+    lanes = _normalize_known_lanes(known_lanes)
+
+    file_paths = extract_file_paths(evidence)
+    test_refs = extract_test_references(evidence)
+    ci_lanes = extract_ci_lane_references(evidence, lanes)
 
     if owner == "repo":
-        # Must have repo file path or test reference (not infra/docs paths)
         has_repo_file = any(
             p for p in file_paths if not is_infra_path(p) and not is_docs_path(p)
         )
-        has_test = len(test_refs) > 0
-        has_ci = len(ci_lanes) > 0
-
+        has_test = bool(test_refs)
+        has_ci = bool(ci_lanes)
         if not (has_repo_file or has_test or has_ci):
             errors.append(
-                f"Owner=repo requires evidence with repo file path, test reference, or CI lane. "
+                "Owner=repo requires evidence with repo code path, test reference, or CI lane. "
                 f"Found: {evidence}"
             )
 
     elif owner == "infra":
-        # Must have workflow YAML, Makefile, or infra path reference
         has_infra_path = any(is_infra_path(p) for p in file_paths)
-        has_workflow = any(".yml" in p or ".yaml" in p for p in file_paths)
-        has_ci = len(ci_lanes) > 0
-
-        if not (has_infra_path or has_workflow or has_ci):
+        has_workflow = any(
+            p.startswith(".github/workflows/") or p.endswith((".yml", ".yaml"))
+            for p in file_paths
+        )
+        has_makefile = any(p == "Makefile" for p in file_paths) or (
+            "makefile" in (evidence or "").lower()
+        )
+        has_ci = bool(ci_lanes)
+        if not (has_infra_path or has_workflow or has_makefile or has_ci):
             errors.append(
-                f"Owner=infra requires evidence with workflow YAML, Makefile, or infra path. "
+                "Owner=infra requires evidence with workflow YAML, Makefile, infra path, or CI lane. "
                 f"Found: {evidence}"
             )
 
     elif owner == "docs":
-        # Must have docs path reference
         has_docs_path = any(is_docs_path(p) for p in file_paths)
-
         if not has_docs_path:
             errors.append(
-                f"Owner=docs requires evidence with docs path reference. "
+                "Owner=docs requires evidence with docs path reference. "
                 f"Found: {evidence}"
             )
 
     return errors
 
 
+# -----------------------
+# Parsing
+# -----------------------
+
+
 @dataclass
 class Gap:
-    """Represents a production gap from GAP_MATRIX.md."""
-
     id: str
     description: str
     severity: str
@@ -405,8 +615,6 @@ class Gap:
 
 @dataclass
 class Waiver:
-    """Represents a risk waiver from RISK_WAIVERS.md."""
-
     gap_id: str
     severity: str
     reason: str
@@ -416,557 +624,454 @@ class Waiver:
 
 
 def validate_matrix_header(content: str) -> list[str]:
-    """Validate that GAP_MATRIX.md has the expected table header."""
     errors: list[str] = []
+    header_match: Optional[str] = None
 
-    # Find header row: | ID | Gap | Severity | ... |
-    header_match = None
-
-    for line in content.split("\n"):
+    for line in content.splitlines():
         line = line.strip()
         if line.startswith("|") and "ID" in line and "Gap" in line:
             header_match = line
             break
 
     if not header_match:
-        errors.append("GAP_MATRIX: No table header found (expected | ID | Gap | ...)")
-        return errors
+        return ["GAP_MATRIX: No table header found (expected | ID | Gap | ... )"]
 
-    # Extract columns from header
-    columns = [col.strip() for col in header_match.split("|") if col.strip()]
-
+    columns = [c.strip() for c in header_match.split("|") if c.strip()]
     if len(columns) != len(EXPECTED_MATRIX_COLUMNS):
-        errors.append(
+        return [
             f"GAP_MATRIX: Header has {len(columns)} columns, expected {len(EXPECTED_MATRIX_COLUMNS)}"
-        )
-        return errors
+        ]
 
-    for i, (actual, expected) in enumerate(zip(columns, EXPECTED_MATRIX_COLUMNS)):
+    for i, (actual, expected) in enumerate(
+        zip(columns, EXPECTED_MATRIX_COLUMNS), start=1
+    ):
         if actual != expected:
             errors.append(
-                f"GAP_MATRIX: Column {i + 1} is '{actual}', expected '{expected}'"
+                f"GAP_MATRIX: Column {i} is '{actual}', expected '{expected}'"
             )
 
     return errors
 
 
-def validate_evidence_artifact(evidence: str) -> bool:
-    """Check if evidence includes at least one repo-backed artifact.
-
-    Valid evidence includes:
-    - A file path containing "/" and a "." extension (e.g., api/auth.py)
-    - A test name containing "test_" (e.g., tests/test_auth.py::test_x)
-    - A CI lane name that matches a known lane in Makefile/CI
-    """
-    if not evidence.strip():
-        return False
-
-    # Check for file path: contains "/" and "." (e.g., api/auth.py)
-    if "/" in evidence and "." in evidence:
-        return True
-
-    # Check for test reference: contains "test_"
-    if "test_" in evidence:
-        return True
-
-    # Check for known CI lane references
-    evidence_lower = evidence.lower()
-    for lane in KNOWN_CI_LANES:
-        if lane in evidence_lower:
-            return True
-
-    # Check for CI-related patterns (yaml files, workflow references)
-    if ".yml" in evidence or ".yaml" in evidence:
-        return True
-
-    return False
-
-
-@dataclass
-class EvidenceVerificationResult:
-    """Result of evidence verification."""
-
-    valid: bool
-    errors: list[str]
-    warnings: list[str]
-    verified_artifacts: list[str]
-
-
-def verify_evidence_artifacts(
-    evidence: str,
-    repo_root: Path | None = None,
-    skip_file_checks: bool = False,
-) -> EvidenceVerificationResult:
-    """Verify that evidence references verifiable repo-backed artifacts.
-
-    This function performs deep verification:
-    1. If evidence contains a file path, verify the file exists
-    2. If evidence references a test, verify it exists via grep
-    3. If evidence references a CI lane, verify it exists in Makefile or workflows
-    4. At least one verifiable artifact is required
-
-    Args:
-        evidence: Evidence string from GAP_MATRIX
-        repo_root: Repository root path (defaults to cwd)
-        skip_file_checks: Skip filesystem checks (for unit tests)
-
-    Returns:
-        EvidenceVerificationResult with validation details
-    """
-    if repo_root is None:
-        repo_root = Path.cwd()
-
-    errors: list[str] = []
-    warnings: list[str] = []
-    verified: list[str] = []
-
-    file_paths = extract_file_paths(evidence)
-    test_refs = extract_test_references(evidence)
-    ci_lanes = extract_ci_lane_references(evidence)
-
-    # Verify file paths
-    for path in file_paths:
-        if skip_file_checks:
-            verified.append(f"file:{path}")
-        elif verify_file_exists(path, repo_root):
-            verified.append(f"file:{path}")
-        else:
-            errors.append(f"Evidence file not found: {path}")
-
-    # Verify test references
-    for test_ref in test_refs:
-        if skip_file_checks:
-            verified.append(f"test:{test_ref}")
-        elif verify_test_exists(test_ref, repo_root):
-            verified.append(f"test:{test_ref}")
-        else:
-            # Check if it's a file reference that exists
-            if test_ref.endswith(".py"):
-                test_path = test_ref if "/" in test_ref else f"tests/{test_ref}"
-                if verify_file_exists(test_path, repo_root):
-                    verified.append(f"test:{test_ref}")
-                    continue
-            errors.append(f"Evidence test reference not found: {test_ref}")
-
-    # Verify CI lanes
-    for lane in ci_lanes:
-        if skip_file_checks:
-            verified.append(f"ci:{lane}")
-        elif verify_ci_lane_exists(lane, repo_root):
-            verified.append(f"ci:{lane}")
-        else:
-            errors.append(f"Evidence CI lane not found: {lane}")
-
-    # Check if at least one artifact was verified
-    if not verified and not errors:
-        errors.append(
-            "Evidence must contain at least one verifiable repo-backed artifact "
-            "(file path, test reference, or CI lane)"
-        )
-
-    return EvidenceVerificationResult(
-        valid=len(errors) == 0 and len(verified) > 0,
-        errors=errors,
-        warnings=warnings,
-        verified_artifacts=verified,
-    )
-
-
 def parse_gap_matrix(path: Path) -> list[Gap]:
-    """Parse GAP_MATRIX.md and extract gap entries."""
     if not path.exists():
         return []
-
     content = path.read_text()
-    gaps: list[Gap] = []
 
-    # Find the gap matrix table rows (ID pattern: G followed by 3 digits OR legacy GAP-NNN)
+    # Table rows
     table_pattern = re.compile(
-        r"^\|\s*(G\d{3}|GAP-\d+)\s*\|"  # ID column (G001 or legacy GAP-001)
-        r"\s*([^|]+)\|"  # Gap description
-        r"\s*([^|]+)\|"  # Severity
-        r"\s*([^|]+)\|"  # Evidence
-        r"\s*([^|]+)\|"  # Owner
-        r"\s*([^|]+)\|"  # ETA
-        r"\s*([^|]+)\|",  # Definition of Done
+        r"^\|\s*(G\d{3}|GAP-\d+)\s*\|"
+        r"\s*([^|]+)\|"
+        r"\s*([^|]+)\|"
+        r"\s*([^|]+)\|"
+        r"\s*([^|]+)\|"
+        r"\s*([^|]+)\|"
+        r"\s*([^|]+)\|",
         re.MULTILINE,
     )
 
-    for match in table_pattern.finditer(content):
-        gap_id = normalize_gap_id(match.group(1).strip())
-        description = match.group(2).strip()
-        severity = match.group(3).strip()
-        evidence = match.group(4).strip()
-        owner = match.group(5).strip()
-        eta = match.group(6).strip()
-        dod = match.group(7).strip()
-
+    gaps: list[Gap] = []
+    for m in table_pattern.finditer(content):
+        gap_id = normalize_gap_id(m.group(1).strip())
         gaps.append(
             Gap(
                 id=gap_id,
-                description=description,
-                severity=severity,
-                evidence=evidence,
-                owner=owner,
-                eta=eta,
-                definition_of_done=dod,
+                description=m.group(2).strip(),
+                severity=m.group(3).strip(),
+                evidence=m.group(4).strip(),
+                owner=m.group(5).strip(),
+                eta=m.group(6).strip(),
+                definition_of_done=m.group(7).strip(),
             )
         )
-
     return gaps
 
 
 def parse_waivers(path: Path) -> list[Waiver]:
-    """Parse RISK_WAIVERS.md and extract waiver entries."""
     if not path.exists():
         return []
-
     content = path.read_text()
-    waivers: list[Waiver] = []
 
-    # Find waiver table rows (ID pattern: G followed by 3 digits OR legacy GAP-NNN)
     table_pattern = re.compile(
-        r"^\|\s*(G\d{3}|GAP-\d+)\s*\|"  # Gap ID (G001 or legacy GAP-001)
-        r"\s*([^|]+)\|"  # Severity
-        r"\s*([^|]+)\|"  # Reason
-        r"\s*([^|]+)\|"  # Approved By
-        r"\s*([^|]+)\|"  # Expiration
-        r"\s*([^|]+)\|",  # Review Date
+        r"^\|\s*(G\d{3}|GAP-\d+)\s*\|"
+        r"\s*([^|]+)\|"
+        r"\s*([^|]+)\|"
+        r"\s*([^|]+)\|"
+        r"\s*([^|]+)\|"
+        r"\s*([^|]+)\|",
         re.MULTILINE,
     )
 
-    for match in table_pattern.finditer(content):
-        gap_id = normalize_gap_id(match.group(1).strip())
-        severity = match.group(2).strip()
-        reason = match.group(3).strip()
-        approved_by = match.group(4).strip()
-        expiration = match.group(5).strip()
-        review_date = match.group(6).strip()
-
+    waivers: list[Waiver] = []
+    for m in table_pattern.finditer(content):
+        gap_id = normalize_gap_id(m.group(1).strip())
         waivers.append(
             Waiver(
                 gap_id=gap_id,
-                severity=severity,
-                reason=reason,
-                approved_by=approved_by,
-                expiration=expiration,
-                review_date=review_date,
+                severity=m.group(2).strip(),
+                reason=m.group(3).strip(),
+                approved_by=m.group(4).strip(),
+                expiration=m.group(5).strip(),
+                review_date=m.group(6).strip(),
             )
         )
-
     return waivers
 
 
-def parse_date(date_str: str) -> datetime | None:
-    """Parse date string in YYYY-MM-DD format."""
-    try:
-        return datetime.strptime(date_str.strip(), "%Y-%m-%d")
-    except ValueError:
-        return None
+# -----------------------
+# Validation
+# -----------------------
 
 
-def is_waiver_valid(waiver: Waiver, today: datetime) -> bool:
-    """Check if a waiver is currently valid (not expired)."""
-    expiration = parse_date(waiver.expiration)
-    if expiration is None:
-        return False  # Invalid date format = invalid waiver
-    return expiration >= today
-
-
-def is_waiver_expiring_soon(waiver: Waiver, today: datetime) -> bool:
-    """Check if a waiver expires within the warning threshold."""
-    expiration = parse_date(waiver.expiration)
-    if expiration is None:
-        return False
-    warning_date = today + timedelta(days=WAIVER_WARNING_DAYS)
-    return expiration <= warning_date
-
-
-def validate_gap(gap: Gap) -> list[str]:
-    """Validate gap entry format."""
+def validate_gap(gap: Gap, known_lanes: Set[str] | None = None) -> list[str]:
+    """
+    Validate gap row. Backwards-compatible: known_lanes optional for unit tests.
+    """
     errors: list[str] = []
+    lanes = _normalize_known_lanes(known_lanes)
 
-    # Validate ID format: must match G[0-9]{3}
     if not GAP_ID_PATTERN.match(gap.id):
         errors.append(
             f"{gap.id}: Invalid ID format. Must match G[0-9]{{3}} (e.g., G001)"
         )
 
-    # Validate severity
     if gap.severity not in SEVERITY_LEVELS:
         errors.append(
-            f"{gap.id}: Invalid severity '{gap.severity}'. "
-            f"Must be one of: {', '.join(sorted(SEVERITY_LEVELS))}"
+            f"{gap.id}: Invalid severity '{gap.severity}'. Must be one of: {', '.join(sorted(SEVERITY_LEVELS))}"
         )
 
-    # Validate owner
     if gap.owner not in VALID_OWNERS:
         errors.append(
-            f"{gap.id}: Invalid owner '{gap.owner}'. "
-            f"Must be one of: {', '.join(sorted(VALID_OWNERS))}"
+            f"{gap.id}: Invalid owner '{gap.owner}'. Must be one of: {', '.join(sorted(VALID_OWNERS))}"
         )
 
-    # Validate non-empty description
     if not gap.description.strip():
         errors.append(f"{gap.id}: Gap description is required")
 
-    # Validate evidence is non-empty
     if not gap.evidence.strip():
         errors.append(f"{gap.id}: Evidence is required")
-    elif not validate_evidence_artifact(gap.evidence):
+    elif not validate_evidence_artifact(gap.evidence, lanes):
         errors.append(
             f"{gap.id}: Evidence '{gap.evidence}' must include a repo-backed artifact "
-            "(file path with '/' and '.', test name with 'test_', or CI lane name)"
+            "(file path, test reference, CI lane, or workflow yaml)."
         )
 
-    # Validate ETA is non-empty
     if not gap.eta.strip():
         errors.append(f"{gap.id}: ETA / Milestone is required")
 
-    # Validate Definition of Done is non-empty
     if not gap.definition_of_done.strip():
         errors.append(f"{gap.id}: Definition of Done is required")
 
     return errors
 
 
-class GapAuditResult:
-    """Collects audit results."""
-
-    def __init__(self) -> None:
-        self.blocking_gaps: list[Gap] = []
-        self.launch_risk_gaps: list[Gap] = []
-        self.post_launch_gaps: list[Gap] = []
-        self.waived_gaps: list[tuple[Gap, Waiver]] = []
-        self.expired_waivers: list[Waiver] = []
-        self.expiring_soon_waivers: list[Waiver] = []
-        self.validation_errors: list[str] = []
-        self.invalid_waiver_attempts: list[Waiver] = []  # Production-blocking waivers
-        self.evidence_verification_errors: list[str] = []  # Deep evidence verification
-        self.owner_evidence_mismatches: list[str] = []  # Owner/evidence semantic errors
-
-
 def validate_waiver(waiver: Waiver, gap_lookup: dict[str, Gap]) -> list[str]:
-    """Validate waiver entry format and cross-references."""
     errors: list[str] = []
 
-    # Gap ID must exist in GAP_MATRIX
     if waiver.gap_id not in gap_lookup:
-        errors.append(
+        return [
             f"Waiver {waiver.gap_id}: Gap ID does not exist in GAP_MATRIX (phantom waiver)"
-        )
-        return errors  # Can't validate further without the gap
+        ]
 
     gap = gap_lookup[waiver.gap_id]
 
-    # Severity in waiver must match gap's actual severity
     if waiver.severity != gap.severity:
         errors.append(
-            f"Waiver {waiver.gap_id}: Severity mismatch - waiver says '{waiver.severity}', "
-            f"gap is '{gap.severity}'"
+            f"Waiver {waiver.gap_id}: Severity mismatch - waiver says '{waiver.severity}', gap is '{gap.severity}'"
         )
 
-    # Approved By must be non-empty and contain '@' OR '/' OR ' ' (human identifier)
     approved = waiver.approved_by.strip()
     if not approved:
         errors.append(f"Waiver {waiver.gap_id}: Approved By is required")
     elif not ("@" in approved or "/" in approved or " " in approved):
         errors.append(
-            f"Waiver {waiver.gap_id}: Approved By '{approved}' must contain '@', '/', or ' ' "
-            "(human identifier format)"
+            f"Waiver {waiver.gap_id}: Approved By '{approved}' must contain '@', '/', or ' ' (human identifier format)"
         )
 
-    # Expiration must be valid ISO date YYYY-MM-DD
-    exp_date = parse_date(waiver.expiration)
-    if exp_date is None:
+    exp = parse_date(waiver.expiration)
+    if exp is None:
         errors.append(
-            f"Waiver {waiver.gap_id}: Expiration '{waiver.expiration}' is not a valid "
-            "ISO date (YYYY-MM-DD)"
+            f"Waiver {waiver.gap_id}: Expiration '{waiver.expiration}' is not a valid ISO date (YYYY-MM-DD)"
         )
 
     return errors
+
+
+# -----------------------
+# Audit result model
+# -----------------------
+
+
+class GapAuditResult:
+    def __init__(self) -> None:
+        self.blocking_gaps: list[Gap] = []
+        self.launch_risk_gaps: list[Gap] = []
+        self.post_launch_gaps: list[Gap] = []
+
+        self.waived_gaps: list[tuple[Gap, Waiver]] = []
+        self.expired_waivers: list[Waiver] = []
+        self.expiring_soon_waivers: list[Waiver] = []
+        self.invalid_waiver_attempts: list[Waiver] = []
+
+        self.validation_errors: list[str] = []
+        self.evidence_verification_errors: list[str] = []
+        self.owner_evidence_mismatches: list[str] = []
+
+
+# -----------------------
+# Core audit
+# -----------------------
 
 
 def run_gap_audit(
     matrix_path: Path,
     waivers_path: Path,
     today: datetime | None = None,
+    *,
     repo_root: Path | None = None,
     skip_evidence_verification: bool = False,
 ) -> GapAuditResult:
-    """Run the gap audit and return results.
+    """
+    Run gap audit and return results.
 
-    Args:
-        matrix_path: Path to GAP_MATRIX.md
-        waivers_path: Path to RISK_WAIVERS.md
-        today: Override for current date (for testing)
-        repo_root: Repository root for evidence verification (defaults to cwd)
-        skip_evidence_verification: Skip deep evidence file checks (for unit tests)
+    NOTE: 'today' is intentionally the 3rd positional argument to match existing call sites/tests.
     """
     if today is None:
         today = datetime.now()
-
     if repo_root is None:
         repo_root = Path.cwd()
 
     result = GapAuditResult()
+    discovered_lanes = merged_known_lanes(repo_root)
+    file_cache: FileExistCache = {}
 
-    # Validate matrix header first
     if matrix_path.exists():
-        content = matrix_path.read_text()
-        header_errors = validate_matrix_header(content)
-        result.validation_errors.extend(header_errors)
+        result.validation_errors.extend(validate_matrix_header(matrix_path.read_text()))
 
-    # Parse files
     gaps = parse_gap_matrix(matrix_path)
     waivers = parse_waivers(waivers_path)
 
-    # Check for duplicate gap IDs
-    seen_ids: set[str] = set()
-    for gap in gaps:
-        if gap.id in seen_ids:
-            result.validation_errors.append(f"{gap.id}: Duplicate gap ID")
-        seen_ids.add(gap.id)
+    # duplicate IDs
+    seen: set[str] = set()
+    for g in gaps:
+        if g.id in seen:
+            result.validation_errors.append(f"{g.id}: Duplicate gap ID")
+        seen.add(g.id)
 
-    # Build gap lookup for waiver validation
-    gap_lookup: dict[str, Gap] = {gap.id: gap for gap in gaps}
+    gap_lookup = {g.id: g for g in gaps}
 
-    # Build waiver lookup and validate waivers
     waiver_by_gap: dict[str, Waiver] = {}
-    for waiver in waivers:
-        # Validate waiver format and cross-references
-        waiver_errors = validate_waiver(waiver, gap_lookup)
-        result.validation_errors.extend(waiver_errors)
+    for w in waivers:
+        result.validation_errors.extend(validate_waiver(w, gap_lookup))
 
-        # Check for invalid Production-blocking waiver attempts
-        if waiver.severity == "Production-blocking":
-            result.invalid_waiver_attempts.append(waiver)
+        if w.severity == "Production-blocking":
+            result.invalid_waiver_attempts.append(w)
             continue
 
-        # Check waiver validity (expiration)
-        if not is_waiver_valid(waiver, today):
-            result.expired_waivers.append(waiver)
+        if not is_waiver_valid(w, today):
+            result.expired_waivers.append(w)
             continue
 
-        if is_waiver_expiring_soon(waiver, today):
-            result.expiring_soon_waivers.append(waiver)
+        if is_waiver_expiring_soon(w, today):
+            result.expiring_soon_waivers.append(w)
 
-        waiver_by_gap[waiver.gap_id] = waiver
+        waiver_by_gap[w.gap_id] = w
 
-    # Process gaps
-    for gap in gaps:
-        # Validate gap format
-        errors = validate_gap(gap)
-        result.validation_errors.extend(errors)
+    for g in gaps:
+        # Always validate; lanes optional is handled downstream.
+        result.validation_errors.extend(validate_gap(g, discovered_lanes))
 
-        # Validate owner/evidence semantic match
-        owner_errors = validate_owner_evidence_match(gap.owner, gap.evidence)
-        for err in owner_errors:
-            result.owner_evidence_mismatches.append(f"{gap.id}: {err}")
+        # IMPORTANT: owner/evidence mismatch is LOGIC, not filesystem verification.
+        # It must still run even when skip_evidence_verification=True.
+        for err in validate_owner_evidence_match(g.owner, g.evidence, discovered_lanes):
+            result.owner_evidence_mismatches.append(f"{g.id}: {err}")
 
-        # Deep evidence verification (skip if disabled for unit tests)
+        # Evidence verification: deep checks (filesystem/grep/make targets).
         if not skip_evidence_verification:
-            evidence_result = verify_evidence_artifacts(
-                gap.evidence,
+            ev = verify_evidence_artifacts(
+                g.evidence,
                 repo_root=repo_root,
+                discovered_lanes=discovered_lanes,
+                cache=file_cache,
                 skip_file_checks=False,
             )
-            for err in evidence_result.errors:
-                result.evidence_verification_errors.append(f"{gap.id}: {err}")
+            for e in ev.errors:
+                result.evidence_verification_errors.append(f"{g.id}: {e}")
 
-        # Check if waived
-        waiver = waiver_by_gap.get(gap.id)
-        if waiver and gap.severity != "Production-blocking":
-            result.waived_gaps.append((gap, waiver))
+        w = waiver_by_gap.get(g.id)
+        if w and g.severity != "Production-blocking":
+            result.waived_gaps.append((g, w))
             continue
 
-        # Categorize by severity
-        if gap.severity == "Production-blocking":
-            result.blocking_gaps.append(gap)
-        elif gap.severity == "Launch-risk":
-            result.launch_risk_gaps.append(gap)
-        elif gap.severity == "Post-launch":
-            result.post_launch_gaps.append(gap)
+        if g.severity == "Production-blocking":
+            result.blocking_gaps.append(g)
+        elif g.severity == "Launch-risk":
+            result.launch_risk_gaps.append(g)
+        else:
+            result.post_launch_gaps.append(g)
+
+    # deterministic ordering
+    result.blocking_gaps.sort(key=lambda x: x.id)
+    result.launch_risk_gaps.sort(key=lambda x: x.id)
+    result.post_launch_gaps.sort(key=lambda x: x.id)
+    result.expired_waivers.sort(key=lambda x: x.gap_id)
+    result.expiring_soon_waivers.sort(key=lambda x: x.gap_id)
+    result.invalid_waiver_attempts.sort(key=lambda x: x.gap_id)
+    result.waived_gaps.sort(key=lambda t: t[0].id)
 
     return result
 
 
+# -----------------------
+# Scorecard (deterministic)
+# -----------------------
+
+
+def generate_gap_scorecard(
+    matrix_path: Path,
+    waivers_path: Path,
+    today: datetime | None = None,
+    *,
+    repo_root: Path | None = None,
+    skip_evidence_verification: bool = False,
+) -> str:
+    """
+    Deterministic markdown scorecard.
+    NO timestamps. Stable order. This is for drift checks and CI artifacts.
+    """
+    res = run_gap_audit(
+        matrix_path,
+        waivers_path,
+        today,
+        repo_root=repo_root,
+        skip_evidence_verification=skip_evidence_verification,
+    )
+
+    def fmt_gaps(title: str, gaps: list[Gap]) -> list[str]:
+        if not gaps:
+            return [f"## {title}", "", "_None_", ""]
+        lines = [f"## {title}", ""]
+        for g in gaps:
+            lines.append(f"- **{g.id}**: {g.description} _(owner: {g.owner})_")
+        lines.append("")
+        return lines
+
+    lines: list[str] = []
+    lines.append("# GAP Scorecard")
+    lines.append("")
+    lines.append("## Summary")
+    lines.append("")
+    lines.append(f"- Production-blocking: **{len(res.blocking_gaps)}**")
+    lines.append(f"- Launch-risk: **{len(res.launch_risk_gaps)}**")
+    lines.append(f"- Post-launch: **{len(res.post_launch_gaps)}**")
+    lines.append(f"- Waived: **{len(res.waived_gaps)}**")
+    lines.append(f"- Expired waivers: **{len(res.expired_waivers)}**")
+    lines.append(f"- Evidence errors: **{len(res.evidence_verification_errors)}**")
+    lines.append(f"- Owner mismatches: **{len(res.owner_evidence_mismatches)}**")
+    lines.append(f"- Validation errors: **{len(res.validation_errors)}**")
+    lines.append("")
+
+    lines.extend(fmt_gaps("Production-blocking", res.blocking_gaps))
+    lines.extend(fmt_gaps("Launch-risk (unwaived)", res.launch_risk_gaps))
+    lines.extend(fmt_gaps("Post-launch", res.post_launch_gaps))
+
+    if res.waived_gaps:
+        lines.append("## Waived")
+        lines.append("")
+        for g, w in res.waived_gaps:
+            lines.append(
+                f"- **{g.id}**: {g.description} _(expires: {w.expiration}, approved: {w.approved_by})_"
+            )
+        lines.append("")
+    else:
+        lines.extend(["## Waived", "", "_None_", ""])
+
+    if res.expired_waivers:
+        lines.append("## Expired waivers")
+        lines.append("")
+        for w in res.expired_waivers:
+            lines.append(f"- **{w.gap_id}** expired: {w.expiration}")
+        lines.append("")
+
+    if res.expiring_soon_waivers:
+        lines.append("## Waivers expiring soon")
+        lines.append("")
+        for w in res.expiring_soon_waivers:
+            lines.append(f"- **{w.gap_id}** expires: {w.expiration}")
+        lines.append("")
+
+    return "\n".join(lines).rstrip() + "\n"
+
+
+# -----------------------
+# CLI reporting
+# -----------------------
+
+
 def format_gap_table(gaps: list[Gap], header: str) -> str:
-    """Format gaps as a simple text table."""
     if not gaps:
         return ""
-
     lines = [header, "=" * len(header)]
-    for gap in gaps:
-        lines.append(f"  {gap.id}: {gap.description}")
-        lines.append(f"    Evidence: {gap.evidence}")
-        lines.append(f"    Owner: {gap.owner}")
+    for g in gaps:
+        lines.append(f"  {g.id}: {g.description}")
+        lines.append(f"    Evidence: {g.evidence}")
+        lines.append(f"    Owner: {g.owner}")
         lines.append("")
     return "\n".join(lines)
 
 
 def main() -> int:
-    """Run gap audit and return exit code."""
-    # Paths relative to repo root
     matrix_path = Path("docs/GAP_MATRIX.md")
     waivers_path = Path("docs/RISK_WAIVERS.md")
     repo_root = Path.cwd()
 
-    # Check if matrix exists
     if not matrix_path.exists():
         print("ERROR: docs/GAP_MATRIX.md not found")
-        print("Create the gap matrix before running audit.")
         return 1
 
     result = run_gap_audit(
         matrix_path,
         waivers_path,
+        datetime.now(),
         repo_root=repo_root,
         skip_evidence_verification=False,
     )
 
-    # Print report
     print("=" * 60)
     print("GAP AUDIT REPORT")
     print("=" * 60)
     print()
 
-    # Validation errors (always fail)
     if result.validation_errors:
         print("VALIDATION ERRORS:")
-        for error in result.validation_errors:
-            print(f"  [ERROR] {error}")
+        for e in result.validation_errors:
+            print(f"  [ERROR] {e}")
         print()
 
-    # Evidence verification errors (always fail)
     if result.evidence_verification_errors:
         print("EVIDENCE VERIFICATION ERRORS:")
-        for error in result.evidence_verification_errors:
-            print(f"  [ERROR] {error}")
+        for e in result.evidence_verification_errors:
+            print(f"  [ERROR] {e}")
         print()
 
-    # Owner/evidence mismatch errors (always fail)
     if result.owner_evidence_mismatches:
         print("OWNER/EVIDENCE MISMATCH ERRORS:")
-        for error in result.owner_evidence_mismatches:
-            print(f"  [ERROR] {error}")
+        for e in result.owner_evidence_mismatches:
+            print(f"  [ERROR] {e}")
         print()
 
-    # Invalid waiver attempts (always fail)
     if result.invalid_waiver_attempts:
         print("INVALID WAIVER ATTEMPTS (Production-blocking cannot be waived):")
-        for waiver in result.invalid_waiver_attempts:
-            print(f"  [ERROR] {waiver.gap_id}: Attempted waiver rejected")
+        for w in result.invalid_waiver_attempts:
+            print(f"  [ERROR] {w.gap_id}: Attempted waiver rejected")
         print()
 
-    # Expired waivers (always fail)
     if result.expired_waivers:
         print("EXPIRED WAIVERS:")
-        for waiver in result.expired_waivers:
-            print(f"  [ERROR] {waiver.gap_id}: Waiver expired {waiver.expiration}")
+        for w in result.expired_waivers:
+            print(f"  [ERROR] {w.gap_id}: Waiver expired {w.expiration}")
         print()
 
-    # Production-blocking gaps (fail)
     if result.blocking_gaps:
         print(
             format_gap_table(
@@ -974,28 +1079,22 @@ def main() -> int:
             )
         )
 
-    # Launch-risk gaps (warn)
     if result.launch_risk_gaps:
         print(format_gap_table(result.launch_risk_gaps, "LAUNCH-RISK GAPS (Warning)"))
 
-    # Expiring soon waivers (warn)
     if result.expiring_soon_waivers:
         print("WAIVERS EXPIRING SOON:")
-        for waiver in result.expiring_soon_waivers:
-            print(f"  [WARN] {waiver.gap_id}: Expires {waiver.expiration}")
+        for w in result.expiring_soon_waivers:
+            print(f"  [WARN] {w.gap_id}: Expires {w.expiration}")
         print()
 
-    # Waived gaps (info)
     if result.waived_gaps:
         print("WAIVED GAPS:")
-        for gap, waiver in result.waived_gaps:
-            print(f"  [WAIVED] {gap.id}: {gap.description}")
-            print(
-                f"    Approved by: {waiver.approved_by}, Expires: {waiver.expiration}"
-            )
+        for g, w in result.waived_gaps:
+            print(f"  [WAIVED] {g.id}: {g.description}")
+            print(f"    Approved by: {w.approved_by}, Expires: {w.expiration}")
         print()
 
-    # Post-launch gaps (info)
     if result.post_launch_gaps:
         print(
             format_gap_table(
@@ -1003,7 +1102,6 @@ def main() -> int:
             )
         )
 
-    # Summary
     print("-" * 60)
     print("SUMMARY:")
     print(f"  Production-blocking: {len(result.blocking_gaps)}")
@@ -1015,41 +1113,25 @@ def main() -> int:
     print(f"  Owner mismatches: {len(result.owner_evidence_mismatches)}")
     print()
 
-    # Determine exit code
     has_errors = (
-        len(result.blocking_gaps) > 0
-        or len(result.validation_errors) > 0
-        or len(result.expired_waivers) > 0
-        or len(result.invalid_waiver_attempts) > 0
-        or len(result.evidence_verification_errors) > 0
-        or len(result.owner_evidence_mismatches) > 0
+        bool(result.blocking_gaps)
+        or bool(result.validation_errors)
+        or bool(result.expired_waivers)
+        or bool(result.invalid_waiver_attempts)
+        or bool(result.evidence_verification_errors)
+        or bool(result.owner_evidence_mismatches)
     )
 
     if has_errors:
         print("=" * 60)
         print("GAP AUDIT: FAILED")
         print("=" * 60)
-        if result.blocking_gaps:
-            print(
-                f"\nCI blocked by {len(result.blocking_gaps)} Production-blocking gap(s)."
-            )
-            print("Remediate gaps or escalate for business review.")
-        if result.evidence_verification_errors:
-            print(
-                f"\nCI blocked by {len(result.evidence_verification_errors)} evidence verification error(s)."
-            )
-            print("Fix evidence paths to reference existing repo artifacts.")
-        if result.owner_evidence_mismatches:
-            print(
-                f"\nCI blocked by {len(result.owner_evidence_mismatches)} owner/evidence mismatch(es)."
-            )
-            print("Ensure evidence matches the owner type (repo/infra/docs).")
         return 1
-    else:
-        print("=" * 60)
-        print("GAP AUDIT: PASSED")
-        print("=" * 60)
-        return 0
+
+    print("=" * 60)
+    print("GAP AUDIT: PASSED")
+    print("=" * 60)
+    return 0
 
 
 if __name__ == "__main__":
