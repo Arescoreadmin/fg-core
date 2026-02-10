@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -41,9 +42,9 @@ try:
     try:
         from api.mission_envelope import mission_envelope_enabled  # preferred
     except Exception:  # pragma: no cover
-        from api.mission_envelope import (
+        from api.mission_envelope import (  # type: ignore
             mission_envelopes_enabled as mission_envelope_enabled,
-        )  # type: ignore
+        )
 except Exception:  # pragma: no cover
 
     def mission_envelope_enabled() -> bool:  # type: ignore
@@ -114,14 +115,9 @@ except ImportError:  # pragma: no cover
     admin_router = None  # type: ignore
 
 
-log = logging.getLogger("frostgate")
-
-# Version info for API responses
-APP_VERSION = "0.8.0"
-API_VERSION = "v1"
-
-ERR_INVALID = "Invalid or missing API key"
-UI_COOKIE_NAME = os.getenv("FG_UI_COOKIE_NAME", "fg_api_key")
+# -----------------------------------------------------------------------------
+# Logging (production-safe)
+# -----------------------------------------------------------------------------
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -129,6 +125,122 @@ def _env_bool(name: str, default: bool = False) -> bool:
     if v is None:
         return default
     return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _parse_log_level(raw: str | None, default: int = logging.INFO) -> int:
+    """
+    Accepts:
+      - "info", "INFO", "warning", etc
+      - numeric: "10", "20", ...
+    Returns a valid logging level int. Never raises.
+    """
+    if raw is None:
+        return default
+
+    s = str(raw).strip()
+    if not s:
+        return default
+
+    # numeric support
+    if s.isdigit():
+        try:
+            n = int(s)
+            if n >= 0:
+                return n
+        except Exception:
+            return default
+
+    s_up = s.upper()
+    level = logging.getLevelName(s_up)
+
+    # logging.getLevelName("INFO") -> 20
+    # logging.getLevelName("NOPE") -> "Level NOPE"
+    if isinstance(level, int):
+        return level
+
+    # try common synonyms
+    synonyms = {
+        "WARN": "WARNING",
+        "FATAL": "CRITICAL",
+    }
+    if s_up in synonyms:
+        level2 = logging.getLevelName(synonyms[s_up])
+        if isinstance(level2, int):
+            return level2
+
+    return default
+
+
+class _JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "ts": self.formatTime(record, datefmt="%Y-%m-%dT%H:%M:%S%z"),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        if record.exc_info:
+            payload["exc"] = self.formatException(record.exc_info)
+        # include some useful standard fields if present
+        for k in ("request_id", "tenant_id", "path", "method", "status_code"):
+            if hasattr(record, k):
+                payload[k] = getattr(record, k)
+        return json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+
+
+def configure_logging() -> None:
+    """
+    Configure root logging once, safely.
+    Avoids the classic double-handler spam and the 'info' crash.
+    """
+    level = _parse_log_level(os.getenv("FG_LOG_LEVEL"), default=logging.INFO)
+    json_logs = _env_bool("FG_LOG_JSON", default=False)
+
+    root = logging.getLogger()
+
+    # If already configured (uvicorn can do this), don't stack handlers.
+    if getattr(root, "_fg_configured", False):
+        root.setLevel(level)
+        return
+
+    root.setLevel(level)
+
+    handler = logging.StreamHandler(stream=sys.stdout)
+    if json_logs:
+        handler.setFormatter(_JsonFormatter())
+    else:
+        handler.setFormatter(
+            logging.Formatter(
+                fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
+            )
+        )
+
+    # Replace handlers to avoid duplicates, but only if we own config
+    root.handlers = [handler]
+    setattr(root, "_fg_configured", True)
+
+    # Reduce noise from common libs (still overridable by FG_LOG_LEVEL)
+    logging.getLogger("uvicorn").setLevel(max(level, logging.INFO))
+    logging.getLogger("uvicorn.error").setLevel(max(level, logging.INFO))
+    logging.getLogger("uvicorn.access").setLevel(
+        logging.WARNING
+    )  # access logs mostly noise
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
+
+
+configure_logging()
+log = logging.getLogger("frostgate")
+
+# -----------------------------------------------------------------------------
+# App constants
+# -----------------------------------------------------------------------------
+
+APP_VERSION = "0.8.0"
+API_VERSION = "v1"
+
+ERR_INVALID = "Invalid or missing API key"
+UI_COOKIE_NAME = os.getenv("FG_UI_COOKIE_NAME", "fg_api_key")
 
 
 def _resolve_auth_enabled_from_env() -> bool:
@@ -277,7 +389,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     # PATCH_FG_UI_SINGLE_USE_MW_V1
     if not hasattr(app.state, "_ui_single_use_used"):
         app.state._ui_single_use_used = set()
-
     if not hasattr(app.state, "_ui_key_scopes_cache"):
         app.state._ui_key_scopes_cache = {}
 
@@ -400,11 +511,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         return v or None
 
     def check_tenant_if_present(req: Request) -> None:
-        """
-        Optional tenant auth:
-        - If X-Tenant-Id is present, enforce tenant key validation even if global auth is disabled.
-        - Fail closed if tenant registry hook isn't available.
-        """
         tenant_id = _hdr(req, "X-Tenant-Id")
         if not tenant_id:
             return
@@ -439,10 +545,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             _fail()
 
     def require_status_auth(req: Request) -> None:
-        # Tenant auth always enforced if present
         check_tenant_if_present(req)
 
-        # Global auth gate
         if not bool(app.state.auth_enabled):
             return
 
@@ -479,8 +583,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 "/openapi.json",
                 "/docs",
                 "/redoc",
-                # Forensics endpoints authenticate via require_scopes()
-                # (scoped fgk.* tokens), not via global FG_API_KEY.
                 "/forensics/chain/verify",
                 "/forensics/snapshot",
                 "/forensics/audit-trail",
@@ -498,8 +600,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(ui_dashboards_router)
     app.include_router(keys_router)
 
-    # Forensics routes must always exist for contract/security tests.
-    # Kill-switch is enforced inside api/forensics.py (return 404).
     app.include_router(forensics_router)
 
     if mission_router is not None and mission_envelope_enabled():
@@ -514,7 +614,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     if _dev_enabled():
         app.include_router(dev_events_router)
 
-    # Admin router for SaaS management
     if admin_router is not None:
         app.include_router(admin_router)
 
@@ -533,14 +632,10 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     @app.get("/health/live")
     async def health_live() -> dict:
-        """Kubernetes liveness probe - is the service running?"""
         return {"status": "live"}
 
     @app.get("/health/ready")
     async def health_ready() -> dict:
-        """
-        Kubernetes readiness probe - can the service handle traffic?
-        """
         from api.health import HealthStatus, get_health_checker
 
         deps_status: dict = {"db": "unknown"}
