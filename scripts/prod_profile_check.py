@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Production profile validation for FrostGate Core.
 
-This script validates that docker-compose.yml and related config files
-have safe production defaults. It checks for:
+Validates docker-compose.yml and related config have safe production defaults.
+
+Checks (core + admin-gateway):
 - FG_RL_FAIL_OPEN must be false (fail-closed rate limiting)
 - FG_AUTH_ALLOW_FALLBACK must be false (no dev bypass in production)
-- FG_AUTH_ENABLED must be true or 1
-- No default/weak secrets in production config
+- FG_AUTH_ENABLED must be true or 1 (core)
+- DoS hardening must be enabled and finite (core)
+- No default/weak secrets in production config (basic checks)
 
 Run as part of CI to prevent unsafe configurations from reaching production.
 """
@@ -15,6 +17,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -30,7 +33,7 @@ def _env_truthy(value: str | bool | None) -> bool:
         return True
     if ":-" in val:
         default = val.split(":-", 1)[1].rstrip("}")
-        return default in ("1", "true", "yes", "on")
+        return default.strip().lower() in ("1", "true", "yes", "on")
     return False
 
 
@@ -43,13 +46,46 @@ def _env_falsy(value: str | bool | None) -> bool:
         return False
     if isinstance(value, bool):
         return not value
-    val_str = str(value).strip().lower()
-    # Direct false values
-    if val_str in ("0", "false", "no", "off"):
+    val = str(value).strip().lower()
+    if val in ("0", "false", "no", "off"):
         return True
-    # Handle ${VAR:-default} syntax - check if default is false
-    if ":-false" in val_str or ":-0" in val_str or ":-no" in val_str:
+    if ":-" in val:
+        default = val.split(":-", 1)[1].rstrip("}")
+        return default.strip().lower() in ("0", "false", "no", "off")
+    return False
+
+
+def _normalize_env(env: Any) -> dict[str, Any]:
+    """Compose 'environment' can be dict or list of KEY=VALUE strings."""
+    if env is None:
+        return {}
+    if isinstance(env, dict):
+        return env
+    if isinstance(env, list):
+        out: dict[str, Any] = {}
+        for item in env:
+            if not isinstance(item, str):
+                continue
+            if "=" not in item:
+                out[item.strip()] = ""
+                continue
+            k, v = item.split("=", 1)
+            out[k.strip()] = v.strip()
+        return out
+    return {}
+
+
+def _env_default_is_prod(env: dict[str, Any]) -> bool:
+    """Treat as prod if FG_ENV is prod or defaults to prod (or missing)."""
+    v = env.get("FG_ENV")
+    if v is None:
         return True
+    s = str(v).strip().lower()
+    if s == "prod" or s == "production":
+        return True
+    if ":-" in s:
+        default = s.split(":-", 1)[1].rstrip("}").strip().lower()
+        return default in ("prod", "production")
     return False
 
 
@@ -66,22 +102,22 @@ class ProductionProfileChecker:
             self.errors.append(f"Compose file not found: {compose_path}")
             return
 
-        with open(compose_path) as f:
-            compose = yaml.safe_load(f)
+        with open(compose_path, encoding="utf-8") as f:
+            compose = yaml.safe_load(f) or {}
 
-        services = compose.get("services", {})
+        services = compose.get("services", {}) or {}
 
-        # Check core service (may be named "core" or "frostgate-core")
         core_svc = services.get("frostgate-core") or services.get("core") or {}
-        core_env = core_svc.get("environment", {})
+        core_env = _normalize_env(core_svc.get("environment"))
         self._check_core_env(core_env)
 
-        # Check admin-gateway service
-        _ = services.get("admin-gateway", {})
+        admin_svc = services.get("admin-gateway") or {}
+        admin_env = _normalize_env(admin_svc.get("environment"))
+        self._check_admin_env(admin_env)
 
-    def _check_core_env(self, env: dict) -> None:
+    def _check_core_env(self, env: dict[str, Any]) -> None:
         """Validate core service environment variables."""
-        # FG_RL_FAIL_OPEN must be explicitly false
+        is_prod = _env_default_is_prod(env)
 
         # DoS hardening must be enabled and finite in production
         dos_enabled = env.get("FG_DOS_GUARD_ENABLED")
@@ -107,6 +143,7 @@ class ProductionProfileChecker:
             "FG_KEEPALIVE_TIMEOUT_SEC",
             "FG_MAX_CONCURRENT_REQUESTS",
         ]
+
         for key in required_positive:
             value = env.get(key)
             if value is None:
@@ -115,11 +152,11 @@ class ProductionProfileChecker:
                 )
                 continue
             try:
-                parsed = (
-                    float(str(value).split(":-")[-1].rstrip("}"))
-                    if isinstance(value, str) and ":-" in value
-                    else float(value)
-                )
+                if isinstance(value, str) and ":-" in value:
+                    raw = value.split(":-", 1)[1].rstrip("}")
+                else:
+                    raw = value
+                parsed = float(str(raw).strip())
                 if parsed <= 0:
                     raise ValueError
             except Exception:
@@ -127,6 +164,7 @@ class ProductionProfileChecker:
                     f"CRITICAL: {key} must be a positive number in production (got {value!r})."
                 )
 
+        # Rate limiting fail-open must be false in production
         fail_open = env.get("FG_RL_FAIL_OPEN")
         if fail_open is None:
             self.errors.append(
@@ -135,27 +173,38 @@ class ProductionProfileChecker:
             )
         elif not _env_falsy(fail_open):
             self.errors.append(
-                f"CRITICAL: FG_RL_FAIL_OPEN={fail_open} in core. "
+                f"CRITICAL: FG_RL_FAIL_OPEN={fail_open!r} in core. "
                 "Production MUST use FG_RL_FAIL_OPEN=false."
             )
 
-        # FG_AUTH_ENABLED should be true or 1
+        # Auth enabled must be on in prod
         auth_enabled = env.get("FG_AUTH_ENABLED")
-        if auth_enabled is not None and not _env_truthy(auth_enabled):
+        if is_prod and auth_enabled is not None and not _env_truthy(auth_enabled):
             self.errors.append(
-                f"CRITICAL: FG_AUTH_ENABLED={auth_enabled} in core. "
+                f"CRITICAL: FG_AUTH_ENABLED={auth_enabled!r} in core. "
                 "Production MUST enable authentication."
             )
 
-        # FG_RL_BACKEND should be redis in production
+        # Auth fallback must default false
+        allow_fallback = env.get("FG_AUTH_ALLOW_FALLBACK")
+        if allow_fallback is None:
+            self.errors.append(
+                "CRITICAL: FG_AUTH_ALLOW_FALLBACK must be explicitly set in core "
+                "and default to false in production."
+            )
+        elif _env_truthy(allow_fallback):
+            self.errors.append(
+                "CRITICAL: FG_AUTH_ALLOW_FALLBACK is enabled in core. "
+                "Production MUST set FG_AUTH_ALLOW_FALLBACK=false."
+            )
+
         rl_backend = env.get("FG_RL_BACKEND")
-        if rl_backend and str(rl_backend).lower() == "memory":
+        if rl_backend and str(rl_backend).strip().lower() == "memory":
             self.warnings.append(
                 "WARNING: FG_RL_BACKEND=memory in core. "
                 "Production should use FG_RL_BACKEND=redis for distributed rate limiting."
             )
 
-        # FG_RL_ALLOW_BYPASS_IN_PROD should be false
         bypass_in_prod = env.get("FG_RL_ALLOW_BYPASS_IN_PROD")
         if bypass_in_prod is not None and _env_truthy(bypass_in_prod):
             self.errors.append(
@@ -163,15 +212,29 @@ class ProductionProfileChecker:
                 "Production MUST NOT allow rate limit bypass."
             )
 
-    def _check_admin_env(self, env: dict) -> None:
+    def _check_admin_env(self, env: dict[str, Any]) -> None:
         """Validate admin-gateway environment variables."""
-        # FG_AUTH_ALLOW_FALLBACK should be false in production
+        is_prod = _env_default_is_prod(env)
+
         allow_fallback = env.get("FG_AUTH_ALLOW_FALLBACK")
-        if allow_fallback is not None and _env_truthy(allow_fallback):
-            self.warnings.append(
-                "WARNING: FG_AUTH_ALLOW_FALLBACK=true in admin-gateway. "
-                "This allows dev bypass authentication. "
-                "Set FG_AUTH_ALLOW_FALLBACK=false for production."
+        if allow_fallback is None:
+            # In prod-like, being explicit is the whole point
+            if is_prod:
+                self.errors.append(
+                    "CRITICAL: FG_AUTH_ALLOW_FALLBACK must be explicitly set in admin-gateway "
+                    "and default to false in production."
+                )
+            else:
+                self.warnings.append(
+                    "WARNING: FG_AUTH_ALLOW_FALLBACK is not set in admin-gateway. "
+                    "Set FG_AUTH_ALLOW_FALLBACK=false explicitly."
+                )
+            return
+
+        if _env_truthy(allow_fallback):
+            self.errors.append(
+                "CRITICAL: FG_AUTH_ALLOW_FALLBACK=true in admin-gateway. "
+                "Production MUST set FG_AUTH_ALLOW_FALLBACK=false."
             )
 
     def report(self) -> int:
@@ -201,11 +264,7 @@ class ProductionProfileChecker:
 def main() -> int:
     """Run production profile checks."""
     checker = ProductionProfileChecker()
-
-    # Check docker-compose.yml
-    compose_path = Path("docker-compose.yml")
-    checker.check_compose_file(compose_path)
-
+    checker.check_compose_file(Path("docker-compose.yml"))
     return checker.report()
 
 
