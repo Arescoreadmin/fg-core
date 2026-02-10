@@ -295,8 +295,8 @@ jobs:
       - name: Create .env for compose
         run: |
           set -euo pipefail
-          printf "POSTGRES_USER=%s\nPOSTGRES_DB=%s\nPOSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nFG_AGENT_API_KEY=%s\nAG_CORS_ORIGINS=%s\n" \
-            "${POSTGRES_USER}" "${POSTGRES_DB}" "${POSTGRES_PASSWORD}" "devredis" "dev-agent-key" "http://localhost:13000" > .env
+          printf "POSTGRES_USER=%s\nPOSTGRES_DB=%s\nPOSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nFG_AGENT_API_KEY=%s\nAG_CORS_ORIGINS=%s\nNATS_AUTH_TOKEN=%s\nFG_API_KEY=%s\n" \
+            "${POSTGRES_USER}" "${POSTGRES_DB}" "${POSTGRES_PASSWORD}" "devredis" "dev-agent-key" "http://localhost:13000" "ci-nats-token" "ci-api-key" > .env
 
       - name: Run Postgres verification lane
         run: make db-postgres-verify
