@@ -25,9 +25,9 @@
   "BP-M3-006": "MISSING",
   "BP-M3-007": "MISSING",
   "BP-C-001": "make bp-c-001-gate",
-  "BP-C-002": "MISSING",
-  "BP-C-003": "MISSING",
-  "BP-C-004": "MISSING",
+  "BP-C-002": "make bp-c-002-gate",
+  "BP-C-003": "make bp-c-003-gate",
+  "BP-C-004": "make bp-c-004-gate",
   "BP-C-005": "MISSING",
   "BP-C-006": "MISSING"
 }
