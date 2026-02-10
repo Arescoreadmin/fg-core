@@ -8,6 +8,9 @@ Validates docs/RISK_WAIVERS.md against docs/GAP_MATRIX.md:
 - Expiration must be YYYY-MM-DD and not expired relative to deterministic today.
 - tools/align_score_map.json must map BP-C-001 to "make bp-c-001-gate".
 
+Fail-closed: malformed or unparseable docs are explicit failures, never silent passes.
+Gap ID normalization: accepts G001 or GAP-001, normalizes internally to GAP-001.
+
 Determinism: uses FG_GATE_TODAY env var (YYYY-MM-DD) if set, else UTC date.
 Outputs: artifacts/gates/bp_c_001_report.json
 Exit code: 0 if passed, 1 if failed.
@@ -37,15 +40,45 @@ def get_today() -> datetime:
 
 
 # ---------------------------------------------------------------------------
-# Parsing helpers
+# Constants and patterns
 # ---------------------------------------------------------------------------
 
-_GAP_ID_RE = re.compile(r"^G\d{3}$")
+_GAP_ID_RE = re.compile(r"^G(\d{3})$")
+_LEGACY_GAP_ID_RE = re.compile(r"^GAP-(\d+)$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _APPROVER_NAME_EMAIL_RE = re.compile(r"^.+ <[^@<>\s]+@[^@<>\s]+>$")
 _APPROVER_HANDLE_RE = re.compile(r"^[^@\s]+@[^@\s]+$")
+_SEPARATOR_RE = re.compile(r"^\|[\s\-|]+\|$")
 
 EXPECTED_ALIGN_VALUE = "make bp-c-001-gate"
+
+_WAIVER_REQUIRED_COLUMNS = frozenset(
+    {"Gap ID", "Severity", "Reason", "Approved By", "Expiration", "Review Date"}
+)
+
+
+# ---------------------------------------------------------------------------
+# Gap ID normalization
+# ---------------------------------------------------------------------------
+
+
+def normalize_gap_id(raw: str) -> str | None:
+    """Normalize G001 or GAP-001 to GAP-001 format. Returns None if invalid."""
+    raw = raw.strip()
+    m = _GAP_ID_RE.match(raw)
+    if m:
+        return f"GAP-{m.group(1)}"
+    m = _LEGACY_GAP_ID_RE.match(raw)
+    if m:
+        num = int(m.group(1))
+        if 1 <= num <= 999:
+            return f"GAP-{num:03d}"
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Parsing helpers
+# ---------------------------------------------------------------------------
 
 
 def _parse_table_rows(text: str) -> list[list[str]]:
@@ -56,7 +89,7 @@ def _parse_table_rows(text: str) -> list[list[str]]:
         if not stripped.startswith("|"):
             continue
         # Skip separator lines like |---|---|
-        if re.match(r"^\|[\s\-|]+\|$", stripped):
+        if _SEPARATOR_RE.match(stripped):
             continue
         cells = [c.strip() for c in stripped.split("|")]
         # split("|") produces empty strings at start/end for "|a|b|"
@@ -71,15 +104,16 @@ def _parse_table_rows(text: str) -> list[list[str]]:
 
 
 def parse_gap_ids(gap_matrix_text: str) -> set[str]:
-    """Extract all gap IDs from GAP_MATRIX.md table."""
+    """Extract all gap IDs from GAP_MATRIX.md table, normalized to GAP-### format."""
     ids: set[str] = set()
     rows = _parse_table_rows(gap_matrix_text)
     for row in rows:
         if not row:
             continue
         candidate = row[0].strip().strip("`")
-        if _GAP_ID_RE.match(candidate):
-            ids.add(candidate)
+        normalized = normalize_gap_id(candidate)
+        if normalized:
+            ids.add(normalized)
     return ids
 
 
@@ -87,6 +121,7 @@ def parse_waivers(waivers_text: str) -> list[dict[str, str]]:
     """Parse waivers from RISK_WAIVERS.md table.
 
     Expected columns: Gap ID | Severity | Reason | Approved By | Expiration | Review Date
+    Accepts both G### and GAP-### gap ID formats.
     """
     rows = _parse_table_rows(waivers_text)
     waivers: list[dict[str, str]] = []
@@ -94,7 +129,7 @@ def parse_waivers(waivers_text: str) -> list[dict[str, str]]:
         if len(row) < 6:
             continue
         gap_id = row[0].strip().strip("`")
-        if not _GAP_ID_RE.match(gap_id):
+        if normalize_gap_id(gap_id) is None:
             continue
         waivers.append(
             {
@@ -110,6 +145,63 @@ def parse_waivers(waivers_text: str) -> list[dict[str, str]]:
 
 
 # ---------------------------------------------------------------------------
+# Structural validation (fail-closed)
+# ---------------------------------------------------------------------------
+
+
+def validate_waivers_structure(text: str) -> list[str]:
+    """Fail-closed structural validation of RISK_WAIVERS.md.
+
+    Returns errors if the file has no table, missing columns, or no data rows.
+    """
+    errors: list[str] = []
+
+    pipe_lines = [ln.strip() for ln in text.splitlines() if ln.strip().startswith("|")]
+    if not pipe_lines:
+        errors.append("RISK_WAIVERS.md: no waiver table found")
+        return errors
+
+    # Get all non-separator rows
+    rows = _parse_table_rows(text)
+    if not rows:
+        errors.append("RISK_WAIVERS.md: no waiver table found")
+        return errors
+
+    # First non-separator row is the header — check required columns
+    header_cells = {c.strip() for c in rows[0]}
+    missing = _WAIVER_REQUIRED_COLUMNS - header_cells
+    if missing:
+        errors.append(
+            f"RISK_WAIVERS.md: missing required columns: {', '.join(sorted(missing))}"
+        )
+        return errors
+
+    # Data rows are everything after the header
+    if len(rows) < 2:
+        errors.append("RISK_WAIVERS.md: no waiver rows found")
+
+    return errors
+
+
+def validate_gap_matrix_structure(text: str, gap_ids: set[str]) -> list[str]:
+    """Fail-closed structural validation of GAP_MATRIX.md.
+
+    Returns errors if the file has no table or no extractable gap IDs.
+    """
+    errors: list[str] = []
+
+    pipe_lines = [ln.strip() for ln in text.splitlines() if ln.strip().startswith("|")]
+    if not pipe_lines:
+        errors.append("GAP_MATRIX.md: no gap table found")
+        return errors
+
+    if not gap_ids:
+        errors.append("GAP_MATRIX.md: no gap ids found")
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
 
@@ -119,11 +211,23 @@ def validate_waivers(
     gap_ids: set[str],
     today: datetime,
 ) -> list[str]:
-    """Validate each waiver. Returns list of error strings (empty = all OK)."""
+    """Validate each waiver. Returns list of error strings (empty = all OK).
+
+    gap_ids should be in normalized GAP-### format. Waiver gap_ids are
+    normalized before comparison; error messages include both original and
+    normalized forms.
+    """
     errors: list[str] = []
 
+    # Normalize the gap_ids set to ensure consistent comparison
+    normalized_gap_ids: set[str] = set()
+    for gid in gap_ids:
+        n = normalize_gap_id(gid)
+        normalized_gap_ids.add(n if n else gid)
+
     for i, w in enumerate(waivers, start=1):
-        prefix = f"waiver #{i} (gap_id={w.get('gap_id', '?')})"
+        raw_gap_id = w.get("gap_id", "").strip()
+        prefix = f"waiver #{i} (gap_id={raw_gap_id})"
 
         # Required fields
         for field in ("gap_id", "severity", "approver", "expires_on", "reason"):
@@ -131,10 +235,17 @@ def validate_waivers(
             if not val:
                 errors.append(f"{prefix}: missing required field '{field}'")
 
-        gap_id = w.get("gap_id", "").strip()
-        # gap_id must exist in GAP_MATRIX
-        if gap_id and gap_id not in gap_ids:
-            errors.append(f"{prefix}: gap_id '{gap_id}' not found in GAP_MATRIX.md")
+        # gap_id must be valid format and exist in GAP_MATRIX
+        if raw_gap_id:
+            norm = normalize_gap_id(raw_gap_id)
+            if norm is None:
+                errors.append(
+                    f"{prefix}: gap_id '{raw_gap_id}' is not a valid gap ID format"
+                )
+            elif norm not in normalized_gap_ids:
+                errors.append(
+                    f"{prefix}: gap_id '{raw_gap_id}' ({norm}) not found in GAP_MATRIX.md"
+                )
 
         # expires_on must parse as YYYY-MM-DD and be >= today
         expires_on_str = w.get("expires_on", "").strip()
@@ -150,7 +261,8 @@ def validate_waivers(
                     )
                     if exp_date < today:
                         errors.append(
-                            f"{prefix}: expired on {expires_on_str} (today={today.strftime('%Y-%m-%d')})"
+                            f"{prefix}: expired on {expires_on_str} "
+                            f"(today={today.strftime('%Y-%m-%d')})"
                         )
                 except ValueError:
                     errors.append(
@@ -245,21 +357,27 @@ def run_gate(
     today = get_today()
     all_errors: list[str] = []
 
-    # --- Read gap matrix ---
+    # --- Read and structurally validate gap matrix ---
     if not gap_matrix_path.exists():
         all_errors.append(f"GAP_MATRIX.md not found at {gap_matrix_path}")
         gap_ids: set[str] = set()
     else:
-        gap_ids = parse_gap_ids(gap_matrix_path.read_text(encoding="utf-8"))
+        gap_text = gap_matrix_path.read_text(encoding="utf-8")
+        gap_ids = parse_gap_ids(gap_text)
+        struct_errors = validate_gap_matrix_structure(gap_text, gap_ids)
+        all_errors.extend(struct_errors)
 
-    # --- Read waivers ---
+    # --- Read and structurally validate waivers ---
     if not waivers_path.exists():
         all_errors.append(f"RISK_WAIVERS.md not found at {waivers_path}")
         waivers: list[dict[str, str]] = []
     else:
-        waivers = parse_waivers(waivers_path.read_text(encoding="utf-8"))
+        waivers_text = waivers_path.read_text(encoding="utf-8")
+        struct_errors = validate_waivers_structure(waivers_text)
+        all_errors.extend(struct_errors)
+        waivers = parse_waivers(waivers_text)
 
-    # --- Validate waivers ---
+    # --- Validate individual waivers ---
     waiver_errors = validate_waivers(waivers, gap_ids, today)
     all_errors.extend(waiver_errors)
 

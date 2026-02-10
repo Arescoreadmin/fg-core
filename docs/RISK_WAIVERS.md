@@ -27,6 +27,7 @@
 
 | Gap ID | Severity | Reason | Approved By | Expiration | Review Date |
 |--------|----------|--------|-------------|------------|-------------|
+| G001 | Launch-risk | Auth fallback acceptable for dev/test profiles; prod enforces off-by-default | secops@frostgate.dev | 2026-06-30 | 2026-06-15 |
 
 ---
 
