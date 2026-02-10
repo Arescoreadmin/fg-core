@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frostgate.ai/schemas/events/ingest_message.schema.json",
+  "title": "Ingest Message Schema",
+  "description": "Versioned, tenant-scoped ingest message for NATS ingestion bus.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "message_id",
+    "tenant_id",
+    "source",
+    "event_type",
+    "timestamp",
+    "payload",
+    "metadata"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "enum": ["1.0"]
+    },
+    "message_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object"
+    },
+    "metadata": {
+      "type": "object"
+    }
+  }
+}

@@ -35,13 +35,17 @@ services:
   nats:
     image: nats:2.10-alpine
     restart: unless-stopped
-    networks:
-      - internal
-    # DO NOT publish NATS to host by default. If you need host access, uncomment.
-    # ports:
-    #   - "4222:4222"
-    #   - "8222:8222"
-    command: ["-js", "-m", "8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"  # HTTP monitoring
+    command:
+      [
+        "-js",
+        "-m",
+        "8222",
+        "--auth",
+        "${NATS_AUTH_TOKEN:?set NATS_AUTH_TOKEN in .env}"
+      ] # Enable JetStream, monitoring, and auth
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8222/healthz"]
       interval: 5s
@@ -100,13 +104,10 @@ services:
     volumes:
       - ./policy/opa:/policies:ro
     healthcheck:
-      disable: true
-    security_opt:
-      - no-new-privileges:true
-    cap_drop: ["ALL"]
-    read_only: true
-    tmpfs:
-      - /tmp:size=64m,mode=700
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8181/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   frostgate-core:
     build:
@@ -164,13 +165,14 @@ services:
       FG_REDIS_URL: ${FG_REDIS_URL:-redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}@redis:6379/0}
 
       # NATS URL for ingestion bus
-      FG_NATS_URL: ${FG_NATS_URL:-nats://nats:4222}
+      FG_NATS_URL: ${FG_NATS_URL:-nats://${NATS_AUTH_TOKEN:?set NATS_AUTH_TOKEN in .env}@nats:4222}
 
       # OPA policy evaluation
       FG_OPA_URL: ${FG_OPA_URL:-http://opa:8181}
       FG_OPA_PATH: ${FG_OPA_PATH:-/v1/data/frostgate/defend}
       FG_OPA_TIMEOUT_SEC: ${FG_OPA_TIMEOUT_SEC:-0.25}
-      FG_OPA_ENFORCE: ${FG_OPA_ENFORCE:-false}
+      FG_OPA_ENFORCE: ${FG_OPA_ENFORCE:-true}
+      FG_OPA_RISK_ACCEPTED: ${FG_OPA_RISK_ACCEPTED:-false}
 
       # HTTP DoS hardening (explicit in production)
       FG_DOS_GUARD_ENABLED: ${FG_DOS_GUARD_ENABLED:-true}

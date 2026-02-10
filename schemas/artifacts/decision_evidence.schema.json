@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frostgate.ai/schemas/artifacts/decision_evidence.schema.json",
+  "title": "Decision Evidence Artifact Schema",
+  "description": "Canonical decision evidence artifact emitted by the core decision pipeline.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "decision_id",
+    "created_at",
+    "tenant_id",
+    "event_id",
+    "event_type",
+    "source",
+    "threat_level",
+    "policy_hash",
+    "request",
+    "response",
+    "rules_triggered",
+    "decision_diff",
+    "chain_hash",
+    "prev_hash",
+    "chain_alg",
+    "chain_ts"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0"]
+    },
+    "decision_id": {
+      "type": "integer"
+    },
+    "created_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "tenant_id": {
+      "type": ["string", "null"]
+    },
+    "event_id": {
+      "type": ["string", "null"]
+    },
+    "event_type": {
+      "type": ["string", "null"]
+    },
+    "source": {
+      "type": ["string", "null"]
+    },
+    "threat_level": {
+      "type": ["string", "null"]
+    },
+    "policy_hash": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "request": {
+      "type": ["object", "null"]
+    },
+    "response": {
+      "type": ["object", "null"]
+    },
+    "rules_triggered": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "decision_diff": {
+      "type": ["object", "null"]
+    },
+    "chain_hash": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "prev_hash": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "chain_alg": {
+      "type": ["string", "null"]
+    },
+    "chain_ts": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    }
+  }
+}

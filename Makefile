@@ -125,7 +125,7 @@ venv:
 # Guards / audits
 # =============================================================================
 
-.PHONY: guard-scripts fg-audit-make fg-contract fg-compile contracts-gen contracts-core-gen contracts-core-diff artifact-contract-check contract-authority-check check-no-engine-evaluate opa-check
+.PHONY: guard-scripts fg-audit-make fg-contract fg-compile contracts-gen contracts-core-gen contracts-core-diff artifact-contract-check contract-authority-check check-no-engine-evaluate opa-check verify-spine-modules verify-schemas verify-drift align-score
 
 guard-scripts:
 	@$(PY_CONTRACT) scripts/guard_no_paste_garbage.py
@@ -148,6 +148,18 @@ opa-check:
 		docker run --rm -v "$$PWD/policy/opa:/policies" openpolicyagent/opa:0.64.1 check --strict /policies; \
 		docker run --rm -v "$$PWD/policy/opa:/policies" openpolicyagent/opa:0.64.1 test /policies; \
 	fi
+
+verify-spine-modules:
+	@$(PY_CONTRACT) scripts/verify_spine_modules.py
+
+verify-schemas:
+	@$(PY_CONTRACT) scripts/verify_schemas.py
+
+verify-drift:
+	@$(PY_CONTRACT) scripts/verify_drift.py
+
+align-score:
+	@$(PY_CONTRACT) tools/align_score.py
 
 fg-audit-make: guard-scripts
 	@$(PY) scripts/audit_make_targets.py
@@ -238,7 +250,7 @@ fg-lint: fmt-check
 # =============================================================================
 
 .PHONY: fg-fast
-fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check dos-hardening-check gap-audit
+fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check dos-hardening-check gap-audit verify-spine-modules verify-schemas verify-drift align-score
 	@$(PYTEST_ENV) $(PY) -m pytest -q -m "not postgres"
 	@$(MAKE) -s fg-lint
 

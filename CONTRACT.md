@@ -1,7 +1,7 @@
 # FrostGate Core — CONTRACT (MVP Invariants)
 
-> **Non-authoritative implementation contract.** This file exists for current
-> test/CI enforcement and is validated against the prod OpenAPI contract
+> **Derived contract (authoritative for CI):** This contract is derived from
+> `BLUEPRINT_STAGED.md` and validated against the prod OpenAPI contract
 > in `contracts/core/openapi.json`.
 
 Contract Authority: contracts/core/openapi.json (prod)
@@ -70,8 +70,8 @@ If behavior changes, update this contract first, then code/tests.
 - **Observable:** every decision is explainable and measurable.
 - **Auditable:** decisions can be persisted and reviewed later.
 - **Safe-by-default:** disruptive actions are gated by doctrine/persona where applicable.
-- **Fail-soft:** non-critical subsystems (diff/log chain)
-  may degrade without breaking core responses.
+- **Fail-closed (spine):** core modules and policy enforcement must fail fast
+  when required components are missing.
 
 ---
 
