@@ -6,13 +6,20 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from api.config.env import is_production_env, is_strict_env_required, resolve_env
+from api.config.spine_modules import load_spine_modules
+from api.config.startup_validation import (
+    compliance_module_enabled,
+    validate_startup_config,
+)
+from api.config.ui import ui_enabled
 from api.db import init_db
 from api.decisions import router as decisions_router
 from api.defend import router as defend_router
@@ -23,12 +30,6 @@ from api.keys import router as keys_router
 from api.stats import router as stats_router
 from api.ui import router as ui_router
 from api.ui_dashboards import router as ui_dashboards_router
-
-from api.governance import router as governance_router
-from api.mission_envelope import router as mission_router
-from api.ring_router import router as ring_router
-from api.roe_engine import router as roe_router
-
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
 from api.middleware.request_validation import (
@@ -41,18 +42,8 @@ from api.middleware.security_headers import (
     SecurityHeadersMiddleware,
 )
 
-from api.config.env import is_production_env, is_strict_env_required, resolve_env
-from api.config.spine_modules import load_spine_modules
-from api.config.startup_validation import (
-    compliance_module_enabled,
-    validate_startup_config,
-)
-from api.config.ui import ui_enabled
-
-
 log = logging.getLogger("frostgate")
 
-# Version info for API responses
 APP_VERSION = "0.8.0"
 API_VERSION = "v1"
 
@@ -62,12 +53,33 @@ UI_COOKIE_NAME = os.getenv("FG_UI_COOKIE_NAME", "fg_api_key")
 # Back-compat symbol for tests that patch api.main.get_shutdown_manager
 get_shutdown_manager = None
 
+# -----------------------------------------------------------------------------
+# Env helpers
+# -----------------------------------------------------------------------------
+_TRUE = {"1", "true", "yes", "y", "on"}
+
 
 def _env_bool(name: str, default: bool = False) -> bool:
     v = os.getenv(name)
     if v is None:
         return default
-    return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
+    return str(v).strip().lower() in _TRUE
+
+
+def _admin_enabled_flag() -> bool:
+    # Explicit opt-in for prod/admin deployments: FG_ADMIN_ENABLED=1
+    return _env_bool("FG_ADMIN_ENABLED", default=False)
+
+
+def _should_mount_admin_routes() -> bool:
+    """
+    Admin routes:
+      - PROD: OFF unless explicitly enabled (FG_ADMIN_ENABLED=1)
+      - NON-PROD (dev/test): ON by default, so tests can enforce 401/403/200 (not 404).
+    """
+    if is_production_env():
+        return _admin_enabled_flag()
+    return True
 
 
 def _resolve_auth_enabled_from_env() -> bool:
@@ -111,6 +123,27 @@ def _sqlite_path_from_env() -> str:
     return str(Path("/tmp") / "fg-core.db")
 
 
+# -----------------------------------------------------------------------------
+# Optional module imports (fail-soft so contracts don’t explode)
+# -----------------------------------------------------------------------------
+def _optional_router(import_path: str, attr: str = "router"):
+    try:
+        mod = __import__(import_path, fromlist=[attr])
+        return getattr(mod, attr)
+    except Exception:
+        return None
+
+
+# Compliance/spine routers (these may not exist in minimal builds)
+governance_router = _optional_router("api.governance", "router")
+mission_router = _optional_router("api.mission_envelope", "router")
+ring_router = _optional_router("api.ring_router", "router")
+roe_router = _optional_router("api.roe_engine", "router")
+
+
+# -----------------------------------------------------------------------------
+# Middleware: exception shield
+# -----------------------------------------------------------------------------
 class FGExceptionShieldMiddleware:
     """
     ASGI middleware that converts HTTPException (and ExceptionGroup containing one)
@@ -145,6 +178,9 @@ class FGExceptionShieldMiddleware:
                 raise
 
 
+# -----------------------------------------------------------------------------
+# App factory
+# -----------------------------------------------------------------------------
 def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     resolved_auth_enabled = (
         _resolve_auth_enabled_from_env() if auth_enabled is None else bool(auth_enabled)
@@ -154,15 +190,17 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        # Run startup validation (fails closed in prod, logs in all envs)
+        # Startup validation (fail closed in prod, log in all envs)
         is_production = False
         try:
             is_production = is_production_env()
-            validation_report = validate_startup_config(
+            report = validate_startup_config(
                 fail_on_error=is_production,
                 log_results=True,
             )
-            app.state.startup_validation = validation_report
+            app.state.startup_validation = report
+
+            # Require DoS guard in prod
             if is_production and not bool(
                 getattr(app.state, "dos_guard_enabled", False)
             ):
@@ -173,8 +211,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             if is_production or is_strict_env_required():
                 raise
 
+        # DB init
         try:
-            # sqlite mode: ensure dir exists BEFORE init_db()
             if not (os.getenv("FG_DB_URL") or "").strip():
                 p = _sqlite_path_from_env()
                 Path(p).parent.mkdir(parents=True, exist_ok=True)
@@ -189,7 +227,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             if is_production or is_strict_env_required():
                 raise
 
-        # Setup graceful shutdown handler
+        # Graceful shutdown
         if spine_modules.get_shutdown_manager is not None:
             try:
                 shutdown_manager = spine_modules.get_shutdown_manager()
@@ -204,7 +242,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
         yield
 
-        # Cleanup on shutdown
         if app.state.shutdown_manager is not None:
             try:
                 await app.state.shutdown_manager.initiate_shutdown(
@@ -215,10 +252,9 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     app = FastAPI(title="frostgate-core", version=APP_VERSION, lifespan=lifespan)
 
-    # PATCH_FG_UI_SINGLE_USE_MW_V1
+    # UI single-use state
     if not hasattr(app.state, "_ui_single_use_used"):
         app.state._ui_single_use_used = set()
-
     if not hasattr(app.state, "_ui_key_scopes_cache"):
         app.state._ui_key_scopes_cache = {}
 
@@ -294,12 +330,12 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     if spine_modules.connection_tracking_middleware is not None:
         app.add_middleware(spine_modules.connection_tracking_middleware)
 
-    # Security headers middleware (after shield, before auth)
+    # Security headers (after shield, before auth)
     app.add_middleware(
         SecurityHeadersMiddleware, config=SecurityHeadersConfig.from_env()
     )
 
-    # CORS middleware (configurable via environment)
+    # CORS
     cors_config = CORSConfig.from_env()
     app.add_middleware(
         CORSMiddleware,
@@ -311,11 +347,11 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         max_age=cors_config.max_age,
     )
 
-    # DoS guard middleware (headers/query/path/body/concurrency/timeouts)
+    # DoS guard
     dos_guard_config = DoSGuardConfig.from_env()
     app.add_middleware(DoSGuardMiddleware, config=dos_guard_config)
 
-    # Request validation middleware (body size limits, content-type validation)
+    # Request validation
     app.add_middleware(
         RequestValidationMiddleware, config=RequestValidationConfig.from_env()
     )
@@ -336,16 +372,11 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         raise HTTPException(status_code=401, detail=detail)
 
     def _hdr(req: Request, name: str) -> Optional[str]:
-        v = req.headers.get(name)  # headers are case-insensitive
+        v = req.headers.get(name)
         v = str(v).strip() if v is not None else ""
         return v or None
 
     def check_tenant_if_present(req: Request) -> None:
-        """
-        Optional tenant auth:
-        - If X-Tenant-Id is present, enforce tenant key validation even if global auth is disabled.
-        - Fail closed if tenant registry hook isn't available.
-        """
         tenant_id = _hdr(req, "X-Tenant-Id")
         if not tenant_id:
             return
@@ -354,7 +385,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         if not api_key:
             ck = req.cookies.get(UI_COOKIE_NAME)
             api_key = str(ck).strip() if ck and str(ck).strip() else None
-
         if not api_key:
             _fail()
 
@@ -380,10 +410,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             _fail()
 
     def require_status_auth(req: Request) -> None:
-        # Tenant auth always enforced if present
         check_tenant_if_present(req)
 
-        # Global auth gate
         if not bool(app.state.auth_enabled):
             return
 
@@ -398,7 +426,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         if str(api_key) != str(_global_expected_api_key()):
             _fail()
 
-    # Compatibility shim: older modules importing require_status_auth from api.auth
+    # Compatibility shim
     try:
         import api.auth as auth_mod  # noqa: E402
 
@@ -414,8 +442,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         "/openapi.json",
         "/docs",
         "/redoc",
-        # Forensics endpoints authenticate via require_scopes()
-        # (scoped fgk.* tokens), not via global FG_API_KEY.
         "/forensics/chain/verify",
         "/forensics/snapshot",
         "/forensics/audit-trail",
@@ -429,36 +455,39 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         config=AuthGateConfig(public_paths=tuple(public_paths)),
     )
 
-    # ---- Routers ----
+    # ---- Routers (core) ----
     app.include_router(defend_router)
     app.include_router(defend_router, prefix="/v1")
     app.include_router(feed_router)
     app.include_router(decisions_router)
     app.include_router(stats_router)
+
     if ui_enabled():
         app.include_router(ui_router)
         app.include_router(ui_dashboards_router)
+
     app.include_router(keys_router)
 
-    # Forensics routes must always exist for contract/security tests.
-    # Kill-switch is enforced inside api/forensics.py (return 404).
+    # Forensics always exists; kill-switch is enforced inside api/forensics.py
     app.include_router(forensics_router)
 
-    if compliance_module_enabled("mission_envelope"):
+    # ---- Compliance routers (only if enabled AND module exists) ----
+    if compliance_module_enabled("mission_envelope") and mission_router is not None:
         app.include_router(mission_router)
-    if compliance_module_enabled("ring_router"):
+    if compliance_module_enabled("ring_router") and ring_router is not None:
         app.include_router(ring_router)
-    if compliance_module_enabled("roe_engine"):
+    if compliance_module_enabled("roe_engine") and roe_router is not None:
         app.include_router(roe_router)
-    if compliance_module_enabled("governance"):
+    if compliance_module_enabled("governance") and governance_router is not None:
         app.include_router(governance_router)
 
     if _dev_enabled():
         app.include_router(dev_events_router)
 
-    # Admin router for SaaS management
-    if spine_modules.admin_router is not None:
-        app.include_router(spine_modules.admin_router)
+    # ---- Admin router (dev/test ON by default, prod explicit) ----
+    admin_router = getattr(spine_modules, "admin_router", None)
+    if admin_router is not None and _should_mount_admin_routes():
+        app.include_router(admin_router)
 
     # ---- Health / Status ----
     @app.get("/health")
@@ -473,19 +502,21 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             "app_instance_id": request.app.state.app_instance_id,
         }
 
-    @app.get("/health/live")
+    @app.get(
+        "/health/live",
+        description="Kubernetes liveness probe - is the service running?",
+    )
     async def health_live() -> dict:
-        """Kubernetes liveness probe - is the service running?"""
         return {"status": "live"}
 
-    @app.get("/health/ready")
+    @app.get(
+        "/health/ready",
+        description="Kubernetes readiness probe - can the service handle traffic?",
+    )
     async def health_ready() -> dict:
-        """
-        Kubernetes readiness probe - can the service handle traffic?
-        """
         from api.health import HealthStatus, get_health_checker
 
-        deps_status: dict = {"db": "unknown"}
+        deps_status: dict[str, Any] = {"db": "unknown"}
         failures: list[str] = []
 
         startup_validation = getattr(app.state, "startup_validation", None)
@@ -520,7 +551,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         rl_enabled = (os.getenv("FG_RL_ENABLED", "true") or "true").strip().lower()
         rl_backend = (os.getenv("FG_RL_BACKEND", "memory") or "memory").strip().lower()
 
-        if rl_enabled in ("1", "true", "yes") and rl_backend == "redis":
+        if rl_enabled in _TRUE and rl_backend == "redis":
             if checker is None:
                 deps_status["redis"] = "error"
                 failures.append("redis: health checker unavailable")
@@ -542,7 +573,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         nats_enabled = (
             (os.getenv("FG_NATS_ENABLED", "false") or "false").strip().lower()
         )
-        if nats_enabled in ("1", "true", "yes"):
+        if nats_enabled in _TRUE:
             if checker is None:
                 deps_status["nats"] = "error"
                 failures.append("nats: health checker unavailable")
@@ -595,7 +626,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     @app.get("/stats/debug")
     async def stats_debug(_: None = Depends(require_status_auth)) -> dict:
         db_url = (os.getenv("FG_DB_URL") or "").strip()
-        result: dict = {
+        result: dict[str, Any] = {
             "service": app.state.service,
             "env": app.state.env,
             "app_instance_id": app.state.app_instance_id,
