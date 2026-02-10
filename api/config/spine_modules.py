@@ -19,7 +19,7 @@ class SpineModules:
 
 
 def load_spine_modules() -> SpineModules:
-    admin_enabled = _env_bool("FG_ADMIN_API_ENABLED", False)
+    admin_enabled = _env_bool("FG_ADMIN_API_ENABLED", True)
     graceful_shutdown_enabled = _env_bool("FG_GRACEFUL_SHUTDOWN_ENABLED", True)
 
     admin_router = None

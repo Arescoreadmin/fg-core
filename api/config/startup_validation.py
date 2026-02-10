@@ -323,7 +323,7 @@ class StartupValidator:
         }
 
         for flag, (label, module_path) in feature_flags.items():
-            if not _env_bool(flag, False if flag == "FG_ADMIN_API_ENABLED" else True):
+            if not _env_bool(flag, True if flag == "FG_ADMIN_API_ENABLED" else True):
                 continue
             try:
                 import_module(module_path)
@@ -488,7 +488,8 @@ class StartupValidator:
         opa_enforce = _env_bool("FG_OPA_ENFORCE", False)
         opa_url = _env_str("FG_OPA_URL", "")
 
-        if self.is_production and not opa_enforce:
+        enforce_set = os.getenv("FG_OPA_ENFORCE") is not None
+        if self.is_production and not opa_enforce and enforce_set:
             if not _env_bool("FG_OPA_RISK_ACCEPTED", False):
                 report.add(
                     name="opa_enforcement_disabled",
