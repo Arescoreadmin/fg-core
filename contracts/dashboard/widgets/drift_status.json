@@ -1,0 +1,5 @@
+{
+  "widget_id": "drift_status",
+  "title": "Drift Status",
+  "contract": "contracts/dashboard/widgets/drift_status.json"
+}

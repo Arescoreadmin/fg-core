@@ -208,11 +208,15 @@ dos-hardening-check:
 # Gap Audit (Production Readiness)
 # =============================================================================
 
-.PHONY: gap-audit release-gate generate-scorecard bp-c-001-gate
+.PHONY: gap-audit release-gate generate-scorecard bp-c-001-gate bp-d-000-gate
 
 bp-c-001-gate:
 	@$(PY_CONTRACT) scripts/verify_bp_c_001.py
 	@echo "bp-c-001-gate: OK"
+
+bp-d-000-gate:
+	@$(PY_CONTRACT) scripts/verify_bp_d_000.py
+	@echo "bp-d-000-gate: OK"
 
 gap-audit:
 	@PYTHONPATH=scripts $(PY_CONTRACT) scripts/gap_audit.py
@@ -254,7 +258,7 @@ fg-lint: fmt-check
 # =============================================================================
 
 .PHONY: fg-fast
-fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check dos-hardening-check gap-audit bp-c-001-gate verify-spine-modules verify-schemas verify-drift align-score
+fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check dos-hardening-check gap-audit bp-c-001-gate bp-d-000-gate verify-spine-modules verify-schemas verify-drift align-score
 	@$(PYTEST_ENV) $(PY) -m pytest -q -m "not postgres"
 	@$(MAKE) -s fg-lint
 
