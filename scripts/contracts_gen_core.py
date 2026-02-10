@@ -73,8 +73,11 @@ def _assert_no_admin_leak(openapi: Dict[str, Any]) -> None:
 
 def _freeze_contract_env() -> None:
     os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
-    os.environ.setdefault("FG_CONTRACT_SPEC", "prod")
-    os.environ.setdefault("FG_ENV", "prod")
+    # Force-set contract-critical vars so CI job env (e.g. FG_ENV=dev)
+    # cannot pollute the prod-spec contract generation.
+    os.environ["FG_CONTRACT_SPEC"] = "prod"
+    os.environ["FG_ENV"] = "prod"
+    os.environ["FG_ADMIN_ENABLED"] = "0"
     os.environ.setdefault("FG_DEV_EVENTS_ENABLED", "0")
     os.environ.setdefault("FG_AUTH_ENABLED", "1")
     os.environ.setdefault("FG_UI_ENABLED", "0")
@@ -84,7 +87,6 @@ def _freeze_contract_env() -> None:
     os.environ.setdefault("FG_MISSION_ENVELOPE_ENABLED", "1")
     os.environ.setdefault("FG_RING_ROUTER_ENABLED", "1")
     os.environ.setdefault("FG_ROE_ENGINE_ENABLED", "1")
-    os.environ.setdefault("FG_ADMIN_ENABLED", "0")  # critical
 
 
 # -----------------------
