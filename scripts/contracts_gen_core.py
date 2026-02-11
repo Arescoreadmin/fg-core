@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from __future__ import annotations
 
 # =============================================================================
@@ -9,7 +10,13 @@ import os
 from pathlib import Path
 from typing import Any, Dict
 
-OUTPUT_PATH = Path("contracts/core/openapi.json")
+CORE_OUTPUT_PATH = Path("contracts/core/openapi.json")
+SCHEMA_OPENAPI_MIRROR_PATH = Path("schemas/api/openapi.json")
+
+SCHEMA_REGISTRY_DIR = Path("schemas/api")
+HEALTH_SCHEMA_PATH = SCHEMA_REGISTRY_DIR / "health.schema.json"
+HEALTH_SCHEMA_REF = "schemas/api/health.schema.json"
+
 
 # -----------------------
 # Rendering / normalization
@@ -67,14 +74,49 @@ def _assert_no_admin_leak(openapi: Dict[str, Any]) -> None:
 
 
 # -----------------------
+# Schema injection (BP-C-003 support)
+# -----------------------
+
+
+def _inject_schema_refs(openapi: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Ensure the canonical core OpenAPI includes at least one stable $ref into
+    schemas/api/ so schema validation gates are verifiable.
+
+    This must happen *during generation* so BP-C-002 (regen drift) remains strict.
+    """
+    # If schemas/api exists, we require the referenced file to exist too.
+    if SCHEMA_REGISTRY_DIR.exists() and not HEALTH_SCHEMA_PATH.exists():
+        raise SystemExit(
+            "ERROR: schemas/api exists but schemas/api/health.schema.json is missing.\n"
+            "BP-C-003 requires referenced schemas to exist.\n"
+            "Fix: add schemas/api/health.schema.json (Draft 2020-12) or change injected ref."
+        )
+
+    if not SCHEMA_REGISTRY_DIR.exists():
+        return openapi
+
+    components = openapi.setdefault("components", {})
+    if not isinstance(components, dict):
+        raise SystemExit("ERROR: OpenAPI components is not a dict")
+
+    schemas = components.setdefault("schemas", {})
+    if not isinstance(schemas, dict):
+        raise SystemExit("ERROR: OpenAPI components.schemas is not a dict")
+
+    # Deterministic: only add if absent
+    schemas.setdefault("Health", {"$ref": HEALTH_SCHEMA_REF})
+
+    return openapi
+
+
+# -----------------------
 # Environment freeze
 # -----------------------
 
 
 def _freeze_contract_env() -> None:
     os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
-    # Force-set contract-critical vars so CI job env (e.g. FG_ENV=dev)
-    # cannot pollute the prod-spec contract generation.
     os.environ["FG_CONTRACT_SPEC"] = "prod"
     os.environ["FG_ENV"] = "prod"
     os.environ["FG_ADMIN_ENABLED"] = "0"
@@ -103,15 +145,21 @@ def generate_openapi() -> Dict[str, Any]:
     openapi = app.openapi()
 
     openapi = _filter_admin_paths(openapi)
+    openapi = _inject_schema_refs(openapi)
     _assert_no_admin_leak(openapi)
 
     return openapi
 
 
 def main() -> None:
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     spec = generate_openapi()
-    OUTPUT_PATH.write_text(_render_openapi(spec), encoding="utf-8")
+    rendered = _render_openapi(spec)
+
+    CORE_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    SCHEMA_OPENAPI_MIRROR_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    CORE_OUTPUT_PATH.write_text(rendered, encoding="utf-8")
+    SCHEMA_OPENAPI_MIRROR_PATH.write_text(rendered, encoding="utf-8")
 
 
 if __name__ == "__main__":
