@@ -208,7 +208,15 @@ dos-hardening-check:
 # Gap Audit (Production Readiness)
 # =============================================================================
 
-.PHONY: gap-audit release-gate generate-scorecard bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-d-000-gate
+.PHONY: gap-audit release-gate generate-scorecard bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate
+
+bp-s0-001-gate:
+	@$(PY_CONTRACT) scripts/verify_bp_s0_001.py
+	@echo "bp-s0-001-gate: OK"
+
+bp-s0-005-gate:
+	@$(PY_CONTRACT) scripts/verify_bp_s0_005.py
+	@echo "bp-s0-005-gate: OK"
 
 bp-c-001-gate:
 	@$(PY_CONTRACT) scripts/verify_bp_c_001.py
@@ -225,6 +233,54 @@ bp-c-003-gate:
 bp-c-004-gate:
 	@$(PY_CONTRACT) scripts/verify_bp_c_004.py
 	@echo "bp-c-004-gate: OK"
+
+bp-c-005-gate:
+	@$(PY_CONTRACT) scripts/verify_bp_c_005.py
+	@echo "bp-c-005-gate: OK"
+
+bp-c-006-gate:
+	@$(PY_CONTRACT) scripts/verify_bp_c_006.py
+	@echo "bp-c-006-gate: OK"
+
+bp-m1-006-gate:
+	@$(PY_CONTRACT) scripts/verify_bp_m1_006.py
+	@echo "bp-m1-006-gate: OK"
+
+bp-m2-001-gate:
+	@$(PY_CONTRACT) scripts/verify_bp_m2_001.py
+	@echo "bp-m2-001-gate: OK"
+
+bp-m2-002-gate:
+	@$(PY_CONTRACT) scripts/verify_bp_m2_002.py
+	@echo "bp-m2-002-gate: OK"
+
+bp-m2-003-gate:
+	@$(PY_CONTRACT) scripts/verify_bp_m2_003.py
+	@echo "bp-m2-003-gate: OK"
+
+bp-m3-001-gate:
+	@$(PY_CONTRACT) scripts/verify_bp_m3_001.py
+	@echo "bp-m3-001-gate: OK"
+
+bp-m3-003-gate:
+	@$(PY_CONTRACT) scripts/verify_bp_m3_003.py
+	@echo "bp-m3-003-gate: OK"
+
+bp-m3-004-gate:
+	@$(PY_CONTRACT) scripts/verify_bp_m3_004.py
+	@echo "bp-m3-004-gate: OK"
+
+bp-m3-005-gate:
+	@$(PY_CONTRACT) scripts/verify_bp_m3_005.py
+	@echo "bp-m3-005-gate: OK"
+
+bp-m3-006-gate:
+	@$(PY_CONTRACT) scripts/verify_bp_m3_006.py
+	@echo "bp-m3-006-gate: OK"
+
+bp-m3-007-gate:
+	@$(PY_CONTRACT) scripts/verify_bp_m3_007.py
+	@echo "bp-m3-007-gate: OK"
 
 bp-d-000-gate:
 	@$(PY_CONTRACT) scripts/verify_bp_d_000.py
@@ -270,7 +326,7 @@ fg-lint: fmt-check
 # =============================================================================
 
 .PHONY: fg-fast
-fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check dos-hardening-check gap-audit bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-d-000-gate verify-spine-modules verify-schemas verify-drift align-score
+fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check dos-hardening-check gap-audit bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate verify-spine-modules verify-schemas verify-drift align-score
 	@$(PYTEST_ENV) $(PY) -m pytest -q -m "not postgres"
 	@$(MAKE) -s fg-lint
 
@@ -774,4 +830,3 @@ pr-check-all: pr-check
 
 pr-check-ci: pr-check-all
 	@echo "✅ pr-check-ci: PASS"
-
