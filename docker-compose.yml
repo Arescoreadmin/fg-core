@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   redis:
     image: redis:7-alpine
@@ -224,7 +226,6 @@ services:
     security_opt:
       - no-new-privileges:true
     cap_drop: ["ALL"]
-    # If your app writes outside ./state, it will crash here. That is the point.
     # read_only: true
     tmpfs:
       - /tmp:size=128m,mode=700
@@ -336,6 +337,28 @@ services:
     security_opt:
       - no-new-privileges:true
     cap_drop: ["ALL"]
+
+  # ---------------------------------------------------------------------------
+  # OPTIONAL: Add these if they exist in your stack. You confirmed they do.
+  # Pinning user IDs here prevents "no pwd entry for UID XXXX" garbage.
+  # ---------------------------------------------------------------------------
+
+  # grafana:
+  #   image: grafana/grafana:latest
+  #   user: "472:472"
+  #   restart: unless-stopped
+  #   networks:
+  #     - internal
+  #     - public
+  #   ports:
+  #     - "3001:3000"
+
+  # loki:
+  #   image: grafana/loki:latest
+  #   user: "10001:10001"
+  #   restart: unless-stopped
+  #   networks:
+  #     - internal
 
 volumes:
   fg_pgdata:

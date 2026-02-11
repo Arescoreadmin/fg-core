@@ -1,8 +1,22 @@
 {
-  "tokens": {
-    "color.primary": "#1a4d8f",
-    "color.accent": "#9c3a1f",
-    "color.surface": "#0e1116",
-    "color.text": "#d7e0ea"
+  "brand_id": "frostgate",
+  "version": "1.0.0",
+  "logo": {
+    "primary": "brand/logo.svg",
+    "mark": "brand/mark.svg"
+  },
+  "colors": {
+    "bg": "#05070A",
+    "fg": "#E9EEF5",
+    "primary": "#FF5A1F",
+    "primary_2": "#0B3A4A",
+    "danger": "#E11D48",
+    "warning": "#F59E0B",
+    "success": "#10B981"
+  },
+  "radius": {
+    "sm": 8,
+    "md": 12,
+    "lg": 16
   }
 }

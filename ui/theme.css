@@ -1,6 +1,13 @@
 :root {
-  --fg-color-primary: #1a4d8f;
-  --fg-color-accent: #9c3a1f;
-  --fg-color-surface: #0e1116;
-  --fg-color-text: #d7e0ea;
+  --bg: #05070A;
+  --fg: #E9EEF5;
+  --primary: #FF5A1F;
+  --primary-2: #0B3A4A;
+  --danger: #E11D48;
+  --warning: #F59E0B;
+  --success: #10B981;
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
 }
