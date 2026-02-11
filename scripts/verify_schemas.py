@@ -26,6 +26,10 @@ def _fail(msg: str) -> int:
 def _extract_version(schema: dict, schema_type: str) -> str | None:
     if schema_type == "api":
         return str(schema.get("info", {}).get("version") or "").strip() or None
+    if schema_type == "jsonschema":
+        # Generic JSON Schema documents (draft 2020-12 etc).
+        # Require an explicit version field.
+        return str(schema.get("version") or "").strip() or None
     if schema_type == "events":
         return schema.get("properties", {}).get("version", {}).get("enum", [None])[0]
     if schema_type == "artifacts":

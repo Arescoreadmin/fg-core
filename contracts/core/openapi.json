@@ -661,6 +661,9 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "Health": {
+        "$ref": "schemas/api/health.schema.json"
+      },
       "KeyInfo": {
         "description": "Information about an API key (without the secret).",
         "properties": {
