@@ -208,11 +208,23 @@ dos-hardening-check:
 # Gap Audit (Production Readiness)
 # =============================================================================
 
-.PHONY: gap-audit release-gate generate-scorecard bp-c-001-gate bp-d-000-gate
+.PHONY: gap-audit release-gate generate-scorecard bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-d-000-gate
 
 bp-c-001-gate:
 	@$(PY_CONTRACT) scripts/verify_bp_c_001.py
 	@echo "bp-c-001-gate: OK"
+
+bp-c-002-gate:
+	@$(PY_CONTRACT) scripts/verify_bp_c_002.py
+	@echo "bp-c-002-gate: OK"
+
+bp-c-003-gate:
+	@$(PY_CONTRACT) scripts/verify_bp_c_003.py
+	@echo "bp-c-003-gate: OK"
+
+bp-c-004-gate:
+	@$(PY_CONTRACT) scripts/verify_bp_c_004.py
+	@echo "bp-c-004-gate: OK"
 
 bp-d-000-gate:
 	@$(PY_CONTRACT) scripts/verify_bp_d_000.py
@@ -258,7 +270,7 @@ fg-lint: fmt-check
 # =============================================================================
 
 .PHONY: fg-fast
-fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check dos-hardening-check gap-audit bp-c-001-gate bp-d-000-gate verify-spine-modules verify-schemas verify-drift align-score
+fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check dos-hardening-check gap-audit bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-d-000-gate verify-spine-modules verify-schemas verify-drift align-score
 	@$(PYTEST_ENV) $(PY) -m pytest -q -m "not postgres"
 	@$(MAKE) -s fg-lint
 
@@ -762,5 +774,4 @@ pr-check-all: pr-check
 
 pr-check-ci: pr-check-all
 	@echo "✅ pr-check-ci: PASS"
-
 
