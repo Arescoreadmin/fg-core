@@ -1,12 +1,25 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+import os
 
 from fastapi import HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import bind_tenant_id
 from api.db import get_sessionmaker, set_tenant_context
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    v = os.getenv(name)
+    if v is None:
+        return default
+    return str(v).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _allow_sqlite_override() -> bool:
+    env = (os.getenv("FG_ENV") or "").strip().lower()
+    return env == "test" or _env_bool("FG_ALLOW_SQLITE_PATH_OVERRIDE", False)
 
 
 def get_db() -> Iterator[Session]:
@@ -50,6 +63,34 @@ def tenant_db_required(
         db.close()
 
 
+def tenant_db_session(
+    request: Request,
+    sqlite_path: str | None = Query(None),
+) -> Iterator[Session]:
+    """
+    Tenant-aware DB session for routes that resolve tenant after payload/header parsing.
+
+    If auth middleware already resolved a tenant, bind DB context immediately.
+    Route handlers MUST bind context after resolving explicit tenant input.
+    """
+    resolved_sqlite_path = sqlite_path if _allow_sqlite_override() else None
+    SessionLocal = get_sessionmaker(sqlite_path=resolved_sqlite_path)
+    db = SessionLocal()
+
+    auth_ctx = getattr(getattr(request, "state", None), "auth", None)
+    tenant_id = getattr(getattr(request, "state", None), "tenant_id", None) or getattr(
+        auth_ctx, "tenant_id", None
+    )
+    if tenant_id:
+        set_tenant_context(db, tenant_id)
+
+    request.state.db_session = db
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 # Back-compat alias some modules import.
 # DO NOT use *args/**kwargs here, FastAPI will treat them as query params => 422.
 def tenant_db(
@@ -59,4 +100,4 @@ def tenant_db(
     yield from tenant_db_required(request=request, tenant_id=tenant_id)
 
 
-__all__ = ["get_db", "tenant_db_required", "tenant_db"]
+__all__ = ["get_db", "tenant_db_required", "tenant_db", "tenant_db_session"]
