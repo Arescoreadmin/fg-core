@@ -1,6 +1,8 @@
 import os
 from fastapi.testclient import TestClient
 
+from api.auth_scopes import mint_key
+
 
 def test_governance_not_mounted_when_disabled(build_app, monkeypatch):
     monkeypatch.delenv("FG_MISSION_ENVELOPE_ENABLED", raising=False)
@@ -22,7 +24,7 @@ def test_governance_approval_flow(build_app, monkeypatch):
     app = build_app()
 
     client = TestClient(app)
-    headers = {"X-API-Key": os.environ["FG_API_KEY"]}
+    headers = {"X-API-Key": mint_key("governance:write", tenant_id="tenant-test")}
 
     create = client.post(
         "/governance/changes",

@@ -46,7 +46,7 @@ def test_governance_persistence_survives_restart(build_app, monkeypatch):
     # Create a change
     app1 = build_app(auth_enabled=True)
     client1 = TestClient(app1)
-    key = mint_key("*")
+    key = mint_key("governance:write", tenant_id="tenant-a")
 
     create_resp = client1.post(
         "/governance/changes",
@@ -78,7 +78,7 @@ def test_governance_fails_closed_on_db_error(build_app, monkeypatch):
     monkeypatch.setenv("FG_GOVERNANCE_ENABLED", "1")
     app = build_app(auth_enabled=True)
     client = TestClient(app)
-    key = mint_key("*")
+    key = mint_key("governance:write", tenant_id="tenant-a")
 
     # Mock the Session.execute method to raise an exception
     from sqlalchemy.orm import Session as RealSession

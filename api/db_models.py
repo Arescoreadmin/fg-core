@@ -217,6 +217,7 @@ class PolicyChangeRequest(Base):
     __tablename__ = "policy_change_requests"
 
     id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
     change_id = Column(String(64), unique=True, nullable=False, index=True)
     change_type = Column(String(64), nullable=False)
     proposed_by = Column(String(128), nullable=False)
