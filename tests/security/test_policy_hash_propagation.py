@@ -42,6 +42,7 @@ def test_defend_response_includes_policy_hash(build_app, monkeypatch):
     payload = {
         "tenant_id": "tenant-a",
         "source": "unit-test",
+        "event_id": "evt-policy-hash-001",
         "event_type": "auth.bruteforce",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "payload": {"failed_auths": 7, "src_ip": "203.0.113.11"},
@@ -69,6 +70,7 @@ def test_ingest_persists_policy_hash(build_app):
     payload = {
         "tenant_id": "tenant-a",
         "source": "unit-test",
+        "event_id": "evt-policy-hash-ingest-001",
         "event_type": "auth.bruteforce",
         "payload": {"failed_auths": 9, "src_ip": "203.0.113.12"},
     }
