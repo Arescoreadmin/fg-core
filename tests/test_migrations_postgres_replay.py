@@ -7,7 +7,11 @@ import sys
 import pytest
 from sqlalchemy import create_engine, text
 
-from api.db_migrations import apply_migrations, assert_migrations_applied, migration_status
+from api.db_migrations import (
+    apply_migrations,
+    assert_migrations_applied,
+    migration_status,
+)
 
 
 def test_postgres_migrations_replay_safe() -> None:
