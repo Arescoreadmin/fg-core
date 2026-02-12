@@ -1647,7 +1647,6 @@
     },
     "/api/v1/dashboard": {
       "get": {
-        "description": "Dashboard data endpoint (placeholder).",
         "operationId": "dashboard_api_v1_dashboard_get",
         "parameters": [
           {
@@ -1695,7 +1694,6 @@
     },
     "/api/v1/keys": {
       "get": {
-        "description": "List API keys (placeholder).",
         "operationId": "list_keys_api_v1_keys_get",
         "parameters": [
           {
@@ -1782,7 +1780,6 @@
     },
     "/api/v1/tenants": {
       "get": {
-        "description": "List tenants (placeholder).",
         "operationId": "list_tenants_api_v1_tenants_get",
         "responses": {
           "200": {
@@ -2003,7 +2000,6 @@
     },
     "/health": {
       "get": {
-        "description": "Health check endpoint.",
         "operationId": "health_health_get",
         "responses": {
           "200": {
@@ -2023,7 +2019,6 @@
     },
     "/version": {
       "get": {
-        "description": "Version information endpoint.",
         "operationId": "version_version_get",
         "responses": {
           "200": {
