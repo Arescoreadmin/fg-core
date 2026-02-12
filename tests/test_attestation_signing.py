@@ -42,7 +42,7 @@ def client(tmp_path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("FG_AUTH_ENABLED", "0")
     _set_signing_env(monkeypatch)
     app = build_app(auth_enabled=False)
-    return TestClient(app)
+    return TestClient(app, headers={"X-API-Key": "test-api-key"})
 
 
 def test_bundle_sign_and_verify_ok(client: TestClient):

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
+from api.auth_scopes import require_scopes
 from api.db import get_sessionmaker, set_tenant_context
 from api.db_models import ApprovalLog, EvidenceBundle, ModuleRegistry
 from api.signed_artifacts import (
@@ -21,7 +22,10 @@ from api.signed_artifacts import (
     verify_hash_signature,
 )
 
-router = APIRouter(tags=["attestation"])
+router = APIRouter(
+    tags=["attestation"],
+    dependencies=[Depends(require_scopes("attestation:admin"))],
+)
 
 
 def _attestation_db(request: Request) -> Iterator[Session]:
