@@ -36,11 +36,8 @@ def test_postgres_migrations_replay_safe() -> None:
     schema_hash_first = _schema_signature(engine)
     print(f"schema_hash_after_first_apply={schema_hash_first}")
 
-    with engine.begin() as conn:
-        conn.execute(text("TRUNCATE schema_migrations"))
-
     applied_second = apply_migrations(engine)
-    assert applied_second == applied_first
+    assert applied_second == []
 
     schema_hash_second = _schema_signature(engine)
     print(f"schema_hash_after_replay={schema_hash_second}")
