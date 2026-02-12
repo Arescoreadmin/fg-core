@@ -4,6 +4,7 @@ const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').repla
 const CORE_API_KEY = process.env.CORE_API_KEY;
 const CORE_TENANT_ID = process.env.CORE_TENANT_ID;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+const ALLOW_TENANT_QUERY_OVERRIDE = NODE_ENV === 'development' && process.env.FG_CONSOLE_ALLOW_TENANT_QUERY_OVERRIDE === '1';
 
 const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'health/live', methods: new Set(['GET', 'HEAD']) },
@@ -21,19 +22,24 @@ const WINDOW_MS = 10_000;
 const MAX_REQUESTS_PER_WINDOW = 120;
 const rateStore = new Map<string, { count: number; windowStart: number }>();
 
-function jsonError(message: string, status: number) {
+function getRequestId(request: NextRequest): string {
+  return request.headers.get('x-request-id') || crypto.randomUUID();
+}
+
+function jsonError(message: string, status: number, requestId: string) {
   return NextResponse.json(
-    { detail: message },
+    { detail: message, code: `HTTP_${status}`, request_id: requestId },
     {
       status,
       headers: {
         'Cache-Control': 'no-store',
+        'x-request-id': requestId,
       },
     },
   );
 }
 
-function enforceRateLimit(request: NextRequest): NextResponse | null {
+function enforceRateLimit(request: NextRequest, requestId: string): NextResponse | null {
   const key = request.headers.get('x-real-ip') || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
   const now = Date.now();
   const current = rateStore.get(key);
@@ -45,17 +51,24 @@ function enforceRateLimit(request: NextRequest): NextResponse | null {
 
   current.count += 1;
   if (current.count > MAX_REQUESTS_PER_WINDOW) {
-    return jsonError('Too many requests', 429);
+    return jsonError('Too many requests', 429, requestId);
   }
   return null;
+}
+
+function resolveTenant(request: NextRequest): string | null {
+  const queryTenant = new URL(request.url).searchParams.get('tenant_id');
+  if (ALLOW_TENANT_QUERY_OVERRIDE && queryTenant) return queryTenant;
+  return CORE_TENANT_ID || null;
 }
 
 function buildCoreUrl(path: string[], request: NextRequest): string {
   const incoming = new URL(request.url);
   const query = new URLSearchParams(incoming.search);
+  query.delete('tenant_id');
 
-  if (query.has('tenant_id')) query.delete('tenant_id');
-  if (CORE_TENANT_ID) query.set('tenant_id', CORE_TENANT_ID);
+  const tenant = resolveTenant(request);
+  if (tenant) query.set('tenant_id', tenant);
 
   return `${CORE_API_URL}/${path.join('/')}?${query.toString()}`.replace(/\?$/, '');
 }
@@ -85,79 +98,94 @@ function isPrivateHost(hostname: string): boolean {
   return false;
 }
 
-async function proxyToCore(request: NextRequest, path: string[]): Promise<NextResponse> {
-  if (!CORE_API_KEY) return jsonError('CORE_API_KEY is not configured', 500);
+async function proxyToCore(request: NextRequest, path: string[], requestId: string): Promise<NextResponse> {
+  if (!CORE_API_KEY) return jsonError('CORE_API_KEY is not configured', 500, requestId);
 
   if (!isProxyPathAllowed(path, request.method)) {
-    return jsonError('Route/method is not allowed by proxy policy', 403);
+    return jsonError('Route/method is not allowed by proxy policy', 403, requestId);
   }
 
   const headers = new Headers();
   headers.set('X-API-Key', CORE_API_KEY);
-  if (CORE_TENANT_ID) headers.set('X-Tenant-ID', CORE_TENANT_ID);
+  headers.set('X-Request-ID', requestId);
+  const tenant = resolveTenant(request);
+  if (tenant) headers.set('X-Tenant-ID', tenant);
 
   const contentType = request.headers.get('content-type');
   if (contentType && (request.method === 'POST' || request.method === 'DELETE')) {
     headers.set('Content-Type', contentType);
   }
 
-  const init: RequestInit = { method: request.method, headers };
+  const init: RequestInit = { method: request.method, headers, cache: 'no-store' };
   if (request.method !== 'GET' && request.method !== 'HEAD') init.body = await request.text();
 
-  const response = await fetch(buildCoreUrl(path, request), init);
+  const target = buildCoreUrl(path, request);
+  console.info(`[core-proxy] ${requestId} ${request.method} ${target}`);
+
+  const response = await fetch(target, init);
   const body = await response.text();
   const out = new NextResponse(body, {
     status: response.status,
     headers: {
       'Cache-Control': 'no-store',
+      'x-request-id': response.headers.get('x-request-id') || requestId,
     },
   });
   const responseContentType = response.headers.get('content-type');
   if (responseContentType) out.headers.set('content-type', responseContentType);
+  const replayHeader = response.headers.get('idempotent-replay');
+  if (replayHeader) out.headers.set('idempotent-replay', replayHeader);
+  const hashHeader = response.headers.get('x-response-hash');
+  if (hashHeader) out.headers.set('x-response-hash', hashHeader);
   return out;
 }
 
-async function getAlignmentArtifact(): Promise<NextResponse> {
+async function getAlignmentArtifact(requestId: string): Promise<NextResponse> {
   const artifactUrl = process.env.ALIGNMENT_ARTIFACT_URL;
-  if (!artifactUrl) return NextResponse.json({ artifact: null }, { headers: { 'Cache-Control': 'no-store' } });
+  if (!artifactUrl) {
+    return NextResponse.json({ artifact: null }, { headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId } });
+  }
 
   const parsed = new URL(artifactUrl);
   if (NODE_ENV !== 'development' && parsed.protocol !== 'https:') {
-    return jsonError('Alignment artifact URL must use https outside development', 400);
+    return jsonError('Alignment artifact URL must use https outside development', 400, requestId);
   }
 
   if (isPrivateHost(parsed.hostname)) {
-    return jsonError('Alignment artifact host is not allowed', 403);
+    return jsonError('Alignment artifact host is not allowed', 403, requestId);
   }
 
   const allowlist = (process.env.ALIGNMENT_ARTIFACT_HOST_ALLOWLIST || '').split(',').map((v) => v.trim()).filter(Boolean);
   if (allowlist.length === 0 && NODE_ENV !== 'development') {
-    return jsonError('ALIGNMENT_ARTIFACT_HOST_ALLOWLIST must be set outside development', 500);
+    return jsonError('ALIGNMENT_ARTIFACT_HOST_ALLOWLIST must be set outside development', 500, requestId);
   }
 
   if (allowlist.length > 0 && !allowlist.includes(parsed.host)) {
-    return jsonError('Alignment artifact host is not allowed', 403);
+    return jsonError('Alignment artifact host is not allowed', 403, requestId);
   }
 
   const response = await fetch(artifactUrl, { cache: 'no-store' });
-  if (!response.ok) return NextResponse.json({ artifact: null }, { headers: { 'Cache-Control': 'no-store' } });
+  if (!response.ok) {
+    return NextResponse.json({ artifact: null }, { headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId } });
+  }
 
   try {
     const payload = await response.json();
-    return NextResponse.json({ artifact: payload }, { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json({ artifact: payload }, { headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId } });
   } catch {
-    return jsonError('Alignment artifact payload is not valid JSON', 502);
+    return jsonError('Alignment artifact payload is not valid JSON', 502, requestId);
   }
 }
 
 async function handle(request: NextRequest, { params }: { params: { path: string[] } }) {
-  const rate = enforceRateLimit(request);
+  const requestId = getRequestId(request);
+  const rate = enforceRateLimit(request, requestId);
   if (rate) return rate;
 
   const path = params.path || [];
-  if (!path.length) return jsonError('Missing path', 400);
-  if (isAlignmentArtifact(path) && request.method === 'GET') return getAlignmentArtifact();
-  return proxyToCore(request, path);
+  if (!path.length) return jsonError('Missing path', 400, requestId);
+  if (isAlignmentArtifact(path) && request.method === 'GET') return getAlignmentArtifact(requestId);
+  return proxyToCore(request, path, requestId);
 }
 
 export async function GET(request: NextRequest, context: { params: { path: string[] } }) {

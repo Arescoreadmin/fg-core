@@ -10,6 +10,7 @@ export interface AppError extends Error {
   code: ErrorCode;
   status?: number;
   details?: unknown;
+  requestId?: string;
 }
 
 const TENANT_ERROR_PATTERNS = [/tenant/i, /missing tenant/i, /tenant.*required/i];
@@ -33,6 +34,9 @@ export function mapHttpError(status: number, payload?: unknown, options: { mask4
     error.code = code;
     error.status = status;
     error.details = payload;
+    if (payload && typeof payload === 'object' && typeof (payload as { request_id?: unknown }).request_id === 'string') {
+      error.requestId = (payload as { request_id: string }).request_id;
+    }
     return error;
   };
 
@@ -65,4 +69,16 @@ export function toUserMessage(error: unknown): string {
     default:
       return appError.message || 'Request failed.';
   }
+}
+
+export function toErrorDisplay(error: unknown): { message: string; code: string; requestId: string } {
+  if (!error || typeof error !== 'object' || !(error instanceof Error)) {
+    return { message: 'Unexpected error.', code: 'UNEXPECTED', requestId: 'n/a' };
+  }
+  const appError = error as AppError;
+  return {
+    message: toUserMessage(error),
+    code: appError.code || 'API_ERROR',
+    requestId: appError.requestId || 'n/a',
+  };
 }
