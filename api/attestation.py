@@ -3,12 +3,14 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from collections.abc import Iterator
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
-from api.deps import get_db
+from api.db import get_sessionmaker, set_tenant_context
 from api.db_models import ApprovalLog, EvidenceBundle, ModuleRegistry
 from api.signed_artifacts import (
     GENESIS_CHAIN_HASH,
@@ -20,6 +22,24 @@ from api.signed_artifacts import (
 )
 
 router = APIRouter(tags=["attestation"])
+
+
+def _attestation_db(request: Request) -> Iterator[Session]:
+    session_local = get_sessionmaker()
+    db = session_local()
+
+    auth_ctx = getattr(getattr(request, "state", None), "auth", None)
+    tenant_id = getattr(getattr(request, "state", None), "tenant_id", None) or getattr(
+        auth_ctx, "tenant_id", None
+    )
+    if tenant_id:
+        set_tenant_context(db, tenant_id)
+
+    request.state.db_session = db
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 class ArtifactMeta(BaseModel):
@@ -58,7 +78,7 @@ class EvidenceVerifyResponse(BaseModel):
 
 @router.post("/evidence/bundles", response_model=EvidenceBundleCreateResponse)
 def create_evidence_bundle(
-    req: EvidenceBundleCreateRequest, db: Session = Depends(get_db)
+    req: EvidenceBundleCreateRequest, db: Session = Depends(_attestation_db)
 ) -> EvidenceBundleCreateResponse:
     created_at = datetime.now(UTC)
     bundle = {
@@ -106,7 +126,7 @@ def create_evidence_bundle(
 
 @router.get("/evidence/bundles/{bundle_id}")
 def get_evidence_bundle(
-    bundle_id: str, db: Session = Depends(get_db)
+    bundle_id: str, db: Session = Depends(_attestation_db)
 ) -> dict[str, Any]:
     row = db.query(EvidenceBundle).filter(EvidenceBundle.id == bundle_id).one_or_none()
     if row is None:
@@ -149,7 +169,7 @@ class ApprovalVerifyRequest(BaseModel):
 
 @router.post("/approvals")
 def create_approval(
-    req: ApprovalCreateRequest, db: Session = Depends(get_db)
+    req: ApprovalCreateRequest, db: Session = Depends(_attestation_db)
 ) -> dict[str, Any]:
     max_seq = (
         db.query(func.max(ApprovalLog.seq))
@@ -224,7 +244,7 @@ def list_approvals(
     subject_type: str,
     subject_id: str,
     tenant_id: str = Header(..., alias="X-Tenant-Id"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(_attestation_db),
 ) -> list[dict[str, Any]]:
     rows = (
         db.query(ApprovalLog)
@@ -255,7 +275,7 @@ def list_approvals(
 
 @router.post("/approvals/verify")
 def verify_approvals(
-    req: ApprovalVerifyRequest, db: Session = Depends(get_db)
+    req: ApprovalVerifyRequest, db: Session = Depends(_attestation_db)
 ) -> dict[str, Any]:
     rows = (
         db.query(ApprovalLog)
@@ -324,7 +344,7 @@ class ModuleRegistrationRequest(BaseModel):
 
 @router.post("/modules/register")
 def register_module(
-    req: ModuleRegistrationRequest, db: Session = Depends(get_db)
+    req: ModuleRegistrationRequest, db: Session = Depends(_attestation_db)
 ) -> dict[str, Any]:
     registered_at = datetime.now(UTC)
     record = {
@@ -356,7 +376,9 @@ def register_module(
 
 
 @router.get("/modules/{module_id}")
-def get_module(module_id: str, db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+def get_module(
+    module_id: str, db: Session = Depends(_attestation_db)
+) -> list[dict[str, Any]]:
     rows = (
         db.query(ModuleRegistry)
         .filter(ModuleRegistry.module_id == module_id)
@@ -376,7 +398,7 @@ def get_module(module_id: str, db: Session = Depends(get_db)) -> list[dict[str, 
 
 @router.get("/modules")
 def list_modules(
-    module_id: str | None = None, db: Session = Depends(get_db)
+    module_id: str | None = None, db: Session = Depends(_attestation_db)
 ) -> list[dict[str, Any]]:
     q = db.query(ModuleRegistry)
     if module_id:
@@ -398,7 +420,7 @@ def enforce_module(
     module_id: str,
     version: str,
     tenant_id: str = Header(..., alias="X-Tenant-Id"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(_attestation_db),
 ) -> dict[str, Any]:
     row = (
         db.query(ModuleRegistry)
