@@ -39,15 +39,9 @@ class AuditEvent(BaseModel):
     tenant_id: str = Field(description="Tenant identifier")
     actor: Optional[str] = Field(default=None, description="Actor identifier")
     action: str = Field(description="Action performed")
-    status: Literal["success", "deny", "error"] = Field(
-        description="Action outcome"
-    )
-    resource_type: Optional[str] = Field(
-        default=None, description="Resource type"
-    )
-    resource_id: Optional[str] = Field(
-        default=None, description="Resource identifier"
-    )
+    status: Literal["success", "deny", "error"] = Field(description="Action outcome")
+    resource_type: Optional[str] = Field(default=None, description="Resource type")
+    resource_id: Optional[str] = Field(default=None, description="Resource identifier")
     request_id: Optional[str] = Field(default=None, description="Request tracking ID")
     ip: Optional[str] = Field(default=None, description="Client IP address")
     user_agent: Optional[str] = Field(default=None, description="Client user agent")

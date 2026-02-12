@@ -1,5 +1,10 @@
 # Admin Gateway Contracts
-from contracts.admin.schemas import AuditEvent, AuditLogEntry, HealthResponse, VersionResponse
+from contracts.admin.schemas import (
+    AuditEvent,
+    AuditLogEntry,
+    HealthResponse,
+    VersionResponse,
+)
 
 __all__ = [
     "HealthResponse",

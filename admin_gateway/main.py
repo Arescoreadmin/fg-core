@@ -2,36 +2,58 @@
 
 Provides administrative API for FrostGate management console.
 Includes OIDC authentication, RBAC, CSRF protection, and audit logging.
+
+PATCH NOTES (2026-02-12):
+- Prevent contract generation from failing due to prod-only OIDC requirements:
+  scripts/contracts_gen.py imports build_app, which triggers app = build_app()
+  and previously failed during config.validate() in prod profile.
+  We now:
+    * Detect "contract generation context"
+    * Filter the specific "OIDC must be configured in production" validation error
+      ONLY in that context
+    * Still fail on all other config validation errors
+- Fix middleware ordering and remove duplicate AuditMiddleware.
+- Make contract generation quiet/deterministic (no CORS warnings in contract ctx).
+- IMPORTANT: In contract-gen context, importing this module must NOT build the app.
 """
 
 from __future__ import annotations
 
+import inspect
 import logging
 import os
+import sys
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from admin_gateway.audit import AuditLogger
 from admin_gateway.auth import Scope, get_current_session, require_scope_dependency
 from admin_gateway.auth.config import get_auth_config
-from admin_gateway.auth.tenant import get_allowed_tenants, validate_tenant_access
 from admin_gateway.auth.session import Session
-from admin_gateway.middleware.request_id import RequestIdMiddleware
-from admin_gateway.middleware.logging import StructuredLoggingMiddleware
+from admin_gateway.auth.tenant import get_allowed_tenants, validate_tenant_access
+from admin_gateway.db import close_db, init_db
 from admin_gateway.middleware.audit import AuditMiddleware
 from admin_gateway.middleware.auth import AuthMiddleware
 from admin_gateway.middleware.auth_context import AuthContextMiddleware
 from admin_gateway.middleware.csrf import CSRFMiddleware
+from admin_gateway.middleware.logging import StructuredLoggingMiddleware
+from admin_gateway.middleware.request_id import RequestIdMiddleware
 from admin_gateway.middleware.session_cookie import SessionCookieMiddleware
-from admin_gateway.audit import AuditLogger
-from admin_gateway.db import init_db, close_db
 from admin_gateway.routers import admin_router, auth_router, products_router
+
+# Version info
+SERVICE_NAME = "admin-gateway"
+VERSION = "0.2.0"
+API_VERSION = "v1"
+
+log = logging.getLogger(SERVICE_NAME)
 
 
 class LegacyProductCreate(BaseModel):
@@ -39,21 +61,61 @@ class LegacyProductCreate(BaseModel):
     name: str | None = Field(default=None, description="Product name")
 
 
-# Version info
-SERVICE_NAME = "admin-gateway"
-VERSION = "0.2.0"
-API_VERSION = "v1"
+def _is_contract_generation_context() -> bool:
+    """True when generating OpenAPI/contracts and we should not enforce prod runtime requirements.
 
-# Configure structured logging
-log = logging.getLogger(SERVICE_NAME)
+    This MUST be deterministic across CI.
+    """
+    v = os.getenv("AG_CONTRACTS_GEN", "")
+    if v.strip().lower() in {"1", "true", "yes", "on"}:
+        return True
+
+    argv0 = (sys.argv[0] or "").lower()
+    if (
+        "contracts_gen.py" in argv0
+        or "contracts-gen" in argv0
+        or "contracts_gen" in argv0
+    ):
+        return True
+
+    # Best-effort fallback for tool-driven invocation. Never required for CI correctness.
+    try:
+        for frame in inspect.stack():
+            fn = (frame.filename or "").lower()
+            if fn.endswith("contracts_gen.py") or "/contracts_gen.py" in fn:
+                return True
+    except Exception:
+        # If inspection fails, do not guess; default to "not contract ctx".
+        return False
+
+    return False
+
+
+# Single source of truth for this module import.
+_CONTRACT_CTX = _is_contract_generation_context()
+
+
+def _filter_contract_ctx_config_errors(errors: list[str]) -> list[str]:
+    """In contract-gen context, allow missing OIDC in prod just to build OpenAPI.
+
+    IMPORTANT: We only filter the specific OIDC-required error. Everything else stays fatal.
+    """
+    filtered: list[str] = []
+    for e in errors:
+        msg = (e or "").strip().lower()
+        if "oidc must be configured in production" in msg:
+            continue
+        if "missing oidc configuration in production" in msg:
+            continue
+        filtered.append(e)
+    return filtered
 
 
 def build_app() -> FastAPI:
-    """Build and configure the FastAPI application."""
+    contract_ctx = _CONTRACT_CTX
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        """Application lifespan handler."""
         log.info(
             "Starting %s v%s",
             SERVICE_NAME,
@@ -61,24 +123,23 @@ def build_app() -> FastAPI:
             extra={"service": SERVICE_NAME, "version": VERSION},
         )
 
-        # Initialize database
         await init_db()
         log.info("Database initialized")
 
-        # Initialize audit logger
         if getattr(app.state, "audit_logger", None) is None:
             app.state.audit_logger = AuditLogger(
                 core_base_url=os.getenv("AG_CORE_BASE_URL"),
                 core_api_key=os.getenv("AG_CORE_API_KEY"),
-                enabled=os.getenv("AG_AUDIT_ENABLED", "1").lower()
+                enabled=os.getenv("AG_AUDIT_ENABLED", "1").strip().lower()
                 not in {"0", "false", "no"},
-                forward_enabled=os.getenv("AG_AUDIT_FORWARD_ENABLED", "0").lower()
-                in {"1", "true", "yes"},
+                forward_enabled=os.getenv("AG_AUDIT_FORWARD_ENABLED", "0")
+                .strip()
+                .lower()
+                in {"1", "true", "yes", "on"},
             )
 
         yield
 
-        # Cleanup
         await close_db()
         log.info("Shutting down %s", SERVICE_NAME)
 
@@ -92,7 +153,10 @@ def build_app() -> FastAPI:
     config = get_auth_config()
 
     # P0: Validate config and fail startup on any errors (including env typos)
-    config_errors = config.validate()
+    config_errors = config.validate() or []
+    if contract_ctx:
+        config_errors = _filter_contract_ctx_config_errors(config_errors)
+
     if config_errors:
         error_msg = "; ".join(config_errors)
         log.error("Configuration validation failed: %s", error_msg)
@@ -100,43 +164,68 @@ def build_app() -> FastAPI:
 
     if config.is_prod and config.dev_auth_bypass:
         raise RuntimeError("FG_DEV_AUTH_BYPASS cannot be enabled in production.")
-    if config.is_prod and not config.oidc_enabled:
-        raise RuntimeError("Missing OIDC configuration in production.")
 
-    # Add middleware (order matters: outermost first)
-    # Audit comes after auth so it can see the session
-    app.add_middleware(AuditMiddleware)
-    app.add_middleware(AuthMiddleware, auto_csrf=True)
-    app.add_middleware(StructuredLoggingMiddleware)
-    app.add_middleware(RequestIdMiddleware)
-    app.add_middleware(AuthContextMiddleware)
-    app.add_middleware(AuditMiddleware)
-    app.add_middleware(CSRFMiddleware)
+    # Strict runtime rule: prod requires OIDC.
+    # But contract generation should not require real auth wiring.
+    if config.is_prod and not config.oidc_enabled:
+        if contract_ctx:
+            log.warning(
+                "Contract generation context detected: allowing missing OIDC configuration "
+                "to build OpenAPI/contracts. NOT allowed for runtime prod deployments."
+            )
+        else:
+            raise RuntimeError("Missing OIDC configuration in production.")
+
+    # ---- Middleware ----
+    #
+    # IMPORTANT: Starlette executes middleware in REVERSE order of add_middleware().
+    # So we add from INNERMOST -> OUTERMOST to achieve desired request flow:
+    #
+    #   RequestId -> StructuredLogging -> Session -> SessionCookie -> CSRF
+    #     -> Auth -> AuthContext -> Audit -> route
+    #
+    # Audit is intentionally AFTER auth context has been established (so it can see identity/tenant),
+    # and it is added ONCE.
     from starlette.middleware.sessions import SessionMiddleware
 
-    session_secret = config.session_secret
+    # innermost (runs last on request, first on response)
+    app.add_middleware(AuditMiddleware)
+    app.add_middleware(AuthContextMiddleware)
+    app.add_middleware(AuthMiddleware, auto_csrf=True)
+    app.add_middleware(CSRFMiddleware)
+
     app.add_middleware(
         SessionMiddleware,
-        secret_key=session_secret,
+        secret_key=config.session_secret,
         max_age=config.session_ttl_seconds,
         same_site="strict",
         https_only=config.is_prod,
     )
     app.add_middleware(SessionCookieMiddleware)
 
-    # CORS configuration - P0: No wildcard allowed in production
+    app.add_middleware(StructuredLoggingMiddleware)
+    app.add_middleware(RequestIdMiddleware)  # outermost (runs first on request)
+
+    # ---- CORS ----
     cors_origins_raw = os.getenv("AG_CORS_ORIGINS", "")
+
     if not cors_origins_raw.strip():
-        if config.is_prod:
-            raise RuntimeError(
-                "AG_CORS_ORIGINS must be set in production (no wildcard allowed)"
+        if contract_ctx:
+            # Deterministic + quiet during contract generation.
+            cors_origins_raw = "http://localhost:3000,http://localhost:13000"
+        else:
+            if config.is_prod:
+                raise RuntimeError(
+                    "AG_CORS_ORIGINS must be set in production (no wildcard allowed)"
+                )
+            cors_origins_raw = "http://localhost:3000,http://localhost:13000"
+            log.warning(
+                "AG_CORS_ORIGINS not set, using dev defaults: %s", cors_origins_raw
             )
-        cors_origins_raw = "http://localhost:3000,http://localhost:13000"
-        log.warning("AG_CORS_ORIGINS not set, using dev defaults: %s", cors_origins_raw)
 
     cors_origins = [o.strip() for o in cors_origins_raw.split(",") if o.strip()]
 
-    # P0: Reject wildcard CORS in production
+    # P0: Reject wildcard CORS in production (contract-gen doesn't get a pass here).
     if config.is_prod and "*" in cors_origins:
         raise RuntimeError("Wildcard CORS origin (*) is not allowed in production")
 
@@ -155,22 +244,20 @@ def build_app() -> FastAPI:
         expose_headers=["X-Request-Id", "X-CSRF-Token"],
     )
 
-    # Store service metadata
+    # Metadata
     app.state.service = SERVICE_NAME
     app.state.version = VERSION
     app.state.api_version = API_VERSION
     app.state.instance_id = str(uuid.uuid4())
     app.state.start_time = datetime.now(timezone.utc)
 
-    # Include routers
+    # Routers
     app.include_router(admin_router)
     app.include_router(auth_router)
     app.include_router(products_router)
 
-    # Health endpoint
     @app.get("/health")
     async def health(request: Request) -> dict[str, Any]:
-        """Health check endpoint."""
         return {
             "status": "ok",
             "service": request.app.state.service,
@@ -179,10 +266,8 @@ def build_app() -> FastAPI:
             "request_id": getattr(request.state, "request_id", None),
         }
 
-    # Version endpoint (public, no auth)
     @app.get("/version")
     async def version(request: Request) -> dict[str, Any]:
-        """Version information endpoint."""
         return {
             "service": request.app.state.service,
             "version": request.app.state.version,
@@ -191,13 +276,10 @@ def build_app() -> FastAPI:
             "build_time": os.getenv("AG_BUILD_TIME"),
         }
 
-    # OpenAPI JSON endpoint (explicit for clarity)
     @app.get("/openapi.json", include_in_schema=False)
     async def openapi_json(request: Request) -> JSONResponse:
-        """OpenAPI schema endpoint."""
         return JSONResponse(content=request.app.openapi())
 
-    # Placeholder admin endpoints
     @app.get(
         "/api/v1/tenants",
         dependencies=[Depends(require_scope_dependency(Scope.CONSOLE_ADMIN))],
@@ -206,7 +288,6 @@ def build_app() -> FastAPI:
         request: Request,
         session: Session = Depends(get_current_session),
     ) -> dict:
-        """List tenants (placeholder)."""
         allowed = get_allowed_tenants(session)
         request.state.tenant_id = None
         return {"tenants": sorted(allowed), "total": len(allowed)}
@@ -220,7 +301,6 @@ def build_app() -> FastAPI:
         tenant_id: str | None = None,
         session: Session = Depends(get_current_session),
     ) -> dict:
-        """List API keys (placeholder)."""
         validate_tenant_access(session, tenant_id)
         return {"keys": [], "total": 0}
 
@@ -233,7 +313,6 @@ def build_app() -> FastAPI:
         tenant_id: str | None = None,
         session: Session = Depends(get_current_session),
     ) -> dict:
-        """Dashboard data endpoint (placeholder)."""
         validate_tenant_access(session, tenant_id)
         return {
             "stats": {
@@ -260,4 +339,9 @@ def build_app() -> FastAPI:
     return app
 
 
-app = build_app()
+# ------------------------------------------------------------
+# Module-level app: MUST NOT build during contract generation
+# ------------------------------------------------------------
+app: Optional[FastAPI] = None
+if not _CONTRACT_CTX:
+    app = build_app()
