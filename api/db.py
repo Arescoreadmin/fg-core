@@ -138,7 +138,7 @@ def _ensure_models_imported() -> None:
 
 
 def _get_base():
-    from api.db_models import Base  # noqa: WPS433 (explicit import by design)
+    from api.db_models import Base  # noqa (explicit import by design)
 
     return Base
 
@@ -187,7 +187,7 @@ def init_db(*, sqlite_path: Optional[str] = None) -> None:
             logger.exception("sqlite auto-migration failed (best effort)")
     elif engine.dialect.name == "postgresql":
         if _env_bool("FG_DB_MIGRATIONS_REQUIRED", True):
-            from api.db_migrations import (  # noqa: WPS433 (explicit import)
+            from api.db_migrations import (  # noqa (explicit import)
                 assert_migrations_applied,
             )
 
@@ -247,7 +247,7 @@ def set_tenant_context(session: Session, tenant_id: str) -> None:
     if not tenant_id:
         raise RuntimeError("tenant_id required")
     session.execute(
-        text("SELECT set_config('app.tenant_id', :tenant_id, false)"),
+        text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
         {"tenant_id": tenant_id},
     )
 
