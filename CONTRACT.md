@@ -5,7 +5,7 @@
 > in `contracts/core/openapi.json`.
 
 Contract Authority: contracts/core/openapi.json (prod)
-Contract-Authority-SHA256: 0b18f2ce80264b257ba5b33d2f6e2b159a36b27709be85d81f177a235ecc9966
+Contract-Authority-SHA256: f88de9e700b965c039c7030bbdc6d8b09fc6d593ae0e61d9ea219a3881fd0cbb
 <!-- CONTRACT_LINT_ANCHORS
 0) Principles
 1) Configuration and Environment Precedence
@@ -181,6 +181,28 @@ bypassed (by definition).
 - `/defend` is protected by `rate_limit_guard`.
 - Rate limit failures MUST return a **non-2xx** response (commonly 429).
 - Contract requirement: **not 2xx**.
+
+
+### 3.5 Governance endpoints are tenant-scoped
+
+Governance routes are strictly tenant-scoped:
+- `GET /governance/changes`
+- `POST /governance/changes`
+- `POST /governance/changes/{change_id}/approve`
+
+Requirements:
+- Require valid API key auth and `governance:write` scope.
+- Require tenant context binding via `tenant_db_required` (no anonymous/global tenant access).
+- **Scoped key semantics:** tenant is bound from the key's auth context; client-provided `tenant_id` that disagrees is rejected.
+- **Unscoped key semantics:** `tenant_id` query param is required and validated by `bind_tenant_id`; this is the only client-selected tenant path.
+- Governance writes always persist `tenant_id` from `request.state.tenant_id` (validated/bound tenant), never from request body payload.
+- Cross-tenant resource access returns **404** (anti-enumeration).
+
+`GET /governance/changes` pagination contract:
+- `limit` query param defaults to `50`.
+- `offset` query param defaults to `0`.
+- Hard cap: maximum effective `limit` is `200`.
+- Deterministic ordering: `proposed_at DESC, id DESC`.
 
 ---
 

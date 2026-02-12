@@ -9,6 +9,7 @@ RLS_TABLES = [
     "decision_evidence_artifacts",
     "api_keys",
     "security_audit_log",
+    "policy_change_requests",
 ]
 
 APPEND_ONLY_TABLES = [
@@ -93,11 +94,46 @@ def bootstrap_pg_for_tests(engine: Engine) -> None:
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    CREATE TABLE IF NOT EXISTS policy_change_requests (
+        id BIGSERIAL PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        change_id TEXT NOT NULL,
+        change_type TEXT NOT NULL DEFAULT 'unknown',
+        proposed_by TEXT NOT NULL DEFAULT 'system',
+        proposed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        justification TEXT NOT NULL DEFAULT '',
+        rule_definition_json JSONB,
+        roe_update_json JSONB,
+        simulation_results_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+        requires_approval_from_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+        approvals_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+        status TEXT NOT NULL DEFAULT 'pending',
+        deployed_at TIMESTAMPTZ
+    );
+
+    ALTER TABLE policy_change_requests
+      ADD COLUMN IF NOT EXISTS change_type TEXT NOT NULL DEFAULT 'unknown';
+    ALTER TABLE policy_change_requests
+      ADD COLUMN IF NOT EXISTS proposed_by TEXT NOT NULL DEFAULT 'system';
+    ALTER TABLE policy_change_requests
+      ADD COLUMN IF NOT EXISTS rule_definition_json JSONB;
+    ALTER TABLE policy_change_requests
+      ADD COLUMN IF NOT EXISTS roe_update_json JSONB;
+    ALTER TABLE policy_change_requests
+      ADD COLUMN IF NOT EXISTS simulation_results_json JSONB NOT NULL DEFAULT '{}'::jsonb;
+    ALTER TABLE policy_change_requests
+      ADD COLUMN IF NOT EXISTS requires_approval_from_json JSONB NOT NULL DEFAULT '[]'::jsonb;
+    ALTER TABLE policy_change_requests
+      ADD COLUMN IF NOT EXISTS approvals_json JSONB NOT NULL DEFAULT '[]'::jsonb;
+    ALTER TABLE policy_change_requests
+      ADD COLUMN IF NOT EXISTS deployed_at TIMESTAMPTZ;
+
     -- Helpful indexes (not required, just sensible)
     CREATE INDEX IF NOT EXISTS ix_decisions_tenant ON decisions(tenant_id);
     CREATE INDEX IF NOT EXISTS ix_artifacts_tenant ON decision_evidence_artifacts(tenant_id);
     CREATE INDEX IF NOT EXISTS ix_api_keys_tenant ON api_keys(tenant_id);
     CREATE INDEX IF NOT EXISTS ix_audit_tenant ON security_audit_log(tenant_id);
+    CREATE INDEX IF NOT EXISTS ix_policy_changes_tenant ON policy_change_requests(tenant_id);
 
     -- 2) Append-only enforcement: block UPDATE/DELETE for append-only tables
     CREATE OR REPLACE FUNCTION fg_block_update_delete()
@@ -129,7 +165,7 @@ def bootstrap_pg_for_tests(engine: Engine) -> None:
     DECLARE t TEXT;
     DECLARE policy TEXT;
     BEGIN
-      FOREACH t IN ARRAY ARRAY['decisions','decision_evidence_artifacts','api_keys','security_audit_log']
+      FOREACH t IN ARRAY ARRAY['decisions','decision_evidence_artifacts','api_keys','security_audit_log','policy_change_requests']
       LOOP
         policy := t || '_tenant_isolation';
 

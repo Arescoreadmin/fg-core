@@ -93,6 +93,7 @@ CREATE INDEX IF NOT EXISTS idx_decision_evidence_created_at ON decision_evidence
 
 CREATE TABLE IF NOT EXISTS policy_change_requests (
     id SERIAL PRIMARY KEY,
+    tenant_id VARCHAR(128) NOT NULL,
     change_id VARCHAR(64) NOT NULL UNIQUE,
     change_type VARCHAR(64) NOT NULL,
     proposed_by VARCHAR(128) NOT NULL,
@@ -112,3 +113,5 @@ CREATE TABLE IF NOT EXISTS policy_change_requests (
 
 CREATE INDEX IF NOT EXISTS idx_policy_change_requests_change_id ON policy_change_requests(change_id);
 CREATE INDEX IF NOT EXISTS idx_policy_change_requests_status ON policy_change_requests(status);
+CREATE INDEX IF NOT EXISTS idx_policy_change_requests_tenant_proposed_id ON policy_change_requests(tenant_id, proposed_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_policy_change_requests_tenant_id_id ON policy_change_requests(tenant_id, id);

@@ -5,9 +5,11 @@ from pathlib import Path
 
 ROOT = Path.cwd()
 
+
 def write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
 
 def append_if_missing(path: Path, marker: str, block: str) -> None:
     s = path.read_text(encoding="utf-8")
@@ -16,13 +18,17 @@ def append_if_missing(path: Path, marker: str, block: str) -> None:
     s = s.rstrip() + "\n\n" + block.strip() + "\n"
     path.write_text(s, encoding="utf-8")
 
+
 def patch_evidence_chain(path: Path) -> None:
     s = path.read_text(encoding="utf-8")
 
     # Replace _latest_chain_hash_for_tenant with a safer version:
     # - ignore rows without chain_hash
     # - avoid autoflush surprises
-    pat = re.compile(r"def _latest_chain_hash_for_tenant\([\s\S]*?\n\)\s*->\s*Optional\[str\]:\n[\s\S]*?\n\n", re.M)
+    pat = re.compile(
+        r"def _latest_chain_hash_for_tenant\([\s\S]*?\n\)\s*->\s*Optional\[str\]:\n[\s\S]*?\n\n",
+        re.M,
+    )
     repl = """def _latest_chain_hash_for_tenant(
     db: Session, tenant_id: Optional[str]
 ) -> Optional[str]:
@@ -49,6 +55,7 @@ def patch_evidence_chain(path: Path) -> None:
         s = s.rstrip() + "\n\n" + repl
 
     path.write_text(s, encoding="utf-8")
+
 
 def main() -> None:
     # --- 1) deps.py (kill args/kwargs 422; provide explicit tenant_db wrapper) ---
@@ -122,7 +129,7 @@ __all__ = ["get_db", "tenant_db_required", "tenant_db"]
     # --- 2) db.py (ensure init_db creates api_keys and sqlite adds hash columns) ---
     dbpy = ROOT / "api" / "db.py"
     marker = "### PATCH_FG_CORE_DB_INIT_V1 ###"
-    patch_block = f"""
+    patch_block = """
 ### PATCH_FG_CORE_DB_INIT_V1 ###
 # This block is appended (not replacing your file) so it wins with last-definition-wins.
 # Goal: fix init_db() so tests create api_keys + required hash columns on sqlite.
@@ -156,7 +163,7 @@ def _resolve_sqlite_path(path: str | None = None) -> str:
         return str(Path(env_path).expanduser())
 
     env = (os.getenv("FG_ENV") or "dev").strip().lower()
-    if env in {{"production", "prod", "staging"}}:
+    if env in {"production", "prod", "staging"}:
         return "/var/lib/frostgate/state/frostgate.db"
 
     if env == "test":
@@ -226,7 +233,10 @@ def init_db(*, sqlite_path: str | None = None) -> None:
     ev = ROOT / "api" / "evidence_chain.py"
     patch_evidence_chain(ev)
 
-    print("Patched: api/deps.py, api/db.py (init_db patch appended), api/evidence_chain.py")
+    print(
+        "Patched: api/deps.py, api/db.py (init_db patch appended), api/evidence_chain.py"
+    )
+
 
 if __name__ == "__main__":
     main()

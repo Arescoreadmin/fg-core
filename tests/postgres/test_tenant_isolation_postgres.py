@@ -39,11 +39,11 @@ def _rls_diagnostics(session: Session) -> dict[str, object]:
     1) RLS flags:
        SELECT relname, relrowsecurity, relforcerowsecurity
        FROM pg_class
-       WHERE relname IN ('decisions','decision_evidence_artifacts','api_keys','security_audit_log');
+       WHERE relname IN ('decisions','decision_evidence_artifacts','api_keys','security_audit_log','policy_change_requests');
     2) Policies:
        SELECT tablename, policyname, qual, with_check
        FROM pg_policies
-       WHERE tablename IN ('decisions','decision_evidence_artifacts','api_keys','security_audit_log');
+       WHERE tablename IN ('decisions','decision_evidence_artifacts','api_keys','security_audit_log','policy_change_requests');
     3) Tenant setting after set_tenant_context:
        SELECT NULLIF(current_setting('app.tenant_id', true), '');
     4) Role bypass:
@@ -62,7 +62,8 @@ def _rls_diagnostics(session: Session) -> dict[str, object]:
                 'decisions',
                 'decision_evidence_artifacts',
                 'api_keys',
-                'security_audit_log'
+                'security_audit_log',
+                'policy_change_requests'
             )
             """
         )
@@ -76,7 +77,8 @@ def _rls_diagnostics(session: Session) -> dict[str, object]:
                 'decisions',
                 'decision_evidence_artifacts',
                 'api_keys',
-                'security_audit_log'
+                'security_audit_log',
+                'policy_change_requests'
             )
             """
         )
@@ -108,6 +110,7 @@ def test_tenant_rls_diagnostics(pg_engine) -> None:
         "decision_evidence_artifacts",
         "api_keys",
         "security_audit_log",
+        "policy_change_requests",
     }
     rls_tables = {row[0] for row in diagnostics["rls"]}
     assert rls_tables == expected_tables

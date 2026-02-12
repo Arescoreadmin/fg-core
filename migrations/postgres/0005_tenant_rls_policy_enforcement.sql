@@ -45,3 +45,15 @@ ALTER POLICY security_audit_log_tenant_isolation ON security_audit_log
         AND current_setting('app.tenant_id', true) IS NOT NULL
         AND tenant_id = current_setting('app.tenant_id', true)
     );
+
+ALTER POLICY policy_change_requests_tenant_isolation ON policy_change_requests
+    USING (
+        tenant_id IS NOT NULL
+        AND current_setting('app.tenant_id', true) IS NOT NULL
+        AND tenant_id = current_setting('app.tenant_id', true)
+    )
+    WITH CHECK (
+        tenant_id IS NOT NULL
+        AND current_setting('app.tenant_id', true) IS NOT NULL
+        AND tenant_id = current_setting('app.tenant_id', true)
+    );

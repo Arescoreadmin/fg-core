@@ -6,7 +6,7 @@ from fastapi import HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import bind_tenant_id
-from api.db import get_sessionmaker
+from api.db import get_sessionmaker, set_tenant_context
 
 
 def get_db() -> Iterator[Session]:
@@ -42,6 +42,7 @@ def tenant_db_required(
 
     # Some flows (tenant context binding) rely on this hook existing.
     request.state.db_session = db
+    set_tenant_context(db, bound)
 
     try:
         yield db

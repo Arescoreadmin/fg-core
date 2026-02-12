@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 
 
@@ -12,7 +11,7 @@ CHAIN_FILE = ROOT / "api" / "evidence_chain.py"
 PATCH_MARK = "PATCH_FG_API_KEYS_SQLITE_V1"
 
 
-EVIDENCE_CHAIN_CLEAN = r'''from __future__ import annotations
+EVIDENCE_CHAIN_CLEAN = r"""from __future__ import annotations
 
 import hashlib
 import hmac
@@ -234,7 +233,7 @@ def verify_chain_for_tenant(
         prev_hash = expected
 
     return {"ok": True, "first_bad_id": None, "reason": "", "checked": checked}
-'''
+"""
 
 
 DB_PATCH = r'''
@@ -246,7 +245,6 @@ DB_PATCH = r'''
 
 from __future__ import annotations
 
-import sqlite3
 from typing import Optional
 
 
@@ -340,7 +338,9 @@ def main() -> None:
     if PATCH_MARK not in db_text:
         DB_FILE.write_text(db_text.rstrip() + "\n" + DB_PATCH, encoding="utf-8")
 
-    print("OK: rewrote api/evidence_chain.py and patched api/db.py for api_keys sqlite init/migration")
+    print(
+        "OK: rewrote api/evidence_chain.py and patched api/db.py for api_keys sqlite init/migration"
+    )
 
 
 if __name__ == "__main__":

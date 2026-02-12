@@ -117,6 +117,7 @@ def assert_tenant_rls(engine: Engine) -> None:
         "decision_evidence_artifacts",
         "api_keys",
         "security_audit_log",
+        "policy_change_requests",
     }
     with engine.begin() as conn:
         rows = conn.execute(

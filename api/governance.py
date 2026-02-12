@@ -5,14 +5,14 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_scopes, verify_api_key
 from api.config.startup_validation import compliance_module_enabled
-from api.db import get_db
+from api.deps import tenant_db_required
 from api.db_models import PolicyChangeRequest as PolicyChangeRequestModel
 
 log = logging.getLogger("frostgate.governance")
@@ -91,6 +91,16 @@ def _model_to_response(m: PolicyChangeRequestModel) -> PolicyChangeResponse:
     )
 
 
+def _require_known_tenant(request: Request) -> str:
+    tenant_id = getattr(request.state, "tenant_id", None)
+    if not tenant_id or tenant_id == "unknown":
+        raise HTTPException(
+            status_code=400,
+            detail="tenant_id is required and must be a known tenant",
+        )
+    return tenant_id
+
+
 # -----------------------------------------------------------------------------
 # Router with authentication + governance scope on ALL endpoints
 # -----------------------------------------------------------------------------
@@ -106,7 +116,12 @@ router = APIRouter(
 
 
 @router.get("/changes", response_model=List[PolicyChangeResponse])
-def list_changes(db: Session = Depends(get_db)) -> List[PolicyChangeResponse]:
+def list_changes(
+    request: Request,
+    db: Session = Depends(tenant_db_required),
+    limit: int = Query(50, ge=1),
+    offset: int = Query(0, ge=0),
+) -> List[PolicyChangeResponse]:
     """
     List all policy change requests.
 
@@ -114,11 +129,22 @@ def list_changes(db: Session = Depends(get_db)) -> List[PolicyChangeResponse]:
     Persistence: Database-backed, survives restart (P0).
     """
     try:
-        stmt = select(PolicyChangeRequestModel).order_by(
-            PolicyChangeRequestModel.proposed_at.desc()
+        tenant_id = _require_known_tenant(request)
+        limit = min(limit, 200)
+        stmt = (
+            select(PolicyChangeRequestModel)
+            .where(PolicyChangeRequestModel.tenant_id == tenant_id)
+            .order_by(
+                PolicyChangeRequestModel.proposed_at.desc(),
+                PolicyChangeRequestModel.id.desc(),
+            )
+            .limit(limit)
+            .offset(offset)
         )
         rows = db.execute(stmt).scalars().all()
         return [_model_to_response(r) for r in rows]
+    except HTTPException:
+        raise
     except Exception as e:
         # P0: Fail closed on DB error - do not return empty list
         log.error("governance.list_changes DB error: %s", e)
@@ -131,7 +157,8 @@ def list_changes(db: Session = Depends(get_db)) -> List[PolicyChangeResponse]:
 @router.post("/changes", response_model=PolicyChangeResponse)
 def create_change(
     req: PolicyChangeCreate,
-    db: Session = Depends(get_db),
+    request: Request,
+    db: Session = Depends(tenant_db_required),
 ) -> PolicyChangeResponse:
     """
     Create a new policy change request.
@@ -141,10 +168,12 @@ def create_change(
     Audit: Timestamp and proposer recorded.
     """
     try:
+        tenant_id = _require_known_tenant(request)
         change_id = f"pcr-{uuid.uuid4().hex[:8]}"
 
         model = PolicyChangeRequestModel(
             change_id=change_id,
+            tenant_id=tenant_id,
             change_type=req.change_type,
             proposed_by=req.proposed_by,
             proposed_at=_utcnow(),
@@ -171,6 +200,8 @@ def create_change(
         )
 
         return _model_to_response(model)
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         # P0: Fail closed on DB error - do not silently fail
@@ -185,7 +216,8 @@ def create_change(
 def approve_change(
     change_id: str,
     req: PolicyApprovalRequest,
-    db: Session = Depends(get_db),
+    request: Request,
+    db: Session = Depends(tenant_db_required),
 ) -> PolicyChangeResponse:
     """
     Approve a policy change request.
@@ -195,8 +227,10 @@ def approve_change(
     Audit: Approval timestamp and approver recorded.
     """
     try:
+        tenant_id = _require_known_tenant(request)
         stmt = select(PolicyChangeRequestModel).where(
-            PolicyChangeRequestModel.change_id == change_id
+            PolicyChangeRequestModel.change_id == change_id,
+            PolicyChangeRequestModel.tenant_id == tenant_id,
         )
         model = db.execute(stmt).scalar_one_or_none()
 

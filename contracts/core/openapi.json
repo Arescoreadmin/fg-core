@@ -2889,7 +2889,29 @@
         "parameters": [
           {
             "in": "query",
-            "name": "sqlite_path",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
             "required": false,
             "schema": {
               "anyOf": [
@@ -2900,7 +2922,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Sqlite Path"
+              "title": "Tenant Id"
             }
           },
           {
@@ -2957,7 +2979,7 @@
         "parameters": [
           {
             "in": "query",
-            "name": "sqlite_path",
+            "name": "tenant_id",
             "required": false,
             "schema": {
               "anyOf": [
@@ -2968,7 +2990,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Sqlite Path"
+              "title": "Tenant Id"
             }
           },
           {
@@ -3042,7 +3064,7 @@
           },
           {
             "in": "query",
-            "name": "sqlite_path",
+            "name": "tenant_id",
             "required": false,
             "schema": {
               "anyOf": [
@@ -3053,7 +3075,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Sqlite Path"
+              "title": "Tenant Id"
             }
           },
           {

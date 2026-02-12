@@ -10,6 +10,10 @@ ALTER TABLE api_keys FORCE ROW LEVEL SECURITY;
 ALTER TABLE security_audit_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE security_audit_log FORCE ROW LEVEL SECURITY;
 
+
+ALTER TABLE policy_change_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE policy_change_requests FORCE ROW LEVEL SECURITY;
+
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -65,6 +69,22 @@ BEGIN
         SELECT 1 FROM pg_policies WHERE policyname = 'security_audit_log_tenant_isolation'
     ) THEN
         CREATE POLICY security_audit_log_tenant_isolation ON security_audit_log
+            USING (
+                tenant_id IS NOT NULL
+                AND current_setting('app.tenant_id', true) IS NOT NULL
+                AND tenant_id = current_setting('app.tenant_id', true)
+            )
+            WITH CHECK (
+                tenant_id IS NOT NULL
+                AND current_setting('app.tenant_id', true) IS NOT NULL
+                AND tenant_id = current_setting('app.tenant_id', true)
+            );
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE policyname = 'policy_change_requests_tenant_isolation'
+    ) THEN
+        CREATE POLICY policy_change_requests_tenant_isolation ON policy_change_requests
             USING (
                 tenant_id IS NOT NULL
                 AND current_setting('app.tenant_id', true) IS NOT NULL
