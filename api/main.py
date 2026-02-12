@@ -10,6 +10,7 @@ from typing import Any, Optional
 from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -26,6 +27,7 @@ from api.defend import router as defend_router
 from api.dev_events import router as dev_events_router
 from api.feed import router as feed_router
 from api.forensics import router as forensics_router
+from api.ingest import router as ingest_router
 from api.keys import router as keys_router
 from api.stats import router as stats_router
 from api.ui import router as ui_router
@@ -253,6 +255,25 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     app = FastAPI(title="frostgate-core", version=APP_VERSION, lifespan=lifespan)
 
+    @app.exception_handler(RequestValidationError)
+    async def _validation_handler(request: Request, exc: RequestValidationError):
+        if request.url.path == "/ingest":
+            errs = exc.errors()
+            if any(
+                e.get("loc") == ("body", "event_id") and e.get("type") == "missing"
+                for e in errs
+            ):
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "detail": {
+                            "code": "INGEST_EVENT_ID_REQUIRED",
+                            "message": "event_id is required",
+                        }
+                    },
+                )
+        return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
     # UI single-use state
     if not hasattr(app.state, "_ui_single_use_used"):
         app.state._ui_single_use_used = set()
@@ -449,6 +470,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     # ---- Routers (core) ----
     app.include_router(defend_router)
     app.include_router(defend_router, prefix="/v1")
+    app.include_router(ingest_router)
     app.include_router(feed_router)
     app.include_router(decisions_router)
     app.include_router(stats_router)

@@ -30,10 +30,23 @@ from engine.policy_fingerprint import get_active_policy_fingerprint
 
 log = logging.getLogger("frostgate.ingest")
 
-INGEST_IDEMPOTENT_REPLAYS = Counter(
-    "frostgate_ingest_idempotent_replays_total",
-    "Count of /ingest requests returned via idempotent replay",
-)
+
+class _NoopCounter:
+    def inc(self) -> None:
+        return
+
+
+def _build_replay_counter():
+    try:
+        return Counter(
+            "frostgate_ingest_idempotent_replays_total",
+            "Count of /ingest requests returned via idempotent replay",
+        )
+    except ValueError:
+        return _NoopCounter()
+
+
+INGEST_IDEMPOTENT_REPLAYS = _build_replay_counter()
 
 _EVENT_ID_MAX_LEN = 128
 _EVENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]+$")
@@ -190,6 +203,35 @@ def _extract_src_ip(payload: dict[str, Any]) -> Optional[str]:
 @router.post(
     "",
     response_model=IngestResponse,
+    responses={
+        400: {
+            "description": "Bad Request",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "detail": {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "enum": [
+                                            "INGEST_EVENT_ID_REQUIRED",
+                                            "INGEST_EVENT_ID_INVALID",
+                                        ],
+                                    },
+                                    "message": {"type": "string"},
+                                },
+                                "required": ["code", "message"],
+                            }
+                        },
+                        "required": ["detail"],
+                    }
+                }
+            },
+        }
+    },
     dependencies=[
         Depends(require_scopes("ingest:write")),
         _RATE_LIMIT_DEP,

@@ -7,8 +7,7 @@ from api.schemas import TelemetryInput
 
 
 class IngestRequest(TelemetryInput):
-    # Manual validation in /ingest ensures stable 400 error semantics for clients.
-    event_id: Optional[str] = None
+    event_id: str
 
 
 class IngestResponse(BaseModel):
