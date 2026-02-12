@@ -5,6 +5,7 @@ import hashlib
 from datetime import datetime, timezone
 
 from sqlalchemy import Column, String, text
+from sqlalchemy import UniqueConstraint
 from sqlalchemy import JSON, Text
 from sqlalchemy import (
     Boolean,
@@ -193,6 +194,70 @@ class DecisionEvidenceArtifact(Base):
     payload_json = Column(JSON, nullable=False)
 
 
+class EvidenceBundle(Base):
+    __tablename__ = "evidence_bundles"
+
+    id = Column(String(64), primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    subject_type = Column(String(64), nullable=False, index=True)
+    subject_id = Column(String(128), nullable=False, index=True)
+    bundle_json = Column(JSON, nullable=False)
+    bundle_hash = Column(String(64), nullable=False, index=True)
+    signature = Column(Text, nullable=False)
+    key_id = Column(String(128), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+
+
+class ApprovalLog(Base):
+    __tablename__ = "approval_logs"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "subject_type", "subject_id", "seq", name="uq_approval_seq"
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    subject_type = Column(String(64), nullable=False, index=True)
+    subject_id = Column(String(128), nullable=False, index=True)
+    seq = Column(Integer, nullable=False)
+    entry_json = Column(JSON, nullable=False)
+    entry_hash = Column(String(64), nullable=False)
+    prev_chain_hash = Column(String(64), nullable=False)
+    chain_hash = Column(String(64), nullable=False, index=True)
+    signature = Column(Text, nullable=False)
+    key_id = Column(String(128), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+
+
+class ModuleRegistry(Base):
+    __tablename__ = "module_registry"
+
+    module_id = Column(String(128), primary_key=True)
+    version = Column(String(64), primary_key=True)
+    record_json = Column(JSON, nullable=False)
+    registration_hash = Column(String(64), nullable=False, index=True)
+    signature = Column(Text, nullable=False)
+    key_id = Column(String(128), nullable=False)
+    registered_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+        index=True,
+    )
+
+
 def _raise_immutable(mapper, connection, target) -> None:
     raise ValueError(f"{target.__class__.__name__} rows are append-only")
 
@@ -201,6 +266,12 @@ event.listen(DecisionRecord, "before_update", _raise_immutable)
 event.listen(DecisionRecord, "before_delete", _raise_immutable)
 event.listen(DecisionEvidenceArtifact, "before_update", _raise_immutable)
 event.listen(DecisionEvidenceArtifact, "before_delete", _raise_immutable)
+event.listen(EvidenceBundle, "before_update", _raise_immutable)
+event.listen(EvidenceBundle, "before_delete", _raise_immutable)
+event.listen(ApprovalLog, "before_update", _raise_immutable)
+event.listen(ApprovalLog, "before_delete", _raise_immutable)
+event.listen(ModuleRegistry, "before_update", _raise_immutable)
+event.listen(ModuleRegistry, "before_delete", _raise_immutable)
 
 
 class PolicyChangeRequest(Base):

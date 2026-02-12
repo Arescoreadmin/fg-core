@@ -30,6 +30,7 @@ from api.forensics import router as forensics_router
 from api.ingest import router as ingest_router
 from api.keys import router as keys_router
 from api.stats import router as stats_router
+from api.attestation import router as attestation_router
 from api.ui import router as ui_router
 from api.ui_dashboards import router as ui_dashboards_router
 from api.public_paths import resolve_public_paths
@@ -474,6 +475,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(feed_router)
     app.include_router(decisions_router)
     app.include_router(stats_router)
+    app.include_router(attestation_router)
 
     if ui_enabled():
         app.include_router(ui_router)
