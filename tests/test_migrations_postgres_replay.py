@@ -7,7 +7,7 @@ import sys
 import pytest
 from sqlalchemy import create_engine, text
 
-from api.db_migrations import apply_migrations
+from api.db_migrations import apply_migrations, assert_migrations_applied, migration_status
 
 
 def test_postgres_migrations_replay_safe() -> None:
@@ -24,20 +24,18 @@ def test_postgres_migrations_replay_safe() -> None:
     schema_hash_before = _schema_signature(engine)
     print(f"schema_hash_before={schema_hash_before}")
 
-    with engine.begin() as conn:
-        conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
-        conn.execute(text("CREATE SCHEMA public"))
-        conn.execute(text("GRANT ALL ON SCHEMA public TO fg_user"))
-        conn.execute(text("GRANT ALL ON SCHEMA public TO public"))
-
     applied_first = apply_migrations(engine)
-    assert applied_first
+    assert applied_first, (
+        "Expected first migration apply to mutate a clean CI DB. "
+        f"Current status: {migration_status(engine)}"
+    )
 
     schema_hash_first = _schema_signature(engine)
     print(f"schema_hash_after_first_apply={schema_hash_first}")
 
     applied_second = apply_migrations(engine)
     assert applied_second == []
+    assert_migrations_applied(engine)
 
     schema_hash_second = _schema_signature(engine)
     print(f"schema_hash_after_replay={schema_hash_second}")
