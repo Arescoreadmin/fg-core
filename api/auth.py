@@ -13,9 +13,7 @@ from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import APIKeyHeader
-from sqlalchemy.orm import Session
 import api.auth_scopes as auth_scopes
-from api.db import get_db
 
 try:
     from tools.tenants.registry import get_tenant as _registry_get_tenant
@@ -48,7 +46,6 @@ def auth_enabled() -> bool:
 async def verify_api_key(
     request: Request,
     x_api_key: Optional[str] = Depends(API_KEY_HEADER),
-    db: Session = Depends(get_db),
 ) -> None:
     """
     FastAPI dependency that verifies API keys.

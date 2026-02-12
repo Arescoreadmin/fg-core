@@ -14,8 +14,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import bind_tenant_id, require_scopes
-from api.db import get_db
+from api.db import set_tenant_context
 from api.db_models import DecisionRecord
+from api.deps import tenant_db_session
 from api.evidence_chain import chain_fields_for_decision
 from api.evidence_artifacts import emit_decision_evidence
 from api.decision_diff import (
@@ -383,7 +384,7 @@ def _persist_decision_best_effort(
 
 @router.post("", response_model=DefendResponse)
 def defend(
-    req: TelemetryInput, request: Request, db: Session = Depends(get_db)
+    req: TelemetryInput, request: Request, db: Session = Depends(tenant_db_session)
 ) -> DefendResponse:
     t0 = time.time()
 
@@ -400,6 +401,7 @@ def defend(
     )
     req.tenant_id = tenant_id
     request.state.tenant_id = tenant_id
+    set_tenant_context(db, tenant_id)
 
     event_type = _coerce_event_type(req)
     event_id = _event_id(req)

@@ -11,8 +11,9 @@ from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import bind_tenant_id, require_scopes
-from api.db import get_db
+from api.db import set_tenant_context
 from api.db_models import DecisionRecord
+from api.deps import tenant_db_session
 from api.evidence_chain import chain_fields_for_decision
 from api.evidence_artifacts import emit_decision_evidence
 from api.decision_diff import (
@@ -130,7 +131,7 @@ def _extract_src_ip(payload: dict[str, Any]) -> Optional[str]:
 async def ingest(
     req: TelemetryInput,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_session),
     x_tenant_id: Optional[str] = Header(default=None, alias="X-Tenant-Id"),
 ) -> IngestResponse:
     """
@@ -141,6 +142,7 @@ async def ingest(
     ts = _utcnow()
 
     tenant_id = _resolve_tenant_id(req, x_tenant_id, request)
+    set_tenant_context(db, tenant_id)
     source = _resolve_source(req)
 
     event_id = _extract_event_id(req)

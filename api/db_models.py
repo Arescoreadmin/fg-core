@@ -129,8 +129,7 @@ class SecurityAuditLog(Base):
 
 
 class DecisionRecord(Base):
-    # IMPORTANT: tests + sqlite helpers insert into this table name
-    __tablename__ = "decision_records"
+    __tablename__ = "decisions"
 
     id = Column(Integer, primary_key=True)
     created_at = Column(

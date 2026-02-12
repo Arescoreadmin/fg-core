@@ -33,7 +33,7 @@ def _insert_decision_record_sqlite(
     try:
         con.execute(
             """
-            INSERT INTO decision_records
+            INSERT INTO decisions
                 (tenant_id, event_id, created_at, request_json, response_json, threat_level, chain_hash, prev_hash)
             VALUES
                 (?, ?, ?, ?, ?, ?, ?, ?)

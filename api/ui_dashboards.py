@@ -18,9 +18,10 @@ from sqlalchemy import asc, desc, func, select
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import bind_tenant_id, require_api_key_always, require_scopes
-from api.deps import get_db, tenant_db_required
+from api.deps import tenant_db_required, tenant_db_session
 from api.db_models import DecisionRecord
 from api.security_audit import audit_admin_action
+from api.db import set_tenant_context
 from api.stats import _compute_stats, _trend_flag
 from api.ui_guard import ui_enabled_guard
 
@@ -733,10 +734,11 @@ async def ui_chain_verify(
 async def ui_audit_packet(
     payload: AuditPacketRequest,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_session),
 ) -> AuditPacketResponse:
     _ensure_csrf(request)
     tenant_id = _resolve_tenant(request, payload.tenant_id)
+    set_tenant_context(db, tenant_id)
     from_dt = _parse_dt(payload.from_ts)
     to_dt = _parse_dt(payload.to_ts)
 
