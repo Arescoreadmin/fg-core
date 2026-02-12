@@ -32,22 +32,35 @@ def test_pg_bootstrap_policy_change_requests_supports_governance_columns(
                     status,
                     deployed_at
                 ) VALUES (
-                    'tenant-a',
-                    'pcr-bootstrap-a',
-                    'add_rule',
-                    'seed',
+                    :tenant_id,
+                    :change_id,
+                    :change_type,
+                    :proposed_by,
                     now(),
-                    'bootstrap-check',
-                    '{"rule":"a"}'::jsonb,
-                    '{"roe":"a"}'::jsonb,
-                    '{"ok":true}'::jsonb,
-                    '["security-lead"]'::jsonb,
-                    '[]'::jsonb,
-                    'pending',
+                    :justification,
+                    CAST(:rule_definition AS jsonb),
+                    CAST(:roe_update AS jsonb),
+                    CAST(:simulation_results AS jsonb),
+                    CAST(:requires_approval_from AS jsonb),
+                    CAST(:approvals AS jsonb),
+                    :status,
                     NULL
                 )
                 """
-            )
+            ),
+            {
+                "tenant_id": "tenant-a",
+                "change_id": "pcr-bootstrap-a",
+                "change_type": "add_rule",
+                "proposed_by": "seed",
+                "justification": "bootstrap-check",
+                "rule_definition": '{"rule":"a"}',
+                "roe_update": '{"roe":"a"}',
+                "simulation_results": '{"ok": true}',
+                "requires_approval_from": '["security-lead"]',
+                "approvals": "[]",
+                "status": "pending",
+            },
         )
         session.commit()
 
@@ -58,10 +71,12 @@ def test_pg_bootstrap_policy_change_requests_supports_governance_columns(
                 """
                 SELECT change_type, proposed_by, justification
                 FROM policy_change_requests
-                WHERE change_id = 'pcr-bootstrap-a'
+                WHERE change_id = :change_id
                 """
-            )
+            ),
+            {"change_id": "pcr-bootstrap-a"},
         ).one()
+
         assert row[0] == "add_rule"
         assert row[1] == "seed"
         assert row[2] == "bootstrap-check"
