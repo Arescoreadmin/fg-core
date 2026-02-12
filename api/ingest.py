@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
-import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from prometheus_client import Counter
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import bind_tenant_id, require_scopes
@@ -21,12 +23,33 @@ from api.decision_diff import (
     snapshot_from_current,
     snapshot_from_record,
 )
-from api.ingest_schemas import IngestResponse
+from api.ingest_schemas import IngestRequest, IngestResponse
 from api.schemas import TelemetryInput
 from engine.pipeline import PipelineInput, TieD, evaluate as pipeline_evaluate
 from engine.policy_fingerprint import get_active_policy_fingerprint
 
 log = logging.getLogger("frostgate.ingest")
+
+
+class _NoopCounter:
+    def inc(self) -> None:
+        return
+
+
+def _build_replay_counter():
+    try:
+        return Counter(
+            "frostgate_ingest_idempotent_replays_total",
+            "Count of /ingest requests returned via idempotent replay",
+        )
+    except ValueError:
+        return _NoopCounter()
+
+
+INGEST_IDEMPOTENT_REPLAYS = _build_replay_counter()
+
+_EVENT_ID_MAX_LEN = 128
+_EVENT_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]+$")
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
@@ -84,9 +107,66 @@ def _resolve_source(req: TelemetryInput) -> str:
     return src or "agent"
 
 
-def _extract_event_id(req: TelemetryInput) -> str:
+def _extract_event_id(req: IngestRequest) -> str:
     eid = (getattr(req, "event_id", None) or "").strip()
-    return eid or str(uuid.uuid4())
+    if not eid:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "INGEST_EVENT_ID_REQUIRED",
+                "message": "event_id is required",
+            },
+        )
+    if len(eid) > _EVENT_ID_MAX_LEN:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "INGEST_EVENT_ID_INVALID",
+                "message": f"event_id exceeds max length {_EVENT_ID_MAX_LEN}",
+            },
+        )
+    if not _EVENT_ID_PATTERN.fullmatch(eid):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "INGEST_EVENT_ID_INVALID",
+                "message": "event_id contains invalid characters",
+            },
+        )
+    return eid
+
+
+def _is_event_id_uniqueness_violation(exc: IntegrityError) -> bool:
+    msg = str(getattr(exc, "orig", exc)).lower()
+    return "uq_decisions_tenant_event_id" in msg or (
+        "unique constraint failed" in msg
+        and "decisions.tenant_id" in msg
+        and "decisions.event_id" in msg
+    )
+
+
+def _existing_ingest_response(
+    db: Session,
+    *,
+    tenant_id: str,
+    event_id: str,
+    fallback: IngestResponse,
+) -> Optional[IngestResponse]:
+    existing = (
+        db.query(DecisionRecord)
+        .filter(
+            DecisionRecord.tenant_id == tenant_id,
+            DecisionRecord.event_id == event_id,
+        )
+        .order_by(DecisionRecord.id.desc())
+        .first()
+    )
+    if existing is None:
+        return None
+    existing_response = getattr(existing, "response_json", None)
+    if isinstance(existing_response, dict):
+        return IngestResponse(**existing_response)
+    return fallback
 
 
 def _extract_event_type(req: TelemetryInput) -> str:
@@ -123,14 +203,44 @@ def _extract_src_ip(payload: dict[str, Any]) -> Optional[str]:
 @router.post(
     "",
     response_model=IngestResponse,
+    responses={
+        400: {
+            "description": "Bad Request",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "detail": {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "enum": [
+                                            "INGEST_EVENT_ID_REQUIRED",
+                                            "INGEST_EVENT_ID_INVALID",
+                                        ],
+                                    },
+                                    "message": {"type": "string"},
+                                },
+                                "required": ["code", "message"],
+                            }
+                        },
+                        "required": ["detail"],
+                    }
+                }
+            },
+        }
+    },
     dependencies=[
         Depends(require_scopes("ingest:write")),
         _RATE_LIMIT_DEP,
     ],
 )
 async def ingest(
-    req: TelemetryInput,
+    req: IngestRequest,
     request: Request,
+    response: Response,
     db: Session = Depends(tenant_db_session),
     x_tenant_id: Optional[str] = Header(default=None, alias="X-Tenant-Id"),
 ) -> IngestResponse:
@@ -146,6 +256,8 @@ async def ingest(
     source = _resolve_source(req)
 
     event_id = _extract_event_id(req)
+    response.headers["Idempotency-Key"] = event_id
+    response.headers["Idempotent-Replay"] = "false"
     event_type = _extract_event_type(req)
 
     payload: dict[str, Any] = req.payload or {}
@@ -296,10 +408,33 @@ async def ingest(
             rec.chain_hash = chain_fields["chain_hash"]
             rec.chain_alg = chain_fields["chain_alg"]
             rec.chain_ts = chain_fields["chain_ts"]
-        db.add(rec)
-        db.flush()
-        emit_decision_evidence(db, rec)
-        db.commit()
+        try:
+            db.add(rec)
+            db.flush()
+            emit_decision_evidence(db, rec)
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            if not _is_event_id_uniqueness_violation(exc):
+                raise
+
+            replay = _existing_ingest_response(
+                db,
+                tenant_id=tenant_id,
+                event_id=event_id,
+                fallback=resp,
+            )
+            if replay is None:
+                raise
+
+            response.headers["Idempotent-Replay"] = "true"
+            INGEST_IDEMPOTENT_REPLAYS.inc()
+            log.info(
+                "ingest idempotent replay tenant_id=%s event_id=%s idempotent_replay=true",
+                tenant_id,
+                event_id,
+            )
+            return replay
     except Exception:
         resp.persisted = False
         log.exception("failed to persist decision")

@@ -67,8 +67,12 @@ def _sqlite_url(sqlite_path: str) -> str:
 def _db_url(*, sqlite_path: Optional[str] = None) -> str:
     """
     Resolve SQLAlchemy URL.
-    Prefer FG_DB_URL if present; otherwise sqlite path contract.
+    Explicit sqlite_path wins (used by tests/tools that must force sqlite);
+    otherwise prefer FG_DB_URL when set.
     """
+    if sqlite_path and str(sqlite_path).strip():
+        return _sqlite_url(_resolve_sqlite_path(sqlite_path))
+
     db_url = (os.getenv("FG_DB_URL") or "").strip()
     if db_url:
         return db_url

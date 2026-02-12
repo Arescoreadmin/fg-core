@@ -268,6 +268,54 @@ jobs:
             state/**
           if-no-files-found: ignore
 
+
+  migrations_replay:
+    name: Migrations Replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: fg_guard
+    if: ${{ github.event_name == 'pull_request' || needs.fg_guard.outputs.core == 'true' || needs.fg_guard.outputs.python == 'true' }}
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: fg_user
+          POSTGRES_PASSWORD: fg_password
+          POSTGRES_DB: frostgate
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U fg_user -d frostgate"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      FG_ENV: test
+      FG_DB_BACKEND: postgres
+      FG_DB_URL: postgresql+psycopg://fg_user:fg_password@127.0.0.1:5432/frostgate
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Generate CI secrets
+        uses: ./.github/actions/fg-secrets
+
+      - name: Python setup (cached)
+        uses: ./.github/actions/fg-python-setup
+        with:
+          python-version: "3.12"
+          install-os-deps: "true"
+          prepare-workspace: "true"
+          build-venv: "true"
+
+      - name: Run migration replay test
+        run: pytest -q -s tests/test_migrations_postgres_replay.py
+
   db_postgres_verify:
     name: DB Postgres Verify
     runs-on: ubuntu-latest

@@ -86,6 +86,7 @@ def test_ingest_decision_matches_schema(
     payload = {
         "tenant_id": "tenant-a",
         "source": "unit-test",
+        "event_id": "evt-artifact-schema-001",
         "event_type": "auth.bruteforce",
         "payload": {"failed_auths": 9, "src_ip": "203.0.113.12"},
     }
