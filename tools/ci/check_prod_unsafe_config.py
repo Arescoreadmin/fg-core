@@ -26,11 +26,7 @@ def _normalize(text: str) -> str:
 
 
 def _has_unsafe_true(body: str, key: str) -> bool:
-    return (
-        f"{key}: true" in body
-        or f"{key}: \"true\"" in body
-        or f"{key}:-true" in body
-    )
+    return f"{key}: true" in body or f'{key}: "true"' in body or f"{key}:-true" in body
 
 
 def main() -> int:
@@ -48,11 +44,17 @@ def main() -> int:
             if marker in body:
                 failures.append(f"{path}: forbidden marker present: {marker}")
 
-        if "fg_env: \"prod\"" in body or "fg_env: prod" in body or path.name == "docker-compose.yml":
+        if (
+            'fg_env: "prod"' in body
+            or "fg_env: prod" in body
+            or path.name == "docker-compose.yml"
+        ):
             if "fg_db_url" not in body:
                 failures.append(f"{path}: prod-like manifest must set FG_DB_URL")
             if "sqlite" in body and "fg_db_url" in body:
-                failures.append(f"{path}: sqlite FG_DB_URL is forbidden for prod-like manifests")
+                failures.append(
+                    f"{path}: sqlite FG_DB_URL is forbidden for prod-like manifests"
+                )
 
     if failures:
         print("prod unsafe config gate: FAILED")
