@@ -1,11 +1,13 @@
 # =============================================================================
 # FrostGate Core - Makefile (single source of truth)
+# Optimized for: deterministic venv usage + CI/Codex stability + explicit tooling checks
 # =============================================================================
 
 SHELL := /bin/bash
 .ONESHELL:
 .SHELLFLAGS := -euo pipefail -c
 .DELETE_ON_ERROR:
+.DEFAULT_GOAL := help
 
 # =============================================================================
 # Repo + Python
@@ -14,13 +16,45 @@ SHELL := /bin/bash
 VENV ?= .venv
 PY   := $(VENV)/bin/python
 PIP  := $(VENV)/bin/pip
-PY_CONTRACT := $(if $(wildcard $(PY)),$(PY),python)
+RUFF := $(VENV)/bin/ruff
+
 export PYTHONPATH := .
+export PIP_DISABLE_PIP_VERSION_CHECK := 1
+export PIP_NO_PYTHON_VERSION_WARNING := 1
+
+# If you truly want "contracts scripts run even without venv", keep this.
+# But for Codex determinism we *prefer* the venv when it exists.
+PY_CONTRACT := $(PY)
 
 PYTEST_ENV := env PYTHONHASHSEED=0 TZ=UTC
 
-# Ruff (format/lint)
-RUFF ?= $(VENV)/bin/ruff
+# =============================================================================
+# Tooling capability probes (Codex/CI may not have these CLIs)
+# =============================================================================
+HAS_DOCKER := $(shell command -v docker >/dev/null 2>&1 && echo 1 || echo 0)
+HAS_HELM   := $(shell command -v helm  >/dev/null 2>&1 && echo 1 || echo 0)
+
+.PHONY: tools-check
+tools-check:
+	@echo "docker: $(if $(filter 1,$(HAS_DOCKER)),yes,no)"
+	@echo "helm:  $(if $(filter 1,$(HAS_HELM)),yes,no)"
+
+.PHONY: require-docker require-helm
+
+.PHONY: require-docker
+require-docker:
+	@test "$(HAS_DOCKER)" = "1" || (echo "❌ docker CLI missing" && exit 1)
+
+.PHONY: require-helm
+require-helm:
+	@test "$(HAS_HELM)" = "1" || (echo "❌ helm CLI missing" && exit 1)
+
+# =============================================================================
+# Tooling versions (single source of truth)
+# =============================================================================
+
+OPA_IMAGE ?= openpolicyagent/opa:0.64.1
+
 
 # =============================================================================
 # Runtime defaults
@@ -34,7 +68,6 @@ BASE_URL ?= http://$(HOST):$(PORT)
 # We intentionally *override* FG_ENV per lane:
 # - Contracts + prod profile checks: FG_ENV=prod
 # - Unit tests (pytest): FG_ENV=test
-# This prevents prod-profile routing differences (e.g. /admin/* hidden) from breaking unit tests.
 FG_ENV                  ?= dev
 
 FG_SERVICE              ?= frostgate-core
@@ -59,7 +92,6 @@ POSTGRES_PORT     ?= 5432
 POSTGRES_URL      ?= postgresql+psycopg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)
 
 # Application role (non-superuser) for migrations, assertions, and tests.
-# The bootstrap POSTGRES_USER cannot be demoted, so we use a separate role.
 APP_DB_USER     ?= fg_app
 APP_DB_PASSWORD ?= $(POSTGRES_PASSWORD)
 APP_DB_URL      ?= postgresql+psycopg://$(APP_DB_USER):$(APP_DB_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)
@@ -95,6 +127,34 @@ export FG_APP     := api.main:app
 export FG_PY      := $(PY)
 
 # =============================================================================
+# Internal helpers (no footguns)
+# =============================================================================
+
+.PHONY: _require-venv _require-cmd _warn-cmd _print-tools
+
+_require-venv:
+	@test -x "$(PY)" || (echo "❌ venv missing at $(PY). Run: make venv"; exit 1)
+
+_require-cmd:
+	@cmd="$(CMD)"; \
+	command -v "$$cmd" >/dev/null 2>&1 || (echo "❌ missing dependency: $$cmd" && exit 1)
+
+_warn-cmd:
+	@cmd="$(CMD)"; \
+	command -v "$$cmd" >/dev/null 2>&1 || (echo "⚠️  missing optional dependency: $$cmd" && exit 0)
+
+_print-tools:
+	@echo "Tooling snapshot:"; \
+	echo "  python: $$(command -v python || true)"; \
+	echo "  venv python: $(PY)"; \
+	test -x "$(PY)" && "$(PY)" -V || true; \
+	test -x "$(PIP)" && "$(PIP)" -V || true; \
+	test -x "$(RUFF)" && "$(RUFF)" --version || true; \
+	command -v docker >/dev/null 2>&1 && docker --version || echo "  docker: (missing)"; \
+	command -v helm  >/dev/null 2>&1 && helm version --short || echo "  helm: (missing)"; \
+	command -v opa   >/dev/null 2>&1 && opa version || echo "  opa: (missing)"
+
+# =============================================================================
 # Help
 # =============================================================================
 
@@ -115,7 +175,13 @@ help:
 	"  make ci-integration" \
 	"  make ci-evidence" \
 	"  make ci-pt" \
+	"" \
+	"Diagnostics:" \
+	"  make tools      # print versions + missing CLIs" \
 	""
+
+.PHONY: tools
+tools: _print-tools
 
 # =============================================================================
 # Setup
@@ -123,9 +189,10 @@ help:
 
 .PHONY: venv
 venv:
-	test -d "$(VENV)" || python -m venv "$(VENV)"
-	"$(PIP)" install --upgrade pip
+	@test -d "$(VENV)" || python -m venv "$(VENV)"
+	"$(PIP)" install --upgrade pip wheel
 	"$(PIP)" install -c constraints.txt -r requirements.txt -r requirements-dev.txt
+	@echo "✅ venv ready: $(PY)"
 
 # =============================================================================
 # Guards / audits
@@ -137,7 +204,7 @@ venv:
 	check-no-engine-evaluate opa-check verify-spine-modules verify-schemas verify-drift align-score \
 	contracts-gen-prod fg-contract-prod test-unit
 
-guard-scripts:
+guard-scripts: venv
 	@$(PY_CONTRACT) scripts/guard_no_paste_garbage.py
 	@$(PY_CONTRACT) scripts/guard_makefile_sanity.py
 
@@ -150,25 +217,30 @@ check-no-engine-evaluate:
 	fi
 
 opa-check:
-	@if command -v opa >/dev/null 2>&1; then \
-		opa check --strict policy/opa; \
-		opa test policy/opa; \
+	@set -euo pipefail; \
+	POLICY_DIR="$$PWD/policy/opa"; \
+	if command -v opa >/dev/null 2>&1; then \
+		opa check --strict "$$POLICY_DIR"; \
+		opa test "$$POLICY_DIR"; \
 	else \
-		command -v docker >/dev/null 2>&1 || (echo "missing dependency: docker" && exit 1); \
-		docker run --rm -v "$$PWD/policy/opa:/policies" openpolicyagent/opa:0.64.1 check --strict /policies; \
-		docker run --rm -v "$$PWD/policy/opa:/policies" openpolicyagent/opa:0.64.1 test /policies; \
+		$(MAKE) -s require-docker; \
+		IMAGE="$(OPA_IMAGE)"; \
+		MOUNT="-v $$POLICY_DIR:/policies"; \
+		echo "⚠️  opa not installed locally. Falling back to $$IMAGE via docker."; \
+		docker run --rm $$MOUNT "$$IMAGE" check --strict /policies; \
+		docker run --rm $$MOUNT "$$IMAGE" test /policies; \
 	fi
 
-verify-spine-modules:
+verify-spine-modules: venv
 	@$(PY_CONTRACT) scripts/verify_spine_modules.py
 
-verify-schemas:
+verify-schemas: venv
 	@$(PY_CONTRACT) scripts/verify_schemas.py
 
-verify-drift:
+verify-drift: venv
 	@$(PY_CONTRACT) scripts/verify_drift.py
 
-align-score:
+align-score: venv
 	@$(PY_CONTRACT) tools/align_score.py
 
 fg-audit-make: guard-scripts
@@ -179,28 +251,28 @@ fg-audit-make: guard-scripts
 # -----------------------------------------------------------------------------
 
 # Default (honors current FG_ENV). Kept for local dev.
-contracts-gen:
+contracts-gen: venv
 	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) scripts/contracts_gen.py
 	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) scripts/contracts_gen_core.py
 
 # CI/contract authority mode: ALWAYS generate in prod context.
-contracts-gen-prod:
+contracts-gen-prod: venv
 	@FG_ENV=prod $(MAKE) -s contracts-gen
 
-contracts-core-gen:
+contracts-core-gen: venv
 	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) scripts/contracts_gen_core.py
 
-contracts-core-diff:
+contracts-core-diff: venv
 	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) scripts/contracts_diff_core.py
 
-artifact-contract-check:
+artifact-contract-check: venv
 	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) scripts/artifact_schema_check.py
 
-contract-authority-check:
+contract-authority-check: venv
 	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) scripts/contract_authority_check.py
 
 # Contract lint/diff must be deterministic and aligned to prod OpenAPI behavior.
-fg-contract: guard-scripts
+fg-contract: venv guard-scripts
 	@FG_ENV=prod $(MAKE) -s contracts-gen
 	@$(PY_CONTRACT) scripts/contract_toolchain_check.py
 	@$(PY_CONTRACT) scripts/contract_lint.py
@@ -211,10 +283,10 @@ fg-contract: guard-scripts
 	@echo "Contract diff: OK (admin/core/artifacts)"
 
 # Convenience alias (explicit)
-fg-contract-prod: guard-scripts
+fg-contract-prod: venv guard-scripts
 	@FG_ENV=prod $(MAKE) -s fg-contract
 
-fg-compile: guard-scripts
+fg-compile: _require-venv guard-scripts
 	@$(PY) -m py_compile api/main.py api/feed.py api/ui.py api/dev_events.py api/auth_scopes/__init__.py
 
 # =============================================================================
@@ -222,11 +294,11 @@ fg-compile: guard-scripts
 # =============================================================================
 
 .PHONY: prod-profile-check dos-hardening-check
-prod-profile-check:
+prod-profile-check: venv
 	@FG_ENV=prod $(PY_CONTRACT) scripts/prod_profile_check.py
 
-dos-hardening-check:
-	@FG_ENV=prod $(PYTEST_ENV) $(PY_CONTRACT) -m pytest -q -p no:unraisableexception tests/test_dos_guard.py
+dos-hardening-check: _require-venv
+	@FG_ENV=prod $(PYTEST_ENV) $(PY) -m pytest -q -p no:unraisableexception tests/test_dos_guard.py
 	@FG_ENV=prod $(PY_CONTRACT) scripts/prod_profile_check.py
 
 # =============================================================================
@@ -238,114 +310,107 @@ dos-hardening-check:
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate
 
-bp-s0-001-gate:
+bp-s0-001-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_s0_001.py
 	@echo "bp-s0-001-gate: OK"
 
-bp-s0-005-gate:
+bp-s0-005-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_s0_005.py
 	@echo "bp-s0-005-gate: OK"
 
-bp-c-001-gate:
+bp-c-001-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_c_001.py
 	@echo "bp-c-001-gate: OK"
 
-bp-c-002-gate:
+bp-c-002-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_c_002.py
 	@echo "bp-c-002-gate: OK"
 
-bp-c-003-gate:
+bp-c-003-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_c_003.py
 	@echo "bp-c-003-gate: OK"
 
-bp-c-004-gate:
+bp-c-004-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_c_004.py
 	@echo "bp-c-004-gate: OK"
 
-bp-c-005-gate:
+bp-c-005-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_c_005.py
 	@echo "bp-c-005-gate: OK"
 
-bp-c-006-gate:
+bp-c-006-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_c_006.py
 	@echo "bp-c-006-gate: OK"
 
-bp-m1-006-gate:
+bp-m1-006-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_m1_006.py
 	@echo "bp-m1-006-gate: OK"
 
-bp-m2-001-gate:
+bp-m2-001-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_m2_001.py
 	@echo "bp-m2-001-gate: OK"
 
-bp-m2-002-gate:
+bp-m2-002-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_m2_002.py
 	@echo "bp-m2-002-gate: OK"
 
-bp-m2-003-gate:
+bp-m2-003-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_m2_003.py
 	@echo "bp-m2-003-gate: OK"
 
-bp-m3-001-gate:
+bp-m3-001-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_m3_001.py
 	@echo "bp-m3-001-gate: OK"
 
-bp-m3-003-gate:
+bp-m3-003-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_m3_003.py
 	@echo "bp-m3-003-gate: OK"
 
-bp-m3-004-gate:
+bp-m3-004-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_m3_004.py
 	@echo "bp-m3-004-gate: OK"
 
-bp-m3-005-gate:
+bp-m3-005-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_m3_005.py
 	@echo "bp-m3-005-gate: OK"
 
-bp-m3-006-gate:
+bp-m3-006-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_m3_006.py
 	@echo "bp-m3-006-gate: OK"
 
-bp-m3-007-gate:
+bp-m3-007-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_m3_007.py
 	@echo "bp-m3-007-gate: OK"
 
-bp-d-000-gate:
+bp-d-000-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_d_000.py
 	@echo "bp-d-000-gate: OK"
 
-gap-audit:
+gap-audit: venv
 	@FG_ENV=prod PYTHONPATH=scripts $(PY_CONTRACT) scripts/gap_audit.py
 
-release-gate:
+release-gate: venv
 	@FG_ENV=prod PYTHONPATH=scripts $(PY_CONTRACT) scripts/release_gate.py
 
-generate-scorecard:
+generate-scorecard: venv
 	@FG_ENV=prod PYTHONPATH=scripts $(PY_CONTRACT) scripts/generate_scorecard.py
 
 # =============================================================================
-# Formatting / Lint (ruff)
+# Formatting / Lint (ruff) - venv always
 # =============================================================================
 
-.PHONY: fmt fmt-check
+.PHONY: fmt fmt-check fg-lint
 
-# Auto-fix lint + apply formatting (local dev)
-fmt:
+fmt: _require-venv
 	@$(RUFF) check --fix api tests scripts
 	@$(RUFF) format api tests scripts
 	@$(RUFF) check api tests scripts
 	@$(RUFF) format --check api tests scripts
 
-# Verify formatting + lint without modifying files (CI-safe)
-fmt-check:
+fmt-check: _require-venv
 	@$(RUFF) check api tests scripts
 	@$(RUFF) format --check api tests scripts
 
-# =============================================================================
-# Lint
-# =============================================================================
-
-.PHONY: fg-lint
 fg-lint: fmt-check
 	@$(PY) -m py_compile api/middleware/auth_gate.py
 
@@ -353,6 +418,7 @@ fg-lint: fmt-check
 # Unit tests lane (ALWAYS run as FG_ENV=test)
 # =============================================================================
 
+.PHONY: test-unit
 test-unit: venv
 	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q -m "not postgres"
 
@@ -361,7 +427,7 @@ test-unit: venv
 # =============================================================================
 
 .PHONY: fg-fast
-fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check dos-hardening-check gap-audit \
+fg-fast: venv fg-audit-make fg-contract fg-compile opa-check prod-profile-check dos-hardening-check gap-audit \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate \
@@ -376,6 +442,7 @@ fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check dos-h
 .PHONY: db-postgres-up db-postgres-migrate db-postgres-assert db-postgres-test db-postgres-verify db-postgres-down
 
 db-postgres-up:
+	@$(MAKE) -s _warn-cmd CMD=docker
 	@if [ ! -f .env ]; then \
 		printf "POSTGRES_USER=%s\nPOSTGRES_DB=%s\nPOSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nFG_AGENT_API_KEY=%s\nAG_CORS_ORIGINS=%s\nNATS_AUTH_TOKEN=%s\nFG_API_KEY=%s\n" \
 			"$(POSTGRES_USER)" "$(POSTGRES_DB)" "$(POSTGRES_PASSWORD)" "devredis" "dev-agent-key" "http://localhost:13000" "dev-nats-token" "dev-api-key" > .env; \
@@ -405,13 +472,13 @@ db-postgres-up:
 	@docker compose exec -T postgres psql -U "$(APP_DB_USER)" -d "$(POSTGRES_DB)" \
 		-c "SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user;"
 
-db-postgres-migrate:
+db-postgres-migrate: venv
 	@FG_DB_URL="$(APP_DB_URL)" FG_DB_BACKEND="postgres" $(PY) -m api.db_migrations --backend postgres --apply
 
-db-postgres-assert:
+db-postgres-assert: venv
 	@FG_DB_URL="$(APP_DB_URL)" FG_DB_BACKEND="postgres" $(PY) -m api.db_migrations --backend postgres --assert
 
-db-postgres-test:
+db-postgres-test: venv
 	@FG_DB_URL="$(APP_DB_URL)" FG_DB_BACKEND="postgres" FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/postgres
 
 db-postgres-verify: db-postgres-up db-postgres-migrate db-postgres-assert db-postgres-test
@@ -424,7 +491,7 @@ db-postgres-down:
 # =============================================================================
 
 .PHONY: fg-live-port-check
-fg-live-port-check:
+fg-live-port-check: venv
 	@$(PY) scripts/fg_port_check.py "$(HOST)" "$(PORT)"
 
 # =============================================================================
@@ -433,7 +500,7 @@ fg-live-port-check:
 
 .PHONY: fg-up fg-down fg-ready fg-health fg-logs
 
-fg-up: fg-live-port-check
+fg-up: venv fg-live-port-check
 	mkdir -p "$(FG_STATE_DIR)" "$(STATE_DIR)"
 	$(FG_RUN) ./scripts/uvicorn_local.sh start
 	$(MAKE) -s fg-ready
@@ -444,7 +511,7 @@ fg-down:
 fg-ready:
 	@$(FG_RUN) ./scripts/uvicorn_local.sh check
 
-fg-health:
+fg-health: venv
 	@curl -fsS "$(BASE_URL)/health" | $(PY) -m json.tool
 
 fg-logs:
@@ -455,7 +522,7 @@ fg-logs:
 # =============================================================================
 
 .PHONY: test-integration
-test-integration:
+test-integration: venv
 	@set -euo pipefail; \
 	BASE_URL="$${BASE_URL:-$(ITEST_BASE_URL)}"; \
 	FG_SQLITE_PATH="$${FG_SQLITE_PATH:-$(ITEST_DB)}"; \
@@ -488,7 +555,7 @@ ITEST_WIPE_DB  ?= 1
 
 .PHONY: itest-db-reset itest-up itest-down itest-local
 
-itest-db-reset:
+itest-db-reset: venv
 	@set -euo pipefail; \
 	mkdir -p "$(STATE_DIR)"; \
 	if [ "$(ITEST_WIPE_DB)" = "1" ]; then rm -f "$(ITEST_DB)"; fi; \
@@ -518,9 +585,6 @@ itest-local: itest-down itest-up
 
 .PHONY: ci ci-integration ci-evidence pip-audit
 
-# ci is now deterministic across caller env:
-# - contract/prod checks run in prod profile
-# - unit tests run in test profile
 ci: venv pip-audit fg-fast
 
 ci-integration: venv itest-local
@@ -537,7 +601,7 @@ pip-audit: venv
 EVIDENCE_SCENARIO ?= $(or $(SCENARIO),spike)
 
 .PHONY: evidence
-evidence:
+evidence: venv
 	@set -euo pipefail; \
 	test -n "$${BASE_URL:-}" || exit 1; \
 	test -n "$${FG_API_KEY:-}" || exit 1; \
@@ -590,33 +654,28 @@ ci-pt: venv
 # =============================================================================
 
 .PHONY: test-core-invariants
-
 test-core-invariants: venv
 	@echo "Running core invariant tests (INV-001 through INV-007)."
 	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -v tests/test_core_invariants.py tests/test_ui_dashboards.py
 
+# =============================================================================
 # Hardening Test Lanes (Day 1-7 hardening plan)
 # =============================================================================
 
 .PHONY: test-decision-unified test-tenant-isolation test-auth-hardening test-hardening-all
 
-# Day 1: Unified decision pipeline
 test-decision-unified: venv
 	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/test_decision_pipeline_unified.py
 
-# Day 2: Tenant isolation invariants
 test-tenant-isolation: venv
 	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/test_tenant_invariant.py tests/test_auth_tenants.py
 
-# Day 3: Auth hardening and config fail-fast
 test-auth-hardening: venv
 	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/test_auth_hardening.py tests/test_auth.py tests/test_auth_contract.py tests/security/test_evidence_chain_persistence.py tests/security/test_chain_verification_detects_tamper.py tests/security/test_scope_enforcement.py tests/security/test_key_hashing_kdf.py
 
-# All hardening tests
 test-hardening-all: test-core-invariants test-decision-unified test-tenant-isolation test-auth-hardening
 	@echo "✅ All hardening tests passed"
 
-# CI lane for hardening (run on every PR)
 .PHONY: ci-hardening
 ci-hardening: venv test-hardening-all
 	@echo "✅ Hardening CI gate passed"
@@ -658,12 +717,10 @@ admin-venv:
 	"$(ADMIN_PY)" -V; \
 	"$(ADMIN_PY)" -c "import sys; print(sys.executable)"; \
 	"$(ADMIN_PY)" -m venv --upgrade "$(AG_VENV)"
-	@# Skip pip install if explicitly disabled
 	if [ "$${ADMIN_SKIP_PIP_INSTALL:-0}" = "1" ]; then \
 		echo "Skipping admin-gateway package install (ADMIN_SKIP_PIP_INSTALL=1)"; \
 		exit 0; \
 	fi
-	@# Compute requirements hash and compare with stamp file
 	@set -euo pipefail; \
 	REQS_HASH=$$(cat admin_gateway/requirements.txt admin_gateway/requirements-dev.txt 2>/dev/null | sha256sum | cut -d' ' -f1); \
 	STAMP_HASH=$$(cat "$(AG_REQS_STAMP)" 2>/dev/null || echo "none"); \
@@ -687,7 +744,6 @@ admin-venv:
 		echo "$$REQS_HASH" > "$(AG_REQS_STAMP)"; \
 	fi
 
-.PHONY: admin-venv-check
 admin-venv-check:
 	@set -euo pipefail; \
 	if [ -x "$(AG_PY)" ]; then \
@@ -718,19 +774,19 @@ ci-admin: admin-venv admin-lint admin-test
 
 .PHONY: compliance-sbom compliance-provenance compliance-cis compliance-scap compliance-all
 
-compliance-sbom:
+compliance-sbom: venv
 	@mkdir -p "$(ARTIFACTS_DIR)"
 	@$(PY) scripts/generate_sbom.py -o "$(ARTIFACTS_DIR)/sbom.json"
 
-compliance-provenance:
+compliance-provenance: venv
 	@mkdir -p "$(ARTIFACTS_DIR)"
 	@$(PY) scripts/provenance.py -o "$(ARTIFACTS_DIR)/provenance.json"
 
-compliance-cis:
+compliance-cis: venv
 	@mkdir -p "$(ARTIFACTS_DIR)"
 	@$(PY) scripts/cis_check.py -o "$(ARTIFACTS_DIR)/cis_check.json" --fail-threshold 70
 
-compliance-scap:
+compliance-scap: venv
 	@mkdir -p "$(ARTIFACTS_DIR)"
 	@$(PY) scripts/scap_scan.py -o "$(ARTIFACTS_DIR)/scap_scan.json"
 
@@ -763,39 +819,17 @@ console-test: console-deps
 
 ci-console: console-lint console-test
 
+# =============================================================================
+# Repo guards
+# =============================================================================
+
+.PHONY: guard-no-trash guard deps-up deps-down fg-restart
+
 guard-no-trash:
 	@bad=$$(git ls-files | grep -E '^(agent_queue/|keys/|secrets/|state/|artifacts/|logs/|CONTEXT_SNAPSHOT\.md|supervisor-sidecar/supervisor-sidecar)' || true); \
 	if [ -n "$$bad" ]; then \
 	  echo "Forbidden tracked paths:"; echo "$$bad"; exit 1; \
 	fi
-
-.PHONY: deps-up deps-down
-
-deps-up:
-	@docker ps >/dev/null 2>&1 || (echo "Docker not running"; exit 1)
-	@docker inspect fg-redis >/dev/null 2>&1 || \
-	  docker run -d --name fg-redis -p 6379:6379 redis:7
-	@echo "✅ deps up (redis on :6379)"
-
-deps-down:
-	@docker rm -f fg-redis >/dev/null 2>&1 || true
-	@echo "✅ deps down"
-
-.PHONY: fg-restart
-fg-restart:
-	@$(MAKE) -s fg-down || true
-	@$(MAKE) -s fg-up
-
-# =============================================================================
-# PR Parity Checks (run locally what PR runs)
-# =============================================================================
-
-.PHONY: test-core-invariants
-.PHONY: pr-check pr-check-all pr-check-ci pr-check-verify-targets
-.PHONY: paste-garbage guard makefile-sanity
-.PHONY: pr-check-fast pr-check-lint pr-check-test pr-check-contract pr-check-prod
-
-__mkdb__:
 
 paste-garbage:
 	@$(MAKE) -s guard-no-trash
@@ -805,6 +839,30 @@ guard:
 	@$(MAKE) -s guard-scripts
 	@$(MAKE) -s guard-no-trash
 	@echo "guard: OK"
+
+deps-up:
+	@command -v docker >/dev/null 2>&1 || (echo "❌ docker missing"; exit 1)
+	@docker ps >/dev/null 2>&1 || (echo "Docker not running"; exit 1)
+	@docker inspect fg-redis >/dev/null 2>&1 || \
+	  docker run -d --name fg-redis -p 6379:6379 redis:7
+	@echo "✅ deps up (redis on :6379)"
+
+deps-down:
+	@docker rm -f fg-redis >/dev/null 2>&1 || true
+	@echo "✅ deps down"
+
+fg-restart:
+	@$(MAKE) -s fg-down || true
+	@$(MAKE) -s fg-up
+
+# =============================================================================
+# PR Parity Checks (run locally what PR runs)
+# =============================================================================
+
+.PHONY: pr-check pr-check-all pr-check-ci pr-check-verify-targets
+.PHONY: pr-check-fast pr-check-lint pr-check-test pr-check-contract pr-check-prod
+
+__mkdb__:
 
 makefile-sanity:
 	@$(MAKE) -s guard-scripts
@@ -818,9 +876,7 @@ pr-check-lint:
 	@$(MAKE) -s fg-lint
 	@echo "pr-check-lint: OK"
 
-# Always run unit tests with FG_ENV=test regardless of caller env.
-pr-check-test:
-	@test -x "$(PY)" || (echo "❌ venv missing. Run: make venv"; exit 1)
+pr-check-test: venv
 	@$(MAKE) -s test-unit
 	@echo "pr-check-test: OK"
 
@@ -828,7 +884,7 @@ pr-check-contract:
 	@$(MAKE) -s fg-contract
 	@echo "pr-check-contract: OK"
 
-pr-check-prod:
+pr-check-prod: venv
 	@$(MAKE) -s opa-check prod-profile-check dos-hardening-check gap-audit
 	@echo "pr-check-prod: OK"
 
@@ -849,7 +905,6 @@ pr-check-verify-targets:
 	test $$missing -eq 0; test $$dup -eq 0; \
 	echo "✅ pr-check prerequisites present"
 
-# Minimal parity: cheap repo guard + fg-fast once
 pr-check: pr-check-verify-targets
 	@$(MAKE) -s paste-garbage
 	@$(MAKE) -s pr-check-fast
@@ -861,3 +916,7 @@ pr-check-all: pr-check
 
 pr-check-ci: pr-check-all
 	@echo "✅ pr-check-ci: PASS"
+
+.PHONY: codex-check
+codex-check: venv
+	@$(MAKE) -s pr-check
