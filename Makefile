@@ -306,6 +306,7 @@ dos-hardening-check: _require-venv
 # =============================================================================
 
 .PHONY: gap-audit release-gate generate-scorecard \
+	prod-unsafe-config-check audit-chain-verify \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate
@@ -386,6 +387,13 @@ bp-d-000-gate: venv
 	@$(PY_CONTRACT) scripts/verify_bp_d_000.py
 	@echo "bp-d-000-gate: OK"
 
+
+.PHONY: prod-unsafe-config-check
+prod-unsafe-config-check: venv
+	@$(PY) tools/ci/check_prod_unsafe_config.py
+audit-chain-verify: venv
+	@$(PY) scripts/verify_audit_chain.py
+
 gap-audit: venv
 	@FG_ENV=prod PYTHONPATH=scripts $(PY_CONTRACT) scripts/gap_audit.py
 
@@ -427,7 +435,7 @@ test-unit: venv
 # =============================================================================
 
 .PHONY: fg-fast
-fg-fast: venv fg-audit-make fg-contract fg-compile opa-check prod-profile-check dos-hardening-check gap-audit \
+fg-fast: venv fg-audit-make fg-contract fg-compile opa-check prod-profile-check prod-unsafe-config-check audit-chain-verify dos-hardening-check gap-audit \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate \
@@ -885,7 +893,7 @@ pr-check-contract:
 	@echo "pr-check-contract: OK"
 
 pr-check-prod: venv
-	@$(MAKE) -s opa-check prod-profile-check dos-hardening-check gap-audit
+	@$(MAKE) -s opa-check prod-profile-check prod-unsafe-config-check audit-chain-verify dos-hardening-check gap-audit
 	@echo "pr-check-prod: OK"
 
 PR_CHECK_REQUIRED_TARGETS := \

@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import os
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.openapi_canonical import parse_openapi_text, render_openapi  # noqa: E402
 
 GATE_ID = "BP-C-002"
 INVARIANT = "The committed OpenAPI contracts MUST be byte-for-byte identical to the contracts generated under a locked prod-spec environment."
@@ -19,6 +27,10 @@ REQUIRED_FILES = (
     Path("schemas/api/openapi.json"),
     Path("Makefile"),
 )
+CONTRACT_FILES = (
+    Path("contracts/core/openapi.json"),
+    Path("schemas/api/openapi.json"),
+)
 
 
 def _utc_now() -> str:
@@ -27,8 +39,12 @@ def _utc_now() -> str:
     )
 
 
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+def _sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _canonical_text(path: Path) -> str:
+    return render_openapi(parse_openapi_text(path.read_text(encoding="utf-8")))
 
 
 def _load_align_map(path: Path) -> dict[str, str]:
@@ -82,9 +98,9 @@ def main() -> int:
         _write_report(False, errors, notes)
         return 1
 
+    committed_canonical = {p.as_posix(): _canonical_text(p) for p in CONTRACT_FILES}
     committed_hashes = {
-        "contracts/core/openapi.json": _sha256(Path("contracts/core/openapi.json")),
-        "schemas/api/openapi.json": _sha256(Path("schemas/api/openapi.json")),
+        p: _sha256_text(text) for p, text in committed_canonical.items()
     }
 
     env = os.environ.copy()
@@ -115,31 +131,29 @@ def main() -> int:
         _write_report(False, errors, notes)
         return 1
 
+    regenerated_canonical = {p.as_posix(): _canonical_text(p) for p in CONTRACT_FILES}
     regenerated_hashes = {
-        "contracts/core/openapi.json": _sha256(Path("contracts/core/openapi.json")),
-        "schemas/api/openapi.json": _sha256(Path("schemas/api/openapi.json")),
+        p: _sha256_text(text) for p, text in regenerated_canonical.items()
     }
     notes.append(f"committed_hashes={committed_hashes}")
     notes.append(f"regenerated_hashes={regenerated_hashes}")
 
-    diff = subprocess.run(
-        [
-            "git",
-            "diff",
-            "--exit-code",
-            "--",
-            "contracts/core/openapi.json",
-            "schemas/api/openapi.json",
-        ],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if diff.returncode != 0:
-        errors.append("openapi drift detected after canonical regeneration")
-        diff_summary = (diff.stdout + "\n" + diff.stderr).strip()
-        if diff_summary:
-            notes.append(f"diff_summary={diff_summary}")
+    for path in CONTRACT_FILES:
+        key = path.as_posix()
+        if committed_canonical[key] != regenerated_canonical[key]:
+            errors.append("openapi drift detected after canonical regeneration")
+            diff = "\n".join(
+                difflib.unified_diff(
+                    committed_canonical[key].splitlines(),
+                    regenerated_canonical[key].splitlines(),
+                    fromfile=f"committed:{key}",
+                    tofile=f"regenerated:{key}",
+                    lineterm="",
+                )
+            )
+            if diff:
+                notes.append(f"diff_summary_{key}={diff}")
+            break
 
     passed = not errors
     _write_report(passed, errors, notes)

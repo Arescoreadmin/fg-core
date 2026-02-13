@@ -21,6 +21,9 @@ env:
   FG_ENV: "prod"
   LOG_INDEXER_URL: "http://loki:3100"
   PQ_FALLBACK_HEADER: "x-pq-fallback"
+  FG_DB_URL: "postgresql+psycopg://fg_app:change_me@postgres:5432/frostgate"
+  FG_AUTH_ALLOW_FALLBACK: "false"
+  FG_RL_FAIL_OPEN: "false"
 
 podAnnotations: {}
 

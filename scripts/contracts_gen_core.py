@@ -5,10 +5,12 @@ from __future__ import annotations
 # Core OpenAPI contract generation (NO admin routes)
 # =============================================================================
 
-import json
-import os
+from dataclasses import dataclass
+import warnings
 from pathlib import Path
 from typing import Any, Dict
+
+from scripts.openapi_canonical import normalize_openapi, render_openapi
 
 CORE_OUTPUT_PATH = Path("contracts/core/openapi.json")
 SCHEMA_OPENAPI_MIRROR_PATH = Path("schemas/api/openapi.json")
@@ -21,19 +23,6 @@ HEALTH_SCHEMA_REF = "schemas/api/health.schema.json"
 # -----------------------
 # Rendering / normalization
 # -----------------------
-
-
-def _render_openapi(payload: Dict[str, Any]) -> str:
-    """
-    Canonical JSON rendering for OpenAPI artifacts.
-    Must be deterministic for diff-based contract checks.
-    """
-    return json.dumps(payload, indent=2, sort_keys=True) + "\n"
-
-
-# Back-compat: contracts_diff_core imports render_openapi
-def render_openapi(payload: Dict[str, Any]) -> str:
-    return _render_openapi(payload)
 
 
 # -----------------------
@@ -111,49 +100,36 @@ def _inject_schema_refs(openapi: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # -----------------------
-# Environment freeze
-# -----------------------
-
-
-def _freeze_contract_env() -> None:
-    os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
-    os.environ["FG_CONTRACT_SPEC"] = "prod"
-    os.environ["FG_ENV"] = "prod"
-    os.environ["FG_ADMIN_ENABLED"] = "0"
-    os.environ.setdefault("FG_DEV_EVENTS_ENABLED", "0")
-    os.environ.setdefault("FG_AUTH_ENABLED", "1")
-    os.environ.setdefault("FG_UI_ENABLED", "0")
-    os.environ.setdefault("FG_UI_TOKEN_GET_ENABLED", "0")
-    os.environ.setdefault("FG_FORENSICS_ENABLED", "0")
-    os.environ.setdefault("FG_GOVERNANCE_ENABLED", "1")
-    os.environ.setdefault("FG_MISSION_ENVELOPE_ENABLED", "1")
-    os.environ.setdefault("FG_RING_ROUTER_ENABLED", "1")
-    os.environ.setdefault("FG_ROE_ENGINE_ENABLED", "1")
-
-
-# -----------------------
 # Generation
 # -----------------------
 
 
-def generate_openapi() -> Dict[str, Any]:
-    _freeze_contract_env()
+@dataclass(frozen=True)
+class ContractSettings:
+    title: str = "frostgate-core"
+    version: str = "0.8.0"
+    servers: tuple[dict[str, str], ...] = ()
 
-    from api.main import build_app  # delayed import by design
 
-    app = build_app(auth_enabled=True)
-    openapi = app.openapi()
+def generate_openapi(settings: ContractSettings | None = None) -> Dict[str, Any]:
+    from api.main import build_contract_app  # delayed import by design
+
+    effective = settings or ContractSettings()
+    app = build_contract_app(settings=effective)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
+        openapi = normalize_openapi(app.openapi())
 
     openapi = _filter_admin_paths(openapi)
     openapi = _inject_schema_refs(openapi)
     _assert_no_admin_leak(openapi)
 
-    return openapi
+    return normalize_openapi(openapi)
 
 
 def main() -> None:
     spec = generate_openapi()
-    rendered = _render_openapi(spec)
+    rendered = render_openapi(spec)
 
     CORE_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     SCHEMA_OPENAPI_MIRROR_PATH.parent.mkdir(parents=True, exist_ok=True)

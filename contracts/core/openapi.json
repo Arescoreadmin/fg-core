@@ -2331,25 +2331,6 @@
   },
   "openapi": "3.1.0",
   "paths": {
-    "/_debug/routes": {
-      "get": {
-        "operationId": "debug_routes__debug_routes_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "title": "Response Debug Routes  Debug Routes Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Debug Routes"
-      }
-    },
     "/approvals": {
       "post": {
         "operationId": "create_approval_approvals_post",
@@ -4013,28 +3994,8 @@
         "summary": "Health"
       }
     },
-    "/health/detailed": {
-      "get": {
-        "operationId": "health_detailed_health_detailed_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "title": "Response Health Detailed Health Detailed Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Health Detailed"
-      }
-    },
     "/health/live": {
       "get": {
-        "description": "Kubernetes liveness probe - is the service running?",
         "operationId": "health_live_health_live_get",
         "responses": {
           "200": {
@@ -4054,7 +4015,6 @@
     },
     "/health/ready": {
       "get": {
-        "description": "Kubernetes readiness probe - can the service handle traffic?",
         "operationId": "health_ready_health_ready_get",
         "responses": {
           "200": {
@@ -5198,25 +5158,6 @@
         ]
       }
     },
-    "/stats/debug": {
-      "get": {
-        "operationId": "stats_debug_stats_debug_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "title": "Response Stats Debug Stats Debug Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Stats Debug"
-      }
-    },
     "/stats/summary": {
       "get": {
         "description": "Marketing-friendly summary payload for dashboard headers.\nBuilt from the same underlying computation to avoid drift.",
@@ -5281,127 +5222,6 @@
         "tags": [
           "stats"
         ]
-      }
-    },
-    "/status": {
-      "get": {
-        "operationId": "status_status_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "title": "Response Status Status Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Status"
-      }
-    },
-    "/v1/defend": {
-      "post": {
-        "operationId": "defend_v1_defend_post",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "_",
-            "required": false,
-            "schema": {
-              "title": " "
-            }
-          },
-          {
-            "in": "query",
-            "name": "sqlite_path",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Sqlite Path"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-API-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TelemetryInput"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DefendResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Defend",
-        "tags": [
-          "defend"
-        ]
-      }
-    },
-    "/v1/status": {
-      "get": {
-        "operationId": "v1_status_v1_status_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "title": "Response V1 Status V1 Status Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "V1 Status"
       }
     }
   }
