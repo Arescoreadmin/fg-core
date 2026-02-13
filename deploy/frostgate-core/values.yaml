@@ -62,7 +62,7 @@ affinity: {}
 
 env:
   # Non-sensitive config pushed via ConfigMap
-  FROSTGATE_ENV: "prod"
+  FG_ENV: "prod"
   FROSTGATE_ENFORCEMENT_MODE: "enforce"  # or "observe"
   FROSTGATE_LOG_LEVEL: "INFO"
 
