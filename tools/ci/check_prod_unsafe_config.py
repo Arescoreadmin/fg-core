@@ -13,6 +13,11 @@ UNSAFE_TRUE_FLAGS = (
     "fg_auth_db_fail_open",
     "fg_auth_allow_fallback",
     "fg_rl_fail_open",
+    "fg_contract_gen_context",
+)
+
+FORBIDDEN_MARKERS = (
+    "contract generation context detected: allowing missing oidc configuration",
 )
 
 
@@ -21,7 +26,11 @@ def _normalize(text: str) -> str:
 
 
 def _has_unsafe_true(body: str, key: str) -> bool:
-    return f"{key}: true" in body or f"{key}:-true" in body
+    return (
+        f"{key}: true" in body
+        or f"{key}: \"true\"" in body
+        or f"{key}:-true" in body
+    )
 
 
 def main() -> int:
@@ -34,6 +43,10 @@ def main() -> int:
         for key in UNSAFE_TRUE_FLAGS:
             if _has_unsafe_true(body, key):
                 failures.append(f"{path}: {key}=true is forbidden")
+
+        for marker in FORBIDDEN_MARKERS:
+            if marker in body:
+                failures.append(f"{path}: forbidden marker present: {marker}")
 
         if "fg_env: \"prod\"" in body or "fg_env: prod" in body or path.name == "docker-compose.yml":
             if "fg_db_url" not in body:
