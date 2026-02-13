@@ -77,7 +77,6 @@ def build_app_factory(
             # pin auth behavior
             "FG_AUTH_ENABLED": "1" if auth_enabled else "0",
             "FG_API_KEY": api_key,
-
             # dev routes mount + seeding behavior
             "FG_DEV_EVENTS_ENABLED": "1" if dev_events_enabled else "0",
         }
@@ -92,6 +91,7 @@ def build_app_factory(
 
         with _temp_environ(env):
             import api.main as main
+
             importlib.reload(main)
             return main.build_app(auth_enabled)
 

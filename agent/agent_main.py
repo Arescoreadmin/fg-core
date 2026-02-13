@@ -35,6 +35,7 @@ AGENT_KEY = os.getenv("FG_AGENT_KEY", "")
 # Models
 # -----------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class TelemetryEvent:
     source: str
@@ -56,11 +57,19 @@ class TelemetryEvent:
 # Deterministic ID
 # -----------------------------------------------------------------------------
 
+
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
-def deterministic_event_id(source: str, tenant_id: str, timestamp_iso: str, payload: Dict[str, Any]) -> str:
+def deterministic_event_id(
+    source: str, tenant_id: str, timestamp_iso: str, payload: Dict[str, Any]
+) -> str:
     """
     Must match server-side logic: stable, predictable, content-addressed.
     """
@@ -73,6 +82,7 @@ def deterministic_event_id(source: str, tenant_id: str, timestamp_iso: str, payl
 # Disk Queue (atomic)
 # -----------------------------------------------------------------------------
 
+
 class DiskQueue:
     """
     Queue layout:
@@ -84,6 +94,7 @@ class DiskQueue:
         dead/
           <event_id>.<nonce>.json
     """
+
     def __init__(self, root: str) -> None:
         self.root = pathlib.Path(root)
         self.pending = self.root / "pending"
@@ -106,7 +117,9 @@ class DiskQueue:
             "payload": ev.payload,
         }
 
-        tmp.write_text(json.dumps(data, separators=(",", ":"), sort_keys=True), encoding="utf-8")
+        tmp.write_text(
+            json.dumps(data, separators=(",", ":"), sort_keys=True), encoding="utf-8"
+        )
         tmp.replace(final)  # atomic on same filesystem
         return final
 
@@ -130,7 +143,10 @@ class DiskQueue:
 # HTTP client (no external deps)
 # -----------------------------------------------------------------------------
 
-def post_json(url: str, api_key: str, payload: Dict[str, Any], timeout_s: int = 10) -> tuple[int, str]:
+
+def post_json(
+    url: str, api_key: str, payload: Dict[str, Any], timeout_s: int = 10
+) -> tuple[int, str]:
     body = json.dumps(payload).encode("utf-8")
     req = urlrequest.Request(
         url=url,
@@ -156,6 +172,7 @@ def post_json(url: str, api_key: str, payload: Dict[str, Any], timeout_s: int = 
 # Collectors (stubs)
 # -----------------------------------------------------------------------------
 
+
 def collect_heartbeat(source: str, tenant_id: str) -> TelemetryEvent:
     ts = _utc_now_iso()
     payload = {
@@ -164,14 +181,19 @@ def collect_heartbeat(source: str, tenant_id: str) -> TelemetryEvent:
         "uptime_s": int(time.time()),
     }
     eid = deterministic_event_id(source, tenant_id, ts, payload)
-    return TelemetryEvent(source=source, tenant_id=tenant_id, timestamp=ts, payload=payload, event_id=eid)
+    return TelemetryEvent(
+        source=source, tenant_id=tenant_id, timestamp=ts, payload=payload, event_id=eid
+    )
 
 
 # -----------------------------------------------------------------------------
 # Agent loops
 # -----------------------------------------------------------------------------
 
-def producer_loop(q: DiskQueue, source: str, tenant_id: str, interval_ms: int = 2000) -> None:
+
+def producer_loop(
+    q: DiskQueue, source: str, tenant_id: str, interval_ms: int = 2000
+) -> None:
     """
     MVP producer: heartbeat every 2s.
     Later: plug in real collectors (process list, auth logs, netflow, etc).
@@ -188,7 +210,9 @@ def sender_loop(q: DiskQueue, core_url: str, api_key: str) -> None:
     Retries on transient failures with capped exponential backoff.
     """
     if not api_key:
-        raise RuntimeError("FG_AGENT_KEY is missing. Export it before running the agent.")
+        raise RuntimeError(
+            "FG_AGENT_KEY is missing. Export it before running the agent."
+        )
 
     ingest_url = f"{core_url}/ingest"
 

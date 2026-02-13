@@ -21,7 +21,9 @@ from typing import Any, Optional
 from loguru import logger
 
 # State directory for artifacts
-STATE_DIR = Path(os.getenv("FG_STATE_DIR", str(Path(__file__).resolve().parents[2] / "state")))
+STATE_DIR = Path(
+    os.getenv("FG_STATE_DIR", str(Path(__file__).resolve().parents[2] / "state"))
+)
 STATE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Artifacts directory
@@ -44,7 +46,9 @@ def sha256_hex(data: str | bytes) -> str:
 
 def canonical_json(obj: Any) -> str:
     """Produce deterministic JSON representation."""
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+    return json.dumps(
+        obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str
+    )
 
 
 @dataclass
@@ -252,7 +256,9 @@ def run_simulation(sim_input: SimulationInput) -> SimulationOutput:
     )
 
     # Run evaluation
-    threat_level, rules_triggered, mitigations, anomaly_score, score = evaluate(telemetry)
+    threat_level, rules_triggered, mitigations, anomaly_score, score = evaluate(
+        telemetry
+    )
 
     # Apply doctrine if specified
     roe_applied = False
@@ -522,18 +528,22 @@ def validate_all(
     for sim_input in inputs:
         output = outputs.get(sim_input.name)
         if not output:
-            failures.append({
-                "name": sim_input.name,
-                "errors": ["No output produced"],
-            })
+            failures.append(
+                {
+                    "name": sim_input.name,
+                    "errors": ["No output produced"],
+                }
+            )
             continue
 
         passed, errors = validate_output(sim_input, output, golden)
         if not passed:
-            failures.append({
-                "name": sim_input.name,
-                "errors": errors,
-            })
+            failures.append(
+                {
+                    "name": sim_input.name,
+                    "errors": errors,
+                }
+            )
             if any("drift" in e.lower() for e in errors):
                 drift_detected = True
 
@@ -566,7 +576,9 @@ async def job(
     Returns:
         Job result dict
     """
-    logger.info(f"sim_validator.job: starting with {len(SIMULATION_INPUTS)} simulations")
+    logger.info(
+        f"sim_validator.job: starting with {len(SIMULATION_INPUTS)} simulations"
+    )
 
     if update_golden:
         # Update mode: run simulations and save as new golden outputs
@@ -600,9 +612,13 @@ async def job(
 
     if not result.passed:
         status["failures"] = result.failures
-        logger.warning(f"sim_validator.job: validation FAILED - {result.failed_count} failures")
+        logger.warning(
+            f"sim_validator.job: validation FAILED - {result.failed_count} failures"
+        )
     else:
-        logger.info(f"sim_validator.job: validation PASSED - {result.passed_count}/{result.total_simulations}")
+        logger.info(
+            f"sim_validator.job: validation PASSED - {result.passed_count}/{result.total_simulations}"
+        )
 
     return status
 

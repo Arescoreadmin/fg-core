@@ -56,7 +56,9 @@ def _load_raw() -> Dict[str, Dict]:
             return {}
         return data
     except Exception as exc:
-        logger.error("tenant_registry_read_error", path=str(REGISTRY_PATH), error=str(exc))
+        logger.error(
+            "tenant_registry_read_error", path=str(REGISTRY_PATH), error=str(exc)
+        )
         return {}
 
 
@@ -72,9 +74,7 @@ def load_registry() -> Dict[str, TenantRecord]:
     out: Dict[str, TenantRecord] = {}
     for tenant_id, payload in raw.items():
         try:
-            out[tenant_id] = TenantRecord.from_dict(
-                {"tenant_id": tenant_id, **payload}
-            )
+            out[tenant_id] = TenantRecord.from_dict({"tenant_id": tenant_id, **payload})
         except Exception as exc:
             logger.error(
                 "tenant_registry_entry_invalid",

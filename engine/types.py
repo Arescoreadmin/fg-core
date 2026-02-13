@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from contracts.engine_types import ClassificationRing, Persona, TelemetryInput
+
+
 class ThreatLevel(str, Enum):
     LOW = "low"
     MEDIUM = "medium"

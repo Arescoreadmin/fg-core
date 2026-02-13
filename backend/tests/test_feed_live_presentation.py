@@ -12,7 +12,16 @@ TEST_TENANT = "test-tenant-presentation"
 
 
 def test_feed_live_presentation_fields_present(tmp_path):
-    old = {k: os.environ.get(k) for k in ["FG_API_KEY", "FG_AUTH_ENABLED", "FG_SQLITE_PATH", "FG_DEV_EVENTS_ENABLED", "FG_RL_ENABLED"]}
+    old = {
+        k: os.environ.get(k)
+        for k in [
+            "FG_API_KEY",
+            "FG_AUTH_ENABLED",
+            "FG_SQLITE_PATH",
+            "FG_DEV_EVENTS_ENABLED",
+            "FG_RL_ENABLED",
+        ]
+    }
     try:
         os.environ["FG_API_KEY"] = API_KEY
         os.environ["FG_AUTH_ENABLED"] = "1"
@@ -25,15 +34,25 @@ def test_feed_live_presentation_fields_present(tmp_path):
 
         app = build_app(auth_enabled=True)
         with TestClient(app) as client:
-            r = client.post(f"/dev/seed?tenant_id={TEST_TENANT}", headers={"x-api-key": API_KEY})
+            r = client.post(
+                f"/dev/seed?tenant_id={TEST_TENANT}", headers={"x-api-key": API_KEY}
+            )
             assert r.status_code == 200, r.text
 
-            r = client.get(f"/feed/live?limit=1&tenant_id={TEST_TENANT}", headers={"x-api-key": API_KEY})
+            r = client.get(
+                f"/feed/live?limit=1&tenant_id={TEST_TENANT}",
+                headers={"x-api-key": API_KEY},
+            )
             assert r.status_code == 200, r.text
             item = r.json()["items"][0]
 
-            assert item.get("severity") in ("info","low","medium","high","critical")
-            assert item.get("action_taken") in ("log_only","blocked","rate_limited","quarantined")
+            assert item.get("severity") in ("info", "low", "medium", "high", "critical")
+            assert item.get("action_taken") in (
+                "log_only",
+                "blocked",
+                "rate_limited",
+                "quarantined",
+            )
             assert isinstance(item.get("score"), (int, float))
             assert 0 <= float(item["score"]) <= 100
             assert isinstance(item.get("confidence"), (int, float))

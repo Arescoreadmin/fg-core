@@ -48,13 +48,19 @@ def _coerce_int(v: Any, default: int = 0) -> int:
 
 def _normalize_event_type(event_type: Any) -> str:
     s = _norm_str(event_type, "unknown").lower()
-    if s in ("auth.brute_force", "auth.bruteforce", "ssh.bruteforce", "bruteforce", "brute_force"):
+    if s in (
+        "auth.brute_force",
+        "auth.bruteforce",
+        "ssh.bruteforce",
+        "bruteforce",
+        "brute_force",
+    ):
         return "auth.bruteforce"
     return s
 
 
 def _extract_payload_and_meta(
-    telemetry: Union[TelemetryInput, Dict[str, Any], Any]
+    telemetry: Union[TelemetryInput, Dict[str, Any], Any],
 ) -> Tuple[Dict[str, Any], str, str, str]:
     payload: Dict[str, Any] = {}
     event_type: Any = "unknown"
@@ -63,15 +69,31 @@ def _extract_payload_and_meta(
 
     if isinstance(telemetry, dict):
         payload_raw = telemetry.get("payload") or telemetry.get("event") or {}
-        payload = payload_raw if isinstance(payload_raw, dict) else _as_dict(payload_raw)
+        payload = (
+            payload_raw if isinstance(payload_raw, dict) else _as_dict(payload_raw)
+        )
         event_type = telemetry.get("event_type") or telemetry.get("type") or "unknown"
         tenant_id = telemetry.get("tenant_id") or telemetry.get("tenant") or "unknown"
         source = telemetry.get("source") or "unknown"
     else:
-        payload_raw = getattr(telemetry, "payload", None) or getattr(telemetry, "event", None) or {}
-        payload = payload_raw if isinstance(payload_raw, dict) else _as_dict(payload_raw)
-        event_type = getattr(telemetry, "event_type", None) or getattr(telemetry, "type", None) or "unknown"
-        tenant_id = getattr(telemetry, "tenant_id", None) or getattr(telemetry, "tenant", None) or "unknown"
+        payload_raw = (
+            getattr(telemetry, "payload", None)
+            or getattr(telemetry, "event", None)
+            or {}
+        )
+        payload = (
+            payload_raw if isinstance(payload_raw, dict) else _as_dict(payload_raw)
+        )
+        event_type = (
+            getattr(telemetry, "event_type", None)
+            or getattr(telemetry, "type", None)
+            or "unknown"
+        )
+        tenant_id = (
+            getattr(telemetry, "tenant_id", None)
+            or getattr(telemetry, "tenant", None)
+            or "unknown"
+        )
         source = getattr(telemetry, "source", None) or "unknown"
 
     # fallback: some send event_type inside payload
@@ -79,7 +101,12 @@ def _extract_payload_and_meta(
     if et in ("unknown", "none", ""):
         event_type = payload.get("event_type") or payload.get("type") or event_type
 
-    return payload, _normalize_event_type(event_type), _norm_str(tenant_id), _norm_str(source)
+    return (
+        payload,
+        _normalize_event_type(event_type),
+        _norm_str(tenant_id),
+        _norm_str(source),
+    )
 
 
 def evaluate_rules(
@@ -127,7 +154,9 @@ def evaluate_rules(
     # robust bruteforce detection:
     # - explicit event_type indicates bruteforce
     # - OR high failed_auths implies bruteforce even if event_type is generic ("auth")
-    is_bruteforce = ("bruteforce" in et) or ("brute_force" in et) or (failed_auths >= 10)
+    is_bruteforce = (
+        ("bruteforce" in et) or ("brute_force" in et) or (failed_auths >= 10)
+    )
 
     # malformed telemetry (declares bruteforce but no count)
     if ("bruteforce" in et or "brute_force" in et) and failed_auths == 0:
@@ -141,8 +170,8 @@ def evaluate_rules(
         threat_level = "high"
         mitigations.append(
             MitigationAction(
-                action="block",          # schema-valid
-                target=str(source_ip),   # keep it string
+                action="block",  # schema-valid
+                target=str(source_ip),  # keep it string
                 reason=f"{failed_auths} failed auth attempts detected",
                 confidence=0.92,
             )

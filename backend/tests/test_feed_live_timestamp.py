@@ -13,7 +13,16 @@ TEST_TENANT = "test-tenant-timestamp"
 
 def test_feed_live_includes_timestamp(tmp_path):
     # isolate env
-    old = {k: os.environ.get(k) for k in ["FG_API_KEY", "FG_AUTH_ENABLED", "FG_SQLITE_PATH", "FG_DEV_EVENTS_ENABLED", "FG_RL_ENABLED"]}
+    old = {
+        k: os.environ.get(k)
+        for k in [
+            "FG_API_KEY",
+            "FG_AUTH_ENABLED",
+            "FG_SQLITE_PATH",
+            "FG_DEV_EVENTS_ENABLED",
+            "FG_RL_ENABLED",
+        ]
+    }
     try:
         os.environ["FG_API_KEY"] = API_KEY
         os.environ["FG_AUTH_ENABLED"] = "1"
@@ -27,10 +36,15 @@ def test_feed_live_includes_timestamp(tmp_path):
         app = build_app(auth_enabled=True)
         with TestClient(app) as client:
             # emit one synthetic event
-            r = client.post(f"/dev/seed?tenant_id={TEST_TENANT}", headers={"x-api-key": API_KEY})
+            r = client.post(
+                f"/dev/seed?tenant_id={TEST_TENANT}", headers={"x-api-key": API_KEY}
+            )
             assert r.status_code == 200, r.text
 
-            r = client.get(f"/feed/live?limit=1&tenant_id={TEST_TENANT}", headers={"x-api-key": API_KEY})
+            r = client.get(
+                f"/feed/live?limit=1&tenant_id={TEST_TENANT}",
+                headers={"x-api-key": API_KEY},
+            )
             assert r.status_code == 200, r.text
             data = r.json()
             assert data.get("items"), f"empty items list from /feed/live: {data}"
