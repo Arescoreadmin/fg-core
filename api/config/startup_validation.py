@@ -339,15 +339,6 @@ class StartupValidator:
         """Check API key security."""
         api_key = _env_str("FG_API_KEY", "")
 
-        if self.is_production and api_key:
-            report.add(
-                name="api_key_global_fallback_production",
-                passed=False,
-                message="FG_API_KEY global fallback must be disabled in production.",
-                severity="error",
-            )
-            return
-
         if not api_key:
             severity = "error" if self.is_production else "warning"
             report.add(

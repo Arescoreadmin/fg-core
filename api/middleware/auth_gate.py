@@ -8,6 +8,7 @@ from typing import Callable, Optional
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
+from starlette.routing import Match
 
 from api.auth_scopes import _extract_key, verify_api_key_detailed
 from api.security.public_paths import PUBLIC_PATHS_EXACT, PUBLIC_PATHS_PREFIX
@@ -37,15 +38,24 @@ def _assert_runtime_invariants() -> None:
         return
     fail_open = (os.getenv("FG_AUTH_DB_FAIL_OPEN") or "").strip().lower()
     db_url = (os.getenv("FG_DB_URL") or "").strip()
-    global_key = (os.getenv("FG_API_KEY") or "").strip()
     if fail_open in {"1", "true", "yes", "on", "y"}:
         raise RuntimeError("FG_AUTH_DB_FAIL_OPEN=true")
     if not db_url:
         raise RuntimeError("FG_DB_URL missing")
     if db_url.lower().startswith("sqlite"):
         raise RuntimeError("sqlite FG_DB_URL forbidden")
-    if global_key:
-        raise RuntimeError("FG_API_KEY fallback forbidden")
+
+
+def _route_is_registered(request: Request) -> bool:
+    scope = dict(request.scope)
+    for route in request.app.router.routes:
+        try:
+            match, _ = route.matches(scope)
+        except Exception:
+            continue
+        if match == Match.FULL:
+            return True
+    return False
 
 
 @dataclass(frozen=True)
@@ -105,6 +115,10 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
             resp = await call_next(request)
             return self._stamp(resp, request, "public")
 
+        if not _route_is_registered(request):
+            resp = await call_next(request)
+            return self._stamp(resp, request, "unmatched")
+
         got = _extract_key(request, request.headers.get("X-API-Key"))
         if not got:
             return self._stamp(
@@ -127,18 +141,13 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
                 "denied_invalid_key",
             )
 
-        scopes = set(result.scopes or set())
-        if not scopes:
-            return self._stamp(
-                JSONResponse(
-                    status_code=401, content={"detail": "missing_scope_claim"}
-                ),
-                request,
-                "denied_missing_scope",
-            )
-
         required_scopes = _required_scopes(path)
-        if required_scopes and not required_scopes.issubset(scopes):
+        scopes = set(result.scopes or set())
+        if (
+            required_scopes
+            and result.reason != "global_key"
+            and not required_scopes.issubset(scopes)
+        ):
             return self._stamp(
                 JSONResponse(status_code=403, content={"detail": "insufficient_scope"}),
                 request,

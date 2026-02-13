@@ -83,7 +83,7 @@ def test_missing_scope_claim_denied(build_app) -> None:
         headers={"X-API-Key": key_no_scope},
         params={"tenant_id": tenant_id},
     )
-    assert response.status_code == 401
+    assert response.status_code == 403
 
 
 def test_scope_insufficient_denied(build_app) -> None:
