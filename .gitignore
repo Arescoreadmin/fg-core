@@ -165,3 +165,6 @@ supervisor-sidecar/supervisor-sidecar
 !contracts/artifacts/*.json
 !schemas/artifacts/
 !schemas/artifacts/*.json
+# Local caches (Codex / CI / dev)
+.cache/
+
