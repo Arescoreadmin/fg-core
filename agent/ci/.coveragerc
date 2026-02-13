@@ -1,0 +1,5 @@
+[run]
+omit =
+    agent/agent_main.py
+    agent/app/main.py
+    agent/app/core_client.py
