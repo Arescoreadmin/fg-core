@@ -33,7 +33,6 @@ from api.stats import router as stats_router
 from api.attestation import router as attestation_router
 from api.ui import router as ui_router
 from api.ui_dashboards import router as ui_dashboards_router
-from api.public_paths import resolve_public_paths
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
 from api.middleware.request_validation import (
@@ -458,14 +457,10 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     except Exception:
         pass
 
-    public_paths = resolve_public_paths(
-        include_ui_dev_routes=not is_production_env() and ui_enabled()
-    )
-
     app.add_middleware(
         AuthGateMiddleware,
         require_status_auth=require_status_auth,
-        config=AuthGateConfig(public_paths=tuple(public_paths)),
+        config=AuthGateConfig(),
     )
 
     # ---- Routers (core) ----

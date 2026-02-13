@@ -399,6 +399,13 @@ class StartupValidator:
             )
 
         if self.is_production:
+            if _env_bool("FG_AUTH_DB_FAIL_OPEN", False):
+                report.add(
+                    name="auth_db_fail_open_production",
+                    passed=False,
+                    message="FG_AUTH_DB_FAIL_OPEN=true is forbidden in production.",
+                    severity="error",
+                )
             if not db_backend:
                 report.add(
                     name="database_backend_missing",
@@ -421,6 +428,13 @@ class StartupValidator:
                     severity="error",
                 )
                 return
+            if db_url.lower().startswith("sqlite"):
+                report.add(
+                    name="database_production_sqlite_forbidden",
+                    passed=False,
+                    message="SQLite FG_DB_URL is forbidden in production.",
+                    severity="error",
+                )
 
         if db_url:
             if "@" in db_url and "://" in db_url:
