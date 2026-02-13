@@ -12,12 +12,12 @@ def _add_repo_paths() -> None:
 
     # Candidates where the `api/` package might live
     candidates = [
-        repo,                    # ./api
-        repo / "src",            # ./src/api
-        repo / "backend",        # ./backend/api
-        repo / "app",            # ./app/api (some people do this)
-        repo / "server",         # ./server/api
-        repo / "services",       # ./services/* (less likely)
+        repo,  # ./api
+        repo / "src",  # ./src/api
+        repo / "backend",  # ./backend/api
+        repo / "app",  # ./app/api (some people do this)
+        repo / "server",  # ./server/api
+        repo / "services",  # ./services/* (less likely)
     ]
 
     for base in candidates:
@@ -33,7 +33,7 @@ def _add_repo_paths() -> None:
         "Searched for api/ in:\n"
         + "".join(f"  - {p}\n" for p in candidates)
         + "\nFix: put this script next to the repo root that contains api/, "
-          "or add the correct directory to candidates.\n\n"
+        "or add the correct directory to candidates.\n\n"
     )
     sys.exit(1)
 
@@ -53,7 +53,9 @@ def utcnow() -> datetime:
 def main() -> None:
     if len(sys.argv) < 3:
         print("usage: python scripts/create_api_key.py <PREFIX> <scopes_csv> [name]")
-        print('example: python scripts/create_api_key.py ADMIN "decisions:read,defend:write,ingest:write" "Admin key"')
+        print(
+            'example: python scripts/create_api_key.py ADMIN "decisions:read,defend:write,ingest:write" "Admin key"'
+        )
         raise SystemExit(2)
 
     prefix_in = sys.argv[1].strip().upper()

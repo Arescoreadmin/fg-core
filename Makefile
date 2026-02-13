@@ -30,7 +30,13 @@ HOST     ?= 127.0.0.1
 PORT     ?= 8000
 BASE_URL ?= http://$(HOST):$(PORT)
 
+# NOTE:
+# We intentionally *override* FG_ENV per lane:
+# - Contracts + prod profile checks: FG_ENV=prod
+# - Unit tests (pytest): FG_ENV=test
+# This prevents prod-profile routing differences (e.g. /admin/* hidden) from breaking unit tests.
 FG_ENV                  ?= dev
+
 FG_SERVICE              ?= frostgate-core
 FG_AUTH_ENABLED         ?= 1
 FG_API_KEY              ?=
@@ -125,7 +131,11 @@ venv:
 # Guards / audits
 # =============================================================================
 
-.PHONY: guard-scripts fg-audit-make fg-contract fg-compile contracts-gen contracts-core-gen contracts-core-diff artifact-contract-check contract-authority-check check-no-engine-evaluate opa-check verify-spine-modules verify-schemas verify-drift align-score
+.PHONY: guard-scripts fg-audit-make fg-contract fg-compile \
+	contracts-gen contracts-core-gen contracts-core-diff \
+	artifact-contract-check contract-authority-check \
+	check-no-engine-evaluate opa-check verify-spine-modules verify-schemas verify-drift align-score \
+	contracts-gen-prod fg-contract-prod test-unit
 
 guard-scripts:
 	@$(PY_CONTRACT) scripts/guard_no_paste_garbage.py
@@ -164,9 +174,18 @@ align-score:
 fg-audit-make: guard-scripts
 	@$(PY) scripts/audit_make_targets.py
 
+# -----------------------------------------------------------------------------
+# Contracts
+# -----------------------------------------------------------------------------
+
+# Default (honors current FG_ENV). Kept for local dev.
 contracts-gen:
 	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) scripts/contracts_gen.py
 	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) scripts/contracts_gen_core.py
+
+# CI/contract authority mode: ALWAYS generate in prod context.
+contracts-gen-prod:
+	@FG_ENV=prod $(MAKE) -s contracts-gen
 
 contracts-core-gen:
 	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) scripts/contracts_gen_core.py
@@ -180,7 +199,9 @@ artifact-contract-check:
 contract-authority-check:
 	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) scripts/contract_authority_check.py
 
-fg-contract: guard-scripts contracts-gen
+# Contract lint/diff must be deterministic and aligned to prod OpenAPI behavior.
+fg-contract: guard-scripts
+	@FG_ENV=prod $(MAKE) -s contracts-gen
 	@$(PY_CONTRACT) scripts/contract_toolchain_check.py
 	@$(PY_CONTRACT) scripts/contract_lint.py
 	@git diff --exit-code contracts/admin
@@ -188,6 +209,10 @@ fg-contract: guard-scripts contracts-gen
 	@$(PY_CONTRACT) scripts/contract_authority_check.py
 	@$(PY_CONTRACT) scripts/artifact_schema_check.py
 	@echo "Contract diff: OK (admin/core/artifacts)"
+
+# Convenience alias (explicit)
+fg-contract-prod: guard-scripts
+	@FG_ENV=prod $(MAKE) -s fg-contract
 
 fg-compile: guard-scripts
 	@$(PY) -m py_compile api/main.py api/feed.py api/ui.py api/dev_events.py api/auth_scopes/__init__.py
@@ -198,17 +223,20 @@ fg-compile: guard-scripts
 
 .PHONY: prod-profile-check dos-hardening-check
 prod-profile-check:
-	@$(PY_CONTRACT) scripts/prod_profile_check.py
+	@FG_ENV=prod $(PY_CONTRACT) scripts/prod_profile_check.py
 
 dos-hardening-check:
-	@$(PYTEST_ENV) $(PY_CONTRACT) -m pytest -q -p no:unraisableexception tests/test_dos_guard.py
-	@$(PY_CONTRACT) scripts/prod_profile_check.py
+	@FG_ENV=prod $(PYTEST_ENV) $(PY_CONTRACT) -m pytest -q -p no:unraisableexception tests/test_dos_guard.py
+	@FG_ENV=prod $(PY_CONTRACT) scripts/prod_profile_check.py
 
 # =============================================================================
 # Gap Audit (Production Readiness)
 # =============================================================================
 
-.PHONY: gap-audit release-gate generate-scorecard bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate
+.PHONY: gap-audit release-gate generate-scorecard \
+	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
+	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
+	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate
 
 bp-s0-001-gate:
 	@$(PY_CONTRACT) scripts/verify_bp_s0_001.py
@@ -287,13 +315,13 @@ bp-d-000-gate:
 	@echo "bp-d-000-gate: OK"
 
 gap-audit:
-	@PYTHONPATH=scripts $(PY_CONTRACT) scripts/gap_audit.py
+	@FG_ENV=prod PYTHONPATH=scripts $(PY_CONTRACT) scripts/gap_audit.py
 
 release-gate:
-	@PYTHONPATH=scripts $(PY_CONTRACT) scripts/release_gate.py
+	@FG_ENV=prod PYTHONPATH=scripts $(PY_CONTRACT) scripts/release_gate.py
 
 generate-scorecard:
-	@PYTHONPATH=scripts $(PY_CONTRACT) scripts/generate_scorecard.py
+	@FG_ENV=prod PYTHONPATH=scripts $(PY_CONTRACT) scripts/generate_scorecard.py
 
 # =============================================================================
 # Formatting / Lint (ruff)
@@ -322,12 +350,23 @@ fg-lint: fmt-check
 	@$(PY) -m py_compile api/middleware/auth_gate.py
 
 # =============================================================================
+# Unit tests lane (ALWAYS run as FG_ENV=test)
+# =============================================================================
+
+test-unit: venv
+	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q -m "not postgres"
+
+# =============================================================================
 # Fast lane
 # =============================================================================
 
 .PHONY: fg-fast
-fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check dos-hardening-check gap-audit bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate verify-spine-modules verify-schemas verify-drift align-score
-	@$(PYTEST_ENV) $(PY) -m pytest -q -m "not postgres"
+fg-fast: fg-audit-make fg-contract fg-compile opa-check prod-profile-check dos-hardening-check gap-audit \
+	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
+	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
+	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate \
+	verify-spine-modules verify-schemas verify-drift align-score
+	@$(MAKE) -s test-unit
 	@$(MAKE) -s fg-lint
 
 # =============================================================================
@@ -373,7 +412,7 @@ db-postgres-assert:
 	@FG_DB_URL="$(APP_DB_URL)" FG_DB_BACKEND="postgres" $(PY) -m api.db_migrations --backend postgres --assert
 
 db-postgres-test:
-	@FG_DB_URL="$(APP_DB_URL)" FG_DB_BACKEND="postgres" $(PYTEST_ENV) $(PY) -m pytest -q tests/postgres
+	@FG_DB_URL="$(APP_DB_URL)" FG_DB_BACKEND="postgres" FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/postgres
 
 db-postgres-verify: db-postgres-up db-postgres-migrate db-postgres-assert db-postgres-test
 
@@ -423,7 +462,6 @@ test-integration:
 	FG_API_KEY="$${FG_API_KEY:-$(FG_API_KEY)}"; \
 	export BASE_URL FG_SQLITE_PATH FG_API_KEY; \
 	\
-	# Fast fail with a useful message if the API isn't up
 	curl -fsS "$${BASE_URL}/health" >/dev/null || ( \
 		echo "❌ API not reachable at BASE_URL=$${BASE_URL}"; \
 		echo "   Start it with: make itest-up  (or run: make itest-local)"; \
@@ -437,7 +475,6 @@ test-integration:
 		exit 0; \
 	fi; \
 	exit $$rc
-
 
 # =============================================================================
 # ITest harness
@@ -475,14 +512,15 @@ itest-local: itest-down itest-up
 	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(ITEST_DB)" ./scripts/smoke_auth.sh; \
 	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(ITEST_DB)" $(MAKE) -s test-integration
 
-
-
 # =============================================================================
 # CI lanes
 # =============================================================================
 
 .PHONY: ci ci-integration ci-evidence pip-audit
 
+# ci is now deterministic across caller env:
+# - contract/prod checks run in prod profile
+# - unit tests run in test profile
 ci: venv pip-audit fg-fast
 
 ci-integration: venv itest-local
@@ -545,7 +583,7 @@ ci-evidence: venv itest-down itest-up
 
 .PHONY: ci-pt
 ci-pt: venv
-	@$(PYTEST_ENV) $(PY) -m pytest -q tests/test_security_hardening.py tests/test_security_middleware.py
+	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/test_security_hardening.py tests/test_security_middleware.py
 
 # =============================================================================
 # Core Invariant Tests (INV-001 through INV-007)
@@ -555,7 +593,7 @@ ci-pt: venv
 
 test-core-invariants: venv
 	@echo "Running core invariant tests (INV-001 through INV-007)."
-	@$(PYTEST_ENV) $(PY) -m pytest -v tests/test_core_invariants.py tests/test_ui_dashboards.py
+	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -v tests/test_core_invariants.py tests/test_ui_dashboards.py
 
 # Hardening Test Lanes (Day 1-7 hardening plan)
 # =============================================================================
@@ -564,15 +602,15 @@ test-core-invariants: venv
 
 # Day 1: Unified decision pipeline
 test-decision-unified: venv
-	@$(PYTEST_ENV) $(PY) -m pytest -q tests/test_decision_pipeline_unified.py
+	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/test_decision_pipeline_unified.py
 
 # Day 2: Tenant isolation invariants
 test-tenant-isolation: venv
-	@$(PYTEST_ENV) $(PY) -m pytest -q tests/test_tenant_invariant.py tests/test_auth_tenants.py
+	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/test_tenant_invariant.py tests/test_auth_tenants.py
 
 # Day 3: Auth hardening and config fail-fast
 test-auth-hardening: venv
-	@$(PYTEST_ENV) $(PY) -m pytest -q tests/test_auth_hardening.py tests/test_auth.py tests/test_auth_contract.py tests/security/test_evidence_chain_persistence.py tests/security/test_chain_verification_detects_tamper.py tests/security/test_scope_enforcement.py tests/security/test_key_hashing_kdf.py
+	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/test_auth_hardening.py tests/test_auth.py tests/test_auth_contract.py tests/security/test_evidence_chain_persistence.py tests/security/test_chain_verification_detects_tamper.py tests/security/test_scope_enforcement.py tests/security/test_key_hashing_kdf.py
 
 # All hardening tests
 test-hardening-all: test-core-invariants test-decision-unified test-tenant-isolation test-auth-hardening
@@ -663,7 +701,7 @@ admin-venv-check:
 
 admin-dev: admin-venv
 	@echo "Starting admin-gateway on $(AG_BASE_URL)..."
-	@PYTHONPATH=. FG_ENV=dev $(AG_PY) -m uvicorn admin_gateway.main:app --host $(AG_HOST) --port $(AG_PORT) --reload
+	@PYTHONPATH=. FG_ENV=dev $(AG_PY) -m uvicorn admin_gateway.asgi:app --host $(AG_HOST) --port $(AG_PORT) --reload
 
 admin-lint: admin-venv
 	@$(AG_PY) -m ruff check admin_gateway
@@ -725,13 +763,11 @@ console-test: console-deps
 
 ci-console: console-lint console-test
 
-
 guard-no-trash:
 	@bad=$$(git ls-files | grep -E '^(agent_queue/|keys/|secrets/|state/|artifacts/|logs/|CONTEXT_SNAPSHOT\.md|supervisor-sidecar/supervisor-sidecar)' || true); \
 	if [ -n "$$bad" ]; then \
 	  echo "Forbidden tracked paths:"; echo "$$bad"; exit 1; \
 	fi
-
 
 .PHONY: deps-up deps-down
 
@@ -750,17 +786,11 @@ fg-restart:
 	@$(MAKE) -s fg-down || true
 	@$(MAKE) -s fg-up
 
-
-# =============================================================================
-# Test Core Invariants
-# =============================================================================
-
-.PHONY: test-core-invariants
-
 # =============================================================================
 # PR Parity Checks (run locally what PR runs)
 # =============================================================================
 
+.PHONY: test-core-invariants
 .PHONY: pr-check pr-check-all pr-check-ci pr-check-verify-targets
 .PHONY: paste-garbage guard makefile-sanity
 .PHONY: pr-check-fast pr-check-lint pr-check-test pr-check-contract pr-check-prod
@@ -788,9 +818,10 @@ pr-check-lint:
 	@$(MAKE) -s fg-lint
 	@echo "pr-check-lint: OK"
 
+# Always run unit tests with FG_ENV=test regardless of caller env.
 pr-check-test:
 	@test -x "$(PY)" || (echo "❌ venv missing. Run: make venv"; exit 1)
-	@$(PYTEST_ENV) $(PY) -m pytest -q -m "not postgres"
+	@$(MAKE) -s test-unit
 	@echo "pr-check-test: OK"
 
 pr-check-contract:

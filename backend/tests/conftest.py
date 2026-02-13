@@ -7,16 +7,12 @@ from api.db import init_db, reset_engine_cache
 
 @pytest.fixture(scope="session", autouse=True)
 def _test_env_defaults() -> None:
-    os.environ.setdefault(
-        "FG_API_KEY", "ci-test-key-00000000000000000000000000000000"
-    )
+    os.environ.setdefault("FG_API_KEY", "ci-test-key-00000000000000000000000000000000")
     os.environ.setdefault("FG_ENV", "test")
 
 
 def pytest_configure() -> None:
-    os.environ.setdefault(
-        "FG_API_KEY", "ci-test-key-00000000000000000000000000000000"
-    )
+    os.environ.setdefault("FG_API_KEY", "ci-test-key-00000000000000000000000000000000")
     os.environ.setdefault("FG_ENV", "test")
 
 

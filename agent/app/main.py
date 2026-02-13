@@ -41,7 +41,9 @@ def main() -> None:
     source = os.getenv("FG_AGENT_SOURCE", "agent").strip()
     interval = int(os.getenv("FG_AGENT_INTERVAL_SEC", "10").strip())
 
-    client = CoreClient(base_url=base_url, api_key=api_key, tenant_id=tenant_id, source=source)
+    client = CoreClient(
+        base_url=base_url, api_key=api_key, tenant_id=tenant_id, source=source
+    )
 
     log(f"starting; core={base_url} tenant={tenant_id} interval={interval}s")
 

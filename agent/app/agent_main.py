@@ -38,12 +38,19 @@ class AgentConfig:
 
 
 def load_config() -> AgentConfig:
-    core_base_url = (os.getenv("FG_CORE_BASE_URL") or "http://localhost:18080").rstrip("/")
-    agent_key = (os.getenv("FG_AGENT_KEY") or os.getenv("FG_AGENT_API_KEY") or "").strip()
+    core_base_url = (os.getenv("FG_CORE_BASE_URL") or "http://localhost:18080").rstrip(
+        "/"
+    )
+    agent_key = (
+        os.getenv("FG_AGENT_KEY") or os.getenv("FG_AGENT_API_KEY") or ""
+    ).strip()
     tenant_id = (os.getenv("FG_TENANT_ID") or "t1").strip()
     source = (os.getenv("FG_SOURCE") or os.getenv("HOSTNAME") or "agent1").strip()
 
-    queue_path = os.getenv("FG_AGENT_QUEUE_PATH") or str(Path(os.getenv("FG_AGENT_QUEUE_DIR", "/var/lib/frostgate/agent_queue")) / "agent_queue.db")
+    queue_path = os.getenv("FG_AGENT_QUEUE_PATH") or str(
+        Path(os.getenv("FG_AGENT_QUEUE_DIR", "/var/lib/frostgate/agent_queue"))
+        / "agent_queue.db"
+    )
     flush_interval_s = float(os.getenv("FG_AGENT_FLUSH_INTERVAL_SECONDS", "2"))
     batch_size = int(os.getenv("FG_AGENT_BATCH_SIZE", "50"))
     max_queue = int(os.getenv("FG_AGENT_MAX_QUEUE", "50000"))
@@ -51,7 +58,7 @@ def load_config() -> AgentConfig:
     connect_timeout_s = float(os.getenv("FG_AGENT_CONNECT_TIMEOUT_SECONDS", "2"))
     read_timeout_s = float(os.getenv("FG_AGENT_TIMEOUT_SECONDS", "4"))
 
-    heartbeat_enabled = (os.getenv("FG_AGENT_HEARTBEAT", "true").lower() == "true")
+    heartbeat_enabled = os.getenv("FG_AGENT_HEARTBEAT", "true").lower() == "true"
 
     if not agent_key:
         raise RuntimeError("FG_AGENT_KEY (or FG_AGENT_API_KEY) is required")
@@ -86,11 +93,20 @@ def ensure_queue(db_path: str) -> None:
             );
             """
         )
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_queue_next ON queue(next_attempt_at);")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_queue_next ON queue(next_attempt_at);"
+        )
         conn.commit()
 
 
-def deterministic_event_id(tenant_id: str, source: str, event_type: str, subject: str, ts: datetime, features: Dict[str, Any]) -> str:
+def deterministic_event_id(
+    tenant_id: str,
+    source: str,
+    event_type: str,
+    subject: str,
+    ts: datetime,
+    features: Dict[str, Any],
+) -> str:
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=timezone.utc)
     ts = ts.astimezone(timezone.utc)
@@ -116,7 +132,13 @@ def queue_put(db_path: str, payload: Dict[str, Any]) -> bool:
         try:
             conn.execute(
                 "INSERT INTO queue(event_id, created_at, payload, attempts, next_attempt_at) VALUES(?,?,?,?,?)",
-                (event_id, datetime.now(timezone.utc).isoformat(), json.dumps(payload), 0, 0.0),
+                (
+                    event_id,
+                    datetime.now(timezone.utc).isoformat(),
+                    json.dumps(payload),
+                    0,
+                    0.0,
+                ),
             )
             conn.commit()
             return True
@@ -138,7 +160,15 @@ def queue_pop_batch(db_path: str, limit: int) -> list[dict]:
             "SELECT id, event_id, payload, attempts FROM queue WHERE next_attempt_at <= ? ORDER BY id ASC LIMIT ?",
             (now, limit),
         ).fetchall()
-        return [{"id": r[0], "event_id": r[1], "payload": json.loads(r[2]), "attempts": int(r[3])} for r in rows]
+        return [
+            {
+                "id": r[0],
+                "event_id": r[1],
+                "payload": json.loads(r[2]),
+                "attempts": int(r[3]),
+            }
+            for r in rows
+        ]
 
 
 def queue_delete(db_path: str, ids: Iterable[int]) -> None:
@@ -166,9 +196,17 @@ def queue_backoff(db_path: str, ids: Iterable[int], attempts: int) -> None:
         conn.commit()
 
 
-def build_event(cfg: AgentConfig, event_type: str, subject: str, features: Dict[str, Any], raw: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def build_event(
+    cfg: AgentConfig,
+    event_type: str,
+    subject: str,
+    features: Dict[str, Any],
+    raw: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     ts = datetime.now(timezone.utc)
-    eid = deterministic_event_id(cfg.tenant_id, cfg.source, event_type, subject, ts, features)
+    eid = deterministic_event_id(
+        cfg.tenant_id, cfg.source, event_type, subject, ts, features
+    )
     return {
         "event_id": eid,
         "tenant_id": cfg.tenant_id,
@@ -184,7 +222,9 @@ def build_event(cfg: AgentConfig, event_type: str, subject: str, features: Dict[
 def collect_stub(cfg: AgentConfig) -> Iterable[Dict[str, Any]]:
     # Collector stubs: predictable, low-noise.
     if cfg.heartbeat_enabled:
-        yield build_event(cfg, "heartbeat", subject=cfg.source, features={"alive": True, "v": 1})
+        yield build_event(
+            cfg, "heartbeat", subject=cfg.source, features={"alive": True, "v": 1}
+        )
     # Example auth signal stub (disabled by default, enable later via real collectors)
     # yield build_event(cfg, "auth", subject="1.2.3.4", features={"failed_auths": 7, "src_ip": "1.2.3.4"})
 
@@ -222,6 +262,8 @@ def run() -> None:
             else:
                 # Backoff based on max attempts in this batch
                 max_attempts = max(b["attempts"] for b in batch)
-                queue_backoff(cfg.queue_path, [b["id"] for b in batch], max_attempts + 1)
+                queue_backoff(
+                    cfg.queue_path, [b["id"] for b in batch], max_attempts + 1
+                )
 
         time.sleep(cfg.flush_interval_s)

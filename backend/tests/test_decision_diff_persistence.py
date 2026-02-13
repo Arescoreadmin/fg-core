@@ -47,7 +47,11 @@ def test_decision_diff_is_persisted_and_surfaced(tmp_path):
             _post_auth(client, 1)
             _post_auth(client, 10)
 
-            r = client.get("/decisions", params={"limit": 1, "tenant_id": TEST_TENANT}, headers={"x-api-key": API_KEY})
+            r = client.get(
+                "/decisions",
+                params={"limit": 1, "tenant_id": TEST_TENANT},
+                headers={"x-api-key": API_KEY},
+            )
             assert r.status_code == 200, f"/decisions failed {r.status_code}: {r.text}"
             item = r.json()["items"][0]
 
@@ -70,7 +74,9 @@ def test_decision_diff_is_persisted_and_surfaced(tmp_path):
                     if f:
                         fields.add(str(f))
 
-            assert ({"threat_level", "decision", "score"} & fields), f"diff not meaningful: fields={fields}, diff={diff}"
+            assert {"threat_level", "decision", "score"} & fields, (
+                f"diff not meaningful: fields={fields}, diff={diff}"
+            )
     finally:
         for k, v in old.items():
             if v is None:

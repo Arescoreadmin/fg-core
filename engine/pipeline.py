@@ -395,7 +395,14 @@ def _evaluate_rules(inp: PipelineInput) -> tuple:
     score = sum(RULE_SCORES.get(r, 0) for r in rules_triggered)
     threat_level = _threat_from_score(score)
 
-    return threat_level, mitigations, rules_triggered, anomaly_score, ai_adv_score, score
+    return (
+        threat_level,
+        mitigations,
+        rules_triggered,
+        anomaly_score,
+        ai_adv_score,
+        score,
+    )
 
 
 # =============================================================================
@@ -516,13 +523,15 @@ def evaluate(inp: PipelineInput) -> PipelineResult:
 
     # 3. Policy selection + doctrine application
     fingerprint = get_active_policy_fingerprint()
-    filtered_mits, tie_d, roe_applied, disruption_limited, ao_required = _apply_doctrine(
-        inp,
-        threat_level,
-        mitigations,
-        score,
-        policy_id=fingerprint.policy_id,
-        policy_hash=fingerprint.policy_hash,
+    filtered_mits, tie_d, roe_applied, disruption_limited, ao_required = (
+        _apply_doctrine(
+            inp,
+            threat_level,
+            mitigations,
+            score,
+            policy_id=fingerprint.policy_id,
+            policy_hash=fingerprint.policy_hash,
+        )
     )
 
     # 4. Policy decision (OPA)

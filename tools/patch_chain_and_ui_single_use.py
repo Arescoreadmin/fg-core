@@ -7,17 +7,21 @@ ROOT = Path.cwd()
 CHAIN = ROOT / "api" / "evidence_chain.py"
 AUTH = ROOT / "api" / "auth_scopes" / "resolution.py"
 
+
 def die(msg: str) -> None:
     raise SystemExit(msg)
+
 
 def read(p: Path) -> str:
     if not p.exists():
         die(f"missing: {p}")
     return p.read_text(encoding="utf-8")
 
+
 def write(p: Path, s: str) -> None:
     p.write_text(s, encoding="utf-8")
     print(f"OK: wrote {p}")
+
 
 # ---------------------------
 # 1) evidence_chain: ignore non-hex chain hashes (tampered-* etc)
@@ -177,14 +181,23 @@ if m:
         if "return ctx" in block:
             block2 = block.replace("return ctx", inject + "\n        return ctx")
         else:
-            block2 = re.sub(r"\n(\s*return\s+[^\n]+\n)\s*\Z", "\n" + inject + r"\n\1", block, count=1)
+            block2 = re.sub(
+                r"\n(\s*return\s+[^\n]+\n)\s*\Z",
+                "\n" + inject + r"\n\1",
+                block,
+                count=1,
+            )
 
         auth_s = auth_s.replace(block, block2)
         hook_done = True
 
 if not hook_done:
-    print("WARN: Could not confidently patch require_scopes() for UI single-use behavior.")
-    print("      If your auth is elsewhere, you need to call _consume_ui_key_once() after validating key_id,")
+    print(
+        "WARN: Could not confidently patch require_scopes() for UI single-use behavior."
+    )
+    print(
+        "      If your auth is elsewhere, you need to call _consume_ui_key_once() after validating key_id,"
+    )
     print("      and only for request.url.path.startswith('/ui/').")
 else:
     write(AUTH, auth_s)

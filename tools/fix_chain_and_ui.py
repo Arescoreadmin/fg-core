@@ -5,19 +5,23 @@ from pathlib import Path
 
 ROOT = Path.cwd()
 CHAIN = ROOT / "api" / "evidence_chain.py"
-MAIN  = ROOT / "api" / "main.py"
+MAIN = ROOT / "api" / "main.py"
+
 
 def die(msg: str) -> None:
     raise SystemExit(msg)
+
 
 def read(p: Path) -> str:
     if not p.exists():
         die(f"missing file: {p}")
     return p.read_text(encoding="utf-8")
 
+
 def write(p: Path, s: str) -> None:
     p.write_text(s, encoding="utf-8")
     print(f"OK: wrote {p}")
+
 
 # -------------------------
 # 1) Evidence chain: only accept valid sha256 hex as prev_hash
@@ -88,7 +92,7 @@ def _is_sha256_hex(v: object) -> bool:
             "        prev_hash = GENESIS_HASH"
         )
         block2 = block.replace(old_line, guarded, 1)
-        new_s = chain_s[:bm.start(2)] + block2 + chain_s[bm.end(2):]
+        new_s = chain_s[: bm.start(2)] + block2 + chain_s[bm.end(2) :]
 
     write(CHAIN, new_s)
 else:
@@ -105,7 +109,8 @@ if marker_ui not in main_s:
     if "from fastapi import" in main_s and "Request" not in main_s:
         main_s = re.sub(
             r"from fastapi import ([^\n]+)",
-            lambda m: "from fastapi import " + (m.group(1) + ", Request" if "Request" not in m.group(1) else m.group(0)),
+            lambda m: "from fastapi import "
+            + (m.group(1) + ", Request" if "Request" not in m.group(1) else m.group(0)),
             main_s,
             count=1,
         )
@@ -115,7 +120,12 @@ if marker_ui not in main_s:
         if "from starlette.responses import" in main_s:
             main_s = re.sub(
                 r"from starlette\.responses import ([^\n]+)",
-                lambda m: "from starlette.responses import " + (m.group(1) + ", JSONResponse" if "JSONResponse" not in m.group(1) else m.group(0)),
+                lambda m: "from starlette.responses import "
+                + (
+                    m.group(1) + ", JSONResponse"
+                    if "JSONResponse" not in m.group(1)
+                    else m.group(0)
+                ),
                 main_s,
                 count=1,
             )
@@ -141,7 +151,9 @@ if marker_ui not in main_s:
 
     build_block = bm.group(2)
 
-    app_line = re.search(r"^\s*app\s*=\s*FastAPI\([^\n]*\)\s*$", build_block, flags=re.M)
+    app_line = re.search(
+        r"^\s*app\s*=\s*FastAPI\([^\n]*\)\s*$", build_block, flags=re.M
+    )
     if not app_line:
         # Some code uses FastAPI(...) over multiple lines. Find first "app = FastAPI"
         app_line = re.search(r"^\s*app\s*=\s*FastAPI\(", build_block, flags=re.M)
@@ -174,7 +186,7 @@ if marker_ui not in main_s:
     # If app creation spans multiple lines, we still inject after the first line; good enough.
     build_block2 = build_block[:insert_at] + mw + build_block[insert_at:]
 
-    main_s2 = main_s[:bm.start(2)] + build_block2 + main_s[bm.end(2):]
+    main_s2 = main_s[: bm.start(2)] + build_block2 + main_s[bm.end(2) :]
     write(MAIN, main_s2)
 else:
     print("SKIP: ui single-use middleware marker already present")

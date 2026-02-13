@@ -44,4 +44,4 @@ EXPOSE 8080
 
 USER app
 
-CMD ["python", "-m", "uvicorn", "admin_gateway.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["python", "-m", "uvicorn", "admin_gateway.asgi:app", "--host", "0.0.0.0", "--port", "8080"]

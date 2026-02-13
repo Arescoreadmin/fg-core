@@ -5,16 +5,12 @@ Includes OIDC authentication, RBAC, CSRF protection, and audit logging.
 
 PATCH NOTES (2026-02-12):
 - Prevent contract generation from failing due to prod-only OIDC requirements:
-  scripts/contracts_gen.py imports build_app, which triggers app = build_app()
-  and previously failed during config.validate() in prod profile.
-  We now:
-    * Detect "contract generation context"
-    * Filter the specific "OIDC must be configured in production" validation error
-      ONLY in that context
-    * Still fail on all other config validation errors
+  scripts/contracts_gen.py imports build_app, which previously triggered app creation
+  at import-time and could fail during config validation under prod profile.
 - Fix middleware ordering and remove duplicate AuditMiddleware.
 - Make contract generation quiet/deterministic (no CORS warnings in contract ctx).
-- IMPORTANT: In contract-gen context, importing this module must NOT build the app.
+- CRITICAL: This module MUST have no import-time side effects. It MUST NOT create `app`.
+  Runtime app creation is moved to admin_gateway/asgi.py.
 """
 
 from __future__ import annotations
@@ -47,6 +43,10 @@ from admin_gateway.middleware.logging import StructuredLoggingMiddleware
 from admin_gateway.middleware.request_id import RequestIdMiddleware
 from admin_gateway.middleware.session_cookie import SessionCookieMiddleware
 from admin_gateway.routers import admin_router, auth_router, products_router
+from admin_gateway.auth.config import enforce_prod_auth_safety
+
+enforce_prod_auth_safety()
+
 
 # Version info
 SERVICE_NAME = "admin-gateway"
@@ -62,10 +62,7 @@ class LegacyProductCreate(BaseModel):
 
 
 def _is_contract_generation_context() -> bool:
-    """True when generating OpenAPI/contracts and we should not enforce prod runtime requirements.
-
-    This MUST be deterministic across CI.
-    """
+    """True when generating OpenAPI/contracts and we should not enforce prod runtime requirements."""
     v = os.getenv("AG_CONTRACTS_GEN", "")
     if v.strip().lower() in {"1", "true", "yes", "on"}:
         return True
@@ -78,21 +75,15 @@ def _is_contract_generation_context() -> bool:
     ):
         return True
 
-    # Best-effort fallback for tool-driven invocation. Never required for CI correctness.
     try:
         for frame in inspect.stack():
             fn = (frame.filename or "").lower()
             if fn.endswith("contracts_gen.py") or "/contracts_gen.py" in fn:
                 return True
     except Exception:
-        # If inspection fails, do not guess; default to "not contract ctx".
         return False
 
     return False
-
-
-# Single source of truth for this module import.
-_CONTRACT_CTX = _is_contract_generation_context()
 
 
 def _filter_contract_ctx_config_errors(errors: list[str]) -> list[str]:
@@ -112,7 +103,7 @@ def _filter_contract_ctx_config_errors(errors: list[str]) -> list[str]:
 
 
 def build_app() -> FastAPI:
-    contract_ctx = _CONTRACT_CTX
+    contract_ctx = _is_contract_generation_context()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -178,17 +169,15 @@ def build_app() -> FastAPI:
 
     # ---- Middleware ----
     #
-    # IMPORTANT: Starlette executes middleware in REVERSE order of add_middleware().
-    # So we add from INNERMOST -> OUTERMOST to achieve desired request flow:
+    # Starlette executes middleware in REVERSE order of add_middleware().
+    # Add from INNERMOST -> OUTERMOST to get desired request flow:
     #
     #   RequestId -> StructuredLogging -> Session -> SessionCookie -> CSRF
     #     -> Auth -> AuthContext -> Audit -> route
     #
-    # Audit is intentionally AFTER auth context has been established (so it can see identity/tenant),
-    # and it is added ONCE.
     from starlette.middleware.sessions import SessionMiddleware
 
-    # innermost (runs last on request, first on response)
+    # innermost
     app.add_middleware(AuditMiddleware)
     app.add_middleware(AuthContextMiddleware)
     app.add_middleware(AuthMiddleware, auto_csrf=True)
@@ -204,14 +193,13 @@ def build_app() -> FastAPI:
     app.add_middleware(SessionCookieMiddleware)
 
     app.add_middleware(StructuredLoggingMiddleware)
-    app.add_middleware(RequestIdMiddleware)  # outermost (runs first on request)
+    app.add_middleware(RequestIdMiddleware)  # outermost
 
     # ---- CORS ----
     cors_origins_raw = os.getenv("AG_CORS_ORIGINS", "")
 
     if not cors_origins_raw.strip():
         if contract_ctx:
-            # Deterministic + quiet during contract generation.
             cors_origins_raw = "http://localhost:3000,http://localhost:13000"
         else:
             if config.is_prod:
@@ -339,9 +327,5 @@ def build_app() -> FastAPI:
     return app
 
 
-# ------------------------------------------------------------
-# Module-level app: MUST NOT build during contract generation
-# ------------------------------------------------------------
+# IMPORTANT: No import-time app creation. Ever.
 app: Optional[FastAPI] = None
-if not _CONTRACT_CTX:
-    app = build_app()

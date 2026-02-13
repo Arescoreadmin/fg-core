@@ -27,6 +27,7 @@ def test_stats_schema_with_auth():
     assert "avg_latency_ms_24h" in data
     assert "pct_high_medium_24h" in data
 
+
 def test_stats_has_buyer_fields():
     r = client.get("/stats", headers={"X-API-Key": os.environ["FG_API_KEY"]})
     assert r.status_code == 200
