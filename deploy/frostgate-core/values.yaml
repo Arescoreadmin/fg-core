@@ -65,6 +65,9 @@ env:
   FG_ENV: "prod"
   FROSTGATE_ENFORCEMENT_MODE: "enforce"  # or "observe"
   FROSTGATE_LOG_LEVEL: "INFO"
+  FG_DB_URL: "postgresql+psycopg://fg_app:change_me@postgres:5432/frostgate"
+  FG_AUTH_ALLOW_FALLBACK: "false"
+  FG_RL_FAIL_OPEN: "false"
 
   # Add any other non-secret settings here as needed
   # EXAMPLE_EXTRA_CONFIG: "value"

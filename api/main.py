@@ -5,8 +5,9 @@ import logging
 import os
 import uuid
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Protocol
 from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -16,6 +17,7 @@ from fastapi.responses import JSONResponse
 
 from api.config.env import is_production_env, is_strict_env_required, resolve_env
 from api.config.spine_modules import load_spine_modules
+from api.config.prod_invariants import assert_prod_invariants
 from api.config.startup_validation import (
     compliance_module_enabled,
     validate_startup_config,
@@ -53,6 +55,23 @@ API_VERSION = "v1"
 
 ERR_INVALID = "Invalid or missing API key"
 UI_COOKIE_NAME = os.getenv("FG_UI_COOKIE_NAME", "fg_api_key")
+
+
+class ContractSettingsLike(Protocol):
+    title: str
+    version: str
+    servers: tuple[dict[str, str], ...]
+
+
+@dataclass(frozen=True)
+class ContractAppSettings:
+    title: str = "frostgate-core"
+    version: str = APP_VERSION
+    servers: tuple[dict[str, str], ...] = ()
+    service: str = "frostgate-core"
+    env: str = "contract"
+    app_instance_id: str = "contract-build"
+
 
 # Back-compat symbol for tests that patch api.main.get_shutdown_manager
 get_shutdown_manager = None
@@ -200,6 +219,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         app.state.effective_env_source = source
 
         # ---- Startup validation ----
+        assert_prod_invariants()
         is_production = False
         try:
             is_production = is_production_env()
@@ -696,6 +716,58 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             return {"ok": False, "error": f"{e.status_code}: {e.detail}", "routes": []}
         except Exception as e:
             return {"ok": False, "error": f"{type(e).__name__}: {e}", "routes": []}
+
+    return app
+
+
+def build_runtime_app(auth_enabled: Optional[bool] = None) -> FastAPI:
+    return build_app(auth_enabled=auth_enabled)
+
+
+def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
+    cfg = settings or ContractAppSettings()
+    app = FastAPI(
+        title=cfg.title, version=cfg.version, servers=list(cfg.servers), root_path=""
+    )
+    app.state.auth_enabled = True
+    app.state.service = getattr(cfg, "service", "frostgate-core")
+    app.state.env = getattr(cfg, "env", "contract")
+    app.state.app_instance_id = getattr(cfg, "app_instance_id", "contract-build")
+    app.state.app_version = cfg.version
+    app.state.api_version = API_VERSION
+
+    app.include_router(ingest_router)
+    app.include_router(defend_router)
+    app.include_router(feed_router)
+    app.include_router(decisions_router)
+    app.include_router(stats_router)
+    app.include_router(attestation_router)
+    app.include_router(keys_router)
+    app.include_router(forensics_router)
+    if mission_router is not None:
+        app.include_router(mission_router)
+    if ring_router is not None:
+        app.include_router(ring_router)
+    if roe_router is not None:
+        app.include_router(roe_router)
+    if governance_router is not None:
+        app.include_router(governance_router)
+
+    @app.get("/health")
+    async def health() -> dict:
+        return {
+            "status": "ok",
+            "service": app.state.service,
+            "version": app.state.app_version,
+        }
+
+    @app.get("/health/live")
+    async def health_live() -> dict:
+        return {"status": "live"}
+
+    @app.get("/health/ready")
+    async def health_ready() -> dict:
+        return {"status": "ready", "dependencies": {"db": "contract"}}
 
     return app
 

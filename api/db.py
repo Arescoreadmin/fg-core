@@ -170,6 +170,16 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             _sqlite_add_column_if_missing(conn, "api_keys", "hash_alg", "TEXT")
             _sqlite_add_column_if_missing(conn, "api_keys", "hash_params", "TEXT")
             _sqlite_add_column_if_missing(conn, "api_keys", "key_lookup", "TEXT")
+        if "security_audit_log" in tables:
+            _sqlite_add_column_if_missing(
+                conn, "security_audit_log", "chain_id", "TEXT DEFAULT 'global'"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "security_audit_log", "prev_hash", "TEXT DEFAULT 'GENESIS'"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "security_audit_log", "entry_hash", "TEXT"
+            )
 
 
 # ---------------------------------------------------------------------

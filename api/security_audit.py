@@ -10,6 +10,8 @@ Production-grade security event logging for SaaS compliance:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 import time
@@ -21,6 +23,36 @@ from typing import Any, Optional
 from fastapi import Request
 
 log = logging.getLogger("frostgate.security")
+
+
+_TRUE = {"1", "true", "yes", "y", "on"}
+
+
+class AuditPersistenceError(RuntimeError):
+    def __init__(self, code: str, message: str):
+        super().__init__(f"{code}:{message}")
+        self.code = code
+        self.message = message
+
+
+def _is_prod_like() -> bool:
+    return (os.getenv("FG_ENV") or "").strip().lower() in {
+        "prod",
+        "production",
+        "staging",
+    }
+
+
+def _canonical_event_payload(record: dict[str, Any]) -> bytes:
+    return json.dumps(
+        record, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+
+
+def _compute_entry_hash(prev_hash: str, record: dict[str, Any]) -> str:
+    return hashlib.sha256(
+        prev_hash.encode("utf-8") + b"|" + _canonical_event_payload(record)
+    ).hexdigest()
 
 
 class EventType(str, Enum):
@@ -177,14 +209,44 @@ class SecurityAuditor:
 
             engine = get_engine()
             with Session(engine) as session:
-                record = SecurityAuditLog(
-                    event_type=event.event_type.value
+                tenant_id = event.tenant_id or "global"
+                prev = (
+                    session.query(SecurityAuditLog)
+                    .filter(SecurityAuditLog.chain_id == tenant_id)
+                    .order_by(SecurityAuditLog.id.desc())
+                    .limit(1)
+                    .one_or_none()
+                )
+                prev_hash = prev.entry_hash if prev is not None else "GENESIS"
+                ts = datetime.fromtimestamp(
+                    event.timestamp or int(time.time()), tz=timezone.utc
+                )
+                payload = {
+                    "event_type": event.event_type.value
                     if isinstance(event.event_type, EventType)
                     else event.event_type,
-                    event_category="security",
-                    severity=event.severity.value
+                    "success": event.success,
+                    "severity": event.severity.value
                     if isinstance(event.severity, Severity)
                     else event.severity,
+                    "tenant_id": event.tenant_id,
+                    "key_prefix": event.key_prefix[:16] if event.key_prefix else None,
+                    "client_ip": event.client_ip,
+                    "user_agent": event.user_agent[:512] if event.user_agent else None,
+                    "request_id": event.request_id,
+                    "request_path": event.request_path,
+                    "request_method": event.request_method,
+                    "reason": event.reason,
+                    "details": event.details if event.details else {},
+                    "timestamp": int(ts.timestamp()),
+                    "timestamp_iso": ts.isoformat(),
+                }
+                entry_hash = _compute_entry_hash(prev_hash, payload)
+
+                record = SecurityAuditLog(
+                    event_type=payload["event_type"],
+                    event_category="security",
+                    severity=payload["severity"],
                     tenant_id=event.tenant_id,
                     key_prefix=event.key_prefix[:16] if event.key_prefix else None,
                     client_ip=event.client_ip,
@@ -195,11 +257,18 @@ class SecurityAuditor:
                     success=event.success,
                     reason=event.reason,
                     details_json=event.details if event.details else None,
+                    created_at=ts,
+                    chain_id=tenant_id,
+                    prev_hash=prev_hash,
+                    entry_hash=entry_hash,
                 )
                 session.add(record)
                 session.commit()
         except Exception as e:
-            # Don't fail on audit logging errors
+            if _is_prod_like():
+                raise AuditPersistenceError(
+                    "FG-AUDIT-001", f"audit persistence failed: {e}"
+                ) from e
             log.debug(f"Failed to persist audit event: {e}")
 
     def log_auth_success(
@@ -419,6 +488,52 @@ class SecurityAuditor:
             "request_path": str(request.url.path) if request.url else None,
             "request_method": request.method,
         }
+
+
+def verify_audit_chain(tenant_id: str | None = None) -> dict[str, Any]:
+    from api.db import get_engine
+    from api.db_models import SecurityAuditLog
+    from sqlalchemy.orm import Session
+
+    engine = get_engine()
+    chain = tenant_id or "global"
+    with Session(engine) as session:
+        rows = (
+            session.query(SecurityAuditLog)
+            .filter(SecurityAuditLog.chain_id == chain)
+            .order_by(SecurityAuditLog.id.asc())
+            .all()
+        )
+
+    expected_prev = "GENESIS"
+    for row in rows:
+        if row.prev_hash != expected_prev:
+            return {"ok": False, "reason": "prev_hash_mismatch", "bad_id": row.id}
+        row_ts = row.created_at
+        if row_ts is not None and row_ts.tzinfo is None:
+            row_ts = row_ts.replace(tzinfo=timezone.utc)
+        payload = {
+            "event_type": row.event_type,
+            "success": row.success,
+            "severity": row.severity,
+            "tenant_id": row.tenant_id,
+            "key_prefix": row.key_prefix,
+            "client_ip": row.client_ip,
+            "user_agent": row.user_agent,
+            "request_id": row.request_id,
+            "request_path": row.request_path,
+            "request_method": row.request_method,
+            "reason": row.reason,
+            "details": row.details_json or {},
+            "timestamp": int(row_ts.timestamp()) if row_ts else 0,
+            "timestamp_iso": row_ts.isoformat() if row_ts else None,
+        }
+        expected_hash = _compute_entry_hash(expected_prev, payload)
+        if row.entry_hash != expected_hash:
+            return {"ok": False, "reason": "entry_hash_mismatch", "bad_id": row.id}
+        expected_prev = expected_hash
+
+    return {"ok": True, "reason": "", "checked": len(rows)}
 
 
 # Global auditor instance

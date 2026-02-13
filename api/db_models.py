@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import Column, String, text
@@ -96,6 +98,11 @@ class SecurityAuditLog(Base):
     """
 
     __tablename__ = "security_audit_log"
+    __table_args__ = (
+        UniqueConstraint(
+            "chain_id", "entry_hash", name="uq_security_audit_chain_entry"
+        ),
+    )
 
     id = Column(Integer, primary_key=True)
     created_at = Column(
@@ -127,6 +134,18 @@ class SecurityAuditLog(Base):
     success = Column(Boolean, nullable=False, default=True)
     reason = Column(String(256), nullable=True)
     details_json = Column(JSON, nullable=True)
+
+    chain_id = Column(
+        String(128),
+        nullable=False,
+        default="global",
+        server_default=text("'global'"),
+        index=True,
+    )
+    prev_hash = Column(
+        String(64), nullable=False, default="GENESIS", server_default=text("'GENESIS'")
+    )
+    entry_hash = Column(String(64), nullable=False, unique=True, index=True)
 
 
 class DecisionRecord(Base):
@@ -314,3 +333,24 @@ class PolicyChangeRequest(Base):
     approvals_json = Column(JSON, nullable=False, default=list)
     status = Column(String(32), nullable=False, default="pending", index=True)
     deployed_at = Column(DateTime(timezone=True), nullable=True)
+
+
+@event.listens_for(SecurityAuditLog, "before_insert")
+def _security_audit_defaults(mapper, connection, target) -> None:
+    if not getattr(target, "chain_id", None):
+        target.chain_id = target.tenant_id or "global"
+    if not getattr(target, "prev_hash", None):
+        target.prev_hash = "GENESIS"
+    if not getattr(target, "entry_hash", None):
+        payload = {
+            "tenant_id": target.tenant_id,
+            "event_type": target.event_type,
+            "severity": target.severity,
+            "success": bool(target.success),
+            "reason": target.reason,
+            "created_at": target.created_at.isoformat() if target.created_at else None,
+            "nonce": str(uuid.uuid4()),
+        }
+        target.entry_hash = hashlib.sha256(
+            f"{target.prev_hash}|{json.dumps(payload, sort_keys=True)}".encode("utf-8")
+        ).hexdigest()
