@@ -43,6 +43,10 @@ from admin_gateway.middleware.logging import StructuredLoggingMiddleware
 from admin_gateway.middleware.request_id import RequestIdMiddleware
 from admin_gateway.middleware.session_cookie import SessionCookieMiddleware
 from admin_gateway.routers import admin_router, auth_router, products_router
+from admin_gateway.auth.config import enforce_prod_auth_safety
+
+enforce_prod_auth_safety()
+
 
 # Version info
 SERVICE_NAME = "admin-gateway"
