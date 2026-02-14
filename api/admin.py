@@ -13,11 +13,15 @@ Provides administrative endpoints for:
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 import logging
 import os
+import re
 import time
+import uuid
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
@@ -202,6 +206,139 @@ class AuditSearchResponse(BaseModel):
 
     items: List[AuditEvent]
     next_cursor: Optional[str] = None
+
+
+class ConfigMutationRevertResponse(BaseModel):
+    success: bool
+    change_id: str
+    tenant_id: str
+    restored_field: str
+    restored_value: Any
+    already_reverted: bool = False
+
+
+_CHANGE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
+
+
+def _sha256_json(payload: dict[str, Any]) -> str:
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _coerce_tier_value(value: Any) -> str:
+    if value is None:
+        return "free"
+    if hasattr(value, "value"):
+        return str(getattr(value, "value"))
+    return str(value)
+
+
+def _auth_scopes(request: Request) -> set[str]:
+    auth_ctx = getattr(getattr(request, "state", None), "auth", None)
+    return set(getattr(auth_ctx, "scopes", set()) or set())
+
+
+def _allow_admin_write_config_fallback() -> bool:
+    explicit = os.getenv("FG_ADMIN_WRITE_CONFIG_FALLBACK")
+    if explicit is not None:
+        return explicit.strip().lower() in {"1", "true", "yes", "on"}
+
+    env = (os.getenv("FG_ENV") or "").strip().lower()
+    return env not in {"prod", "production", "staging"}
+
+
+def _require_elevated_config_scope(request: Request) -> str:
+    scopes = _auth_scopes(request)
+    if "admin:config" in scopes:
+        return "admin:config"
+    if "admin:write" in scopes and _allow_admin_write_config_fallback():
+        return "admin:write"
+    raise HTTPException(status_code=403, detail="Insufficient scope")
+
+
+def _config_change_dir() -> Path:
+    root = Path(os.getenv("FG_CONFIG_CHANGE_DIR", "artifacts/config_changes")).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    try:
+        root.chmod(0o700)
+    except Exception:
+        pass
+    return root
+
+
+def _sanitize_change_id(change_id: str) -> str:
+    if not _CHANGE_ID_RE.fullmatch(change_id or ""):
+        raise HTTPException(status_code=400, detail="Invalid change id format")
+    return change_id
+
+
+def _state_for_field(*, tracker: Any, tenant_id: str, field: str) -> Any:
+    if field == "custom_quota":
+        return tracker._tenant_custom_quotas.get(tenant_id)
+    if field == "tier":
+        return _coerce_tier_value(tracker._tenant_tiers.get(tenant_id))
+    raise HTTPException(status_code=400, detail="Unsupported config change field")
+
+
+def _record_config_change(
+    *,
+    request: Request,
+    tenant_id: str,
+    field: str,
+    before: Any,
+    after: Any,
+    scope: str,
+) -> dict[str, Any]:
+    created_at = datetime.now(timezone.utc).isoformat()
+    request_id = getattr(getattr(request, "state", None), "request_id", None)
+    change_id = uuid.uuid4().hex
+
+    payload = {
+        "change_id": change_id,
+        "tenant_id": tenant_id,
+        "field": field,
+        "before": before,
+        "after": after,
+        "scope": scope,
+        "timestamp": created_at,
+        "request_id": request_id,
+        "revert_supported": True,
+        "reverted": False,
+    }
+    payload["snapshot_hash"] = _sha256_json(payload)
+
+    out = (_config_change_dir() / f"{change_id}.json").resolve()
+    if out.parent != _config_change_dir():
+        raise HTTPException(status_code=400, detail="Invalid config change path")
+    out.write_text(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")), encoding="utf-8"
+    )
+    try:
+        out.chmod(0o600)
+    except Exception:
+        pass
+    return payload
+
+
+def _load_config_change(change_id: str) -> tuple[Path, dict[str, Any]]:
+    safe_change_id = _sanitize_change_id(change_id)
+    path = (_config_change_dir() / f"{safe_change_id}.json").resolve()
+    if path.parent != _config_change_dir():
+        raise HTTPException(status_code=400, detail="Invalid config change path")
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Config change not found")
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    expected = payload.get("snapshot_hash")
+    body = dict(payload)
+    body.pop("snapshot_hash", None)
+    actual = _sha256_json(body)
+    if not isinstance(expected, str) or expected != actual:
+        raise HTTPException(
+            status_code=409, detail="Config change integrity verification failed"
+        )
+    return path, payload
 
 
 _SENSITIVE_KEYS = {
@@ -418,13 +555,23 @@ async def update_tenant_quota(
             detail="Tenant usage tracking not available",
         )
 
+    scope_used = _require_elevated_config_scope(request)
     tracker = get_usage_tracker()
+    before_quota = tracker._tenant_custom_quotas.get(tenant_id)
     tracker.set_custom_quota(tenant_id, update.quota)
+    change = _record_config_change(
+        request=request,
+        tenant_id=tenant_id,
+        field="custom_quota",
+        before=before_quota,
+        after=update.quota,
+        scope=scope_used,
+    )
     audit_admin_action(
         action="tenant_quota_updated",
         tenant_id=tenant_id,
         request=request,
-        details={"quota": update.quota},
+        details={"quota": update.quota, "config_change": change},
     )
 
     return {
@@ -432,6 +579,7 @@ async def update_tenant_quota(
         "tenant_id": tenant_id,
         "quota": update.quota,
         "message": "Quota updated successfully",
+        "config_change_id": change["change_id"],
     }
 
 
@@ -464,13 +612,23 @@ async def update_tenant_tier(
             f"Valid tiers: {[t.value for t in SubscriptionTier]}",
         )
 
+    scope_used = _require_elevated_config_scope(request)
     tracker = get_usage_tracker()
+    previous_tier = _coerce_tier_value(tracker._tenant_tiers.get(tenant_id))
     tracker.set_tenant_tier(tenant_id, tier)
+    change = _record_config_change(
+        request=request,
+        tenant_id=tenant_id,
+        field="tier",
+        before=previous_tier,
+        after=tier.value,
+        scope=scope_used,
+    )
     audit_admin_action(
         action="tenant_tier_updated",
         tenant_id=tenant_id,
         request=request,
-        details={"tier": tier.value},
+        details={"tier": tier.value, "config_change": change},
     )
 
     return {
@@ -478,6 +636,7 @@ async def update_tenant_tier(
         "tenant_id": tenant_id,
         "tier": tier.value,
         "message": "Tier updated successfully",
+        "config_change_id": change["change_id"],
     }
 
 
@@ -1173,6 +1332,117 @@ async def get_all_usage(
             for tid, record in usage.items()
         },
     }
+
+
+@router.post(
+    "/config/changes/{change_id}/revert",
+    response_model=ConfigMutationRevertResponse,
+    dependencies=[Depends(require_scopes("admin:write"))],
+)
+async def revert_config_change(
+    change_id: str,
+    request: Request,
+) -> ConfigMutationRevertResponse:
+    """Revert a previously recorded config mutation."""
+    _require_elevated_config_scope(request)
+
+    try:
+        from api.tenant_usage import SubscriptionTier, get_usage_tracker
+    except ImportError:
+        raise HTTPException(
+            status_code=501, detail="Tenant usage tracking not available"
+        )
+
+    path, change = _load_config_change(change_id)
+    tenant_id = str(change.get("tenant_id") or "")
+    bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+
+    tracker = get_usage_tracker()
+    field = str(change.get("field") or "")
+
+    if bool(change.get("reverted", False)):
+        return ConfigMutationRevertResponse(
+            success=True,
+            already_reverted=True,
+            change_id=str(change.get("change_id") or change_id),
+            tenant_id=tenant_id,
+            restored_field=field,
+            restored_value=change.get("before"),
+        )
+
+    current = _state_for_field(tracker=tracker, tenant_id=tenant_id, field=field)
+    expected_current = change.get("after")
+    if field == "tier":
+        current = _coerce_tier_value(current)
+        expected_current = _coerce_tier_value(expected_current)
+    if current != expected_current:
+        raise HTTPException(
+            status_code=409,
+            detail="Config has changed since snapshot; revert rejected",
+        )
+
+    restored = change.get("before")
+    if field == "custom_quota":
+        if restored is None:
+            tracker._tenant_custom_quotas.pop(tenant_id, None)
+        else:
+            tracker.set_custom_quota(tenant_id, int(restored))
+    elif field == "tier":
+        fallback = (
+            SubscriptionTier.FREE
+            if restored is None
+            else SubscriptionTier(str(restored).lower())
+        )
+        tracker.set_tenant_tier(tenant_id, fallback)
+        restored = fallback.value
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported config change field")
+
+    new_hash_source = {
+        "tenant_id": tenant_id,
+        "field": field,
+        "value": restored,
+        "at": datetime.now(timezone.utc).isoformat(),
+    }
+    new_hash = _sha256_json(new_hash_source)
+    prev_hash = str(change.get("snapshot_hash") or "")
+
+    change["reverted"] = True
+    change["reverted_at"] = datetime.now(timezone.utc).isoformat()
+    change["reverted_value"] = restored
+    change["revert_prev_hash"] = prev_hash
+    change["revert_new_hash"] = new_hash
+    change["snapshot_hash"] = _sha256_json(
+        {k: v for k, v in change.items() if k != "snapshot_hash"}
+    )
+    path.write_text(
+        json.dumps(change, sort_keys=True, separators=(",", ":")), encoding="utf-8"
+    )
+    try:
+        path.chmod(0o600)
+    except Exception:
+        pass
+
+    audit_admin_action(
+        action="config_revert",
+        tenant_id=tenant_id,
+        request=request,
+        details={
+            "change_id": change_id,
+            "field": field,
+            "restored": restored,
+            "prev_hash": prev_hash,
+            "new_hash": new_hash,
+        },
+    )
+    return ConfigMutationRevertResponse(
+        success=True,
+        already_reverted=False,
+        change_id=change_id,
+        tenant_id=tenant_id,
+        restored_field=field,
+        restored_value=restored,
+    )
 
 
 __all__ = ["router"]
