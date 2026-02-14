@@ -6,8 +6,8 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, String, text
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import Column, Index, String, text
+from sqlalchemy import ForeignKeyConstraint, UniqueConstraint
 from sqlalchemy import JSON, Text
 from sqlalchemy import (
     Boolean,
@@ -148,8 +148,59 @@ class SecurityAuditLog(Base):
     entry_hash = Column(String(64), nullable=False, unique=True, index=True)
 
 
+
+
+class ConfigVersion(Base):
+    __tablename__ = "config_versions"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "config_hash", name="uq_config_versions_tenant_hash"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    config_hash = Column(String(64), nullable=False, index=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+    created_by = Column(String(128), nullable=True)
+    config_json = Column(JSON, nullable=False, server_default=text("'{}'"))
+    config_json_canonical = Column(Text, nullable=False)
+    parent_hash = Column(String(64), nullable=True)
+
+
+class TenantActiveConfig(Base):
+    __tablename__ = "tenant_config_active"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "active_config_hash"],
+            ["config_versions.tenant_id", "config_versions.config_hash"],
+            name="fk_tenant_active_config",
+        ),
+    )
+
+    tenant_id = Column(String(128), primary_key=True)
+    active_config_hash = Column(String(64), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+
+
 class DecisionRecord(Base):
     __tablename__ = "decisions"
+    __table_args__ = (
+        Index("ix_decisions_tenant_config_created", "tenant_id", "config_hash", "created_at"),
+        ForeignKeyConstraint(
+            ["tenant_id", "config_hash"],
+            ["config_versions.tenant_id", "config_versions.config_hash"],
+            name="fk_decisions_config_version",
+        ),
+    )
 
     id = Column(Integer, primary_key=True)
     created_at = Column(
@@ -164,6 +215,13 @@ class DecisionRecord(Base):
     event_id = Column(String, nullable=True)
     event_type = Column(String, nullable=True)
     policy_hash = Column(String(64), nullable=True)
+    config_hash = Column(
+        String(64),
+        nullable=False,
+        index=True,
+        default="legacy_config_hash",
+        server_default=text("'legacy_config_hash'"),
+    )
 
     threat_level = Column(String, nullable=True)
     anomaly_score = Column(Float, nullable=True)

@@ -8,6 +8,7 @@ import sqlite3
 import time
 from typing import Optional
 
+from api.config_versioning import canonicalize_config, hash_config
 from api.db import _resolve_sqlite_path, init_db
 
 from .definitions import DEFAULT_TTL_SECONDS
@@ -20,6 +21,58 @@ from .helpers import (
 )
 
 log = logging.getLogger("frostgate")
+
+
+def _ensure_default_config_for_tenant(sqlite_path: str, tenant_id: Optional[str]) -> None:
+    if not tenant_id:
+        return
+    canonical = canonicalize_config({})
+    config_hash = hash_config(canonical)
+    con = sqlite3.connect(sqlite_path)
+    try:
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS config_versions (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                config_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                created_by TEXT,
+                config_json JSON NOT NULL DEFAULT '{}',
+                config_json_canonical TEXT NOT NULL,
+                parent_hash TEXT,
+                CONSTRAINT uq_config_versions_tenant_hash UNIQUE (tenant_id, config_hash)
+            )
+            """
+        )
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tenant_config_active (
+                tenant_id TEXT PRIMARY KEY,
+                active_config_hash TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+
+        con.execute(
+            """
+            INSERT OR IGNORE INTO config_versions(
+                tenant_id, config_hash, created_by, config_json, config_json_canonical
+            ) VALUES (?, ?, 'mint_key', '{}', ?)
+            """,
+            (tenant_id, config_hash, canonical),
+        )
+        con.execute(
+            """
+            INSERT OR IGNORE INTO tenant_config_active(tenant_id, active_config_hash)
+            VALUES (?, ?)
+            """,
+            (tenant_id, config_hash),
+        )
+        con.commit()
+    finally:
+        con.close()
 
 
 def _update_key_usage(
@@ -163,6 +216,8 @@ def mint_key(
         con.commit()
     finally:
         con.close()
+
+    _ensure_default_config_for_tenant(sqlite_path, tenant_id)
 
     return f"{prefix}.{token}.{secret}"
 

@@ -17,7 +17,9 @@ class IngestResponse(BaseModel):
     source: str
     event_type: str
     decision: Dict[str, Any] = Field(default_factory=dict)
+    config_hash: str
 
     # Optional convenience fields (for UI / search / filtering)
     threat_level: Optional[str] = None
     latency_ms: Optional[int] = None
+    persisted: bool = True

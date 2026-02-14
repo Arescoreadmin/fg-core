@@ -75,6 +75,7 @@ def snapshot(
         "rules_triggered": getattr(rec, "rules_triggered_json", None),
         "request": getattr(rec, "request_json", None),
         "response": getattr(rec, "response_json", None),
+        "config_hash": getattr(rec, "config_hash", None),
     }
 
 
@@ -121,6 +122,7 @@ def audit_trail(
         "reproducible": bool(chain_hash is not None or prev_hash is not None),
         "chain_hash": chain_hash,
         "prev_hash": prev_hash,
+        "config_hash": getattr(rec, "config_hash", None),
     }
 
 

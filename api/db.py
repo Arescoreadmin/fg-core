@@ -181,6 +181,69 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 conn, "security_audit_log", "entry_hash", "TEXT"
             )
 
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS config_versions (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                config_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                created_by TEXT,
+                config_json JSON NOT NULL DEFAULT '{}',
+                config_json_canonical TEXT NOT NULL,
+                parent_hash TEXT,
+                CONSTRAINT uq_config_versions_tenant_hash UNIQUE (tenant_id, config_hash)
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS tenant_config_active (
+                tenant_id TEXT PRIMARY KEY,
+                active_config_hash TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+
+        if "decisions" in tables:
+            _sqlite_add_column_if_missing(conn, "decisions", "config_hash", "TEXT DEFAULT 'legacy_config_hash'")
+
+            tenant_rows = conn.exec_driver_sql(
+                "SELECT DISTINCT tenant_id FROM decisions WHERE tenant_id IS NOT NULL"
+            ).fetchall()
+            for row in tenant_rows:
+                tenant_id = row[0]
+                canonical = '{"legacy":true}'
+                legacy_hash = 'legacy_config_hash'
+                conn.exec_driver_sql(
+                    """
+                    INSERT OR IGNORE INTO config_versions(
+                        tenant_id, config_hash, created_by, config_json, config_json_canonical
+                    ) VALUES (:tenant_id, :config_hash, 'migration', '{"legacy":true}', :canonical)
+                    """,
+                    {"tenant_id": tenant_id, "config_hash": legacy_hash, "canonical": canonical},
+                )
+                conn.exec_driver_sql(
+                    """
+                    UPDATE decisions
+                    SET config_hash = :config_hash
+                    WHERE tenant_id = :tenant_id AND (config_hash IS NULL OR config_hash = '')
+                    """,
+                    {"tenant_id": tenant_id, "config_hash": legacy_hash},
+                )
+                conn.exec_driver_sql(
+                    """
+                    INSERT OR IGNORE INTO tenant_config_active(tenant_id, active_config_hash)
+                    VALUES (:tenant_id, :config_hash)
+                    """,
+                    {"tenant_id": tenant_id, "config_hash": legacy_hash},
+                )
+
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_decisions_tenant_config_created ON decisions(tenant_id, config_hash, created_at)"
+            )
+
 
 # ---------------------------------------------------------------------
 # Public API
