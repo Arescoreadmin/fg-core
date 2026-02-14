@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hmac
 import hashlib
 import json
 import os
@@ -42,6 +43,13 @@ def utc_bucket(ts: datetime, bucket_seconds: int = EVENT_BUCKET_SECONDS) -> str:
     return str(bucket_start)
 
 
+def _event_id_keys() -> tuple[str, str | None, list[str]]:
+    current = os.getenv("FG_EVENT_ID_KEY_CURRENT", "").strip()
+    prev = os.getenv("FG_EVENT_ID_KEY_PREV", "").strip() or None
+    from_list = [v.strip() for v in os.getenv("FG_EVENT_ID_KEYS", "").split(",") if v.strip()]
+    return current, prev, from_list
+
+
 def deterministic_event_id(
     tenant_id: str,
     agent_id: str,
@@ -50,6 +58,10 @@ def deterministic_event_id(
     bucket: str,
     features: dict,
 ) -> str:
+    """Generate deterministic event IDs.
+
+    Migration note: Core should accept both legacy SHA256 IDs and v2 HMAC IDs during cutover.
+    """
     payload = {
         "tenant_id": tenant_id,
         "agent_id": agent_id,
@@ -58,8 +70,26 @@ def deterministic_event_id(
         "bucket": bucket,
         "features": features,
     }
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    mode = os.getenv("FG_EVENT_ID_MODE", "hmac_v2").strip().lower()
+    if mode == "legacy":
+        legacy_canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(legacy_canonical).hexdigest()
+    if mode != "hmac_v2":
+        raise ValueError("FG_EVENT_ID_MODE must be either 'hmac_v2' or 'legacy'")
+
+    payload["canon_v"] = 1
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+    current_key, _prev_key, keys = _event_id_keys()
+    signing_key = current_key or (keys[0] if keys else "")
+    if not signing_key:
+        raise ValueError(
+            "FG_EVENT_ID_MODE=hmac_v2 requires FG_EVENT_ID_KEY_CURRENT (preferred) or FG_EVENT_ID_KEYS"
+        )
+
+    digest = hmac.new(signing_key.encode("utf-8"), canonical, hashlib.sha256).hexdigest()
+    return f"ev2_{digest}"
 
 
 def config_fingerprint(cfg: AgentConfig) -> str:

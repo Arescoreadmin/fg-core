@@ -1,7 +1,5 @@
 from unittest.mock import patch
 
-import requests
-
 from agent.core_client import CoreClient
 
 
@@ -16,8 +14,9 @@ class DummyResp:
         return self._body
 
 
-def test_contract_headers_and_envelope_parsing():
-    client = CoreClient("http://x", "k", "t", "a", "2025-01-01")
+def test_contract_headers_and_envelope_parsing(monkeypatch):
+    monkeypatch.setattr("socket.getaddrinfo", lambda *args, **kwargs: [(2, 1, 6, "", ("8.8.8.8", 0))])
+    client = CoreClient("https://x", "k", "t", "a", "2025-01-01")
 
     def fake_request(method, url, headers=None, **kwargs):
         assert "X-Contract-Version" in headers
@@ -33,7 +32,7 @@ def test_contract_headers_and_envelope_parsing():
             {"Retry-After": "5"},
         )
 
-    with patch.object(requests, "request", side_effect=fake_request):
+    with patch.object(client._session, "request", side_effect=fake_request):
         try:
             client.send_events([])
             assert False
@@ -41,15 +40,16 @@ def test_contract_headers_and_envelope_parsing():
             assert "RATE_LIMITED" in str(exc)
 
 
-def test_request_id_can_be_reused_for_logical_retry():
-    client = CoreClient("http://x", "k", "t", "a", "2025-01-01")
+def test_request_id_can_be_reused_for_logical_retry(monkeypatch):
+    monkeypatch.setattr("socket.getaddrinfo", lambda *args, **kwargs: [(2, 1, 6, "", ("8.8.8.8", 0))])
+    client = CoreClient("https://x", "k", "t", "a", "2025-01-01")
     seen = []
 
     def fake_request(method, url, headers=None, **kwargs):
         seen.append(headers["X-Request-ID"])
         return DummyResp(200, {"ok": True})
 
-    with patch.object(requests, "request", side_effect=fake_request):
+    with patch.object(client._session, "request", side_effect=fake_request):
         client.send_events([], request_id="fixed-request")
         client.send_events([], request_id="fixed-request")
 

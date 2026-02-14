@@ -30,7 +30,9 @@ def test_agent_survives_network_outage(monkeypatch):
     monkeypatch.setenv("FG_TENANT_ID", "t")
     monkeypatch.setenv("FG_AGENT_ID", "a")
     monkeypatch.setenv("FG_CORE_BASE_URL", "http://x")
+    monkeypatch.setenv("FG_ALLOW_INSECURE_HTTP", "1")
     monkeypatch.setenv("FG_AGENT_KEY", "k")
+    monkeypatch.setenv("FG_EVENT_ID_KEY_CURRENT", "test-key")
 
     monkeypatch.setattr(agent_main, "BatchSender", CrashySender)
     monkeypatch.setattr(agent_main, "CommandPoller", lambda: NoopPoller())

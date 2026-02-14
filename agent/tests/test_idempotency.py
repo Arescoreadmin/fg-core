@@ -34,7 +34,8 @@ class RetryReceiptClient:
         return {"ok": True}
 
 
-def test_deterministic_event_id_stable():
+def test_deterministic_event_id_stable(monkeypatch):
+    monkeypatch.setenv("FG_EVENT_ID_MODE", "legacy")
     f = {"alive": True}
     a = deterministic_event_id("t", "a", "heartbeat", "s", "b", f)
     b = deterministic_event_id("t", "a", "heartbeat", "s", "b", {"alive": True})
