@@ -46,7 +46,10 @@ def test_hmac_v2_changes_under_new_key(monkeypatch):
 
 def test_legacy_mode_unchanged(monkeypatch):
     monkeypatch.setenv("FG_EVENT_ID_MODE", "legacy")
-    assert deterministic_event_id("t", "a", "heartbeat", "s", "b", {"alive": True}) == _legacy_expected()
+    assert (
+        deterministic_event_id("t", "a", "heartbeat", "s", "b", {"alive": True})
+        == _legacy_expected()
+    )
 
 
 def test_v2_prefix_format(monkeypatch):

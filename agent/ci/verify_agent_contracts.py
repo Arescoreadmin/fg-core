@@ -11,7 +11,9 @@ from agent.core_client import CoreClient
 
 
 def main() -> None:
-    with patch.object(socket, "getaddrinfo", return_value=[(None, None, None, None, ("8.8.8.8", 0))]):
+    with patch.object(
+        socket, "getaddrinfo", return_value=[(None, None, None, None, ("8.8.8.8", 0))]
+    ):
         client = CoreClient("https://example", "k", "t", "a", "2025-01-01")
     headers = client._headers(request_id="fixed")
     assert "X-Contract-Version" in headers

@@ -2,14 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import hmac
 import hashlib
 import hmac
 import json
 import os
 
 EVENT_BUCKET_SECONDS = 5
-EVENT_ID_CANON_VERSION = "2"
+EVENT_ID_CANON_VERSION = 2  # v2 HMAC canonical payload version
 
 
 @dataclass(frozen=True)
@@ -48,7 +47,9 @@ def utc_bucket(ts: datetime, bucket_seconds: int = EVENT_BUCKET_SECONDS) -> str:
 def _event_id_keys() -> tuple[str, str | None, list[str]]:
     current = os.getenv("FG_EVENT_ID_KEY_CURRENT", "").strip()
     prev = os.getenv("FG_EVENT_ID_KEY_PREV", "").strip() or None
-    from_list = [v.strip() for v in os.getenv("FG_EVENT_ID_KEYS", "").split(",") if v.strip()]
+    from_list = [
+        v.strip() for v in os.getenv("FG_EVENT_ID_KEYS", "").split(",") if v.strip()
+    ]
     return current, prev, from_list
 
 
@@ -64,6 +65,27 @@ def deterministic_event_id(
 
     Migration note: Core should accept both legacy SHA256 IDs and v2 HMAC IDs during cutover.
     """
+    mode = os.getenv("FG_EVENT_ID_MODE", "hmac_v2").strip().lower()
+
+    if mode == "legacy":
+        # Legacy v1: SHA256 of canonical JSON (sorted keys, compact separators), NO canon_v.
+        legacy_payload = {
+            "tenant_id": tenant_id,
+            "agent_id": agent_id,
+            "event_type": event_type,
+            "subject": subject,
+            "bucket": bucket,
+            "features": features,
+        }
+        legacy_bytes = json.dumps(
+            legacy_payload, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        return hashlib.sha256(legacy_bytes).hexdigest()
+
+    if mode != "hmac_v2":
+        raise ValueError("FG_EVENT_ID_MODE must be either 'hmac_v2' or 'legacy'")
+
+    # v2: canonical JSON + HMAC-SHA256, prefixed with ev2_
     payload = {
         "canon_v": EVENT_ID_CANON_VERSION,
         "tenant_id": tenant_id,
@@ -73,16 +95,9 @@ def deterministic_event_id(
         "bucket": bucket,
         "features": features,
     }
-
-    mode = os.getenv("FG_EVENT_ID_MODE", "hmac_v2").strip().lower()
-    if mode == "legacy":
-        legacy_canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        return hashlib.sha256(legacy_canonical).hexdigest()
-    if mode != "hmac_v2":
-        raise ValueError("FG_EVENT_ID_MODE must be either 'hmac_v2' or 'legacy'")
-
-    payload["canon_v"] = 1
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
 
     current_key, _prev_key, keys = _event_id_keys()
     signing_key = current_key or (keys[0] if keys else "")
@@ -91,7 +106,9 @@ def deterministic_event_id(
             "FG_EVENT_ID_MODE=hmac_v2 requires FG_EVENT_ID_KEY_CURRENT (preferred) or FG_EVENT_ID_KEYS"
         )
 
-    digest = hmac.new(signing_key.encode("utf-8"), canonical, hashlib.sha256).hexdigest()
+    digest = hmac.new(
+        signing_key.encode("utf-8"), canonical, hashlib.sha256
+    ).hexdigest()
     return f"ev2_{digest}"
 
 

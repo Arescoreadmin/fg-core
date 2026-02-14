@@ -15,7 +15,9 @@ class DummyResp:
 
 
 def test_contract_headers_and_envelope_parsing(monkeypatch):
-    monkeypatch.setattr("socket.getaddrinfo", lambda *args, **kwargs: [(2, 1, 6, "", ("8.8.8.8", 0))])
+    monkeypatch.setattr(
+        "socket.getaddrinfo", lambda *args, **kwargs: [(2, 1, 6, "", ("8.8.8.8", 0))]
+    )
     client = CoreClient("https://x", "k", "t", "a", "2025-01-01")
 
     def fake_request(method, url, headers=None, **kwargs):
@@ -41,7 +43,9 @@ def test_contract_headers_and_envelope_parsing(monkeypatch):
 
 
 def test_request_id_can_be_reused_for_logical_retry(monkeypatch):
-    monkeypatch.setattr("socket.getaddrinfo", lambda *args, **kwargs: [(2, 1, 6, "", ("8.8.8.8", 0))])
+    monkeypatch.setattr(
+        "socket.getaddrinfo", lambda *args, **kwargs: [(2, 1, 6, "", ("8.8.8.8", 0))]
+    )
     client = CoreClient("https://x", "k", "t", "a", "2025-01-01")
     seen = []
 

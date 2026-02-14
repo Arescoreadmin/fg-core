@@ -18,8 +18,8 @@ class FakeQueue:
     def retry_later(self, ids, next_attempt_at):
         self.retried.append((ids, next_attempt_at))
 
-    def dead_letter(self, ids, reason):
-        self.dead.append((ids, reason))
+    def dead_letter(self, event_id, reason, **kwargs):
+        self.dead.append((event_id, reason))
 
     def dead_letter_count(self):
         return len(self.dead)
@@ -44,7 +44,9 @@ class BadSender:
 
 class AbuseSender:
     def send_events(self, events, request_id=None):
-        raise CoreClientError(429, "ABUSE_CAP_EXCEEDED", "abuse", {}, "r2", retry_after_seconds=1)
+        raise CoreClientError(
+            429, "ABUSE_CAP_EXCEEDED", "abuse", {}, "r2", retry_after_seconds=1
+        )
 
 
 class FatalSender:

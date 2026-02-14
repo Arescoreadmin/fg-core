@@ -20,7 +20,9 @@ def test_terminal_reasons_dead_letter_immediately(tmp_path):
     assert result["status"] == "dead_letter"
     assert queue.size() == 0
     assert queue.dead_count() == 1
-    reason = queue._conn.execute("SELECT reason FROM dead_events WHERE event_id='e1'").fetchone()[0]
+    reason = queue._conn.execute(
+        "SELECT reason FROM dead_events WHERE event_id='e1'"
+    ).fetchone()[0]
     assert reason == "payload_too_large"
 
 
@@ -32,7 +34,9 @@ def test_max_attempts_moves_to_dead_letter(tmp_path):
     queue.retry_later(["e1"], next_attempt_at=0)
     assert queue.size() == 0
     assert queue.dead_count() == 1
-    reason = queue._conn.execute("SELECT reason FROM dead_events WHERE event_id='e1'").fetchone()[0]
+    reason = queue._conn.execute(
+        "SELECT reason FROM dead_events WHERE event_id='e1'"
+    ).fetchone()[0]
     assert reason == "max_attempts_exceeded"
 
 

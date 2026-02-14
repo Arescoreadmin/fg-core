@@ -61,6 +61,8 @@ def test_v2_includes_canonicalization_version(monkeypatch):
         "features": {"ok": True},
         "canon_v": 1,
     }
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
     expected = "ev2_" + hmac.new(b"key1", canonical, hashlib.sha256).hexdigest()
     assert deterministic_event_id(*_args()) == expected

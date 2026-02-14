@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import time
 import uuid
 
@@ -27,22 +28,31 @@ class BatchSender:
 
     @staticmethod
     def _request_id_for_batch(event_ids: list[str]) -> str:
+        # Deterministic: same set of event_ids -> same request_id
         stable = "|".join(sorted(event_ids))
         digest = hashlib.sha256(stable.encode("utf-8")).hexdigest()
         return str(uuid.uuid5(uuid.NAMESPACE_URL, digest))
 
     @staticmethod
     def _terminal_reason(err: CoreClientError) -> str | None:
+        # 413 is always terminal for this payload size
         if err.status_code == 413:
             return "payload_too_large"
         return _TERMINAL_CODE_MAP.get(err.code)
 
     @staticmethod
-    def _retry_delay(event_ids: list[str], attempt: int, retry_after: float | None = None) -> float:
+    def _retry_delay(
+        event_ids: list[str], attempt: int, retry_after: float | None = None
+    ) -> float:
+        # Honor server hint when present, but keep it bounded.
         if retry_after is not None:
             return max(1.0, min(60.0, float(retry_after)))
-        base = min(60.0, max(1.0, float(2**min(6, attempt))))
-        jitter_seed = hashlib.sha256("|".join(sorted(event_ids)).encode("utf-8")).hexdigest()
+
+        # Exponential backoff capped at 60s; deterministic jitter per batch for stability in tests/CI.
+        base = min(60.0, max(1.0, float(2 ** min(6, attempt))))
+        jitter_seed = hashlib.sha256(
+            "|".join(sorted(event_ids)).encode("utf-8")
+        ).hexdigest()
         jitter_unit = int(jitter_seed[:8], 16) / 0xFFFFFFFF
         jitter = 0.25 * jitter_unit
         return min(60.0, base + jitter)
@@ -59,23 +69,37 @@ class BatchSender:
 
         try:
             self.sender.send_events(payload, request_id=request_id)
-            self.queue.ack(event_ids)
-            self.last_success_at = time.time()
-            return {"status": "sent", "sent": len(event_ids), "request_id": request_id}
         except CoreClientError as err:
             terminal_reason = self._terminal_reason(err)
+
             if terminal_reason is not None:
+                now = time.time()
                 for event_id in event_ids:
-                    self.queue.dead_letter(event_id, terminal_reason, last_failed_at=time.time())
+                    self.queue.dead_letter(
+                        event_id, terminal_reason, last_failed_at=now
+                    )
+
                 if terminal_reason == "auth_invalid":
                     logging.error("fatal auth/scope failure")
-                    return {"status": "fatal", "code": err.code}
-                return {"status": "dead_letter", "reason": terminal_reason, "request_id": request_id}
 
+                return {
+                    "status": "dead_letter",
+                    "dead_lettered": len(event_ids),
+                    "reason": terminal_reason,
+                    "request_id": request_id,
+                    "code": err.code,
+                }
+
+            # Non-terminal: schedule retry
             if err.code in {"ABUSE_CAP_EXCEEDED", "PLAN_LIMIT_EXCEEDED"}:
                 delay = max(60.0, float(err.retry_after_seconds or 60.0))
             else:
-                delay = self._retry_delay(event_ids, attempt=max_attempt + 1, retry_after=err.retry_after_seconds)
+                delay = self._retry_delay(
+                    event_ids,
+                    attempt=max_attempt + 1,
+                    retry_after=err.retry_after_seconds,
+                )
+
             self.queue.retry_later(event_ids, time.time() + delay)
             return {
                 "status": "retry",
@@ -83,3 +107,8 @@ class BatchSender:
                 "delay": delay,
                 "request_id": request_id,
             }
+
+        # Success path (kept outside try so we don't ack on exception)
+        self.queue.ack(event_ids)
+        self.last_success_at = time.time()
+        return {"status": "sent", "sent": len(event_ids), "request_id": request_id}
