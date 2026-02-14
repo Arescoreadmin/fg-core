@@ -42,7 +42,14 @@ def utc_bucket(ts: datetime, bucket_seconds: int = EVENT_BUCKET_SECONDS) -> str:
     return str(bucket_start)
 
 
-def deterministic_event_id(tenant_id: str, agent_id: str, event_type: str, subject: str, bucket: str, features: dict) -> str:
+def deterministic_event_id(
+    tenant_id: str,
+    agent_id: str,
+    event_type: str,
+    subject: str,
+    bucket: str,
+    features: dict,
+) -> str:
     payload = {
         "tenant_id": tenant_id,
         "agent_id": agent_id,
@@ -62,4 +69,6 @@ def config_fingerprint(cfg: AgentConfig) -> str:
         "poll_interval_s": cfg.poll_interval_s,
         "queue_max_size": cfg.queue_max_size,
     }
-    return hashlib.sha256(json.dumps(stable, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(
+        json.dumps(stable, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()[:16]

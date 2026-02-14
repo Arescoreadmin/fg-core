@@ -34,7 +34,10 @@ class SQLiteQueue:
             return False
         with sqlite3.connect(self.path) as conn:
             try:
-                conn.execute("INSERT INTO events(event_id,payload) VALUES(?,?)", (event["event_id"], json.dumps(event, sort_keys=True)))
+                conn.execute(
+                    "INSERT INTO events(event_id,payload) VALUES(?,?)",
+                    (event["event_id"], json.dumps(event, sort_keys=True)),
+                )
                 return True
             except sqlite3.IntegrityError:
                 return False
@@ -42,13 +45,24 @@ class SQLiteQueue:
     def due_batch(self, limit: int) -> list[dict]:
         now = time.time()
         with sqlite3.connect(self.path) as conn:
-            rows = conn.execute("SELECT event_id,payload,attempts FROM events WHERE next_attempt_at <= ? ORDER BY created_at LIMIT ?", (now, limit)).fetchall()
-        return [{"event_id": r[0], "payload": json.loads(r[1]), "attempts": r[2]} for r in rows]
+            rows = conn.execute(
+                "SELECT event_id,payload,attempts FROM events WHERE next_attempt_at <= ? ORDER BY created_at LIMIT ?",
+                (now, limit),
+            ).fetchall()
+        return [
+            {"event_id": r[0], "payload": json.loads(r[1]), "attempts": r[2]}
+            for r in rows
+        ]
 
     def ack(self, event_ids: list[str]) -> None:
         with sqlite3.connect(self.path) as conn:
-            conn.executemany("DELETE FROM events WHERE event_id=?", [(e,) for e in event_ids])
+            conn.executemany(
+                "DELETE FROM events WHERE event_id=?", [(e,) for e in event_ids]
+            )
 
     def retry_later(self, event_ids: list[str], next_attempt_at: float) -> None:
         with sqlite3.connect(self.path) as conn:
-            conn.executemany("UPDATE events SET attempts=attempts+1,next_attempt_at=? WHERE event_id=?", [(next_attempt_at, e) for e in event_ids])
+            conn.executemany(
+                "UPDATE events SET attempts=attempts+1,next_attempt_at=? WHERE event_id=?",
+                [(next_attempt_at, e) for e in event_ids],
+            )

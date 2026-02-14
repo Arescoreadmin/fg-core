@@ -24,10 +24,10 @@ def load_spine_modules() -> SpineModules:
 
     admin_router = None
     if admin_enabled:
-        from api.admin import router as admin_router  # noqa: WPS433 (explicit import)
+        from api.admin import router as admin_router
 
     if graceful_shutdown_enabled:
-        from api.graceful_shutdown import (  # noqa: WPS433 (explicit import)
+        from api.graceful_shutdown import (
             ConnectionTrackingMiddleware,
             get_shutdown_manager,
         )

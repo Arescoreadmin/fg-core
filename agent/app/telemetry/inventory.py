@@ -4,7 +4,9 @@ import platform
 import socket
 
 
-def collect_inventory(agent_version: str, device_id: str, mobile_device_model: str | None = None) -> dict:
+def collect_inventory(
+    agent_version: str, device_id: str, mobile_device_model: str | None = None
+) -> dict:
     return {
         "platform": platform.system().lower(),
         "os_version": platform.version(),

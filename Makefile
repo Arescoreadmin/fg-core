@@ -9,14 +9,54 @@ SHELL := /bin/bash
 .DELETE_ON_ERROR:
 .DEFAULT_GOAL := help
 
+MAKEFLAGS += --no-print-directory
+
+
 # =============================================================================
 # Repo + Python
 # =============================================================================
 
-VENV ?= .venv
-PY   := $(VENV)/bin/python
-PIP  := $(VENV)/bin/pip
+VENV_DIR ?= .venv
+VENV := $(VENV_DIR)
+PY  := $(VENV)/bin/python
+PIP := $(VENV)/bin/pip
 RUFF := $(VENV)/bin/ruff
+
+DEPS_STAMP := $(VENV_DIR)/.deps.stamp
+DEPS_INPUTS := requirements.txt requirements-dev.txt constraints.txt
+
+# =============================================================================
+# Setup (deterministic + fast via deps stamp)
+# =============================================================================
+
+
+# venv: create/refresh dependencies only when inputs change
+.PHONY: venv
+venv: $(DEPS_STAMP)
+	@echo "✅ venv ready: $(PY)"
+
+# venv-force: blow away stamp and reinstall deps (useful for debugging)
+.PHONY: venv-force
+venv-force:
+	@rm -f "$(DEPS_STAMP)"
+	@$(MAKE) venv
+
+# Stamp rule: reruns when any deps input changes
+$(DEPS_STAMP): $(DEPS_INPUTS)
+	@set -euo pipefail; \
+	test -d "$(VENV)" || python -m venv "$(VENV)"; \
+	"$(PIP)" install --upgrade pip wheel >/dev/null; \
+	hash="$$(sha256sum $(DEPS_INPUTS) | sha256sum | awk '{print $$1}')"; \
+	prev="$$(cat "$(DEPS_STAMP)" 2>/dev/null || echo "")"; \
+	if [ "$$hash" = "$$prev" ] && [ -n "$$prev" ]; then \
+		echo "✅ deps unchanged (stamp match)"; \
+		exit 0; \
+	fi; \
+	echo "==> deps changed: installing"; \
+	"$(PIP)" install -c constraints.txt -r requirements.txt -r requirements-dev.txt; \
+	echo "$$hash" > "$(DEPS_STAMP)"
+
+
 
 export PYTHONPATH := .
 export PIP_DISABLE_PIP_VERSION_CHECK := 1
@@ -94,7 +134,15 @@ POSTGRES_URL      ?= postgresql+psycopg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@
 # Application role (non-superuser) for migrations, assertions, and tests.
 APP_DB_USER     ?= fg_app
 APP_DB_PASSWORD ?= $(POSTGRES_PASSWORD)
-APP_DB_URL      ?= postgresql+psycopg://$(APP_DB_USER):$(APP_DB_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)
+
+# Host-side DSN (only works if Postgres is published to localhost)
+APP_DB_URL_HOST ?= postgresql+psycopg://$(APP_DB_USER):$(APP_DB_PASSWORD)@127.0.0.1:$(POSTGRES_PORT)/$(POSTGRES_DB)
+
+# Compose network DSN (correct default for docker-compose workflows)
+APP_DB_URL_COMPOSE ?= postgresql+psycopg://$(APP_DB_USER):$(APP_DB_PASSWORD)@postgres:5432/$(POSTGRES_DB)
+
+# Back-compat (some targets/scripts may reference APP_DB_URL)
+APP_DB_URL ?= $(APP_DB_URL_HOST)
 
 export API_KEY := $(FG_API_KEY)
 
@@ -183,16 +231,16 @@ help:
 .PHONY: tools
 tools: _print-tools
 
-# =============================================================================
-# Setup
-# =============================================================================
+.PHONY: fix ci-local
 
-.PHONY: venv
-venv:
-	@test -d "$(VENV)" || python -m venv "$(VENV)"
-	"$(PIP)" install --upgrade pip wheel
-	"$(PIP)" install -c constraints.txt -r requirements.txt -r requirements-dev.txt
-	@echo "✅ venv ready: $(PY)"
+fix:
+	@ruff check . --fix
+	@ruff format .
+
+ci-local: fix
+	@$(MAKE) pr-check
+
+
 
 # =============================================================================
 # Guards / audits
@@ -461,22 +509,23 @@ db-postgres-up:
 		docker compose up -d postgres
 	@PGHOST="$(POSTGRES_HOST)" PGPORT="$(POSTGRES_PORT)" PGUSER="$(POSTGRES_USER)" PGDATABASE="$(POSTGRES_DB)" \
 		./scripts/wait_for_postgres.sh
-	@docker compose exec -T postgres psql -U "$(POSTGRES_USER)" -d "$(POSTGRES_DB)" -c "SELECT 1;" >/dev/null || { \
-		echo "Postgres auth check failed."; \
-		echo "POSTGRES_USER=$(POSTGRES_USER) POSTGRES_DB=$(POSTGRES_DB)"; \
-		docker compose exec -T postgres sh -c 'env | grep "^POSTGRES_"' || true; \
-		exit 1; \
-	}
-	@echo "Provisioning app role $(APP_DB_USER) (NOSUPERUSER NOBYPASSRLS)..."
-	@docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$(POSTGRES_USER)" -d "$(POSTGRES_DB)" -c "\
-		DO \$$\$$ BEGIN \
-		  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$(APP_DB_USER)') THEN \
-		    CREATE ROLE $(APP_DB_USER) WITH LOGIN PASSWORD '$(APP_DB_PASSWORD)' \
-		      NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB; \
-		  END IF; \
-		END \$$\$$; \
-		ALTER DATABASE $(POSTGRES_DB) OWNER TO $(APP_DB_USER); \
-		GRANT ALL ON SCHEMA public TO $(APP_DB_USER);"
+		@docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$(POSTGRES_USER)" -d "$(POSTGRES_DB)" <<-'SQL'
+	DO $$$$
+	BEGIN
+	  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '$(APP_DB_USER)') THEN
+	    CREATE ROLE $(APP_DB_USER) WITH LOGIN PASSWORD '$(APP_DB_PASSWORD)'
+	      NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB;
+	  END IF;
+
+	  /* Force password every run so auth never drifts. */
+	  ALTER ROLE $(APP_DB_USER) WITH PASSWORD '$(APP_DB_PASSWORD)';
+	END
+	$$$$;
+
+	ALTER DATABASE $(POSTGRES_DB) OWNER TO $(APP_DB_USER);
+	GRANT ALL ON SCHEMA public TO $(APP_DB_USER);
+	SQL
+
 	@docker compose exec -T postgres psql -U "$(APP_DB_USER)" -d "$(POSTGRES_DB)" \
 		-c "SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user;"
 
@@ -487,12 +536,14 @@ db-postgres-assert: venv
 	@FG_DB_URL="$(APP_DB_URL)" FG_DB_BACKEND="postgres" $(PY) -m api.db_migrations --backend postgres --assert
 
 db-postgres-test: venv
-	@FG_DB_URL="$(APP_DB_URL)" FG_DB_BACKEND="postgres" FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/postgres
+	@FG_DB_URL="$(APP_DB_URL_COMPOSE)" FG_DB_BACKEND="postgres" FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/postgres -rs
 
 db-postgres-verify: db-postgres-up db-postgres-migrate db-postgres-assert db-postgres-test
 
 db-postgres-down:
 	@docker compose stop postgres || true
+
+
 
 # =============================================================================
 # Live port guard
@@ -598,9 +649,12 @@ ci: venv pip-audit fg-fast
 ci-integration: venv itest-local
 
 pip-audit: venv
-	"$(PIP)" install --upgrade pip-audit
-	"$(PY)" -m pip_audit -r requirements.txt -r requirements-dev.txt
-	"$(PY)" -m pip_audit -r admin_gateway/requirements.txt -r admin_gateway/requirements-dev.txt
+	@echo "==> running pip-audit"
+	@$(PIP) install -q --upgrade pip-audit
+	@$(PY) -m pip_audit -r requirements.txt -r requirements-dev.txt
+	@$(PY) -m pip_audit -r admin_gateway/requirements.txt -r admin_gateway/requirements-dev.txt
+
+
 
 # =============================================================================
 # Evidence

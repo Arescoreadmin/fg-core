@@ -18,7 +18,11 @@ def run(max_loops: int | None = None) -> None:
     poller = CommandPoller()
 
     queue.enqueue(heartbeat_event(cfg.tenant_id, cfg.agent_id))
-    queue.enqueue(agent_boot_event(cfg.tenant_id, cfg.agent_id, cfg.agent_version, config_fingerprint(cfg)))
+    queue.enqueue(
+        agent_boot_event(
+            cfg.tenant_id, cfg.agent_id, cfg.agent_version, config_fingerprint(cfg)
+        )
+    )
 
     loops = 0
     while True:

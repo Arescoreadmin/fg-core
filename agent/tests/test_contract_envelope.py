@@ -9,7 +9,7 @@ class DummyResp:
     def __init__(self, status_code, body, headers=None):
         self.status_code = status_code
         self._body = body
-        self.content = b'x'
+        self.content = b"x"
         self.headers = headers or {}
 
     def json(self):
@@ -22,7 +22,16 @@ def test_contract_headers_and_envelope_parsing():
     def fake_request(method, url, headers=None, **kwargs):
         assert "X-Contract-Version" in headers
         assert "X-Request-ID" in headers
-        return DummyResp(429, {"code": "RATE_LIMITED", "message": "slow", "details": {}, "request_id": "r"}, {"Retry-After": "5"})
+        return DummyResp(
+            429,
+            {
+                "code": "RATE_LIMITED",
+                "message": "slow",
+                "details": {},
+                "request_id": "r",
+            },
+            {"Retry-After": "5"},
+        )
 
     with patch.object(requests, "request", side_effect=fake_request):
         try:

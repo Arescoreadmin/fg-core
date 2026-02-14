@@ -122,20 +122,32 @@ class CoreClient:
         return self._request(
             "POST",
             "/v1/agent/events",
-            payload={"tenant_id": self.tenant_id, "agent_id": self.agent_id, "events": events},
+            payload={
+                "tenant_id": self.tenant_id,
+                "agent_id": self.agent_id,
+                "events": events,
+            },
             request_id=request_id,
         )
 
-    def poll_commands(self, agent_id: str, cursor: Optional[str], request_id: str | None = None) -> dict:
+    def poll_commands(
+        self, agent_id: str, cursor: Optional[str], request_id: str | None = None
+    ) -> dict:
         params = {"agent_id": agent_id}
         if cursor:
             params["cursor"] = cursor
-        return self._request("GET", "/v1/agent/commands", params=params, request_id=request_id)
+        return self._request(
+            "GET", "/v1/agent/commands", params=params, request_id=request_id
+        )
 
     def send_receipt(self, receipt: dict, request_id: str | None = None) -> dict:
         return self._request(
             "POST",
             "/v1/agent/receipts",
-            payload={"tenant_id": self.tenant_id, "agent_id": self.agent_id, "receipt": receipt},
+            payload={
+                "tenant_id": self.tenant_id,
+                "agent_id": self.agent_id,
+                "receipt": receipt,
+            },
             request_id=request_id,
         )

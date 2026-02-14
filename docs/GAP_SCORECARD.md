@@ -10,7 +10,7 @@
 | Metric | Score | Status |
 |--------|-------|--------|
 | Production Readiness | 100.0% | READY |
-| Launch Readiness | 0.0% | AT RISK |
+| Launch Readiness | 100.0% | READY |
 
 ### Scoring Rules
 
@@ -29,7 +29,7 @@ Launch Readiness = 1 - (open Launch-risk gaps / total Launch-risk gaps)
 | Severity | Open | Waived | Total |
 |----------|------|--------|-------|
 | Production-blocking | 0 | 0 | 0 |
-| Launch-risk | 1 | 0 | 1 |
+| Launch-risk | 0 | 1 | 1 |
 | Post-launch | 0 | 0 | 0 |
 
 ---
@@ -38,7 +38,7 @@ Launch Readiness = 1 - (open Launch-risk gaps / total Launch-risk gaps)
 
 | Owner | Open | Total |
 |-------|------|-------|
-| repo | 1 | 1 |
+| repo | 0 | 1 |
 | infra | 0 | 0 |
 | docs | 0 | 0 |
 
@@ -52,19 +52,10 @@ All Production-blocking gaps resolved. Release may proceed.
 
 ---
 
-## Warnings
-
-### Active Launch Risks
-
-- **G001**: Auth fallback must be OFF by default (compose + prod-like)
-
-
----
-
 ## Detailed Gap List
 
-### Launch-risk
+### Waived
 
 - **G001**: Auth fallback must be OFF by default (compose + prod-like)
-  - Evidence: ``docker-compose.yml:96` / `scripts/prod_profile_check.py` / `.github/workflows/ci.yml` / `unit``
-  - Owner: repo
+  - Approved by: secops@frostgate.dev
+  - Expires: 2026-06-30

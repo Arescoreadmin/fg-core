@@ -42,12 +42,25 @@ class BatchSender:
                 logging.error("fatal auth/scope failure")
                 return {"status": "fatal", "code": err.code}
             if err.code in {"ABUSE_CAP_EXCEEDED", "PLAN_LIMIT_EXCEEDED"}:
-                delay = err.retry_after_seconds if err.retry_after_seconds is not None else 60.0
+                delay = (
+                    err.retry_after_seconds
+                    if err.retry_after_seconds is not None
+                    else 60.0
+                )
                 delay = max(60.0, delay)
             elif err.code == "RATE_LIMITED" or err.transient:
                 self.rate_limited_count += 1
-                delay = err.retry_after_seconds if err.retry_after_seconds is not None else backoff_delay(max_attempt)
+                delay = (
+                    err.retry_after_seconds
+                    if err.retry_after_seconds is not None
+                    else backoff_delay(max_attempt)
+                )
             else:
                 return {"status": "drop", "code": err.code}
             self.queue.retry_later(event_ids, time.time() + delay)
-            return {"status": "retry", "code": err.code, "delay": delay, "request_id": request_id}
+            return {
+                "status": "retry",
+                "code": err.code,
+                "delay": delay,
+                "request_id": request_id,
+            }

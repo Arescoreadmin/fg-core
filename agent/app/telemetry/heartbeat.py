@@ -11,7 +11,9 @@ def heartbeat_event(tenant_id: str, agent_id: str) -> dict:
     bucket = utc_bucket(now)
     features = {"alive": True}
     return {
-        "event_id": deterministic_event_id(tenant_id, agent_id, "heartbeat", agent_id, bucket, features),
+        "event_id": deterministic_event_id(
+            tenant_id, agent_id, "heartbeat", agent_id, bucket, features
+        ),
         "event_type": "heartbeat",
         "subject": agent_id,
         "features": features,
@@ -19,7 +21,9 @@ def heartbeat_event(tenant_id: str, agent_id: str) -> dict:
     }
 
 
-def agent_boot_event(tenant_id: str, agent_id: str, version: str, config_hash: str) -> dict:
+def agent_boot_event(
+    tenant_id: str, agent_id: str, version: str, config_hash: str
+) -> dict:
     now = datetime.now(timezone.utc)
     bucket = utc_bucket(now)
     features = {
@@ -28,7 +32,9 @@ def agent_boot_event(tenant_id: str, agent_id: str, version: str, config_hash: s
         "config_hash": config_hash,
     }
     return {
-        "event_id": deterministic_event_id(tenant_id, agent_id, "agent_boot", agent_id, bucket, features),
+        "event_id": deterministic_event_id(
+            tenant_id, agent_id, "agent_boot", agent_id, bucket, features
+        ),
         "event_type": "agent_boot",
         "subject": agent_id,
         "features": features,

@@ -34,7 +34,9 @@ class BadSender:
 
 class AbuseSender:
     def send_events(self, events, request_id=None):
-        raise CoreClientError(429, "ABUSE_CAP_EXCEEDED", "abuse", {}, "r2", retry_after_seconds=1)
+        raise CoreClientError(
+            429, "ABUSE_CAP_EXCEEDED", "abuse", {}, "r2", retry_after_seconds=1
+        )
 
 
 def test_batch_sender_ack_on_success():

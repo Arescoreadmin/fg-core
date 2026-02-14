@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 import socket
 import threading
-import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import sys
 
@@ -59,7 +58,15 @@ class _MockCoreHandler(BaseHTTPRequestHandler):
             self._write(200, {"ok": True})
             return
 
-        self._write(404, {"code": "NOT_FOUND", "message": "missing", "details": {}, "request_id": "mock"})
+        self._write(
+            404,
+            {
+                "code": "NOT_FOUND",
+                "message": "missing",
+                "details": {},
+                "request_id": "mock",
+            },
+        )
 
     def do_GET(self):
         if self.path.startswith("/v1/agent/commands"):
@@ -85,7 +92,15 @@ class _MockCoreHandler(BaseHTTPRequestHandler):
             )
             return
 
-        self._write(404, {"code": "NOT_FOUND", "message": "missing", "details": {}, "request_id": "mock"})
+        self._write(
+            404,
+            {
+                "code": "NOT_FOUND",
+                "message": "missing",
+                "details": {},
+                "request_id": "mock",
+            },
+        )
 
 
 class _DummyRedisServer(threading.Thread):
@@ -133,7 +148,9 @@ def main() -> None:
     os.environ["FG_COMMAND_POLL_INTERVAL_SECONDS"] = "0.2"
     os.environ["FG_REDIS_URL"] = f"redis://127.0.0.1:{redis.port}/0"
 
-    agent_thread = threading.Thread(target=lambda: agent_main.run(max_loops=60), daemon=True)
+    agent_thread = threading.Thread(
+        target=lambda: agent_main.run(max_loops=60), daemon=True
+    )
     agent_thread.start()
     agent_thread.join(timeout=20)
 
