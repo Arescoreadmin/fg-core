@@ -45,7 +45,6 @@ venv-force:
 $(DEPS_STAMP): $(DEPS_INPUTS)
 	@set -euo pipefail; \
 	test -d "$(VENV)" || python -m venv "$(VENV)"; \
-	"$(PIP)" install --upgrade pip wheel >/dev/null; \
 	hash="$$(sha256sum $(DEPS_INPUTS) | sha256sum | awk '{print $$1}')"; \
 	prev="$$(cat "$(DEPS_STAMP)" 2>/dev/null || echo "")"; \
 	if [ "$$hash" = "$$prev" ] && [ -n "$$prev" ]; then \
@@ -53,6 +52,7 @@ $(DEPS_STAMP): $(DEPS_INPUTS)
 		exit 0; \
 	fi; \
 	echo "==> deps changed: installing"; \
+	"$(PIP)" install --upgrade pip wheel >/dev/null; \
 	"$(PIP)" install -c constraints.txt -r requirements.txt -r requirements-dev.txt; \
 	echo "$$hash" > "$(DEPS_STAMP)"
 
@@ -231,14 +231,13 @@ help:
 .PHONY: tools
 tools: _print-tools
 
-.PHONY: fix ci-local
+.PHONY: ci-local fix
 
 fix:
 	@ruff check . --fix
 	@ruff format .
 
-ci-local: fix
-	@$(MAKE) pr-check
+ci-local: fix fg-fast
 
 
 
