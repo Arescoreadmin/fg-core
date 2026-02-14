@@ -3,10 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
+import hmac
 import json
 import os
 
 EVENT_BUCKET_SECONDS = 5
+EVENT_ID_CANON_VERSION = "2"
 
 
 @dataclass(frozen=True)
@@ -42,7 +44,7 @@ def utc_bucket(ts: datetime, bucket_seconds: int = EVENT_BUCKET_SECONDS) -> str:
     return str(bucket_start)
 
 
-def deterministic_event_id(
+def _legacy_canonical_payload(
     tenant_id: str,
     agent_id: str,
     event_type: str,
@@ -58,8 +60,67 @@ def deterministic_event_id(
         "bucket": bucket,
         "features": features,
     }
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+
+def _v2_canonical_payload(
+    tenant_id: str,
+    agent_id: str,
+    event_type: str,
+    subject: str,
+    bucket: str,
+    features: dict,
+) -> str:
+    payload = {
+        "canon_v": EVENT_ID_CANON_VERSION,
+        "tenant_id": tenant_id,
+        "agent_id": agent_id,
+        "event_type": event_type,
+        "subject": subject,
+        "bucket": bucket,
+        "features": features,
+    }
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+
+def _event_id_keys() -> tuple[str, list[str]]:
+    current = os.getenv("FG_EVENT_ID_KEY_CURRENT", "").strip()
+    extras = [x.strip() for x in os.getenv("FG_EVENT_ID_KEYS", "").split(",") if x.strip()]
+    prev = os.getenv("FG_EVENT_ID_KEY_PREV", "").strip()
+    accepted = list(extras)
+    if prev:
+        accepted.append(prev)
+    return current, accepted
+
+
+def deterministic_event_id(
+    tenant_id: str,
+    agent_id: str,
+    event_type: str,
+    subject: str,
+    bucket: str,
+    features: dict,
+) -> str:
+    mode = os.getenv("FG_EVENT_ID_MODE", "hmac_v2").strip().lower()
+    if mode == "legacy":
+        canonical = _legacy_canonical_payload(
+            tenant_id, agent_id, event_type, subject, bucket, features
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    if mode != "hmac_v2":
+        raise ValueError("FG_EVENT_ID_MODE must be one of: legacy, hmac_v2")
+
+    current_key, _accepted_keys = _event_id_keys()
+    # Server migration expectation: ingestion should accept IDs generated from CURRENT and PREV keys.
+    if not current_key:
+        raise ValueError("FG_EVENT_ID_KEY_CURRENT is required when FG_EVENT_ID_MODE=hmac_v2")
+    canonical = _v2_canonical_payload(
+        tenant_id, agent_id, event_type, subject, bucket, features
+    )
+    digest = hmac.new(
+        current_key.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return f"ev2_{digest}"
 
 
 def config_fingerprint(cfg: AgentConfig) -> str:
