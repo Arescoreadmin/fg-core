@@ -4,10 +4,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hmac
 import hashlib
+import hmac
 import json
 import os
 
 EVENT_BUCKET_SECONDS = 5
+EVENT_ID_CANON_VERSION = "2"
 
 
 @dataclass(frozen=True)
@@ -63,6 +65,7 @@ def deterministic_event_id(
     Migration note: Core should accept both legacy SHA256 IDs and v2 HMAC IDs during cutover.
     """
     payload = {
+        "canon_v": EVENT_ID_CANON_VERSION,
         "tenant_id": tenant_id,
         "agent_id": agent_id,
         "event_type": event_type,

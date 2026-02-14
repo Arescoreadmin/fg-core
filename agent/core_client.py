@@ -11,6 +11,8 @@ import socket
 import uuid
 from urllib.parse import urlparse
 from typing import Optional
+from urllib.parse import urlparse
+import uuid
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -230,6 +232,48 @@ class CoreClientError(RuntimeError):
         return self.code in TRANSIENT_CODES or self.status_code >= 500
 
 
+def _allowlist_entries() -> list[str]:
+    raw = os.getenv("FG_CORE_HOST_ALLOWLIST", "")
+    return [x.strip().lower() for x in raw.split(",") if x.strip()]
+
+
+def _sanitize_request_id(request_id: str | None) -> str:
+    if not request_id:
+        return str(uuid.uuid4())
+    candidate = request_id.strip()
+    return candidate if _REQUEST_ID_RE.fullmatch(candidate) else str(uuid.uuid4())
+
+
+def _normalize_fingerprint(fp: str) -> str:
+    value = fp.strip().lower()
+    if value.startswith("sha256/"):
+        value = value.split("/", 1)[1]
+    return value.replace(":", "")
+
+
+class PinningAdapter(HTTPAdapter):
+    def __init__(self, fingerprints: list[str], *args, **kwargs):
+        self._fingerprints = [_normalize_fingerprint(x) for x in fingerprints if x.strip()]
+        super().__init__(*args, **kwargs)
+
+    def send(self, request, **kwargs):
+        response = super().send(request, **kwargs)
+        if request.url.startswith("https://") and self._fingerprints:
+            cert_bin = response.raw.connection.sock.getpeercert(binary_form=True)
+            matched = False
+            for fp in self._fingerprints:
+                try:
+                    assert_fingerprint(cert_bin, fp)
+                    matched = True
+                    break
+                except Exception:
+                    continue
+            if not matched:
+                response.close()
+                raise requests.exceptions.SSLError("TLS certificate pin mismatch")
+        return response
+
+
 @dataclass
 class CoreClient:
     base_url: str
@@ -267,6 +311,39 @@ class CoreClient:
             agent_id=os.environ["FG_AGENT_ID"],
             contract_version=os.getenv("FG_CONTRACT_VERSION", "2025-01-01"),
         )
+
+    def _is_host_allowlisted(self, hostname: str) -> bool:
+        host = hostname.lower()
+        for entry in self._allowlist:
+            if "/" in entry:
+                continue
+            suffix = entry[2:] if entry.startswith("*.") else entry
+            if host == suffix or host.endswith(f".{suffix}"):
+                return True
+        return False
+
+    def _is_ip_allowlisted(self, ip: ipaddress._BaseAddress) -> bool:
+        for entry in self._allowlist:
+            if "/" not in entry:
+                continue
+            try:
+                if ip in ipaddress.ip_network(entry, strict=False):
+                    return True
+            except ValueError:
+                continue
+        return False
+
+    def _validate_resolved_ips(self, hostname: str) -> None:
+        infos = socket.getaddrinfo(hostname, None)
+        for info in infos:
+            ip = ipaddress.ip_address(info[4][0])
+            if ip.is_loopback or ip.is_link_local:
+                if not (self._allowlist_match or self._is_ip_allowlisted(ip)):
+                    raise ValueError(f"core host resolves to disallowed address: {ip}")
+                continue
+            if ip.is_private and not self._allow_private:
+                if not (self._allowlist_match or self._is_ip_allowlisted(ip)):
+                    raise ValueError(f"core host resolves to private address without override: {ip}")
 
     def _headers(self, request_id: str | None = None) -> dict[str, str]:
         return {
@@ -383,7 +460,7 @@ class CoreClient:
         except ValueError:
             try:
                 dt = parsedate_to_datetime(value)
-                return max(0.0, dt.timestamp() - __import__("time").time())
+                return max(0.0, dt.timestamp() - time.time())
             except Exception:
                 return None
 

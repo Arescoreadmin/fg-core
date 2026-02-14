@@ -489,6 +489,7 @@ fg-fast: venv fg-audit-make fg-contract fg-compile opa-check prod-profile-check 
 	verify-spine-modules verify-schemas verify-drift align-score
 	@$(MAKE) -s test-unit
 	@$(MAKE) -s fg-lint
+	@$(MAKE) -s test-dashboard-p0
 
 # =============================================================================
 # Postgres verification (CI + local)
@@ -723,7 +724,7 @@ test-core-invariants: venv
 # Hardening Test Lanes (Day 1-7 hardening plan)
 # =============================================================================
 
-.PHONY: test-decision-unified test-tenant-isolation test-auth-hardening test-hardening-all
+.PHONY: test-decision-unified test-tenant-isolation test-auth-hardening test-dashboard-p0 test-hardening-all
 
 test-decision-unified: venv
 	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/test_decision_pipeline_unified.py
@@ -734,7 +735,11 @@ test-tenant-isolation: venv
 test-auth-hardening: venv
 	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/test_auth_hardening.py tests/test_auth.py tests/test_auth_contract.py tests/security/test_evidence_chain_persistence.py tests/security/test_chain_verification_detects_tamper.py tests/security/test_scope_enforcement.py tests/security/test_key_hashing_kdf.py
 
-test-hardening-all: test-core-invariants test-decision-unified test-tenant-isolation test-auth-hardening
+
+test-dashboard-p0: venv
+	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/security/test_dashboard_p0_hardening.py tests/security/test_admin_audit_required_fields.py
+
+test-hardening-all: test-core-invariants test-decision-unified test-tenant-isolation test-auth-hardening test-dashboard-p0
 	@echo "✅ All hardening tests passed"
 
 .PHONY: ci-hardening
@@ -935,6 +940,7 @@ pr-check-fast:
 
 pr-check-lint:
 	@$(MAKE) -s fg-lint
+	@$(MAKE) -s test-dashboard-p0
 	@echo "pr-check-lint: OK"
 
 pr-check-test: venv

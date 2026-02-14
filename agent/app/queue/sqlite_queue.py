@@ -8,6 +8,9 @@ import time
 from pathlib import Path
 
 
+TERMINAL_REASONS = {"schema_invalid", "auth_invalid", "payload_too_large"}
+
+
 class SQLiteQueue:
     def __init__(
         self,
@@ -41,7 +44,9 @@ class SQLiteQueue:
                     payload TEXT NOT NULL,
                     attempts INTEGER NOT NULL DEFAULT 0,
                     next_attempt_at REAL NOT NULL DEFAULT 0,
-                    created_at REAL NOT NULL DEFAULT (strftime('%s', 'now'))
+                    first_seen_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+                    last_failed_at REAL,
+                    created_at REAL NOT NULL DEFAULT (strftime('%s','now'))
                 )
                 """
             )
@@ -120,6 +125,7 @@ class SQLiteQueue:
                 "DELETE FROM events WHERE event_id=?",
                 [(event_id,) for event_id in event_ids],
             )
+            self._conn.commit()
 
     def dead_letter(self, event_id: str, reason: str, last_failed_at: float | None = None) -> None:
         failed_ts = time.time() if last_failed_at is None else float(last_failed_at)
