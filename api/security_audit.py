@@ -601,11 +601,17 @@ def audit_admin_action(
 ) -> None:
     """Log state-changing admin actions."""
     enriched_details = dict(details or {})
-    auth_ctx = getattr(getattr(request, "state", None), "auth", None) if request else None
-    actor_id = getattr(auth_ctx, "key_prefix", None) or getattr(auth_ctx, "subject", None)
+    auth_ctx = (
+        getattr(getattr(request, "state", None), "auth", None) if request else None
+    )
+    actor_id = getattr(auth_ctx, "key_prefix", None) or getattr(
+        auth_ctx, "subject", None
+    )
     scope_values = sorted(getattr(auth_ctx, "scopes", set()) or [])
     correlation_id = (
-        getattr(getattr(request, "state", None), "request_id", None) if request else None
+        getattr(getattr(request, "state", None), "request_id", None)
+        if request
+        else None
     ) or enriched_details.get("correlation_id")
 
     enriched_details.setdefault("actor_id", actor_id)
@@ -614,8 +620,16 @@ def audit_admin_action(
     enriched_details.setdefault("correlation_id", correlation_id)
     enriched_details.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
 
-    required_admin_fields = ("actor_id", "scope", "action", "correlation_id", "timestamp")
-    missing = [field for field in required_admin_fields if not enriched_details.get(field)]
+    required_admin_fields = (
+        "actor_id",
+        "scope",
+        "action",
+        "correlation_id",
+        "timestamp",
+    )
+    missing = [
+        field for field in required_admin_fields if not enriched_details.get(field)
+    ]
     if missing:
         raise AuditPersistenceError(
             "FG-AUDIT-ADMIN-001",

@@ -199,8 +199,6 @@ def _resolve_tenant(request: Request, tenant_id: Optional[str]) -> str:
     return bound
 
 
-
-
 def _not_found_response(request: Request, detail: str) -> JSONResponse:
     request_id = _request_id(request)
     headers = {"Cache-Control": "no-store"}
@@ -211,6 +209,8 @@ def _not_found_response(request: Request, detail: str) -> JSONResponse:
         content={"detail": detail, "request_id": request_id},
         headers=headers,
     )
+
+
 def _deny_cross_tenant(
     *, request: Request, actor_tenant: Optional[str], target_tenant: str, action: str
 ) -> None:

@@ -45,4 +45,6 @@ def test_admin_audit_missing_required_fields_raises():
     except AuditPersistenceError as exc:
         assert exc.code == "FG-AUDIT-ADMIN-001"
     else:
-        raise AssertionError("expected AuditPersistenceError for missing required fields")
+        raise AssertionError(
+            "expected AuditPersistenceError for missing required fields"
+        )

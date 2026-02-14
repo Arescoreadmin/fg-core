@@ -311,7 +311,9 @@ def _record_config_change(
     out = (_config_change_dir() / f"{change_id}.json").resolve()
     if out.parent != _config_change_dir():
         raise HTTPException(status_code=400, detail="Invalid config change path")
-    out.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+    out.write_text(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")), encoding="utf-8"
+    )
     try:
         out.chmod(0o600)
     except Exception:
@@ -333,7 +335,9 @@ def _load_config_change(change_id: str) -> tuple[Path, dict[str, Any]]:
     body.pop("snapshot_hash", None)
     actual = _sha256_json(body)
     if not isinstance(expected, str) or expected != actual:
-        raise HTTPException(status_code=409, detail="Config change integrity verification failed")
+        raise HTTPException(
+            status_code=409, detail="Config change integrity verification failed"
+        )
     return path, payload
 
 
@@ -1345,7 +1349,9 @@ async def revert_config_change(
     try:
         from api.tenant_usage import SubscriptionTier, get_usage_tracker
     except ImportError:
-        raise HTTPException(status_code=501, detail="Tenant usage tracking not available")
+        raise HTTPException(
+            status_code=501, detail="Tenant usage tracking not available"
+        )
 
     path, change = _load_config_change(change_id)
     tenant_id = str(change.get("tenant_id") or "")
@@ -1406,8 +1412,12 @@ async def revert_config_change(
     change["reverted_value"] = restored
     change["revert_prev_hash"] = prev_hash
     change["revert_new_hash"] = new_hash
-    change["snapshot_hash"] = _sha256_json({k: v for k, v in change.items() if k != "snapshot_hash"})
-    path.write_text(json.dumps(change, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+    change["snapshot_hash"] = _sha256_json(
+        {k: v for k, v in change.items() if k != "snapshot_hash"}
+    )
+    path.write_text(
+        json.dumps(change, sort_keys=True, separators=(",", ":")), encoding="utf-8"
+    )
     try:
         path.chmod(0o600)
     except Exception:

@@ -121,7 +121,11 @@ def test_ui_decision_not_found_bucket_consistency(build_app):
 
     assert wrong_tenant.status_code == 404
     assert not_found.status_code == 404
-    assert wrong_tenant.json()["detail"] == not_found.json()["detail"] == "Decision not found"
+    assert (
+        wrong_tenant.json()["detail"]
+        == not_found.json()["detail"]
+        == "Decision not found"
+    )
     assert "request_id" in wrong_tenant.json()
     assert "request_id" in not_found.json()
 
@@ -144,7 +148,9 @@ def test_admin_config_snapshot_tamper_detected(build_app, monkeypatch, tmp_path)
     artifact = tmp_path / "config_changes" / f"{change_id}.json"
     payload = json.loads(artifact.read_text(encoding="utf-8"))
     payload["after"] = 9999
-    artifact.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+    artifact.write_text(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")), encoding="utf-8"
+    )
 
     revert_resp = client.post(
         f"/admin/config/changes/{change_id}/revert",
@@ -256,6 +262,10 @@ def test_ui_audit_packet_not_found_bucket_consistency(build_app, monkeypatch, tm
 
     assert wrong_tenant.status_code == 404
     assert not_found.status_code == 404
-    assert wrong_tenant.json()["detail"] == not_found.json()["detail"] == "Packet not found"
+    assert (
+        wrong_tenant.json()["detail"]
+        == not_found.json()["detail"]
+        == "Packet not found"
+    )
     assert "request_id" in wrong_tenant.json()
     assert "request_id" in not_found.json()
