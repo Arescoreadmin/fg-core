@@ -1,13 +1,23 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 import time
 import uuid
 
-from agent.app.queue.backoff import backoff_delay
 from agent.app.sender.http_sender import HTTPSender
 from agent.core_client import CoreClientError
+
+
+TERMINAL_CODES = {
+    "AUTH_REQUIRED": "auth_invalid",
+    "SCOPE_DENIED": "auth_invalid",
+    "SCHEMA_INVALID": "schema_invalid",
+    "PAYLOAD_TOO_LARGE": "payload_too_large",
+}
+
+
+def _deterministic_backoff(attempt: int) -> float:
+    return float(min(60, 2 ** max(0, attempt)))
 
 
 class BatchSender:
@@ -32,31 +42,26 @@ class BatchSender:
         payload = [item["payload"] for item in batch]
         max_attempt = max(item["attempts"] for item in batch)
         request_id = self._request_id_for_batch(event_ids)
+
         try:
             self.sender.send_events(payload, request_id=request_id)
             self.queue.ack(event_ids)
             self.last_success_at = time.time()
             return {"status": "sent", "sent": len(event_ids), "request_id": request_id}
         except CoreClientError as err:
-            if err.code in {"AUTH_REQUIRED", "SCOPE_DENIED"}:
-                logging.error("fatal auth/scope failure")
-                return {"status": "fatal", "code": err.code}
+            if err.code in TERMINAL_CODES:
+                self.queue.dead_letter(event_ids, TERMINAL_CODES[err.code])
+                return {"status": "dead_letter", "code": err.code}
+
+            self.rate_limited_count += 1
             if err.code in {"ABUSE_CAP_EXCEEDED", "PLAN_LIMIT_EXCEEDED"}:
-                delay = (
-                    err.retry_after_seconds
-                    if err.retry_after_seconds is not None
-                    else 60.0
-                )
-                delay = max(60.0, delay)
-            elif err.code == "RATE_LIMITED" or err.transient:
-                self.rate_limited_count += 1
-                delay = (
-                    err.retry_after_seconds
-                    if err.retry_after_seconds is not None
-                    else backoff_delay(max_attempt)
-                )
+                delay = max(60.0, err.retry_after_seconds or 60.0)
             else:
-                return {"status": "drop", "code": err.code}
+                delay = (
+                    err.retry_after_seconds
+                    if err.retry_after_seconds is not None
+                    else _deterministic_backoff(max_attempt)
+                )
             self.queue.retry_later(event_ids, time.time() + delay)
             return {
                 "status": "retry",

@@ -7,6 +7,7 @@ class FakeQueue:
         self.events = [{"event_id": "a", "payload": {"event_id": "a"}, "attempts": 0}]
         self.acked = []
         self.retried = []
+        self.dead = []
 
     def due_batch(self, limit):
         return self.events[:limit]
@@ -16,6 +17,15 @@ class FakeQueue:
 
     def retry_later(self, ids, next_attempt_at):
         self.retried.append((ids, next_attempt_at))
+
+    def dead_letter(self, ids, reason):
+        self.dead.append((ids, reason))
+
+    def dead_letter_count(self):
+        return len(self.dead)
+
+    def size(self):
+        return len(self.events)
 
 
 class GoodSender:
@@ -34,9 +44,12 @@ class BadSender:
 
 class AbuseSender:
     def send_events(self, events, request_id=None):
-        raise CoreClientError(
-            429, "ABUSE_CAP_EXCEEDED", "abuse", {}, "r2", retry_after_seconds=1
-        )
+        raise CoreClientError(429, "ABUSE_CAP_EXCEEDED", "abuse", {}, "r2", retry_after_seconds=1)
+
+
+class FatalSender:
+    def send_events(self, events, request_id=None):
+        raise CoreClientError(401, "AUTH_REQUIRED", "bad", {}, "r3")
 
 
 def test_batch_sender_ack_on_success():
@@ -61,6 +74,14 @@ def test_batch_sender_abuse_cap_uses_minimum_pause():
     result = sender.flush_once()
     assert result["status"] == "retry"
     assert result["delay"] >= 60
+
+
+def test_batch_sender_terminal_dead_letters():
+    q = FakeQueue()
+    sender = BatchSender(queue=q, sender=FatalSender())
+    result = sender.flush_once()
+    assert result["status"] == "dead_letter"
+    assert q.dead
 
 
 def test_batch_sender_reuses_request_id_for_same_batch():
