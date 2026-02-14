@@ -109,8 +109,14 @@ if marker_ui not in main_s:
     if "from fastapi import" in main_s and "Request" not in main_s:
         main_s = re.sub(
             r"from fastapi import ([^\n]+)",
-            lambda m: "from fastapi import "
-            + (m.group(1) + ", Request" if "Request" not in m.group(1) else m.group(0)),
+            lambda m: (
+                "from fastapi import "
+                + (
+                    m.group(1) + ", Request"
+                    if "Request" not in m.group(1)
+                    else m.group(0)
+                )
+            ),
             main_s,
             count=1,
         )
@@ -120,11 +126,13 @@ if marker_ui not in main_s:
         if "from starlette.responses import" in main_s:
             main_s = re.sub(
                 r"from starlette\.responses import ([^\n]+)",
-                lambda m: "from starlette.responses import "
-                + (
-                    m.group(1) + ", JSONResponse"
-                    if "JSONResponse" not in m.group(1)
-                    else m.group(0)
+                lambda m: (
+                    "from starlette.responses import "
+                    + (
+                        m.group(1) + ", JSONResponse"
+                        if "JSONResponse" not in m.group(1)
+                        else m.group(0)
+                    )
                 ),
                 main_s,
                 count=1,
