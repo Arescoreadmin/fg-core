@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import asc, desc, func, select
 from sqlalchemy.orm import Session
@@ -197,6 +197,34 @@ def _resolve_tenant(request: Request, tenant_id: Optional[str]) -> str:
             detail="tenant_id is required and must be a known tenant",
         )
     return bound
+
+
+
+
+def _not_found_response(request: Request, detail: str) -> JSONResponse:
+    request_id = _request_id(request)
+    headers = {"Cache-Control": "no-store"}
+    if request_id:
+        headers["x-request-id"] = request_id
+    return JSONResponse(
+        status_code=404,
+        content={"detail": detail, "request_id": request_id},
+        headers=headers,
+    )
+def _deny_cross_tenant(
+    *, request: Request, actor_tenant: Optional[str], target_tenant: str, action: str
+) -> None:
+    audit_admin_action(
+        action="cross_tenant_access_denied",
+        tenant_id=actor_tenant,
+        request=request,
+        details={
+            "action": action,
+            "actor_tenant_id": actor_tenant,
+            "target_tenant_id": target_tenant,
+            "deny_bucket": "tenant_not_found",
+        },
+    )
 
 
 def _parse_dt(val: Optional[str]) -> Optional[datetime]:
@@ -673,9 +701,15 @@ async def ui_decision_detail(
     tenant_id = _resolve_tenant(request, tenant_id)
     record = db.get(DecisionRecord, decision_id)
     if record is None:
-        raise HTTPException(status_code=404, detail="Decision not found")
+        return _not_found_response(request, "Decision not found")
     if record.tenant_id != tenant_id:
-        raise HTTPException(status_code=403, detail="Tenant mismatch")
+        _deny_cross_tenant(
+            request=request,
+            actor_tenant=tenant_id,
+            target_tenant=record.tenant_id,
+            action="ui_decision_detail",
+        )
+        return _not_found_response(request, "Decision not found")
 
     return DecisionDetail(
         id=int(record.id),
@@ -871,7 +905,7 @@ async def ui_audit_packet_download(
     tenant_id = _resolve_tenant(request, tenant_id)
     packet_dir = _audit_packet_dir() / packet_id
     if not packet_dir.exists():
-        raise HTTPException(status_code=404, detail="Packet not found")
+        return _not_found_response(request, "Packet not found")
     token_path = packet_dir / "token.txt"
     file_token = (
         token_path.read_text(encoding="utf-8").strip() if token_path.exists() else None
@@ -887,10 +921,16 @@ async def ui_audit_packet_download(
     if meta_path.exists():
         metadata = json.loads(meta_path.read_text(encoding="utf-8"))
         if metadata.get("tenant_id") != tenant_id:
-            raise HTTPException(status_code=403, detail="Tenant mismatch")
+            _deny_cross_tenant(
+                request=request,
+                actor_tenant=tenant_id,
+                target_tenant=str(metadata.get("tenant_id") or "unknown"),
+                action="ui_audit_packet_download",
+            )
+            return _not_found_response(request, "Packet not found")
     zip_path = packet_dir / "audit_packet.zip"
     if not zip_path.exists():
-        raise HTTPException(status_code=404, detail="Packet archive missing")
+        return _not_found_response(request, "Packet not found")
     return FileResponse(
         path=zip_path, filename=zip_path.name, media_type="application/zip"
     )
