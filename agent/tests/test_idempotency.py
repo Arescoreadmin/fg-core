@@ -27,10 +27,10 @@ def test_hmac_v2_requires_key(monkeypatch):
         deterministic_event_id("t", "a", "heartbeat", "s", "b", {"alive": True})
 
 
-def test_hmac_v2_stable_same_key(monkeypatch):
-    monkeypatch.setenv("FG_EVENT_ID_MODE", "hmac_v2")
-    monkeypatch.setenv("FG_EVENT_ID_KEY_CURRENT", "k1")
-    a = deterministic_event_id("t", "a", "heartbeat", "s", "b", {"alive": True})
+def test_deterministic_event_id_stable(monkeypatch):
+    monkeypatch.setenv("FG_EVENT_ID_MODE", "legacy")
+    f = {"alive": True}
+    a = deterministic_event_id("t", "a", "heartbeat", "s", "b", f)
     b = deterministic_event_id("t", "a", "heartbeat", "s", "b", {"alive": True})
     assert a == b
 

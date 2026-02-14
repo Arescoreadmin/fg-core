@@ -16,17 +16,26 @@ Production-grade additive agent implementation that communicates with FrostGate 
 
 ## Environment variables
 
-- `FG_CORE_BASE_URL`: Base URL of control plane.
+- `FG_CORE_BASE_URL`: Base URL of control plane (https required by default).
+- `FG_ALLOW_INSECURE_HTTP`: Set to `1` only for local/dev to permit `http://` Core URLs.
+- `FG_ALLOW_PRIVATE_CORE`: Set to `1` to allow private/loopback/link-local Core hosts.
+- `FG_CORE_HOST_ALLOWLIST`: Optional comma list of allowed Core hosts/CIDRs (supports exact host, `*.suffix`, `.suffix`, CIDR).
+- `FG_CORE_CERT_SHA256`: Optional comma list of TLS certificate SHA256 fingerprints for pinning.
 - `FG_AGENT_KEY`: Agent API key.
 - `FG_TENANT_ID`: Tenant identifier (authoritative from control plane context).
 - `FG_AGENT_ID`: Agent identifier.
 - `FG_CONTRACT_VERSION`: Contract version sent via `X-Contract-Version`.
-- `FG_QUEUE_PATH`: SQLite queue file path.
+- `FG_QUEUE_PATH`: SQLite queue file path (must be writable local disk; WAL creates `-wal`/`-shm` sidecar files).
 - `FG_QUEUE_MAX_SIZE`: Queue cap.
 - `FG_BATCH_SIZE`: Max events per flush.
 - `FG_FLUSH_INTERVAL_SECONDS`: Sender flush interval.
 - `FG_REDIS_URL`: Optional Redis limiter endpoint.
 - `FG_COMMAND_POLL_INTERVAL_SECONDS`: Command poll interval.
+- `FG_EVENT_ID_MODE`: `hmac_v2` (default) or `legacy` during migration.
+- `FG_EVENT_ID_KEY_CURRENT`: Current HMAC key for event IDs (`hmac_v2` mode).
+- `FG_EVENT_ID_KEY_PREV`: Optional previous key for verifier compatibility during rotation.
+- `FG_EVENT_ID_KEYS`: Alternate comma-separated key list (first key is used for signing).
+- `FG_DEAD_LETTER_MAX`: Dead-letter retention cap (default `10000`, oldest purged first).
 
 ## Local development
 
@@ -51,7 +60,7 @@ docker compose -f agent/docker-compose.yml up --build
 ## Compliance & posture
 
 - Inventory and posture collectors report platform details, attestation stubs, root/jailbreak signals, and compliance status.
-- Event IDs are deterministic over canonical payload slices.
+- Event IDs are deterministic over canonical payload slices and default to HMAC-based `ev2_` IDs.
 
 ## Rate limiting
 

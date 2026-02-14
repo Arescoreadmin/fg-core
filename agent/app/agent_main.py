@@ -17,8 +17,8 @@ def run(max_loops: int | None = None) -> None:
     sender = BatchSender(queue=queue, batch_size=cfg.batch_size)
     poller = CommandPoller()
 
-    queue.enqueue(heartbeat_event(cfg.tenant_id, cfg.agent_id))
-    queue.enqueue(
+    queue.enqueue(heartbeat_event(cfg.tenant_id, cfg.agent_id))  # best-effort; drop on contention/cap.
+    queue.enqueue(  # best-effort; drop on contention/cap.
         agent_boot_event(
             cfg.tenant_id, cfg.agent_id, cfg.agent_version, config_fingerprint(cfg)
         )

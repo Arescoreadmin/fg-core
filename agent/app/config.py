@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hmac
 import hashlib
 import hmac
 import json
@@ -44,53 +45,11 @@ def utc_bucket(ts: datetime, bucket_seconds: int = EVENT_BUCKET_SECONDS) -> str:
     return str(bucket_start)
 
 
-def _legacy_canonical_payload(
-    tenant_id: str,
-    agent_id: str,
-    event_type: str,
-    subject: str,
-    bucket: str,
-    features: dict,
-) -> str:
-    payload = {
-        "tenant_id": tenant_id,
-        "agent_id": agent_id,
-        "event_type": event_type,
-        "subject": subject,
-        "bucket": bucket,
-        "features": features,
-    }
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
-
-
-def _v2_canonical_payload(
-    tenant_id: str,
-    agent_id: str,
-    event_type: str,
-    subject: str,
-    bucket: str,
-    features: dict,
-) -> str:
-    payload = {
-        "canon_v": EVENT_ID_CANON_VERSION,
-        "tenant_id": tenant_id,
-        "agent_id": agent_id,
-        "event_type": event_type,
-        "subject": subject,
-        "bucket": bucket,
-        "features": features,
-    }
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
-
-
-def _event_id_keys() -> tuple[str, list[str]]:
+def _event_id_keys() -> tuple[str, str | None, list[str]]:
     current = os.getenv("FG_EVENT_ID_KEY_CURRENT", "").strip()
-    extras = [x.strip() for x in os.getenv("FG_EVENT_ID_KEYS", "").split(",") if x.strip()]
-    prev = os.getenv("FG_EVENT_ID_KEY_PREV", "").strip()
-    accepted = list(extras)
-    if prev:
-        accepted.append(prev)
-    return current, accepted
+    prev = os.getenv("FG_EVENT_ID_KEY_PREV", "").strip() or None
+    from_list = [v.strip() for v in os.getenv("FG_EVENT_ID_KEYS", "").split(",") if v.strip()]
+    return current, prev, from_list
 
 
 def deterministic_event_id(
@@ -101,25 +60,38 @@ def deterministic_event_id(
     bucket: str,
     features: dict,
 ) -> str:
+    """Generate deterministic event IDs.
+
+    Migration note: Core should accept both legacy SHA256 IDs and v2 HMAC IDs during cutover.
+    """
+    payload = {
+        "canon_v": EVENT_ID_CANON_VERSION,
+        "tenant_id": tenant_id,
+        "agent_id": agent_id,
+        "event_type": event_type,
+        "subject": subject,
+        "bucket": bucket,
+        "features": features,
+    }
+
     mode = os.getenv("FG_EVENT_ID_MODE", "hmac_v2").strip().lower()
     if mode == "legacy":
-        canonical = _legacy_canonical_payload(
-            tenant_id, agent_id, event_type, subject, bucket, features
-        )
-        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        legacy_canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(legacy_canonical).hexdigest()
     if mode != "hmac_v2":
-        raise ValueError("FG_EVENT_ID_MODE must be one of: legacy, hmac_v2")
+        raise ValueError("FG_EVENT_ID_MODE must be either 'hmac_v2' or 'legacy'")
 
-    current_key, _accepted_keys = _event_id_keys()
-    # Server migration expectation: ingestion should accept IDs generated from CURRENT and PREV keys.
-    if not current_key:
-        raise ValueError("FG_EVENT_ID_KEY_CURRENT is required when FG_EVENT_ID_MODE=hmac_v2")
-    canonical = _v2_canonical_payload(
-        tenant_id, agent_id, event_type, subject, bucket, features
-    )
-    digest = hmac.new(
-        current_key.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256
-    ).hexdigest()
+    payload["canon_v"] = 1
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+    current_key, _prev_key, keys = _event_id_keys()
+    signing_key = current_key or (keys[0] if keys else "")
+    if not signing_key:
+        raise ValueError(
+            "FG_EVENT_ID_MODE=hmac_v2 requires FG_EVENT_ID_KEY_CURRENT (preferred) or FG_EVENT_ID_KEYS"
+        )
+
+    digest = hmac.new(signing_key.encode("utf-8"), canonical, hashlib.sha256).hexdigest()
     return f"ev2_{digest}"
 
 
