@@ -50,6 +50,7 @@ from api.middleware.security_headers import (
     SecurityHeadersConfig,
     SecurityHeadersMiddleware,
 )
+from api.middleware.exception_shield import FGExceptionShieldMiddleware
 
 # Canonical app logger (fastapi.logger is NOT a stdlib logger)
 log = logging.getLogger("frostgate")
@@ -837,4 +838,55 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     return app
 
 
-app = build_app()
+_RUNTIME_APP: FastAPI | None = None
+
+
+def _is_contract_generation_context() -> bool:
+    return _env_bool("FG_CONTRACTS_GEN", default=False)
+
+
+def _import_build_mode() -> str:
+    return (os.getenv("FG_IMPORT_BUILD_MODE") or "strict").strip().lower() or "strict"
+
+
+def get_app() -> FastAPI:
+    global _RUNTIME_APP
+    if _RUNTIME_APP is None:
+        _RUNTIME_APP = build_app()
+    return _RUNTIME_APP
+
+
+def create_app() -> FastAPI:
+    """Factory entrypoint for uvicorn --factory and runtime bootstraps."""
+    return build_app()
+
+
+class _LazyRuntimeApp:
+    """ASGI-compatible lazy runtime app wrapper to avoid import-time side effects."""
+
+    async def __call__(self, scope, receive, send):
+        app_instance = get_app()
+        await app_instance(scope, receive, send)
+
+    def __getattr__(self, name: str):
+        return getattr(get_app(), name)
+
+
+def _module_app_binding() -> FastAPI | _LazyRuntimeApp | None:
+    if _is_contract_generation_context():
+        return None
+
+    mode = _import_build_mode()
+    if mode == "soft":
+        return _LazyRuntimeApp()
+
+    if _env_bool("FG_BUILD_APP_ON_IMPORT", default=False):
+        return get_app()
+
+    return _LazyRuntimeApp()
+
+
+app = _module_app_binding()
+# app = build_app() is intentionally not executed at import-time; use get_app/create_app.
+
+# error_code handling is enforced in api.middleware.exception_shield.FGExceptionShieldMiddleware
