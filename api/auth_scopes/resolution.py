@@ -575,4 +575,5 @@ def require_scopes(*scopes: str) -> Callable[..., None]:
     def _dep(_: str = Depends(_scoped_key_dep)) -> None:
         return None
 
+    setattr(_dep, "__fg_scope_dependency__", True)
     return _dep
