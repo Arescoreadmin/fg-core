@@ -168,3 +168,4 @@ supervisor-sidecar/supervisor-sidecar
 # Local caches (Codex / CI / dev)
 .cache/
 
+scratch.sh
