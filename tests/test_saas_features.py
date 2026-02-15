@@ -131,7 +131,6 @@ class TestWebhookSecurity:
 
         assert result.valid is False
 
-
     def test_verify_signature_missing_secret_denied_by_default(self, monkeypatch):
         """Unsigned webhook requests are denied by default."""
         from api import webhook_security
