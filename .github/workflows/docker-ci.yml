@@ -23,13 +23,14 @@ jobs:
           print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
           print(f"NATS_AUTH_TOKEN={secrets.token_urlsafe(24)}")
           print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(24)}")
+          print(f"FG_WEBHOOK_SECRET={secrets.token_urlsafe(32)}")
           PY
 
       - name: Verify required env vars are set
         run: |
           set -euo pipefail
           missing=0
-          for var in FG_API_KEY REDIS_PASSWORD POSTGRES_PASSWORD NATS_AUTH_TOKEN FG_AGENT_API_KEY; do
+          for var in FG_API_KEY REDIS_PASSWORD POSTGRES_PASSWORD NATS_AUTH_TOKEN FG_AGENT_API_KEY FG_WEBHOOK_SECRET; do
             if [ -n "${!var:-}" ]; then
               echo "${var}=set"
             else
@@ -55,6 +56,7 @@ jobs:
             echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}"
             echo "NATS_AUTH_TOKEN=${NATS_AUTH_TOKEN}"
             echo "FG_AGENT_API_KEY=${FG_AGENT_API_KEY}"
+            echo "FG_WEBHOOK_SECRET=${FG_WEBHOOK_SECRET}"
           } >> .env.ci
           cp .env.ci .env
           echo "${FG_API_KEY}" > secrets/fg_api_keys.txt

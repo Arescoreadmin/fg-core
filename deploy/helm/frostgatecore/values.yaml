@@ -24,6 +24,7 @@ env:
   FG_DB_URL: "postgresql+psycopg://fg_app:change_me@postgres:5432/frostgate"
   FG_AUTH_ALLOW_FALLBACK: "false"
   FG_RL_FAIL_OPEN: "false"
+  FG_WEBHOOK_SECRET: "change_me_set_via_secret_ref"
 
 podAnnotations: {}
 
