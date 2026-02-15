@@ -207,7 +207,9 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
         )
 
         if "decisions" in tables:
-            _sqlite_add_column_if_missing(conn, "decisions", "config_hash", "TEXT DEFAULT 'legacy_config_hash'")
+            _sqlite_add_column_if_missing(
+                conn, "decisions", "config_hash", "TEXT DEFAULT 'legacy_config_hash'"
+            )
 
             tenant_rows = conn.exec_driver_sql(
                 "SELECT DISTINCT tenant_id FROM decisions WHERE tenant_id IS NOT NULL"
@@ -215,14 +217,18 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             for row in tenant_rows:
                 tenant_id = row[0]
                 canonical = '{"legacy":true}'
-                legacy_hash = 'legacy_config_hash'
+                legacy_hash = "legacy_config_hash"
                 conn.exec_driver_sql(
                     """
                     INSERT OR IGNORE INTO config_versions(
                         tenant_id, config_hash, created_by, config_json, config_json_canonical
                     ) VALUES (:tenant_id, :config_hash, 'migration', '{"legacy":true}', :canonical)
                     """,
-                    {"tenant_id": tenant_id, "config_hash": legacy_hash, "canonical": canonical},
+                    {
+                        "tenant_id": tenant_id,
+                        "config_hash": legacy_hash,
+                        "canonical": canonical,
+                    },
                 )
                 conn.exec_driver_sql(
                     """

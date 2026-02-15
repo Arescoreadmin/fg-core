@@ -11,7 +11,9 @@ from api.config_versioning import create_config_version
 from api.db import get_engine
 
 
-def _create_config_hash(db: Session, tenant_id: str, payload: dict, set_active: bool = True) -> str:
+def _create_config_hash(
+    db: Session, tenant_id: str, payload: dict, set_active: bool = True
+) -> str:
     v = create_config_version(
         db,
         tenant_id=tenant_id,
@@ -40,26 +42,38 @@ def test_decision_includes_config_hash_on_ingest_and_read(build_app):
         "payload": {"x": 1},
     }
 
-    r = client.post("/ingest", json=payload, headers={"X-API-Key": key, "X-Tenant-Id": "tenant-bind"})
+    r = client.post(
+        "/ingest",
+        json=payload,
+        headers={"X-API-Key": key, "X-Tenant-Id": "tenant-bind"},
+    )
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["config_hash"] == h
     assert body["decision"]["config_hash"] == h
 
-    rd = client.get("/decisions", params={"tenant_id": "tenant-bind"}, headers={"X-API-Key": key})
+    rd = client.get(
+        "/decisions", params={"tenant_id": "tenant-bind"}, headers={"X-API-Key": key}
+    )
     assert rd.status_code == 200, rd.text
     assert rd.json()["items"][0]["config_hash"] == h
 
 
-def test_atomic_config_selection_explicit_hash_beats_active_pointer_change(build_app, monkeypatch):
+def test_atomic_config_selection_explicit_hash_beats_active_pointer_change(
+    build_app, monkeypatch
+):
     app = build_app()
     client = TestClient(app)
     key = mint_key("ingest:write", "decisions:read", tenant_id="tenant-atomic")
 
     engine = get_engine()
     with Session(engine) as db:
-        hash_a = _create_config_hash(db, "tenant-atomic", {"version": "A"}, set_active=True)
-        hash_b = _create_config_hash(db, "tenant-atomic", {"version": "B"}, set_active=True)
+        hash_a = _create_config_hash(
+            db, "tenant-atomic", {"version": "A"}, set_active=True
+        )
+        hash_b = _create_config_hash(
+            db, "tenant-atomic", {"version": "B"}, set_active=True
+        )
 
     from api import ingest as ingest_module
 
@@ -67,7 +81,9 @@ def test_atomic_config_selection_explicit_hash_beats_active_pointer_change(build
 
     def _flip_active(db: Session, rec):
         db.execute(
-            text("UPDATE tenant_config_active SET active_config_hash = :h WHERE tenant_id = :t"),
+            text(
+                "UPDATE tenant_config_active SET active_config_hash = :h WHERE tenant_id = :t"
+            ),
             {"h": hash_b, "t": "tenant-atomic"},
         )
         return orig_emit(db, rec)
@@ -83,7 +99,11 @@ def test_atomic_config_selection_explicit_hash_beats_active_pointer_change(build
             "event_type": "auth.test",
             "payload": {},
         },
-        headers={"X-API-Key": key, "X-Tenant-Id": "tenant-atomic", "X-Config-Hash": hash_a},
+        headers={
+            "X-API-Key": key,
+            "X-Tenant-Id": "tenant-atomic",
+            "X-Config-Hash": hash_a,
+        },
     )
     assert r.status_code == 200, r.text
     assert r.json()["config_hash"] == hash_a
@@ -111,8 +131,6 @@ def test_unknown_config_hash_fails_closed(build_app):
     )
     assert r.status_code == 400
     assert r.json()["detail"]["error"]["code"] == "CONFIG_HASH_NOT_FOUND"
-
-
 
 
 def test_unknown_config_hash_error_contract(build_app):
@@ -155,7 +173,10 @@ def test_active_config_missing_error_contract(build_app):
 
     engine = get_engine()
     with Session(engine) as db:
-        db.execute(text("DELETE FROM tenant_config_active WHERE tenant_id=:t"), {"t": "tenant-missing-active"})
+        db.execute(
+            text("DELETE FROM tenant_config_active WHERE tenant_id=:t"),
+            {"t": "tenant-missing-active"},
+        )
         db.commit()
 
     r = client.post(
@@ -179,6 +200,7 @@ def test_active_config_missing_error_contract(build_app):
         }
     }
 
+
 def test_cross_tenant_config_hash_isolation(build_app):
     app = build_app()
     client = TestClient(app)
@@ -199,7 +221,11 @@ def test_cross_tenant_config_hash_isolation(build_app):
             "event_type": "auth.test",
             "payload": {},
         },
-        headers={"X-API-Key": key2, "X-Tenant-Id": "tenant-two", "X-Config-Hash": hash1},
+        headers={
+            "X-API-Key": key2,
+            "X-Tenant-Id": "tenant-two",
+            "X-Config-Hash": hash1,
+        },
     )
     assert r.status_code == 400
     assert r.json()["detail"]["error"]["code"] == "CONFIG_HASH_NOT_FOUND"
@@ -214,7 +240,11 @@ def test_cross_tenant_config_hash_isolation(build_app):
             "event_type": "auth.test",
             "payload": {},
         },
-        headers={"X-API-Key": key1, "X-Tenant-Id": "tenant-one", "X-Config-Hash": hash1},
+        headers={
+            "X-API-Key": key1,
+            "X-Tenant-Id": "tenant-one",
+            "X-Config-Hash": hash1,
+        },
     )
     assert ok.status_code == 200, ok.text
 
@@ -252,7 +282,9 @@ def test_audit_record_links_decision_to_config_hash(build_app):
 
     with Session(engine) as db:
         dec_hash = db.execute(
-            text("SELECT config_hash FROM decisions WHERE tenant_id=:t AND event_id=:e"),
+            text(
+                "SELECT config_hash FROM decisions WHERE tenant_id=:t AND event_id=:e"
+            ),
             {"t": "tenant-audit-link", "e": event_id},
         ).scalar_one()
 
@@ -263,4 +295,3 @@ def test_audit_record_links_decision_to_config_hash(build_app):
     assert audit_resp.status_code == 200, audit_resp.text
     assert dec_hash == expected_hash
     assert audit_resp.json()["config_hash"] == dec_hash
-

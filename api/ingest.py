@@ -114,17 +114,32 @@ def _extract_event_id(req: IngestRequest) -> str:
     if not eid:
         raise HTTPException(
             status_code=400,
-            detail={"error": {"code": "INGEST_EVENT_ID_REQUIRED", "message": "event_id is required"}},
+            detail={
+                "error": {
+                    "code": "INGEST_EVENT_ID_REQUIRED",
+                    "message": "event_id is required",
+                }
+            },
         )
     if len(eid) > _EVENT_ID_MAX_LEN:
         raise HTTPException(
             status_code=400,
-            detail={"error": {"code": "INGEST_EVENT_ID_INVALID", "message": f"event_id exceeds max length {_EVENT_ID_MAX_LEN}"}},
+            detail={
+                "error": {
+                    "code": "INGEST_EVENT_ID_INVALID",
+                    "message": f"event_id exceeds max length {_EVENT_ID_MAX_LEN}",
+                }
+            },
         )
     if not _EVENT_ID_PATTERN.fullmatch(eid):
         raise HTTPException(
             status_code=400,
-            detail={"error": {"code": "INGEST_EVENT_ID_INVALID", "message": "event_id contains invalid characters"}},
+            detail={
+                "error": {
+                    "code": "INGEST_EVENT_ID_INVALID",
+                    "message": "event_id contains invalid characters",
+                }
+            },
         )
     return eid
 
@@ -274,8 +289,14 @@ async def ingest(
         _ = load_config_version(db, tenant_id=tenant_id, config_hash=config_hash)
     except HTTPException as exc:
         detail = exc.detail if isinstance(exc.detail, dict) else {}
-        error_obj = detail.get("error") if isinstance(detail.get("error"), dict) else detail
-        error_code = error_obj.get("code", "UNKNOWN") if isinstance(error_obj, dict) else "UNKNOWN"
+        error_obj = (
+            detail.get("error") if isinstance(detail.get("error"), dict) else detail
+        )
+        error_code = (
+            error_obj.get("code", "UNKNOWN")
+            if isinstance(error_obj, dict)
+            else "UNKNOWN"
+        )
         log.warning(
             "ingest config resolution failed tenant_id=%s event_id=%s decision_id=%s config_hash=%s config_source=%s error_code=%s",
             tenant_id,

@@ -63,7 +63,9 @@ def hash_config(canonical_str: str) -> str:
     return hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
 
 
-def verify_config_hash_integrity(*, config_payload: dict[str, Any], config_hash: str) -> bool:
+def verify_config_hash_integrity(
+    *, config_payload: dict[str, Any], config_hash: str
+) -> bool:
     """Replay-safety invariant: hash must match canonical JSON of stored payload."""
     return hash_config(canonicalize_config(config_payload)) == config_hash
 
@@ -124,7 +126,9 @@ def create_config_version(
     return version
 
 
-def resolve_config_hash(db: Session, *, tenant_id: str, requested_hash: str | None) -> str:
+def resolve_config_hash(
+    db: Session, *, tenant_id: str, requested_hash: str | None
+) -> str:
     if requested_hash:
         config_hash = requested_hash.strip()
         if not config_hash:
@@ -161,7 +165,9 @@ def resolve_config_hash(db: Session, *, tenant_id: str, requested_hash: str | No
     return config_hash
 
 
-def load_config_version(db: Session, *, tenant_id: str, config_hash: str) -> ConfigVersion:
+def load_config_version(
+    db: Session, *, tenant_id: str, config_hash: str
+) -> ConfigVersion:
     version = (
         db.query(ConfigVersion)
         .filter(

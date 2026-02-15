@@ -16,7 +16,9 @@ def test_canonicalization_golden_vector() -> None:
         "n": None,
         "zero": -0.0,
     }
-    expected_canonical = '{"a":{"x":1,"y":2},"f":1.5,"n":null,"u":"μ","z":[3,2,1],"zero":0.0}'
+    expected_canonical = (
+        '{"a":{"x":1,"y":2},"f":1.5,"n":null,"u":"μ","z":[3,2,1],"zero":0.0}'
+    )
     expected_hash = "d97df257eb557a6ad23b630f0a18d65cd61f8a5756b6ec920d3ce6b6e825a8ff"
 
     canonical = canonicalize_config(payload)

@@ -23,7 +23,9 @@ from .helpers import (
 log = logging.getLogger("frostgate")
 
 
-def _ensure_default_config_for_tenant(sqlite_path: str, tenant_id: Optional[str]) -> None:
+def _ensure_default_config_for_tenant(
+    sqlite_path: str, tenant_id: Optional[str]
+) -> None:
     if not tenant_id:
         return
     canonical = canonicalize_config({})

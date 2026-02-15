@@ -148,12 +148,12 @@ class SecurityAuditLog(Base):
     entry_hash = Column(String(64), nullable=False, unique=True, index=True)
 
 
-
-
 class ConfigVersion(Base):
     __tablename__ = "config_versions"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "config_hash", name="uq_config_versions_tenant_hash"),
+        UniqueConstraint(
+            "tenant_id", "config_hash", name="uq_config_versions_tenant_hash"
+        ),
     )
 
     id = Column(Integer, primary_key=True)
@@ -194,7 +194,12 @@ class TenantActiveConfig(Base):
 class DecisionRecord(Base):
     __tablename__ = "decisions"
     __table_args__ = (
-        Index("ix_decisions_tenant_config_created", "tenant_id", "config_hash", "created_at"),
+        Index(
+            "ix_decisions_tenant_config_created",
+            "tenant_id",
+            "config_hash",
+            "created_at",
+        ),
         ForeignKeyConstraint(
             ["tenant_id", "config_hash"],
             ["config_versions.tenant_id", "config_versions.config_hash"],
