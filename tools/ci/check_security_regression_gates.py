@@ -14,7 +14,9 @@ def check_no_placeholder_security_tests(failures: list[str]) -> None:
     for path in (REPO / "tests").rglob("test_*.py"):
         body = path.read_text(encoding="utf-8")
         if "assert True" in body and "security" in str(path):
-            failures.append(f"{path.relative_to(REPO)} contains placeholder assert True")
+            failures.append(
+                f"{path.relative_to(REPO)} contains placeholder assert True"
+            )
 
 
 def check_auth_middleware_enforces(failures: list[str]) -> None:
@@ -36,7 +38,9 @@ def check_no_insecure_prod_overrides(failures: list[str]) -> None:
     body = _read("tools/ci/check_prod_unsafe_config.py")
     for marker in ("fg_auth_db_fail_open", "fg_auth_allow_fallback", "fg_rl_fail_open"):
         if marker not in body:
-            failures.append(f"tools/ci/check_prod_unsafe_config.py missing unsafe marker {marker}")
+            failures.append(
+                f"tools/ci/check_prod_unsafe_config.py missing unsafe marker {marker}"
+            )
 
 
 def check_network_egress_policy(failures: list[str]) -> None:
@@ -51,8 +55,6 @@ def check_stable_error_codes(failures: list[str]) -> None:
     body = _read("api/main.py")
     if "error_code" not in body:
         failures.append("api/main.py missing stable error_code response handling")
-
-
 
 
 def check_ci_prod_webhook_secret_and_no_outbound_bypass(failures: list[str]) -> None:

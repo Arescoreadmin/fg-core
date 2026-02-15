@@ -64,7 +64,9 @@ def main() -> int:
                     f"{path}: sqlite FG_DB_URL is forbidden for prod-like manifests"
                 )
             if "fg_webhook_secret" not in body:
-                failures.append(f"{path}: prod-like manifest must set FG_WEBHOOK_SECRET")
+                failures.append(
+                    f"{path}: prod-like manifest must set FG_WEBHOOK_SECRET"
+                )
 
         for key in FORBIDDEN_OUTBOUND_BYPASS_KEYS:
             if key in body:
