@@ -47,6 +47,7 @@ from api.middleware.security_headers import (
     SecurityHeadersConfig,
     SecurityHeadersMiddleware,
 )
+from api.middleware.exception_shield import FGExceptionShieldMiddleware
 
 # Canonical app logger (fastapi.logger is NOT a stdlib logger)
 log = logging.getLogger("frostgate")
@@ -160,46 +161,6 @@ governance_router = _optional_router("api.governance", "router")
 mission_router = _optional_router("api.mission_envelope", "router")
 ring_router = _optional_router("api.ring_router", "router")
 roe_router = _optional_router("api.roe_engine", "router")
-
-
-def _stable_error_code(status_code: int, detail: object) -> str:
-    detail_s = str(detail or "").strip().lower().replace(" ", "_")
-    detail_s = "".join(ch for ch in detail_s if ch.isalnum() or ch == "_")
-    if not detail_s:
-        detail_s = "error"
-    return f"E{int(status_code)}_{detail_s}"
-
-
-class FGExceptionShieldMiddleware:
-    """
-    ASGI middleware that converts HTTPException (and ExceptionGroup containing one)
-    into a clean JSON response instead of a 500.
-    """
-
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        try:
-            await self.app(scope, receive, send)
-        except HTTPException as e:
-            resp = JSONResponse(
-                status_code=e.status_code,
-                content={"detail": getattr(e, "detail", str(e)), "error_code": _stable_error_code(e.status_code, getattr(e, "detail", str(e)))},
-            )
-            await resp(scope, receive, send)
-        except ExceptionGroup as eg:  # py3.11+
-            http_exc = next(
-                (ex for ex in eg.exceptions if isinstance(ex, HTTPException)), None
-            )
-            if http_exc is not None:
-                resp = JSONResponse(
-                    status_code=http_exc.status_code,
-                    content={"detail": getattr(http_exc, "detail", str(http_exc)), "error_code": _stable_error_code(http_exc.status_code, getattr(http_exc, "detail", str(http_exc)))},
-                )
-                await resp(scope, receive, send)
-            else:
-                raise
 
 
 def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
@@ -785,4 +746,55 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     return app
 
 
-app = build_app()
+_RUNTIME_APP: FastAPI | None = None
+
+
+def _is_contract_generation_context() -> bool:
+    return _env_bool("FG_CONTRACTS_GEN", default=False)
+
+
+def _import_build_mode() -> str:
+    return (os.getenv("FG_IMPORT_BUILD_MODE") or "strict").strip().lower() or "strict"
+
+
+def get_app() -> FastAPI:
+    global _RUNTIME_APP
+    if _RUNTIME_APP is None:
+        _RUNTIME_APP = build_app()
+    return _RUNTIME_APP
+
+
+def create_app() -> FastAPI:
+    """Factory entrypoint for uvicorn --factory and runtime bootstraps."""
+    return build_app()
+
+
+class _LazyRuntimeApp:
+    """ASGI-compatible lazy runtime app wrapper to avoid import-time side effects."""
+
+    async def __call__(self, scope, receive, send):
+        app_instance = get_app()
+        await app_instance(scope, receive, send)
+
+    def __getattr__(self, name: str):
+        return getattr(get_app(), name)
+
+
+def _module_app_binding() -> FastAPI | _LazyRuntimeApp | None:
+    if _is_contract_generation_context():
+        return None
+
+    mode = _import_build_mode()
+    if mode == "soft":
+        return _LazyRuntimeApp()
+
+    if _env_bool("FG_BUILD_APP_ON_IMPORT", default=False):
+        return get_app()
+
+    return _LazyRuntimeApp()
+
+
+app = _module_app_binding()
+# app = build_app() is intentionally not executed at import-time; use get_app/create_app.
+
+# error_code handling is enforced in api.middleware.exception_shield.FGExceptionShieldMiddleware

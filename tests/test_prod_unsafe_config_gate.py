@@ -78,7 +78,9 @@ services:
     assert "ok" in out
 
 
-def test_gate_fails_when_webhook_secret_missing_in_prod_like(tmp_path, monkeypatch, capsys):
+def test_gate_fails_when_webhook_secret_missing_in_prod_like(
+    tmp_path, monkeypatch, capsys
+):
     compose = tmp_path / "docker-compose.yml"
     compose.write_text(
         """
