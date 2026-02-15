@@ -161,6 +161,14 @@ ring_router = _optional_router("api.ring_router", "router")
 roe_router = _optional_router("api.roe_engine", "router")
 
 
+def _stable_error_code(status_code: int, detail: object) -> str:
+    detail_s = str(detail or "").strip().lower().replace(" ", "_")
+    detail_s = "".join(ch for ch in detail_s if ch.isalnum() or ch == "_")
+    if not detail_s:
+        detail_s = "error"
+    return f"E{int(status_code)}_{detail_s}"
+
+
 class FGExceptionShieldMiddleware:
     """
     ASGI middleware that converts HTTPException (and ExceptionGroup containing one)
@@ -176,7 +184,7 @@ class FGExceptionShieldMiddleware:
         except HTTPException as e:
             resp = JSONResponse(
                 status_code=e.status_code,
-                content={"detail": getattr(e, "detail", str(e))},
+                content={"detail": getattr(e, "detail", str(e)), "error_code": _stable_error_code(e.status_code, getattr(e, "detail", str(e)))},
             )
             await resp(scope, receive, send)
         except ExceptionGroup as eg:  # py3.11+
@@ -186,7 +194,7 @@ class FGExceptionShieldMiddleware:
             if http_exc is not None:
                 resp = JSONResponse(
                     status_code=http_exc.status_code,
-                    content={"detail": getattr(http_exc, "detail", str(http_exc))},
+                    content={"detail": getattr(http_exc, "detail", str(http_exc)), "error_code": _stable_error_code(http_exc.status_code, getattr(http_exc, "detail", str(http_exc)))},
                 )
                 await resp(scope, receive, send)
             else:

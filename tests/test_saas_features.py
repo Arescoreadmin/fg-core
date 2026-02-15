@@ -131,6 +131,44 @@ class TestWebhookSecurity:
 
         assert result.valid is False
 
+
+    def test_verify_signature_missing_secret_denied_by_default(self, monkeypatch):
+        """Unsigned webhook requests are denied by default."""
+        from api import webhook_security
+
+        monkeypatch.setenv("FG_ENV", "dev")
+        monkeypatch.delenv("FG_WEBHOOK_ALLOW_UNSIGNED", raising=False)
+
+        payload = b'{"test": "data"}'
+        timestamp = int(time.time())
+        result = webhook_security.verify_signature(
+            payload,
+            "v1=anything",
+            timestamp,
+            secret="",
+        )
+
+        assert result.valid is False
+        assert "not configured" in (result.error or "").lower()
+
+    def test_verify_signature_missing_secret_unsigned_override(self, monkeypatch):
+        """Unsigned webhook requests can be explicitly enabled for local workflows."""
+        from api import webhook_security
+
+        monkeypatch.setenv("FG_ENV", "dev")
+        monkeypatch.setenv("FG_WEBHOOK_ALLOW_UNSIGNED", "true")
+
+        payload = b'{"test": "data"}'
+        timestamp = int(time.time())
+        result = webhook_security.verify_signature(
+            payload,
+            "v1=anything",
+            timestamp,
+            secret="",
+        )
+
+        assert result.valid is True
+
     def test_verify_signature_expired(self):
         """Test verification of expired timestamp."""
         from api.webhook_security import compute_signature, verify_signature
@@ -377,6 +415,18 @@ class TestSecurityAlerts:
 
         # Same fingerprint for deduplication
         assert alert1.fingerprint() == alert2.fingerprint()
+
+    def test_alert_webhook_egress_policy_blocks_private(self, monkeypatch):
+        from api.security_alerts import _validate_alert_webhook_url
+
+        monkeypatch.setenv("FG_ENV", "prod")
+        assert _validate_alert_webhook_url("https://127.0.0.1/hook") is False
+
+    def test_alert_webhook_egress_policy_requires_https_in_prod(self, monkeypatch):
+        from api.security_alerts import _validate_alert_webhook_url
+
+        monkeypatch.setenv("FG_ENV", "prod")
+        assert _validate_alert_webhook_url("http://example.com/hook") is False
 
     def test_alert_manager_rate_limiting(self):
         """Test alert manager rate limiting."""

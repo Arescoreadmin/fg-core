@@ -113,6 +113,9 @@ jobs:
       - name: Enforce route scope lint
         run: python tools/ci/check_route_scopes.py
 
+      - name: Enforce security regression gates
+        run: python tools/ci/check_security_regression_gates.py
+
       - name: Run fg-fast guard lane (lock regression)
         run: make fg-fast
         env:
@@ -201,6 +204,9 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Generate CI secrets
+        uses: ./.github/actions/fg-secrets
+
       - name: Python setup (cached)
         uses: ./.github/actions/fg-python-setup
         with:
@@ -208,6 +214,9 @@ jobs:
           install-os-deps: "true"
           prepare-workspace: "true"
           build-venv: "true"
+
+      - name: Verify FG_WEBHOOK_SECRET is set for prod job
+        run: python -c "import os; assert os.getenv('FG_WEBHOOK_SECRET')"
 
       - name: Verify prod OpenAPI contract drift
         run: make contracts-core-diff

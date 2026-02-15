@@ -12,13 +12,18 @@ Provides real-time security event alerting with:
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import logging
 import os
+import socket
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
+from urllib.parse import urlparse
+
+from api.config.env import is_production_env
 
 log = logging.getLogger("frostgate.security.alerts")
 
@@ -55,6 +60,33 @@ ALERT_MIN_SEVERITY = _env_str("FG_ALERT_MIN_SEVERITY", "warning")
 ALERT_RATE_LIMIT_WINDOW = _env_int("FG_ALERT_RATE_LIMIT_WINDOW", 60)  # seconds
 ALERT_RATE_LIMIT_MAX = _env_int("FG_ALERT_RATE_LIMIT_MAX", 10)  # max alerts per window
 ALERT_AGGREGATION_WINDOW = _env_int("FG_ALERT_AGGREGATION_WINDOW", 300)  # 5 minutes
+
+
+def _validate_alert_webhook_url(url: str) -> bool:
+    """Validate webhook URL to reduce SSRF risk."""
+    if not url:
+        return False
+
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    if not parsed.hostname:
+        return False
+
+    if is_production_env() and parsed.scheme != "https":
+        return False
+
+    try:
+        host_ips = {ai[4][0] for ai in socket.getaddrinfo(parsed.hostname, None)}
+    except Exception:
+        return False
+
+    for ip_raw in host_ips:
+        ip = ipaddress.ip_address(ip_raw)
+        if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_multicast:
+            return False
+
+    return True
 
 
 class AlertSeverity(str, Enum):
@@ -180,6 +212,9 @@ class WebhookAlertChannel(AlertChannel):
     async def send(self, alert: SecurityAlert) -> bool:
         """Send webhook alert."""
         if not self.url:
+            return False
+        if not _validate_alert_webhook_url(self.url):
+            log.error("Blocked security alert webhook URL by egress policy")
             return False
 
         try:

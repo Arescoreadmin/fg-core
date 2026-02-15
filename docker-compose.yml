@@ -250,6 +250,7 @@ services:
       FG_RL_PREFIX: ${FG_RL_PREFIX:-fg:rl:prod}
       FG_RL_ALLOW_BYPASS_IN_PROD: ${FG_RL_ALLOW_BYPASS_IN_PROD:-false}
       FG_RL_FAIL_OPEN: ${FG_RL_FAIL_OPEN:-false}
+      FG_WEBHOOK_SECRET: ${FG_WEBHOOK_SECRET:?set FG_WEBHOOK_SECRET in .env}
 
     secrets: [fg_api_keys]
     volumes:

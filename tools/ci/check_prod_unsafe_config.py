@@ -13,7 +13,15 @@ UNSAFE_TRUE_FLAGS = (
     "fg_auth_db_fail_open",
     "fg_auth_allow_fallback",
     "fg_rl_fail_open",
+    "fg_rl_allow_bypass_in_prod",
     "fg_contract_gen_context",
+    "fg_webhook_allow_unsigned",
+)
+
+FORBIDDEN_OUTBOUND_BYPASS_KEYS = (
+    "fg_alert_allow_private_destinations",
+    "fg_tripwire_allow_private_destinations",
+    "fg_outbound_url_bypass",
 )
 
 FORBIDDEN_MARKERS = (
@@ -55,6 +63,12 @@ def main() -> int:
                 failures.append(
                     f"{path}: sqlite FG_DB_URL is forbidden for prod-like manifests"
                 )
+            if "fg_webhook_secret" not in body:
+                failures.append(f"{path}: prod-like manifest must set FG_WEBHOOK_SECRET")
+
+        for key in FORBIDDEN_OUTBOUND_BYPASS_KEYS:
+            if key in body:
+                failures.append(f"{path}: outbound URL bypass key is forbidden: {key}")
 
     if failures:
         print("prod unsafe config gate: FAILED")

@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Tuple
 
+from api.config.env import is_production_env
+
 log = logging.getLogger("frostgate.webhook")
 
 # =============================================================================
@@ -48,6 +50,16 @@ WEBHOOK_TIMESTAMP_TOLERANCE = _env_int(
 )  # 5 minutes
 WEBHOOK_SIGNATURE_HEADER = _env_str("FG_WEBHOOK_SIGNATURE_HEADER", "X-FG-Signature")
 WEBHOOK_TIMESTAMP_HEADER = _env_str("FG_WEBHOOK_TIMESTAMP_HEADER", "X-FG-Timestamp")
+
+
+def _allow_unsigned_webhooks() -> bool:
+    return _env_str("FG_WEBHOOK_ALLOW_UNSIGNED", "").lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+        "on",
+    }
 
 
 class SignatureAlgorithm(str, Enum):
@@ -131,10 +143,30 @@ def verify_signature(
 
     # Check if secret is configured
     if not secret:
-        log.warning("Webhook signature verification skipped: no secret configured")
+        if is_production_env():
+            log.error(
+                "Webhook signature verification failed: no secret configured in production-like environment"
+            )
+            return SignatureVerificationResult(
+                valid=False,
+                error="Webhook secret not configured",
+                algorithm=algorithm.value,
+            )
+        if _allow_unsigned_webhooks():
+            log.warning(
+                "Webhook signature verification skipped: no secret configured and FG_WEBHOOK_ALLOW_UNSIGNED=true"
+            )
+            return SignatureVerificationResult(
+                valid=True,
+                error="Signature verification disabled (no secret configured)",
+                algorithm=algorithm.value,
+            )
+        log.warning(
+            "Webhook signature verification failed: no secret configured and unsigned mode not enabled"
+        )
         return SignatureVerificationResult(
-            valid=True,
-            error="Signature verification disabled (no secret configured)",
+            valid=False,
+            error="Webhook secret not configured",
             algorithm=algorithm.value,
         )
 

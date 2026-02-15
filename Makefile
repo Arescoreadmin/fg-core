@@ -435,9 +435,12 @@ bp-d-000-gate: venv
 	@echo "bp-d-000-gate: OK"
 
 
-.PHONY: prod-unsafe-config-check
+.PHONY: prod-unsafe-config-check security-regression-gates
 prod-unsafe-config-check: venv
 	@$(PY) tools/ci/check_prod_unsafe_config.py
+
+security-regression-gates: venv
+	@$(PY) tools/ci/check_security_regression_gates.py
 audit-chain-verify: venv
 	@$(PY) scripts/verify_audit_chain.py
 
@@ -482,7 +485,7 @@ test-unit: venv
 # =============================================================================
 
 .PHONY: fg-fast
-fg-fast: venv fg-audit-make fg-contract fg-compile opa-check prod-profile-check prod-unsafe-config-check audit-chain-verify dos-hardening-check gap-audit \
+fg-fast: venv fg-audit-make fg-contract fg-compile opa-check prod-profile-check prod-unsafe-config-check security-regression-gates audit-chain-verify dos-hardening-check gap-audit \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate \
@@ -500,8 +503,8 @@ fg-fast: venv fg-audit-make fg-contract fg-compile opa-check prod-profile-check 
 db-postgres-up:
 	@$(MAKE) -s _warn-cmd CMD=docker
 	@if [ ! -f .env ]; then \
-		printf "POSTGRES_USER=%s\nPOSTGRES_DB=%s\nPOSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nFG_AGENT_API_KEY=%s\nAG_CORS_ORIGINS=%s\nNATS_AUTH_TOKEN=%s\nFG_API_KEY=%s\n" \
-			"$(POSTGRES_USER)" "$(POSTGRES_DB)" "$(POSTGRES_PASSWORD)" "devredis" "dev-agent-key" "http://localhost:13000" "dev-nats-token" "dev-api-key" > .env; \
+		printf "POSTGRES_USER=%s\nPOSTGRES_DB=%s\nPOSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nFG_AGENT_API_KEY=%s\nAG_CORS_ORIGINS=%s\nNATS_AUTH_TOKEN=%s\nFG_API_KEY=%s\nFG_WEBHOOK_SECRET=%s\n" \
+			"$(POSTGRES_USER)" "$(POSTGRES_DB)" "$(POSTGRES_PASSWORD)" "devredis" "dev-agent-key" "http://localhost:13000" "dev-nats-token" "dev-api-key" "dev-webhook-secret" > .env; \
 	fi
 	@POSTGRES_USER="$(POSTGRES_USER)" POSTGRES_PASSWORD="$(POSTGRES_PASSWORD)" POSTGRES_DB="$(POSTGRES_DB)" \
 		docker compose down -v --remove-orphans || true
