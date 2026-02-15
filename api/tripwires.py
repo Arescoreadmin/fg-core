@@ -13,12 +13,15 @@ Security principle: Assume breach, detect early, alert fast.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 import os
+import socket
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
+from urllib.parse import urljoin, urlparse
 
 log = logging.getLogger("frostgate.tripwire")
 _security_log = logging.getLogger("frostgate.security")
@@ -146,6 +149,60 @@ class WebhookDeliveryService:
             await self._http_client.aclose()
             self._http_client = None
 
+    @staticmethod
+    def _request_headers(alert_type: str, severity: str) -> dict[str, str]:
+        return {
+            "Content-Type": "application/json",
+            "User-Agent": "FrostGate-Tripwire/1.0",
+            "X-Alert-Type": alert_type,
+            "X-Alert-Severity": severity,
+        }
+
+    async def safe_post_with_redirect_validation(
+        self,
+        url: str,
+        payload: dict[str, Any],
+        headers: dict[str, str],
+        max_hops: int = 3,
+    ) -> tuple[Optional[int], Optional[str]]:
+        client = await self._get_http_client()
+        current_url = url
+        hop = 0
+
+        while True:
+            request_kwargs = {
+                "json": payload,
+                "headers": headers,
+            }
+            if hasattr(client, "post"):
+                request_kwargs["follow_redirects"] = False
+                response = await client.post(current_url, **request_kwargs)
+            else:
+                request_kwargs["allow_redirects"] = False
+                response = await client.post(current_url, **request_kwargs)
+
+            status_code = getattr(response, "status_code", getattr(response, "status", 0))
+            if not 300 <= status_code < 400:
+                return status_code, None
+
+            redirect_location = getattr(response, "headers", {}).get("Location")
+            if not redirect_location:
+                return None, "tripwire_webhook: redirect_missing_location"
+
+            if hop >= max_hops:
+                return None, "tripwire_webhook: redirect_hop_limit"
+
+            next_url = urljoin(current_url, redirect_location)
+            is_valid, reason = validate_outbound_url(
+                next_url,
+                "tripwire_webhook_redirect",
+            )
+            if not is_valid:
+                return None, f"tripwire_webhook: {reason}"
+
+            current_url = next_url
+            hop += 1
+
     async def deliver(
         self,
         url: str,
@@ -164,35 +221,49 @@ class WebhookDeliveryService:
         for attempt in range(1, self.max_attempts + 1):
             start_time = time.time()
             try:
-                client = await self._get_http_client()
-
-                # Determine client type and make request
-                if hasattr(client, "post"):  # httpx
-                    response = await client.post(
-                        url,
-                        json=payload,
-                        headers={
-                            "Content-Type": "application/json",
-                            "User-Agent": "FrostGate-Tripwire/1.0",
-                            "X-Alert-Type": alert_type,
-                            "X-Alert-Severity": severity,
-                        },
+                is_valid, reason = validate_outbound_url(url, "tripwire_webhook")
+                if not is_valid:
+                    error = f"tripwire_webhook: {reason}"
+                    self.audit_logger(
+                        {
+                            "event_type": "webhook_failed",
+                            "url": sanitize_url_for_log(url),
+                            "alert_type": alert_type,
+                            "severity": severity,
+                            "attempt": attempt,
+                            "error": error,
+                            "success": False,
+                            "permanent_failure": True,
+                        }
                     )
-                    status_code = response.status_code
-                    response_time = (time.time() - start_time) * 1000
-                else:  # aiohttp
-                    async with client.post(
-                        url,
-                        json=payload,
-                        headers={
-                            "Content-Type": "application/json",
-                            "User-Agent": "FrostGate-Tripwire/1.0",
-                            "X-Alert-Type": alert_type,
-                            "X-Alert-Severity": severity,
-                        },
-                    ) as response:
-                        status_code = response.status
-                        response_time = (time.time() - start_time) * 1000
+                    return DeliveryResult(success=False, error=error, attempt=attempt)
+
+                headers = self._request_headers(alert_type, severity)
+                status_code, redirect_error = await self.safe_post_with_redirect_validation(
+                    url,
+                    payload,
+                    headers,
+                )
+                response_time = (time.time() - start_time) * 1000
+                if redirect_error:
+                    self.audit_logger(
+                        {
+                            "event_type": "webhook_failed",
+                            "url": sanitize_url_for_log(url),
+                            "alert_type": alert_type,
+                            "severity": severity,
+                            "attempt": attempt,
+                            "error": redirect_error,
+                            "success": False,
+                            "permanent_failure": True,
+                        }
+                    )
+                    return DeliveryResult(
+                        success=False,
+                        error=redirect_error,
+                        attempt=attempt,
+                        response_time_ms=response_time,
+                    )
 
                 last_status = status_code
 
@@ -201,7 +272,7 @@ class WebhookDeliveryService:
                     self.audit_logger(
                         {
                             "event_type": "webhook_delivered",
-                            "url": url,
+                            "url": sanitize_url_for_log(url),
                             "alert_type": alert_type,
                             "severity": severity,
                             "status_code": status_code,
@@ -223,7 +294,7 @@ class WebhookDeliveryService:
                     self.audit_logger(
                         {
                             "event_type": "webhook_failed",
-                            "url": url,
+                            "url": sanitize_url_for_log(url),
                             "alert_type": alert_type,
                             "severity": severity,
                             "status_code": status_code,
@@ -259,7 +330,7 @@ class WebhookDeliveryService:
                 self.audit_logger(
                     {
                         "event_type": "webhook_retry",
-                        "url": url,
+                        "url": sanitize_url_for_log(url),
                         "alert_type": alert_type,
                         "attempt": attempt,
                         "max_attempts": self.max_attempts,
@@ -273,7 +344,7 @@ class WebhookDeliveryService:
         self.audit_logger(
             {
                 "event_type": "webhook_failed",
-                "url": url,
+                "url": sanitize_url_for_log(url),
                 "alert_type": alert_type,
                 "severity": severity,
                 "status_code": last_status,
@@ -361,17 +432,89 @@ def queue_webhook_delivery(
 
     try:
         _delivery_queue.put_nowait(delivery)
-        log.debug(f"Queued webhook delivery to {url}")
+        log.debug(f"Queued webhook delivery to {sanitize_url_for_log(url)}")
     except asyncio.QueueFull:
-        log.error(f"Webhook delivery queue full, dropping alert to {url}")
+        log.error(
+            f"Webhook delivery queue full, dropping alert to {sanitize_url_for_log(url)}"
+        )
         _security_log.error(
             "WEBHOOK_QUEUE_FULL",
             extra={
                 "event_type": "webhook_queue_full",
-                "url": url,
+                "url": sanitize_url_for_log(url),
                 "alert_type": alert_type,
             },
         )
+
+
+def sanitize_url_for_log(url: str) -> str:
+    try:
+        parsed = urlparse(url)
+        if not parsed.scheme or not parsed.hostname:
+            return "unparseable_url"
+        host = parsed.hostname
+        port = f":{parsed.port}" if parsed.port else ""
+        path = parsed.path or ""
+        return f"{parsed.scheme}://{host}{port}{path}"
+    except Exception:
+        return "unparseable_url"
+
+
+def validate_outbound_url(url: str, context: str) -> tuple[bool, str]:
+    _ = context
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False, "forbidden_unparseable_url"
+
+    if parsed.scheme not in {"http", "https"}:
+        return False, "forbidden_scheme"
+    if not parsed.hostname:
+        return False, "forbidden_missing_host"
+
+    host = parsed.hostname.strip().lower()
+    if host in {"localhost", "localhost.localdomain"}:
+        return False, "forbidden_loopback_host"
+
+    try:
+        ip = ipaddress.ip_address(host)
+        if (
+            ip.is_loopback
+            or ip.is_private
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            return False, "forbidden_private_ip"
+        return True, "allowed"
+    except ValueError:
+        pass
+
+    try:
+        resolved = {ai[4][0] for ai in socket.getaddrinfo(host, parsed.port or 443)}
+    except Exception:
+        return False, "forbidden_dns_resolution_failed"
+
+    if not resolved:
+        return False, "forbidden_dns_empty"
+
+    for ip_raw in resolved:
+        try:
+            ip = ipaddress.ip_address(ip_raw)
+        except ValueError:
+            return False, "forbidden_invalid_ip_resolution"
+        if (
+            ip.is_loopback
+            or ip.is_private
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            return False, "forbidden_private_ip"
+
+    return True, "allowed"
 
 
 async def deliver_webhook_async(
