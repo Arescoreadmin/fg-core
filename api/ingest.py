@@ -14,7 +14,9 @@ from sqlalchemy.orm import Session
 
 from api.auth_scopes import bind_tenant_id, require_scopes
 from api.db import set_tenant_context
+from api.config_versioning import load_config_version, resolve_config_hash
 from api.db_models import DecisionRecord
+from api.security_audit import AuditEvent, EventType, get_auditor
 from api.deps import tenant_db_session
 from api.evidence_chain import chain_fields_for_decision
 from api.evidence_artifacts import emit_decision_evidence
@@ -113,24 +115,30 @@ def _extract_event_id(req: IngestRequest) -> str:
         raise HTTPException(
             status_code=400,
             detail={
-                "code": "INGEST_EVENT_ID_REQUIRED",
-                "message": "event_id is required",
+                "error": {
+                    "code": "INGEST_EVENT_ID_REQUIRED",
+                    "message": "event_id is required",
+                }
             },
         )
     if len(eid) > _EVENT_ID_MAX_LEN:
         raise HTTPException(
             status_code=400,
             detail={
-                "code": "INGEST_EVENT_ID_INVALID",
-                "message": f"event_id exceeds max length {_EVENT_ID_MAX_LEN}",
+                "error": {
+                    "code": "INGEST_EVENT_ID_INVALID",
+                    "message": f"event_id exceeds max length {_EVENT_ID_MAX_LEN}",
+                }
             },
         )
     if not _EVENT_ID_PATTERN.fullmatch(eid):
         raise HTTPException(
             status_code=400,
             detail={
-                "code": "INGEST_EVENT_ID_INVALID",
-                "message": "event_id contains invalid characters",
+                "error": {
+                    "code": "INGEST_EVENT_ID_INVALID",
+                    "message": "event_id contains invalid characters",
+                }
             },
         )
     return eid
@@ -214,16 +222,25 @@ def _extract_src_ip(payload: dict[str, Any]) -> Optional[str]:
                             "detail": {
                                 "type": "object",
                                 "properties": {
-                                    "code": {
-                                        "type": "string",
-                                        "enum": [
-                                            "INGEST_EVENT_ID_REQUIRED",
-                                            "INGEST_EVENT_ID_INVALID",
-                                        ],
-                                    },
-                                    "message": {"type": "string"},
+                                    "error": {
+                                        "type": "object",
+                                        "properties": {
+                                            "code": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "INGEST_EVENT_ID_REQUIRED",
+                                                    "INGEST_EVENT_ID_INVALID",
+                                                    "CONFIG_HASH_NOT_FOUND",
+                                                    "CONFIG_ACTIVE_MISSING",
+                                                ],
+                                            },
+                                            "message": {"type": "string"},
+                                            "details": {"type": "object"},
+                                        },
+                                        "required": ["code", "message"],
+                                    }
                                 },
-                                "required": ["code", "message"],
+                                "required": ["error"],
                             }
                         },
                         "required": ["detail"],
@@ -243,6 +260,7 @@ async def ingest(
     response: Response,
     db: Session = Depends(tenant_db_session),
     x_tenant_id: Optional[str] = Header(default=None, alias="X-Tenant-Id"),
+    x_config_hash: Optional[str] = Header(default=None, alias="X-Config-Hash"),
 ) -> IngestResponse:
     """
     Ingest telemetry, evaluate, persist.
@@ -260,6 +278,36 @@ async def ingest(
     response.headers["Idempotent-Replay"] = "false"
     event_type = _extract_event_type(req)
 
+    config_source = "explicit_header" if x_config_hash else "active_pointer"
+    # Intentionally uncached by active pointer to prevent sticky/latest config regressions.
+    try:
+        config_hash = resolve_config_hash(
+            db,
+            tenant_id=tenant_id,
+            requested_hash=x_config_hash,
+        )
+        _ = load_config_version(db, tenant_id=tenant_id, config_hash=config_hash)
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        error_obj = (
+            detail.get("error") if isinstance(detail.get("error"), dict) else detail
+        )
+        error_code = (
+            error_obj.get("code", "UNKNOWN")
+            if isinstance(error_obj, dict)
+            else "UNKNOWN"
+        )
+        log.warning(
+            "ingest config resolution failed tenant_id=%s event_id=%s decision_id=%s config_hash=%s config_source=%s error_code=%s",
+            tenant_id,
+            event_id,
+            "pending",
+            x_config_hash,
+            config_source,
+            error_code,
+        )
+        raise
+
     payload: dict[str, Any] = req.payload or {}
     actor, target = _extract_actor_target(payload)
     src_ip = _extract_src_ip(payload)
@@ -270,6 +318,7 @@ async def ingest(
         "timestamp": _isoz(ts),
         "event_id": event_id,
         "event_type": event_type,
+        "config_hash": config_hash,
         "src_ip": src_ip,
         "actor": actor,
         "target": target,
@@ -298,6 +347,7 @@ async def ingest(
         decision["summary"] = result.explanation_brief
         decision["rules"] = list(result.rules_triggered or [])
         decision["pq_fallback"] = False
+        decision["config_hash"] = config_hash
     except Exception:
         log.exception("evaluation failed")
         fingerprint = get_active_policy_fingerprint()
@@ -307,6 +357,7 @@ async def ingest(
             "tenant_id": tenant_id,
             "source": source,
             "event_type": event_type,
+            "config_hash": config_hash,
             "threat_level": "low",
             "mitigations": [],
             "rules_triggered": ["rule:evaluate_exception"],
@@ -334,6 +385,7 @@ async def ingest(
         source=source,
         event_type=event_type,
         decision=decision,
+        config_hash=config_hash,
         threat_level=threat_level,
         latency_ms=latency_ms,
         persisted=True,
@@ -379,6 +431,7 @@ async def ingest(
             event_id=event_id,
             event_type=event_type,
             policy_hash=policy_hash,
+            config_hash=config_hash,
             threat_level=threat_level,
             anomaly_score=float(decision.get("anomaly_score") or 0.0),
             ai_adversarial_score=float(decision.get("ai_adversarial_score") or 0.0),
@@ -442,5 +495,38 @@ async def ingest(
             db.rollback()
         except Exception:
             pass
+
+    decision_id = None
+    try:
+        decision_id = rec.id  # type: ignore[name-defined]
+    except Exception:
+        decision_id = None
+
+    log.info(
+        "ingest decision persisted tenant_id=%s event_id=%s decision_id=%s config_hash=%s config_source=%s error_code=%s",
+        tenant_id,
+        event_id,
+        decision_id,
+        config_hash,
+        config_source,
+        "NONE",
+    )
+
+    get_auditor().log_event(
+        AuditEvent(
+            event_type=EventType.ADMIN_ACTION,
+            success=bool(resp.persisted),
+            tenant_id=tenant_id,
+            request_path="/ingest",
+            request_method="POST",
+            details={
+                "decision_event_id": event_id,
+                "decision_id": decision_id,
+                "config_hash": config_hash,
+                "config_source": config_source,
+                "persisted": bool(resp.persisted),
+            },
+        )
+    )
 
     return resp

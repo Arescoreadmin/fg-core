@@ -56,8 +56,10 @@ def test_ingest_rejects_missing_event_id(build_app):
     assert resp.status_code == 400
     assert resp.json() == {
         "detail": {
-            "code": "INGEST_EVENT_ID_REQUIRED",
-            "message": "event_id is required",
+            "error": {
+                "code": "INGEST_EVENT_ID_REQUIRED",
+                "message": "event_id is required",
+            }
         }
     }
 
@@ -88,8 +90,10 @@ def test_ingest_rejects_invalid_event_id(build_app):
     assert resp.status_code == 400
     assert resp.json() == {
         "detail": {
-            "code": "INGEST_EVENT_ID_INVALID",
-            "message": "event_id contains invalid characters",
+            "error": {
+                "code": "INGEST_EVENT_ID_INVALID",
+                "message": "event_id contains invalid characters",
+            }
         }
     }
 

@@ -77,6 +77,7 @@ class DecisionOut(BaseModel):
     anomaly_score: float
     ai_adversarial_score: float
     pq_fallback: bool
+    config_hash: str
 
     rules_triggered: Optional[Any] = None
     explain_summary: Optional[str] = None
@@ -170,6 +171,7 @@ def list_decisions(
                     getattr(r, "ai_adversarial_score", 0.0) or 0.0
                 ),
                 pq_fallback=bool(getattr(r, "pq_fallback", False)),
+                config_hash=str(getattr(r, "config_hash", "")),
                 rules_triggered=_loads_json_text(
                     getattr(r, "rules_triggered_json", None)
                 ),
@@ -235,6 +237,7 @@ def get_decision(
             anomaly_score=float(getattr(r, "anomaly_score", 0.0) or 0.0),
             ai_adversarial_score=float(getattr(r, "ai_adversarial_score", 0.0) or 0.0),
             pq_fallback=bool(getattr(r, "pq_fallback", False)),
+            config_hash=str(getattr(r, "config_hash", "")),
             rules_triggered=_loads_json_text(getattr(r, "rules_triggered_json", None)),
             explain_summary=getattr(r, "explain_summary", None),
             latency_ms=int(getattr(r, "latency_ms", 0) or 0),

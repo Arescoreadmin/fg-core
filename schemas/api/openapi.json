@@ -126,6 +126,54 @@
         "title": "ClassificationRing",
         "type": "string"
       },
+      "ConfigWriteRequest": {
+        "properties": {
+          "config_payload": {
+            "title": "Config Payload",
+            "type": "object"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "parent_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Hash"
+          },
+          "set_active": {
+            "default": true,
+            "title": "Set Active",
+            "type": "boolean"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          }
+        },
+        "title": "ConfigWriteRequest",
+        "type": "object"
+      },
       "CreateKeyRequest": {
         "description": "Request to create a new API key.",
         "properties": {
@@ -321,6 +369,10 @@
             "title": "Anomaly Score",
             "type": "number"
           },
+          "config_hash": {
+            "title": "Config Hash",
+            "type": "string"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -429,7 +481,8 @@
           "threat_level",
           "anomaly_score",
           "ai_adversarial_score",
-          "pq_fallback"
+          "pq_fallback",
+          "config_hash"
         ],
         "title": "DecisionOut",
         "type": "object"
@@ -1010,6 +1063,10 @@
       },
       "IngestResponse": {
         "properties": {
+          "config_hash": {
+            "title": "Config Hash",
+            "type": "string"
+          },
           "decision": {
             "title": "Decision",
             "type": "object"
@@ -1032,6 +1089,11 @@
               }
             ],
             "title": "Latency Ms"
+          },
+          "persisted": {
+            "default": true,
+            "title": "Persisted",
+            "type": "boolean"
           },
           "source": {
             "title": "Source",
@@ -1062,7 +1124,8 @@
           "event_id",
           "tenant_id",
           "source",
-          "event_type"
+          "event_type",
+          "config_hash"
         ],
         "title": "IngestResponse",
         "type": "object"
@@ -2528,6 +2591,82 @@
         "summary": "List Approvals",
         "tags": [
           "attestation"
+        ]
+      }
+    },
+    "/config/versions": {
+      "post": {
+        "operationId": "write_config_version_config_versions_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigWriteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Write Config Version Config Versions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Write Config Version",
+        "tags": [
+          "config"
         ]
       }
     },
@@ -4079,6 +4218,22 @@
           },
           {
             "in": "header",
+            "name": "X-Config-Hash",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Config-Hash"
+            }
+          },
+          {
+            "in": "header",
             "name": "X-API-Key",
             "required": false,
             "schema": {
@@ -4122,20 +4277,33 @@
                   "properties": {
                     "detail": {
                       "properties": {
-                        "code": {
-                          "enum": [
-                            "INGEST_EVENT_ID_REQUIRED",
-                            "INGEST_EVENT_ID_INVALID"
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "INGEST_EVENT_ID_REQUIRED",
+                                "INGEST_EVENT_ID_INVALID",
+                                "CONFIG_HASH_NOT_FOUND",
+                                "CONFIG_ACTIVE_MISSING"
+                              ],
+                              "type": "string"
+                            },
+                            "details": {
+                              "type": "object"
+                            },
+                            "message": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "message"
                           ],
-                          "type": "string"
-                        },
-                        "message": {
-                          "type": "string"
+                          "type": "object"
                         }
                       },
                       "required": [
-                        "code",
-                        "message"
+                        "error"
                       ],
                       "type": "object"
                     }

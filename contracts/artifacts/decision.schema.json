@@ -14,12 +14,15 @@
     "timestamp",
     "decision",
     "reasons",
-    "schema_version"
+    "schema_version",
+    "config_hash"
   ],
   "properties": {
     "schema_version": {
       "type": "string",
-      "enum": ["1.0"]
+      "enum": [
+        "1.0"
+      ]
     },
     "tenant_id": {
       "type": "string",
@@ -47,11 +50,17 @@
     },
     "decision": {
       "type": "string",
-      "enum": ["allow", "deny", "require_approval"]
+      "enum": [
+        "allow",
+        "deny",
+        "require_approval"
+      ]
     },
     "reasons": {
       "type": "array",
-      "items": {"type": "string"},
+      "items": {
+        "type": "string"
+      },
       "minItems": 1
     },
     "policy_version": {
@@ -59,6 +68,10 @@
     },
     "notes": {
       "type": "string"
+    },
+    "config_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$|^legacy_config_hash$"
     }
   }
 }

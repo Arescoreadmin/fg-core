@@ -5,7 +5,7 @@
 > in `contracts/core/openapi.json`.
 
 Contract Authority: contracts/core/openapi.json (prod)
-Contract-Authority-SHA256: 46a170b292b96c25006ea59f179ee2591ead0a3bb73b8b34f32968aaa52320da
+Contract-Authority-SHA256: 047149c74f5c3ecb2e094032ae3cf8cbdf097afddfbde1dc3448ee116810ecb3
 <!-- CONTRACT_LINT_ANCHORS
 0) Principles
 1) Configuration and Environment Precedence
@@ -603,3 +603,20 @@ When enabled, the API MUST expose:
 - `GET /governance/changes`
 - `POST /governance/changes`
 - `POST /governance/changes/{change_id}/approve`
+
+## Config Version Binding (P0)
+
+- Decision responses from `/ingest`, `/decisions`, `/decisions/{id}`, and forensics decision views include `config_hash`.
+- Data-plane config resolution order:
+  1. `X-Config-Hash` request header (explicit deterministic binding)
+  2. Tenant active config pointer lookup (`tenant_config_active.active_config_hash`)
+- Fail-closed errors:
+  - `400` + `CONFIG_HASH_NOT_FOUND` when the requested hash does not exist for the tenant.
+  - `503` + `CONFIG_ACTIVE_MISSING` when no active pointer exists and no explicit hash is provided.
+- Decisions persist exact `config_hash`; no fallback to latest/current config is allowed.
+- Audit records include decision/config linkage via `details.config_hash`.
+
+- Canonicalization rules for config hashing are fixed: normalize tuples→arrays, preserve `null`, sort object keys, separators are `(',', ':')`, encode UTF-8 without ASCII escaping, reject NaN/Infinity, normalize `-0.0` to `0.0`, and hash as `sha256(canonical_json_bytes)`.
+- Replay safety invariant: persisted `config_hash` must equal `sha256(canonicalize(config_json))` for the stored payload.
+- Data-plane config resolution is intentionally not sticky by "active" value; any cache must be keyed by `(tenant_id, config_hash)` only (or disabled).
+- `legacy_config_hash` is a migration-only sentinel artifact for historical backfill and must never be minted by `/config/versions`.
