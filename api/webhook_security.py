@@ -138,7 +138,8 @@ def verify_signature(
     Returns:
         SignatureVerificationResult with validation status
     """
-    secret = secret or WEBHOOK_SECRET
+    if secret is None:
+        secret = _env_str("FG_WEBHOOK_SECRET", "")
     tolerance = tolerance if tolerance is not None else WEBHOOK_TIMESTAMP_TOLERANCE
 
     # Check if secret is configured
@@ -240,7 +241,8 @@ def sign_webhook_request(
 
     Returns (signature, timestamp) to include in headers.
     """
-    secret = secret or WEBHOOK_SECRET
+    if secret is None:
+        secret = _env_str("FG_WEBHOOK_SECRET", "")
     timestamp = int(time.time())
 
     if not secret:
@@ -273,7 +275,7 @@ class WebhookVerifier:
         timestamp_header: Optional[str] = None,
         algorithm: SignatureAlgorithm = SignatureAlgorithm.HMAC_SHA256,
     ):
-        self.secret = secret or WEBHOOK_SECRET
+        self.secret = secret
         self.tolerance = (
             tolerance if tolerance is not None else WEBHOOK_TIMESTAMP_TOLERANCE
         )
