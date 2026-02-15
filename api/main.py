@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api.config.env import is_production_env, is_strict_env_required, resolve_env
 from api.config.spine_modules import load_spine_modules
@@ -42,6 +44,7 @@ from api.middleware.request_validation import (
     RequestValidationConfig,
     RequestValidationMiddleware,
 )
+from api.security.route_scope_enforcement import enforce_api_route_scope_invariant
 from api.middleware.security_headers import (
     CORSConfig,
     SecurityHeadersConfig,
@@ -79,6 +82,16 @@ get_shutdown_manager = None
 
 _TRUE = {"1", "true", "yes", "y", "on"}
 
+
+
+
+def _is_contract_generation_context() -> bool:
+    v = os.getenv("FG_CONTRACTS_GEN", "")
+    if v.strip().lower() in {"1", "true", "yes", "on"}:
+        return True
+
+    argv0 = (sys.argv[0] or "").lower()
+    return "contracts_gen.py" in argv0 or "contracts_gen_core.py" in argv0
 
 def _env_bool(name: str, default: bool = False) -> bool:
     v = os.getenv(name)
@@ -169,6 +182,13 @@ def _stable_error_code(status_code: int, detail: object) -> str:
         detail_s = "error"
     return f"E{int(status_code)}_{detail_s}"
 
+def _error_envelope(status_code: int, detail: object) -> dict[str, object]:
+    _ = status_code
+    return {
+        "detail": detail,
+    }
+
+
 
 class FGExceptionShieldMiddleware:
     """
@@ -183,9 +203,12 @@ class FGExceptionShieldMiddleware:
         try:
             await self.app(scope, receive, send)
         except HTTPException as e:
+            headers = getattr(e, "headers", None) or {}
+            detail = getattr(e, "detail", str(e))
             resp = JSONResponse(
                 status_code=e.status_code,
-                content={"detail": getattr(e, "detail", str(e)), "error_code": _stable_error_code(e.status_code, getattr(e, "detail", str(e)))},
+                content=_error_envelope(e.status_code, detail),
+                headers=headers,
             )
             await resp(scope, receive, send)
         except ExceptionGroup as eg:  # py3.11+
@@ -193,9 +216,12 @@ class FGExceptionShieldMiddleware:
                 (ex for ex in eg.exceptions if isinstance(ex, HTTPException)), None
             )
             if http_exc is not None:
+                headers = getattr(http_exc, "headers", None) or {}
+                detail = getattr(http_exc, "detail", str(http_exc))
                 resp = JSONResponse(
                     status_code=http_exc.status_code,
-                    content={"detail": getattr(http_exc, "detail", str(http_exc)), "error_code": _stable_error_code(http_exc.status_code, getattr(http_exc, "detail", str(http_exc)))},
+                    content=_error_envelope(http_exc.status_code, detail),
+                    headers=headers,
                 )
                 await resp(scope, receive, send)
             else:
@@ -311,6 +337,26 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                     },
                 )
         return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
+    @app.exception_handler(HTTPException)
+    async def _http_exception_handler(request: Request, exc: HTTPException):
+        headers = getattr(exc, "headers", None) or {}
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=_error_envelope(exc.status_code, getattr(exc, "detail", str(exc))),
+            headers=headers,
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _starlette_http_exception_handler(
+        request: Request, exc: StarletteHTTPException
+    ):
+        headers = getattr(exc, "headers", None) or {}
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=_error_envelope(exc.status_code, getattr(exc, "detail", str(exc))),
+            headers=headers,
+        )
 
     # ---- UI single-use state ----
     if not hasattr(app.state, "_ui_single_use_used"):
@@ -728,6 +774,9 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             return {"ok": False, "error": f"{e.status_code}: {e.detail}", "routes": []}
         except Exception as e:
             return {"ok": False, "error": f"{type(e).__name__}: {e}", "routes": []}
+
+    if not _is_contract_generation_context():
+        enforce_api_route_scope_invariant(app)
 
     return app
 
