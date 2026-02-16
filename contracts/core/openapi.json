@@ -4123,7 +4123,54 @@
               "application/json": {
                 "schema": {
                   "title": "Response Health Health Get",
-                  "type": "object"
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "ai_breaker_state",
+                    "ai_breaker_log_cooldown_seconds",
+                    "ai_breaker_metrics"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "ai_breaker_state": {
+                      "type": "string",
+                      "enum": [
+                        "closed",
+                        "open",
+                        "half_open"
+                      ]
+                    },
+                    "ai_breaker_log_cooldown_seconds": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "ai_breaker_metrics": {
+                      "type": "object",
+                      "required": [
+                        "open_count",
+                        "half_open_trials",
+                        "close_count"
+                      ],
+                      "properties": {
+                        "open_count": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "half_open_trials": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "close_count": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": true
                 }
               }
             },
@@ -4161,7 +4208,57 @@
               "application/json": {
                 "schema": {
                   "title": "Response Health Ready Health Ready Get",
-                  "type": "object"
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "ai_breaker_state",
+                    "ai_breaker_log_cooldown_seconds",
+                    "ai_breaker_metrics"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "dependencies": {
+                      "type": "object"
+                    },
+                    "ai_breaker_state": {
+                      "type": "string",
+                      "enum": [
+                        "closed",
+                        "open",
+                        "half_open"
+                      ]
+                    },
+                    "ai_breaker_log_cooldown_seconds": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "ai_breaker_metrics": {
+                      "type": "object",
+                      "required": [
+                        "open_count",
+                        "half_open_trials",
+                        "close_count"
+                      ],
+                      "properties": {
+                        "open_count": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "half_open_trials": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "close_count": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": true
                 }
               }
             },
