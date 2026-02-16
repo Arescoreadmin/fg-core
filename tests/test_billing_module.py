@@ -21,7 +21,9 @@ from api.db_models import (
 )
 
 
-def _client_with_key(build_app, *scopes: str, tenant_id: str) -> tuple[TestClient, dict[str, str]]:
+def _client_with_key(
+    build_app, *scopes: str, tenant_id: str
+) -> tuple[TestClient, dict[str, str]]:
     app = build_app(auth_enabled=True)
     client = TestClient(app)
     key = mint_key(*scopes, tenant_id=tenant_id)
@@ -69,7 +71,9 @@ def test_identity_dedupe_priority() -> None:
 
 
 def test_identity_conflict_quarantine_and_resolution_events(build_app) -> None:
-    client, headers = _client_with_key(build_app, "admin:read", "admin:write", tenant_id="t-1")
+    client, headers = _client_with_key(
+        build_app, "admin:read", "admin:write", tenant_id="t-1"
+    )
     first = client.post(
         "/billing/devices/upsert",
         json={"tenant_id": "t-1", "asset_id": "asset-x", "asset_verified": True},
@@ -99,7 +103,9 @@ def test_identity_conflict_quarantine_and_resolution_events(build_app) -> None:
     claim_id = second.json()["claim_id"]
     assert second.json()["conflict_state"] == "conflicted"
 
-    disputes = client.get("/billing/identity/disputes", params={"tenant_id": "t-1"}, headers=headers)
+    disputes = client.get(
+        "/billing/identity/disputes", params={"tenant_id": "t-1"}, headers=headers
+    )
     assert disputes.status_code == 200
     assert any(item["claim_id"] == claim_id for item in disputes.json()["items"])
 
@@ -118,7 +124,11 @@ def test_identity_conflict_quarantine_and_resolution_events(build_app) -> None:
     assert resolved.status_code == 200
 
     with Session(get_engine()) as db:
-        claim = db.query(BillingIdentityClaim).filter(BillingIdentityClaim.id == claim_id).one()
+        claim = (
+            db.query(BillingIdentityClaim)
+            .filter(BillingIdentityClaim.id == claim_id)
+            .one()
+        )
         assert claim.conflict_state == "resolved"
         events = (
             db.query(BillingIdentityClaimEvent)
@@ -132,10 +142,16 @@ def test_identity_conflict_quarantine_and_resolution_events(build_app) -> None:
 
 
 def test_device_enrollment_and_activity_proof(build_app) -> None:
-    client, headers = _client_with_key(build_app, "admin:read", "admin:write", tenant_id="t-1")
+    client, headers = _client_with_key(
+        build_app, "admin:read", "admin:write", tenant_id="t-1"
+    )
     upsert = client.post(
         "/billing/devices/upsert",
-        json={"tenant_id": "t-1", "agent_stable_id": "ag-enroll", "device_type": "server"},
+        json={
+            "tenant_id": "t-1",
+            "agent_stable_id": "ag-enroll",
+            "device_type": "server",
+        },
         headers=headers,
     )
     device_id = upsert.json()["device_id"]
@@ -168,7 +184,9 @@ def test_device_enrollment_and_activity_proof(build_app) -> None:
 
 
 def test_invoice_determinism_and_reproduce(build_app) -> None:
-    client, headers = _client_with_key(build_app, "admin:read", "admin:write", tenant_id="t-1")
+    client, headers = _client_with_key(
+        build_app, "admin:read", "admin:write", tenant_id="t-1"
+    )
 
     upsert = client.post(
         "/billing/devices/upsert",
@@ -225,7 +243,9 @@ def test_invoice_determinism_and_reproduce(build_app) -> None:
 
 
 def test_reproduce_mismatch_detection(build_app) -> None:
-    client, headers = _client_with_key(build_app, "admin:read", "admin:write", tenant_id="t-1")
+    client, headers = _client_with_key(
+        build_app, "admin:read", "admin:write", tenant_id="t-1"
+    )
     with Session(get_engine()) as db:
         _seed_pricing_and_contract(db, "t-1")
         db.add(
@@ -254,7 +274,9 @@ def test_reproduce_mismatch_detection(build_app) -> None:
 
 
 def test_evidence_export_contains_manifest_and_attestation(build_app) -> None:
-    client, headers = _client_with_key(build_app, "admin:read", "admin:write", tenant_id="t-1")
+    client, headers = _client_with_key(
+        build_app, "admin:read", "admin:write", tenant_id="t-1"
+    )
     with Session(get_engine()) as db:
         _seed_pricing_and_contract(db, "t-1")
         db.add(
@@ -296,10 +318,16 @@ def test_evidence_export_contains_manifest_and_attestation(build_app) -> None:
 
 
 def test_daily_count_sync_incremental_has_tamper_evident_checkpoint(build_app) -> None:
-    client, headers = _client_with_key(build_app, "admin:read", "admin:write", tenant_id="t-1")
+    client, headers = _client_with_key(
+        build_app, "admin:read", "admin:write", tenant_id="t-1"
+    )
     upsert = client.post(
         "/billing/devices/upsert",
-        json={"tenant_id": "t-1", "agent_stable_id": "ag-sync", "device_type": "server"},
+        json={
+            "tenant_id": "t-1",
+            "agent_stable_id": "ag-sync",
+            "device_type": "server",
+        },
         headers=headers,
     )
     device_id = upsert.json()["device_id"]
@@ -344,7 +372,9 @@ def test_daily_count_sync_incremental_has_tamper_evident_checkpoint(build_app) -
 
 
 def test_billing_run_model(build_app) -> None:
-    client, headers = _client_with_key(build_app, "admin:read", "admin:write", tenant_id="t-1")
+    client, headers = _client_with_key(
+        build_app, "admin:read", "admin:write", tenant_id="t-1"
+    )
     run = client.post(
         "/billing/runs",
         json={
@@ -381,7 +411,9 @@ def test_billing_run_model(build_app) -> None:
 
 
 def test_coverage_day_contract_metadata(build_app) -> None:
-    client, headers = _client_with_key(build_app, "admin:read", "admin:write", tenant_id="t-1")
+    client, headers = _client_with_key(
+        build_app, "admin:read", "admin:write", tenant_id="t-1"
+    )
     with Session(get_engine()) as db:
         db.add(
             BillingInvoice(
@@ -399,14 +431,18 @@ def test_coverage_day_contract_metadata(build_app) -> None:
             )
         )
         db.commit()
-    details = client.get("/billing/invoices/inv-meta", params={"tenant_id": "t-1"}, headers=headers)
+    details = client.get(
+        "/billing/invoices/inv-meta", params={"tenant_id": "t-1"}, headers=headers
+    )
     assert details.status_code == 200
     assert details.json()["coverage_day_rule"] == "UTC"
     assert details.json()["invoice_period_boundary"] == "[period_start, period_end)"
 
 
 def test_credit_note_append_only_flow(build_app) -> None:
-    client, headers = _client_with_key(build_app, "admin:read", "admin:write", tenant_id="t-1")
+    client, headers = _client_with_key(
+        build_app, "admin:read", "admin:write", tenant_id="t-1"
+    )
     with Session(get_engine()) as db:
         _seed_pricing_and_contract(db, "t-1")
         db.add(
@@ -450,13 +486,17 @@ def test_credit_note_append_only_flow(build_app) -> None:
     assert listed.status_code == 200
     assert listed.json()["items"][0]["credit_note_id"] == "cn-1"
 
-    inv = client.get("/billing/invoices/inv-credit", params={"tenant_id": "t-1"}, headers=headers)
+    inv = client.get(
+        "/billing/invoices/inv-credit", params={"tenant_id": "t-1"}, headers=headers
+    )
     assert inv.status_code == 200
     assert inv.json()["net_total"] == 75.0
 
 
 def test_invoice_finalize_freezes_evidence(build_app) -> None:
-    client, headers = _client_with_key(build_app, "admin:read", "admin:write", tenant_id="t-1")
+    client, headers = _client_with_key(
+        build_app, "admin:read", "admin:write", tenant_id="t-1"
+    )
     with Session(get_engine()) as db:
         _seed_pricing_and_contract(db, "t-1")
         db.add(
@@ -478,7 +518,12 @@ def test_invoice_finalize_freezes_evidence(build_app) -> None:
 
     finalized = client.post(
         "/billing/invoices/inv-final/finalize",
-        json={"tenant_id": "t-1", "finalized_by": "ops@example.com", "ticket_id": "SOC-999", "reason": "period close"},
+        json={
+            "tenant_id": "t-1",
+            "finalized_by": "ops@example.com",
+            "ticket_id": "SOC-999",
+            "reason": "period close",
+        },
         headers=headers,
     )
     assert finalized.status_code == 200
@@ -492,8 +537,12 @@ def test_invoice_finalize_freezes_evidence(build_app) -> None:
 
 
 def test_tenant_isolation_adversarial_reads_and_writes(build_app) -> None:
-    client_a, headers_a = _client_with_key(build_app, "admin:read", "admin:write", tenant_id="tenant-a")
-    client_b, headers_b = _client_with_key(build_app, "admin:read", "admin:write", tenant_id="tenant-b")
+    client_a, headers_a = _client_with_key(
+        build_app, "admin:read", "admin:write", tenant_id="tenant-a"
+    )
+    client_b, headers_b = _client_with_key(
+        build_app, "admin:read", "admin:write", tenant_id="tenant-b"
+    )
 
     with Session(get_engine()) as db:
         _seed_pricing_and_contract(db, "tenant-a")
@@ -523,7 +572,11 @@ def test_tenant_isolation_adversarial_reads_and_writes(build_app) -> None:
 
     device = client_a.post(
         "/billing/devices/upsert",
-        json={"tenant_id": "tenant-a", "agent_stable_id": "ag-a", "device_type": "agent"},
+        json={
+            "tenant_id": "tenant-a",
+            "agent_stable_id": "ag-a",
+            "device_type": "agent",
+        },
         headers=headers_a,
     )
     device_id = device.json()["device_id"]

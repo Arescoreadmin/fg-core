@@ -12,7 +12,9 @@ def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8").strip()
 
 
-def verify_bundle(bundle_dir: Path, pubkey_path: Path, hmac_key: str | None) -> tuple[bool, list[str]]:
+def verify_bundle(
+    bundle_dir: Path, pubkey_path: Path, hmac_key: str | None
+) -> tuple[bool, list[str]]:
     errors: list[str] = []
     manifest_path = bundle_dir / "manifest.json"
     sig_path = bundle_dir / "attestation.sig"
@@ -50,9 +52,7 @@ def verify_bundle(bundle_dir: Path, pubkey_path: Path, hmac_key: str | None) -> 
         errors.append("unsupported_pubkey_format")
     else:
         key = (
-            hmac_key
-            or os.getenv("FG_BILLING_EVIDENCE_HMAC_KEY")
-            or "billing-dev-key"
+            hmac_key or os.getenv("FG_BILLING_EVIDENCE_HMAC_KEY") or "billing-dev-key"
         ).encode("utf-8")
         expected_sig = hmac.new(key, manifest_raw, hashlib.sha256).hexdigest()
         got_sig = _read_text(sig_path)
@@ -63,10 +63,14 @@ def verify_bundle(bundle_dir: Path, pubkey_path: Path, hmac_key: str | None) -> 
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Verify FrostGate billing evidence bundle")
+    parser = argparse.ArgumentParser(
+        description="Verify FrostGate billing evidence bundle"
+    )
     parser.add_argument("bundle_dir", help="Path to extracted bundle directory")
     parser.add_argument("--pubkey", required=True, help="Path to attestation.pub")
-    parser.add_argument("--hmac-key", default=None, help="Override HMAC key for verification")
+    parser.add_argument(
+        "--hmac-key", default=None, help="Override HMAC key for verification"
+    )
     args = parser.parse_args()
 
     ok, errors = verify_bundle(Path(args.bundle_dir), Path(args.pubkey), args.hmac_key)

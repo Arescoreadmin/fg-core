@@ -67,7 +67,9 @@ def _canonical_contract_hash(contract: TenantContract) -> str:
         "pricing_version_id": contract.pricing_version_id,
         "discount_rules_json": contract.discount_rules_json or {},
         "commitment_minimum": float(contract.commitment_minimum or 0.0),
-        "start_at": _as_utc(contract.start_at).isoformat() if contract.start_at else None,
+        "start_at": _as_utc(contract.start_at).isoformat()
+        if contract.start_at
+        else None,
         "end_at": _as_utc(contract.end_at).isoformat() if contract.end_at else None,
     }
     return canonical_hash(payload)
@@ -116,7 +118,6 @@ def _to_days(start: datetime, end: datetime | None) -> list[date]:
 
 def _is_covered(action: str) -> bool:
     return action in {"ADD", "CHANGE", "MERGE"}
-
 
 
 def _emit_claim_event(
@@ -216,12 +217,17 @@ def _resolve_identity_claim(
     claim.conflict_state = "conflicted"
     this_device = (
         db.query(BillingDevice)
-        .filter(BillingDevice.tenant_id == tenant_id, BillingDevice.device_id == device_id)
+        .filter(
+            BillingDevice.tenant_id == tenant_id, BillingDevice.device_id == device_id
+        )
         .one_or_none()
     )
     other_device = (
         db.query(BillingDevice)
-        .filter(BillingDevice.tenant_id == tenant_id, BillingDevice.device_id == claim.device_id)
+        .filter(
+            BillingDevice.tenant_id == tenant_id,
+            BillingDevice.device_id == claim.device_id,
+        )
         .one_or_none()
     )
     if this_device:
@@ -343,7 +349,9 @@ def _sync_daily_counts_incremental(
         return {
             "processed": 0,
             "last_ledger_id": last_ledger_id,
-            "processed_digest": checkpoint.processed_digest if checkpoint else "GENESIS",
+            "processed_digest": checkpoint.processed_digest
+            if checkpoint
+            else "GENESIS",
         }
 
     touched_days: set[date] = set()
@@ -617,7 +625,9 @@ class DisputeResolveRequest(BaseModel):
     resolved_device_id: str
     reason: str
     ticket_id: str
-    resolution_type: Literal["manual_review", "asset_registry_proof", "agent_attestation"]
+    resolution_type: Literal[
+        "manual_review", "asset_registry_proof", "agent_attestation"
+    ]
     resolved_by: str
 
 
@@ -664,20 +674,23 @@ class DeviceActivityProofRequest(BaseModel):
     proof_hash: str
 
 
-
 @router.post("/devices/upsert", dependencies=[Depends(require_scopes("admin:write"))])
 def upsert_device(
     req: DeviceUpsertRequest,
     request: Request,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
-    tenant_id = bind_tenant_id(request, req.tenant_id, require_explicit_for_unscoped=True)
+    tenant_id = bind_tenant_id(
+        request, req.tenant_id, require_explicit_for_unscoped=True
+    )
     claim_type, device_key, confidence = _stable_device_key(req)
     now = _utc_now()
 
     device = (
         db.query(BillingDevice)
-        .filter(BillingDevice.tenant_id == tenant_id, BillingDevice.device_key == device_key)
+        .filter(
+            BillingDevice.tenant_id == tenant_id, BillingDevice.device_key == device_key
+        )
         .one_or_none()
     )
     if device is None:
@@ -736,7 +749,9 @@ def list_identity_disputes(
     db: Session = Depends(tenant_db_required),
     max_age_days: int = 7,
 ) -> dict[str, Any]:
-    effective_tenant = bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    effective_tenant = bind_tenant_id(
+        request, tenant_id, require_explicit_for_unscoped=True
+    )
     threshold = _utc_now() - timedelta(days=max_age_days)
     rows = (
         db.query(BillingIdentityClaim)
@@ -748,9 +763,7 @@ def list_identity_disputes(
         .all()
     )
     escalated = [
-        row
-        for row in rows
-        if row.last_seen and _as_utc(row.last_seen) <= threshold
+        row for row in rows if row.last_seen and _as_utc(row.last_seen) <= threshold
     ]
     if escalated:
         get_auditor().log_event(
@@ -779,10 +792,12 @@ def list_identity_disputes(
                 "first_seen": _ts(row.first_seen),
                 "last_seen": _ts(row.last_seen),
                 "conflict_state": row.conflict_state,
-                "sla_breached": bool(row.last_seen and _as_utc(row.last_seen) <= threshold),
+                "sla_breached": bool(
+                    row.last_seen and _as_utc(row.last_seen) <= threshold
+                ),
             }
             for row in rows
-        ]
+        ],
     }
 
 
@@ -796,24 +811,38 @@ def resolve_identity_dispute(
     request: Request,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
-    tenant_id = bind_tenant_id(request, req.tenant_id, require_explicit_for_unscoped=True)
+    tenant_id = bind_tenant_id(
+        request, req.tenant_id, require_explicit_for_unscoped=True
+    )
     claim = (
         db.query(BillingIdentityClaim)
-        .filter(BillingIdentityClaim.tenant_id == tenant_id, BillingIdentityClaim.id == claim_id)
+        .filter(
+            BillingIdentityClaim.tenant_id == tenant_id,
+            BillingIdentityClaim.id == claim_id,
+        )
         .one_or_none()
     )
     if claim is None:
         raise HTTPException(status_code=404, detail="claim not found")
     if claim.conflict_state != "conflicted":
         raise HTTPException(status_code=409, detail="claim_not_in_conflicted_state")
-    if not req.reason.strip() or not req.ticket_id.strip() or not req.resolved_by.strip():
-        raise HTTPException(status_code=400, detail="reason, ticket_id and resolved_by are required")
+    if (
+        not req.reason.strip()
+        or not req.ticket_id.strip()
+        or not req.resolved_by.strip()
+    ):
+        raise HTTPException(
+            status_code=400, detail="reason, ticket_id and resolved_by are required"
+        )
     previous = claim.conflict_state
     claim.device_id = req.resolved_device_id
     claim.conflict_state = "resolved"
     winner = (
         db.query(BillingDevice)
-        .filter(BillingDevice.tenant_id == tenant_id, BillingDevice.device_id == req.resolved_device_id)
+        .filter(
+            BillingDevice.tenant_id == tenant_id,
+            BillingDevice.device_id == req.resolved_device_id,
+        )
         .one_or_none()
     )
     if winner is None:
@@ -860,10 +889,15 @@ def coverage_change(
     request: Request,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
-    tenant_id = bind_tenant_id(request, req.tenant_id, require_explicit_for_unscoped=True)
+    tenant_id = bind_tenant_id(
+        request, req.tenant_id, require_explicit_for_unscoped=True
+    )
     device = (
         db.query(BillingDevice)
-        .filter(BillingDevice.tenant_id == tenant_id, BillingDevice.device_id == req.device_id)
+        .filter(
+            BillingDevice.tenant_id == tenant_id,
+            BillingDevice.device_id == req.device_id,
+        )
         .one_or_none()
     )
     if device is None:
@@ -904,14 +938,18 @@ def coverage_change(
     }
 
 
-@router.post("/daily-counts/sync", dependencies=[Depends(require_scopes("admin:write"))])
+@router.post(
+    "/daily-counts/sync", dependencies=[Depends(require_scopes("admin:write"))]
+)
 def sync_daily_counts(
     tenant_id: str,
     request: Request,
     limit: int = 2000,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
-    effective_tenant = bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    effective_tenant = bind_tenant_id(
+        request, tenant_id, require_explicit_for_unscoped=True
+    )
     result = _sync_daily_counts_incremental(db, tenant_id=effective_tenant, limit=limit)
     db.commit()
     return {"tenant_id": effective_tenant, **result}
@@ -924,11 +962,15 @@ def list_devices(
     status: str | None = None,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
-    effective_tenant = bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    effective_tenant = bind_tenant_id(
+        request, tenant_id, require_explicit_for_unscoped=True
+    )
     query = db.query(BillingDevice).filter(BillingDevice.tenant_id == effective_tenant)
     if status:
         query = query.filter(BillingDevice.status == status)
-    rows = query.order_by(BillingDevice.last_seen_at.desc(), BillingDevice.device_key.asc()).all()
+    rows = query.order_by(
+        BillingDevice.last_seen_at.desc(), BillingDevice.device_key.asc()
+    ).all()
     return {
         "coverage_day_rule": COVERAGE_DAY_RULE,
         "invoice_period_boundary": INVOICE_PERIOD_BOUNDARY,
@@ -946,7 +988,7 @@ def list_devices(
                 "collision_signal": row.collision_signal,
             }
             for row in rows
-        ]
+        ],
     }
 
 
@@ -960,14 +1002,18 @@ def coverage_timeline(
     request: Request,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
-    effective_tenant = bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    effective_tenant = bind_tenant_id(
+        request, tenant_id, require_explicit_for_unscoped=True
+    )
     rows = (
         db.query(DeviceCoverageLedger)
         .filter(
             DeviceCoverageLedger.tenant_id == effective_tenant,
             DeviceCoverageLedger.device_id == device_id,
         )
-        .order_by(DeviceCoverageLedger.effective_from.asc(), DeviceCoverageLedger.id.asc())
+        .order_by(
+            DeviceCoverageLedger.effective_from.asc(), DeviceCoverageLedger.id.asc()
+        )
         .all()
     )
     return {
@@ -987,7 +1033,7 @@ def coverage_timeline(
                 "prev_hash": row.prev_hash,
             }
             for row in rows
-        ]
+        ],
     }
 
 
@@ -997,19 +1043,25 @@ def create_billing_run(
     request: Request,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
-    tenant_id = bind_tenant_id(request, req.tenant_id, require_explicit_for_unscoped=True)
+    tenant_id = bind_tenant_id(
+        request, req.tenant_id, require_explicit_for_unscoped=True
+    )
     period_start = _as_utc(req.period_start)
     period_end = _as_utc(req.period_end)
-    idem_key = canonical_hash({
-        "tenant_id": tenant_id,
-        "period_start": _ts(period_start),
-        "period_end": _ts(period_end),
-        "pricing_version_id": req.pricing_version_id,
-        "contract_hash": req.contract_hash,
-    })
+    idem_key = canonical_hash(
+        {
+            "tenant_id": tenant_id,
+            "period_start": _ts(period_start),
+            "period_end": _ts(period_end),
+            "pricing_version_id": req.pricing_version_id,
+            "contract_hash": req.contract_hash,
+        }
+    )
     existing = (
         db.query(BillingRun)
-        .filter(BillingRun.tenant_id == tenant_id, BillingRun.idempotency_key == idem_key)
+        .filter(
+            BillingRun.tenant_id == tenant_id, BillingRun.idempotency_key == idem_key
+        )
         .one_or_none()
     )
     if existing is not None:
@@ -1054,7 +1106,9 @@ def list_billing_runs(
     request: Request,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
-    effective_tenant = bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    effective_tenant = bind_tenant_id(
+        request, tenant_id, require_explicit_for_unscoped=True
+    )
     rows = (
         db.query(BillingRun)
         .filter(BillingRun.tenant_id == effective_tenant)
@@ -1078,7 +1132,7 @@ def list_billing_runs(
                 "period_end": _ts(row.period_end),
             }
             for row in rows
-        ]
+        ],
     }
 
 
@@ -1127,10 +1181,15 @@ def enroll_device(
     request: Request,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
-    tenant_id = bind_tenant_id(request, req.tenant_id, require_explicit_for_unscoped=True)
+    tenant_id = bind_tenant_id(
+        request, req.tenant_id, require_explicit_for_unscoped=True
+    )
     device = (
         db.query(BillingDevice)
-        .filter(BillingDevice.tenant_id == tenant_id, BillingDevice.device_id == req.device_id)
+        .filter(
+            BillingDevice.tenant_id == tenant_id,
+            BillingDevice.device_id == req.device_id,
+        )
         .one_or_none()
     )
     if device is None:
@@ -1157,7 +1216,11 @@ def enroll_device(
     )
     db.add(enroll)
     db.commit()
-    return {"tenant_id": tenant_id, "device_id": req.device_id, "enrolled_at": _ts(enroll.enrolled_at)}
+    return {
+        "tenant_id": tenant_id,
+        "device_id": req.device_id,
+        "enrolled_at": _ts(enroll.enrolled_at),
+    }
 
 
 @router.post("/devices/activity", dependencies=[Depends(require_scopes("admin:write"))])
@@ -1166,10 +1229,15 @@ def record_device_activity_proof(
     request: Request,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
-    tenant_id = bind_tenant_id(request, req.tenant_id, require_explicit_for_unscoped=True)
+    tenant_id = bind_tenant_id(
+        request, req.tenant_id, require_explicit_for_unscoped=True
+    )
     device = (
         db.query(BillingDevice)
-        .filter(BillingDevice.tenant_id == tenant_id, BillingDevice.device_id == req.device_id)
+        .filter(
+            BillingDevice.tenant_id == tenant_id,
+            BillingDevice.device_id == req.device_id,
+        )
         .one_or_none()
     )
     if device is None:
@@ -1196,8 +1264,12 @@ def record_device_activity_proof(
         )
         db.add(proof)
         db.commit()
-    return {"tenant_id": tenant_id, "device_id": req.device_id, "activity_day": req.activity_day.isoformat(), "proof_hash": req.proof_hash}
-
+    return {
+        "tenant_id": tenant_id,
+        "device_id": req.device_id,
+        "activity_day": req.activity_day.isoformat(),
+        "proof_hash": req.proof_hash,
+    }
 
 
 @router.post("/invoices", dependencies=[Depends(require_scopes("admin:write"))])
@@ -1206,12 +1278,18 @@ def create_invoice(
     request: Request,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
-    tenant_id = bind_tenant_id(request, req.tenant_id, require_explicit_for_unscoped=True)
+    tenant_id = bind_tenant_id(
+        request, req.tenant_id, require_explicit_for_unscoped=True
+    )
     _sync_daily_counts_incremental(db, tenant_id=tenant_id)
 
     pricing = _pricing_for_invoice(db, req.pricing_version_id)
-    contract = _contract_for_invoice(db, tenant_id, req.pricing_version_id, req.period_start)
-    daily_rows, daily_hash = _invoice_daily_rows(db, tenant_id, req.period_start, req.period_end)
+    contract = _contract_for_invoice(
+        db, tenant_id, req.pricing_version_id, req.period_start
+    )
+    daily_rows, daily_hash = _invoice_daily_rows(
+        db, tenant_id, req.period_start, req.period_end
+    )
     payload = _build_invoice_payload(
         tenant_id=tenant_id,
         period_start=req.period_start,
@@ -1227,7 +1305,10 @@ def create_invoice(
 
     existing_invoice = (
         db.query(BillingInvoice)
-        .filter(BillingInvoice.tenant_id == tenant_id, BillingInvoice.invoice_id == req.invoice_id)
+        .filter(
+            BillingInvoice.tenant_id == tenant_id,
+            BillingInvoice.invoice_id == req.invoice_id,
+        )
         .one_or_none()
     )
     if existing_invoice is not None:
@@ -1305,18 +1386,27 @@ def reproduce_invoice(
     request: Request,
     db: Session = Depends(tenant_db_required),
 ) -> InvoiceReproduceResponse:
-    effective_tenant = bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    effective_tenant = bind_tenant_id(
+        request, tenant_id, require_explicit_for_unscoped=True
+    )
     row = (
         db.query(BillingInvoice)
-        .filter(BillingInvoice.tenant_id == effective_tenant, BillingInvoice.invoice_id == invoice_id)
+        .filter(
+            BillingInvoice.tenant_id == effective_tenant,
+            BillingInvoice.invoice_id == invoice_id,
+        )
         .one_or_none()
     )
     if row is None:
         raise HTTPException(status_code=404, detail="invoice not found")
 
     pricing = _pricing_for_invoice(db, row.pricing_version_id)
-    contract = _contract_for_invoice(db, effective_tenant, row.pricing_version_id, row.period_start)
-    daily_rows, daily_hash = _invoice_daily_rows(db, effective_tenant, row.period_start, row.period_end)
+    contract = _contract_for_invoice(
+        db, effective_tenant, row.pricing_version_id, row.period_start
+    )
+    daily_rows, daily_hash = _invoice_daily_rows(
+        db, effective_tenant, row.period_start, row.period_end
+    )
     payload = _build_invoice_payload(
         tenant_id=effective_tenant,
         period_start=row.period_start,
@@ -1352,7 +1442,9 @@ def list_invoices(
     request: Request,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
-    effective_tenant = bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    effective_tenant = bind_tenant_id(
+        request, tenant_id, require_explicit_for_unscoped=True
+    )
     rows = (
         db.query(BillingInvoice)
         .filter(BillingInvoice.tenant_id == effective_tenant)
@@ -1376,26 +1468,40 @@ def list_invoices(
                 "created_at": _ts(row.created_at),
             }
             for row in rows
-        ]
+        ],
     }
 
 
-@router.get("/invoices/{invoice_id}", dependencies=[Depends(require_scopes("admin:read"))])
+@router.get(
+    "/invoices/{invoice_id}", dependencies=[Depends(require_scopes("admin:read"))]
+)
 def invoice_details(
     invoice_id: str,
     tenant_id: str,
     request: Request,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
-    effective_tenant = bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    effective_tenant = bind_tenant_id(
+        request, tenant_id, require_explicit_for_unscoped=True
+    )
     row = (
         db.query(BillingInvoice)
-        .filter(BillingInvoice.tenant_id == effective_tenant, BillingInvoice.invoice_id == invoice_id)
+        .filter(
+            BillingInvoice.tenant_id == effective_tenant,
+            BillingInvoice.invoice_id == invoice_id,
+        )
         .one_or_none()
     )
     if row is None:
         raise HTTPException(status_code=404, detail="invoice not found")
-    credits = db.query(BillingCreditNote).filter(BillingCreditNote.tenant_id == effective_tenant, BillingCreditNote.invoice_id == invoice_id).all()
+    credits = (
+        db.query(BillingCreditNote)
+        .filter(
+            BillingCreditNote.tenant_id == effective_tenant,
+            BillingCreditNote.invoice_id == invoice_id,
+        )
+        .all()
+    )
     credit_total = round(sum(float(c.amount) for c in credits), 6)
     invoice_total = float((row.invoice_json or {}).get("total", 0.0))
     return {
@@ -1427,22 +1533,32 @@ def _git_commit() -> str:
 
 
 def _attest(payload: bytes) -> tuple[str, str]:
-    secret = (os.getenv("FG_BILLING_EVIDENCE_HMAC_KEY") or "billing-dev-key").encode("utf-8")
+    secret = (os.getenv("FG_BILLING_EVIDENCE_HMAC_KEY") or "billing-dev-key").encode(
+        "utf-8"
+    )
     sig = hmac.new(secret, payload, hashlib.sha256).hexdigest()
     return sig, "hmac-sha256:key_id=fg_billing_default"
 
 
-@router.post("/invoices/{invoice_id}/evidence", dependencies=[Depends(require_scopes("admin:read"))])
+@router.post(
+    "/invoices/{invoice_id}/evidence",
+    dependencies=[Depends(require_scopes("admin:read"))],
+)
 def export_evidence(
     invoice_id: str,
     tenant_id: str,
     request: Request,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
-    effective_tenant = bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    effective_tenant = bind_tenant_id(
+        request, tenant_id, require_explicit_for_unscoped=True
+    )
     invoice = (
         db.query(BillingInvoice)
-        .filter(BillingInvoice.tenant_id == effective_tenant, BillingInvoice.invoice_id == invoice_id)
+        .filter(
+            BillingInvoice.tenant_id == effective_tenant,
+            BillingInvoice.invoice_id == invoice_id,
+        )
         .one_or_none()
     )
     if invoice is None:
@@ -1464,10 +1580,14 @@ def export_evidence(
         db.query(BillingCoverageDailyState)
         .filter(
             BillingCoverageDailyState.tenant_id == effective_tenant,
-            BillingCoverageDailyState.coverage_day >= _as_utc(invoice.period_start).date(),
+            BillingCoverageDailyState.coverage_day
+            >= _as_utc(invoice.period_start).date(),
             BillingCoverageDailyState.coverage_day < _as_utc(invoice.period_end).date(),
         )
-        .order_by(BillingCoverageDailyState.coverage_day.asc(), BillingCoverageDailyState.device_id.asc())
+        .order_by(
+            BillingCoverageDailyState.coverage_day.asc(),
+            BillingCoverageDailyState.device_id.asc(),
+        )
         .all()
     )
 
@@ -1560,7 +1680,10 @@ def export_evidence(
     invoice.evidence_path = str(out_dir / "manifest.json")
     run = (
         db.query(BillingRun)
-        .filter(BillingRun.tenant_id == effective_tenant, BillingRun.invoice_id == invoice_id)
+        .filter(
+            BillingRun.tenant_id == effective_tenant,
+            BillingRun.invoice_id == invoice_id,
+        )
         .order_by(BillingRun.created_at.desc())
         .first()
     )
@@ -1577,17 +1700,25 @@ def export_evidence(
     }
 
 
-@router.post("/invoices/{invoice_id}/credits", dependencies=[Depends(require_scopes("admin:write"))])
+@router.post(
+    "/invoices/{invoice_id}/credits",
+    dependencies=[Depends(require_scopes("admin:write"))],
+)
 def create_credit_note(
     invoice_id: str,
     req: CreditNoteCreateRequest,
     request: Request,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
-    tenant_id = bind_tenant_id(request, req.tenant_id, require_explicit_for_unscoped=True)
+    tenant_id = bind_tenant_id(
+        request, req.tenant_id, require_explicit_for_unscoped=True
+    )
     invoice = (
         db.query(BillingInvoice)
-        .filter(BillingInvoice.tenant_id == tenant_id, BillingInvoice.invoice_id == invoice_id)
+        .filter(
+            BillingInvoice.tenant_id == tenant_id,
+            BillingInvoice.invoice_id == invoice_id,
+        )
         .one_or_none()
     )
     if invoice is None:
@@ -1633,43 +1764,78 @@ def create_credit_note(
         reason=req.reason,
     )
     db.commit()
-    return {"credit_note_id": note.credit_note_id, "credit_sha256": note.credit_sha256, "invoice_state": invoice.invoice_state}
+    return {
+        "credit_note_id": note.credit_note_id,
+        "credit_sha256": note.credit_sha256,
+        "invoice_state": invoice.invoice_state,
+    }
 
 
-@router.get("/invoices/{invoice_id}/credits", dependencies=[Depends(require_scopes("admin:read"))])
+@router.get(
+    "/invoices/{invoice_id}/credits",
+    dependencies=[Depends(require_scopes("admin:read"))],
+)
 def list_credit_notes(
     invoice_id: str,
     tenant_id: str,
     request: Request,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
-    effective_tenant = bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    effective_tenant = bind_tenant_id(
+        request, tenant_id, require_explicit_for_unscoped=True
+    )
     rows = (
         db.query(BillingCreditNote)
-        .filter(BillingCreditNote.tenant_id == effective_tenant, BillingCreditNote.invoice_id == invoice_id)
+        .filter(
+            BillingCreditNote.tenant_id == effective_tenant,
+            BillingCreditNote.invoice_id == invoice_id,
+        )
         .order_by(BillingCreditNote.created_at.asc())
         .all()
     )
-    return {"items": [{"credit_note_id": r.credit_note_id, "amount": r.amount, "currency": r.currency, "reason": r.reason, "ticket_id": r.ticket_id, "created_by": r.created_by, "credit_sha256": r.credit_sha256} for r in rows]}
+    return {
+        "items": [
+            {
+                "credit_note_id": r.credit_note_id,
+                "amount": r.amount,
+                "currency": r.currency,
+                "reason": r.reason,
+                "ticket_id": r.ticket_id,
+                "created_by": r.created_by,
+                "credit_sha256": r.credit_sha256,
+            }
+            for r in rows
+        ]
+    }
 
 
-@router.post("/credits/{credit_note_id}/evidence", dependencies=[Depends(require_scopes("admin:read"))])
+@router.post(
+    "/credits/{credit_note_id}/evidence",
+    dependencies=[Depends(require_scopes("admin:read"))],
+)
 def export_credit_note_evidence(
     credit_note_id: str,
     tenant_id: str,
     request: Request,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
-    effective_tenant = bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    effective_tenant = bind_tenant_id(
+        request, tenant_id, require_explicit_for_unscoped=True
+    )
     note = (
         db.query(BillingCreditNote)
-        .filter(BillingCreditNote.tenant_id == effective_tenant, BillingCreditNote.credit_note_id == credit_note_id)
+        .filter(
+            BillingCreditNote.tenant_id == effective_tenant,
+            BillingCreditNote.credit_note_id == credit_note_id,
+        )
         .one_or_none()
     )
     if note is None:
         raise HTTPException(status_code=404, detail="credit note not found")
 
-    out_dir = Path("artifacts") / "billing" / effective_tenant / "credits" / credit_note_id
+    out_dir = (
+        Path("artifacts") / "billing" / effective_tenant / "credits" / credit_note_id
+    )
     credit_payload = canonical_json(note.credit_json)
     manifest = {
         "billing_evidence_spec_version": "v1",
@@ -1678,7 +1844,13 @@ def export_credit_note_evidence(
         "credit_sha256": note.credit_sha256,
         "verifier_version": VERIFIER_VERSION,
         "expected_pubkey_kid": "fg_billing_default",
-        "files": [{"path": "credit_note.json", "sha256": hashlib.sha256(credit_payload).hexdigest(), "size": len(credit_payload)}],
+        "files": [
+            {
+                "path": "credit_note.json",
+                "sha256": hashlib.sha256(credit_payload).hexdigest(),
+                "size": len(credit_payload),
+            }
+        ],
     }
     manifest_json = canonical_json(manifest)
     sig, pub = _attest(manifest_json)
@@ -1691,23 +1863,36 @@ def export_credit_note_evidence(
     return {"credit_note_id": credit_note_id, "evidence_path": note.evidence_path}
 
 
-@router.post("/invoices/{invoice_id}/finalize", dependencies=[Depends(require_scopes("admin:write"))])
+@router.post(
+    "/invoices/{invoice_id}/finalize",
+    dependencies=[Depends(require_scopes("admin:write"))],
+)
 def finalize_invoice(
     invoice_id: str,
     req: InvoiceFinalizeRequest,
     request: Request,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
-    tenant_id = bind_tenant_id(request, req.tenant_id, require_explicit_for_unscoped=True)
+    tenant_id = bind_tenant_id(
+        request, req.tenant_id, require_explicit_for_unscoped=True
+    )
     invoice = (
         db.query(BillingInvoice)
-        .filter(BillingInvoice.tenant_id == tenant_id, BillingInvoice.invoice_id == invoice_id)
+        .filter(
+            BillingInvoice.tenant_id == tenant_id,
+            BillingInvoice.invoice_id == invoice_id,
+        )
         .one_or_none()
     )
     if invoice is None:
         raise HTTPException(status_code=404, detail="invoice not found")
     if invoice.finalized_at is not None:
-        return {"invoice_id": invoice_id, "finalized_at": _ts(invoice.finalized_at), "invoice_state": invoice.invoice_state, "already_finalized": True}
+        return {
+            "invoice_id": invoice_id,
+            "finalized_at": _ts(invoice.finalized_at),
+            "invoice_state": invoice.invoice_state,
+            "already_finalized": True,
+        }
 
     invoice.finalized_at = _utc_now()
     prev_state = invoice.invoice_state
@@ -1738,20 +1923,33 @@ def finalize_invoice(
         )
     )
     db.commit()
-    return {"invoice_id": invoice_id, "finalized_at": _ts(invoice.finalized_at), "invoice_state": invoice.invoice_state, "already_finalized": False}
+    return {
+        "invoice_id": invoice_id,
+        "finalized_at": _ts(invoice.finalized_at),
+        "invoice_state": invoice.invoice_state,
+        "already_finalized": False,
+    }
 
 
-@router.get("/invoices/{invoice_id}/evidence", dependencies=[Depends(require_scopes("admin:read"))])
+@router.get(
+    "/invoices/{invoice_id}/evidence",
+    dependencies=[Depends(require_scopes("admin:read"))],
+)
 def invoice_evidence(
     invoice_id: str,
     tenant_id: str,
     request: Request,
     db: Session = Depends(tenant_db_required),
 ) -> dict[str, Any]:
-    effective_tenant = bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
+    effective_tenant = bind_tenant_id(
+        request, tenant_id, require_explicit_for_unscoped=True
+    )
     row = (
         db.query(BillingInvoice)
-        .filter(BillingInvoice.tenant_id == effective_tenant, BillingInvoice.invoice_id == invoice_id)
+        .filter(
+            BillingInvoice.tenant_id == effective_tenant,
+            BillingInvoice.invoice_id == invoice_id,
+        )
         .one_or_none()
     )
     if row is None:

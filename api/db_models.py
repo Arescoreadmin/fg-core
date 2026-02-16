@@ -265,7 +265,9 @@ class DecisionRecord(Base):
 class BillingDevice(Base):
     __tablename__ = "billing_devices"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "device_key", name="uq_billing_devices_tenant_key"),
+        UniqueConstraint(
+            "tenant_id", "device_key", name="uq_billing_devices_tenant_key"
+        ),
         Index("ix_billing_devices_tenant_status", "tenant_id", "status"),
     )
 
@@ -279,9 +281,14 @@ class BillingDevice(Base):
     last_seen_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
     labels = Column(JSON, nullable=False, default=dict, server_default=text("'{}'"))
     identity_confidence = Column(Integer, nullable=False, default=0)
-    collision_signal = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    collision_signal = Column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     billable_state = Column(
-        String(32), nullable=False, default="billable", server_default=text("'billable'")
+        String(32),
+        nullable=False,
+        default="billable",
+        server_default=text("'billable'"),
     )
 
 
@@ -297,7 +304,9 @@ class PricingVersion(Base):
 class TenantContract(Base):
     __tablename__ = "tenant_contracts"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "contract_id", name="uq_tenant_contracts_tenant_contract"),
+        UniqueConstraint(
+            "tenant_id", "contract_id", name="uq_tenant_contracts_tenant_contract"
+        ),
     )
 
     id = Column(Integer, primary_key=True)
@@ -306,18 +315,29 @@ class TenantContract(Base):
     pricing_version_id = Column(
         String(64), ForeignKey("pricing_versions.pricing_version_id"), nullable=False
     )
-    discount_rules_json = Column(JSON, nullable=False, default=dict, server_default=text("'{}'"))
+    discount_rules_json = Column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
     commitment_minimum = Column(Float, nullable=False, default=0.0)
     start_at = Column(DateTime(timezone=True), nullable=False)
     end_at = Column(DateTime(timezone=True), nullable=True)
-    contract_hash = Column(String(64), nullable=False, default="", server_default=text("''"))
+    contract_hash = Column(
+        String(64), nullable=False, default="", server_default=text("''")
+    )
 
 
 class DeviceCoverageLedger(Base):
     __tablename__ = "device_coverage_ledger"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "event_id", name="uq_device_coverage_tenant_event"),
-        Index("ix_device_coverage_tenant_device_from", "tenant_id", "device_id", "effective_from"),
+        UniqueConstraint(
+            "tenant_id", "event_id", name="uq_device_coverage_tenant_event"
+        ),
+        Index(
+            "ix_device_coverage_tenant_device_from",
+            "tenant_id",
+            "device_id",
+            "effective_from",
+        ),
     )
 
     id = Column(Integer, primary_key=True)
@@ -377,7 +397,9 @@ class BillingCoverageDailyState(Base):
             "coverage_day",
             name="uq_billing_coverage_daily_state_tenant_device_day",
         ),
-        Index("ix_billing_coverage_daily_state_tenant_day", "tenant_id", "coverage_day"),
+        Index(
+            "ix_billing_coverage_daily_state_tenant_day", "tenant_id", "coverage_day"
+        ),
         Index(
             "ix_billing_coverage_daily_state_tenant_device_day",
             "tenant_id",
@@ -411,7 +433,9 @@ class BillingCountSyncCheckpoint(Base):
 class BillingCountSyncCheckpointEvent(Base):
     __tablename__ = "billing_count_sync_checkpoint_events"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "sequence", name="uq_billing_sync_checkpoint_events_seq"),
+        UniqueConstraint(
+            "tenant_id", "sequence", name="uq_billing_sync_checkpoint_events_seq"
+        ),
     )
 
     id = Column(Integer, primary_key=True)
@@ -428,7 +452,12 @@ class BillingCountSyncCheckpointEvent(Base):
 class BillingIdentityClaimEvent(Base):
     __tablename__ = "billing_identity_claim_events"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "claim_id", "sequence", name="uq_billing_identity_claim_events_seq"),
+        UniqueConstraint(
+            "tenant_id",
+            "claim_id",
+            "sequence",
+            name="uq_billing_identity_claim_events_seq",
+        ),
     )
 
     id = Column(Integer, primary_key=True)
@@ -449,7 +478,9 @@ class BillingRun(Base):
     __tablename__ = "billing_runs"
     __table_args__ = (
         UniqueConstraint("tenant_id", "run_id", name="uq_billing_runs_tenant_run"),
-        UniqueConstraint("tenant_id", "idempotency_key", name="uq_billing_runs_tenant_idempotency"),
+        UniqueConstraint(
+            "tenant_id", "idempotency_key", name="uq_billing_runs_tenant_idempotency"
+        ),
     )
 
     id = Column(Integer, primary_key=True)
@@ -457,8 +488,12 @@ class BillingRun(Base):
     run_id = Column(String(128), nullable=False)
     replay_id = Column(String(128), nullable=False)
     idempotency_key = Column(String(128), nullable=False, index=True)
-    pricing_version_id = Column(String(64), nullable=False, default="", server_default=text("''"))
-    contract_hash = Column(String(64), nullable=False, default="", server_default=text("''"))
+    pricing_version_id = Column(
+        String(64), nullable=False, default="", server_default=text("''")
+    )
+    contract_hash = Column(
+        String(64), nullable=False, default="", server_default=text("''")
+    )
     period_start = Column(DateTime(timezone=True), nullable=False)
     period_end = Column(DateTime(timezone=True), nullable=False)
     status = Column(String(32), nullable=False, default="scheduled")
@@ -511,7 +546,9 @@ class BillingCreditNote(Base):
     reason = Column(Text, nullable=False)
     ticket_id = Column(String(128), nullable=False)
     created_by = Column(String(128), nullable=False)
-    credit_json = Column(JSON, nullable=False, default=dict, server_default=text("'{}'"))
+    credit_json = Column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
     credit_sha256 = Column(String(64), nullable=False)
     evidence_path = Column(String(512), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
@@ -520,7 +557,9 @@ class BillingCreditNote(Base):
 class BillingDeviceEnrollment(Base):
     __tablename__ = "billing_device_enrollments"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "device_id", name="uq_billing_device_enrollments_device"),
+        UniqueConstraint(
+            "tenant_id", "device_id", name="uq_billing_device_enrollments_device"
+        ),
     )
 
     id = Column(Integer, primary_key=True)
@@ -536,7 +575,11 @@ class BillingDeviceActivityProof(Base):
     __tablename__ = "billing_device_activity_proofs"
     __table_args__ = (
         UniqueConstraint(
-            "tenant_id", "device_id", "activity_day", "proof_hash", name="uq_billing_activity_proof"
+            "tenant_id",
+            "device_id",
+            "activity_day",
+            "proof_hash",
+            name="uq_billing_activity_proof",
         ),
         Index("ix_billing_activity_tenant_day", "tenant_id", "activity_day"),
     )
@@ -550,11 +593,15 @@ class BillingDeviceActivityProof(Base):
     observed_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
 
 
-
 class BillingDailyCount(Base):
     __tablename__ = "billing_daily_counts"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "day", "plan_id", name="uq_billing_daily_counts_tenant_day_plan"),
+        UniqueConstraint(
+            "tenant_id",
+            "day",
+            "plan_id",
+            name="uq_billing_daily_counts_tenant_day_plan",
+        ),
     )
 
     id = Column(Integer, primary_key=True)
@@ -569,7 +616,9 @@ class BillingDailyCount(Base):
 class BillingInvoice(Base):
     __tablename__ = "billing_invoices"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "invoice_id", name="uq_billing_invoices_tenant_invoice"),
+        UniqueConstraint(
+            "tenant_id", "invoice_id", name="uq_billing_invoices_tenant_invoice"
+        ),
     )
 
     id = Column(Integer, primary_key=True)
@@ -578,14 +627,22 @@ class BillingInvoice(Base):
     period_start = Column(DateTime(timezone=True), nullable=False)
     period_end = Column(DateTime(timezone=True), nullable=False)
     pricing_version_id = Column(String(64), nullable=False)
-    pricing_hash = Column(String(64), nullable=False, default="", server_default=text("''"))
-    contract_hash = Column(String(64), nullable=False, default="", server_default=text("''"))
+    pricing_hash = Column(
+        String(64), nullable=False, default="", server_default=text("''")
+    )
+    contract_hash = Column(
+        String(64), nullable=False, default="", server_default=text("''")
+    )
     config_hash = Column(String(64), nullable=False)
     policy_hash = Column(String(64), nullable=False)
-    invoice_json = Column(JSON, nullable=False, default=dict, server_default=text("'{}'"))
+    invoice_json = Column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
     invoice_sha256 = Column(String(64), nullable=False)
     evidence_path = Column(String(512), nullable=True)
-    invoice_state = Column(String(32), nullable=False, default="draft", server_default=text("'draft'"))
+    invoice_state = Column(
+        String(32), nullable=False, default="draft", server_default=text("'draft'")
+    )
     finalized_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
 
@@ -661,8 +718,12 @@ def _coverage_ledger_defaults(mapper, connection, target) -> None:
         "device_id": target.device_id,
         "plan_id": target.plan_id,
         "action": target.action,
-        "effective_from": target.effective_from.isoformat() if target.effective_from else None,
-        "effective_to": target.effective_to.isoformat() if target.effective_to else None,
+        "effective_from": target.effective_from.isoformat()
+        if target.effective_from
+        else None,
+        "effective_to": target.effective_to.isoformat()
+        if target.effective_to
+        else None,
         "pricing_version_id": target.pricing_version_id,
         "config_hash": target.config_hash,
         "policy_hash": target.policy_hash,
