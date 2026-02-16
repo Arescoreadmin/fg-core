@@ -443,8 +443,7 @@ security-regression-gates: venv
 	@$(PY) tools/ci/check_security_regression_gates.py
 
 soc-invariants: venv
-	@$(PY) tools/ci/check_soc_invariants.py
-
+@PYTHONPATH=. $(PY) tools/ci/check_soc_invariants.py
 enforcement-mode-matrix: venv
 	@$(PY) tools/ci/check_enforcement_mode_matrix.py
 
@@ -452,8 +451,7 @@ route-inventory-generate: venv
 	@$(PY) tools/ci/check_route_inventory.py --write
 
 route-inventory-audit: venv
-	@$(PY) tools/ci/check_route_inventory.py
-
+@PYTHONPATH=. $(PY) tools/ci/check_route_inventory.py
 test-quality-gate: venv
 	@$(PY) tools/ci/check_test_quality.py
 

@@ -1,17 +1,12 @@
-#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
-import sys
-
-REPO = Path(__file__).resolve().parents[2]
-if str(REPO) not in sys.path:
-    sys.path.insert(0, str(REPO))
 
 from tools.ci.route_checks import iter_route_records, is_public_path
 
+REPO = Path(__file__).resolve().parents[2]
 INVENTORY = REPO / "tools/ci/route_inventory.json"
 TRI_UNKNOWN = "unknown"
 PROTECTED_UNKNOWN_PREFIXES = (
@@ -90,7 +85,9 @@ def _is_protected_path(path: str) -> bool:
     return any(path.startswith(prefix) for prefix in PROTECTED_UNKNOWN_PREFIXES)
 
 
-def _validate_inventory(expected: list[dict[str, object]], cur: list[dict[str, object]]) -> tuple[list[str], list[str]]:
+def _validate_inventory(
+    expected: list[dict[str, object]], cur: list[dict[str, object]]
+) -> tuple[list[str], list[str]]:
     failures: list[str] = []
     warnings: list[str] = []
 

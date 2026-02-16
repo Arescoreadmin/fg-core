@@ -4,15 +4,12 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-import sys
 from pathlib import Path
-
-REPO = Path(__file__).resolve().parents[2]
-if str(REPO) not in sys.path:
-    sys.path.insert(0, str(REPO))
 
 from api.config.prod_invariants import ProdInvariantViolation, assert_prod_invariants
 from scripts.prod_profile_check import ProductionProfileChecker
+
+REPO = Path(__file__).resolve().parents[2]
 
 ALLOWED_REDIRECT_FILES = {
     "api/security_alerts.py",
@@ -195,9 +192,7 @@ def _check_fallback_import_patterns(failures: list[str]) -> None:
         text = py.read_text(encoding="utf-8")
         for pat in banned_patterns:
             if pat.search(text):
-                failures.append(
-                    f"{rel} imports fallback module pattern: {pat.pattern}"
-                )
+                failures.append(f"{rel} imports fallback module pattern: {pat.pattern}")
 
 
 def _check_redirect_clients(failures: list[str]) -> None:
