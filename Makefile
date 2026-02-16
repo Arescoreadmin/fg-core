@@ -1016,8 +1016,10 @@ codex-check: venv
 .PHONY: soc-manifest-sync soc-manifest-verify
 
 soc-manifest-sync: venv
-	@PYTHONPATH=. $(PY) tools/ci/sync_soc_manifest_status.py --write
+	@PYTHONPATH=. $(PY) tools/ci/sync_soc_manifest_status.py --mode sync --write
+
 
 soc-manifest-verify: venv
-	@PYTHONPATH=. $(PY) tools/ci/sync_soc_manifest_status.py --fail-on-unresolved-p0
+	@PYTHONPATH=. $(PY) tools/ci/sync_soc_manifest_status.py --mode verify --fail-on-unresolved-p0
+
 
