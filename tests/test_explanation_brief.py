@@ -1,6 +1,6 @@
-import os
-
 from fastapi.testclient import TestClient
+
+from api.auth_scopes import mint_key
 
 try:
     from api.main import app
@@ -10,11 +10,12 @@ except Exception as e:
     ) from e
 
 
-def test_defend_returns_explanation_brief():
-    api_key = os.getenv("FG_API_KEY")
-    assert api_key, "FG_API_KEY must be set for this test (env var missing)."
+def test_defend_returns_explanation_brief(monkeypatch):
+    monkeypatch.setenv("FG_RL_ENABLED", "0")
+    api_key = mint_key("defend:write", tenant_id="tenant-explain")
 
     payload = {
+        "tenant_id": "tenant-explain",
         "event_type": "auth_attempt",
         "source": "pytest",
         "metadata": {

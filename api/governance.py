@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import require_scopes, verify_api_key
+from api.auth_scopes import require_bound_tenant, require_scopes, verify_api_key
 from api.config.startup_validation import compliance_module_enabled
 from api.deps import tenant_db_required
 from api.db_models import PolicyChangeRequest as PolicyChangeRequestModel
@@ -92,13 +92,7 @@ def _model_to_response(m: PolicyChangeRequestModel) -> PolicyChangeResponse:
 
 
 def _require_known_tenant(request: Request) -> str:
-    tenant_id = getattr(request.state, "tenant_id", None)
-    if not tenant_id or tenant_id == "unknown":
-        raise HTTPException(
-            status_code=400,
-            detail="tenant_id is required and must be a known tenant",
-        )
-    return tenant_id
+    return require_bound_tenant(request)
 
 
 # -----------------------------------------------------------------------------

@@ -39,9 +39,9 @@ def tenant_db_required(
     Tenant-bound DB session dependency.
 
     Contract enforced by bind_tenant_id():
-      - unscoped keys require explicit tenant_id (400 if missing)
-      - unknown/invalid tenant_id -> 400
-      - scoped key mismatch -> 403
+      - tenant is always derived from key binding
+      - supplied tenant_id is optional but must match key tenant (403 on mismatch)
+      - unbound keys are denied (400 fail-closed)
     """
     bound = bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
     if not bound:

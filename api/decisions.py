@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import require_scopes
+from api.auth_scopes import redact_detail, require_bound_tenant, require_scopes
 from api.deps import tenant_db_required
 from api.db_models import DecisionRecord
 
@@ -119,14 +119,7 @@ def list_decisions(
 ) -> DecisionsPage:
     try:
         # P0: Require tenant_id for all requests - no cross-tenant access allowed
-        tenant_id = request.state.tenant_id
-
-        # P0: Reject "unknown" tenant bucket - fail closed
-        if not tenant_id or tenant_id == "unknown":
-            raise HTTPException(
-                status_code=400,
-                detail="tenant_id is required and must be a known tenant",
-            )
+        tenant_id = require_bound_tenant(request)
 
         # Build WHERE clauses once - tenant_id is ALWAYS required
         where = [DecisionRecord.tenant_id == tenant_id]  # P0: Always filter by tenant
@@ -209,14 +202,7 @@ def get_decision(
 ) -> DecisionOut:
     try:
         # P0: Require tenant_id for all requests - no cross-tenant access allowed
-        resolved_tenant = request.state.tenant_id
-
-        # P0: Reject "unknown" tenant bucket - fail closed
-        if not resolved_tenant or resolved_tenant == "unknown":
-            raise HTTPException(
-                status_code=400,
-                detail="tenant_id is required and must be a known tenant",
-            )
+        resolved_tenant = require_bound_tenant(request)
 
         r = db.get(DecisionRecord, decision_id)
         if r is None:
@@ -224,7 +210,10 @@ def get_decision(
 
         # P0: ALWAYS check tenant isolation - no exceptions
         if r.tenant_id != resolved_tenant:
-            raise HTTPException(status_code=403, detail="Tenant mismatch")
+            raise HTTPException(
+                status_code=403,
+                detail=redact_detail("tenant mismatch", generic="forbidden"),
+            )
 
         out = DecisionOut(
             id=int(r.id),

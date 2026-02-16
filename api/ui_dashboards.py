@@ -17,7 +17,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import asc, desc, func, select
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import bind_tenant_id, require_api_key_always, require_scopes
+from api.auth_scopes import (
+    bind_tenant_id,
+    redact_detail,
+    require_api_key_always,
+    require_scopes,
+)
 from api.deps import tenant_db_required, tenant_db_session
 from api.db_models import DecisionRecord
 from api.security_audit import audit_admin_action
@@ -188,14 +193,14 @@ def _resolve_tenant(request: Request, tenant_id: Optional[str]) -> str:
     existing = getattr(getattr(request, "state", None), "tenant_id", None)
     if existing:
         if tenant_id and tenant_id != existing:
-            raise HTTPException(status_code=403, detail="Tenant mismatch")
+            raise HTTPException(
+                status_code=403,
+                detail=redact_detail("tenant mismatch", generic="forbidden"),
+            )
         return existing
     bound = bind_tenant_id(request, tenant_id, require_explicit_for_unscoped=True)
-    if not bound or bound == "unknown":
-        raise HTTPException(
-            status_code=400,
-            detail="tenant_id is required and must be a known tenant",
-        )
+    if not bound:
+        raise HTTPException(status_code=401, detail="unauthorized")
     return bound
 
 

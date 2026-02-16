@@ -26,6 +26,7 @@ from api.auth_scopes import (
     require_scopes,
     _validate_tenant_id,
     DEFAULT_TTL_SECONDS,
+    redact_detail,
 )
 from api.security_audit import audit_key_created, audit_key_revoked, audit_key_rotated
 
@@ -410,7 +411,10 @@ def rotate_key(
                 raise HTTPException(status_code=400, detail="Key is already disabled")
 
             if not db_tenant_id or db_tenant_id != bound_tenant:
-                raise HTTPException(status_code=403, detail="Tenant mismatch")
+                raise HTTPException(
+                    status_code=403,
+                    detail=redact_detail("tenant mismatch", generic="forbidden"),
+                )
 
             # Parse scopes from old key
             scopes = list(_parse_scopes_csv(scopes_csv))

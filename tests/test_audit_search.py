@@ -21,18 +21,21 @@ def audit_client(tmp_path, monkeypatch):
     from api.main import app
 
     client = TestClient(app)
-    api_key = mint_key("audit:read", ttl_seconds=3600)
+    api_key = mint_key("audit:read", ttl_seconds=3600, tenant_id="tenant-a")
     return client, api_key
 
 
-def test_unscoped_key_requires_tenant_id(audit_client):
-    """Unscoped key without tenant_id returns 400 for audit search."""
-    client, api_key = audit_client
-    # Unscoped keys MUST provide explicit tenant_id for audit endpoints
-    response = client.get("/admin/audit/search", headers={"X-API-Key": api_key})
-    # Should return 400 because unscoped keys must provide tenant_id
+def test_unscoped_key_denied_for_audit_search(audit_client):
+    """Unscoped key is denied for tenant-scoped audit search."""
+    client, _ = audit_client
+    api_key = mint_key("audit:read", ttl_seconds=3600)
+    response = client.get(
+        "/admin/audit/search",
+        headers={"X-API-Key": api_key},
+        params={"tenant_id": "tenant-a"},
+    )
     assert response.status_code == 400
-    assert response.json()["detail"] == "tenant_id required for unscoped keys"
+    assert "tenant_id required" in response.json()["detail"]
 
 
 def test_audit_filters_by_tenant(audit_client):
@@ -56,7 +59,7 @@ def test_audit_filters_by_tenant(audit_client):
                     event_type="auth_failure",
                     event_category="security",
                     severity="warning",
-                    tenant_id="tenant-b",
+                    tenant_id="tenant-a",
                     success=False,
                 ),
             ]
@@ -86,7 +89,7 @@ def test_audit_redacts_sensitive_details_and_ip(audit_client):
                 event_type="auth_success",
                 event_category="security",
                 severity="info",
-                tenant_id="tenant-1",
+                tenant_id="tenant-a",
                 success=True,
                 client_ip="192.168.1.10",
                 user_agent="agent",
@@ -102,7 +105,7 @@ def test_audit_redacts_sensitive_details_and_ip(audit_client):
     response = client.get(
         "/admin/audit/search",
         headers={"X-API-Key": api_key},
-        params={"tenant_id": "tenant-1"},
+        params={"tenant_id": "tenant-a"},
     )
     assert response.status_code == 200
     payload = response.json()
@@ -131,7 +134,7 @@ def test_audit_pagination_is_stable(audit_client):
                     event_type="event_a",
                     event_category="security",
                     severity="info",
-                    tenant_id="tenant-3",
+                    tenant_id="tenant-a",
                     success=True,
                     created_at=base_time + timedelta(seconds=1),
                 ),
@@ -139,7 +142,7 @@ def test_audit_pagination_is_stable(audit_client):
                     event_type="event_b",
                     event_category="security",
                     severity="info",
-                    tenant_id="tenant-3",
+                    tenant_id="tenant-a",
                     success=True,
                     created_at=base_time + timedelta(seconds=2),
                 ),
@@ -147,7 +150,7 @@ def test_audit_pagination_is_stable(audit_client):
                     event_type="event_c",
                     event_category="security",
                     severity="info",
-                    tenant_id="tenant-3",
+                    tenant_id="tenant-a",
                     success=True,
                     created_at=base_time + timedelta(seconds=3),
                 ),
@@ -158,7 +161,7 @@ def test_audit_pagination_is_stable(audit_client):
     first = client.get(
         "/admin/audit/search",
         headers={"X-API-Key": api_key},
-        params={"tenant_id": "tenant-3", "page_size": 1},
+        params={"page_size": 1},
     )
     assert first.status_code == 200
     first_payload = first.json()
@@ -168,7 +171,7 @@ def test_audit_pagination_is_stable(audit_client):
     second = client.get(
         "/admin/audit/search",
         headers={"X-API-Key": api_key},
-        params={"tenant_id": "tenant-3", "page_size": 1, "cursor": cursor},
+        params={"page_size": 1, "cursor": cursor},
     )
     assert second.status_code == 200
     second_payload = second.json()
@@ -204,7 +207,7 @@ def test_audit_export_csv(audit_client):
                 event_type="auth_success",
                 event_category="security",
                 severity="info",
-                tenant_id="tenant-2",
+                tenant_id="tenant-a",
                 success=True,
                 details_json=json.dumps({"note": "ok"}),
             )
@@ -214,7 +217,7 @@ def test_audit_export_csv(audit_client):
     response = client.post(
         "/admin/audit/export",
         headers={"X-API-Key": api_key},
-        json={"tenant_id": "tenant-2", "format": "csv"},
+        json={"format": "csv"},
     )
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/csv")
@@ -234,7 +237,7 @@ def test_audit_export_redacts_ip_user_agent(audit_client):
                 event_type="auth_failure",
                 event_category="security",
                 severity="warning",
-                tenant_id="tenant-9",
+                tenant_id="tenant-a",
                 success=False,
                 client_ip="10.0.0.1",
                 user_agent="test-agent",
@@ -245,7 +248,7 @@ def test_audit_export_redacts_ip_user_agent(audit_client):
     response = client.post(
         "/admin/audit/export",
         headers={"X-API-Key": api_key},
-        json={"tenant_id": "tenant-9", "format": "json"},
+        json={"format": "json"},
     )
     assert response.status_code == 200
     lines = [line for line in response.text.splitlines() if line]
