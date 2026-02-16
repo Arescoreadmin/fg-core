@@ -42,6 +42,7 @@ Gate semantics:
 - `tools/ci/check_route_inventory.py`
 - `tools/ci/check_test_quality.py`
 - `tools/ci/check_soc_review_sync.py`
+- `tools/ci/check_soc_review_sync.py` deepens shallow history in CI to recover merge-base before `origin/${GITHUB_BASE_REF}...HEAD` diff; still fails closed if diff is not computable.
 
 ## Makefile targets
 - `soc-invariants`

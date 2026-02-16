@@ -31,14 +31,59 @@ def _run_git(args: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _repo_is_shallow() -> bool:
+    probe = _run_git(["rev-parse", "--is-shallow-repository"])
+    return probe.returncode == 0 and probe.stdout.strip().lower() == "true"
+
+
+def _has_merge_base(base_ref: str) -> bool:
+    mb = _run_git(["merge-base", f"origin/{base_ref}", "HEAD"])
+    return mb.returncode == 0
+
+
+def _ensure_merge_base(base_ref: str) -> str | None:
+    # Initial base fetch from CI base ref.
+    initial_fetch = _run_git(["fetch", "origin", base_ref, "--depth=200"])
+    if initial_fetch.returncode != 0:
+        return (
+            f"git fetch failed for origin/{base_ref}: "
+            f"{initial_fetch.stderr.strip() or initial_fetch.stdout.strip()}"
+        )
+
+    if _has_merge_base(base_ref):
+        return None
+
+    # If repository is shallow, progressively deepen to recover merge base.
+    if _repo_is_shallow():
+        for depth in (200, 400, 800, 1600):
+            deepen = _run_git(["fetch", "--deepen", str(depth), "origin"])
+            if deepen.returncode != 0:
+                return (
+                    "failed to deepen git history while searching for merge base: "
+                    f"{deepen.stderr.strip() or deepen.stdout.strip()}"
+                )
+            if _has_merge_base(base_ref):
+                return None
+
+        unshallow = _run_git(["fetch", "--unshallow", "origin"])
+        if unshallow.returncode == 0 and _has_merge_base(base_ref):
+            return None
+
+    return f"no merge base between origin/{base_ref} and HEAD"
+
+
 def _changed_files_ci(base_ref: str) -> tuple[list[str], str | None]:
-    fetch = _run_git(["fetch", "origin", base_ref, "--depth=1"])
-    if fetch.returncode != 0:
-        return [], f"git fetch failed for origin/{base_ref}: {fetch.stderr.strip() or fetch.stdout.strip()}"
+    merge_base_err = _ensure_merge_base(base_ref)
+    if merge_base_err:
+        return [], merge_base_err
 
     diff = _run_git(["diff", "--name-only", f"origin/{base_ref}...HEAD"])
     if diff.returncode != 0:
-        return [], f"git diff failed for origin/{base_ref}...HEAD: {diff.stderr.strip() or diff.stdout.strip()}"
+        return (
+            [],
+            f"git diff failed for origin/{base_ref}...HEAD: "
+            f"{diff.stderr.strip() or diff.stdout.strip()}",
+        )
 
     files = [line.strip() for line in diff.stdout.splitlines() if line.strip()]
     return sorted(set(files)), None
