@@ -2,14 +2,14 @@ import os
 
 from fastapi.testclient import TestClient
 
+from api.auth_scopes import mint_key
 from api.main import build_app
 
 
 def test_auth_gate_accepts_cookie_when_header_missing(monkeypatch):
     # Force auth ON
     monkeypatch.setenv("FG_AUTH_ENABLED", "1")
-    api_key = os.environ["FG_API_KEY"]
-    monkeypatch.setenv("FG_API_KEY", api_key)
+    api_key = mint_key("stats:read", tenant_id="test-tenant")
 
     cookie_name = os.getenv("FG_UI_COOKIE_NAME", "fg_api_key")
 
@@ -20,6 +20,6 @@ def test_auth_gate_accepts_cookie_when_header_missing(monkeypatch):
         client.cookies.set(cookie_name, api_key)
 
         # Hit a protected endpoint WITHOUT header, ONLY cookie
-        r = client.get("/stats?tenant_id=test-tenant")
+        r = client.get("/stats")
 
         assert r.status_code == 200, r.text

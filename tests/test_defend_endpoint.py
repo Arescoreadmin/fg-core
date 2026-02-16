@@ -8,7 +8,8 @@ from api.auth_scopes import mint_key
 
 
 @pytest.fixture()
-def client():
+def client(monkeypatch):
+    monkeypatch.setenv("FG_RL_ENABLED", "0")
     return TestClient(app)
 
 
@@ -23,7 +24,7 @@ def _payload(failed_auths=12):
 
 
 def test_defend_high_bruteforce_response(client):
-    key = mint_key("defend:write")
+    key = mint_key("defend:write", tenant_id="test-tenant")
 
     resp = client.post(
         "/defend",

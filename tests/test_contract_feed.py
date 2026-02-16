@@ -1,8 +1,9 @@
-import os
 from typing import Dict
 
 import pytest
 from fastapi.testclient import TestClient
+
+from api.auth_scopes import mint_key
 
 # Uses your unified harness (already in place)
 # build_app fixture exists from tests/conftest.py via build_app_factory
@@ -18,11 +19,9 @@ REQUIRED_PRESENTATION_FIELDS = (
 )
 
 
-def _auth_headers() -> Dict[str, str]:
-    api_key = os.getenv("FG_API_KEY")
-    if not api_key:
-        raise RuntimeError("FG_API_KEY must be set for test runs.")
-    return {"X-API-Key": api_key}
+def _auth_headers(*scopes: str) -> Dict[str, str]:
+    key = mint_key(*(scopes or ("feed:read",)), tenant_id="test-tenant")
+    return {"X-API-Key": key}
 
 
 def test_auth_required_when_enabled(build_app):
@@ -39,7 +38,7 @@ def test_auth_required_when_enabled(build_app):
     assert r.status_code == 401
 
     # P0 Security Fix: tenant_id is now required for all data endpoints
-    r = c.get("/feed/live?limit=1&tenant_id=test-tenant", headers=_auth_headers())
+    r = c.get("/feed/live?limit=1", headers=_auth_headers("feed:read"))
     assert r.status_code == 200
 
 
@@ -51,11 +50,11 @@ def test_feed_presentation_fields_non_null(build_app):
     c = TestClient(app)
 
     # seed deterministically
-    r = c.post("/dev/seed", headers=_auth_headers())
+    r = c.post("/dev/seed", headers=_auth_headers("dev:write"))
     assert r.status_code in (200, 201)
 
     # P0 Security Fix: tenant_id is now required
-    r = c.get("/feed/live?limit=50&tenant_id=test-tenant", headers=_auth_headers())
+    r = c.get("/feed/live?limit=50", headers=_auth_headers("feed:read"))
     assert r.status_code == 200
     data = r.json()
     assert isinstance(data.get("items"), list)
@@ -74,13 +73,13 @@ def test_only_actionable_filters_dev_seed_noise(build_app):
     app = build_app(auth_enabled=True, dev_events_enabled=True)
     c = TestClient(app)
 
-    r = c.post("/dev/seed", headers=_auth_headers())
+    r = c.post("/dev/seed", headers=_auth_headers("dev:write"))
     assert r.status_code in (200, 201)
 
     # P0 Security Fix: tenant_id is now required
     r = c.get(
         "/feed/live?limit=200&only_actionable=true&tenant_id=test-tenant",
-        headers=_auth_headers(),
+        headers=_auth_headers("feed:read"),
     )
     assert r.status_code == 200
     items = r.json()["items"]
@@ -99,6 +98,6 @@ def test_dev_seed_gated_when_disabled(build_app):
     app = build_app(auth_enabled=True, dev_events_enabled=False)
     c = TestClient(app)
 
-    r = c.post("/dev/seed", headers=_auth_headers())
+    r = c.post("/dev/seed", headers=_auth_headers("dev:write"))
     # preferred 404; 405 acceptable depending on router mount style
     assert r.status_code in (404, 405)

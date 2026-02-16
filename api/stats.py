@@ -6,11 +6,11 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import require_scopes
+from api.auth_scopes import require_bound_tenant, require_scopes
 from api.deps import tenant_db_required
 from api.db_models import DecisionRecord
 
@@ -543,14 +543,7 @@ def get_stats(
     db: Session = Depends(tenant_db_required),
     tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> StatsResponse:
-    tenant_id = request.state.tenant_id
-    auth = getattr(getattr(request, "state", None), "auth", None)
-    is_global_key = getattr(auth, "reason", None) == "global_key"
-    if not tenant_id or (tenant_id == "unknown" and not is_global_key):
-        raise HTTPException(
-            status_code=400,
-            detail="tenant_id is required and must be a known tenant",
-        )
+    tenant_id = require_bound_tenant(request)
     c = _compute_stats(db, tenant_id=tenant_id)
     return StatsResponse(
         generated_at=_iso(c.now),
@@ -578,14 +571,7 @@ def get_stats_summary(
     Marketing-friendly summary payload for dashboard headers.
     Built from the same underlying computation to avoid drift.
     """
-    tenant_id = request.state.tenant_id
-    auth = getattr(getattr(request, "state", None), "auth", None)
-    is_global_key = getattr(auth, "reason", None) == "global_key"
-    if not tenant_id or (tenant_id == "unknown" and not is_global_key):
-        raise HTTPException(
-            status_code=400,
-            detail="tenant_id is required and must be a known tenant",
-        )
+    tenant_id = require_bound_tenant(request)
     c = _compute_stats(db, tenant_id=tenant_id)
 
     threat_counts_24h = c.threat_counts_24h.model_dump()

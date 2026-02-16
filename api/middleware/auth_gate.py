@@ -10,7 +10,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Match
 
-from api.auth_scopes import _extract_key, verify_api_key_detailed
+from api.auth_scopes import (
+    _extract_key,
+    log_tenant_denial_event,
+    redact_detail,
+    verify_api_key_detailed,
+)
 from api.security.public_paths import PUBLIC_PATHS_EXACT, PUBLIC_PATHS_PREFIX
 
 ROUTE_SCOPE_PREFIX: dict[str, tuple[str, ...]] = {
@@ -160,14 +165,27 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
             and requested_tenant
             and requested_tenant != result.tenant_id
         ):
+            log_tenant_denial_event(
+                request=request,
+                reason="header_tenant_mismatch",
+                tenant_from_key=getattr(result, "tenant_id", None),
+                tenant_supplied=requested_tenant,
+                key_id=getattr(result, "key_prefix", None),
+            )
             return self._stamp(
-                JSONResponse(status_code=403, content={"detail": "Tenant mismatch"}),
+                JSONResponse(
+                    status_code=403,
+                    content={
+                        "detail": redact_detail("tenant mismatch", generic="forbidden")
+                    },
+                ),
                 request,
                 "denied_tenant",
             )
 
         request.state.auth = result
-        request.state.tenant_id = result.tenant_id or requested_tenant or "unknown"
+        request.state.tenant_id = result.tenant_id
+        request.state.tenant_is_key_bound = bool(result.tenant_id)
 
         resp = await call_next(request)
         return self._stamp(resp, request, "protected")
