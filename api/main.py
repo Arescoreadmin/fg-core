@@ -133,16 +133,18 @@ def _dev_enabled() -> bool:
 
 
 def _sqlite_path_from_env() -> str:
-    """
-    Canonical sqlite path resolution:
-    Prefer FG_SQLITE_PATH (tests set this), else SQLITE_PATH, else a safe default.
-    """
     sqlite_path = (
         os.getenv("FG_SQLITE_PATH") or os.getenv("SQLITE_PATH") or ""
     ).strip()
     if sqlite_path:
         return sqlite_path
-    return str(Path("/tmp") / "fg-core.db")
+
+    env = (os.getenv("FG_ENV") or "").strip().lower()
+    if env in {"dev", "test"}:
+        # repo-local default to avoid /var/lib perms pain
+        return str(Path.cwd() / "state" / "fg-core.db")
+
+    return str(Path("/var/lib/frostgate/state") / "fg-core.db")
 
 
 def _optional_router(import_path: str, attr: str = "router"):
