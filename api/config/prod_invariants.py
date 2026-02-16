@@ -74,4 +74,3 @@ def assert_prod_invariants(settings: Mapping[str, str] | None = None) -> None:
         raise ProdInvariantViolation(
             "FG-PROD-007", "FG_ENFORCEMENT_MODE must be enforce in prod/staging"
         )
-
