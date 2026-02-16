@@ -36,6 +36,7 @@ from api.attestation import router as attestation_router
 from api.config_control import router as config_control_router
 from api.ui import router as ui_router
 from api.ui_dashboards import router as ui_dashboards_router
+from api.billing import router as billing_router
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
 from api.middleware.request_validation import (
@@ -464,6 +465,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(stats_router)
     app.include_router(attestation_router)
     app.include_router(config_control_router)
+    app.include_router(billing_router)
 
     if ui_enabled():
         app.include_router(ui_router)
@@ -716,6 +718,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(stats_router)
     app.include_router(attestation_router)
     app.include_router(config_control_router)
+    app.include_router(billing_router)
     app.include_router(keys_router)
     app.include_router(forensics_router)
     if mission_router is not None:

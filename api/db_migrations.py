@@ -92,7 +92,20 @@ def assert_migrations_applied(engine: Engine) -> None:
 
 
 def assert_append_only_triggers(engine: Engine) -> None:
-    expected_tables = {"decisions", "decision_evidence_artifacts"}
+    expected_tables = {
+        "decisions",
+        "decision_evidence_artifacts",
+        "device_coverage_ledger",
+        "billing_identity_claim_events",
+        "billing_invoice_state_events",
+        "billing_credit_notes",
+        "billing_device_enrollments",
+        "billing_device_activity_proofs",
+        "billing_coverage_daily_state",
+        "billing_count_sync_checkpoint_events",
+        "pricing_versions",
+        "tenant_contracts",
+    }
     with engine.begin() as conn:
         rows = conn.exec_driver_sql(
             """
@@ -118,6 +131,21 @@ def assert_tenant_rls(engine: Engine) -> None:
         "api_keys",
         "security_audit_log",
         "policy_change_requests",
+        "billing_devices",
+        "billing_identity_claims",
+        "billing_identity_claim_events",
+        "billing_invoice_state_events",
+        "billing_credit_notes",
+        "billing_device_enrollments",
+        "billing_device_activity_proofs",
+        "device_coverage_ledger",
+        "billing_coverage_daily_state",
+        "tenant_contracts",
+        "billing_daily_counts",
+        "billing_count_sync_checkpoints",
+        "billing_count_sync_checkpoint_events",
+        "billing_invoices",
+        "billing_runs",
     }
     with engine.begin() as conn:
         rows = conn.execute(
