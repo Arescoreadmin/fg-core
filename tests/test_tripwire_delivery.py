@@ -483,7 +483,7 @@ class TestIntegration:
         }
 
         result = await service.deliver(
-            url="http://security-siem.example.com/alerts",
+            url="http://example.com/alerts",
             payload=alert_payload,
             alert_type="CANARY_TOKEN_ACCESSED",
             severity="CRITICAL",

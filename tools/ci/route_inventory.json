@@ -1,0 +1,808 @@
+[
+  {
+    "file": "api/main.py",
+    "method": "GET",
+    "path": "/_debug/routes",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/ui_feed.py",
+    "method": "GET",
+    "path": "/_legacy/ui_feed/_disabled",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/admin.py",
+    "method": "POST",
+    "path": "/admin/audit/export",
+    "scoped": true,
+    "scopes": [
+      "audit:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/admin.py",
+    "method": "GET",
+    "path": "/admin/audit/search",
+    "scoped": true,
+    "scopes": [
+      "audit:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/admin.py",
+    "method": "POST",
+    "path": "/admin/config/changes/{change_id}/revert",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/admin.py",
+    "method": "GET",
+    "path": "/admin/keys",
+    "scoped": true,
+    "scopes": [
+      "keys:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/admin.py",
+    "method": "POST",
+    "path": "/admin/keys",
+    "scoped": true,
+    "scopes": [
+      "keys:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/admin.py",
+    "method": "GET",
+    "path": "/admin/keys/needing-rotation",
+    "scoped": true,
+    "scopes": [
+      "admin:read"
+    ],
+    "tenant_bound": "unknown"
+  },
+  {
+    "file": "api/admin.py",
+    "method": "POST",
+    "path": "/admin/keys/{key_prefix}/revoke",
+    "scoped": true,
+    "scopes": [
+      "keys:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/admin.py",
+    "method": "POST",
+    "path": "/admin/keys/{key_prefix}/rotate",
+    "scoped": true,
+    "scopes": [
+      "keys:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/admin.py",
+    "method": "POST",
+    "path": "/admin/keys/{key_prefix}/rotate",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": "unknown"
+  },
+  {
+    "file": "api/admin.py",
+    "method": "GET",
+    "path": "/admin/keys/{key_prefix}/rotation-status",
+    "scoped": true,
+    "scopes": [
+      "admin:read"
+    ],
+    "tenant_bound": "unknown"
+  },
+  {
+    "file": "api/admin.py",
+    "method": "GET",
+    "path": "/admin/system/health",
+    "scoped": true,
+    "scopes": [
+      "admin:read"
+    ],
+    "tenant_bound": "unknown"
+  },
+  {
+    "file": "api/admin.py",
+    "method": "POST",
+    "path": "/admin/tenants/{tenant_id}/activate",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/admin.py",
+    "method": "PUT",
+    "path": "/admin/tenants/{tenant_id}/quota",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/admin.py",
+    "method": "POST",
+    "path": "/admin/tenants/{tenant_id}/suspend",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/admin.py",
+    "method": "PUT",
+    "path": "/admin/tenants/{tenant_id}/tier",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/admin.py",
+    "method": "GET",
+    "path": "/admin/tenants/{tenant_id}/usage",
+    "scoped": true,
+    "scopes": [
+      "admin:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/admin.py",
+    "method": "GET",
+    "path": "/admin/usage/all",
+    "scoped": true,
+    "scopes": [
+      "admin:read"
+    ],
+    "tenant_bound": "unknown"
+  },
+  {
+    "file": "api/attestation.py",
+    "method": "POST",
+    "path": "/approvals",
+    "scoped": true,
+    "scopes": [
+      "attestation:admin"
+    ],
+    "tenant_bound": "unknown"
+  },
+  {
+    "file": "api/attestation.py",
+    "method": "POST",
+    "path": "/approvals/verify",
+    "scoped": true,
+    "scopes": [
+      "attestation:admin"
+    ],
+    "tenant_bound": "unknown"
+  },
+  {
+    "file": "api/attestation.py",
+    "method": "GET",
+    "path": "/approvals/{subject_type}/{subject_id}",
+    "scoped": true,
+    "scopes": [
+      "attestation:admin"
+    ],
+    "tenant_bound": "unknown"
+  },
+  {
+    "file": "api/config_control.py",
+    "method": "POST",
+    "path": "/config/versions",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/decisions.py",
+    "method": "GET",
+    "path": "/decisions",
+    "scoped": true,
+    "scopes": [
+      "decisions:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/decisions.py",
+    "method": "GET",
+    "path": "/decisions/{decision_id}",
+    "scoped": true,
+    "scopes": [
+      "decisions:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/defend.py",
+    "method": "POST",
+    "path": "/defend",
+    "scoped": true,
+    "scopes": [
+      "defend:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/dev_events.py",
+    "method": "POST",
+    "path": "/dev/emit",
+    "scoped": true,
+    "scopes": [
+      "dev:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/dev_events.py",
+    "method": "POST",
+    "path": "/dev/seed",
+    "scoped": true,
+    "scopes": [
+      "dev:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/attestation.py",
+    "method": "POST",
+    "path": "/evidence/bundles",
+    "scoped": true,
+    "scopes": [
+      "attestation:admin"
+    ],
+    "tenant_bound": "unknown"
+  },
+  {
+    "file": "api/attestation.py",
+    "method": "GET",
+    "path": "/evidence/bundles/{bundle_id}",
+    "scoped": true,
+    "scopes": [
+      "attestation:admin"
+    ],
+    "tenant_bound": "unknown"
+  },
+  {
+    "file": "api/attestation.py",
+    "method": "POST",
+    "path": "/evidence/verify",
+    "scoped": true,
+    "scopes": [
+      "attestation:admin"
+    ],
+    "tenant_bound": "unknown"
+  },
+  {
+    "file": "api/feed.py",
+    "method": "GET",
+    "path": "/feed/live",
+    "scoped": true,
+    "scopes": [
+      "feed:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/feed.py",
+    "method": "GET",
+    "path": "/feed/stream",
+    "scoped": true,
+    "scopes": [
+      "feed:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/feed.py",
+    "method": "HEAD",
+    "path": "/feed/stream",
+    "scoped": true,
+    "scopes": [
+      "feed:read"
+    ],
+    "tenant_bound": "unknown"
+  },
+  {
+    "file": "api/forensics.py",
+    "method": "GET",
+    "path": "/forensics/audit_trail/{event_id}",
+    "scoped": true,
+    "scopes": [
+      "forensics:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/forensics.py",
+    "method": "GET",
+    "path": "/forensics/chain/verify",
+    "scoped": true,
+    "scopes": [
+      "forensics:verify"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/forensics.py",
+    "method": "GET",
+    "path": "/forensics/snapshot/{event_id}",
+    "scoped": true,
+    "scopes": [
+      "forensics:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/governance.py",
+    "method": "GET",
+    "path": "/governance/changes",
+    "scoped": true,
+    "scopes": [
+      "governance:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/governance.py",
+    "method": "POST",
+    "path": "/governance/changes",
+    "scoped": true,
+    "scopes": [
+      "governance:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/governance.py",
+    "method": "POST",
+    "path": "/governance/changes/{change_id}/approve",
+    "scoped": true,
+    "scopes": [
+      "governance:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/main.py",
+    "method": "GET",
+    "path": "/health",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/main.py",
+    "method": "GET",
+    "path": "/health",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/main.py",
+    "method": "GET",
+    "path": "/health/detailed",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/main.py",
+    "method": "GET",
+    "path": "/health/live",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/main.py",
+    "method": "GET",
+    "path": "/health/live",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/main.py",
+    "method": "GET",
+    "path": "/health/ready",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/main.py",
+    "method": "GET",
+    "path": "/health/ready",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/ingest.py",
+    "method": "POST",
+    "path": "/ingest",
+    "scoped": true,
+    "scopes": [
+      "ingest:write"
+    ],
+    "tenant_bound": "unknown"
+  },
+  {
+    "file": "api/keys.py",
+    "method": "GET",
+    "path": "/keys",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/keys.py",
+    "method": "POST",
+    "path": "/keys",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/keys.py",
+    "method": "POST",
+    "path": "/keys/revoke",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/keys.py",
+    "method": "POST",
+    "path": "/keys/rotate",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/keys.py",
+    "method": "DELETE",
+    "path": "/keys/{prefix}",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": "unknown"
+  },
+  {
+    "file": "api/mission_envelope.py",
+    "method": "GET",
+    "path": "/missions",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/mission_envelope.py",
+    "method": "GET",
+    "path": "/missions/{mission_id}",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/mission_envelope.py",
+    "method": "GET",
+    "path": "/missions/{mission_id}/status",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/attestation.py",
+    "method": "GET",
+    "path": "/modules",
+    "scoped": true,
+    "scopes": [
+      "attestation:admin"
+    ],
+    "tenant_bound": "unknown"
+  },
+  {
+    "file": "api/attestation.py",
+    "method": "GET",
+    "path": "/modules/enforce/{module_id}",
+    "scoped": true,
+    "scopes": [
+      "attestation:admin"
+    ],
+    "tenant_bound": "unknown"
+  },
+  {
+    "file": "api/attestation.py",
+    "method": "POST",
+    "path": "/modules/register",
+    "scoped": true,
+    "scopes": [
+      "attestation:admin"
+    ],
+    "tenant_bound": "unknown"
+  },
+  {
+    "file": "api/attestation.py",
+    "method": "GET",
+    "path": "/modules/{module_id}",
+    "scoped": true,
+    "scopes": [
+      "attestation:admin"
+    ],
+    "tenant_bound": "unknown"
+  },
+  {
+    "file": "api/ring_router.py",
+    "method": "GET",
+    "path": "/rings/isolation",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/ring_router.py",
+    "method": "GET",
+    "path": "/rings/policies",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/ring_router.py",
+    "method": "POST",
+    "path": "/rings/route",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/roe_engine.py",
+    "method": "POST",
+    "path": "/roe/evaluate",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/roe_engine.py",
+    "method": "GET",
+    "path": "/roe/policy",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/stats.py",
+    "method": "GET",
+    "path": "/stats",
+    "scoped": true,
+    "scopes": [
+      "stats:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/main.py",
+    "method": "GET",
+    "path": "/stats/debug",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/stats.py",
+    "method": "GET",
+    "path": "/stats/summary",
+    "scoped": true,
+    "scopes": [
+      "stats:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/main.py",
+    "method": "GET",
+    "path": "/status",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/ui_dashboards.py",
+    "method": "POST",
+    "path": "/ui/audit/packet",
+    "scoped": true,
+    "scopes": [
+      "audit:read"
+    ],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/ui_dashboards.py",
+    "method": "GET",
+    "path": "/ui/audit/packet/{packet_id}/download",
+    "scoped": true,
+    "scopes": [
+      "audit:read"
+    ],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/ui_dashboards.py",
+    "method": "GET",
+    "path": "/ui/controls",
+    "scoped": true,
+    "scopes": [
+      "controls:read"
+    ],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/ui_dashboards.py",
+    "method": "GET",
+    "path": "/ui/controls/{inv_id}",
+    "scoped": true,
+    "scopes": [
+      "controls:read"
+    ],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/ui_dashboards.py",
+    "method": "GET",
+    "path": "/ui/csrf",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/ui.py",
+    "method": "GET",
+    "path": "/ui/dash/controls",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/ui.py",
+    "method": "GET",
+    "path": "/ui/dash/forensics",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/ui.py",
+    "method": "GET",
+    "path": "/ui/dash/posture",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/ui_dashboards.py",
+    "method": "GET",
+    "path": "/ui/decision/{decision_id}",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_dashboards.py",
+    "method": "GET",
+    "path": "/ui/decisions",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui.py",
+    "method": "GET",
+    "path": "/ui/feed",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/ui_dashboards.py",
+    "method": "GET",
+    "path": "/ui/forensics/chain/verify",
+    "scoped": true,
+    "scopes": [
+      "forensics:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_dashboards.py",
+    "method": "GET",
+    "path": "/ui/posture",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_dashboards.py",
+    "method": "GET",
+    "path": "/ui/scopes",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/ui.py",
+    "method": "GET",
+    "path": "/ui/token",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/main.py",
+    "method": "GET",
+    "path": "/v1/status",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  }
+]

@@ -435,12 +435,36 @@ bp-d-000-gate: venv
 	@echo "bp-d-000-gate: OK"
 
 
-.PHONY: prod-unsafe-config-check security-regression-gates
+.PHONY: prod-unsafe-config-check security-regression-gates soc-invariants enforcement-mode-matrix route-inventory-audit route-inventory-generate test-quality-gate soc-review-sync pr-base-mainline-check rebase-main-instructions
 prod-unsafe-config-check: venv
 	@$(PY) tools/ci/check_prod_unsafe_config.py
 
 security-regression-gates: venv
 	@$(PY) tools/ci/check_security_regression_gates.py
+
+soc-invariants: venv
+	@$(PY) tools/ci/check_soc_invariants.py
+
+enforcement-mode-matrix: venv
+	@$(PY) tools/ci/check_enforcement_mode_matrix.py
+
+route-inventory-generate: venv
+	@$(PY) tools/ci/check_route_inventory.py --write
+
+route-inventory-audit: venv
+	@$(PY) tools/ci/check_route_inventory.py
+
+test-quality-gate: venv
+	@$(PY) tools/ci/check_test_quality.py
+
+soc-review-sync: venv
+	@$(PY) tools/ci/check_soc_review_sync.py
+
+pr-base-mainline-check: venv
+	@$(PY) tools/ci/check_pr_base_is_mainline.py
+
+rebase-main-instructions:
+	@echo "Rebase workflow (run in your local clone):"; 	echo "  git remote -v"; 	echo "  git fetch origin"; 	echo "  git rebase origin/main"; 	echo "  git push --force-with-lease"; 	echo ""; 	echo "Verify SOC review doc is not re-added after rebase:"; 	echo "  git diff --name-status origin/main...HEAD | rg '^A[[:space:]]+docs/SOC_ARCH_REVIEW_2026-02-15.md$$' && echo '❌ still added' && exit 1 || echo '✅ not added as new'"
 audit-chain-verify: venv
 	@$(PY) scripts/verify_audit_chain.py
 
@@ -485,7 +509,7 @@ test-unit: venv
 # =============================================================================
 
 .PHONY: fg-fast
-fg-fast: venv fg-audit-make fg-contract fg-compile opa-check prod-profile-check prod-unsafe-config-check security-regression-gates audit-chain-verify dos-hardening-check gap-audit \
+fg-fast: venv fg-audit-make fg-contract fg-compile opa-check prod-profile-check prod-unsafe-config-check security-regression-gates soc-invariants route-inventory-audit test-quality-gate soc-review-sync pr-base-mainline-check audit-chain-verify dos-hardening-check gap-audit \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate \

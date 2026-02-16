@@ -18,6 +18,7 @@ def _seed_prod_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
 
     env = {
         "FG_ENV": "prod",
+        "FG_ENFORCEMENT_MODE": "enforce",
         "FG_API_KEY": "a" * 32,
         "FG_AUTH_ENABLED": "1",
         "FG_DB_BACKEND": "postgres",
