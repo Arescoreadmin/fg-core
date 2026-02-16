@@ -191,6 +191,43 @@ class TenantActiveConfig(Base):
     )
 
 
+class TenantAIConfig(Base):
+    __tablename__ = "tenant_ai_config"
+
+    tenant_id = Column(String(128), primary_key=True)
+    ai_enabled = Column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
+    rpm_limit = Column(Integer, nullable=False, default=30, server_default=text("30"))
+    daily_token_budget = Column(
+        Integer, nullable=False, default=20000, server_default=text("20000")
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+
+
+class TenantAIUsage(Base):
+    __tablename__ = "tenant_ai_usage"
+
+    tenant_id = Column(String(128), primary_key=True)
+    usage_day = Column(String(10), primary_key=True)
+    minute_bucket = Column(String(16), nullable=False, default="")
+    minute_requests = Column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    daily_tokens = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+
+
 class DecisionRecord(Base):
     __tablename__ = "decisions"
     __table_args__ = (
