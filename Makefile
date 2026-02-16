@@ -507,7 +507,7 @@ test-unit: venv
 # =============================================================================
 
 .PHONY: fg-fast
-fg-fast: venv fg-audit-make fg-contract fg-compile opa-check prod-profile-check prod-unsafe-config-check security-regression-gates soc-invariants route-inventory-audit test-quality-gate soc-review-sync pr-base-mainline-check audit-chain-verify dos-hardening-check gap-audit \
+fg-fast: venv fg-audit-make fg-contract fg-compile opa-check prod-profile-check prod-unsafe-config-check security-regression-gates soc-invariants soc-manifest-verify route-inventory-audit test-quality-gate soc-review-sync pr-base-mainline-check audit-chain-verify dos-hardening-check gap-audit \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate \
@@ -1012,3 +1012,12 @@ pr-check-ci: pr-check-all
 .PHONY: codex-check
 codex-check: venv
 	@$(MAKE) -s pr-check
+
+.PHONY: soc-manifest-sync soc-manifest-verify
+
+soc-manifest-sync: venv
+	@PYTHONPATH=. $(PY) tools/ci/sync_soc_manifest_status.py --write
+
+soc-manifest-verify: venv
+	@PYTHONPATH=. $(PY) tools/ci/sync_soc_manifest_status.py --fail-on-unresolved-p0
+
