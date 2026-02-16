@@ -1,12 +1,12 @@
-import os
 import pytest
 from httpx import AsyncClient, ASGITransport
 
-from tests.test_auth import build_app  # reuse helper so FG_API_KEY is set
+from api.auth_scopes import mint_key
+from tests.test_auth import build_app
 
 
 @pytest.mark.asyncio
-async def test_guardian_disruption_limit_and_roe_flags():
+async def test_guardian_disruption_limit_and_roe_flags(monkeypatch):
     """
     With persona=guardian + SECRET + high failed_auths:
       - /v1/defend should:
@@ -14,13 +14,18 @@ async def test_guardian_disruption_limit_and_roe_flags():
         - mark explain.roe_applied = True
         - surface tie_d + persona + classification in explain
     """
+    monkeypatch.setenv("FG_RL_ENABLED", "0")
     app = build_app(auth_enabled=True)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
             "/v1/defend",
-            headers={"x-api-key": os.environ["FG_API_KEY"]},
+            headers={
+                "x-api-key": mint_key(
+                    "defend:write", tenant_id="tenant-doctrine-guardian"
+                )
+            },
             json={
                 "source": "edge-gateway-1",
                 "tenant_id": "tenant-doctrine-guardian",
@@ -62,13 +67,14 @@ async def test_guardian_disruption_limit_and_roe_flags():
 
 
 @pytest.mark.asyncio
-async def test_sentinel_can_allow_more_disruption():
+async def test_sentinel_can_allow_more_disruption(monkeypatch):
     """
     Sentinel persona is allowed to be more aggressive than guardian.
     We ensure:
       - same scenario with sentinel does NOT have *stricter* mitigations
         than guardian in terms of block_ip count.
     """
+    monkeypatch.setenv("FG_RL_ENABLED", "0")
     app = build_app(auth_enabled=True)
 
     transport = ASGITransport(app=app)
@@ -87,12 +93,20 @@ async def test_sentinel_can_allow_more_disruption():
 
         guardian_resp = await client.post(
             "/v1/defend",
-            headers={"x-api-key": os.environ["FG_API_KEY"]},
+            headers={
+                "x-api-key": mint_key(
+                    "defend:write", tenant_id="tenant-doctrine-compare"
+                )
+            },
             json={**base_payload, "persona": "guardian"},
         )
         sentinel_resp = await client.post(
             "/v1/defend",
-            headers={"x-api-key": os.environ["FG_API_KEY"]},
+            headers={
+                "x-api-key": mint_key(
+                    "defend:write", tenant_id="tenant-doctrine-compare"
+                )
+            },
             json={**base_payload, "persona": "sentinel"},
         )
 

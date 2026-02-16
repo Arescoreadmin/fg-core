@@ -34,8 +34,8 @@ def write_config_version(
     tenant_id = bind_tenant_id(
         request, req.tenant_id, require_explicit_for_unscoped=True
     )
-    if tenant_id == "unknown":
-        raise HTTPException(status_code=400, detail="tenant_id must be known")
+    if not tenant_id:
+        raise HTTPException(status_code=401, detail="unauthorized")
 
     if req.config_payload.get("_legacy") is True:
         raise HTTPException(status_code=400, detail="_legacy marker is reserved")

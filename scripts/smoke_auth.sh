@@ -3,6 +3,8 @@ set -euo pipefail
 
 BASE_URL="${FG_BASE_URL:-${BASE_URL:-http://127.0.0.1:8000}}"
 API_KEY="${FG_API_KEY:-${API_KEY:?set FG_API_KEY}}"
+SMOKE_TENANT_ID="${FG_SMOKE_TENANT_ID:-smoke-test}"
+SMOKE_SCOPED_KEY="${FG_SMOKE_SCOPED_KEY:-}"
 CJ="${CJ:-/tmp/fg_smoke_cj.txt}"
 TMPDIR="${TMPDIR:-/tmp}"
 
@@ -63,10 +65,30 @@ echo "BASE_URL=$BASE_URL"
 c="$(http_code "$BASE_URL/health")"
 assert_code "$c" "200" "/health"
 
+resolve_scoped_key() {
+  if [[ -n "$SMOKE_SCOPED_KEY" ]]; then
+    printf "%s" "$SMOKE_SCOPED_KEY"
+    return 0
+  fi
+  local py="${PYTHON_BIN:-./.venv/bin/python}"
+  if [[ ! -x "$py" ]]; then
+    py="python3"
+  fi
+  FG_SMOKE_TENANT_ID="$SMOKE_TENANT_ID" "$py" - <<'PY'
+import os
+from api.auth_scopes import mint_key
+print(mint_key("ui:read", "feed:read", tenant_id=os.environ["FG_SMOKE_TENANT_ID"]))
+PY
+}
+
+SCOPED_KEY="$(resolve_scoped_key)"
+[[ -n "$SCOPED_KEY" ]] || fail "failed to resolve tenant-scoped smoke key"
+ok "resolved tenant-scoped key for tenant=$SMOKE_TENANT_ID"
+
 # get cookie
 echo "-- getting cookie via /ui/token"
 rm -f "$CJ" || true
-c="$(http_code "$BASE_URL/ui/token" -H "X-API-Key: $API_KEY" -c "$CJ")"
+c="$(http_code "$BASE_URL/ui/token" -H "X-API-Key: $SCOPED_KEY" -c "$CJ")"
 assert_code "$c" "200" "/ui/token (valid api_key)"
 grep -q 'fg_api_key' "$CJ" || fail "cookie jar missing fg_api_key"
 ok "cookie jar captured fg_api_key"
@@ -91,12 +113,11 @@ echo "$ct" | grep -qi '^text/html' || fail "/ui/feed with cookie expected text/h
 ok "/ui/feed content-type looks html"
 
 # SSE with cookie => must emit at least one data: line
-echo "-- SSE /feed/stream with cookie"
+echo "-- SSE /feed/stream with cookie (tenant bound via key)"
 tmp="$(mktemp "$TMPDIR/fg_sse.XXXXXX")"
 # timeout is expected to stop the stream; ignore exit code
-# P0: tenant_id required for tenant isolation
 timeout 2s curl -sS -N -b "$CJ" \
-  "$BASE_URL/feed/stream?limit=1&interval=0.2&q=&threat_level=&tenant_id=smoke-test" \
+  "$BASE_URL/feed/stream?limit=1&interval=0.2&q=&threat_level=" \
   >"$tmp" 2>/dev/null || true
 
 grep -m1 '^data: ' "$tmp" >/dev/null || (sed -n '1,80p' "$tmp" >&2; rm -f "$tmp"; fail "SSE did not emit any data: within timeout")

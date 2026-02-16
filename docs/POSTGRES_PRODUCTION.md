@@ -18,6 +18,7 @@ If any of the above is missing, startup **fails closed**.
 - `FG_DB_URL`: required when `FG_DB_BACKEND=postgres`
 - `FG_TENANT_CONTEXT_MODE`: `db_session` (default) or `app_only` (dev only)
 - `FG_DB_POOL_SIZE` (default 10), `FG_DB_MAX_OVERFLOW` (default 20)
+- `FG_TRUST_PROXY_HEADERS` (default `false`): trust `X-Forwarded-For`/proxy IP headers for logging only when running behind a trusted reverse proxy.
 
 ## Migrations (Postgres)
 Apply:

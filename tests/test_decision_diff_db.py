@@ -1,9 +1,12 @@
-from api.main import app
-from api.db import get_db_no_request
-from api.db_models import DecisionRecord
 import os
 from fastapi.testclient import TestClient
 
+from api.auth_scopes import mint_key
+from api.db import get_db_no_request
+from api.db_models import DecisionRecord
+from api.main import app
+
+os.environ.setdefault("FG_RL_ENABLED", "0")
 client = TestClient(app)
 
 
@@ -12,21 +15,19 @@ def _latest_decision(db):
 
 
 def test_decision_diff_is_persisted_in_db_after_second_event():
+    key = mint_key("defend:write", tenant_id="tenant-diff-db")
     payload = {
+        "tenant_id": "tenant-diff-db",
         "event_type": "auth_attempt",
         "source": "pytest",
         "metadata": {"source_ip": "1.2.3.4", "username": "alice", "failed_attempts": 1},
     }
 
-    r1 = client.post(
-        "/defend", json=payload, headers={"x-api-key": os.environ["FG_API_KEY"]}
-    )
+    r1 = client.post("/defend", json=payload, headers={"x-api-key": key})
     assert r1.status_code in (200, 201), r1.text
 
     payload["metadata"]["failed_attempts"] = 10
-    r2 = client.post(
-        "/defend", json=payload, headers={"x-api-key": os.environ["FG_API_KEY"]}
-    )
+    r2 = client.post("/defend", json=payload, headers={"x-api-key": key})
     assert r2.status_code in (200, 201), r2.text
 
     db = next(get_db_no_request())

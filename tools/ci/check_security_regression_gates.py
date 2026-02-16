@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -8,6 +9,20 @@ REPO = Path(__file__).resolve().parents[2]
 
 def _read(path: str) -> str:
     return (REPO / path).read_text(encoding="utf-8")
+
+
+def _parse(path: str) -> ast.AST:
+    return ast.parse(_read(path), filename=path)
+
+
+def _allowlist_paths_for_tenant_assignment(path: str) -> bool:
+    return path.startswith("tests/") or path.startswith("tools/ci/fixtures/")
+
+
+def _has_allow_marker(path: str, marker: str, body: str) -> bool:
+    if not _allowlist_paths_for_tenant_assignment(path):
+        return False
+    return marker in body
 
 
 def check_no_placeholder_security_tests(failures: list[str]) -> None:
@@ -75,6 +90,118 @@ def check_ci_prod_webhook_secret_and_no_outbound_bypass(failures: list[str]) -> 
             )
 
 
+def _is_request_state_tenant_attr(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Attribute) or node.attr != "tenant_id":
+        return False
+    state_attr = node.value
+    return (
+        isinstance(state_attr, ast.Attribute)
+        and state_attr.attr == "state"
+        and isinstance(state_attr.value, ast.Name)
+        and state_attr.value.id == "request"
+    )
+
+
+def _is_result_tenant_attr(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Attribute)
+        and node.attr == "tenant_id"
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "result"
+    )
+
+
+def check_middleware_tenant_assignment_is_key_derived(failures: list[str]) -> None:
+    path = "api/middleware/auth_gate.py"
+    body = _read(path)
+    if _has_allow_marker(path, "FG_CI_ALLOW_TENANT_ASSIGNMENT", body):
+        return
+
+    tree = ast.parse(body, filename=path)
+    assigns: list[tuple[int, ast.AST]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for tgt in node.targets:
+                if _is_request_state_tenant_attr(tgt):
+                    assigns.append((node.lineno, node.value))
+
+    if not assigns:
+        failures.append("auth_gate: missing assignment to request.state.tenant_id")
+        return
+
+    bad = [ln for ln, value in assigns if not _is_result_tenant_attr(value)]
+    if bad:
+        failures.append(
+            "auth_gate: request.state.tenant_id must be assigned from result.tenant_id only "
+            f"(bad lines: {bad})"
+        )
+
+
+def check_tenant_binding_helper_usage(failures: list[str]) -> None:
+    resolution_tree = _parse("api/auth_scopes/resolution.py")
+    has_bind = any(
+        isinstance(node, ast.FunctionDef) and node.name == "bind_tenant_id"
+        for node in ast.walk(resolution_tree)
+    )
+    if not has_bind:
+        failures.append("api/auth_scopes/resolution.py missing bind_tenant_id helper")
+
+    route_files = [
+        "api/decisions.py",
+        "api/ingest.py",
+        "api/keys.py",
+        "api/admin.py",
+        "api/forensics.py",
+        "api/feed.py",
+        "api/stats.py",
+    ]
+    for path in route_files:
+        body = _read(path)
+        if "bind_tenant_id(" not in body and "tenant_db_required" not in body:
+            failures.append(
+                f"{path} missing tenant binding dependency/helper usage; add bind_tenant_id or tenant_db_required"
+            )
+
+
+def check_no_unknown_tenant_fallback(failures: list[str]) -> None:
+    resolution_path = "api/auth_scopes/resolution.py"
+    auth_gate_path = "api/middleware/auth_gate.py"
+
+    resolution_body = _read(resolution_path)
+    auth_gate_body = _read(auth_gate_path)
+
+    if _has_allow_marker(
+        resolution_path, "FG_CI_ALLOW_UNKNOWN_TENANT", resolution_body
+    ):
+        return
+    if _has_allow_marker(auth_gate_path, "FG_CI_ALLOW_UNKNOWN_TENANT", auth_gate_body):
+        return
+
+    resolution_tree = ast.parse(resolution_body, filename=resolution_path)
+    auth_gate_tree = ast.parse(auth_gate_body, filename=auth_gate_path)
+
+    bad_unknown: list[int] = []
+    for node in ast.walk(resolution_tree):
+        if isinstance(node, ast.Constant) and node.value == "unknown":
+            bad_unknown.append(getattr(node, "lineno", -1))
+
+    gate_unknown: list[int] = []
+    for node in ast.walk(auth_gate_tree):
+        if isinstance(node, ast.Constant) and node.value == "unknown":
+            gate_unknown.append(getattr(node, "lineno", -1))
+
+    if bad_unknown:
+        failures.append(
+            "resolution: forbidden tenant fallback marker 'unknown' present "
+            f"(lines: {sorted(set(bad_unknown))})"
+        )
+    if gate_unknown:
+        failures.append(
+            "auth_gate: forbidden tenant fallback marker 'unknown' present "
+            f"(lines: {sorted(set(gate_unknown))})"
+        )
+
+
 def main() -> int:
     failures: list[str] = []
     check_no_placeholder_security_tests(failures)
@@ -83,6 +210,9 @@ def main() -> int:
     check_network_egress_policy(failures)
     check_stable_error_codes(failures)
     check_ci_prod_webhook_secret_and_no_outbound_bypass(failures)
+    check_middleware_tenant_assignment_is_key_derived(failures)
+    check_tenant_binding_helper_usage(failures)
+    check_no_unknown_tenant_fallback(failures)
 
     if failures:
         print("security regression gates: FAILED")

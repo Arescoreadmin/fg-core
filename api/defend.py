@@ -388,16 +388,8 @@ def defend(
 ) -> DefendResponse:
     t0 = time.time()
 
-    # Keep strict tenant enforcement in prod-like environments.
-    # In non-prod (tests/CI/dev), allow a safe default tenant to avoid breaking legacy tests.
-    require_explicit = True
-    if not _is_prod_like() and _env_bool("FG_TEST_TENANT_DEFAULT_ALLOW", True):
-        require_explicit = False
-        if not getattr(req, "tenant_id", None):
-            req.tenant_id = os.getenv("FG_DEFAULT_TENANT_ID", "t1")
-
     tenant_id = bind_tenant_id(
-        request, req.tenant_id, require_explicit_for_unscoped=require_explicit
+        request, req.tenant_id, require_explicit_for_unscoped=True
     )
     req.tenant_id = tenant_id
     request.state.tenant_id = tenant_id

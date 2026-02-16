@@ -58,7 +58,7 @@ def test_defend_response_matches_schema(
     from api.main import app as main_app  # import after env is set
 
     client = TestClient(main_app)
-    key = mint_key("defend:write")
+    key = mint_key("defend:write", tenant_id="test-tenant")
 
     resp = client.post(
         "/defend",
