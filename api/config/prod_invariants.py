@@ -61,3 +61,16 @@ def assert_prod_invariants(settings: Mapping[str, str] | None = None) -> None:
             "FG-PROD-006",
             "FG_CONTRACT_SPEC must not be set at runtime in prod/staging",
         )
+
+    raw_mode = (env.get("FG_ENFORCEMENT_MODE") or "").strip()
+    if not raw_mode:
+        raise ProdInvariantViolation(
+            "FG-PROD-007",
+            "FG_ENFORCEMENT_MODE must be explicitly set to enforce in prod/staging",
+        )
+
+    mode = raw_mode.lower()
+    if mode != "enforce":
+        raise ProdInvariantViolation(
+            "FG-PROD-007", "FG_ENFORCEMENT_MODE must be enforce in prod/staging"
+        )
