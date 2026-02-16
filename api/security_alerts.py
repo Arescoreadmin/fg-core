@@ -15,13 +15,14 @@ import hashlib
 import ipaddress
 import logging
 import os
+import re
 import socket
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
-from urllib.parse import urlparse
+from typing import Any, Callable, Dict, List, Mapping, Optional
+from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from api.config.env import is_production_env
 
@@ -60,33 +61,161 @@ ALERT_MIN_SEVERITY = _env_str("FG_ALERT_MIN_SEVERITY", "warning")
 ALERT_RATE_LIMIT_WINDOW = _env_int("FG_ALERT_RATE_LIMIT_WINDOW", 60)  # seconds
 ALERT_RATE_LIMIT_MAX = _env_int("FG_ALERT_RATE_LIMIT_MAX", 10)  # max alerts per window
 ALERT_AGGREGATION_WINDOW = _env_int("FG_ALERT_AGGREGATION_WINDOW", 300)  # 5 minutes
+MAX_REDIRECT_HOPS = 3
+ALLOWED_EXCEPTION_HEADERS = {"retry-after"}
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+class SSRFBlocked(ValueError):
+    """Raised when webhook target violates SSRF policy."""
+
+
+def sanitize_header_value(value: str) -> str:
+    """Strip controls, drop continuation content, trim, and cap length."""
+    text = str(value)
+    for idx, ch in enumerate(text):
+        if ord(ch) < 0x20 or ord(ch) == 0x7F:
+            text = text[:idx]
+            break
+    text = _CONTROL_CHAR_RE.sub("", text).strip()
+    return text[:256]
+
+
+def filter_exception_headers(headers: Mapping[str, str]) -> Dict[str, str]:
+    """Return only explicit allowlisted exception headers with safe values."""
+    filtered: Dict[str, str] = {}
+    for key, value in headers.items():
+        key_lower = key.lower()
+        if key_lower in ALLOWED_EXCEPTION_HEADERS:
+            filtered[key] = sanitize_header_value(value)
+    return filtered
+
+
+def sanitize_url_for_log(url: str) -> str:
+    """Render URL safely for logs/errors: no userinfo/query/fragment/control chars."""
+    cleaned = _CONTROL_CHAR_RE.sub("", str(url))
+    try:
+        parsed = urlsplit(cleaned)
+    except Exception:
+        return "<malformed-url>"
+
+    if not parsed.scheme or not parsed.hostname:
+        return "<malformed-url>"
+
+    host = parsed.hostname
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    netloc = host
+    if parsed.port is not None:
+        netloc = f"{netloc}:{parsed.port}"
+    safe_path = sanitize_header_value(parsed.path or "/")
+    return urlunsplit((parsed.scheme, netloc, safe_path, "", ""))
+
+
+def parse_url(url: str):
+    """Parse and validate URL shape/scheme with strict SSRF-safe rules."""
+    cleaned = _CONTROL_CHAR_RE.sub("", str(url))
+    try:
+        parsed = urlsplit(cleaned)
+    except Exception as exc:
+        raise SSRFBlocked("malformed_url") from exc
+    if parsed.scheme not in {"http", "https"}:
+        raise SSRFBlocked("scheme_not_allowed")
+    if not parsed.hostname:
+        raise SSRFBlocked("host_required")
+    if parsed.username is not None or parsed.password is not None:
+        raise SSRFBlocked("userinfo_not_allowed")
+    return parsed
+
+
+def resolve_host(host: str) -> List[str]:
+    """Resolve all A/AAAA records for host deterministically."""
+    try:
+        info = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+    except OSError as exc:
+        raise SSRFBlocked("dns_resolution_failed") from exc
+    ips = sorted({entry[4][0] for entry in info})
+    if not ips:
+        raise SSRFBlocked("dns_no_addresses")
+    return ips
+
+
+def is_ip_blocked(ip_raw: str) -> bool:
+    """Deny private/local/special ranges for SSRF prevention."""
+    ip = ipaddress.ip_address(ip_raw)
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+
+    return any(
+        (
+            ip.is_private,
+            ip.is_loopback,
+            ip.is_link_local,
+            ip.is_multicast,
+            ip.is_unspecified,
+            ip.is_reserved,
+        )
+    )
+
+
+def validate_target(url: str) -> tuple[str, list[str]]:
+    """Validate URL and DNS targets; return normalized URL and validated IPs."""
+    parsed = parse_url(url)
+    if is_production_env() and parsed.scheme != "https":
+        raise SSRFBlocked("https_required_in_production")
+    ips = resolve_host(parsed.hostname)
+    if any(is_ip_blocked(ip) for ip in ips):
+        raise SSRFBlocked("resolved_ip_blocked")
+    rebound_ips = resolve_host(parsed.hostname)
+    if rebound_ips != ips:
+        raise SSRFBlocked("dns_rebinding_detected")
+    normalized_url = urlunsplit(
+        (parsed.scheme, parsed.netloc, parsed.path or "/", "", "")
+    )
+    return normalized_url, ips
 
 
 def _validate_alert_webhook_url(url: str) -> bool:
     """Validate webhook URL to reduce SSRF risk."""
-    if not url:
-        return False
-
-    parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"}:
-        return False
-    if not parsed.hostname:
-        return False
-
-    if is_production_env() and parsed.scheme != "https":
-        return False
-
     try:
-        host_ips = {ai[4][0] for ai in socket.getaddrinfo(parsed.hostname, None)}
-    except Exception:
+        validate_target(url)
+    except SSRFBlocked:
         return False
-
-    for ip_raw in host_ips:
-        ip = ipaddress.ip_address(ip_raw)
-        if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_multicast:
-            return False
-
     return True
+
+
+async def _safe_post_with_redirects(
+    client: Any,
+    url: str,
+    *,
+    json_body: Dict[str, Any],
+    headers: Dict[str, str],
+    timeout: float,
+    max_redirect_hops: int = MAX_REDIRECT_HOPS,
+) -> Any:
+    current_url = url
+    for hop in range(max_redirect_hops + 1):
+        normalized_url, _ = validate_target(current_url)
+        response = await client.post(
+            normalized_url,
+            json=json_body,
+            headers=headers,
+            timeout=timeout,
+            follow_redirects=False,
+        )
+        status = getattr(response, "status_code", None)
+        if status is None:
+            status = getattr(response, "status", 0)
+        if 300 <= status < 400:
+            location = (getattr(response, "headers", {}) or {}).get("Location")
+            if not location:
+                raise SSRFBlocked("redirect_location_missing")
+            if hop >= max_redirect_hops:
+                raise SSRFBlocked("redirect_hop_limit_exceeded")
+            current_url = urljoin(normalized_url, location)
+            continue
+        return response
+    raise SSRFBlocked("redirect_hop_limit_exceeded")
 
 
 class AlertSeverity(str, Enum):
@@ -214,16 +343,20 @@ class WebhookAlertChannel(AlertChannel):
         if not self.url:
             return False
         if not _validate_alert_webhook_url(self.url):
-            log.error("Blocked security alert webhook URL by egress policy")
+            log.error(
+                "Blocked security alert webhook URL by egress policy: %s",
+                sanitize_url_for_log(self.url),
+            )
             return False
 
         try:
             import httpx
 
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
+            async with httpx.AsyncClient(follow_redirects=False) as client:
+                response = await _safe_post_with_redirects(
+                    client,
                     self.url,
-                    json=alert.to_dict(),
+                    json_body=alert.to_dict(),
                     headers=self.headers,
                     timeout=10.0,
                 )
@@ -232,7 +365,16 @@ class WebhookAlertChannel(AlertChannel):
             log.warning("httpx not installed, webhook alerts disabled")
             return False
         except Exception as e:
-            log.error(f"Failed to send webhook alert: {e}")
+            log.error(
+                "Failed to send webhook alert to %s: %s",
+                sanitize_url_for_log(self.url),
+                sanitize_header_value(str(e)),
+                extra={
+                    "exception_headers": filter_exception_headers(
+                        getattr(getattr(e, "response", None), "headers", {}) or {}
+                    )
+                },
+            )
             return False
 
 
