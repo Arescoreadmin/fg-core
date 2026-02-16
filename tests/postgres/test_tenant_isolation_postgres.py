@@ -1,13 +1,56 @@
 from __future__ import annotations
 
+import hashlib
+import json
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.db import set_tenant_context
 
 
+def _canonical_json_str(obj: object) -> str:
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _ensure_config_version(session: Session, tenant_id: str) -> str:
+    set_tenant_context(session, tenant_id)
+
+    config_obj = {"tenant": tenant_id, "purpose": "postgres-test"}
+    canonical = _canonical_json_str(config_obj)
+    config_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    session.execute(
+        text(
+            """
+            INSERT INTO config_versions (
+                tenant_id,
+                config_hash,
+                config_json_canonical,
+                config_json
+            )
+            VALUES (
+                :tenant_id,
+                :config_hash,
+                CAST(:config_json_canonical AS jsonb),
+                CAST(:config_json AS jsonb)
+            )
+            ON CONFLICT (tenant_id, config_hash) DO NOTHING
+            """
+        ),
+        {
+            "tenant_id": tenant_id,
+            "config_hash": config_hash,
+            "config_json_canonical": canonical,
+            "config_json": canonical,
+        },
+    )
+    return config_hash
+
+
 def _insert_decision(session: Session, tenant_id: str, event_id: str) -> None:
     set_tenant_context(session, tenant_id)
+    config_hash = _ensure_config_version(session, tenant_id)
     session.execute(
         text(
             """
@@ -16,6 +59,7 @@ def _insert_decision(session: Session, tenant_id: str, event_id: str) -> None:
                 source,
                 event_id,
                 event_type,
+                config_hash,
                 request_json,
                 response_json
             )
@@ -24,35 +68,17 @@ def _insert_decision(session: Session, tenant_id: str, event_id: str) -> None:
                 'unit-test',
                 :event_id,
                 'test',
+                :config_hash,
                 '{}'::jsonb,
                 '{}'::jsonb
             )
             """
         ),
-        {"tenant_id": tenant_id, "event_id": event_id},
+        {"tenant_id": tenant_id, "event_id": event_id, "config_hash": config_hash},
     )
 
 
 def _rls_diagnostics(session: Session) -> dict[str, object]:
-    """
-    Diagnostic SQL queries (kept inline for auditability):
-    1) RLS flags:
-       SELECT relname, relrowsecurity, relforcerowsecurity
-       FROM pg_class
-       WHERE relname IN ('decisions','decision_evidence_artifacts','api_keys','security_audit_log','policy_change_requests');
-    2) Policies:
-       SELECT tablename, policyname, qual, with_check
-       FROM pg_policies
-       WHERE tablename IN ('decisions','decision_evidence_artifacts','api_keys','security_audit_log','policy_change_requests');
-    3) Tenant setting after set_tenant_context:
-       SELECT NULLIF(current_setting('app.tenant_id', true), '');
-    4) Role bypass:
-       SELECT rolname, rolsuper, rolbypassrls
-       FROM pg_roles
-       WHERE rolname = current_user;
-    5) Row security setting:
-       SHOW row_security;
-    """
     rls_rows = session.execute(
         text(
             """
