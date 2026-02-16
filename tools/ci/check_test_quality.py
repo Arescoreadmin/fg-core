@@ -35,7 +35,9 @@ def _iter_protected_tests() -> list[Path]:
     return sorted(path for path in files if path.is_file())
 
 
-def _find_nearest_suppression(lines: list[str], assert_line: int) -> tuple[int, re.Match[str] | None]:
+def _find_nearest_suppression(
+    lines: list[str], assert_line: int
+) -> tuple[int, re.Match[str] | None]:
     for idx in range(max(0, assert_line - 4), assert_line):
         match = SUPPRESSION_RE.match(lines[idx])
         if match:
@@ -44,7 +46,7 @@ def _find_nearest_suppression(lines: list[str], assert_line: int) -> tuple[int, 
 
 
 def _todo_skip_line(line: str) -> bool:
-    return "pytest.skip(\"TODO\"" in line or "pytest.mark.skip(reason=\"TODO\"" in line
+    return 'pytest.skip("TODO"' in line or 'pytest.mark.skip(reason="TODO"' in line
 
 
 def main() -> int:
@@ -61,7 +63,7 @@ def main() -> int:
             if "SOC:ALLOW_VACUOUS_ASSERT" in line and not SUPPRESSION_RE.match(line):
                 failures.append(
                     f"{rel}:{idx} suppression marker has invalid format; expected "
-                    "# SOC:ALLOW_VACUOUS_ASSERT reason=\"...\" remove_by=\"YYYY-MM-DD\""
+                    '# SOC:ALLOW_VACUOUS_ASSERT reason="..." remove_by="YYYY-MM-DD"'
                 )
 
             if "assert True" in line:
@@ -89,7 +91,9 @@ def main() -> int:
                 suppression_count += 1
 
             if _todo_skip_line(line):
-                failures.append(f"{rel}:{idx} TODO skip marker is forbidden in protected suites")
+                failures.append(
+                    f"{rel}:{idx} TODO skip marker is forbidden in protected suites"
+                )
 
     if suppression_count > suppression_cap:
         failures.append(

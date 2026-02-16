@@ -87,9 +87,11 @@ class RouteExtractor(ast.NodeVisitor):
             if self.router_scope_names.get(router_name):
                 all_scopes |= set(self.router_scope_names[router_name])
 
-            route_scope = bool(all_scopes) or _dependencies_include_scope(
-                deco
-            ) or _function_has_scope_dependency(node)
+            route_scope = (
+                bool(all_scopes)
+                or _dependencies_include_scope(deco)
+                or _function_has_scope_dependency(node)
+            )
             if self.router_scope_dependency.get(router_name, False):
                 route_scope = True
 
@@ -213,8 +215,6 @@ def _scope_names_from_dependency(node: ast.AST) -> set[str]:
     return set()
 
 
-
-
 def _dependencies_has_any(call: ast.Call) -> bool:
     dep_node = _keyword_value(call, "dependencies")
     return isinstance(dep_node, (ast.List, ast.Tuple)) and bool(dep_node.elts)
@@ -233,6 +233,7 @@ def _function_has_any_dependency(
         if isinstance(default, ast.Call) and _get_name(default.func) == "Depends":
             return True
     return False
+
 
 def _dependencies_include_scope(call: ast.Call) -> bool:
     dep_node = _keyword_value(call, "dependencies")
@@ -372,9 +373,17 @@ def _is_tenant_binding_dependency(node: ast.AST) -> bool:
     if _get_name(node.func) != "Depends" or not node.args:
         return False
     dep_name = _get_name(node.args[0]) or ""
-    if dep_name.endswith("bind_tenant_id") or dep_name.endswith("tenant_db_required") or dep_name.endswith("tenant_db_optional"):
+    if (
+        dep_name.endswith("bind_tenant_id")
+        or dep_name.endswith("tenant_db_required")
+        or dep_name.endswith("tenant_db_optional")
+    ):
         return True
     if isinstance(node.args[0], ast.Call):
         nested_name = _get_name(node.args[0].func) or ""
-        return nested_name.endswith("bind_tenant_id") or nested_name.endswith("tenant_db_required") or nested_name.endswith("tenant_db_optional")
+        return (
+            nested_name.endswith("bind_tenant_id")
+            or nested_name.endswith("tenant_db_required")
+            or nested_name.endswith("tenant_db_optional")
+        )
     return False

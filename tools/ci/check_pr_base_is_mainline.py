@@ -25,7 +25,10 @@ def _base_has_soc_review(base_ref: str) -> tuple[bool, str | None]:
         return True, None
     if probe.returncode == 128:
         return False, None
-    return False, probe.stderr.strip() or probe.stdout.strip() or "cat-file probe failed"
+    return (
+        False,
+        probe.stderr.strip() or probe.stdout.strip() or "cat-file probe failed",
+    )
 
 
 def main() -> int:
@@ -77,7 +80,9 @@ def main() -> int:
             print(
                 f" - {SOC_REVIEW_PATH} is added in PR diff but already exists on origin/{base_ref}."
             )
-            print(" - Rebase onto latest mainline to avoid re-adding existing SOC review docs:")
+            print(
+                " - Rebase onto latest mainline to avoid re-adding existing SOC review docs:"
+            )
             print("   git remote -v")
             print("   git fetch origin")
             print("   git rebase origin/main")
