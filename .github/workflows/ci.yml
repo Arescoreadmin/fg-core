@@ -117,7 +117,7 @@ jobs:
         run: python tools/ci/check_security_regression_gates.py
 
       - name: Run fg-fast guard lane (lock regression)
-        run: make fg-fast
+        run: make fg-fast-full
         env:
           FG_API_KEY: ${{ env.FG_API_KEY }}
 
