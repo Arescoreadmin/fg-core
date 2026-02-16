@@ -130,3 +130,17 @@ Use `make rebase-main-instructions` for the exact command sequence and verificat
 
 
 Note: SOC ID enforcement in CI is manifest-backed (`tools/ci/soc_findings_manifest.json`) and does not require ID tokens in prose-only review sections.
+
+## 2026-02-16 — SOC manifest verify/sync tool hardening
+
+- Added/updated `tools/ci/sync_soc_manifest_status.py` to provide production-grade SOC manifest verification and sync:
+  - Explicit `--mode verify|sync` behavior (no misleading output).
+  - Deterministic gate execution with timeout + parallelism.
+  - Strict manifest schema validation + evidence existence checks.
+  - Atomic write with no-churn behavior (writes only when changes occur).
+  - Improved diagnostics on gate failures (tail output).
+
+Validation:
+- `make soc-manifest-verify`
+- `make soc-manifest-sync`
+- `make fg-fast`
