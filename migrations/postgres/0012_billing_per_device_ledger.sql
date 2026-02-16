@@ -281,8 +281,8 @@ BEGIN
         'billing_runs'
     ]
     LOOP
-        EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
-        EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
+        EXECUTE format('ALTER TABLE %%I ENABLE ROW LEVEL SECURITY', t);
+        EXECUTE format('ALTER TABLE %%I FORCE ROW LEVEL SECURITY', t);
         IF EXISTS (
             SELECT 1 FROM information_schema.columns
             WHERE table_schema='public' AND table_name=t AND column_name='tenant_id'
@@ -291,7 +291,7 @@ BEGIN
             WHERE schemaname='public' AND tablename=t AND policyname=t || '_tenant_isolation'
         ) THEN
             EXECUTE format(
-                'CREATE POLICY %I ON %I USING (tenant_id IS NOT NULL AND current_setting(''app.tenant_id'', true) IS NOT NULL AND tenant_id = current_setting(''app.tenant_id'', true)) WITH CHECK (tenant_id IS NOT NULL AND current_setting(''app.tenant_id'', true) IS NOT NULL AND tenant_id = current_setting(''app.tenant_id'', true))',
+                'CREATE POLICY %%I ON %%I USING (tenant_id IS NOT NULL AND current_setting(''app.tenant_id'', true) IS NOT NULL AND tenant_id = current_setting(''app.tenant_id'', true)) WITH CHECK (tenant_id IS NOT NULL AND current_setting(''app.tenant_id'', true) IS NOT NULL AND tenant_id = current_setting(''app.tenant_id'', true))',
                 t || '_tenant_isolation',
                 t
             );
