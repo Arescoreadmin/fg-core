@@ -19,6 +19,15 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
+from urllib.parse import urljoin
+
+from api.security_alerts import (
+    SSRFBlocked,
+    MAX_REDIRECT_HOPS,
+    sanitize_header_value,
+    sanitize_url_for_log,
+    validate_target,
+)
 
 log = logging.getLogger("frostgate.tripwire")
 _security_log = logging.getLogger("frostgate.security")
@@ -124,7 +133,7 @@ class WebhookDeliveryService:
 
                 self._http_client = httpx.AsyncClient(
                     timeout=self.timeout,
-                    follow_redirects=True,
+                    follow_redirects=False,
                 )
             except ImportError:
                 # Fallback to aiohttp if httpx not available
@@ -168,31 +177,13 @@ class WebhookDeliveryService:
 
                 # Determine client type and make request
                 if hasattr(client, "post"):  # httpx
-                    response = await client.post(
-                        url,
-                        json=payload,
-                        headers={
-                            "Content-Type": "application/json",
-                            "User-Agent": "FrostGate-Tripwire/1.0",
-                            "X-Alert-Type": alert_type,
-                            "X-Alert-Severity": severity,
-                        },
-                    )
+                    response = await self._safe_post(client, url, payload, alert_type, severity)
                     status_code = response.status_code
                     response_time = (time.time() - start_time) * 1000
                 else:  # aiohttp
-                    async with client.post(
-                        url,
-                        json=payload,
-                        headers={
-                            "Content-Type": "application/json",
-                            "User-Agent": "FrostGate-Tripwire/1.0",
-                            "X-Alert-Type": alert_type,
-                            "X-Alert-Severity": severity,
-                        },
-                    ) as response:
-                        status_code = response.status
-                        response_time = (time.time() - start_time) * 1000
+                    response = await self._safe_post(client, url, payload, alert_type, severity)
+                    status_code = response.status
+                    response_time = (time.time() - start_time) * 1000
 
                 last_status = status_code
 
@@ -201,7 +192,7 @@ class WebhookDeliveryService:
                     self.audit_logger(
                         {
                             "event_type": "webhook_delivered",
-                            "url": url,
+                            "url": sanitize_url_for_log(url),
                             "alert_type": alert_type,
                             "severity": severity,
                             "status_code": status_code,
@@ -223,7 +214,7 @@ class WebhookDeliveryService:
                     self.audit_logger(
                         {
                             "event_type": "webhook_failed",
-                            "url": url,
+                            "url": sanitize_url_for_log(url),
                             "alert_type": alert_type,
                             "severity": severity,
                             "status_code": status_code,
@@ -246,20 +237,44 @@ class WebhookDeliveryService:
 
             except asyncio.TimeoutError:
                 last_error = "Request timeout"
+            except SSRFBlocked as e:
+                last_error = sanitize_header_value(str(e))
+                self.audit_logger(
+                    {
+                        "event_type": "webhook_failed",
+                        "url": sanitize_url_for_log(url),
+                        "alert_type": alert_type,
+                        "severity": severity,
+                        "status_code": last_status,
+                        "attempt": attempt,
+                        "error": last_error,
+                        "success": False,
+                        "permanent_failure": True,
+                    }
+                )
+                return DeliveryResult(
+                    success=False,
+                    status_code=last_status,
+                    error=last_error,
+                    attempt=attempt,
+                )
             except Exception as e:
-                last_error = str(e)
+                last_error = sanitize_header_value(str(e))
 
             # Log retry attempt
             if attempt < self.max_attempts:
                 backoff = self.backoff_base ** (attempt - 1)
                 log.warning(
                     f"Webhook delivery failed (attempt {attempt}/{self.max_attempts}), "
-                    f"retrying in {backoff}s: {last_error}"
+                    "retrying in %ss for %s: %s",
+                    backoff,
+                    sanitize_url_for_log(url),
+                    sanitize_header_value(str(last_error)),
                 )
                 self.audit_logger(
                     {
                         "event_type": "webhook_retry",
-                        "url": url,
+                        "url": sanitize_url_for_log(url),
                         "alert_type": alert_type,
                         "attempt": attempt,
                         "max_attempts": self.max_attempts,
@@ -273,7 +288,7 @@ class WebhookDeliveryService:
         self.audit_logger(
             {
                 "event_type": "webhook_failed",
-                "url": url,
+                "url": sanitize_url_for_log(url),
                 "alert_type": alert_type,
                 "severity": severity,
                 "status_code": last_status,
@@ -290,6 +305,49 @@ class WebhookDeliveryService:
             error=last_error,
             attempt=self.max_attempts,
         )
+
+    async def _safe_post(
+        self,
+        client: Any,
+        url: str,
+        payload: dict[str, Any],
+        alert_type: str,
+        severity: str,
+    ) -> Any:
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "FrostGate-Tripwire/1.0",
+            "X-Alert-Type": alert_type,
+            "X-Alert-Severity": severity,
+        }
+        current_url = url
+        is_httpx_client = client.__class__.__module__.startswith("httpx")
+        for hop in range(MAX_REDIRECT_HOPS + 1):
+            normalized_url, _ = validate_target(current_url)
+            request_kwargs = {
+                "json": payload,
+                "headers": headers,
+                "timeout": self.timeout,
+            }
+            if is_httpx_client:
+                request_kwargs["follow_redirects"] = False
+            else:
+                request_kwargs["allow_redirects"] = False
+
+            response = await client.post(normalized_url, **request_kwargs)
+            status_code = getattr(response, "status_code", None)
+            if status_code is None:
+                status_code = getattr(response, "status", 0)
+            if 300 <= status_code < 400:
+                location = (getattr(response, "headers", {}) or {}).get("Location")
+                if not location:
+                    raise SSRFBlocked("redirect_location_missing")
+                if hop >= MAX_REDIRECT_HOPS:
+                    raise SSRFBlocked("redirect_hop_limit_exceeded")
+                current_url = urljoin(normalized_url, location)
+                continue
+            return response
+        raise SSRFBlocked("redirect_hop_limit_exceeded")
 
 
 # Singleton delivery service instance
@@ -361,14 +419,17 @@ def queue_webhook_delivery(
 
     try:
         _delivery_queue.put_nowait(delivery)
-        log.debug(f"Queued webhook delivery to {url}")
+        log.debug("Queued webhook delivery to %s", sanitize_url_for_log(url))
     except asyncio.QueueFull:
-        log.error(f"Webhook delivery queue full, dropping alert to {url}")
+        log.error(
+            "Webhook delivery queue full, dropping alert to %s",
+            sanitize_url_for_log(url),
+        )
         _security_log.error(
             "WEBHOOK_QUEUE_FULL",
             extra={
                 "event_type": "webhook_queue_full",
-                "url": url,
+                "url": sanitize_url_for_log(url),
                 "alert_type": alert_type,
             },
         )
