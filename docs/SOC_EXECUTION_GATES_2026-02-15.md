@@ -83,7 +83,8 @@ Gate semantics:
      - WARN (non-blocking) when total unknown count increases outside protected prefixes.
 
 2. **Fallback import detection**
-   - `tools/ci/check_soc_invariants.py` blocks `import ...fallback...` patterns under `api/`.
+   - `tools/ci/check_soc_invariants.py` blocks `import ...fallback...` patterns in repo-owned modules under `api/**` and `admin_gateway/**`.
+   - The scanner excludes vendored/dependency and cache/build paths (e.g. `.venv`, `site-packages`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `node_modules`, `dist`, `build`) so SOC invariants apply only to first-party code.
 
 3. **HTTP redirect wrapper enforcement**
    - `tools/ci/check_soc_invariants.py` blocks redirect-following clients outside approved files.

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -10,8 +11,8 @@ REPO = Path(__file__).resolve().parents[2]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from scripts.prod_profile_check import ProductionProfileChecker
 from api.config.prod_invariants import ProdInvariantViolation, assert_prod_invariants
+from scripts.prod_profile_check import ProductionProfileChecker
 
 ALLOWED_REDIRECT_FILES = {
     "api/security_alerts.py",
@@ -19,10 +20,58 @@ ALLOWED_REDIRECT_FILES = {
 }
 VALID_STATUSES = {"open", "partial", "mitigated"}
 SOC_ID_PATTERN = re.compile(r"SOC-(P0|P1|HIGH)-\d{3}")
+EXCLUDED_PATH_SEGMENTS = {
+    ".venv",
+    "site-packages",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    "node_modules",
+    "dist",
+    "build",
+}
 
 
 def _read(rel: str) -> str:
     return (REPO / rel).read_text(encoding="utf-8")
+
+
+def _is_excluded_path(path: Path) -> bool:
+    return any(segment in EXCLUDED_PATH_SEGMENTS for segment in path.parts)
+
+
+def _git_ls_files_under(prefixes: tuple[str, ...]) -> list[Path]:
+    cmd = ["git", "ls-files", "--", *prefixes]
+    proc = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        return []
+
+    files: list[Path] = []
+    for raw in proc.stdout.splitlines():
+        rel = raw.strip()
+        if not rel.endswith(".py"):
+            continue
+        path = REPO / rel
+        if not path.exists() or _is_excluded_path(path):
+            continue
+        files.append(path)
+    return sorted(files)
+
+
+def _iter_owned_python_files() -> list[Path]:
+    tracked = _git_ls_files_under(("api", "admin_gateway"))
+    if tracked:
+        return tracked
+
+    fallback: list[Path] = []
+    for base in (REPO / "api", REPO / "admin_gateway"):
+        if not base.exists():
+            continue
+        for py in base.rglob("*.py"):
+            if _is_excluded_path(py):
+                continue
+            fallback.append(py)
+    return sorted(fallback)
 
 
 def _normalize_evidence(value: object) -> list[str]:
@@ -131,9 +180,7 @@ def _check_runtime_enforcement_mode(failures: list[str]) -> None:
         invalid["FG_ENFORCEMENT_MODE"] = "observe"
         try:
             assert_prod_invariants(invalid)
-            failures.append(
-                f"runtime invariant failed open for {env_name}/observe"
-            )
+            failures.append(f"runtime invariant failed open for {env_name}/observe")
         except ProdInvariantViolation:
             pass
 
@@ -143,17 +190,14 @@ def _check_fallback_import_patterns(failures: list[str]) -> None:
         re.compile(r"from\s+.+fallback.+\s+import\s+", re.IGNORECASE),
         re.compile(r"import\s+.+fallback", re.IGNORECASE),
     ]
-    for base in (REPO / "api", REPO / "admin_gateway"):
-        if not base.exists():
-            continue
-        for py in base.rglob("*.py"):
-            rel = py.relative_to(REPO).as_posix()
-            text = py.read_text(encoding="utf-8")
-            for pat in banned_patterns:
-                if pat.search(text):
-                    failures.append(
-                        f"{rel} imports fallback module pattern: {pat.pattern}"
-                    )
+    for py in _iter_owned_python_files():
+        rel = py.relative_to(REPO).as_posix()
+        text = py.read_text(encoding="utf-8")
+        for pat in banned_patterns:
+            if pat.search(text):
+                failures.append(
+                    f"{rel} imports fallback module pattern: {pat.pattern}"
+                )
 
 
 def _check_redirect_clients(failures: list[str]) -> None:
@@ -161,18 +205,15 @@ def _check_redirect_clients(failures: list[str]) -> None:
         r"(httpx\.(Client|AsyncClient)\([^\)]*follow_redirects\s*=\s*True|"
         r"requests\.[a-z]+\([^\)]*allow_redirects\s*=\s*True)"
     )
-    for base in (REPO / "api", REPO / "admin_gateway"):
-        if not base.exists():
+    for py in _iter_owned_python_files():
+        rel = py.relative_to(REPO).as_posix()
+        if rel in ALLOWED_REDIRECT_FILES:
             continue
-        for py in base.rglob("*.py"):
-            rel = py.relative_to(REPO).as_posix()
-            if rel in ALLOWED_REDIRECT_FILES:
-                continue
-            text = py.read_text(encoding="utf-8")
-            if pattern.search(text):
-                failures.append(
-                    f"{rel} uses redirect-following client without approved wrapper"
-                )
+        text = py.read_text(encoding="utf-8")
+        if pattern.search(text):
+            failures.append(
+                f"{rel} uses redirect-following client without approved wrapper"
+            )
 
 
 def main() -> int:
