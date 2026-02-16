@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass
 from typing import Mapping
 
+
 _PROD_ENVS = {"prod", "production", "staging"}
 _TRUE = {"1", "true", "yes", "y", "on"}
 
@@ -74,3 +75,22 @@ def assert_prod_invariants(settings: Mapping[str, str] | None = None) -> None:
         raise ProdInvariantViolation(
             "FG-PROD-007", "FG_ENFORCEMENT_MODE must be enforce in prod/staging"
         )
+
+    if not _env_bool(env, "FG_AUDIT_VERIFY_REQUIRED", True):
+        raise ProdInvariantViolation(
+            "FG-PROD-008", "FG_AUDIT_VERIFY_REQUIRED must be true in prod/staging"
+        )
+
+    signing_mode = (env.get("FG_AUDIT_EXPORT_SIGNING_MODE") or "hmac").strip().lower()
+    if signing_mode not in {"hmac", "ed25519"}:
+        raise ProdInvariantViolation(
+            "FG-PROD-009", "FG_AUDIT_EXPORT_SIGNING_MODE must be hmac or ed25519"
+        )
+    if signing_mode == "ed25519":
+        active_kid = (env.get("FG_AUDIT_ED25519_ACTIVE_KID") or "").strip()
+        private_json = (env.get("FG_AUDIT_ED25519_PRIVATE_KEYS_JSON") or "").strip()
+        private_file = (env.get("FG_AUDIT_ED25519_PRIVATE_KEYS_FILE") or "").strip()
+        if not active_kid or (not private_json and not private_file):
+            raise ProdInvariantViolation(
+                "FG-PROD-009", "valid active Ed25519 signing key is required in prod/staging"
+            )
