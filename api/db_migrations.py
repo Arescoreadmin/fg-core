@@ -92,7 +92,7 @@ def assert_migrations_applied(engine: Engine) -> None:
 
 
 def assert_append_only_triggers(engine: Engine) -> None:
-    expected_tables = {"decisions", "decision_evidence_artifacts"}
+    expected_tables = {"decisions", "decision_evidence_artifacts", "audit_ledger"}
     with engine.begin() as conn:
         rows = conn.exec_driver_sql(
             """
@@ -118,6 +118,13 @@ def assert_tenant_rls(engine: Engine) -> None:
         "api_keys",
         "security_audit_log",
         "policy_change_requests",
+        "audit_ledger",
+        "audit_exports",
+        "audit_chain_checkpoints",
+        "audit_anchors",
+        "audit_export_jobs",
+        "audit_bypass_events",
+        "audit_retention_runs",
     }
     with engine.begin() as conn:
         rows = conn.execute(

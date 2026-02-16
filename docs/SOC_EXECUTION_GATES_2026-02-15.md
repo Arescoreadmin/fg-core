@@ -158,3 +158,25 @@ Validation:
   - `PYTHONPATH=. .venv/bin/python tools/ci/sync_soc_manifest_status.py --mode verify --fail-on-unresolved-p0`
   - `PYTHONPATH=. .venv/bin/python tools/ci/sync_soc_manifest_status.py --mode sync --write`
   - `make fg-fast`
+
+
+## 2026-02-16 — Audit spine hardening gates
+
+Audit determinism + evidence chain controls are now required in strict lanes:
+
+- `make audit-chain-verify`
+- `make audit-export-verify-determinism`
+- `make audit-checkpoint-verify`
+- `make audit-evidence-verify`
+
+These are wired into `fg-fast-ci` / `fg-fast-full` and are fail-closed on:
+
+- manifest signature mismatch
+- export non-determinism
+- checkpoint/chain tamper detection failures
+- missing evidence metadata invariants
+
+- offline evidence verification: `.venv/bin/python scripts/fg_audit_verify.py --bundle <export.zip> --pubkeys <keys.json>`
+- prod invariant requires `FG_AUDIT_VERIFY_REQUIRED=1`; disabling verification is a startup hard-fail.
+
+- offline verifier supports `--json` machine-readable reason codes with deterministic exit codes (0 pass / 1 fail).

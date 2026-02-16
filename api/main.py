@@ -36,6 +36,8 @@ from api.attestation import router as attestation_router
 from api.config_control import router as config_control_router
 from api.ui import router as ui_router
 from api.ui_dashboards import router as ui_dashboards_router
+from api.audit import router as audit_router
+from api.ui_audit_dashboard import router as ui_audit_router
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
 from api.middleware.request_validation import (
@@ -471,6 +473,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     app.include_router(keys_router)
     app.include_router(forensics_router)
+    app.include_router(audit_router)
+    app.include_router(ui_audit_router)
 
     # ---- Compliance routers ----
     if compliance_module_enabled("mission_envelope") and mission_router is not None:
@@ -718,6 +722,8 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(config_control_router)
     app.include_router(keys_router)
     app.include_router(forensics_router)
+    app.include_router(audit_router)
+    app.include_router(ui_audit_router)
     if mission_router is not None:
         app.include_router(mission_router)
     if ring_router is not None:
