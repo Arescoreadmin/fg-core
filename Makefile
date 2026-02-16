@@ -21,6 +21,7 @@ VENV := $(VENV_DIR)
 PY  := $(VENV)/bin/python
 PIP := $(VENV)/bin/pip
 RUFF := $(VENV)/bin/ruff
+PYTEST := $(VENV)/bin/pytest
 
 DEPS_STAMP := $(VENV_DIR)/.deps.stamp
 DEPS_INPUTS := requirements.txt requirements-dev.txt constraints.txt
@@ -79,7 +80,7 @@ tools-check:
 	@echo "docker: $(if $(filter 1,$(HAS_DOCKER)),yes,no)"
 	@echo "helm:  $(if $(filter 1,$(HAS_HELM)),yes,no)"
 
-.PHONY: require-docker require-helm
+.PHONY: require-docker require-helm require-opa-runtime
 
 .PHONY: require-docker
 require-docker:
@@ -89,11 +90,26 @@ require-docker:
 require-helm:
 	@test "$(HAS_HELM)" = "1" || (echo "❌ helm CLI missing" && exit 1)
 
+
+.PHONY: require-opa-runtime
+require-opa-runtime:
+	@set -euo pipefail; \
+	if command -v opa >/dev/null 2>&1; then \
+		echo "✅ opa-check runtime: local opa CLI"; \
+		exit 0; \
+	fi; \
+	if command -v docker >/dev/null 2>&1; then \
+		echo "✅ opa-check runtime: dockerized opa ($(OPA_IMAGE))"; \
+		exit 0; \
+	fi; \
+	echo "❌ missing dependency: install 'opa' CLI or 'docker' to run opa-check"; \
+	exit 1
+
 # =============================================================================
 # Tooling versions (single source of truth)
 # =============================================================================
 
-OPA_IMAGE ?= openpolicyagent/opa:0.64.1
+OPA_IMAGE ?= openpolicyagent/opa:0.64.1@sha256:34402172b65ceddd52461f227f998b2048c09a62cb4ba253cb0cc0504ea608de
 
 
 # =============================================================================
@@ -178,10 +194,13 @@ export FG_PY      := $(PY)
 # Internal helpers (no footguns)
 # =============================================================================
 
-.PHONY: _require-venv _require-cmd _warn-cmd _print-tools
+.PHONY: _require-venv _require-pytest-venv _require-cmd _warn-cmd _print-tools
 
 _require-venv:
 	@test -x "$(PY)" || (echo "❌ venv missing at $(PY). Run: make venv"; exit 1)
+
+_require-pytest-venv:
+	@test -x "$(PYTEST)" || (echo "❌ venv missing or broken: run make venv"; exit 2)
 
 _require-cmd:
 	@cmd="$(CMD)"; \
@@ -266,14 +285,15 @@ check-no-engine-evaluate:
 opa-check:
 	@set -euo pipefail; \
 	POLICY_DIR="$$PWD/policy/opa"; \
+	$(MAKE) -s require-opa-runtime; \
 	if command -v opa >/dev/null 2>&1; then \
+		echo "opa-check: using local opa CLI"; \
 		opa check --strict "$$POLICY_DIR"; \
 		opa test "$$POLICY_DIR"; \
-	else \
-		$(MAKE) -s require-docker; \
+	elif command -v docker >/dev/null 2>&1; then \
 		IMAGE="$(OPA_IMAGE)"; \
 		MOUNT="-v $$POLICY_DIR:/policies"; \
-		echo "⚠️  opa not installed locally. Falling back to $$IMAGE via docker."; \
+		echo "opa-check: using pinned docker image $$IMAGE"; \
 		docker run --rm $$MOUNT "$$IMAGE" check --strict /policies; \
 		docker run --rm $$MOUNT "$$IMAGE" test /policies; \
 	fi
@@ -345,7 +365,7 @@ prod-profile-check: venv
 	@FG_ENV=prod $(PY_CONTRACT) scripts/prod_profile_check.py
 
 dos-hardening-check: _require-venv
-	@FG_ENV=prod $(PYTEST_ENV) $(PY) -m pytest -q -p no:unraisableexception tests/test_dos_guard.py
+	@FG_ENV=prod $(PYTEST_ENV) $(PYTEST) -q -p no:unraisableexception tests/test_dos_guard.py
 	@FG_ENV=prod $(PY_CONTRACT) scripts/prod_profile_check.py
 
 # =============================================================================
@@ -499,15 +519,15 @@ fg-lint: fmt-check
 # =============================================================================
 
 .PHONY: test-unit
-test-unit: venv
-	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q -m "not postgres"
+test-unit: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q -m "not postgres"
 
 # =============================================================================
 # Fast lane
 # =============================================================================
 
-.PHONY: fg-fast
-fg-fast: venv fg-audit-make fg-contract fg-compile opa-check prod-profile-check prod-unsafe-config-check security-regression-gates soc-invariants soc-manifest-verify route-inventory-audit test-quality-gate soc-review-sync pr-base-mainline-check audit-chain-verify dos-hardening-check gap-audit \
+.PHONY: fg-fast fg-fast-ci fg-fast-full
+fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check prod-unsafe-config-check security-regression-gates soc-invariants soc-manifest-verify route-inventory-audit test-quality-gate soc-review-sync pr-base-mainline-check audit-chain-verify dos-hardening-check gap-audit \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate \
@@ -516,6 +536,10 @@ fg-fast: venv fg-audit-make fg-contract fg-compile opa-check prod-profile-check 
 	@$(MAKE) -s fg-lint
 	@$(MAKE) -s test-dashboard-p0
 
+fg-fast-ci: fg-fast opa-check
+
+fg-fast-full: fg-fast-ci
+
 # =============================================================================
 # Postgres verification (CI + local)
 # =============================================================================
@@ -523,7 +547,7 @@ fg-fast: venv fg-audit-make fg-contract fg-compile opa-check prod-profile-check 
 .PHONY: db-postgres-up db-postgres-migrate db-postgres-assert db-postgres-test db-postgres-verify db-postgres-down
 
 db-postgres-up:
-	@$(MAKE) -s _warn-cmd CMD=docker
+	@$(MAKE) -s require-docker
 	@if [ ! -f .env ]; then \
 		printf "POSTGRES_USER=%s\nPOSTGRES_DB=%s\nPOSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nFG_AGENT_API_KEY=%s\nAG_CORS_ORIGINS=%s\nNATS_AUTH_TOKEN=%s\nFG_API_KEY=%s\nFG_WEBHOOK_SECRET=%s\n" \
 			"$(POSTGRES_USER)" "$(POSTGRES_DB)" "$(POSTGRES_PASSWORD)" "devredis" "dev-agent-key" "http://localhost:13000" "dev-nats-token" "dev-api-key" "dev-webhook-secret" > .env; \
@@ -561,7 +585,7 @@ db-postgres-assert: venv
 	@FG_DB_URL="$(APP_DB_URL)" FG_DB_BACKEND="postgres" $(PY) -m api.db_migrations --backend postgres --assert
 
 db-postgres-test: venv
-	@FG_DB_URL="$(APP_DB_URL_COMPOSE)" FG_DB_BACKEND="postgres" FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/postgres -rs
+	@FG_DB_URL="$(APP_DB_URL_COMPOSE)" FG_DB_BACKEND="postgres" FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/postgres -rs
 
 db-postgres-verify: db-postgres-up db-postgres-migrate db-postgres-assert db-postgres-test
 
@@ -620,7 +644,7 @@ test-integration: venv
 	); \
 	\
 	rc=0; \
-	FG_BASE_URL="$${BASE_URL}" $(PYTEST_ENV) $(PY) -m pytest -q -m integration || rc=$$?; \
+	FG_BASE_URL="$${BASE_URL}" $(PYTEST_ENV) $(PYTEST) -q -m integration || rc=$$?; \
 	if [ $$rc -eq 5 ]; then \
 		echo "⚠️  No integration tests collected (ok for now)"; \
 		exit 0; \
@@ -669,7 +693,7 @@ itest-local: itest-down itest-up
 
 .PHONY: ci ci-integration ci-evidence pip-audit
 
-ci: venv pip-audit fg-fast
+ci: venv pip-audit fg-fast-ci
 
 ci-integration: venv itest-local
 
@@ -733,17 +757,17 @@ ci-evidence: venv itest-down itest-up
 # =============================================================================
 
 .PHONY: ci-pt
-ci-pt: venv
-	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/test_security_hardening.py tests/test_security_middleware.py
+ci-pt: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_security_hardening.py tests/test_security_middleware.py
 
 # =============================================================================
 # Core Invariant Tests (INV-001 through INV-007)
 # =============================================================================
 
 .PHONY: test-core-invariants
-test-core-invariants: venv
+test-core-invariants: venv _require-pytest-venv
 	@echo "Running core invariant tests (INV-001 through INV-007)."
-	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -v tests/test_core_invariants.py tests/test_ui_dashboards.py
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -v tests/test_core_invariants.py tests/test_ui_dashboards.py
 
 # =============================================================================
 # Hardening Test Lanes (Day 1-7 hardening plan)
@@ -751,18 +775,18 @@ test-core-invariants: venv
 
 .PHONY: test-decision-unified test-tenant-isolation test-auth-hardening test-dashboard-p0 test-hardening-all
 
-test-decision-unified: venv
-	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/test_decision_pipeline_unified.py
+test-decision-unified: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_decision_pipeline_unified.py
 
-test-tenant-isolation: venv
-	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/test_tenant_invariant.py tests/test_auth_tenants.py
+test-tenant-isolation: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_tenant_invariant.py tests/test_auth_tenants.py
 
-test-auth-hardening: venv
-	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/test_auth_hardening.py tests/test_auth.py tests/test_auth_contract.py tests/security/test_evidence_chain_persistence.py tests/security/test_chain_verification_detects_tamper.py tests/security/test_scope_enforcement.py tests/security/test_key_hashing_kdf.py
+test-auth-hardening: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_auth_hardening.py tests/test_auth.py tests/test_auth_contract.py tests/security/test_evidence_chain_persistence.py tests/security/test_chain_verification_detects_tamper.py tests/security/test_scope_enforcement.py tests/security/test_key_hashing_kdf.py
 
 
-test-dashboard-p0: venv
-	@FG_ENV=test $(PYTEST_ENV) $(PY) -m pytest -q tests/security/test_dashboard_p0_hardening.py tests/security/test_admin_audit_required_fields.py
+test-dashboard-p0: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/security/test_dashboard_p0_hardening.py tests/security/test_admin_audit_required_fields.py
 
 test-hardening-all: test-core-invariants test-decision-unified test-tenant-isolation test-auth-hardening test-dashboard-p0
 	@echo "✅ All hardening tests passed"
@@ -855,7 +879,7 @@ admin-lint: admin-venv
 	@$(AG_PY) -m ruff format --check admin_gateway
 
 admin-test: admin-venv
-	@PYTHONPATH=. $(PYTEST_ENV) $(AG_PY) -m pytest admin_gateway/tests -q
+	@PYTHONPATH=. $(PYTEST_ENV) $(AG_VENV)/bin/pytest admin_gateway/tests -q
 
 ci-admin: admin-venv admin-lint admin-test
 
@@ -1021,5 +1045,3 @@ soc-manifest-sync: venv
 
 soc-manifest-verify: venv
 	@PYTHONPATH=. $(PY) tools/ci/sync_soc_manifest_status.py --mode verify --fail-on-unresolved-p0
-
-

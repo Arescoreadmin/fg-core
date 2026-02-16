@@ -144,3 +144,17 @@ Validation:
 - `make soc-manifest-verify`
 - `make soc-manifest-sync`
 - `make fg-fast`
+
+## Usage
+
+- Verify mode checks schema, evidence, gate results, and unresolved P0 findings without modifying the manifest.
+- Sync mode applies only safe upgrades (`non-final -> mitigated`) when the gate passes and evidence exists, and writes only when content changes.
+- CI wiring:
+  - `make soc-manifest-verify` runs `PYTHONPATH=. .venv/bin/python tools/ci/sync_soc_manifest_status.py --mode verify --fail-on-unresolved-p0`.
+  - `make soc-manifest-verify` is part of `make fg-fast` (developer lane).
+  - CI uses `make fg-fast-full`/`make fg-fast-ci` to include `opa-check` in addition to `fg-fast`.
+  - `make soc-manifest-sync` is opt-in/manual and is not part of `fg-fast`.
+- Local commands:
+  - `PYTHONPATH=. .venv/bin/python tools/ci/sync_soc_manifest_status.py --mode verify --fail-on-unresolved-p0`
+  - `PYTHONPATH=. .venv/bin/python tools/ci/sync_soc_manifest_status.py --mode sync --write`
+  - `make fg-fast`
