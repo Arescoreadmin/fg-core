@@ -169,3 +169,7 @@ supervisor-sidecar/supervisor-sidecar
 .cache/
 
 scratch.sh
+
+# local env
+env.*.local
+tools/dev/
