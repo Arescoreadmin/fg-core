@@ -5,6 +5,7 @@ import importlib
 import sys
 
 import pytest
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture(autouse=True)
@@ -69,9 +70,27 @@ def test_build_app_still_fails_closed_when_invariant_raises(
         asyncio.run(_startup_only())
 
 
-def test_contract_generation_context_keeps_module_app_none(reload_api_main) -> None:
+def test_contract_generation_context_binds_contract_app(reload_api_main) -> None:
     main = reload_api_main(contract_gen=True)
 
-    assert main.app is None
-    app = main.build_contract_app()
-    assert app.title
+    assert main.app is not None
+    assert hasattr(main.app, "router")
+    assert main.build_contract_app().title
+
+
+def test_builders_do_not_crash_when_optional_billing_router_is_missing(
+    reload_api_main,
+) -> None:
+    main = reload_api_main(contract_gen=True)
+
+    assert hasattr(main, "billing_router")
+    assert main.billing_router is None
+
+    runtime_app = main.build_app(auth_enabled=False)
+    contract_app = main.build_contract_app()
+
+    with TestClient(runtime_app) as runtime_client:
+        assert runtime_client.get("/health").status_code == 200
+
+    with TestClient(contract_app) as contract_client:
+        assert contract_client.get("/health").status_code == 200

@@ -36,6 +36,8 @@ from api.attestation import router as attestation_router
 from api.config_control import router as config_control_router
 from api.ui import router as ui_router
 from api.ui_dashboards import router as ui_dashboards_router
+from api.audit import router as audit_router
+from api.ui_audit_dashboard import router as ui_audit_router
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
 from api.middleware.request_validation import (
@@ -161,6 +163,7 @@ governance_router = _optional_router("api.governance", "router")
 mission_router = _optional_router("api.mission_envelope", "router")
 ring_router = _optional_router("api.ring_router", "router")
 roe_router = _optional_router("api.roe_engine", "router")
+billing_router = _optional_router("api.billing", "router")
 
 
 def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
@@ -471,6 +474,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     app.include_router(keys_router)
     app.include_router(forensics_router)
+    app.include_router(audit_router)
+    app.include_router(ui_audit_router)
 
     # ---- Compliance routers ----
     if compliance_module_enabled("mission_envelope") and mission_router is not None:
@@ -481,6 +486,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         app.include_router(roe_router)
     if compliance_module_enabled("governance") and governance_router is not None:
         app.include_router(governance_router)
+    if compliance_module_enabled("billing") and billing_router is not None:
+        app.include_router(billing_router)
 
     if _dev_enabled():
         app.include_router(dev_events_router)
@@ -718,6 +725,8 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(config_control_router)
     app.include_router(keys_router)
     app.include_router(forensics_router)
+    app.include_router(audit_router)
+    app.include_router(ui_audit_router)
     if mission_router is not None:
         app.include_router(mission_router)
     if ring_router is not None:
@@ -726,6 +735,8 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
         app.include_router(roe_router)
     if governance_router is not None:
         app.include_router(governance_router)
+    if billing_router is not None:
+        app.include_router(billing_router)
 
     @app.get("/health")
     async def health() -> dict:
@@ -782,7 +793,11 @@ class _LazyRuntimeApp:
 
 def _module_app_binding() -> FastAPI | _LazyRuntimeApp | None:
     if _is_contract_generation_context():
-        return None
+        # Contract generation contexts may import `api.main.app` and access
+        # route metadata directly. Bind to a contract app (not runtime app)
+        # to avoid `NoneType` attribute errors while keeping runtime side
+        # effects disabled.
+        return build_contract_app()
 
     mode = _import_build_mode()
     if mode == "soft":
