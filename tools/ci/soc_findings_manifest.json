@@ -1,124 +1,124 @@
 {
-  "source_review": "docs/SOC_ARCH_REVIEW_2026-02-15.md",
   "findings": [
     {
+      "evidence": [
+        "scripts/prod_profile_check.py",
+        "tests/test_security_audit_fixes.py"
+      ],
+      "gate": "soc-invariants",
       "id": "SOC-P0-001",
       "severity": "P0",
-      "status": "mitigated",
-      "gate": "soc-invariants",
+      "status": "mitigated"
+    },
+    {
       "evidence": [
         "scripts/prod_profile_check.py",
         "tests/test_security_audit_fixes.py"
-      ]
-    },
-    {
+      ],
+      "gate": "prod-profile-check",
       "id": "SOC-P0-002",
       "severity": "P0",
-      "status": "mitigated",
-      "gate": "prod-profile-check",
-      "evidence": [
-        "scripts/prod_profile_check.py",
-        "tests/test_security_audit_fixes.py"
-      ]
+      "status": "mitigated"
     },
     {
-      "id": "SOC-P0-003",
-      "severity": "P0",
-      "status": "mitigated",
-      "gate": "test-tenant-isolation",
       "evidence": [
         "tests/test_tenant_invariant.py",
         "tests/test_security_audit_fixes.py"
-      ]
+      ],
+      "gate": "test-tenant-isolation",
+      "id": "SOC-P0-003",
+      "severity": "P0",
+      "status": "mitigated"
     },
     {
-      "id": "SOC-P0-004",
-      "severity": "P0",
-      "status": "mitigated",
-      "gate": "test-auth-hardening",
       "evidence": [
         "tests/test_security_audit_fixes.py",
         "api/governance.py"
-      ]
+      ],
+      "gate": "test-auth-hardening",
+      "id": "SOC-P0-004",
+      "severity": "P0",
+      "status": "mitigated"
     },
     {
-      "id": "SOC-P0-005",
-      "severity": "P0",
-      "status": "mitigated",
-      "gate": "enforcement-mode-matrix",
       "evidence": [
         "api/config/prod_invariants.py",
         "tools/ci/check_enforcement_mode_matrix.py"
-      ]
+      ],
+      "gate": "enforcement-mode-matrix",
+      "id": "SOC-P0-005",
+      "severity": "P0",
+      "status": "mitigated"
     },
     {
-      "id": "SOC-P0-006",
-      "severity": "P0",
-      "status": "partial",
-      "gate": "security-regression-gates",
       "evidence": [
         "tools/ci/check_security_regression_gates.py",
         "api/security_alerts.py"
-      ]
+      ],
+      "gate": "security-regression-gates",
+      "id": "SOC-P0-006",
+      "severity": "P0",
+      "status": "mitigated"
     },
     {
-      "id": "SOC-P0-007",
-      "severity": "P0",
-      "status": "mitigated",
-      "gate": "ci-admin",
       "evidence": [
         "admin_gateway/main.py",
         "tests/test_security_audit_fixes.py"
-      ]
+      ],
+      "gate": "ci-admin",
+      "id": "SOC-P0-007",
+      "severity": "P0",
+      "status": "mitigated"
     },
     {
-      "id": "SOC-P1-001",
-      "severity": "P1",
-      "status": "mitigated",
-      "gate": "route-inventory-audit",
       "evidence": [
         "tools/ci/check_route_inventory.py",
         "tools/ci/check_route_scopes.py"
-      ]
+      ],
+      "gate": "route-inventory-audit",
+      "id": "SOC-P1-001",
+      "severity": "P1",
+      "status": "mitigated"
     },
     {
-      "id": "SOC-P1-002",
-      "severity": "P1",
-      "status": "partial",
-      "gate": "soc-invariants",
       "evidence": [
         "tools/ci/check_soc_invariants.py"
-      ]
+      ],
+      "gate": "soc-invariants",
+      "id": "SOC-P1-002",
+      "severity": "P1",
+      "status": "mitigated"
     },
     {
-      "id": "SOC-P1-003",
-      "severity": "P1",
-      "status": "mitigated",
-      "gate": "soc-invariants",
       "evidence": [
         "tools/ci/check_soc_invariants.py",
         "api/security_alerts.py"
-      ]
+      ],
+      "gate": "soc-invariants",
+      "id": "SOC-P1-003",
+      "severity": "P1",
+      "status": "mitigated"
     },
     {
-      "id": "SOC-HIGH-001",
-      "severity": "HIGH",
-      "status": "mitigated",
-      "gate": "test-quality-gate",
       "evidence": [
         "tools/ci/check_test_quality.py",
         "tests/test_core_invariants.py"
-      ]
+      ],
+      "gate": "test-quality-gate",
+      "id": "SOC-HIGH-001",
+      "severity": "HIGH",
+      "status": "mitigated"
     },
     {
-      "id": "SOC-HIGH-002",
-      "severity": "HIGH",
-      "status": "mitigated",
-      "gate": "soc-review-sync",
       "evidence": [
         "tools/ci/check_soc_review_sync.py",
         "docs/SOC_EXECUTION_GATES_2026-02-15.md"
-      ]
+      ],
+      "gate": "soc-review-sync",
+      "id": "SOC-HIGH-002",
+      "severity": "HIGH",
+      "status": "mitigated"
     }
-  ]
+  ],
+  "source_review": "docs/SOC_ARCH_REVIEW_2026-02-15.md"
 }
