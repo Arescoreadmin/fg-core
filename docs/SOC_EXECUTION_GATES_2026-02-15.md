@@ -76,11 +76,13 @@ Gate semantics:
    - Enforce snapshot: `make route-inventory-audit`.
    - Snapshot file: `tools/ci/route_inventory.json`.
    - Inventory fields include `method`, `path`, `file`, `scoped`, `scopes`, and `tenant_bound`.
-   - `scoped` / `tenant_bound` may be `true`, `false`, or `"unknown"`.
+   - `scoped` / `tenant_bound` may be `true`, `false`, or `"unknown"` in generated inventory state.
    - Gate behavior:
      - FAIL on known regressions (`true -> false`).
-     - FAIL when `unknown` appears on protected prefixes (`/decisions`, `/feed`, `/governance`) for non-HEAD routes.
-     - WARN (non-blocking) when total unknown count increases outside protected prefixes.
+     - FAIL when any unknown classification remains (`unknown` count must be zero).
+     - Failure output includes exact `METHOD PATH (file)` rows and remediation hints:
+       - `make route-inventory-generate`
+       - `git add tools/ci/route_inventory.json`
 
 2. **Fallback import detection**
    - `tools/ci/check_soc_invariants.py` blocks `import ...fallback...` patterns in repo-owned modules under `api/**` and `admin_gateway/**`.

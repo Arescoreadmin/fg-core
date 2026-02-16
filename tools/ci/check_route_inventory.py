@@ -29,6 +29,8 @@ def _scoped_state(rec) -> bool | str:
 def _tenant_state(rec) -> bool | str:
     if rec.tenant_bound:
         return True
+    if getattr(rec, "tenant_explicit_unbound", False):
+        return False
     if is_public_path(rec.full_path):
         return False
     if rec.route_has_any_dependency:
@@ -103,6 +105,7 @@ def _validate_inventory(
 
     expected_unknown = 0
     current_unknown = 0
+    unknown_routes: list[tuple[str, str, str]] = []
 
     for key in sorted(set(expected_map) & set(cur_map)):
         before = expected_map[key]
@@ -124,14 +127,23 @@ def _validate_inventory(
             expected_unknown += 1
         if _is_unknown(after_scoped) or _is_unknown(after_tenant):
             current_unknown += 1
+            unknown_routes.append((method, path, str(after.get("file", ""))))
             if _is_protected_path(path) and method != "HEAD":
                 failures.append(
                     f"{key} has unknown scoped/tenant_bound on protected path {path}"
                 )
 
-    if current_unknown > expected_unknown:
+    if current_unknown != 0:
+        failures.append(
+            f"unknown route classification count must be zero: {current_unknown}"
+        )
+        failures.append("unknown route entries (METHOD PATH (file)):")
+        for method, path, file_path in unknown_routes:
+            failures.append(f"  {method} {path} ({file_path})")
+        failures.append("regenerate inventory with: make route-inventory-generate")
+    elif expected_unknown != 0:
         warnings.append(
-            f"unknown route classification count increased: {expected_unknown} -> {current_unknown}"
+            f"unknown route classification improved: {expected_unknown} -> {current_unknown}"
         )
 
     return failures, warnings

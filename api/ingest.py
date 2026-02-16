@@ -12,7 +12,7 @@ from prometheus_client import Counter
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import bind_tenant_id, require_scopes
+from api.auth_scopes import bind_tenant_id, require_bound_tenant, require_scopes
 from api.db import set_tenant_context
 from api.config_versioning import load_config_version, resolve_config_hash
 from api.db_models import DecisionRecord
@@ -251,6 +251,7 @@ def _extract_src_ip(payload: dict[str, Any]) -> Optional[str]:
     },
     dependencies=[
         Depends(require_scopes("ingest:write")),
+        Depends(require_bound_tenant),
         _RATE_LIMIT_DEP,
     ],
 )

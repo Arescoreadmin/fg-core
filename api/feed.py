@@ -407,7 +407,9 @@ def feed_live(
 
 
 @router.head("/stream")
-def feed_stream_head() -> Response:
+def feed_stream_head(
+    _tenant_id: str = Depends(require_bound_tenant),
+) -> Response:
     # Headers-only probe for smoke tests / health checks
     return Response(content=b"", media_type="text/event-stream")
 

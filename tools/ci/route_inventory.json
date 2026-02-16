@@ -73,7 +73,7 @@
     "scopes": [
       "admin:read"
     ],
-    "tenant_bound": "unknown"
+    "tenant_bound": false
   },
   {
     "file": "api/admin.py",
@@ -91,9 +91,9 @@
     "path": "/admin/keys/{key_prefix}/rotate",
     "scoped": true,
     "scopes": [
-      "keys:write"
+      "admin:write"
     ],
-    "tenant_bound": true
+    "tenant_bound": false
   },
   {
     "file": "api/admin.py",
@@ -101,9 +101,9 @@
     "path": "/admin/keys/{key_prefix}/rotate",
     "scoped": true,
     "scopes": [
-      "admin:write"
+      "keys:write"
     ],
-    "tenant_bound": "unknown"
+    "tenant_bound": true
   },
   {
     "file": "api/admin.py",
@@ -113,7 +113,7 @@
     "scopes": [
       "admin:read"
     ],
-    "tenant_bound": "unknown"
+    "tenant_bound": false
   },
   {
     "file": "api/admin.py",
@@ -123,7 +123,7 @@
     "scopes": [
       "admin:read"
     ],
-    "tenant_bound": "unknown"
+    "tenant_bound": false
   },
   {
     "file": "api/admin.py",
@@ -183,7 +183,7 @@
     "scopes": [
       "admin:read"
     ],
-    "tenant_bound": "unknown"
+    "tenant_bound": false
   },
   {
     "file": "api/attestation.py",
@@ -193,7 +193,7 @@
     "scopes": [
       "attestation:admin"
     ],
-    "tenant_bound": "unknown"
+    "tenant_bound": false
   },
   {
     "file": "api/attestation.py",
@@ -203,7 +203,7 @@
     "scopes": [
       "attestation:admin"
     ],
-    "tenant_bound": "unknown"
+    "tenant_bound": false
   },
   {
     "file": "api/attestation.py",
@@ -213,7 +213,7 @@
     "scopes": [
       "attestation:admin"
     ],
-    "tenant_bound": "unknown"
+    "tenant_bound": false
   },
   {
     "file": "api/config_control.py",
@@ -283,7 +283,7 @@
     "scopes": [
       "attestation:admin"
     ],
-    "tenant_bound": "unknown"
+    "tenant_bound": false
   },
   {
     "file": "api/attestation.py",
@@ -293,7 +293,7 @@
     "scopes": [
       "attestation:admin"
     ],
-    "tenant_bound": "unknown"
+    "tenant_bound": false
   },
   {
     "file": "api/attestation.py",
@@ -303,7 +303,7 @@
     "scopes": [
       "attestation:admin"
     ],
-    "tenant_bound": "unknown"
+    "tenant_bound": false
   },
   {
     "file": "api/feed.py",
@@ -333,7 +333,7 @@
     "scopes": [
       "feed:read"
     ],
-    "tenant_bound": "unknown"
+    "tenant_bound": true
   },
   {
     "file": "api/forensics.py",
@@ -459,7 +459,7 @@
     "scopes": [
       "ingest:write"
     ],
-    "tenant_bound": "unknown"
+    "tenant_bound": true
   },
   {
     "file": "api/keys.py",
@@ -509,7 +509,7 @@
     "scopes": [
       "keys:admin"
     ],
-    "tenant_bound": "unknown"
+    "tenant_bound": true
   },
   {
     "file": "api/mission_envelope.py",
@@ -543,7 +543,7 @@
     "scopes": [
       "attestation:admin"
     ],
-    "tenant_bound": "unknown"
+    "tenant_bound": false
   },
   {
     "file": "api/attestation.py",
@@ -553,7 +553,7 @@
     "scopes": [
       "attestation:admin"
     ],
-    "tenant_bound": "unknown"
+    "tenant_bound": false
   },
   {
     "file": "api/attestation.py",
@@ -563,7 +563,7 @@
     "scopes": [
       "attestation:admin"
     ],
-    "tenant_bound": "unknown"
+    "tenant_bound": false
   },
   {
     "file": "api/attestation.py",
@@ -573,7 +573,7 @@
     "scopes": [
       "attestation:admin"
     ],
-    "tenant_bound": "unknown"
+    "tenant_bound": false
   },
   {
     "file": "api/ring_router.py",
