@@ -53,3 +53,13 @@ def test_route_checker_uses_canonical_public_paths() -> None:
         "from api.public_paths import LINTER_PUBLIC_PATH_PREFIXES"
         in inspect.getsource(route_checks)
     )
+
+
+def test_admin_route_fixture_infers_explicit_unbound_tenant() -> None:
+    records = _records_for("admin_route.py")
+    assert records and records[0].tenant_explicit_unbound is True
+
+
+def test_require_bound_tenant_fixture_counts_as_tenant_binding() -> None:
+    records = _records_for("require_bound_tenant_route.py")
+    assert records and records[0].tenant_bound is True

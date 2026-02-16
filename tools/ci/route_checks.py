@@ -20,6 +20,7 @@ class RouteRecord:
     route_has_db_dependency: bool
     route_scopes: tuple[str, ...]
     tenant_bound: bool
+    tenant_explicit_unbound: bool
     route_has_any_dependency: bool
 
 
@@ -104,6 +105,11 @@ class RouteExtractor(ast.NodeVisitor):
                 or _function_has_tenant_binding(node)
                 or self.router_tenant_bound.get(router_name, False)
             )
+            tenant_explicit_unbound = _infer_tenant_unbound(
+                file_path=self.file_path,
+                full_path=full_path,
+                scopes=all_scopes,
+            )
 
             route_has_any_dependency = (
                 _dependencies_has_any(deco)
@@ -121,9 +127,31 @@ class RouteExtractor(ast.NodeVisitor):
                     route_has_db_dependency=route_db,
                     route_scopes=tuple(sorted(all_scopes)),
                     tenant_bound=tenant_bound,
+                    tenant_explicit_unbound=tenant_explicit_unbound,
                     route_has_any_dependency=route_has_any_dependency,
                 )
             )
+
+
+def _scope_names_include_admin(scopes: set[str]) -> bool:
+    return any("admin" in str(scope).lower() for scope in scopes)
+
+
+def _infer_tenant_unbound(*, file_path: Path, full_path: str, scopes: set[str]) -> bool:
+    rel_file = file_path.as_posix()
+    has_admin_scope = _scope_names_include_admin(scopes)
+
+    if full_path.startswith("/admin") and (has_admin_scope or rel_file.endswith("/api/admin.py") or rel_file == "api/admin.py"):
+        return True
+
+    if (
+        (rel_file.endswith("/api/attestation.py") or rel_file == "api/attestation.py")
+        and full_path.startswith(("/approvals", "/evidence", "/modules"))
+        and has_admin_scope
+    ):
+        return True
+
+    return False
 
 
 def iter_route_records(root: Path) -> list[RouteRecord]:
@@ -304,6 +332,7 @@ def _function_has_tenant_binding(
             name = _get_name(nested.func) or ""
             if (
                 name.endswith("bind_tenant_id")
+                or name.endswith("require_bound_tenant")
                 or name.endswith("_require_known_tenant")
                 or name.endswith("tenant_db_required")
                 or name.endswith("tenant_db_optional")
@@ -375,6 +404,7 @@ def _is_tenant_binding_dependency(node: ast.AST) -> bool:
     dep_name = _get_name(node.args[0]) or ""
     if (
         dep_name.endswith("bind_tenant_id")
+        or dep_name.endswith("require_bound_tenant")
         or dep_name.endswith("tenant_db_required")
         or dep_name.endswith("tenant_db_optional")
     ):
@@ -383,6 +413,7 @@ def _is_tenant_binding_dependency(node: ast.AST) -> bool:
         nested_name = _get_name(node.args[0].func) or ""
         return (
             nested_name.endswith("bind_tenant_id")
+            or nested_name.endswith("require_bound_tenant")
             or nested_name.endswith("tenant_db_required")
             or nested_name.endswith("tenant_db_optional")
         )

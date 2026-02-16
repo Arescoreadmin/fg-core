@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from api.auth_scopes import (
     bind_tenant_id,
+    require_bound_tenant,
     mint_key,
     revoke_api_key,
     list_api_keys,
@@ -282,6 +283,7 @@ def revoke_key(
 def delete_key(
     prefix: str,
     request: Request,
+    _tenant_id: str = Depends(require_bound_tenant),
     tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> RevokeKeyResponse:
     """
