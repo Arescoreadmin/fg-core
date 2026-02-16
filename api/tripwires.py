@@ -177,11 +177,15 @@ class WebhookDeliveryService:
 
                 # Determine client type and make request
                 if hasattr(client, "post"):  # httpx
-                    response = await self._safe_post(client, url, payload, alert_type, severity)
+                    response = await self._safe_post(
+                        client, url, payload, alert_type, severity
+                    )
                     status_code = response.status_code
                     response_time = (time.time() - start_time) * 1000
                 else:  # aiohttp
-                    response = await self._safe_post(client, url, payload, alert_type, severity)
+                    response = await self._safe_post(
+                        client, url, payload, alert_type, severity
+                    )
                     status_code = response.status
                     response_time = (time.time() - start_time) * 1000
 
