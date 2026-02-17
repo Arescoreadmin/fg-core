@@ -194,6 +194,16 @@
     "tenant_bound": false
   },
   {
+    "file": "api/ai/router.py",
+    "method": "POST",
+    "path": "/ai/query",
+    "scoped": true,
+    "scopes": [
+      "ai:query"
+    ],
+    "tenant_bound": true
+  },
+  {
     "file": "api/attestation.py",
     "method": "POST",
     "path": "/approvals",

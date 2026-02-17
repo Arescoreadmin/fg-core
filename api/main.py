@@ -37,10 +37,8 @@ from api.attestation import router as attestation_router
 from api.config_control import router as config_control_router
 from api.ui import router as ui_router
 from api.ui_dashboards import router as ui_dashboards_router
-from api.audit import router as audit_router
 from api.ui_audit_dashboard import router as ui_audit_dashboard_router
 from api.ui_compliance_dashboard import router as ui_compliance_dashboard_router
-from api.compliance import router as compliance_router
 from api.billing import router as billing_router
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
