@@ -1,72 +1,110 @@
-# Enforceable Findings Matrix
+# SOC Enforceable Findings Matrix (Release Authority)
 
-| Finding ID | Invariant | Test Strategy | CI Gate | Release Blocker |
-|---|---|---|---|---|
-| SOC-P0-001 | `FG_AUTH_ALLOW_FALLBACK` must remain false in prod/staging runtime invariants. | runtime invariant + prod profile validation. | `make soc-invariants`, `make prod-profile-check` | Y |
-| SOC-P0-002 | Fail-open controls (`FG_RL_FAIL_OPEN`, `FG_AUTH_DB_FAIL_OPEN`) must be false in prod/staging. | runtime invariant + hardening tests. | `make soc-invariants`, `make test-auth-hardening` | Y |
-| SOC-P0-003 | `/decisions`, `/feed/live`, `/feed/stream` must deny unscoped or cross-tenant reads. | integration tests in protected suites. | `make test-tenant-isolation` | Y |
-| SOC-P0-004 | Governance endpoints must require auth and fail closed on DB errors. | integration tests + startup validation. | `make test-auth-hardening` | Y |
-| SOC-P0-005 | `FG_ENFORCEMENT_MODE` must be `enforce` in prod/staging. | runtime invariant + CI matrix (`FG_ENV=prod/staging`). | `make enforcement-mode-matrix` | Y |
-| SOC-P0-006 | Tripwire egress policy must block disallowed webhook destinations. | security regression checks + targeted tests. | `make security-regression-gates` | Y |
-| SOC-P0-007 | Admin redirect/CORS must reject unsafe production values. | admin startup + integration tests. | `make ci-admin` | Y |
-| SOC-P1-001 | Route inventory drift is blocked unless snapshot is updated intentionally. | AST route extraction + snapshot diff. | `make route-inventory-audit` | Y |
-| SOC-P1-002 | New fallback module import paths in runtime API are blocked. | static pattern checks in `tools/ci/check_soc_invariants.py`. | `make soc-invariants` | Y |
-| SOC-P1-003 | Redirect-following HTTP clients are restricted to approved wrappers/files. | static pattern checks in `tools/ci/check_soc_invariants.py`. | `make soc-invariants` | Y |
-| SOC-HIGH-001 | Protected security/invariant suites cannot contain vacuous assertions without explicit suppression. | test-quality static scan with suppression markers. | `make test-quality-gate` | Y |
-| SOC-HIGH-002 | Security-critical PRs must update SOC review/execution docs. | diff-aware sync check. | `make soc-review-sync` | Y |
+This matrix defines **hard release invariants**.  
+All gates are binary pass/fail. No warnings. No release exceptions.
+
+---
+
+## Findings Matrix
+
+| Finding ID | Invariant | Enforcement Mechanism | CI Gate | Release Blocker |
+|------------|-----------|-----------------------|---------|------------------|
+| SOC-P0-001 | `FG_AUTH_ALLOW_FALLBACK` must be `false` in prod/staging runtime invariants. | Runtime invariant + prod profile validation. | `make soc-invariants`, `make prod-profile-check` | Y |
+| SOC-P0-002 | Fail-open controls (`FG_RL_FAIL_OPEN`, `FG_AUTH_DB_FAIL_OPEN`) must be `false` in prod/staging. | Runtime invariant + hardening tests. | `make soc-invariants`, `make test-auth-hardening` | Y |
+| SOC-P0-003 | `/decisions`, `/feed/live`, `/feed/stream` must deny unscoped or cross-tenant reads. | Integration tests (tenant isolation suites). | `make test-tenant-isolation` | Y |
+| SOC-P0-004 | Governance endpoints must require authentication and fail closed on DB errors. | Integration tests + startup validation. | `make test-auth-hardening` | Y |
+| SOC-P0-005 | `FG_ENFORCEMENT_MODE` must be `enforce` in prod/staging. | Runtime invariant + enforcement matrix test. | `make enforcement-mode-matrix` | Y |
+| SOC-P0-006 | Tripwire egress policy must block disallowed webhook destinations. | Security regression tests. | `make security-regression-gates` | Y |
+| SOC-P0-007 | Admin redirect and CORS must reject unsafe production values. | Admin startup validation + integration tests. | `make ci-admin` | Y |
+| SOC-P1-001 | Route inventory drift is blocked unless snapshot is intentionally regenerated. | AST route extraction + snapshot diff. | `make route-inventory-audit` | Y |
+| SOC-P1-002 | Fallback module imports in runtime API are prohibited. | Static invariant scan. | `make soc-invariants` | Y |
+| SOC-P1-003 | Redirect-following HTTP clients are restricted to approved wrappers/files. | Static invariant scan. | `make soc-invariants` | Y |
+| SOC-HIGH-001 | Protected security/invariant test suites cannot contain vacuous assertions without explicit suppression. | Static test-quality scan with enforced suppression rules. | `make test-quality-gate` | Y |
+| SOC-HIGH-002 | Security-critical file changes require SOC review documentation updates. | Diff-aware SOC sync verification. | `make soc-review-sync` | Y |
+
+---
 
 # MVP2 Stage Gate Definition
 
-**MVP2 is achieved when ALL of the following are true:**
+MVP2 is achieved only when ALL gates pass:
 
-- [ ] `make soc-invariants` passes.
-- [ ] `make prod-profile-check` passes.
-- [ ] `make enforcement-mode-matrix` passes for `FG_ENV=prod` and `FG_ENV=staging`.
-- [ ] `make security-regression-gates` passes.
-- [ ] `make test-tenant-isolation` passes.
-- [ ] `make ci-admin` passes.
-- [ ] `make route-inventory-audit` passes.
-- [ ] `make test-quality-gate` passes.
-- [ ] `make soc-review-sync` passes.
+- [ ] `make soc-invariants`
+- [ ] `make prod-profile-check`
+- [ ] `make enforcement-mode-matrix`
+- [ ] `make security-regression-gates`
+- [ ] `make test-tenant-isolation`
+- [ ] `make ci-admin`
+- [ ] `make route-inventory-audit`
+- [ ] `make test-quality-gate`
+- [ ] `make soc-review-sync`
+- [ ] `make soc-manifest-verify`
 
-Gate semantics:
+## Gate Semantics
+
 - Binary pass/fail only.
-- Zero exceptions in release branch.
-- Every P0/P1/HIGH finding above maps to at least one hard-fail gate.
+- Zero suppressed P0 violations.
+- Zero unresolved HIGH findings.
+- No exceptions in release branches.
+- Every matrix entry maps to at least one enforced CI gate.
 
-# CI Wiring Plan
+---
 
-## New/updated guard scripts
+# CI Wiring Architecture
+
+## Guard Scripts
+
 - `tools/ci/check_soc_invariants.py`
 - `tools/ci/check_enforcement_mode_matrix.py`
 - `tools/ci/check_route_inventory.py`
 - `tools/ci/check_test_quality.py`
 - `tools/ci/check_soc_review_sync.py`
-- `tools/ci/check_soc_review_sync.py` deepens shallow history in CI to recover merge-base before `origin/${GITHUB_BASE_REF}...HEAD` diff; still fails closed if diff is not computable.
+- `tools/ci/sync_soc_manifest_status.py`
 
-## Makefile targets
+### SOC Review Sync Behavior
+
+`check_soc_review_sync.py`:
+
+- Computes diff against merge-base (`origin/${GITHUB_BASE_REF}...HEAD`)
+- Deepens shallow clones in CI when necessary
+- Fails closed if diff cannot be computed
+- Blocks changes to security-critical paths unless SOC docs are updated
+
+---
+
+# Makefile Targets
+
 - `soc-invariants`
 - `enforcement-mode-matrix`
 - `route-inventory-generate`
 - `route-inventory-audit`
 - `test-quality-gate`
 - `soc-review-sync`
+- `soc-manifest-verify`
+- `soc-manifest-sync`
 
-## Workflow wiring
-- `fg_guard` runs `make fg-fast` once (no duplicate execution of sub-gates).
-- New `enforcement_mode_matrix` job runs `make enforcement-mode-matrix` to exercise prod/staging runtime invariant pass/fail cases (`enforce`, `observe`, and unset).
+---
 
-## Warning-to-fail promotions
-- Observe mode in prod/staging is hard fail via runtime invariants + matrix test.
-- Route inventory drift is hard fail.
-- Vacuous assertions in protected suites are hard fail.
-- Missing SOC doc updates for critical changes are hard fail.
+# Workflow Wiring
 
-## Risk if skipped
-- Silent fallback/observe-mode drift reaches release.
-- Route/auth shadow paths can be introduced undetected.
-- Regressions are masked by non-assertive tests.
-- SOC stage classification drifts from reality.
+- `fg-fast` → developer enforcement lane
+- `fg-fast-full` / `fg-fast-ci` → extended CI lane
+- `soc-manifest-verify` is part of `fg-fast`
+- `soc-manifest-sync` is manual only
+
+---
+
+# Warning → Hard-Fail Promotions
+
+The following are hard failures:
+
+- Observe mode in prod/staging
+- Route inventory drift
+- Vacuous assertions in protected suites
+- Missing SOC doc updates for critical file changes
+- Unresolved P0 findings in manifest
+- Missing evidence linkage for mitigated findings
+
+---
 
 # Regression Immunity Architecture
 

@@ -16,6 +16,14 @@
     "tenant_bound": false
   },
   {
+    "file": "api/_scratch/ui_legacy.py",
+    "method": "GET",
+    "path": "/_legacy/ui_legacy/_disabled",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
     "file": "api/admin.py",
     "method": "POST",
     "path": "/admin/audit/export",
@@ -862,6 +870,36 @@
     "tenant_bound": false
   },
   {
+    "file": "api/ui_audit_dashboard.py",
+    "method": "GET",
+    "path": "/ui/audit/chain-integrity",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_audit_dashboard.py",
+    "method": "GET",
+    "path": "/ui/audit/export-link",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_audit_dashboard.py",
+    "method": "GET",
+    "path": "/ui/audit/overview",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
     "file": "api/ui_dashboards.py",
     "method": "POST",
     "path": "/ui/audit/packet",
@@ -880,6 +918,56 @@
       "audit:read"
     ],
     "tenant_bound": false
+  },
+  {
+    "file": "api/ui_audit_dashboard.py",
+    "method": "GET",
+    "path": "/ui/audit/status",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_compliance_dashboard.py",
+    "method": "GET",
+    "path": "/ui/compliance/exam-readiness",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_compliance_dashboard.py",
+    "method": "GET",
+    "path": "/ui/compliance/findings",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_compliance_dashboard.py",
+    "method": "GET",
+    "path": "/ui/compliance/overview",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_compliance_dashboard.py",
+    "method": "GET",
+    "path": "/ui/compliance/requirements/status",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": true
   },
   {
     "file": "api/ui_dashboards.py",

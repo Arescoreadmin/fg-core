@@ -141,7 +141,11 @@ def _infer_tenant_unbound(*, file_path: Path, full_path: str, scopes: set[str]) 
     rel_file = file_path.as_posix()
     has_admin_scope = _scope_names_include_admin(scopes)
 
-    if full_path.startswith("/admin") and (has_admin_scope or rel_file.endswith("/api/admin.py") or rel_file == "api/admin.py"):
+    if full_path.startswith("/admin") and (
+        has_admin_scope
+        or rel_file.endswith("/api/admin.py")
+        or rel_file == "api/admin.py"
+    ):
         return True
 
     if (
