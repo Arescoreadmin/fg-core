@@ -5,6 +5,7 @@ import importlib
 import sys
 
 import pytest
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture(autouse=True)
@@ -69,9 +70,48 @@ def test_build_app_still_fails_closed_when_invariant_raises(
         asyncio.run(_startup_only())
 
 
-def test_contract_generation_context_keeps_module_app_none(reload_api_main) -> None:
+def test_contract_generation_context_binds_contract_app(reload_api_main) -> None:
     main = reload_api_main(contract_gen=True)
 
-    assert main.app is None
-    app = main.build_contract_app()
-    assert app.title
+    assert main.app is not None
+    assert hasattr(main.app, "router")
+    assert main.build_contract_app().title
+
+
+def test_builders_do_not_crash_when_optional_billing_router_is_missing(
+    reload_api_main,
+) -> None:
+    main = reload_api_main(contract_gen=True)
+
+    assert hasattr(main, "billing_router")
+    assert main.billing_router is not None
+    assert getattr(main.billing_router, "routes", None) == []
+
+    runtime_app = main.build_app(auth_enabled=False)
+    contract_app = main.build_contract_app()
+
+    with TestClient(runtime_app) as runtime_client:
+        assert runtime_client.get("/health").status_code == 200
+
+    with TestClient(contract_app) as contract_client:
+        assert contract_client.get("/health").status_code == 200
+
+
+def test_optional_router_requires_apirouter_instance(reload_api_main, monkeypatch) -> None:
+    main = reload_api_main(contract_gen=True)
+
+    class _FakeModule:
+        router = object()
+
+    monkeypatch.setattr("builtins.__import__", lambda *args, **kwargs: _FakeModule)
+
+    assert main._optional_router("api.billing") is None
+
+
+def test_build_app_ignores_invalid_optional_router_value(reload_api_main, monkeypatch) -> None:
+    main = reload_api_main(contract_gen=False)
+    monkeypatch.setattr(main, "billing_router", object())
+
+    app = main.build_app(auth_enabled=False)
+    with TestClient(app) as client:
+        assert client.get("/health").status_code == 200

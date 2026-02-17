@@ -404,6 +404,11 @@ jobs:
       - name: Postgres migration smoke test
         run: pytest -q tests/test_migrations_postgres_smoke.py
 
+      - name: Postgres audit terminal-guard parity test
+        env:
+          FG_POSTGRES_TESTS: "1"
+        run: pytest -q tests/postgres/test_audit_export_job_terminal_guard_postgres.py
+
   admin:
     name: Admin Gateway (ci-admin)
     runs-on: ubuntu-latest

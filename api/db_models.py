@@ -259,6 +259,174 @@ class DecisionRecord(Base):
     chain_ts = Column(DateTime(timezone=True), nullable=True)
 
 
+class AuditLedgerRecord(Base):
+    __tablename__ = "audit_ledger"
+
+    id = Column(Integer, primary_key=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+    tenant_id = Column(
+        String(128),
+        nullable=False,
+        index=True,
+        default="system",
+        server_default=text("'system'"),
+    )
+    timestamp_utc = Column(String(64), nullable=False)
+    invariant_id = Column(String(128), nullable=False, index=True)
+    decision = Column(String(16), nullable=False)
+    config_hash = Column(String(64), nullable=False)
+    policy_hash = Column(String(64), nullable=False)
+    git_commit = Column(String(128), nullable=False)
+    runtime_version = Column(String(64), nullable=False)
+    host_id = Column(String(128), nullable=False)
+    sha256_self_hash = Column(String(64), nullable=False, unique=True, index=True)
+    previous_record_hash = Column(String(64), nullable=False)
+    signature = Column(String(128), nullable=False)
+
+
+class AuditExport(Base):
+    __tablename__ = "audit_exports"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "export_hash", "manifest_hash", name="uq_audit_exports_dedupe"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    export_id = Column(String(128), nullable=False, unique=True, index=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+    export_hash = Column(String(64), nullable=False, index=True)
+    manifest_hash = Column(String(64), nullable=False, index=True)
+    storage_uri = Column(Text, nullable=False)
+    size_bytes = Column(Integer, nullable=False)
+    triggered_by = Column(String(128), nullable=False)
+    purpose = Column(String(128), nullable=False)
+    retention_class = Column(String(64), nullable=False)
+    export_range_start_utc = Column(String(64), nullable=False, index=True)
+    export_range_end_utc = Column(String(64), nullable=False, index=True)
+    export_range_end_inclusive = Column(Boolean, nullable=False, default=True, server_default=text("1"))
+    kid = Column(String(128), nullable=False)
+    signature_algo = Column(String(64), nullable=False)
+
+
+class AuditExportJob(Base):
+    __tablename__ = "audit_export_jobs"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    job_id = Column(String(128), nullable=False, unique=True, index=True)
+    idempotency_key = Column(String(128), nullable=False, index=True)
+    status = Column(String(32), nullable=False, index=True)
+    requested_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    start_utc = Column(String(64), nullable=False)
+    end_utc = Column(String(64), nullable=False)
+    end_inclusive = Column(Boolean, nullable=False, default=True, server_default=text("1"))
+    purpose = Column(String(128), nullable=False)
+    retention_class = Column(String(64), nullable=False)
+    signing_kid = Column(String(128), nullable=False, default="", server_default=text("''"))
+    triggered_by = Column(String(128), nullable=False)
+    force = Column(Boolean, nullable=False, default=False, server_default=text("0"))
+    attempts = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    job_event_seq = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    last_error_code = Column(String(64), nullable=True)
+    lease_owner = Column(String(128), nullable=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
+    export_id = Column(String(128), nullable=True, index=True)
+    storage_uri = Column(Text, nullable=True)
+
+
+class AuditBypassEvent(Base):
+    __tablename__ = "audit_bypass_events"
+
+    id = Column(Integer, primary_key=True)
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
+    tenant_id = Column(String(128), nullable=False, index=True)
+    principal_id = Column(String(128), nullable=False, index=True)
+    operation = Column(String(64), nullable=False)
+    reason_code = Column(String(64), nullable=False)
+    ticket_id = Column(String(128), nullable=False)
+    ttl_seconds = Column(Integer, nullable=False)
+    expires_at_utc = Column(String(64), nullable=False)
+
+
+class AuditRetentionRun(Base):
+    __tablename__ = "audit_retention_runs"
+
+    id = Column(Integer, primary_key=True)
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
+    tenant_id = Column(String(128), nullable=False, index=True)
+    triggered_by = Column(String(128), nullable=False)
+    mode = Column(String(16), nullable=False)
+    reason_code = Column(String(64), nullable=False)
+    ticket_id = Column(String(128), nullable=False)
+    confirmation_token = Column(String(128), nullable=True)
+    policy_json = Column(JSON, nullable=False)
+    policy_hash = Column(String(64), nullable=False, index=True)
+    affected_exports_digest = Column(String(64), nullable=False)
+    affected_jobs_digest = Column(String(64), nullable=False)
+    affected_exports_count = Column(Integer, nullable=False)
+    affected_jobs_count = Column(Integer, nullable=False)
+
+
+class AuditChainCheckpoint(Base):
+    __tablename__ = "audit_chain_checkpoints"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "checkpoint_id", name="uq_audit_chain_checkpoint_tenant_checkpoint"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    checkpoint_id = Column(String(128), nullable=False)
+    record_seq = Column(Integer, nullable=False, index=True)
+    root_hash = Column(String(64), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+
+
+class AuditAnchor(Base):
+    __tablename__ = "audit_anchors"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "anchor_day", name="uq_audit_anchors_day"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    anchor_day = Column(String(32), nullable=False, index=True)
+    day_root_hash = Column(String(64), nullable=False)
+    trust_domain = Column(String(64), nullable=False)
+    anchor_status = Column(String(32), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+
+
 class DecisionEvidenceArtifact(Base):
     __tablename__ = "decision_evidence_artifacts"
 
