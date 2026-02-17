@@ -1,3 +1,8 @@
+-- Compliance registry + exam session tables
+-- Hardened for psycopg3 execution (escape Postgres format() placeholders)
+-- Enforces append-only triggers via audit_ledger_append_only_guard()
+-- Enforces tenant RLS policy for all tables listed
+
 CREATE TABLE IF NOT EXISTS compliance_requirements (
     id BIGSERIAL PRIMARY KEY,
     tenant_id TEXT NOT NULL,
@@ -59,7 +64,6 @@ CREATE TABLE IF NOT EXISTS compliance_snapshots (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-
 CREATE TABLE IF NOT EXISTS compliance_requirement_updates (
     id BIGSERIAL PRIMARY KEY,
     tenant_id TEXT NOT NULL,
@@ -94,26 +98,53 @@ CREATE TABLE IF NOT EXISTS audit_exam_sessions (
     key_id TEXT NOT NULL DEFAULT ''
 );
 
-CREATE INDEX IF NOT EXISTS ix_compliance_requirements_tenant_req ON compliance_requirements(tenant_id, req_id, id);
-CREATE INDEX IF NOT EXISTS ix_compliance_findings_tenant_find ON compliance_findings(tenant_id, finding_id, id);
-CREATE INDEX IF NOT EXISTS ix_compliance_snapshots_tenant ON compliance_snapshots(tenant_id, id);
-CREATE INDEX IF NOT EXISTS ix_compliance_updates_tenant ON compliance_requirement_updates(tenant_id, id);
+-- Indexes
+CREATE INDEX IF NOT EXISTS ix_compliance_requirements_tenant_req
+    ON compliance_requirements(tenant_id, req_id, id);
 
+CREATE INDEX IF NOT EXISTS ix_compliance_findings_tenant_find
+    ON compliance_findings(tenant_id, finding_id, id);
+
+CREATE INDEX IF NOT EXISTS ix_compliance_snapshots_tenant
+    ON compliance_snapshots(tenant_id, id);
+
+CREATE INDEX IF NOT EXISTS ix_compliance_updates_tenant
+    ON compliance_requirement_updates(tenant_id, id);
+
+-- RLS + append-only triggers for all tables in one deterministic loop.
+-- NOTE: psycopg3 scans percent-tokens; avoid percent-letter sequences in migration text.
 DO $$
 DECLARE t TEXT;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['compliance_requirements','compliance_findings','compliance_snapshots','audit_exam_sessions','compliance_requirement_updates']
+  FOREACH t IN ARRAY ARRAY[
+    'compliance_requirements',
+    'compliance_findings',
+    'compliance_snapshots',
+    'audit_exam_sessions',
+    'compliance_requirement_updates'
+  ]
   LOOP
-    EXECUTE format('DROP TRIGGER IF EXISTS %I_append_only_update ON %I', t, t);
-    EXECUTE format('DROP TRIGGER IF EXISTS %I_append_only_delete ON %I', t, t);
-    EXECUTE format('CREATE TRIGGER %I_append_only_update BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION append_only_guard()', t, t);
-    EXECUTE format('CREATE TRIGGER %I_append_only_delete BEFORE DELETE ON %I FOR EACH ROW EXECUTE FUNCTION append_only_guard()', t, t);
+    -- Append-only enforcement
+    EXECUTE format('DROP TRIGGER IF EXISTS %%I_append_only_update ON %%I', t, t);
+    EXECUTE format('DROP TRIGGER IF EXISTS %%I_append_only_delete ON %%I', t, t);
 
-    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
-    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
-    EXECUTE format('DROP POLICY IF EXISTS %I_tenant_isolation ON %I', t, t);
+    EXECUTE format(
+      'CREATE TRIGGER %%I_append_only_update BEFORE UPDATE ON %%I FOR EACH ROW EXECUTE FUNCTION audit_ledger_append_only_guard()',
+      t, t
+    );
+    EXECUTE format(
+      'CREATE TRIGGER %%I_append_only_delete BEFORE DELETE ON %%I FOR EACH ROW EXECUTE FUNCTION audit_ledger_append_only_guard()',
+      t, t
+    );
+
+    -- RLS enforcement
+    EXECUTE format('ALTER TABLE %%I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('ALTER TABLE %%I FORCE ROW LEVEL SECURITY', t);
+
+    -- Tenant isolation policy
+    EXECUTE format('DROP POLICY IF EXISTS %%I_tenant_isolation ON %%I', t, t);
     EXECUTE format($fmt$
-      CREATE POLICY %I_tenant_isolation ON %I
+      CREATE POLICY %%I_tenant_isolation ON %%I
       USING (tenant_id = current_setting('app.tenant_id', true))
       WITH CHECK (tenant_id = current_setting('app.tenant_id', true))
     $fmt$, t, t);
@@ -121,12 +152,11 @@ BEGIN
 END;
 $$;
 
-ALTER TABLE audit_exam_sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE audit_exam_sessions FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS audit_exam_sessions_tenant_isolation ON audit_exam_sessions;
-CREATE POLICY audit_exam_sessions_tenant_isolation
-ON audit_exam_sessions
-USING (tenant_id = current_setting('app.tenant_id', true))
-WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
-
-REVOKE TRUNCATE ON compliance_requirements, compliance_findings, compliance_snapshots, audit_exam_sessions, compliance_requirement_updates FROM PUBLIC;
+-- Reduce blast radius: TRUNCATE is not allowed for public role
+REVOKE TRUNCATE
+  ON compliance_requirements,
+     compliance_findings,
+     compliance_snapshots,
+     audit_exam_sessions,
+     compliance_requirement_updates
+  FROM PUBLIC;

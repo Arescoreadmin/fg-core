@@ -557,7 +557,7 @@ exam-reproduce-test: venv _require-pytest-venv
 	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_audit_engine.py -k "exam_reproduce"
 
 .PHONY: fg-fast fg-fast-ci fg-fast-full
-fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check prod-unsafe-config-check security-regression-gates soc-invariants soc-manifest-verify route-inventory-audit test-quality-gate soc-review-sync pr-base-mainline-check audit-chain-verify dos-hardening-check gap-audit \
+fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check prod-unsafe-config-check security-regression-gates soc-invariants soc-manifest-verify route-inventory-audit test-quality-gate soc-review-sync pr-base-mainline-check audit-chain-verify dos-hardening-check sql-migration-percent-guard gap-audit \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate \
@@ -565,6 +565,7 @@ fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check prod-unsaf
 	@$(MAKE) -s test-unit
 	@$(MAKE) -s fg-lint
 	@$(MAKE) -s test-dashboard-p0
+	@$(MAKE) sql-migration-percent-guard
 
 fg-fast-ci: fg-fast billing-ledger-verify billing-invoice-verify opa-check
 
@@ -1101,3 +1102,24 @@ soc-manifest-sync: venv
 
 soc-manifest-verify: venv
 	@PYTHONPATH=. $(PY) tools/ci/sync_soc_manifest_status.py --mode verify --fail-on-unresolved-p0
+
+.PHONY: sql-migration-percent-guard
+sql-migration-percent-guard:
+	@PYTHONPATH=. .venv/bin/python tools/ci/guard_no_raw_percent_in_sql.py
+
+
+.PHONY: pg-reset-frostgate
+pg-reset-frostgate:
+	bash tools/dev/reset_postgres_db.sh frostgate
+
+.PHONY: pg-reset-frostgate test-pg-migrations-replay
+
+pg-reset-frostgate:
+	bash tools/dev/reset_postgres_db.sh frostgate
+
+test-pg-migrations-replay: pg-reset-frostgate
+	FG_DB_URL=$${FG_DB_URL:-postgresql+psycopg://fg_user:fg_password@127.0.0.1:5432/frostgate} \
+	pytest -q tests/test_migrations_postgres_replay.py::test_postgres_migrations_replay_safe
+
+
+

@@ -107,6 +107,10 @@ jobs:
       - name: Syntax / import guard (fast fail)
         run: python -m compileall -q api engine tests
 
+      # ✅ Added: SQL migration percent-token guard (psycopg3 hazard)
+      - name: SQL migration percent-token guard
+        run: python tools/ci/guard_no_raw_percent_in_sql.py
+
       - name: Enforce tenant DB dependency lint
         run: python tools/ci/check_db_dependency.py
 
@@ -305,7 +309,6 @@ jobs:
             artifacts/**
             state/**
           if-no-files-found: ignore
-
 
   migrations_replay:
     name: Migrations Replay
