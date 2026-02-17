@@ -4,13 +4,25 @@ import pytest
 from fastapi import HTTPException
 
 from api.audit import ReproduceRequest, audit_reproduce
+from api.db import init_db, reset_engine_cache
 from services.audit_engine.engine import InvariantResult
 
 
-def test_reproduce_mismatch_returns_non_200(monkeypatch):
+@pytest.fixture
+def isolated_audit_env(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "audit_exam_api.db"
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
+    reset_engine_cache()
+    init_db(sqlite_path=str(db_path))
+
+
+def test_reproduce_mismatch_returns_non_200(monkeypatch, isolated_audit_env):
     from services.audit_engine.engine import AuditEngine
 
-    monkeypatch.setenv("FG_AUDIT_HMAC_KEY_CURRENT", "api-audit-key-api-audit-key-api-0000")
+    monkeypatch.setenv(
+        "FG_AUDIT_HMAC_KEY_CURRENT", "api-audit-key-api-audit-key-api-0000"
+    )
     monkeypatch.setenv("FG_AUDIT_HMAC_KEY_ID_CURRENT", "ak-api")
     monkeypatch.setenv("FG_AUDIT_TENANT_ID", "tenant-a")
     eng = AuditEngine()
@@ -32,16 +44,22 @@ def test_reproduce_mismatch_returns_non_200(monkeypatch):
     assert exc.value.status_code == 409
 
 
-def test_export_chain_failure_returns_non_200(monkeypatch):
+def test_export_chain_failure_returns_non_200(monkeypatch, isolated_audit_env):
     from services.audit_engine.engine import AuditEngine
 
-    monkeypatch.setenv("FG_AUDIT_HMAC_KEY_CURRENT", "api-audit-key-api-audit-key-api-0000")
+    monkeypatch.setenv(
+        "FG_AUDIT_HMAC_KEY_CURRENT", "api-audit-key-api-audit-key-api-0000"
+    )
     monkeypatch.setenv("FG_AUDIT_HMAC_KEY_ID_CURRENT", "ak-api")
     monkeypatch.setenv("FG_AUDIT_TENANT_ID", "tenant-a")
     eng = AuditEngine()
-    monkeypatch.setattr(eng, "_invariants", lambda: [InvariantResult("soc-invariants", "pass", "ok")])
+    monkeypatch.setattr(
+        eng, "_invariants", lambda: [InvariantResult("soc-invariants", "pass", "ok")]
+    )
     _ = eng.run_cycle("light")
-    monkeypatch.setenv("FG_AUDIT_HMAC_KEY_CURRENT", "different-key-different-key-diff-0000")
+    monkeypatch.setenv(
+        "FG_AUDIT_HMAC_KEY_CURRENT", "different-key-different-key-diff-0000"
+    )
     monkeypatch.setenv("FG_AUDIT_HMAC_KEY_ID_CURRENT", "ak-new")
     monkeypatch.delenv("FG_AUDIT_HMAC_KEY_PREV", raising=False)
     monkeypatch.delenv("FG_AUDIT_HMAC_KEY_ID_PREV", raising=False)
