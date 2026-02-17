@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Optional, Protocol
 from urllib.parse import urlparse
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -36,6 +36,8 @@ from api.attestation import router as attestation_router
 from api.config_control import router as config_control_router
 from api.ui import router as ui_router
 from api.ui_dashboards import router as ui_dashboards_router
+from api.audit import router as audit_router
+from api.ui_audit_dashboard import router as ui_audit_router
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
 from api.middleware.request_validation import (
@@ -145,15 +147,18 @@ def _sqlite_path_from_env() -> str:
     return str(Path("/tmp") / "fg-core.db")
 
 
-def _optional_router(import_path: str, attr: str = "router"):
+def _optional_router(import_path: str, attr: str = "router") -> APIRouter | None:
     """
     Fail-soft optional imports so contracts-gen / minimal builds don't explode.
+    Only APIRouter instances are mountable; any other value is treated as missing.
     """
     try:
         mod = __import__(import_path, fromlist=[attr])
-        return getattr(mod, attr)
+        candidate = getattr(mod, attr)
     except Exception:
         return None
+
+    return candidate if isinstance(candidate, APIRouter) else None
 
 
 # Compliance/spine routers (may not exist in minimal builds)
@@ -161,6 +166,12 @@ governance_router = _optional_router("api.governance", "router")
 mission_router = _optional_router("api.mission_envelope", "router")
 ring_router = _optional_router("api.ring_router", "router")
 roe_router = _optional_router("api.roe_engine", "router")
+billing_router = _optional_router("api.billing", "router")
+
+def _include_optional_router(app: FastAPI, router: APIRouter | None) -> None:
+    """Include optional router only when it is a valid APIRouter instance."""
+    if isinstance(router, APIRouter):
+        app.include_router(router)
 
 
 def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
@@ -471,16 +482,20 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     app.include_router(keys_router)
     app.include_router(forensics_router)
+    app.include_router(audit_router)
+    app.include_router(ui_audit_router)
 
     # ---- Compliance routers ----
-    if compliance_module_enabled("mission_envelope") and mission_router is not None:
-        app.include_router(mission_router)
-    if compliance_module_enabled("ring_router") and ring_router is not None:
-        app.include_router(ring_router)
-    if compliance_module_enabled("roe_engine") and roe_router is not None:
-        app.include_router(roe_router)
-    if compliance_module_enabled("governance") and governance_router is not None:
-        app.include_router(governance_router)
+    if compliance_module_enabled("mission_envelope"):
+        _include_optional_router(app, mission_router)
+    if compliance_module_enabled("ring_router"):
+        _include_optional_router(app, ring_router)
+    if compliance_module_enabled("roe_engine"):
+        _include_optional_router(app, roe_router)
+    if compliance_module_enabled("governance"):
+        _include_optional_router(app, governance_router)
+    if compliance_module_enabled("billing"):
+        _include_optional_router(app, billing_router)
 
     if _dev_enabled():
         app.include_router(dev_events_router)
@@ -718,14 +733,13 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(config_control_router)
     app.include_router(keys_router)
     app.include_router(forensics_router)
-    if mission_router is not None:
-        app.include_router(mission_router)
-    if ring_router is not None:
-        app.include_router(ring_router)
-    if roe_router is not None:
-        app.include_router(roe_router)
-    if governance_router is not None:
-        app.include_router(governance_router)
+    app.include_router(audit_router)
+    app.include_router(ui_audit_router)
+    _include_optional_router(app, mission_router)
+    _include_optional_router(app, ring_router)
+    _include_optional_router(app, roe_router)
+    _include_optional_router(app, governance_router)
+    _include_optional_router(app, billing_router)
 
     @app.get("/health")
     async def health() -> dict:
@@ -782,7 +796,11 @@ class _LazyRuntimeApp:
 
 def _module_app_binding() -> FastAPI | _LazyRuntimeApp | None:
     if _is_contract_generation_context():
-        return None
+        # Contract generation contexts may import `api.main.app` and access
+        # route metadata directly. Bind to a contract app (not runtime app)
+        # to avoid `NoneType` attribute errors while keeping runtime side
+        # effects disabled.
+        return build_contract_app()
 
     mode = _import_build_mode()
     if mode == "soft":

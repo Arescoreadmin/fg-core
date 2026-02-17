@@ -93,3 +93,34 @@ def test_prod_startup_crashes_on_unsafe_flags(monkeypatch: pytest.MonkeyPatch) -
             pass
 
     assert exc.value.code == "FG-PROD-002"
+
+
+def test_prod_invariants_fail_when_audit_verify_disabled() -> None:
+    with pytest.raises(ProdInvariantViolation) as exc:
+        assert_prod_invariants(
+            {
+                "FG_ENV": "prod",
+                "FG_AUTH_ENABLED": "1",
+                "FG_DB_URL": "postgresql://x",
+                "FG_DB_BACKEND": "postgres",
+                "FG_ENFORCEMENT_MODE": "enforce",
+                "FG_AUDIT_VERIFY_REQUIRED": "0",
+            }
+        )
+    assert exc.value.code == "FG-PROD-008"
+
+
+def test_prod_invariants_fail_when_ed25519_keys_missing() -> None:
+    with pytest.raises(ProdInvariantViolation) as exc:
+        assert_prod_invariants(
+            {
+                "FG_ENV": "prod",
+                "FG_AUTH_ENABLED": "1",
+                "FG_DB_URL": "postgresql://x",
+                "FG_DB_BACKEND": "postgres",
+                "FG_ENFORCEMENT_MODE": "enforce",
+                "FG_AUDIT_VERIFY_REQUIRED": "1",
+                "FG_AUDIT_EXPORT_SIGNING_MODE": "ed25519",
+            }
+        )
+    assert exc.value.code == "FG-PROD-009"
