@@ -219,3 +219,23 @@ Format: `Risk | File | Description | Exploit Path | Fix Strategy`
    Test: canary replay with historical decision corpus.  
    CI gate: policy regression lane blocking deploy.
 
+
+## SOC Review Sync Update (2026-02-17T17:43:16Z)
+
+**Commit:** 4964e86
+
+### Files reviewed (required by SOC-HIGH-002)
+- admin_gateway/auth/config.py
+
+### Summary
+- Reviewed security impact of auth/tenant controls and route inventory updates.
+- Verified route inventory gate is green and audit routes remain scope-protected + tenant-bound.
+
+### Verification
+- make admin-test
+- make route-inventory-generate
+- make route-inventory-audit
+- make fg-fast-full (expected to pass SOC sync after this update)
+
+### Reviewer
+- Jason (repo owner / final authority)

@@ -80,7 +80,13 @@ def audit_export(
         )
 
 
-@router.post("/audit/reproduce", dependencies=[Depends(require_scopes("audit:write"))])
+@router.post(
+    "/audit/reproduce",
+    dependencies=[
+        Depends(require_scopes("audit:write")),
+        Depends(require_bound_tenant),
+    ],
+)
 def audit_reproduce(body: ReproduceRequest) -> dict[str, object]:
     engine = AuditEngine()
     result = engine.reproduce_session(body.session_id)
@@ -137,7 +143,10 @@ def run_exam(request: Request, body: ExamRunRequest) -> dict[str, str]:
 
 @router.get(
     "/audit/exams/{exam_id}/export",
-    dependencies=[Depends(require_scopes("audit:export"))],
+    dependencies=[
+        Depends(require_scopes("audit:export")),
+        Depends(require_bound_tenant),
+    ],
 )
 def export_exam(exam_id: str, request: Request) -> dict[str, object]:
     return AuditEngine().export_exam_bundle(
@@ -147,7 +156,10 @@ def export_exam(exam_id: str, request: Request) -> dict[str, object]:
 
 @router.post(
     "/audit/exams/{exam_id}/reproduce",
-    dependencies=[Depends(require_scopes("audit:write"))],
+    dependencies=[
+        Depends(require_scopes("audit:write")),
+        Depends(require_bound_tenant),
+    ],
 )
 def reproduce_exam(exam_id: str) -> dict[str, object]:
     result = AuditEngine().reproduce_exam(exam_id)
