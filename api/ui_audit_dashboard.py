@@ -33,8 +33,14 @@ def ui_audit_overview(request: Request) -> dict[str, object]:
         )
     return {
         "current_invariant_status": latest.decision if latest else "unknown",
-        "drift_status": latest.decision if latest and latest.invariant_id == "drift-verification" else "unknown",
-        "last_reproducibility_test": (snap.summary_json or {}).get("last_reproduce_result") if snap else None,
+        "drift_status": latest.decision
+        if latest and latest.invariant_id == "drift-verification"
+        else "unknown",
+        "last_reproducibility_test": (snap.summary_json or {}).get(
+            "last_reproduce_result"
+        )
+        if snap
+        else None,
         "policy_hash": latest.policy_hash if latest else None,
         "config_hash": latest.config_hash if latest else None,
     }

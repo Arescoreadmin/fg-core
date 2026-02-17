@@ -62,11 +62,15 @@ def _parse_json_keyring(raw: str) -> dict[str, bytes]:
         if key_id in seen:
             raise RuntimeError("duplicate key_id in keyring")
         seen.add(key_id)
-        created = _parse_utc_iso8601_z(str(item.get("created_at_utc") or ""), "created_at_utc")
+        created = _parse_utc_iso8601_z(
+            str(item.get("created_at_utc") or ""), "created_at_utc"
+        )
         retired = item.get("retired_at_utc")
         if retired is not None:
             retired_v = _parse_utc_iso8601_z(str(retired), "retired_at_utc")
-            if datetime.fromisoformat(retired_v.replace("Z", "+00:00")) < datetime.fromisoformat(created.replace("Z", "+00:00")):
+            if datetime.fromisoformat(
+                retired_v.replace("Z", "+00:00")
+            ) < datetime.fromisoformat(created.replace("Z", "+00:00")):
                 raise RuntimeError("retired_at_utc must be >= created_at_utc")
         out[key_id] = _decode_key_material(item)
     if not out:
@@ -74,14 +78,22 @@ def _parse_json_keyring(raw: str) -> dict[str, bytes]:
     return out
 
 
-def load_hmac_keys(prefix: str, default_key_id: str = "v1") -> tuple[str, dict[str, bytes]]:
+def load_hmac_keys(
+    prefix: str, default_key_id: str = "v1"
+) -> tuple[str, dict[str, bytes]]:
     raw_json = (os.getenv(f"{prefix}_HMAC_KEYS_JSON") or "").strip()
     keys: dict[str, bytes] = {}
     if raw_json:
         keys.update(_parse_json_keyring(raw_json))
 
-    current = (os.getenv(f"{prefix}_HMAC_KEY_CURRENT") or os.getenv(f"{prefix}_HMAC_KEY") or "").strip()
-    current_id = (os.getenv(f"{prefix}_HMAC_KEY_ID_CURRENT") or os.getenv(f"{prefix}_HMAC_KEY_ID") or default_key_id).strip()
+    current = (
+        os.getenv(f"{prefix}_HMAC_KEY_CURRENT") or os.getenv(f"{prefix}_HMAC_KEY") or ""
+    ).strip()
+    current_id = (
+        os.getenv(f"{prefix}_HMAC_KEY_ID_CURRENT")
+        or os.getenv(f"{prefix}_HMAC_KEY_ID")
+        or default_key_id
+    ).strip()
     if current:
         current_bytes = current.encode("utf-8")
         if len(current_bytes) < 32:

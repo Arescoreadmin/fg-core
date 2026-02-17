@@ -75,7 +75,9 @@ def audit_export(
             app_openapi=request.app.openapi(),
         )
     except AuditIntegrityError as exc:
-        raise HTTPException(status_code=409, detail={"code": exc.code, "message": str(exc)})
+        raise HTTPException(
+            status_code=409, detail={"code": exc.code, "message": str(exc)}
+        )
 
 
 @router.post("/audit/reproduce", dependencies=[Depends(require_scopes("audit:write"))])
@@ -83,13 +85,16 @@ def audit_reproduce(body: ReproduceRequest) -> dict[str, object]:
     engine = AuditEngine()
     result = engine.reproduce_session(body.session_id)
     if not result.get("ok"):
-        raise HTTPException(status_code=409, detail={"code": result.get("code", "AUDIT_REPRO_FAILED"), **result})
+        raise HTTPException(
+            status_code=409,
+            detail={"code": result.get("code", "AUDIT_REPRO_FAILED"), **result},
+        )
     return result
 
 
-
-
-@router.get("/audit/exam-snapshot", dependencies=[Depends(require_scopes("audit:read"))])
+@router.get(
+    "/audit/exam-snapshot", dependencies=[Depends(require_scopes("audit:read"))]
+)
 def exam_snapshot(request: Request) -> dict[str, object]:
     tenant_id = require_bound_tenant(request)
     engine = AuditEngine()
@@ -110,6 +115,8 @@ def exam_snapshot(request: Request) -> dict[str, object]:
         "requirements_stale": snap.get("requirements_stale", False),
         "stale_requirement_sources": snap.get("stale_requirement_sources", []),
     }
+
+
 @router.get("/audit/exams", dependencies=[Depends(require_scopes("audit:read"))])
 def list_exams(request: Request) -> dict[str, object]:
     tenant_id = require_bound_tenant(request)
@@ -128,14 +135,25 @@ def run_exam(request: Request, body: ExamRunRequest) -> dict[str, str]:
     return {"exam_id": exam_id}
 
 
-@router.get("/audit/exams/{exam_id}/export", dependencies=[Depends(require_scopes("audit:export"))])
+@router.get(
+    "/audit/exams/{exam_id}/export",
+    dependencies=[Depends(require_scopes("audit:export"))],
+)
 def export_exam(exam_id: str, request: Request) -> dict[str, object]:
-    return AuditEngine().export_exam_bundle(exam_id=exam_id, app_openapi=request.app.openapi())
+    return AuditEngine().export_exam_bundle(
+        exam_id=exam_id, app_openapi=request.app.openapi()
+    )
 
 
-@router.post("/audit/exams/{exam_id}/reproduce", dependencies=[Depends(require_scopes("audit:write"))])
+@router.post(
+    "/audit/exams/{exam_id}/reproduce",
+    dependencies=[Depends(require_scopes("audit:write"))],
+)
 def reproduce_exam(exam_id: str) -> dict[str, object]:
     result = AuditEngine().reproduce_exam(exam_id)
     if not result.get("ok"):
-        raise HTTPException(status_code=409, detail={"code": result.get("code", "AUDIT_REPRO_FAILED"), **result})
+        raise HTTPException(
+            status_code=409,
+            detail={"code": result.get("code", "AUDIT_REPRO_FAILED"), **result},
+        )
     return result

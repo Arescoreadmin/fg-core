@@ -815,8 +815,6 @@ class ModuleRegistry(Base):
     )
 
 
-
-
 class ComplianceRequirementRecord(Base):
     __tablename__ = "compliance_requirements"
 
@@ -844,7 +842,12 @@ class ComplianceRequirementRecord(Base):
     record_hash = Column(String(64), nullable=False, unique=True, index=True)
     signature = Column(Text, nullable=False)
     key_id = Column(String(64), nullable=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now())
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -879,20 +882,29 @@ class ComplianceFindingRecord(Base):
     id = Column(Integer, primary_key=True)
     tenant_id = Column(String(128), nullable=False, index=True)
     finding_id = Column(String(128), nullable=False, index=True)
-    req_ids_json = Column(JSON, nullable=False, default=list, server_default=text("'[]'"))
+    req_ids_json = Column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
     title = Column(String(256), nullable=False)
     details = Column(Text, nullable=False)
     severity = Column(String(16), nullable=False)
     status = Column(String(16), nullable=False, index=True)
     waiver_json = Column(JSON, nullable=True)
     detected_at_utc = Column(String(64), nullable=False)
-    evidence_refs_json = Column(JSON, nullable=False, default=list, server_default=text("'[]'"))
+    evidence_refs_json = Column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
     created_at_utc = Column(String(64), nullable=False)
     previous_record_hash = Column(String(64), nullable=False)
     record_hash = Column(String(64), nullable=False, unique=True, index=True)
     signature = Column(Text, nullable=False)
     key_id = Column(String(64), nullable=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now())
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -919,13 +931,20 @@ class ComplianceSnapshotRecord(Base):
     id = Column(Integer, primary_key=True)
     tenant_id = Column(String(128), nullable=False, index=True)
     snapshot_id = Column(String(64), nullable=False, unique=True, index=True)
-    summary_json = Column(JSON, nullable=False, default=dict, server_default=text("'{}'"))
+    summary_json = Column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
     created_at_utc = Column(String(64), nullable=False)
     previous_record_hash = Column(String(64), nullable=False)
     record_hash = Column(String(64), nullable=False, unique=True, index=True)
     signature = Column(Text, nullable=False)
     key_id = Column(String(64), nullable=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now())
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
 
 
 class AuditExamSession(Base):
@@ -941,7 +960,9 @@ class AuditExamSession(Base):
     export_path = Column(String(512), nullable=True)
     reproduce_json = Column(JSON, nullable=True)
     previous_record_hash = Column(String(64), nullable=False, default="GENESIS")
-    record_hash = Column(String(64), nullable=False, unique=True, index=True, default="")
+    record_hash = Column(
+        String(64), nullable=False, unique=True, index=True, default=""
+    )
     signature = Column(Text, nullable=False, default="")
     key_id = Column(String(64), nullable=False, default="")
 
@@ -965,6 +986,7 @@ class ComplianceRequirementUpdateRecord(Base):
     key_id = Column(String(64), nullable=False)
     created_at_utc = Column(String(64), nullable=False)
 
+
 class AuditLedgerRecord(Base):
     __tablename__ = "audit_ledger"
 
@@ -984,7 +1006,9 @@ class AuditLedgerRecord(Base):
     sha256_self_hash = Column(String(64), nullable=False, unique=True, index=True)
     previous_record_hash = Column(String(64), nullable=False)
     signature = Column(Text, nullable=False)
-    details_json = Column(JSON, nullable=False, default=dict, server_default=text("'{}'"))
+    details_json = Column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,

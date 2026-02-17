@@ -51,7 +51,9 @@ def _sha256_hex(payload: bytes) -> str:
 
 
 def _git_commit() -> str:
-    proc = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=False)
+    proc = subprocess.run(
+        ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=False
+    )
     if proc.returncode != 0:
         return "unknown"
     return (proc.stdout or "").strip() or "unknown"
@@ -93,7 +95,9 @@ def _tree_hash(rel_root: str, glob_pat: str) -> str:
     if root.exists():
         for p in sorted(root.rglob(glob_pat)):
             if p.is_file():
-                entries.append((p.relative_to(root).as_posix(), _sha256_hex(p.read_bytes())))
+                entries.append(
+                    (p.relative_to(root).as_posix(), _sha256_hex(p.read_bytes()))
+                )
     return _sha256_hex(deterministic_json_bytes(entries))
 
 
@@ -122,7 +126,9 @@ class AuditEngine:
         self.registry = ComplianceRegistry()
 
     def verify_chain_integrity(self, session: Session) -> bool:
-        records = session.query(AuditLedgerRecord).order_by(AuditLedgerRecord.id.asc()).all()
+        records = (
+            session.query(AuditLedgerRecord).order_by(AuditLedgerRecord.id.asc()).all()
+        )
         prev = "GENESIS"
         _, keys = _audit_keys()
         for rec in records:
@@ -150,16 +156,25 @@ class AuditEngine:
     def _invariants(self) -> list[InvariantResult]:
         checks = [
             ("soc-invariants", "tools/ci/check_soc_invariants.py"),
-            ("security-regression-gates", "tools/ci/check_security_regression_gates.py"),
+            (
+                "security-regression-gates",
+                "tools/ci/check_security_regression_gates.py",
+            ),
             ("route-inventory", "tools/ci/check_route_inventory.py"),
             ("drift-verification", "scripts/verify_drift.py"),
         ]
         results: list[InvariantResult] = []
         for invariant_id, script in checks:
             ok, detail = _run_check(script)
-            results.append(InvariantResult(invariant_id, "pass" if ok else "fail", detail))
-        results.append(InvariantResult("config-hash-validation", "pass", _config_hash()))
-        results.append(InvariantResult("policy-hash-validation", "pass", _policy_hash()))
+            results.append(
+                InvariantResult(invariant_id, "pass" if ok else "fail", detail)
+            )
+        results.append(
+            InvariantResult("config-hash-validation", "pass", _config_hash())
+        )
+        results.append(
+            InvariantResult("policy-hash-validation", "pass", _policy_hash())
+        )
         return results
 
     def run_cycle(self, cycle_kind: str = "light") -> str:
@@ -172,9 +187,18 @@ class AuditEngine:
             tenant_id = os.getenv("FG_AUDIT_TENANT_ID", host_id)
             key_id, keys = _audit_keys()
             key = keys[key_id]
-            last = session.query(AuditLedgerRecord).order_by(AuditLedgerRecord.id.desc()).limit(1).one_or_none()
+            last = (
+                session.query(AuditLedgerRecord)
+                .order_by(AuditLedgerRecord.id.desc())
+                .limit(1)
+                .one_or_none()
+            )
             prev = last.sha256_self_hash if last else "GENESIS"
-            cfg_hash, pol_hash, code_hash = _config_hash(), _policy_hash(), _self_code_hash()
+            cfg_hash, pol_hash, code_hash = (
+                _config_hash(),
+                _policy_hash(),
+                _self_code_hash(),
+            )
 
             decisions: list[str] = []
             for inv in self._invariants():
@@ -217,7 +241,13 @@ class AuditEngine:
 
             summary = self.registry.snapshot(tenant_id)
             snapshot_id = str(uuid.uuid4())
-            s_prev = session.query(ComplianceSnapshotRecord).filter(ComplianceSnapshotRecord.tenant_id == tenant_id).order_by(ComplianceSnapshotRecord.id.desc()).limit(1).one_or_none()
+            s_prev = (
+                session.query(ComplianceSnapshotRecord)
+                .filter(ComplianceSnapshotRecord.tenant_id == tenant_id)
+                .order_by(ComplianceSnapshotRecord.id.desc())
+                .limit(1)
+                .one_or_none()
+            )
             s_prev_hash = s_prev.record_hash if s_prev else "GENESIS"
             s_material = {
                 "snapshot_id": snapshot_id,
@@ -231,7 +261,11 @@ class AuditEngine:
                 ComplianceSnapshotRecord(
                     tenant_id=tenant_id,
                     snapshot_id=snapshot_id,
-                    summary_json={**summary, "drift_status": "pass" if "fail" not in decisions else "fail", "last_reproduce_result": "pass"},
+                    summary_json={
+                        **summary,
+                        "drift_status": "pass" if "fail" not in decisions else "fail",
+                        "last_reproduce_result": "pass",
+                    },
                     created_at_utc=s_material["created_at_utc"],
                     previous_record_hash=s_prev_hash,
                     record_hash=s_hash,
@@ -242,14 +276,34 @@ class AuditEngine:
             session.commit()
         return session_id
 
-    def export_bundle(self, start: str, end: str, app_openapi: dict[str, Any], tenant_id: str | None = None) -> dict[str, Any]:
+    def export_bundle(
+        self,
+        start: str,
+        end: str,
+        app_openapi: dict[str, Any],
+        tenant_id: str | None = None,
+    ) -> dict[str, Any]:
         tenant = tenant_id or os.getenv("FG_AUDIT_TENANT_ID", socket.gethostname())
         with Session(self.engine) as session:
-            rows = session.query(AuditLedgerRecord).filter(AuditLedgerRecord.timestamp_utc >= start).filter(AuditLedgerRecord.timestamp_utc <= end).filter(AuditLedgerRecord.tenant_id == tenant).order_by(AuditLedgerRecord.id.asc()).all()
-            snapshots = session.query(ComplianceSnapshotRecord).filter(ComplianceSnapshotRecord.tenant_id == tenant).order_by(ComplianceSnapshotRecord.id.asc()).all()
+            rows = (
+                session.query(AuditLedgerRecord)
+                .filter(AuditLedgerRecord.timestamp_utc >= start)
+                .filter(AuditLedgerRecord.timestamp_utc <= end)
+                .filter(AuditLedgerRecord.tenant_id == tenant)
+                .order_by(AuditLedgerRecord.id.asc())
+                .all()
+            )
+            snapshots = (
+                session.query(ComplianceSnapshotRecord)
+                .filter(ComplianceSnapshotRecord.tenant_id == tenant)
+                .order_by(ComplianceSnapshotRecord.id.asc())
+                .all()
+            )
             chain_ok = self.verify_chain_integrity(session)
         if not chain_ok:
-            raise AuditIntegrityError("AUDIT_CHAIN_BROKEN", "audit chain integrity check failed")
+            raise AuditIntegrityError(
+                "AUDIT_CHAIN_BROKEN", "audit chain integrity check failed"
+            )
 
         records = [r.to_dict() for r in rows]
         snapshot_rows = [s.summary_json for s in snapshots]
@@ -261,7 +315,12 @@ class AuditEngine:
             "policy_snapshot": {"policy_hash": _policy_hash()},
             "config_snapshot": {"config_hash": _config_hash()},
             "openapi_snapshot": app_openapi,
-            "soc_manifest_snapshot": json.loads((Path(__file__).resolve().parents[2] / "tools/ci/soc_findings_manifest.json").read_text(encoding="utf-8")),
+            "soc_manifest_snapshot": json.loads(
+                (
+                    Path(__file__).resolve().parents[2]
+                    / "tools/ci/soc_findings_manifest.json"
+                ).read_text(encoding="utf-8")
+            ),
             "chain_integrity_ok": chain_ok,
         }
         key_id, keys = _audit_keys()
@@ -270,10 +329,18 @@ class AuditEngine:
         manifest = {
             "bundle_sha256": checksum,
             "records_sha256": _sha256_hex(deterministic_json_bytes(records)),
-            "policy_sha256": _sha256_hex(deterministic_json_bytes(bundle["policy_snapshot"])),
-            "config_sha256": _sha256_hex(deterministic_json_bytes(bundle["config_snapshot"])),
-            "openapi_sha256": _sha256_hex(deterministic_json_bytes(bundle["openapi_snapshot"])),
-            "soc_manifest_sha256": _sha256_hex(deterministic_json_bytes(bundle["soc_manifest_snapshot"])),
+            "policy_sha256": _sha256_hex(
+                deterministic_json_bytes(bundle["policy_snapshot"])
+            ),
+            "config_sha256": _sha256_hex(
+                deterministic_json_bytes(bundle["config_snapshot"])
+            ),
+            "openapi_sha256": _sha256_hex(
+                deterministic_json_bytes(bundle["openapi_snapshot"])
+            ),
+            "soc_manifest_sha256": _sha256_hex(
+                deterministic_json_bytes(bundle["soc_manifest_snapshot"])
+            ),
         }
         out = {"bundle": bundle, "manifest": manifest}
         root = Path(os.getenv("FG_AUDIT_EXPORT_DIR", "artifacts/audit_exports"))
@@ -286,8 +353,17 @@ class AuditEngine:
     def reproduce_session(self, session_id: str) -> dict[str, Any]:
         with Session(self.engine) as session:
             if not self.verify_chain_integrity(session):
-                return {"ok": False, "reason": "audit_chain_broken", "code": "AUDIT_CHAIN_BROKEN"}
-            rows = session.query(AuditLedgerRecord).filter(AuditLedgerRecord.session_id == session_id).order_by(AuditLedgerRecord.id.asc()).all()
+                return {
+                    "ok": False,
+                    "reason": "audit_chain_broken",
+                    "code": "AUDIT_CHAIN_BROKEN",
+                }
+            rows = (
+                session.query(AuditLedgerRecord)
+                .filter(AuditLedgerRecord.session_id == session_id)
+                .order_by(AuditLedgerRecord.id.asc())
+                .all()
+            )
         if not rows:
             return {"ok": False, "reason": "session_not_found"}
         current = {r.invariant_id: r.decision for r in rows}
@@ -295,14 +371,32 @@ class AuditEngine:
         expected_hash = _sha256_hex(deterministic_json_bytes(current))
         actual_hash = _sha256_hex(deterministic_json_bytes(rerun))
         if current != rerun:
-            return {"ok": False, "reason": "reproducibility_mismatch", "expected": current, "actual": rerun, "hashes": {"expected": expected_hash, "actual": actual_hash}, "critical_alert": True}
-        return {"ok": True, "hashes": {"expected": expected_hash, "actual": actual_hash}}
+            return {
+                "ok": False,
+                "reason": "reproducibility_mismatch",
+                "expected": current,
+                "actual": rerun,
+                "hashes": {"expected": expected_hash, "actual": actual_hash},
+                "critical_alert": True,
+            }
+        return {
+            "ok": True,
+            "hashes": {"expected": expected_hash, "actual": actual_hash},
+        }
 
-    def create_exam(self, tenant_id: str, name: str, window_start: str, window_end: str) -> str:
+    def create_exam(
+        self, tenant_id: str, name: str, window_start: str, window_end: str
+    ) -> str:
         exam_id = str(uuid.uuid4())
         key_id, keys = _audit_keys()
         with Session(self.engine) as session:
-            last = session.query(AuditExamSession).filter(AuditExamSession.tenant_id == tenant_id).order_by(AuditExamSession.id.desc()).limit(1).one_or_none()
+            last = (
+                session.query(AuditExamSession)
+                .filter(AuditExamSession.tenant_id == tenant_id)
+                .order_by(AuditExamSession.id.desc())
+                .limit(1)
+                .one_or_none()
+            )
             prev = last.record_hash if last else "GENESIS"
             material = {
                 "exam_id": exam_id,
@@ -333,31 +427,79 @@ class AuditEngine:
 
     def list_exams(self, tenant_id: str) -> list[dict[str, Any]]:
         with Session(self.engine) as session:
-            rows = session.query(AuditExamSession).filter(AuditExamSession.tenant_id == tenant_id).order_by(AuditExamSession.id.desc()).all()
-        return [{"exam_id": r.exam_id, "name": r.name, "window_start_utc": r.window_start_utc, "window_end_utc": r.window_end_utc, "created_at_utc": r.created_at_utc, "export_path": r.export_path} for r in rows]
+            rows = (
+                session.query(AuditExamSession)
+                .filter(AuditExamSession.tenant_id == tenant_id)
+                .order_by(AuditExamSession.id.desc())
+                .all()
+            )
+        return [
+            {
+                "exam_id": r.exam_id,
+                "name": r.name,
+                "window_start_utc": r.window_start_utc,
+                "window_end_utc": r.window_end_utc,
+                "created_at_utc": r.created_at_utc,
+                "export_path": r.export_path,
+            }
+            for r in rows
+        ]
 
-    def export_exam_bundle(self, exam_id: str, app_openapi: dict[str, Any]) -> dict[str, Any]:
+    def export_exam_bundle(
+        self, exam_id: str, app_openapi: dict[str, Any]
+    ) -> dict[str, Any]:
         with Session(self.engine) as session:
-            exam = session.query(AuditExamSession).filter(AuditExamSession.exam_id == exam_id).one_or_none()
+            exam = (
+                session.query(AuditExamSession)
+                .filter(AuditExamSession.exam_id == exam_id)
+                .one_or_none()
+            )
             if exam is None:
                 raise AuditTamperDetected("exam_session_not_found")
-        export = self.export_bundle(start=exam.window_start_utc, end=exam.window_end_utc, app_openapi=app_openapi, tenant_id=exam.tenant_id)
+        export = self.export_bundle(
+            start=exam.window_start_utc,
+            end=exam.window_end_utc,
+            app_openapi=app_openapi,
+            tenant_id=exam.tenant_id,
+        )
         payload = json.loads(Path(export["path"]).read_text(encoding="utf-8"))
         archive_path = Path(export["path"]).with_suffix(".tar")
-        self._write_deterministic_archive(archive_path, {
-            "manifest.json": deterministic_json_bytes(payload["manifest"]),
-            "manifest.sha256": f"{payload['manifest']['bundle_sha256']}  bundle.json\n".encode("utf-8"),
-            "manifest.sig": payload["bundle"]["signed_evidence_checksum"].encode("utf-8"),
-            "bundle.json": deterministic_json_bytes(payload["bundle"]),
-        })
-        return {"exam_id": exam_id, "archive_path": str(archive_path), "manifest": payload["manifest"]}
+        self._write_deterministic_archive(
+            archive_path,
+            {
+                "manifest.json": deterministic_json_bytes(payload["manifest"]),
+                "manifest.sha256": f"{payload['manifest']['bundle_sha256']}  bundle.json\n".encode(
+                    "utf-8"
+                ),
+                "manifest.sig": payload["bundle"]["signed_evidence_checksum"].encode(
+                    "utf-8"
+                ),
+                "bundle.json": deterministic_json_bytes(payload["bundle"]),
+            },
+        )
+        return {
+            "exam_id": exam_id,
+            "archive_path": str(archive_path),
+            "manifest": payload["manifest"],
+        }
 
     def reproduce_exam(self, exam_id: str) -> dict[str, Any]:
         with Session(self.engine) as session:
-            exam = session.query(AuditExamSession).filter(AuditExamSession.exam_id == exam_id).one_or_none()
+            exam = (
+                session.query(AuditExamSession)
+                .filter(AuditExamSession.exam_id == exam_id)
+                .one_or_none()
+            )
             if exam is None:
                 return {"ok": False, "reason": "exam_session_not_found"}
-            rows = session.query(AuditLedgerRecord).filter(AuditLedgerRecord.timestamp_utc >= exam.window_start_utc).filter(AuditLedgerRecord.timestamp_utc <= exam.window_end_utc).filter(AuditLedgerRecord.tenant_id == exam.tenant_id).order_by(AuditLedgerRecord.id.asc()).all()
+            rows = (
+                session.query(AuditLedgerRecord)
+                .filter(AuditLedgerRecord.timestamp_utc >= exam.window_start_utc)
+                .filter(AuditLedgerRecord.timestamp_utc <= exam.window_end_utc)
+                .filter(AuditLedgerRecord.tenant_id == exam.tenant_id)
+                .order_by(AuditLedgerRecord.id.asc())
+                .all()
+            )
         if not rows:
             return {"ok": False, "reason": "exam_window_empty"}
         result = self.reproduce_session(rows[-1].session_id)

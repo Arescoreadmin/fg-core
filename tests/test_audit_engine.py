@@ -19,7 +19,9 @@ def audit_engine(tmp_path, monkeypatch) -> AuditEngine:
     db_path = tmp_path / "audit.db"
     monkeypatch.setenv("FG_ENV", "test")
     monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
-    monkeypatch.setenv("FG_AUDIT_HMAC_KEY_CURRENT", "unit-test-key-unit-test-key-unit!!")
+    monkeypatch.setenv(
+        "FG_AUDIT_HMAC_KEY_CURRENT", "unit-test-key-unit-test-key-unit!!"
+    )
     monkeypatch.setenv("FG_AUDIT_HMAC_KEY_ID_CURRENT", "ak1")
     monkeypatch.setenv("FG_AUDIT_TENANT_ID", "tenant-a")
     reset_engine_cache()
@@ -71,7 +73,9 @@ def test_tamper_detection_fail_closed(audit_engine: AuditEngine) -> None:
         audit_engine.run_cycle("light")
 
 
-def test_reproducibility_mismatch_detected(audit_engine: AuditEngine, monkeypatch) -> None:
+def test_reproducibility_mismatch_detected(
+    audit_engine: AuditEngine, monkeypatch
+) -> None:
     sid = audit_engine.run_cycle("light")
     monkeypatch.setattr(
         audit_engine,
@@ -116,7 +120,10 @@ def test_exam_export_is_deterministic(audit_engine: AuditEngine) -> None:
     first_bytes = Path(a["archive_path"]).read_bytes()
     b = audit_engine.export_exam_bundle(exam_id, app_openapi={"openapi": "3.1.0"})
     second_bytes = Path(b["archive_path"]).read_bytes()
-    assert hashlib.sha256(first_bytes).hexdigest() == hashlib.sha256(second_bytes).hexdigest()
+    assert (
+        hashlib.sha256(first_bytes).hexdigest()
+        == hashlib.sha256(second_bytes).hexdigest()
+    )
 
 
 def test_exam_reproduce(audit_engine: AuditEngine) -> None:
@@ -133,9 +140,13 @@ def test_exam_reproduce(audit_engine: AuditEngine) -> None:
     assert set(result["hashes"]) == {"expected", "actual"}
 
 
-def test_key_rotation_old_record_verifiable(audit_engine: AuditEngine, monkeypatch) -> None:
+def test_key_rotation_old_record_verifiable(
+    audit_engine: AuditEngine, monkeypatch
+) -> None:
     audit_engine.run_cycle("light")
-    monkeypatch.setenv("FG_AUDIT_HMAC_KEY_CURRENT", "new-key-new-key-new-key-new-key-0000")
+    monkeypatch.setenv(
+        "FG_AUDIT_HMAC_KEY_CURRENT", "new-key-new-key-new-key-new-key-0000"
+    )
     monkeypatch.setenv("FG_AUDIT_HMAC_KEY_ID_CURRENT", "ak2")
     monkeypatch.setenv("FG_AUDIT_HMAC_KEY_PREV", "unit-test-key-unit-test-key-unit!!")
     monkeypatch.setenv("FG_AUDIT_HMAC_KEY_ID_PREV", "ak1")
@@ -143,13 +154,15 @@ def test_key_rotation_old_record_verifiable(audit_engine: AuditEngine, monkeypat
         assert audit_engine.verify_chain_integrity(session)
 
 
-
-
-def test_unknown_key_id_fails_chain_verification(audit_engine: AuditEngine, monkeypatch) -> None:
+def test_unknown_key_id_fails_chain_verification(
+    audit_engine: AuditEngine, monkeypatch
+) -> None:
     audit_engine.run_cycle("light")
     monkeypatch.delenv("FG_AUDIT_HMAC_KEY_PREV", raising=False)
     monkeypatch.delenv("FG_AUDIT_HMAC_KEY_ID_PREV", raising=False)
-    monkeypatch.setenv("FG_AUDIT_HMAC_KEY_CURRENT", "another-audit-key-another-audit-key-0000")
+    monkeypatch.setenv(
+        "FG_AUDIT_HMAC_KEY_CURRENT", "another-audit-key-another-audit-key-0000"
+    )
     monkeypatch.setenv("FG_AUDIT_HMAC_KEY_ID_CURRENT", "ak9")
     with Session(audit_engine.engine) as session:
         assert not audit_engine.verify_chain_integrity(session)

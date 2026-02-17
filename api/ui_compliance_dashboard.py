@@ -10,7 +10,9 @@ from api.db import get_engine
 from api.db_models import ComplianceFindingRecord, ComplianceRequirementRecord
 from services.compliance_registry import ComplianceRegistry
 
-router = APIRouter(tags=["ui-compliance"], dependencies=[Depends(require_scopes("ui:read"))])
+router = APIRouter(
+    tags=["ui-compliance"], dependencies=[Depends(require_scopes("ui:read"))]
+)
 
 
 @router.get("/ui/compliance/overview")
@@ -32,7 +34,10 @@ def requirement_status(request: Request) -> dict[str, object]:
         rows = (
             session.query(ComplianceRequirementRecord)
             .filter(ComplianceRequirementRecord.tenant_id == tenant_id)
-            .order_by(ComplianceRequirementRecord.req_id.asc(), ComplianceRequirementRecord.id.desc())
+            .order_by(
+                ComplianceRequirementRecord.req_id.asc(),
+                ComplianceRequirementRecord.id.desc(),
+            )
             .all()
         )
     latest: dict[str, ComplianceRequirementRecord] = {}
@@ -40,7 +45,12 @@ def requirement_status(request: Request) -> dict[str, object]:
         latest.setdefault(row.req_id, row)
     return {
         "requirements": [
-            {"req_id": r.req_id, "severity": r.severity, "status": r.status, "version": r.version}
+            {
+                "req_id": r.req_id,
+                "severity": r.severity,
+                "status": r.status,
+                "version": r.version,
+            }
             for r in sorted(latest.values(), key=lambda x: x.req_id)
         ]
     }
@@ -63,7 +73,10 @@ def findings(request: Request) -> dict[str, object]:
         waiver = row.waiver_json if isinstance(row.waiver_json, dict) else None
         if waiver and waiver.get("expires_utc"):
             try:
-                if datetime.fromisoformat(waiver["expires_utc"].replace("Z", "+00:00")) <= now:
+                if (
+                    datetime.fromisoformat(waiver["expires_utc"].replace("Z", "+00:00"))
+                    <= now
+                ):
                     expiry_warning = True
             except Exception:
                 expiry_warning = True
@@ -83,9 +96,7 @@ def findings(request: Request) -> dict[str, object]:
 def exam_readiness(request: Request) -> dict[str, object]:
     tenant_id = require_bound_tenant(request)
     snap = ComplianceRegistry().snapshot(tenant_id)
-    ready = (
-        not snap["expired_waivers"] and snap["coverage"].get("unknown", 0) == 0
-    )
+    ready = not snap["expired_waivers"] and snap["coverage"].get("unknown", 0) == 0
     return {
         "ready": ready,
         "coverage_unknown": snap["coverage"].get("unknown", 0),

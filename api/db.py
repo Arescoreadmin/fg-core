@@ -247,7 +247,7 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 )
 
             conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS ix_decisions_tenant_config_created ON decisions(tenant_id, config_hash, created_at)"
+                "CREATE INDEX IF NOT EXISTS ix_decisions_tenant_config_created ON decisions(tenant_id, config_hash, created_at)"
             )
 
         conn.exec_driver_sql(
@@ -283,7 +283,6 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             END;
             """
         )
-
 
         conn.exec_driver_sql(
             """
@@ -395,7 +394,13 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             )
             """
         )
-        for table in ("compliance_requirements", "compliance_findings", "compliance_snapshots", "audit_exam_sessions", "compliance_requirement_updates"):
+        for table in (
+            "compliance_requirements",
+            "compliance_findings",
+            "compliance_snapshots",
+            "audit_exam_sessions",
+            "compliance_requirement_updates",
+        ):
             conn.exec_driver_sql(
                 f"""
                 CREATE TRIGGER IF NOT EXISTS {table}_append_only_update

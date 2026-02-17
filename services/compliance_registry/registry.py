@@ -15,7 +15,11 @@ from api.db_models import (
     ComplianceRequirementRecord,
     ComplianceRequirementUpdateRecord,
 )
-from services.canonical import canonical_json_bytes, parse_utc_iso8601_z, utc_iso8601_z_now
+from services.canonical import (
+    canonical_json_bytes,
+    parse_utc_iso8601_z,
+    utc_iso8601_z_now,
+)
 from services.crypto_keys import load_hmac_keys
 
 Severity = Literal["low", "med", "high", "critical"]
@@ -37,6 +41,7 @@ class RequirementPackageMeta(BaseModel):
     @classmethod
     def _validate_ts(cls, value: str) -> str:
         return parse_utc_iso8601_z(value)
+
 
 def _utc_now_z() -> str:
     return utc_iso8601_z_now()
@@ -409,7 +414,9 @@ class ComplianceRegistry:
         for rec in by_req.values():
             if rec.published_at_utc:
                 try:
-                    dt = datetime.fromisoformat(str(rec.published_at_utc).replace("Z", "+00:00"))
+                    dt = datetime.fromisoformat(
+                        str(rec.published_at_utc).replace("Z", "+00:00")
+                    )
                     src = rec.source_name or rec.source
                     prev = source_latest.get(src)
                     if prev is None or dt > prev:

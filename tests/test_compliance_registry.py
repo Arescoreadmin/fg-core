@@ -19,7 +19,9 @@ def registry(tmp_path, monkeypatch) -> ComplianceRegistry:
     db_path = tmp_path / "compliance.db"
     monkeypatch.setenv("FG_ENV", "test")
     monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
-    monkeypatch.setenv("FG_COMPLIANCE_HMAC_KEY_CURRENT", "cmp-key-cmp-key-cmp-key-cmp-key-0")
+    monkeypatch.setenv(
+        "FG_COMPLIANCE_HMAC_KEY_CURRENT", "cmp-key-cmp-key-cmp-key-cmp-key-0"
+    )
     monkeypatch.setenv("FG_COMPLIANCE_HMAC_KEY_ID_CURRENT", "ck1")
     monkeypatch.setenv("FG_CRITICAL_UNKNOWN_THRESHOLD", "0")
     reset_engine_cache()
@@ -61,7 +63,9 @@ def test_requirement_append_only_and_chain(registry: ComplianceRegistry) -> None
     )
     with Session(registry.engine) as session:
         with pytest.raises(SQLAlchemyError):
-            session.execute(text("UPDATE compliance_requirements SET title='x' WHERE id=1"))
+            session.execute(
+                text("UPDATE compliance_requirements SET title='x' WHERE id=1")
+            )
             session.commit()
 
 
@@ -171,7 +175,9 @@ def test_tenant_isolation_in_registry_queries(registry: ComplianceRegistry) -> N
 
 
 def test_update_available_then_applied_record(registry: ComplianceRegistry) -> None:
-    update_id = registry.record_update_available("tenant-a", _pkg(), {"added": ["FG-BANK-AC-011"]})
+    update_id = registry.record_update_available(
+        "tenant-a", _pkg(), {"added": ["FG-BANK-AC-011"]}
+    )
     registry.import_requirements(
         "tenant-a",
         [
