@@ -226,7 +226,7 @@ class TestIngestProcessor:
         )
 
         # Run synchronously for testing
-        result = asyncio.get_event_loop().run_until_complete(processor.process(msg))
+        result = asyncio.run(processor.process(msg))
 
         assert "threat_level" in result
         assert "rules_triggered" in result
@@ -247,7 +247,7 @@ class TestIngestProcessor:
             },
         )
 
-        result = asyncio.get_event_loop().run_until_complete(processor.process(msg))
+        result = asyncio.run(processor.process(msg))
 
         assert result["threat_level"] == "high"
         assert "rule:ssh_bruteforce" in result["rules_triggered"]
@@ -271,7 +271,7 @@ class TestIngestProcessor:
             },
         )
 
-        result = asyncio.get_event_loop().run_until_complete(processor.process(msg))
+        result = asyncio.run(processor.process(msg))
 
         assert result["roe_applied"] is True
 
@@ -286,11 +286,9 @@ class TestIngestProcessor:
             payload={},
         )
 
-        loop = asyncio.get_event_loop()
-
         # Process a few messages
         for _ in range(3):
-            loop.run_until_complete(processor.process(msg))
+            asyncio.run(processor.process(msg))
 
         stats = processor.stats
         assert stats["processed"] == 3
@@ -464,9 +462,7 @@ class TestEndToEnd:
 
         # Process
         processor = IngestProcessor()
-        result = asyncio.get_event_loop().run_until_complete(
-            processor.process(restored)
-        )
+        result = asyncio.run(processor.process(restored))
 
         # Verify decision
         assert result["tenant_id"] == "tenant1"
@@ -491,10 +487,8 @@ class TestEndToEnd:
             payload={"path": "/api/health"},
         )
 
-        loop = asyncio.get_event_loop()
-
-        result1 = loop.run_until_complete(processor.process(msg1))
-        result2 = loop.run_until_complete(processor.process(msg2))
+        result1 = asyncio.run(processor.process(msg1))
+        result2 = asyncio.run(processor.process(msg2))
 
         assert result1["tenant_id"] == "tenant1"
         assert result2["tenant_id"] == "tenant2"

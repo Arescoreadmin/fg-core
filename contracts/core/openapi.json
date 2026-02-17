@@ -1,6 +1,94 @@
 {
   "components": {
     "schemas": {
+      "AICitation": {
+        "properties": {
+          "chunk_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "score": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "number"
+          },
+          "source_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "chunk_id",
+          "score"
+        ],
+        "title": "AICitation",
+        "type": "object"
+      },
+      "AIQueryRequest": {
+        "properties": {
+          "question": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "AIQueryRequest",
+        "type": "object"
+      },
+      "AIQueryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "maxLength": 8000,
+            "minLength": 0,
+            "title": "Answer",
+            "type": "string"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/AICitation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "trace_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Trace Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "answer",
+          "confidence",
+          "trace_id"
+        ],
+        "title": "AIQueryResponse",
+        "type": "object"
+      },
       "ApprovalCreateRequest": {
         "properties": {
           "action": {
@@ -2927,6 +3015,113 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/ai/query": {
+      "post": {
+        "operationId": "ai_query_ai_query_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Idempotency-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIQueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIQueryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ai Query",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
     "/approvals": {
       "post": {
         "operationId": "create_approval_approvals_post",

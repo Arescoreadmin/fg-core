@@ -29,6 +29,7 @@ from api.defend import router as defend_router
 from api.dev_events import router as dev_events_router
 from api.feed import router as feed_router
 from api.forensics import router as forensics_router
+from api.ai.router import router as ai_router
 from api.ingest import router as ingest_router
 from api.keys import router as keys_router
 from api.stats import router as stats_router
@@ -466,6 +467,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(attestation_router)
     app.include_router(config_control_router)
     app.include_router(billing_router)
+    app.include_router(ai_router)
 
     if ui_enabled():
         app.include_router(ui_router)
@@ -719,6 +721,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(attestation_router)
     app.include_router(config_control_router)
     app.include_router(billing_router)
+    app.include_router(ai_router)
     app.include_router(keys_router)
     app.include_router(forensics_router)
     if mission_router is not None:
