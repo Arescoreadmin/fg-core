@@ -486,6 +486,28 @@ rebase-main-instructions:
 audit-chain-verify: venv
 	@$(PY) scripts/verify_audit_chain.py
 
+.PHONY: audit-engine audit-export-test audit-repro-test audit-export-verify-determinism audit-checkpoint-verify audit-evidence-verify audit-offline-verify-sample
+audit-engine: venv
+	@FG_ENV=test PYTHONPATH=. $(PY) scripts/run_audit_engine_cycle.py
+
+audit-export-test: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_audit_engine.py -k deterministic_export
+
+audit-repro-test: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_audit_engine.py -k reproducibility
+
+audit-export-verify-determinism: venv
+	@FG_ENV=test PYTHONPATH=. $(PY) scripts/verify_audit_export_determinism.py
+
+audit-checkpoint-verify: venv
+	@FG_ENV=test PYTHONPATH=. $(PY) scripts/verify_audit_checkpoint.py
+
+audit-evidence-verify: venv
+	@FG_ENV=test PYTHONPATH=. $(PY) scripts/verify_audit_evidence.py
+
+audit-offline-verify-sample: venv
+	@echo "Run: $(PY) scripts/fg_audit_verify.py --bundle <bundle.zip> --pubkeys <keys.json>"
+
 gap-audit: venv
 	@FG_ENV=prod PYTHONPATH=scripts $(PY_CONTRACT) scripts/gap_audit.py
 
@@ -536,9 +558,9 @@ fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check prod-unsaf
 	@$(MAKE) -s fg-lint
 	@$(MAKE) -s test-dashboard-p0
 
-fg-fast-ci: fg-fast opa-check
+fg-fast-ci: fg-fast opa-check audit-export-verify-determinism audit-checkpoint-verify audit-evidence-verify
 
-fg-fast-full: fg-fast-ci
+fg-fast-full: fg-fast-ci audit-engine audit-export-test audit-repro-test audit-export-verify-determinism audit-checkpoint-verify audit-evidence-verify
 
 # =============================================================================
 # Postgres verification (CI + local)

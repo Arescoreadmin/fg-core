@@ -247,8 +247,206 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 )
 
             conn.exec_driver_sql(
-                "CREATE INDEX IF NOT EXISTS ix_decisions_tenant_config_created ON decisions(tenant_id, config_hash, created_at)"
+            "CREATE INDEX IF NOT EXISTS ix_decisions_tenant_config_created ON decisions(tenant_id, config_hash, created_at)"
             )
+
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS audit_ledger (
+                id INTEGER PRIMARY KEY,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                tenant_id TEXT NOT NULL DEFAULT 'system',
+                timestamp_utc TEXT NOT NULL,
+                invariant_id TEXT NOT NULL,
+                decision TEXT NOT NULL,
+                config_hash TEXT NOT NULL,
+                policy_hash TEXT NOT NULL,
+                git_commit TEXT NOT NULL,
+                runtime_version TEXT NOT NULL,
+                host_id TEXT NOT NULL,
+                sha256_self_hash TEXT NOT NULL UNIQUE,
+                previous_record_hash TEXT NOT NULL,
+                signature TEXT NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_audit_ledger_invariant_id ON audit_ledger(invariant_id)"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_audit_ledger_tenant_id ON audit_ledger(tenant_id)"
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TRIGGER IF NOT EXISTS audit_ledger_append_only_update
+            BEFORE UPDATE ON audit_ledger
+            BEGIN
+                SELECT RAISE(ABORT, 'audit_ledger is append-only');
+            END;
+            """
+        )
+
+        if "audit_exports" in tables:
+            _sqlite_add_column_if_missing(conn, "audit_exports", "export_range_start_utc", "TEXT DEFAULT '1970-01-01T00:00:00Z'")
+            _sqlite_add_column_if_missing(conn, "audit_exports", "export_range_end_utc", "TEXT DEFAULT '1970-01-01T00:00:00Z'")
+            _sqlite_add_column_if_missing(conn, "audit_exports", "export_range_end_inclusive", "INTEGER DEFAULT 1")
+
+        if "audit_export_jobs" in tables:
+            _sqlite_add_column_if_missing(conn, "audit_export_jobs", "idempotency_key", "TEXT DEFAULT ''")
+            _sqlite_add_column_if_missing(conn, "audit_export_jobs", "end_inclusive", "INTEGER DEFAULT 1")
+            _sqlite_add_column_if_missing(conn, "audit_export_jobs", "signing_kid", "TEXT DEFAULT ''")
+            _sqlite_add_column_if_missing(conn, "audit_export_jobs", "attempts", "INTEGER DEFAULT 0")
+            _sqlite_add_column_if_missing(conn, "audit_export_jobs", "job_event_seq", "INTEGER DEFAULT 0")
+            _sqlite_add_column_if_missing(conn, "audit_export_jobs", "last_error_code", "TEXT")
+            _sqlite_add_column_if_missing(conn, "audit_export_jobs", "lease_owner", "TEXT")
+            _sqlite_add_column_if_missing(conn, "audit_export_jobs", "lease_expires_at", "TIMESTAMP")
+
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS audit_exports (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                export_id TEXT NOT NULL UNIQUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                export_hash TEXT NOT NULL,
+                manifest_hash TEXT NOT NULL,
+                storage_uri TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                triggered_by TEXT NOT NULL,
+                purpose TEXT NOT NULL,
+                retention_class TEXT NOT NULL,
+                export_range_start_utc TEXT NOT NULL,
+                export_range_end_utc TEXT NOT NULL,
+                export_range_end_inclusive INTEGER NOT NULL DEFAULT 1,
+                kid TEXT NOT NULL,
+                signature_algo TEXT NOT NULL,
+                CONSTRAINT uq_audit_exports_dedupe UNIQUE (tenant_id, export_hash, manifest_hash)
+            )
+            """
+        )
+        conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_audit_exports_tenant_created_at ON audit_exports(tenant_id, created_at)")
+        conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_audit_exports_retention_class ON audit_exports(retention_class)")
+        conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_audit_exports_tenant_range ON audit_exports(tenant_id, export_range_start_utc, export_range_end_utc)")
+
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS audit_export_jobs (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                job_id TEXT NOT NULL UNIQUE,
+                idempotency_key TEXT NOT NULL,
+                status TEXT NOT NULL,
+                requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                started_at TIMESTAMP,
+                finished_at TIMESTAMP,
+                start_utc TEXT NOT NULL,
+                end_utc TEXT NOT NULL,
+                end_inclusive INTEGER NOT NULL DEFAULT 1,
+                purpose TEXT NOT NULL,
+                retention_class TEXT NOT NULL,
+                signing_kid TEXT NOT NULL DEFAULT '',
+                triggered_by TEXT NOT NULL,
+                force INTEGER NOT NULL DEFAULT 0,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                job_event_seq INTEGER NOT NULL DEFAULT 0,
+                last_error_code TEXT,
+                lease_owner TEXT,
+                lease_expires_at TIMESTAMP,
+                export_id TEXT,
+                storage_uri TEXT
+            )
+            """
+        )
+        conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_audit_export_jobs_tenant_status ON audit_export_jobs(tenant_id, status)")
+
+
+        conn.exec_driver_sql(
+            """
+            CREATE TRIGGER IF NOT EXISTS audit_export_jobs_terminal_update_guard
+            BEFORE UPDATE ON audit_export_jobs
+            WHEN OLD.status IN ('cancelled', 'succeeded', 'failed') AND NEW.status != OLD.status
+            BEGIN
+                SELECT RAISE(ABORT, 'audit_export_jobs terminal state is immutable');
+            END;
+            """
+        )
+
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS audit_bypass_events (
+                id INTEGER PRIMARY KEY,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                tenant_id TEXT NOT NULL,
+                principal_id TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                reason_code TEXT NOT NULL,
+                ticket_id TEXT NOT NULL,
+                ttl_seconds INTEGER NOT NULL,
+                expires_at_utc TEXT NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_audit_bypass_events_tenant_principal ON audit_bypass_events(tenant_id, principal_id, created_at)")
+
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS audit_retention_runs (
+                id INTEGER PRIMARY KEY,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                tenant_id TEXT NOT NULL,
+                triggered_by TEXT NOT NULL,
+                mode TEXT NOT NULL,
+                reason_code TEXT NOT NULL,
+                ticket_id TEXT NOT NULL,
+                confirmation_token TEXT,
+                policy_json JSON NOT NULL,
+                policy_hash TEXT NOT NULL,
+                affected_exports_digest TEXT NOT NULL,
+                affected_jobs_digest TEXT NOT NULL,
+                affected_exports_count INTEGER NOT NULL,
+                affected_jobs_count INTEGER NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_audit_retention_runs_tenant_created ON audit_retention_runs(tenant_id, created_at)")
+
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS audit_chain_checkpoints (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                checkpoint_id TEXT NOT NULL,
+                record_seq INTEGER NOT NULL,
+                root_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                CONSTRAINT uq_audit_chain_checkpoint_tenant_checkpoint UNIQUE (tenant_id, checkpoint_id)
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS audit_anchors (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                anchor_day TEXT NOT NULL,
+                day_root_hash TEXT NOT NULL,
+                trust_domain TEXT NOT NULL,
+                anchor_status TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                CONSTRAINT uq_audit_anchors_day UNIQUE (tenant_id, anchor_day)
+            )
+            """
+        )
+
+        conn.exec_driver_sql(
+            """
+            CREATE TRIGGER IF NOT EXISTS audit_ledger_append_only_delete
+            BEFORE DELETE ON audit_ledger
+            BEGIN
+                SELECT RAISE(ABORT, 'audit_ledger is append-only');
+            END;
+            """
+        )
 
 
 # ---------------------------------------------------------------------
