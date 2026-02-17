@@ -41,6 +41,8 @@ class AuthConfig:
         FG_OIDC_REDIRECT_URL: OAuth callback URL
         FG_ENV: Environment (prod/staging/dev/test)
         FG_DEV_AUTH_BYPASS: Enable dev auth bypass (dev/test only)
+        FG_DEV_TENANT_ID: Tenant id to mint in dev bypass session (default: default)
+        FG_DEV_ALLOWED_TENANTS: CSV allowed tenants for dev bypass session (default: FG_DEV_TENANT_ID)
         FG_SESSION_SECRET: Secret for signing session cookies
         FG_SESSION_COOKIE_NAME: Session cookie name (default: fg_admin_session)
         FG_SESSION_TTL_SECONDS: Session TTL in seconds (default: 28800 = 8 hours)
@@ -54,6 +56,9 @@ class AuthConfig:
     env: str = "dev"
     dev_auth_bypass: bool = False
 
+    # Dev-bypass tenant controls (dev/test only)
+    dev_tenant_id: str = "default"
+    dev_allowed_tenants: list[str] = field(default_factory=list)
     session_secret: str = field(default_factory=lambda: os.urandom(32).hex())
     session_cookie_name: str = "fg_admin_session"
     session_ttl_seconds: int = 28800
