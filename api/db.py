@@ -247,8 +247,182 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 )
 
             conn.exec_driver_sql(
-                "CREATE INDEX IF NOT EXISTS ix_decisions_tenant_config_created ON decisions(tenant_id, config_hash, created_at)"
+            "CREATE INDEX IF NOT EXISTS ix_decisions_tenant_config_created ON decisions(tenant_id, config_hash, created_at)"
             )
+
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS audit_ledger (
+                id INTEGER PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                cycle_kind TEXT NOT NULL,
+                timestamp_utc TEXT NOT NULL,
+                invariant_id TEXT NOT NULL,
+                decision TEXT NOT NULL,
+                config_hash TEXT NOT NULL,
+                policy_hash TEXT NOT NULL,
+                git_commit TEXT NOT NULL,
+                runtime_version TEXT NOT NULL,
+                host_id TEXT NOT NULL,
+                tenant_id TEXT NOT NULL DEFAULT 'unknown',
+                sha256_engine_code_hash TEXT NOT NULL DEFAULT '',
+                sha256_self_hash TEXT NOT NULL UNIQUE,
+                previous_record_hash TEXT NOT NULL,
+                signature TEXT NOT NULL,
+                details_json JSON NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TRIGGER IF NOT EXISTS audit_ledger_append_only_update
+            BEFORE UPDATE ON audit_ledger
+            BEGIN
+                SELECT RAISE(ABORT, 'audit_ledger is append-only');
+            END;
+            """
+        )
+
+
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS compliance_requirements (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                req_id TEXT NOT NULL,
+                source TEXT NOT NULL,
+                source_ref TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                effective_date_utc TEXT NOT NULL,
+                version TEXT NOT NULL,
+                status TEXT NOT NULL,
+                evidence_type TEXT NOT NULL,
+                owner TEXT NOT NULL,
+                source_name TEXT,
+                source_version TEXT,
+                published_at_utc TEXT,
+                retrieved_at_utc TEXT,
+                bundle_sha256 TEXT,
+                tags_json JSON NOT NULL DEFAULT '[]',
+                created_at_utc TEXT NOT NULL,
+                previous_record_hash TEXT NOT NULL,
+                record_hash TEXT NOT NULL UNIQUE,
+                signature TEXT NOT NULL,
+                key_id TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS compliance_findings (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                finding_id TEXT NOT NULL,
+                req_ids_json JSON NOT NULL DEFAULT '[]',
+                title TEXT NOT NULL,
+                details TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                status TEXT NOT NULL,
+                waiver_json JSON,
+                detected_at_utc TEXT NOT NULL,
+                evidence_refs_json JSON NOT NULL DEFAULT '[]',
+                created_at_utc TEXT NOT NULL,
+                previous_record_hash TEXT NOT NULL,
+                record_hash TEXT NOT NULL UNIQUE,
+                signature TEXT NOT NULL,
+                key_id TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS compliance_snapshots (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                snapshot_id TEXT NOT NULL UNIQUE,
+                summary_json JSON NOT NULL DEFAULT '{}',
+                created_at_utc TEXT NOT NULL,
+                previous_record_hash TEXT NOT NULL,
+                record_hash TEXT NOT NULL UNIQUE,
+                signature TEXT NOT NULL,
+                key_id TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS audit_exam_sessions (
+                id INTEGER PRIMARY KEY,
+                exam_id TEXT NOT NULL UNIQUE,
+                tenant_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                window_start_utc TEXT NOT NULL,
+                window_end_utc TEXT NOT NULL,
+                created_at_utc TEXT NOT NULL,
+                export_path TEXT,
+                reproduce_json JSON,
+                previous_record_hash TEXT NOT NULL DEFAULT 'GENESIS',
+                record_hash TEXT NOT NULL UNIQUE DEFAULT '',
+                signature TEXT NOT NULL DEFAULT '',
+                key_id TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS compliance_requirement_updates (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                update_id TEXT NOT NULL UNIQUE,
+                source_name TEXT NOT NULL,
+                source_version TEXT NOT NULL,
+                published_at_utc TEXT NOT NULL,
+                retrieved_at_utc TEXT NOT NULL,
+                bundle_sha256 TEXT NOT NULL,
+                status TEXT NOT NULL,
+                diff_json JSON NOT NULL DEFAULT '{}',
+                previous_record_hash TEXT NOT NULL,
+                record_hash TEXT NOT NULL UNIQUE,
+                signature TEXT NOT NULL,
+                key_id TEXT NOT NULL,
+                created_at_utc TEXT NOT NULL
+            )
+            """
+        )
+        for table in ("compliance_requirements", "compliance_findings", "compliance_snapshots", "audit_exam_sessions", "compliance_requirement_updates"):
+            conn.exec_driver_sql(
+                f"""
+                CREATE TRIGGER IF NOT EXISTS {table}_append_only_update
+                BEFORE UPDATE ON {table}
+                BEGIN
+                    SELECT RAISE(ABORT, '{table} is append-only');
+                END;
+                """
+            )
+            conn.exec_driver_sql(
+                f"""
+                CREATE TRIGGER IF NOT EXISTS {table}_append_only_delete
+                BEFORE DELETE ON {table}
+                BEGIN
+                    SELECT RAISE(ABORT, '{table} is append-only');
+                END;
+                """
+            )
+        conn.exec_driver_sql(
+            """
+            CREATE TRIGGER IF NOT EXISTS audit_ledger_append_only_delete
+            BEFORE DELETE ON audit_ledger
+            BEGIN
+                SELECT RAISE(ABORT, 'audit_ledger is append-only');
+            END;
+            """
+        )
 
 
 # ---------------------------------------------------------------------

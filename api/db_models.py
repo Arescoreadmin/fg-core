@@ -815,6 +815,204 @@ class ModuleRegistry(Base):
     )
 
 
+
+
+class ComplianceRequirementRecord(Base):
+    __tablename__ = "compliance_requirements"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    req_id = Column(String(128), nullable=False, index=True)
+    source = Column(String(32), nullable=False)
+    source_ref = Column(String(256), nullable=False)
+    title = Column(String(256), nullable=False)
+    description = Column(Text, nullable=False)
+    severity = Column(String(16), nullable=False)
+    effective_date_utc = Column(String(64), nullable=False)
+    version = Column(String(64), nullable=False)
+    status = Column(String(16), nullable=False)
+    evidence_type = Column(String(16), nullable=False)
+    owner = Column(String(128), nullable=False)
+    source_name = Column(String(128), nullable=True)
+    source_version = Column(String(64), nullable=True)
+    published_at_utc = Column(String(64), nullable=True)
+    retrieved_at_utc = Column(String(64), nullable=True)
+    bundle_sha256 = Column(String(64), nullable=True)
+    tags_json = Column(JSON, nullable=False, default=list, server_default=text("'[]'"))
+    created_at_utc = Column(String(64), nullable=False)
+    previous_record_hash = Column(String(64), nullable=False)
+    record_hash = Column(String(64), nullable=False, unique=True, index=True)
+    signature = Column(Text, nullable=False)
+    key_id = Column(String(64), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now())
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "req_id": self.req_id,
+            "source": self.source,
+            "source_ref": self.source_ref,
+            "title": self.title,
+            "description": self.description,
+            "severity": self.severity,
+            "effective_date_utc": self.effective_date_utc,
+            "version": self.version,
+            "status": self.status,
+            "evidence_type": self.evidence_type,
+            "owner": self.owner,
+            "source_name": self.source_name,
+            "source_version": self.source_version,
+            "published_at_utc": self.published_at_utc,
+            "retrieved_at_utc": self.retrieved_at_utc,
+            "bundle_sha256": self.bundle_sha256,
+            "tags": self.tags_json,
+            "created_at_utc": self.created_at_utc,
+            "previous_record_hash": self.previous_record_hash,
+            "record_hash": self.record_hash,
+            "signature": self.signature,
+            "key_id": self.key_id,
+        }
+
+
+class ComplianceFindingRecord(Base):
+    __tablename__ = "compliance_findings"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    finding_id = Column(String(128), nullable=False, index=True)
+    req_ids_json = Column(JSON, nullable=False, default=list, server_default=text("'[]'"))
+    title = Column(String(256), nullable=False)
+    details = Column(Text, nullable=False)
+    severity = Column(String(16), nullable=False)
+    status = Column(String(16), nullable=False, index=True)
+    waiver_json = Column(JSON, nullable=True)
+    detected_at_utc = Column(String(64), nullable=False)
+    evidence_refs_json = Column(JSON, nullable=False, default=list, server_default=text("'[]'"))
+    created_at_utc = Column(String(64), nullable=False)
+    previous_record_hash = Column(String(64), nullable=False)
+    record_hash = Column(String(64), nullable=False, unique=True, index=True)
+    signature = Column(Text, nullable=False)
+    key_id = Column(String(64), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now())
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "finding_id": self.finding_id,
+            "req_ids": self.req_ids_json,
+            "title": self.title,
+            "details": self.details,
+            "severity": self.severity,
+            "status": self.status,
+            "waiver": self.waiver_json,
+            "detected_at_utc": self.detected_at_utc,
+            "evidence_refs": self.evidence_refs_json,
+            "created_at_utc": self.created_at_utc,
+            "previous_record_hash": self.previous_record_hash,
+            "record_hash": self.record_hash,
+            "signature": self.signature,
+            "key_id": self.key_id,
+        }
+
+
+class ComplianceSnapshotRecord(Base):
+    __tablename__ = "compliance_snapshots"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    snapshot_id = Column(String(64), nullable=False, unique=True, index=True)
+    summary_json = Column(JSON, nullable=False, default=dict, server_default=text("'{}'"))
+    created_at_utc = Column(String(64), nullable=False)
+    previous_record_hash = Column(String(64), nullable=False)
+    record_hash = Column(String(64), nullable=False, unique=True, index=True)
+    signature = Column(Text, nullable=False)
+    key_id = Column(String(64), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now())
+
+
+class AuditExamSession(Base):
+    __tablename__ = "audit_exam_sessions"
+
+    id = Column(Integer, primary_key=True)
+    exam_id = Column(String(64), nullable=False, unique=True, index=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    name = Column(String(128), nullable=False)
+    window_start_utc = Column(String(64), nullable=False)
+    window_end_utc = Column(String(64), nullable=False)
+    created_at_utc = Column(String(64), nullable=False)
+    export_path = Column(String(512), nullable=True)
+    reproduce_json = Column(JSON, nullable=True)
+    previous_record_hash = Column(String(64), nullable=False, default="GENESIS")
+    record_hash = Column(String(64), nullable=False, unique=True, index=True, default="")
+    signature = Column(Text, nullable=False, default="")
+    key_id = Column(String(64), nullable=False, default="")
+
+
+class ComplianceRequirementUpdateRecord(Base):
+    __tablename__ = "compliance_requirement_updates"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    update_id = Column(String(64), nullable=False, unique=True, index=True)
+    source_name = Column(String(128), nullable=False)
+    source_version = Column(String(64), nullable=False)
+    published_at_utc = Column(String(64), nullable=False)
+    retrieved_at_utc = Column(String(64), nullable=False)
+    bundle_sha256 = Column(String(64), nullable=False)
+    status = Column(String(16), nullable=False, index=True)
+    diff_json = Column(JSON, nullable=False, default=dict, server_default=text("'{}'"))
+    previous_record_hash = Column(String(64), nullable=False)
+    record_hash = Column(String(64), nullable=False, unique=True, index=True)
+    signature = Column(Text, nullable=False)
+    key_id = Column(String(64), nullable=False)
+    created_at_utc = Column(String(64), nullable=False)
+
+class AuditLedgerRecord(Base):
+    __tablename__ = "audit_ledger"
+
+    id = Column(Integer, primary_key=True)
+    session_id = Column(String(64), nullable=False, index=True)
+    cycle_kind = Column(String(16), nullable=False, default="light")
+    timestamp_utc = Column(String(64), nullable=False, index=True)
+    invariant_id = Column(String(128), nullable=False, index=True)
+    decision = Column(String(8), nullable=False)
+    config_hash = Column(String(64), nullable=False)
+    policy_hash = Column(String(64), nullable=False)
+    git_commit = Column(String(64), nullable=False)
+    runtime_version = Column(String(64), nullable=False)
+    host_id = Column(String(128), nullable=False)
+    tenant_id = Column(String(128), nullable=False, index=True, default="unknown")
+    sha256_engine_code_hash = Column(String(64), nullable=False, default="")
+    sha256_self_hash = Column(String(64), nullable=False, unique=True, index=True)
+    previous_record_hash = Column(String(64), nullable=False)
+    signature = Column(Text, nullable=False)
+    details_json = Column(JSON, nullable=False, default=dict, server_default=text("'{}'"))
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "session_id": self.session_id,
+            "cycle_kind": self.cycle_kind,
+            "timestamp_utc": self.timestamp_utc,
+            "invariant_id": self.invariant_id,
+            "decision": self.decision,
+            "config_hash": self.config_hash,
+            "policy_hash": self.policy_hash,
+            "git_commit": self.git_commit,
+            "runtime_version": self.runtime_version,
+            "host_id": self.host_id,
+            "tenant_id": self.tenant_id,
+            "sha256_engine_code_hash": self.sha256_engine_code_hash,
+            "sha256_self_hash": self.sha256_self_hash,
+            "previous_record_hash": self.previous_record_hash,
+            "signature": self.signature,
+            "details_json": self.details_json,
+        }
+
+
 def _raise_immutable(mapper, connection, target) -> None:
     raise ValueError(f"{target.__class__.__name__} rows are append-only")
 
@@ -829,6 +1027,18 @@ event.listen(ApprovalLog, "before_update", _raise_immutable)
 event.listen(ApprovalLog, "before_delete", _raise_immutable)
 event.listen(ModuleRegistry, "before_update", _raise_immutable)
 event.listen(ModuleRegistry, "before_delete", _raise_immutable)
+event.listen(AuditLedgerRecord, "before_update", _raise_immutable)
+event.listen(AuditLedgerRecord, "before_delete", _raise_immutable)
+event.listen(ComplianceRequirementRecord, "before_update", _raise_immutable)
+event.listen(ComplianceRequirementRecord, "before_delete", _raise_immutable)
+event.listen(ComplianceFindingRecord, "before_update", _raise_immutable)
+event.listen(ComplianceFindingRecord, "before_delete", _raise_immutable)
+event.listen(ComplianceSnapshotRecord, "before_update", _raise_immutable)
+event.listen(ComplianceSnapshotRecord, "before_delete", _raise_immutable)
+event.listen(AuditExamSession, "before_update", _raise_immutable)
+event.listen(AuditExamSession, "before_delete", _raise_immutable)
+event.listen(ComplianceRequirementUpdateRecord, "before_update", _raise_immutable)
+event.listen(ComplianceRequirementUpdateRecord, "before_delete", _raise_immutable)
 
 
 class PolicyChangeRequest(Base):

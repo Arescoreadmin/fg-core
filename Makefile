@@ -266,7 +266,7 @@ ci-local: fix fg-fast
 
 .PHONY: guard-scripts fg-audit-make fg-contract fg-compile \
 	contracts-gen contracts-core-gen contracts-core-diff \
-	artifact-contract-check contract-authority-check \
+	artifact-contract-check contract-authority-check contract-authority-refresh \
 	check-no-engine-evaluate opa-check verify-spine-modules verify-schemas verify-drift align-score \
 	contracts-gen-prod fg-contract-prod test-unit
 
@@ -337,6 +337,10 @@ artifact-contract-check: venv
 
 contract-authority-check: venv
 	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) scripts/contract_authority_check.py
+
+contract-authority-refresh: venv
+	@FG_ENV=prod $(MAKE) -s contracts-gen
+	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) scripts/refresh_contract_authority.py
 
 # Contract lint/diff must be deterministic and aligned to prod OpenAPI behavior.
 fg-contract: venv guard-scripts
@@ -455,7 +459,7 @@ bp-d-000-gate: venv
 	@echo "bp-d-000-gate: OK"
 
 
-.PHONY: prod-unsafe-config-check security-regression-gates soc-invariants enforcement-mode-matrix route-inventory-audit route-inventory-generate test-quality-gate soc-review-sync pr-base-mainline-check rebase-main-instructions
+.PHONY: prod-unsafe-config-check security-regression-gates soc-invariants enforcement-mode-matrix route-inventory-audit route-inventory-generate test-quality-gate soc-review-sync pr-base-mainline-check rebase-main-instructions compliance-chain-verify canonicalization-guard
 prod-unsafe-config-check: venv
 	@$(PY) tools/ci/check_prod_unsafe_config.py
 
@@ -485,6 +489,13 @@ rebase-main-instructions:
 	@echo "Rebase workflow (run in your local clone):"; 	echo "  git remote -v"; 	echo "  git fetch origin"; 	echo "  git rebase origin/main"; 	echo "  git push --force-with-lease"; 	echo ""; 	echo "Verify SOC review doc is not re-added after rebase:"; 	echo "  git diff --name-status origin/main...HEAD | rg '^A[[:space:]]+docs/SOC_ARCH_REVIEW_2026-02-15.md$$' && echo '❌ still added' && exit 1 || echo '✅ not added as new'"
 audit-chain-verify: venv
 	@$(PY) scripts/verify_audit_chain.py
+
+compliance-chain-verify: venv
+	@$(PY) scripts/verify_compliance_chain.py
+
+
+canonicalization-guard: venv
+	@$(PY) scripts/verify_canonicalization_guard.py
 
 gap-audit: venv
 	@FG_ENV=prod PYTHONPATH=scripts $(PY_CONTRACT) scripts/gap_audit.py
@@ -526,6 +537,25 @@ test-unit: venv _require-pytest-venv
 # Fast lane
 # =============================================================================
 
+.PHONY: audit-engine audit-export-test audit-repro-test compliance-registry-test exam-export-test exam-reproduce-test
+audit-engine: venv
+	@$(PY) scripts/run_audit_engine.py
+
+audit-export-test: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_audit_engine.py -k "deterministic_export"
+
+audit-repro-test: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_audit_engine.py -k "reproducibility_mismatch"
+
+compliance-registry-test: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_compliance_registry.py
+
+exam-export-test: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_audit_engine.py -k "exam_export"
+
+exam-reproduce-test: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_audit_engine.py -k "exam_reproduce"
+
 .PHONY: fg-fast fg-fast-ci fg-fast-full
 fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check prod-unsafe-config-check security-regression-gates soc-invariants soc-manifest-verify route-inventory-audit test-quality-gate soc-review-sync pr-base-mainline-check audit-chain-verify dos-hardening-check gap-audit \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
@@ -538,7 +568,7 @@ fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check prod-unsaf
 
 fg-fast-ci: fg-fast billing-ledger-verify billing-invoice-verify opa-check
 
-fg-fast-full: fg-fast-ci
+fg-fast-full: fg-fast-ci audit-chain-verify compliance-chain-verify canonicalization-guard audit-export-test audit-repro-test compliance-registry-test exam-export-test exam-reproduce-test
 
 
 .PHONY: billing-ledger-verify billing-invoice-verify billing-daily-sync billing-evidence-verify
@@ -890,11 +920,22 @@ admin-dev: admin-venv
 	@PYTHONPATH=. FG_ENV=dev $(AG_PY) -m uvicorn admin_gateway.asgi:app --host $(AG_HOST) --port $(AG_PORT) --reload
 
 admin-lint: admin-venv
-	@$(AG_PY) -m ruff check admin_gateway
-	@$(AG_PY) -m ruff format --check admin_gateway
+	@set -euo pipefail; \
+	if [ "$${ADMIN_SKIP_PIP_INSTALL:-0}" = "1" ]; then \
+		$(PY) -m ruff check admin_gateway; \
+		$(PY) -m ruff format --check admin_gateway; \
+	else \
+		$(AG_PY) -m ruff check admin_gateway; \
+		$(AG_PY) -m ruff format --check admin_gateway; \
+	fi
 
 admin-test: admin-venv
-	@PYTHONPATH=. $(PYTEST_ENV) $(AG_VENV)/bin/pytest admin_gateway/tests -q
+	@set -euo pipefail; \
+	if [ "$${ADMIN_SKIP_PIP_INSTALL:-0}" = "1" ]; then \
+		PYTHONPATH=. $(PYTEST_ENV) $(PYTEST) admin_gateway/tests -q; \
+	else \
+		PYTHONPATH=. $(PYTEST_ENV) $(AG_VENV)/bin/pytest admin_gateway/tests -q; \
+	fi
 
 ci-admin: admin-venv admin-lint admin-test
 

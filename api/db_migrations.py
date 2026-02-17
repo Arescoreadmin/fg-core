@@ -105,6 +105,12 @@ def assert_append_only_triggers(engine: Engine) -> None:
         "billing_count_sync_checkpoint_events",
         "pricing_versions",
         "tenant_contracts",
+        "audit_ledger",
+        "compliance_requirements",
+        "compliance_findings",
+        "compliance_snapshots",
+        "audit_exam_sessions",
+        "compliance_requirement_updates",
     }
     with engine.begin() as conn:
         rows = conn.exec_driver_sql(
@@ -146,6 +152,12 @@ def assert_tenant_rls(engine: Engine) -> None:
         "billing_count_sync_checkpoint_events",
         "billing_invoices",
         "billing_runs",
+        "audit_ledger",
+        "compliance_requirements",
+        "compliance_findings",
+        "compliance_snapshots",
+        "audit_exam_sessions",
+        "compliance_requirement_updates",
     }
     with engine.begin() as conn:
         rows = conn.execute(
