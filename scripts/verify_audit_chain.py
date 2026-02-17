@@ -4,68 +4,83 @@ from __future__ import annotations
 # ruff: noqa: E402
 
 import os
-import sys
 from pathlib import Path
+import sys
+
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from sqlalchemy import text
-from sqlalchemy.orm import Session
-
-from api.db import get_engine, init_db, reset_engine_cache
-from api.security_audit import (
-    AuditEvent,
-    EventType,
-    Severity,
-    SecurityAuditor,
-    verify_audit_chain,
-)
+from api.db import init_db, reset_engine_cache
+from services.audit_engine import AuditEngine, AuditTamperDetected
 
 
 def main() -> int:
     db_path = Path("/tmp/fg-audit-chain-check.db")
-    if db_path.exists():
-        db_path.unlink()
+    db_path.unlink(missing_ok=True)
 
     os.environ["FG_ENV"] = "test"
     os.environ["FG_SQLITE_PATH"] = str(db_path)
+    os.environ["FG_AUDIT_HMAC_KEY_CURRENT"] = "test-audit-key-test-audit-key-0000"
+    os.environ["FG_AUDIT_HMAC_KEY_ID_CURRENT"] = "ak1"
+    os.environ["FG_AUDIT_TENANT_ID"] = "tenant-a"
     os.environ.pop("FG_DB_URL", None)
     reset_engine_cache()
     init_db()
 
-    auditor = SecurityAuditor(persist_to_db=True)
-    auditor.log_event(
-        AuditEvent(
-            event_type=EventType.STARTUP, severity=Severity.INFO, tenant_id="tenant-a"
-        )
-    )
-    auditor.log_event(
-        AuditEvent(
-            event_type=EventType.ADMIN_ACTION,
-            severity=Severity.WARNING,
-            tenant_id="tenant-a",
-            details={"op": "x"},
-        )
-    )
+    engine = AuditEngine()
+    sid = engine.run_cycle("light")
 
-    ok = verify_audit_chain("tenant-a")
-    if not ok.get("ok"):
-        raise SystemExit(f"verify should pass, got {ok}")
+    # append-only enforcement
+    with Session(engine.engine) as session:
+        try:
+            session.execute(text("UPDATE audit_ledger SET decision='pass' WHERE id=1"))
+            session.commit()
+            raise SystemExit("append-only invariant violated")
+        except SQLAlchemyError:
+            session.rollback()
 
-    engine = get_engine()
-    with Session(engine) as session:
+    # tamper detection
+    with Session(engine.engine) as session:
         session.execute(
             text(
-                "UPDATE security_audit_log SET reason='tampered' WHERE id=(SELECT max(id) FROM security_audit_log)"
+                "INSERT INTO audit_ledger(session_id,cycle_kind,timestamp_utc,invariant_id,decision,config_hash,policy_hash,git_commit,runtime_version,host_id,tenant_id,sha256_engine_code_hash,sha256_self_hash,previous_record_hash,signature,details_json) VALUES ('x','light','2026-01-01T00:00:00Z','tampered','pass','a','b','c','d','tenant-a','tenant-a','e','f','g','h','{}')"
             )
         )
         session.commit()
+    try:
+        engine.run_cycle("light")
+        raise SystemExit("tamper detection failed")
+    except AuditTamperDetected:
+        pass
 
-    bad = verify_audit_chain("tenant-a")
-    if bad.get("ok"):
-        raise SystemExit("verify should fail after tamper")
+    db_path.unlink(missing_ok=True)
+    reset_engine_cache()
+    init_db()
+    engine = AuditEngine()
+    sid = engine.run_cycle("light")
+    a = engine.export_bundle(
+        "1970-01-01T00:00:00Z",
+        "9999-12-31T23:59:59Z",
+        app_openapi={"openapi": "3.1.0"},
+        tenant_id="tenant-a",
+    )
+    b = engine.export_bundle(
+        "1970-01-01T00:00:00Z",
+        "9999-12-31T23:59:59Z",
+        app_openapi={"openapi": "3.1.0"},
+        tenant_id="tenant-a",
+    )
+    if a["manifest"]["bundle_sha256"] != b["manifest"]["bundle_sha256"]:
+        raise SystemExit("nondeterministic export hash")
+
+    repro = engine.reproduce_session(sid)
+    if not repro.get("ok"):
+        raise SystemExit(f"reproducibility mismatch: {repro}")
 
     print("audit chain verification gate: OK")
     return 0
