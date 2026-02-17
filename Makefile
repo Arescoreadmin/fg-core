@@ -536,9 +536,24 @@ fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check prod-unsaf
 	@$(MAKE) -s fg-lint
 	@$(MAKE) -s test-dashboard-p0
 
-fg-fast-ci: fg-fast opa-check
+fg-fast-ci: fg-fast billing-ledger-verify billing-invoice-verify opa-check
 
 fg-fast-full: fg-fast-ci
+
+
+.PHONY: billing-ledger-verify billing-invoice-verify billing-daily-sync billing-evidence-verify
+billing-ledger-verify: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_billing_module.py -k "identity_dedupe_priority or identity_conflict_quarantine_and_resolution_events or device_enrollment_and_activity_proof or tenant_isolation_adversarial_reads_and_writes or scope_bypass_denied"
+
+billing-invoice-verify: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_billing_module.py -k "invoice_determinism_and_reproduce or reproduce_mismatch_detection or evidence_export_contains_manifest_and_attestation or billing_run_model or invoice_finalize_freezes_evidence or coverage_day_contract_metadata or credit_note_append_only_flow"
+
+billing-daily-sync: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_billing_module.py -k "daily_count_sync_incremental_has_tamper_evident_checkpoint"
+
+billing-evidence-verify: venv
+	@test -n "$(BUNDLE_DIR)" || (echo "BUNDLE_DIR is required" && exit 1)
+	@$(PY) scripts/fg_billing_verify.py "$(BUNDLE_DIR)" --pubkey "$(BUNDLE_DIR)/attestation.pub"
 
 # =============================================================================
 # Postgres verification (CI + local)
