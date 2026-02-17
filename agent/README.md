@@ -36,6 +36,25 @@ Production-grade additive agent implementation that communicates with FrostGate 
 - `FG_EVENT_ID_KEY_PREV`: Optional previous key for verifier compatibility during rotation.
 - `FG_EVENT_ID_KEYS`: Alternate comma-separated key list (first key is used for signing).
 - `FG_DEAD_LETTER_MAX`: Dead-letter retention cap (default `10000`, oldest purged first).
+- `FG_CONFIG_HMAC_KEY_CURRENT`: Active HMAC key for config authenticity (`config_sig`) verification.
+- `FG_CONFIG_HMAC_KEY_PREV`: Optional previous HMAC key accepted during rotation.
+- `FG_CONFIG_HMAC_KEYS`: Optional comma-separated key list; accepted in order after `CURRENT`/`PREV`.
+- `FG_CONFIG_HMAC_KEY`: Legacy single-key fallback (still supported).
+- Config verification mode:
+  - If no HMAC key(s) are configured: integrity-only mode (`config_hash` required and enforced).
+  - If any HMAC key is configured: `config_sig` is required and must verify against current/previous/list key(s), otherwise fail closed.
+  - `config_sig` encoding is lowercase hex HMAC-SHA256 (64 chars); malformed formats are rejected fail-closed.
+  - Signing is deterministic and uses key-id `k0` (mapped to CURRENT, or first resolved key if CURRENT is unset).
+  - Verifiers accept signatures made by `k0` and any configured rotation fallback keys (`PREV`/`KEYS` entries).
+  - Safety rail: `PREV`-only configuration without `CURRENT` is rejected (`config_hmac_current_required_for_signing`).
+
+## Repo fast-lane note
+
+- `make fg-fast` passes when dependencies are available.
+- In restricted (non-CI) environments without package-index access, pre-install dependencies once and run with:
+  ```bash
+  ADMIN_SKIP_PIP_INSTALL=1 make fg-fast
+  ```
 
 ## Local development
 
