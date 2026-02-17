@@ -235,6 +235,7 @@ help:
 	"" \
 	"Formatting:" \
 	"  make fmt        # auto-fix lint + format" \
+	"  make fmt-agent  # format only agent + tests/agent (avoids SOC-tracked churn)" \
 	"  make fmt-check  # check-only (CI)" \
 	"" \
 	"CI:" \
@@ -471,7 +472,7 @@ route-inventory-generate: venv
 	@$(PY) tools/ci/check_route_inventory.py --write
 
 route-inventory-audit: venv
-@PYTHONPATH=. $(PY) tools/ci/check_route_inventory.py
+	@PYTHONPATH=. $(PY) tools/ci/check_route_inventory.py
 test-quality-gate: venv
 	@$(PY) tools/ci/check_test_quality.py
 
@@ -499,13 +500,17 @@ generate-scorecard: venv
 # Formatting / Lint (ruff) - venv always
 # =============================================================================
 
-.PHONY: fmt fmt-check fg-lint
+.PHONY: fmt fmt-agent fmt-check fg-lint
 
 fmt: _require-venv
 	@$(RUFF) check --fix api tests scripts
 	@$(RUFF) format api tests scripts
 	@$(RUFF) check api tests scripts
 	@$(RUFF) format --check api tests scripts
+
+fmt-agent: _require-venv
+	@$(RUFF) format agent tests/agent
+	@$(RUFF) check agent tests/agent
 
 fmt-check: _require-venv
 	@$(RUFF) check api tests scripts
@@ -526,6 +531,13 @@ test-unit: venv _require-pytest-venv
 # Fast lane
 # =============================================================================
 
+
+.PHONY: agent-ci
+agent-ci: venv
+	@$(RUFF) check agent/ tests/agent/
+	@$(PYTEST) -q tests/agent/test_agent_core_runtime.py
+	@$(PY) -m py_compile $$(find agent -name '*.py' -type f)
+
 .PHONY: fg-fast fg-fast-ci fg-fast-full
 fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check prod-unsafe-config-check security-regression-gates soc-invariants soc-manifest-verify route-inventory-audit test-quality-gate soc-review-sync pr-base-mainline-check audit-chain-verify dos-hardening-check gap-audit \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
@@ -538,7 +550,7 @@ fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check prod-unsaf
 
 fg-fast-ci: fg-fast billing-ledger-verify billing-invoice-verify opa-check
 
-fg-fast-full: fg-fast-ci
+fg-fast-full: fg-fast-ci agent-ci
 
 
 .PHONY: billing-ledger-verify billing-invoice-verify billing-daily-sync billing-evidence-verify

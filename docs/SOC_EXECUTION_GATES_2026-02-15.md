@@ -158,3 +158,11 @@ Validation:
   - `PYTHONPATH=. .venv/bin/python tools/ci/sync_soc_manifest_status.py --mode verify --fail-on-unresolved-p0`
   - `PYTHONPATH=. .venv/bin/python tools/ci/sync_soc_manifest_status.py --mode sync --write`
   - `make fg-fast`
+
+## 2026-02-17 — Route inventory refresh (SOC-P1-001)
+
+- Refreshed `tools/ci/route_inventory.json` to match current API route surface detected by `tools/ci/check_route_inventory.py`.
+- This update resolves `route-inventory-audit` drift failures caused by inventory mismatch with current registered routes.
+- Gate evidence commands:
+  - `make route-inventory-audit`
+  - `PYTHONPATH=. .venv/bin/python tools/ci/check_route_inventory.py`

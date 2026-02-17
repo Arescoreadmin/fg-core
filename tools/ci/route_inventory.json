@@ -216,6 +216,216 @@
     "tenant_bound": false
   },
   {
+    "file": "api/billing.py",
+    "method": "POST",
+    "path": "/billing/coverage/change",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "POST",
+    "path": "/billing/credits/{credit_note_id}/evidence",
+    "scoped": true,
+    "scopes": [
+      "admin:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "POST",
+    "path": "/billing/daily-counts/sync",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "GET",
+    "path": "/billing/devices",
+    "scoped": true,
+    "scopes": [
+      "admin:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "POST",
+    "path": "/billing/devices/activity",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "POST",
+    "path": "/billing/devices/enroll",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "POST",
+    "path": "/billing/devices/upsert",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "GET",
+    "path": "/billing/devices/{device_id}/coverage-timeline",
+    "scoped": true,
+    "scopes": [
+      "admin:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "GET",
+    "path": "/billing/identity/disputes",
+    "scoped": true,
+    "scopes": [
+      "admin:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "POST",
+    "path": "/billing/identity/disputes/{claim_id}/resolve",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "GET",
+    "path": "/billing/invoices",
+    "scoped": true,
+    "scopes": [
+      "admin:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "POST",
+    "path": "/billing/invoices",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "GET",
+    "path": "/billing/invoices/{invoice_id}",
+    "scoped": true,
+    "scopes": [
+      "admin:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "GET",
+    "path": "/billing/invoices/{invoice_id}/credits",
+    "scoped": true,
+    "scopes": [
+      "admin:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "POST",
+    "path": "/billing/invoices/{invoice_id}/credits",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "GET",
+    "path": "/billing/invoices/{invoice_id}/evidence",
+    "scoped": true,
+    "scopes": [
+      "admin:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "POST",
+    "path": "/billing/invoices/{invoice_id}/evidence",
+    "scoped": true,
+    "scopes": [
+      "admin:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "POST",
+    "path": "/billing/invoices/{invoice_id}/finalize",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "POST",
+    "path": "/billing/invoices/{invoice_id}/reproduce",
+    "scoped": true,
+    "scopes": [
+      "admin:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "GET",
+    "path": "/billing/runs",
+    "scoped": true,
+    "scopes": [
+      "admin:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/billing.py",
+    "method": "POST",
+    "path": "/billing/runs",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
     "file": "api/config_control.py",
     "method": "POST",
     "path": "/config/versions",
