@@ -36,6 +36,7 @@ from api.attestation import router as attestation_router
 from api.config_control import router as config_control_router
 from api.ui import router as ui_router
 from api.ui_dashboards import router as ui_dashboards_router
+from api.ai import router as ai_router
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
 from api.middleware.request_validation import (
@@ -48,6 +49,7 @@ from api.middleware.security_headers import (
     SecurityHeadersMiddleware,
 )
 from api.middleware.exception_shield import FGExceptionShieldMiddleware
+from api.ai.llm_client import get_breaker_snapshot, get_breaker_state
 
 # Canonical app logger (fastapi.logger is NOT a stdlib logger)
 log = logging.getLogger("frostgate")
@@ -161,6 +163,7 @@ governance_router = _optional_router("api.governance", "router")
 mission_router = _optional_router("api.mission_envelope", "router")
 ring_router = _optional_router("api.ring_router", "router")
 roe_router = _optional_router("api.roe_engine", "router")
+billing_router = _optional_router("api.billing", "router")
 
 
 def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
@@ -471,6 +474,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     app.include_router(keys_router)
     app.include_router(forensics_router)
+    app.include_router(ai_router)
 
     # ---- Compliance routers ----
     if compliance_module_enabled("mission_envelope") and mission_router is not None:
@@ -481,6 +485,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         app.include_router(roe_router)
     if compliance_module_enabled("governance") and governance_router is not None:
         app.include_router(governance_router)
+    if billing_router is not None:
+        app.include_router(billing_router)
 
     if _dev_enabled():
         app.include_router(dev_events_router)
@@ -501,6 +507,15 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             "env": request.app.state.env,
             "auth_enabled": bool(request.app.state.auth_enabled),
             "app_instance_id": request.app.state.app_instance_id,
+            "ai_breaker_state": get_breaker_state(),
+            "ai_breaker_log_cooldown_seconds": get_breaker_snapshot().get(
+                "log_cooldown_seconds"
+            ),
+            "ai_breaker_metrics": {
+                "open_count": get_breaker_snapshot().get("open_count"),
+                "half_open_trials": get_breaker_snapshot().get("half_open_trials"),
+                "close_count": get_breaker_snapshot().get("close_count"),
+            },
         }
 
     @app.get(
@@ -603,7 +618,19 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 status_code=503, detail=f"dependencies_unhealthy: {'; '.join(failures)}"
             )
 
-        return {"status": "ready", "dependencies": deps_status}
+        return {
+            "status": "ready",
+            "dependencies": deps_status,
+            "ai_breaker_state": get_breaker_state(),
+            "ai_breaker_log_cooldown_seconds": get_breaker_snapshot().get(
+                "log_cooldown_seconds"
+            ),
+            "ai_breaker_metrics": {
+                "open_count": get_breaker_snapshot().get("open_count"),
+                "half_open_trials": get_breaker_snapshot().get("half_open_trials"),
+                "close_count": get_breaker_snapshot().get("close_count"),
+            },
+        }
 
     @app.get("/health/detailed")
     async def health_detailed(_: None = Depends(require_status_auth)) -> dict:
@@ -718,6 +745,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(config_control_router)
     app.include_router(keys_router)
     app.include_router(forensics_router)
+    app.include_router(ai_router)
     if mission_router is not None:
         app.include_router(mission_router)
     if ring_router is not None:
@@ -733,6 +761,15 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
             "status": "ok",
             "service": app.state.service,
             "version": app.state.app_version,
+            "ai_breaker_state": get_breaker_state(),
+            "ai_breaker_log_cooldown_seconds": get_breaker_snapshot().get(
+                "log_cooldown_seconds"
+            ),
+            "ai_breaker_metrics": {
+                "open_count": get_breaker_snapshot().get("open_count"),
+                "half_open_trials": get_breaker_snapshot().get("half_open_trials"),
+                "close_count": get_breaker_snapshot().get("close_count"),
+            },
         }
 
     @app.get("/health/live")
@@ -741,7 +778,19 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
 
     @app.get("/health/ready")
     async def health_ready() -> dict:
-        return {"status": "ready", "dependencies": {"db": "contract"}}
+        return {
+            "status": "ready",
+            "dependencies": {"db": "contract"},
+            "ai_breaker_state": get_breaker_state(),
+            "ai_breaker_log_cooldown_seconds": get_breaker_snapshot().get(
+                "log_cooldown_seconds"
+            ),
+            "ai_breaker_metrics": {
+                "open_count": get_breaker_snapshot().get("open_count"),
+                "half_open_trials": get_breaker_snapshot().get("half_open_trials"),
+                "close_count": get_breaker_snapshot().get("close_count"),
+            },
+        }
 
     return app
 
