@@ -198,6 +198,102 @@
         "title": "ConfigWriteRequest",
         "type": "object"
       },
+      "CoverageChangeRequest": {
+        "properties": {
+          "action": {
+            "enum": [
+              "ADD",
+              "REMOVE",
+              "CHANGE",
+              "RETIRE",
+              "MERGE"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "config_hash": {
+            "title": "Config Hash",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "effective_from": {
+            "format": "date-time",
+            "title": "Effective From",
+            "type": "string"
+          },
+          "effective_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective To"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "plan_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Id"
+          },
+          "policy_hash": {
+            "title": "Policy Hash",
+            "type": "string"
+          },
+          "pricing_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pricing Version Id"
+          },
+          "source": {
+            "default": "api",
+            "title": "Source",
+            "type": "string"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          }
+        },
+        "required": [
+          "event_id",
+          "device_id",
+          "action",
+          "effective_from",
+          "config_hash",
+          "policy_hash"
+        ],
+        "title": "CoverageChangeRequest",
+        "type": "object"
+      },
       "CreateKeyRequest": {
         "description": "Request to create a new API key.",
         "properties": {
@@ -300,6 +396,55 @@
           "expires_at"
         ],
         "title": "CreateKeyResponse",
+        "type": "object"
+      },
+      "CreditNoteCreateRequest": {
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "number"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "credit_note_id": {
+            "title": "Credit Note Id",
+            "type": "string"
+          },
+          "currency": {
+            "default": "USD",
+            "title": "Currency",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "ticket_id": {
+            "title": "Ticket Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "credit_note_id",
+          "amount",
+          "reason",
+          "ticket_id",
+          "created_by"
+        ],
+        "title": "CreditNoteCreateRequest",
         "type": "object"
       },
       "DecisionExplain": {
@@ -606,6 +751,273 @@
         "title": "DefendResponse",
         "type": "object"
       },
+      "DeviceActivityProofRequest": {
+        "properties": {
+          "activity_day": {
+            "format": "date",
+            "title": "Activity Day",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "proof_hash": {
+            "title": "Proof Hash",
+            "type": "string"
+          },
+          "proof_type": {
+            "title": "Proof Type",
+            "type": "string"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          }
+        },
+        "required": [
+          "device_id",
+          "activity_day",
+          "proof_type",
+          "proof_hash"
+        ],
+        "title": "DeviceActivityProofRequest",
+        "type": "object"
+      },
+      "DeviceEnrollRequest": {
+        "properties": {
+          "attestation_payload_hash": {
+            "title": "Attestation Payload Hash",
+            "type": "string"
+          },
+          "attestation_type": {
+            "title": "Attestation Type",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "enrolled_by": {
+            "title": "Enrolled By",
+            "type": "string"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          }
+        },
+        "required": [
+          "device_id",
+          "attestation_type",
+          "attestation_payload_hash",
+          "enrolled_by"
+        ],
+        "title": "DeviceEnrollRequest",
+        "type": "object"
+      },
+      "ExportJobRequest": {
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "end_inclusive": {
+            "default": true,
+            "title": "End Inclusive",
+            "type": "boolean"
+          },
+          "force": {
+            "default": false,
+            "title": "Force",
+            "type": "boolean"
+          },
+          "purpose": {
+            "default": "compliance-review",
+            "title": "Purpose",
+            "type": "string"
+          },
+          "retention_class": {
+            "default": "regulated",
+            "title": "Retention Class",
+            "type": "string"
+          },
+          "signing_kid": {
+            "default": "",
+            "title": "Signing Kid",
+            "type": "string"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "ExportJobRequest",
+        "type": "object"
+      },
+      "FeedItem": {
+        "properties": {
+          "agent_stable_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Stable Id"
+          },
+          "asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Id"
+          },
+          "asset_verified": {
+            "default": false,
+            "title": "Asset Verified",
+            "type": "boolean"
+          },
+          "attestation_level": {
+            "default": "none",
+            "title": "Attestation Level",
+            "type": "string"
+          },
+          "device_type": {
+            "default": "unknown",
+            "title": "Device Type",
+            "type": "string"
+          },
+          "fingerprint_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fingerprint Hash"
+          },
+          "labels": {
+            "title": "Labels",
+            "type": "object"
+          },
+          "source_agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Agent Id"
+          },
+          "source_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ip"
+          },
+          "status": {
+            "default": "active",
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          }
+        },
+        "title": "DeviceUpsertRequest",
+        "type": "object"
+      },
+      "DisputeResolveRequest": {
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "resolution_type": {
+            "enum": [
+              "manual_review",
+              "asset_registry_proof",
+              "agent_attestation"
+            ],
+            "title": "Resolution Type",
+            "type": "string"
+          },
+          "resolved_by": {
+            "title": "Resolved By",
+            "type": "string"
+          },
+          "resolved_device_id": {
+            "title": "Resolved Device Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "ticket_id": {
+            "title": "Ticket Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "resolved_device_id",
+          "reason",
+          "ticket_id",
+          "resolution_type",
+          "resolved_by"
+        ],
+        "title": "DisputeResolveRequest",
+        "type": "object"
+      },
       "EvidenceBundleCreateRequest": {
         "properties": {
           "artifacts": {
@@ -733,49 +1145,6 @@
           "verified"
         ],
         "title": "EvidenceVerifyResponse",
-        "type": "object"
-      },
-      "ExportJobRequest": {
-        "properties": {
-          "end": {
-            "title": "End",
-            "type": "string"
-          },
-          "end_inclusive": {
-            "default": true,
-            "title": "End Inclusive",
-            "type": "boolean"
-          },
-          "force": {
-            "default": false,
-            "title": "Force",
-            "type": "boolean"
-          },
-          "purpose": {
-            "default": "compliance-review",
-            "title": "Purpose",
-            "type": "string"
-          },
-          "retention_class": {
-            "default": "regulated",
-            "title": "Retention Class",
-            "type": "string"
-          },
-          "signing_kid": {
-            "default": "",
-            "title": "Signing Kid",
-            "type": "string"
-          },
-          "start": {
-            "title": "Start",
-            "type": "string"
-          }
-        },
-        "required": [
-          "start",
-          "end"
-        ],
-        "title": "ExportJobRequest",
         "type": "object"
       },
       "FeedItem": {
@@ -1195,6 +1564,119 @@
           "config_hash"
         ],
         "title": "IngestResponse",
+        "type": "object"
+      },
+      "InvoiceCreateRequest": {
+        "properties": {
+          "config_hash": {
+            "title": "Config Hash",
+            "type": "string"
+          },
+          "invoice_id": {
+            "title": "Invoice Id",
+            "type": "string"
+          },
+          "period_end": {
+            "format": "date-time",
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "format": "date-time",
+            "title": "Period Start",
+            "type": "string"
+          },
+          "policy_hash": {
+            "title": "Policy Hash",
+            "type": "string"
+          },
+          "pricing_version_id": {
+            "title": "Pricing Version Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          }
+        },
+        "required": [
+          "invoice_id",
+          "period_start",
+          "period_end",
+          "pricing_version_id",
+          "config_hash",
+          "policy_hash"
+        ],
+        "title": "InvoiceCreateRequest",
+        "type": "object"
+      },
+      "InvoiceFinalizeRequest": {
+        "properties": {
+          "finalized_by": {
+            "title": "Finalized By",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "ticket_id": {
+            "title": "Ticket Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finalized_by",
+          "ticket_id",
+          "reason"
+        ],
+        "title": "InvoiceFinalizeRequest",
+        "type": "object"
+      },
+      "InvoiceReproduceResponse": {
+        "properties": {
+          "invoice_id": {
+            "title": "Invoice Id",
+            "type": "string"
+          },
+          "match": {
+            "title": "Match",
+            "type": "boolean"
+          },
+          "recomputed_hash": {
+            "title": "Recomputed Hash",
+            "type": "string"
+          },
+          "stored_hash": {
+            "title": "Stored Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "invoice_id",
+          "recomputed_hash",
+          "stored_hash",
+          "match"
+        ],
+        "title": "InvoiceReproduceResponse",
         "type": "object"
       },
       "KeyInfo": {

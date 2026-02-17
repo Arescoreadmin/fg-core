@@ -6,11 +6,12 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, Index, String, text
+from sqlalchemy import Column, ForeignKey, Index, String, text
 from sqlalchemy import ForeignKeyConstraint, UniqueConstraint
 from sqlalchemy import JSON, Text
 from sqlalchemy import (
     Boolean,
+    Date,
     DateTime,
     Float,
     Integer,
@@ -18,6 +19,8 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.orm import declarative_base
+
+from api.signed_artifacts import canonical_hash
 
 Base = declarative_base()
 
