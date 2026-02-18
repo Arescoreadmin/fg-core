@@ -1,0 +1,47 @@
+{
+  "type": "object",
+  "required": [
+    "id",
+    "version",
+    "allowed_providers",
+    "default_provider",
+    "default_model",
+    "tenant_max_tokens_per_day"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "allowed_providers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "default_provider": {
+      "type": "string"
+    },
+    "default_model": {
+      "type": "string"
+    },
+    "tenant_max_tokens_per_day": {
+      "type": "integer"
+    },
+    "device_max_tokens_per_day": {
+      "type": "integer"
+    },
+    "pii_deny_terms": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "max_tokens_per_request": {
+      "type": "integer"
+    }
+  }
+}

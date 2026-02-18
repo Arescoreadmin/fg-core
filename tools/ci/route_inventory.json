@@ -16,6 +16,36 @@
     "tenant_bound": false
   },
   {
+    "file": "api/agent_tokens.py",
+    "method": "GET",
+    "path": "/admin/agent/devices",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/agent_tokens.py",
+    "method": "POST",
+    "path": "/admin/agent/devices/{device_id}/revoke",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/agent_tokens.py",
+    "method": "POST",
+    "path": "/admin/agent/enrollment-tokens",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
     "file": "api/admin.py",
     "method": "POST",
     "path": "/admin/audit/export",
@@ -39,6 +69,36 @@
     "file": "api/admin.py",
     "method": "POST",
     "path": "/admin/config/changes/{change_id}/revert",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "GET",
+    "path": "/admin/devices",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "POST",
+    "path": "/admin/devices/{device_id}/disable",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "POST",
+    "path": "/admin/devices/{device_id}/enable",
     "scoped": true,
     "scopes": [
       "admin:write"
@@ -183,6 +243,30 @@
     "scopes": [
       "admin:read"
     ],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/agent_enrollment.py",
+    "method": "POST",
+    "path": "/agent/enroll",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/agent_enrollment.py",
+    "method": "POST",
+    "path": "/agent/heartbeat",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/agent_enrollment.py",
+    "method": "POST",
+    "path": "/agent/key/rotate",
+    "scoped": false,
+    "scopes": [],
     "tenant_bound": false
   },
   {
@@ -1453,6 +1537,28 @@
     "path": "/ui/decisions",
     "scoped": true,
     "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "POST",
+    "path": "/ui/devices/{device_id}/disable",
+    "scoped": true,
+    "scopes": [
+      "admin:write",
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "POST",
+    "path": "/ui/devices/{device_id}/enable",
+    "scoped": true,
+    "scopes": [
+      "admin:write",
       "ui:read"
     ],
     "tenant_bound": true
