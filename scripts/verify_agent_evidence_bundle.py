@@ -18,7 +18,9 @@ def main() -> int:
         print("FAIL: anchors missing")
         return 1
     command_ledger = data.get("command_ledger", [])
-    digest = hashlib.sha256(json.dumps(command_ledger, sort_keys=True).encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(
+        json.dumps(command_ledger, sort_keys=True).encode("utf-8")
+    ).hexdigest()
     print(f"PASS bundle={p} command_ledger_sha256={digest} anchors={len(anchors)}")
     return 0
 

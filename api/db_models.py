@@ -191,7 +191,9 @@ class AgentDeviceRegistry(Base):
     last_seen_at = Column(DateTime(timezone=True), nullable=True)
     last_ip = Column(String(64), nullable=True)
     last_version = Column(String(64), nullable=True)
-    ring = Column(String(16), nullable=False, default="broad", server_default=text("'broad'"))
+    ring = Column(
+        String(16), nullable=False, default="broad", server_default=text("'broad'")
+    )
 
 
 class AgentDeviceKey(Base):
@@ -291,7 +293,9 @@ class AgentUpdateRollout(Base):
     canary_error_budget = Column(Integer, nullable=False, default=5)
     canary_error_count = Column(Integer, nullable=False, default=0)
     paused = Column(Boolean, nullable=False, default=False, server_default=text("0"))
-    kill_switch = Column(Boolean, nullable=False, default=False, server_default=text("0"))
+    kill_switch = Column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
     updated_at = Column(
         DateTime(timezone=True),
         nullable=False,

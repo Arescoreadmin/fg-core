@@ -10,7 +10,9 @@ from tests.agent.helpers import admin_headers, enroll_device, signed_headers
 
 
 def _sig(enrolled: dict[str, str], path: str, body: dict) -> dict[str, str]:
-    return signed_headers(path, body, enrolled["device_key_prefix"], enrolled["device_key"])
+    return signed_headers(
+        path, body, enrolled["device_key_prefix"], enrolled["device_key"]
+    )
 
 
 def _issue(client: TestClient, device_id: str, idem: str | None = None):
@@ -21,7 +23,9 @@ def _issue(client: TestClient, device_id: str, idem: str | None = None):
     }
     if idem:
         body["idempotency_key"] = idem
-    return client.post("/admin/agent/commands/issue", headers=admin_headers(), json=body)
+    return client.post(
+        "/admin/agent/commands/issue", headers=admin_headers(), json=body
+    )
 
 
 def test_idempotency_key_reuses_command(build_app):
@@ -79,7 +83,11 @@ def test_ack_after_lease_expiry_denied(build_app):
     )
     assert poll.status_code == 200
     with Session(get_engine()) as session:
-        row = session.query(AgentCommand).filter(AgentCommand.command_id == command_id).first()
+        row = (
+            session.query(AgentCommand)
+            .filter(AgentCommand.command_id == command_id)
+            .first()
+        )
         row.lease_expires_at = row.issued_at
         session.commit()
 

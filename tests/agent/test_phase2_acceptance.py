@@ -11,7 +11,9 @@ from tests.agent.helpers import admin_headers, enroll_device, signed_headers
 
 
 def _sig(enrolled: dict[str, str], path: str, body: dict) -> dict[str, str]:
-    return signed_headers(path, body, enrolled["device_key_prefix"], enrolled["device_key"])
+    return signed_headers(
+        path, body, enrolled["device_key_prefix"], enrolled["device_key"]
+    )
 
 
 def test_revoked_device_denied_codes_for_phase2_control(build_app):
@@ -28,7 +30,11 @@ def test_revoked_device_denied_codes_for_phase2_control(build_app):
 
     res = client.post(
         "/agent/commands/poll",
-        headers=_sig(enrolled, "/agent/commands/poll", {"controller_id": "ctrl-1", "lease_seconds": 60}),
+        headers=_sig(
+            enrolled,
+            "/agent/commands/poll",
+            {"controller_id": "ctrl-1", "lease_seconds": 60},
+        ),
         json={"controller_id": "ctrl-1", "lease_seconds": 60},
     )
     assert res.status_code == 403
@@ -51,7 +57,11 @@ def test_quarantined_device_denied_policy_fetch_with_stable_code(build_app):
 
     res = client.post(
         "/agent/commands/poll",
-        headers=_sig(enrolled, "/agent/commands/poll", {"controller_id": "ctrl-1", "lease_seconds": 60}),
+        headers=_sig(
+            enrolled,
+            "/agent/commands/poll",
+            {"controller_id": "ctrl-1", "lease_seconds": 60},
+        ),
         json={"controller_id": "ctrl-1", "lease_seconds": 60},
     )
     assert res.status_code == 403
@@ -79,7 +89,11 @@ def test_expired_cert_has_stable_error_code(build_app):
 
     res = client.post(
         "/agent/commands/poll",
-        headers=_sig(enrolled, "/agent/commands/poll", {"controller_id": "ctrl-1", "lease_seconds": 60}),
+        headers=_sig(
+            enrolled,
+            "/agent/commands/poll",
+            {"controller_id": "ctrl-1", "lease_seconds": 60},
+        ),
         json={"controller_id": "ctrl-1", "lease_seconds": 60},
     )
     assert res.status_code == 403

@@ -76,12 +76,12 @@ class CommandIssueRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     device_id: str
-    command_type: str = Field(pattern="^(collect_diagnostics|rotate_identity|flush_cache|run_integrity_check|fetch_inventory)$")
+    command_type: str = Field(
+        pattern="^(collect_diagnostics|rotate_identity|flush_cache|run_integrity_check|fetch_inventory)$"
+    )
     payload: dict = Field(default_factory=dict, max_length=128)
     ttl_seconds: int = Field(default=300, ge=30, le=86400)
     idempotency_key: str | None = Field(default=None, min_length=8, max_length=128)
-
-
 
 
 class CommandLeaseRequest(BaseModel):
@@ -132,6 +132,7 @@ class FetchInventoryParams(BaseModel):
 
     include_software: bool = True
     include_services: bool = True
+
 
 class UpdateReportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -202,27 +203,35 @@ def _device_fingerprint(cert: x509.Certificate) -> str:
 
 
 def _sign_command(payload: dict) -> str:
-    key = (os.getenv("FG_AGENT_COMMAND_SIGNING_KEY") or os.getenv("FG_KEY_PEPPER") or "").encode("utf-8")
+    key = (
+        os.getenv("FG_AGENT_COMMAND_SIGNING_KEY") or os.getenv("FG_KEY_PEPPER") or ""
+    ).encode("utf-8")
     if not key:
         raise RuntimeError("FG_AGENT_COMMAND_SIGNING_KEY or FG_KEY_PEPPER required")
-    canonical = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    canonical = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode(
+        "utf-8"
+    )
     return hmac.new(key, canonical, hashlib.sha256).hexdigest()
 
 
 def _verify_policy_hash(policy: dict, policy_hash: str) -> bool:
-    canonical = json.dumps(policy, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    canonical = json.dumps(policy, separators=(",", ":"), sort_keys=True).encode(
+        "utf-8"
+    )
     return hashlib.sha256(canonical).hexdigest() == policy_hash
 
 
-
-
 def _params_hash(payload: dict | None) -> str:
-    canonical = json.dumps(payload or {}, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    canonical = json.dumps(payload or {}, separators=(",", ":"), sort_keys=True).encode(
+        "utf-8"
+    )
     return hashlib.sha256(canonical).hexdigest()
 
 
 def _error(status_code: int, code: str, message: str) -> HTTPException:
-    return HTTPException(status_code=status_code, detail={"code": code, "message": message})
+    return HTTPException(
+        status_code=status_code, detail={"code": code, "message": message}
+    )
 
 
 def _require_operational_device(
@@ -231,10 +240,14 @@ def _require_operational_device(
     *,
     allow_quarantined: bool = False,
 ) -> AgentDeviceRegistry:
-    reg = session.query(AgentDeviceRegistry).filter(
-        AgentDeviceRegistry.device_id == device.device_id,
-        AgentDeviceRegistry.tenant_id == device.tenant_id,
-    ).first()
+    reg = (
+        session.query(AgentDeviceRegistry)
+        .filter(
+            AgentDeviceRegistry.device_id == device.device_id,
+            AgentDeviceRegistry.tenant_id == device.tenant_id,
+        )
+        .first()
+    )
     if reg is None:
         raise _error(403, "DEVICE_NOT_FOUND", "device not found")
     if reg.status == "revoked":
@@ -261,8 +274,9 @@ def _audit_action(
     }
     if extra:
         details.update(extra)
-    audit_admin_action(action=action, tenant_id=tenant_id, request=request, details=details)
-
+    audit_admin_action(
+        action=action, tenant_id=tenant_id, request=request, details=details
+    )
 
 
 def _normalize_dt(value: datetime) -> datetime:
@@ -283,12 +297,16 @@ def _consume_budget(
     now = _utcnow()
     slot = int(now.timestamp() // window_seconds) * window_seconds
     window_start = datetime.fromtimestamp(slot, tz=UTC)
-    row = session.query(AgentRateBudgetCounter).filter(
-        AgentRateBudgetCounter.tenant_id == tenant_id,
-        AgentRateBudgetCounter.device_id == device_id,
-        AgentRateBudgetCounter.metric == metric,
-        AgentRateBudgetCounter.window_start == window_start,
-    ).first()
+    row = (
+        session.query(AgentRateBudgetCounter)
+        .filter(
+            AgentRateBudgetCounter.tenant_id == tenant_id,
+            AgentRateBudgetCounter.device_id == device_id,
+            AgentRateBudgetCounter.metric == metric,
+            AgentRateBudgetCounter.window_start == window_start,
+        )
+        .first()
+    )
     if row is None:
         row = AgentRateBudgetCounter(
             tenant_id=tenant_id,
@@ -320,13 +338,17 @@ def _validate_command_payload(command_type: str, payload: dict) -> None:
     try:
         model.model_validate(payload)
     except Exception as exc:
-        raise _error(403, "COMMAND_PARAMS_INVALID", "invalid command parameters") from exc
+        raise _error(
+            403, "COMMAND_PARAMS_INVALID", "invalid command parameters"
+        ) from exc
 
 
 def _load_rollout(session: Session, tenant_id: str) -> AgentUpdateRollout:
-    row = session.query(AgentUpdateRollout).filter(
-        AgentUpdateRollout.tenant_id == tenant_id
-    ).first()
+    row = (
+        session.query(AgentUpdateRollout)
+        .filter(AgentUpdateRollout.tenant_id == tenant_id)
+        .first()
+    )
     if row is None:
         row = AgentUpdateRollout(tenant_id=tenant_id)
         session.add(row)
@@ -335,7 +357,9 @@ def _load_rollout(session: Session, tenant_id: str) -> AgentUpdateRollout:
     return row
 
 
-def _rollout_allowed(session: Session, *, tenant_id: str, ring: str) -> tuple[bool, AgentUpdateRollout]:
+def _rollout_allowed(
+    session: Session, *, tenant_id: str, ring: str
+) -> tuple[bool, AgentUpdateRollout]:
     rollout = _load_rollout(session, tenant_id)
     if rollout.kill_switch:
         return False, rollout
@@ -359,11 +383,16 @@ def _rollout_allowed(session: Session, *, tenant_id: str, ring: str) -> tuple[bo
     )
     return ok, rollout
 
+
 def _require_valid_device_identity(session: Session, device: DeviceAuthContext) -> None:
-    row = session.query(AgentDeviceIdentity).filter(
-        AgentDeviceIdentity.device_id == device.device_id,
-        AgentDeviceIdentity.tenant_id == device.tenant_id,
-    ).first()
+    row = (
+        session.query(AgentDeviceIdentity)
+        .filter(
+            AgentDeviceIdentity.device_id == device.device_id,
+            AgentDeviceIdentity.tenant_id == device.tenant_id,
+        )
+        .first()
+    )
     if row is None:
         return
     if row.status == "revoked":
@@ -375,7 +404,11 @@ def _require_valid_device_identity(session: Session, device: DeviceAuthContext) 
         raise _error(403, "CERT_EXPIRED", "certificate expired")
 
 
-@router.post("/cert/enroll", response_model=CertEnrollResponse, responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}})
+@router.post(
+    "/cert/enroll",
+    response_model=CertEnrollResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
 def cert_enroll(body: CertEnrollRequest, request: Request) -> CertEnrollResponse:
     now = _utcnow()
     token_hash = _hash_with_pepper(body.enrollment_token)
@@ -383,7 +416,11 @@ def cert_enroll(body: CertEnrollRequest, request: Request) -> CertEnrollResponse
 
     engine = get_engine()
     with Session(engine) as session:
-        enrollment = session.query(AgentEnrollmentToken).filter(AgentEnrollmentToken.token_hash == token_hash).first()
+        enrollment = (
+            session.query(AgentEnrollmentToken)
+            .filter(AgentEnrollmentToken.token_hash == token_hash)
+            .first()
+        )
         if enrollment is None:
             raise _error(401, "ENROLL_TOKEN_INVALID", "invalid enrollment token")
         if enrollment.expires_at.replace(tzinfo=UTC) < now:
@@ -401,7 +438,9 @@ def cert_enroll(body: CertEnrollRequest, request: Request) -> CertEnrollResponse
             .serial_number(x509.random_serial_number())
             .not_valid_before(now - timedelta(minutes=1))
             .not_valid_after(now + timedelta(days=7))
-            .add_extension(x509.SubjectAlternativeName([x509.DNSName(device_id)]), critical=False)
+            .add_extension(
+                x509.SubjectAlternativeName([x509.DNSName(device_id)]), critical=False
+            )
             .sign(private_key=key, algorithm=hashes.SHA256())
         )
         fingerprint = _device_fingerprint(cert)
@@ -422,7 +461,9 @@ def cert_enroll(body: CertEnrollRequest, request: Request) -> CertEnrollResponse
                 tenant_id=enrollment.tenant_id,
                 cert_fingerprint=fingerprint,
                 cert_pem=cert.public_bytes(serialization.Encoding.PEM).decode("utf-8"),
-                cert_chain_pem=ca_cert.public_bytes(serialization.Encoding.PEM).decode("utf-8"),
+                cert_chain_pem=ca_cert.public_bytes(serialization.Encoding.PEM).decode(
+                    "utf-8"
+                ),
                 cert_not_after=cert.not_valid_after_utc,
                 status="active",
                 last_seen_at=now,
@@ -439,13 +480,21 @@ def cert_enroll(body: CertEnrollRequest, request: Request) -> CertEnrollResponse
         )
         return CertEnrollResponse(
             device_id=device_id,
-            certificate_pem=cert.public_bytes(serialization.Encoding.PEM).decode("utf-8"),
-            certificate_chain_pem=ca_cert.public_bytes(serialization.Encoding.PEM).decode("utf-8"),
+            certificate_pem=cert.public_bytes(serialization.Encoding.PEM).decode(
+                "utf-8"
+            ),
+            certificate_chain_pem=ca_cert.public_bytes(
+                serialization.Encoding.PEM
+            ).decode("utf-8"),
             expires_at=cert.not_valid_after_utc.isoformat(),
         )
 
 
-@router.post("/cert/renew", response_model=CertEnrollResponse, responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}})
+@router.post(
+    "/cert/renew",
+    response_model=CertEnrollResponse,
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
 def cert_renew(
     body: dict,
     request: Request,
@@ -465,7 +514,10 @@ def cert_renew(
         .serial_number(x509.random_serial_number())
         .not_valid_before(now - timedelta(minutes=1))
         .not_valid_after(now + timedelta(days=7))
-        .add_extension(x509.SubjectAlternativeName([x509.DNSName(device.device_id)]), critical=False)
+        .add_extension(
+            x509.SubjectAlternativeName([x509.DNSName(device.device_id)]),
+            critical=False,
+        )
         .sign(private_key=key, algorithm=hashes.SHA256())
     )
 
@@ -473,16 +525,22 @@ def cert_renew(
     with Session(engine) as session:
         _require_valid_device_identity(session, device)
         _require_operational_device(session, device)
-        row = session.query(AgentDeviceIdentity).filter(
-            AgentDeviceIdentity.device_id == device.device_id,
-            AgentDeviceIdentity.tenant_id == device.tenant_id,
-            AgentDeviceIdentity.status != "revoked",
-        ).first()
+        row = (
+            session.query(AgentDeviceIdentity)
+            .filter(
+                AgentDeviceIdentity.device_id == device.device_id,
+                AgentDeviceIdentity.tenant_id == device.tenant_id,
+                AgentDeviceIdentity.status != "revoked",
+            )
+            .first()
+        )
         if row is None:
             raise _error(403, "CERT_REVOKED", "device certificate revoked")
         row.cert_fingerprint = _device_fingerprint(cert)
         row.cert_pem = cert.public_bytes(serialization.Encoding.PEM).decode("utf-8")
-        row.cert_chain_pem = ca_cert.public_bytes(serialization.Encoding.PEM).decode("utf-8")
+        row.cert_chain_pem = ca_cert.public_bytes(serialization.Encoding.PEM).decode(
+            "utf-8"
+        )
         row.cert_not_after = cert.not_valid_after_utc
         row.last_seen_at = now
         session.commit()
@@ -490,22 +548,31 @@ def cert_renew(
     return CertEnrollResponse(
         device_id=device.device_id,
         certificate_pem=cert.public_bytes(serialization.Encoding.PEM).decode("utf-8"),
-        certificate_chain_pem=ca_cert.public_bytes(serialization.Encoding.PEM).decode("utf-8"),
+        certificate_chain_pem=ca_cert.public_bytes(serialization.Encoding.PEM).decode(
+            "utf-8"
+        ),
         expires_at=cert.not_valid_after_utc.isoformat(),
     )
 
 
-@router.get("/cert/status", responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}})
+@router.get(
+    "/cert/status",
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
 def cert_status(
     request: Request,
     device: DeviceAuthContext = Depends(require_device_signature),
 ) -> dict:
     engine = get_engine()
     with Session(engine) as session:
-        row = session.query(AgentDeviceIdentity).filter(
-            AgentDeviceIdentity.device_id == device.device_id,
-            AgentDeviceIdentity.tenant_id == device.tenant_id,
-        ).first()
+        row = (
+            session.query(AgentDeviceIdentity)
+            .filter(
+                AgentDeviceIdentity.device_id == device.device_id,
+                AgentDeviceIdentity.tenant_id == device.tenant_id,
+            )
+            .first()
+        )
         if row is None or row.status == "revoked":
             raise _error(403, "CERT_REVOKED", "certificate revoked")
         cert_not_after = row.cert_not_after
@@ -522,8 +589,22 @@ def cert_status(
         }
 
 
-@router.get("/update/manifest", responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}, 429: {"description": "Too Many Requests"}})
-@router.post("/update/manifest", responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}, 429: {"description": "Too Many Requests"}})
+@router.get(
+    "/update/manifest",
+    responses={
+        401: {"description": "Unauthorized"},
+        403: {"description": "Forbidden"},
+        429: {"description": "Too Many Requests"},
+    },
+)
+@router.post(
+    "/update/manifest",
+    responses={
+        401: {"description": "Unauthorized"},
+        403: {"description": "Forbidden"},
+        429: {"description": "Too Many Requests"},
+    },
+)
 def update_manifest(
     request: Request,
     device: DeviceAuthContext = Depends(require_device_signature),
@@ -564,10 +645,16 @@ def update_manifest(
         "download_url": url,
     }
     signature = _sign_command(payload)
-    return {**payload, "signature": base64.b64encode(signature.encode("utf-8")).decode("utf-8")}
+    return {
+        **payload,
+        "signature": base64.b64encode(signature.encode("utf-8")).decode("utf-8"),
+    }
 
 
-@router.post("/update/report", responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}})
+@router.post(
+    "/update/report",
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
 def report_update_event(
     body: UpdateReportRequest,
     request: Request,
@@ -577,7 +664,10 @@ def report_update_event(
     with Session(engine) as session:
         _require_valid_device_identity(session, device)
         reg = _require_operational_device(session, device, allow_quarantined=True)
-        if str(body.status).lower() in {"failed", "verify_failed"} and (reg.ring or "broad") == "canary":
+        if (
+            str(body.status).lower() in {"failed", "verify_failed"}
+            and (reg.ring or "broad") == "canary"
+        ):
             rollout = _load_rollout(session, device.tenant_id)
             rollout.canary_error_count = int(rollout.canary_error_count) + 1
             if int(rollout.canary_error_count) > int(rollout.canary_error_budget):
@@ -596,7 +686,13 @@ def report_update_event(
     return {"ok": True}
 
 
-@admin_router.post("/commands/issue", responses={429: {"description": "Too Many Requests"}, 403: {"description": "Forbidden"}})
+@admin_router.post(
+    "/commands/issue",
+    responses={
+        429: {"description": "Too Many Requests"},
+        403: {"description": "Forbidden"},
+    },
+)
 def issue_command(body: CommandIssueRequest, request: Request) -> dict:
     tenant_id = require_bound_tenant(request)
     now = _utcnow()
@@ -626,11 +722,17 @@ def issue_command(body: CommandIssueRequest, request: Request) -> dict:
             limit=int(os.getenv("FG_AGENT_COMMANDS_PER_DAY_TENANT", "10000")),
             window_seconds=86400,
         ):
-            raise _error(429, "RATE_LIMIT_TENANT_COMMANDS", "tenant command budget exceeded")
-        device = session.query(AgentDeviceRegistry).filter(
-            AgentDeviceRegistry.device_id == body.device_id,
-            AgentDeviceRegistry.tenant_id == tenant_id,
-        ).first()
+            raise _error(
+                429, "RATE_LIMIT_TENANT_COMMANDS", "tenant command budget exceeded"
+            )
+        device = (
+            session.query(AgentDeviceRegistry)
+            .filter(
+                AgentDeviceRegistry.device_id == body.device_id,
+                AgentDeviceRegistry.tenant_id == tenant_id,
+            )
+            .first()
+        )
         if device is None:
             raise _error(403, "DEVICE_SCOPE_DENIED", "device not found")
         if device.status == "revoked":
@@ -645,14 +747,20 @@ def issue_command(body: CommandIssueRequest, request: Request) -> dict:
             limit=int(os.getenv("FG_AGENT_COMMANDS_PER_DAY_DEVICE", "500")),
             window_seconds=86400,
         ):
-            raise _error(429, "RATE_LIMIT_DEVICE_COMMANDS", "device command budget exceeded")
+            raise _error(
+                429, "RATE_LIMIT_DEVICE_COMMANDS", "device command budget exceeded"
+            )
 
         if body.idempotency_key:
-            existing = session.query(AgentCommand).filter(
-                AgentCommand.tenant_id == tenant_id,
-                AgentCommand.device_id == body.device_id,
-                AgentCommand.idempotency_key == body.idempotency_key,
-            ).first()
+            existing = (
+                session.query(AgentCommand)
+                .filter(
+                    AgentCommand.tenant_id == tenant_id,
+                    AgentCommand.device_id == body.device_id,
+                    AgentCommand.idempotency_key == body.idempotency_key,
+                )
+                .first()
+            )
             if existing is not None:
                 return {
                     "command_id": existing.command_id,
@@ -697,7 +805,10 @@ def issue_command(body: CommandIssueRequest, request: Request) -> dict:
     return {**command_doc, "signature": signature}
 
 
-@router.post("/commands/poll", responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}})
+@router.post(
+    "/commands/poll",
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
 def poll_commands(
     body: CommandLeaseRequest,
     request: Request,
@@ -707,24 +818,41 @@ def poll_commands(
     with Session(engine) as session:
         _require_valid_device_identity(session, device)
         reg = _require_operational_device(session, device)
-        reg = session.query(AgentDeviceRegistry).filter(
-            AgentDeviceRegistry.device_id == device.device_id,
-            AgentDeviceRegistry.tenant_id == device.tenant_id,
-        ).first()
+        reg = (
+            session.query(AgentDeviceRegistry)
+            .filter(
+                AgentDeviceRegistry.device_id == device.device_id,
+                AgentDeviceRegistry.tenant_id == device.tenant_id,
+            )
+            .first()
+        )
         quarantined = bool(reg and reg.status == "quarantined")
         lease_now = _utcnow()
-        rows = session.query(AgentCommand).filter(
-            AgentCommand.device_id == device.device_id,
-            AgentCommand.tenant_id == device.tenant_id,
-            AgentCommand.status == "issued",
-            AgentCommand.expires_at > lease_now,
-        ).order_by(AgentCommand.issued_at.asc()).limit(20).all()
+        rows = (
+            session.query(AgentCommand)
+            .filter(
+                AgentCommand.device_id == device.device_id,
+                AgentCommand.tenant_id == device.tenant_id,
+                AgentCommand.status == "issued",
+                AgentCommand.expires_at > lease_now,
+            )
+            .order_by(AgentCommand.issued_at.asc())
+            .limit(20)
+            .all()
+        )
         commands = []
         for row in rows:
             if row.terminal_state in {"acked", "cancelled", "expired"}:
                 continue
-            lease_expires = _normalize_dt(row.lease_expires_at) if row.lease_expires_at else None
-            if row.lease_owner and lease_expires and lease_expires > lease_now and row.lease_owner != body.controller_id:
+            lease_expires = (
+                _normalize_dt(row.lease_expires_at) if row.lease_expires_at else None
+            )
+            if (
+                row.lease_owner
+                and lease_expires
+                and lease_expires > lease_now
+                and row.lease_owner != body.controller_id
+            ):
                 continue
             row.lease_owner = body.controller_id
             row.lease_expires_at = lease_now + timedelta(seconds=body.lease_seconds)
@@ -740,7 +868,9 @@ def poll_commands(
                 "nonce": row.nonce,
                 "signature": row.signature,
                 "lease_owner": row.lease_owner,
-                "lease_expires_at": row.lease_expires_at.isoformat() if row.lease_expires_at else None,
+                "lease_expires_at": row.lease_expires_at.isoformat()
+                if row.lease_expires_at
+                else None,
                 "attempt_count": row.attempt_count,
             }
             commands.append(doc)
@@ -748,7 +878,10 @@ def poll_commands(
         return {"commands": commands}
 
 
-@router.post("/commands/ack", responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}})
+@router.post(
+    "/commands/ack",
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
 def ack_command(
     body: CommandAckRequest,
     request: Request,
@@ -760,16 +893,25 @@ def ack_command(
     with Session(engine) as session:
         _require_valid_device_identity(session, device)
         _require_operational_device(session, device)
-        row = session.query(AgentCommand).filter(
-            AgentCommand.command_id == body.command_id,
-            AgentCommand.device_id == device.device_id,
-            AgentCommand.tenant_id == device.tenant_id,
-        ).first()
+        row = (
+            session.query(AgentCommand)
+            .filter(
+                AgentCommand.command_id == body.command_id,
+                AgentCommand.device_id == device.device_id,
+                AgentCommand.tenant_id == device.tenant_id,
+            )
+            .first()
+        )
         if row is None:
             raise _error(403, "COMMAND_SCOPE_DENIED", "command not found")
-        if row.terminal_state in {"acked", "cancelled", "expired"} or row.status in {"acked", "failed"}:
+        if row.terminal_state in {"acked", "cancelled", "expired"} or row.status in {
+            "acked",
+            "failed",
+        }:
             raise _error(403, "COMMAND_REPLAY", "command already acknowledged")
-        lease_expires = _normalize_dt(row.lease_expires_at) if row.lease_expires_at else None
+        lease_expires = (
+            _normalize_dt(row.lease_expires_at) if row.lease_expires_at else None
+        )
         if lease_expires and lease_expires < _utcnow():
             row.terminal_state = "expired"
             row.status = "expired"
@@ -804,19 +946,32 @@ def ack_command(
 
 
 @admin_router.post("/quarantine/{device_id}")
-def quarantine_device(device_id: str, body: QuarantineRequest, request: Request) -> dict:
+def quarantine_device(
+    device_id: str, body: QuarantineRequest, request: Request
+) -> dict:
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
     with Session(engine) as session:
-        row = session.query(AgentDeviceRegistry).filter(
-            AgentDeviceRegistry.device_id == device_id,
-            AgentDeviceRegistry.tenant_id == tenant_id,
-        ).first()
+        row = (
+            session.query(AgentDeviceRegistry)
+            .filter(
+                AgentDeviceRegistry.device_id == device_id,
+                AgentDeviceRegistry.tenant_id == tenant_id,
+            )
+            .first()
+        )
         if row is None:
             raise _error(403, "DEVICE_SCOPE_DENIED", "device not found")
         row.status = "quarantined"
         row.suspicious = True
-        session.add(AgentQuarantineEvent(tenant_id=tenant_id, device_id=device_id, action="quarantine_initiated", reason=body.reason))
+        session.add(
+            AgentQuarantineEvent(
+                tenant_id=tenant_id,
+                device_id=device_id,
+                action="quarantine_initiated",
+                reason=body.reason,
+            )
+        )
         session.commit()
     _audit_action(
         action=f"agent-quarantine:{device_id}",
@@ -831,18 +986,31 @@ def quarantine_device(device_id: str, body: QuarantineRequest, request: Request)
 
 
 @admin_router.post("/unquarantine/{device_id}")
-def unquarantine_device(device_id: str, body: QuarantineRequest, request: Request) -> dict:
+def unquarantine_device(
+    device_id: str, body: QuarantineRequest, request: Request
+) -> dict:
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
     with Session(engine) as session:
-        row = session.query(AgentDeviceRegistry).filter(
-            AgentDeviceRegistry.device_id == device_id,
-            AgentDeviceRegistry.tenant_id == tenant_id,
-        ).first()
+        row = (
+            session.query(AgentDeviceRegistry)
+            .filter(
+                AgentDeviceRegistry.device_id == device_id,
+                AgentDeviceRegistry.tenant_id == tenant_id,
+            )
+            .first()
+        )
         if row is None:
             raise _error(403, "DEVICE_SCOPE_DENIED", "device not found")
         row.status = "active"
-        session.add(AgentQuarantineEvent(tenant_id=tenant_id, device_id=device_id, action="quarantine_lifted", reason=body.reason))
+        session.add(
+            AgentQuarantineEvent(
+                tenant_id=tenant_id,
+                device_id=device_id,
+                action="quarantine_lifted",
+                reason=body.reason,
+            )
+        )
         session.commit()
     _audit_action(
         action=f"agent-unquarantine:{device_id}",
@@ -856,7 +1024,10 @@ def unquarantine_device(device_id: str, body: QuarantineRequest, request: Reques
     return {"quarantined": False}
 
 
-@router.get("/policy/fetch", responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}})
+@router.get(
+    "/policy/fetch",
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
 def fetch_policy(
     request: Request,
     device: DeviceAuthContext = Depends(require_device_signature),
@@ -865,10 +1036,15 @@ def fetch_policy(
     with Session(engine) as session:
         _require_valid_device_identity(session, device)
         _require_operational_device(session, device)
-        row = session.query(AgentPolicyBundle).filter(
-            AgentPolicyBundle.tenant_id == device.tenant_id,
-            AgentPolicyBundle.revoked.is_(False),
-        ).order_by(AgentPolicyBundle.created_at.desc()).first()
+        row = (
+            session.query(AgentPolicyBundle)
+            .filter(
+                AgentPolicyBundle.tenant_id == device.tenant_id,
+                AgentPolicyBundle.revoked.is_(False),
+            )
+            .order_by(AgentPolicyBundle.created_at.desc())
+            .first()
+        )
         if row is None:
             raise _error(403, "POLICY_NOT_FOUND", "policy not found")
         if not _verify_policy_hash(row.policy_json, row.policy_hash):
@@ -894,7 +1070,9 @@ def fetch_policy(
 @admin_router.post("/policy/publish")
 def publish_policy(body: PolicyPublishRequest, request: Request) -> dict:
     tenant_id = require_bound_tenant(request)
-    canonical = json.dumps(body.policy_json, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    canonical = json.dumps(
+        body.policy_json, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
     policy_hash = hashlib.sha256(canonical).hexdigest()
     engine = get_engine()
     with Session(engine) as session:
@@ -906,7 +1084,9 @@ def publish_policy(body: PolicyPublishRequest, request: Request) -> dict:
             limit=int(os.getenv("FG_AGENT_POLICY_PUBLISH_PER_DAY", "100")),
             window_seconds=86400,
         ):
-            raise _error(429, "RATE_LIMIT_POLICY_PUBLISH", "policy publish budget exceeded")
+            raise _error(
+                429, "RATE_LIMIT_POLICY_PUBLISH", "policy publish budget exceeded"
+            )
         session.add(
             AgentPolicyBundle(
                 tenant_id=tenant_id,
@@ -934,10 +1114,14 @@ def revoke_policy(policy_hash: str, request: Request) -> dict:
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
     with Session(engine) as session:
-        count = session.query(AgentPolicyBundle).filter(
-            AgentPolicyBundle.tenant_id == tenant_id,
-            AgentPolicyBundle.policy_hash == policy_hash,
-        ).update({"revoked": True})
+        count = (
+            session.query(AgentPolicyBundle)
+            .filter(
+                AgentPolicyBundle.tenant_id == tenant_id,
+                AgentPolicyBundle.policy_hash == policy_hash,
+            )
+            .update({"revoked": True})
+        )
         session.commit()
     _audit_action(
         action="agent-policy-revoke",
@@ -951,7 +1135,10 @@ def revoke_policy(policy_hash: str, request: Request) -> dict:
     return {"revoked": count > 0}
 
 
-@router.post("/log/anchor", responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}})
+@router.post(
+    "/log/anchor",
+    responses={401: {"description": "Unauthorized"}, 403: {"description": "Forbidden"}},
+)
 def anchor_log_hash(
     body: LogAnchorRequest,
     request: Request,
@@ -1010,17 +1197,32 @@ def export_device_evidence(device_id: str, request: Request) -> dict:
     tenant_id = require_bound_tenant(request)
     engine = get_engine()
     with Session(engine) as session:
-        cmds = session.query(AgentCommand).filter(
-            AgentCommand.tenant_id == tenant_id,
-            AgentCommand.device_id == device_id,
-        ).order_by(AgentCommand.issued_at.asc()).all()
-        anchors = session.query(AgentLogAnchor).filter(
-            AgentLogAnchor.tenant_id == tenant_id,
-            AgentLogAnchor.device_id == device_id,
-        ).order_by(AgentLogAnchor.anchored_at.asc()).all()
-        policies = session.query(AgentPolicyBundle).filter(
-            AgentPolicyBundle.tenant_id == tenant_id,
-        ).order_by(AgentPolicyBundle.created_at.asc()).all()
+        cmds = (
+            session.query(AgentCommand)
+            .filter(
+                AgentCommand.tenant_id == tenant_id,
+                AgentCommand.device_id == device_id,
+            )
+            .order_by(AgentCommand.issued_at.asc())
+            .all()
+        )
+        anchors = (
+            session.query(AgentLogAnchor)
+            .filter(
+                AgentLogAnchor.tenant_id == tenant_id,
+                AgentLogAnchor.device_id == device_id,
+            )
+            .order_by(AgentLogAnchor.anchored_at.asc())
+            .all()
+        )
+        policies = (
+            session.query(AgentPolicyBundle)
+            .filter(
+                AgentPolicyBundle.tenant_id == tenant_id,
+            )
+            .order_by(AgentPolicyBundle.created_at.asc())
+            .all()
+        )
 
     bundle = {
         "device_id": device_id,

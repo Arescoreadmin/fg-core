@@ -23,10 +23,14 @@ def _sign_manifest(payload: dict, private_key: ed25519.Ed25519PrivateKey) -> str
 
 def test_invalid_signature_rejected():
     private = ed25519.Ed25519PrivateKey.generate()
-    public = private.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode("utf-8")
+    public = (
+        private.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("utf-8")
+    )
 
     payload = {
         "version": "2.0.1",
@@ -52,4 +56,6 @@ def test_rollback_attempt_rejected():
 
 def test_corrupted_binary_rejected():
     binary = b"binary-data"
-    assert not verify_update_payload(binary + b"x", hashlib.sha256(binary).hexdigest(), len(binary))
+    assert not verify_update_payload(
+        binary + b"x", hashlib.sha256(binary).hexdigest(), len(binary)
+    )
