@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "required": ["id", "version", "name", "colors"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string"},
+    "version": {"type": "string"},
+    "name": {"type": "string"},
+    "colors": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    }
+  }
+}
