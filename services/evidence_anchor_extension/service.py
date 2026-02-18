@@ -8,8 +8,9 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
 from sqlalchemy import text
+
+from services.schema_validation import validate_payload_against_schema
 from sqlalchemy.orm import Session
 
 from services.evidence_anchor_extension.models import EvidenceAnchorCreate
@@ -34,7 +35,7 @@ def safe_path_join(base: Path, *parts: str) -> Path:
 def _write_anchor_receipt(payload: dict[str, object]) -> str:
     schema_path = Path("contracts/artifacts/anchor_receipt.schema.json")
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
-    Draft202012Validator(schema).validate(payload)
+    validate_payload_against_schema(payload, schema)
 
     receipt_id = str(payload.get("receipt_id") or "")
     if not _SAFE_ID_RE.fullmatch(receipt_id):

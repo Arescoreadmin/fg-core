@@ -264,3 +264,22 @@ Direct invocation:
 PYTHONPATH=. .venv/bin/python tools/ci/sync_soc_manifest_status.py --mode verify --fail-on-unresolved-p0
 PYTHONPATH=. .venv/bin/python tools/ci/sync_soc_manifest_status.py --mode sync --write
 ```
+
+
+## 2026-02-18 Additive Security/Platform Gate Update
+
+Reviewed critical-path additive changes for SOC-HIGH-002 coverage:
+- `api/auth_federation.py`
+- `api/middleware/resilience_guard.py`
+- `tools/ci/check_openapi_security_diff.py`
+- `tools/ci/check_artifact_policy.py`
+- `tools/ci/check_governance_invariants.py`
+- `tools/ci/check_plane_registry.py`
+- `tools/ci/check_route_inventory.py`
+- `tools/ci/check_security_regression_gates.py`
+- `tools/ci/openapi_baseline.json`
+- `tools/ci/protected_routes_allowlist.json`
+- `tools/ci/artifact_policy_allowlist.json`
+- `tools/ci/route_inventory.json`
+
+Disposition: additive-only governance hardening; no route removals; deterministic gate/test coverage added.

@@ -5,8 +5,9 @@ import json
 import os
 from datetime import datetime, timezone
 
-from jsonschema import Draft202012Validator
 from sqlalchemy import text
+
+from services.schema_validation import validate_payload_against_schema
 from sqlalchemy.orm import Session
 
 from services.ai_plane_extension import policy_engine, rag_stub
@@ -216,7 +217,7 @@ def write_ai_plane_evidence(
     }
     with open(schema_path, encoding="utf-8") as f:
         schema = json.load(f)
-    Draft202012Validator(schema).validate(payload)
+    validate_payload_against_schema(payload, schema)
 
     tmp_path = f"{out_path}.tmp"
     with open(tmp_path, "w", encoding="utf-8") as f:
