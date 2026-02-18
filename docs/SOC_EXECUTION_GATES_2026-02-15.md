@@ -292,3 +292,10 @@ Reviewed formatting-only edits to critical paths:
 - `api/middleware/resilience_guard.py`
 
 Disposition: no semantic change; formatting normalization only.
+
+
+## 2026-02-18 Security Review Sync Update
+
+- Updated SOC review for Enterprise AI Console route additions and corresponding route inventory regeneration (`tools/ci/route_inventory.json`).
+- Confirmed `tools/ci/validate_ai_contracts.py` is part of security-critical CI surface and remains enforced through `fg-contract`/CI lanes.
+- Re-validated that `route-inventory-audit` and `soc-review-sync` must pass before merge.
