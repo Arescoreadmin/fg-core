@@ -19,7 +19,12 @@ def admin_headers() -> dict[str, str]:
 def enroll_device(client: TestClient) -> dict[str, str]:
     issue = client.post(
         "/admin/agent/enrollment-tokens",
-        json={"reason": "provision endpoint", "ticket": "CHG-100", "ttl_minutes": 15, "max_uses": 1},
+        json={
+            "reason": "provision endpoint",
+            "ticket": "CHG-100",
+            "ttl_minutes": 15,
+            "max_uses": 1,
+        },
         headers=admin_headers(),
     )
     assert issue.status_code == 200
@@ -32,12 +37,23 @@ def enroll_device(client: TestClient) -> dict[str, str]:
     return enroll.json()
 
 
-def signed_headers(path: str, body: dict, key_id: str, secret: str, ts: int | None = None, nonce: str | None = None) -> dict[str, str]:
+def signed_headers(
+    path: str,
+    body: dict,
+    key_id: str,
+    secret: str,
+    ts: int | None = None,
+    nonce: str | None = None,
+) -> dict[str, str]:
     ts_s = str(ts or int(time.time()))
     nonce_s = nonce or uuid.uuid4().hex[:24]
-    body_hash = hashlib.sha256(json.dumps(body, separators=(",", ":"), sort_keys=True).encode("utf-8")).hexdigest()
+    body_hash = hashlib.sha256(
+        json.dumps(body, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    ).hexdigest()
     canonical = "\n".join(["POST", path, body_hash, ts_s, nonce_s])
-    sig = hmac.new(secret.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
+    sig = hmac.new(
+        secret.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
     return {
         "X-FG-DEVICE-KEY": key_id,
         "X-FG-TS": ts_s,

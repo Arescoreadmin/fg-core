@@ -179,7 +179,9 @@ class AgentDeviceRegistry(Base):
     tenant_id = Column(String(128), nullable=False, index=True)
     fingerprint_hash = Column(String(64), nullable=False)
     status = Column(String(16), nullable=False, default="active", index=True)
-    suspicious = Column(Boolean, nullable=False, default=False, server_default=text("0"))
+    suspicious = Column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
@@ -196,7 +198,10 @@ class AgentDeviceKey(Base):
 
     id = Column(Integer, primary_key=True)
     device_id = Column(
-        String(64), ForeignKey("agent_device_registry.device_id"), nullable=False, index=True
+        String(64),
+        ForeignKey("agent_device_registry.device_id"),
+        nullable=False,
+        index=True,
     )
     tenant_id = Column(String(128), nullable=False, index=True)
     key_prefix = Column(String(32), nullable=False, unique=True, index=True)
@@ -228,7 +233,6 @@ class AgentDeviceNonce(Base):
         default=utcnow,
         server_default=func.now(),
     )
-
 
 
 class ConfigVersion(Base):

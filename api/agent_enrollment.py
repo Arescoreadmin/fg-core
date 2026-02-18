@@ -20,7 +20,12 @@ from sqlalchemy.orm import Session
 
 from api.auth_scopes import hash_key
 from api.db import get_engine
-from api.db_models import AgentDeviceKey, AgentDeviceNonce, AgentDeviceRegistry, AgentEnrollmentToken
+from api.db_models import (
+    AgentDeviceKey,
+    AgentDeviceNonce,
+    AgentDeviceRegistry,
+    AgentEnrollmentToken,
+)
 from api.security_audit import audit_admin_action
 
 log = logging.getLogger("frostgate.agent")
@@ -73,7 +78,9 @@ class _KEK:
 
 
 def _token_pepper() -> str:
-    pepper = (os.getenv("FG_AGENT_TOKEN_PEPPER") or os.getenv("FG_KEY_PEPPER") or "").strip()
+    pepper = (
+        os.getenv("FG_AGENT_TOKEN_PEPPER") or os.getenv("FG_KEY_PEPPER") or ""
+    ).strip()
     if not pepper:
         raise RuntimeError("FG_AGENT_TOKEN_PEPPER or FG_KEY_PEPPER is required")
     return pepper
@@ -170,7 +177,9 @@ def _fingerprint_hash(fingerprint: str) -> str:
 def _body_hash(raw: bytes) -> str:
     try:
         obj = json.loads(raw.decode("utf-8")) if raw else {}
-        canonical = json.dumps(obj, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        canonical = json.dumps(obj, separators=(",", ":"), sort_keys=True).encode(
+            "utf-8"
+        )
     except Exception:
         canonical = raw
     return hashlib.sha256(canonical).hexdigest()
@@ -185,11 +194,15 @@ def _canonical_path_with_query(request: Request) -> str:
     return f"{path}?{urlencode(query_items, doseq=True)}"
 
 
-def _canonical_request(method: str, path_with_query: str, body_hash: str, ts: str, nonce: str) -> str:
+def _canonical_request(
+    method: str, path_with_query: str, body_hash: str, ts: str, nonce: str
+) -> str:
     return "\n".join([method.upper(), path_with_query, body_hash, ts, nonce])
 
 
-def _request_metadata(request: Request, body: AgentHeartbeatRequest | AgentEnrollRequest | None = None) -> dict[str, str]:
+def _request_metadata(
+    request: Request, body: AgentHeartbeatRequest | AgentEnrollRequest | None = None
+) -> dict[str, str]:
     payload = {
         "ip": request.client.host if request.client else "",
         "ua": request.headers.get("user-agent", ""),
@@ -276,7 +289,9 @@ async def _validate_signed_request(request: Request, device_secret: str) -> None
     try:
         ts = int(ts_raw)
     except ValueError as exc:
-        raise HTTPException(status_code=401, detail="invalid signature timestamp") from exc
+        raise HTTPException(
+            status_code=401, detail="invalid signature timestamp"
+        ) from exc
 
     now = int(time.time())
     if ts > now + _CLOCK_SKEW_SECONDS:
@@ -337,7 +352,11 @@ async def require_device_signature(request: Request) -> DeviceAuthContext:
 
     engine = get_engine()
     with Session(engine) as session:
-        key_row = session.query(AgentDeviceKey).filter(AgentDeviceKey.key_prefix == key_id).first()
+        key_row = (
+            session.query(AgentDeviceKey)
+            .filter(AgentDeviceKey.key_prefix == key_id)
+            .first()
+        )
         if key_row is None:
             raise HTTPException(status_code=401, detail="invalid device key id")
         device = (
@@ -375,16 +394,26 @@ async def require_device_signature(request: Request) -> DeviceAuthContext:
 
         request.state.device_id = device.device_id
         request.state.tenant_id = device.tenant_id
-        return DeviceAuthContext(device_id=device.device_id, tenant_id=device.tenant_id, key_row_id=key_row.id)
+        return DeviceAuthContext(
+            device_id=device.device_id,
+            tenant_id=device.tenant_id,
+            key_row_id=key_row.id,
+        )
 
 
 @router.post(
     "/enroll",
     response_model=AgentEnrollResponse,
-    responses={401: {"description": "Unauthorized"}, 429: {"description": "Too Many Requests"}},
+    responses={
+        401: {"description": "Unauthorized"},
+        429: {"description": "Too Many Requests"},
+    },
 )
 def enroll_agent(body: AgentEnrollRequest, request: Request) -> AgentEnrollResponse:
-    if request.headers.get("content-length") and int(request.headers["content-length"]) > _MAX_BODY_BYTES:
+    if (
+        request.headers.get("content-length")
+        and int(request.headers["content-length"]) > _MAX_BODY_BYTES
+    ):
         raise HTTPException(status_code=413, detail="payload too large")
 
     now = _utcnow()
@@ -408,7 +437,9 @@ def enroll_agent(body: AgentEnrollRequest, request: Request) -> AgentEnrollRespo
             raise HTTPException(status_code=401, detail="enrollment token already used")
 
         device_id = f"dev_{secrets.token_hex(16)}"
-        device_secret, device_key_prefix, key_hash, key_lookup, hash_alg = _mint_device_secret()
+        device_secret, device_key_prefix, key_hash, key_lookup, hash_alg = (
+            _mint_device_secret()
+        )
 
         device = AgentDeviceRegistry(
             device_id=device_id,
@@ -472,13 +503,21 @@ def agent_heartbeat(
     request: Request,
     device: DeviceAuthContext = Depends(require_device_signature),
 ) -> AgentHeartbeatResponse:
-    if not _HEARTBEAT_LIMITER.allow(f"d:{device.device_id}", rate_per_sec=1 / 60.0, burst=3):
+    if not _HEARTBEAT_LIMITER.allow(
+        f"d:{device.device_id}", rate_per_sec=1 / 60.0, burst=3
+    ):
         raise HTTPException(status_code=429, detail="device heartbeat rate limited")
-    if not _HEARTBEAT_LIMITER.allow(f"t:{device.tenant_id}", rate_per_sec=2.0, burst=60):
+    if not _HEARTBEAT_LIMITER.allow(
+        f"t:{device.tenant_id}", rate_per_sec=2.0, burst=60
+    ):
         raise HTTPException(status_code=429, detail="tenant heartbeat rate limited")
 
-    if (os.getenv("FG_AGENT_RATE_LIMIT_MODE") or "in-memory").strip().lower() == "in-memory":
-        log.debug("agent rate limiting uses local in-memory buckets (single-process scope)")
+    if (
+        os.getenv("FG_AGENT_RATE_LIMIT_MODE") or "in-memory"
+    ).strip().lower() == "in-memory":
+        log.debug(
+            "agent rate limiting uses local in-memory buckets (single-process scope)"
+        )
 
     now = _utcnow()
 
@@ -549,9 +588,15 @@ def rotate_device_key(
             .first()
         )
         if reg is None or reg.status in {"revoked", "quarantined"}:
-            raise HTTPException(status_code=403, detail="device not eligible for rotation")
+            raise HTTPException(
+                status_code=403, detail="device not eligible for rotation"
+            )
 
-        old_key = session.query(AgentDeviceKey).filter(AgentDeviceKey.id == device.key_row_id).first()
+        old_key = (
+            session.query(AgentDeviceKey)
+            .filter(AgentDeviceKey.id == device.key_row_id)
+            .first()
+        )
         if old_key is None:
             raise HTTPException(status_code=401, detail="invalid device key id")
         old_key.enabled = False

@@ -11,7 +11,12 @@ def test_enrollment_token_issue_then_enroll(build_app):
 
     issue = client.post(
         "/admin/agent/enrollment-tokens",
-        json={"ttl_minutes": 15, "max_uses": 1, "reason": "new install", "ticket": "INC-1"},
+        json={
+            "ttl_minutes": 15,
+            "max_uses": 1,
+            "reason": "new install",
+            "ticket": "INC-1",
+        },
         headers=admin_headers(),
     )
     assert issue.status_code == 200
@@ -43,5 +48,7 @@ def test_enrollment_token_issue_then_enroll(build_app):
 def test_enrollment_requires_reason_ticket(build_app):
     app = build_app()
     client = TestClient(app)
-    res = client.post("/admin/agent/enrollment-tokens", json={}, headers=admin_headers())
+    res = client.post(
+        "/admin/agent/enrollment-tokens", json={}, headers=admin_headers()
+    )
     assert res.status_code == 422

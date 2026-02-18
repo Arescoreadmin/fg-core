@@ -62,7 +62,9 @@ def _utcnow() -> datetime:
 
 
 def _token_hash(raw: str) -> str:
-    pepper = (os.getenv("FG_AGENT_TOKEN_PEPPER") or os.getenv("FG_KEY_PEPPER") or "").strip()
+    pepper = (
+        os.getenv("FG_AGENT_TOKEN_PEPPER") or os.getenv("FG_KEY_PEPPER") or ""
+    ).strip()
     if not pepper:
         raise RuntimeError("FG_AGENT_TOKEN_PEPPER or FG_KEY_PEPPER is required")
     return hashlib.sha256(f"{pepper}:{raw}".encode("utf-8")).hexdigest()
@@ -93,7 +95,11 @@ class DeviceInfo(BaseModel):
     last_version: str | None
 
 
-@router.post("/enrollment-tokens", response_model=EnrollmentTokenCreateResponse, responses={429: {"description": "Too Many Requests"}})
+@router.post(
+    "/enrollment-tokens",
+    response_model=EnrollmentTokenCreateResponse,
+    responses={429: {"description": "Too Many Requests"}},
+)
 def create_enrollment_token(
     body: EnrollmentTokenCreateRequest,
     request: Request,
@@ -102,14 +108,22 @@ def create_enrollment_token(
     auth_ctx = getattr(request.state, "auth", None)
     actor_id = getattr(auth_ctx, "key_prefix", None) or "admin"
 
-    if not _TOKEN_ISSUE_LIMITER.allow(f"tenant:{tenant_id}", rate_per_sec=1 / 30.0, burst=3):
-        raise HTTPException(status_code=429, detail="tenant token issuance rate limited")
-    if not _TOKEN_ISSUE_LIMITER.allow(f"actor:{actor_id}", rate_per_sec=1 / 60.0, burst=2):
+    if not _TOKEN_ISSUE_LIMITER.allow(
+        f"tenant:{tenant_id}", rate_per_sec=1 / 30.0, burst=3
+    ):
+        raise HTTPException(
+            status_code=429, detail="tenant token issuance rate limited"
+        )
+    if not _TOKEN_ISSUE_LIMITER.allow(
+        f"actor:{actor_id}", rate_per_sec=1 / 60.0, burst=2
+    ):
         raise HTTPException(status_code=429, detail="admin token issuance rate limited")
 
     raw = f"agt_{secrets.token_urlsafe(24)}"
     expires_at = _utcnow() + timedelta(minutes=body.ttl_minutes)
-    max_active_per_tenant = int(os.getenv("FG_AGENT_MAX_ACTIVE_TOKENS_PER_TENANT", "10"))
+    max_active_per_tenant = int(
+        os.getenv("FG_AGENT_MAX_ACTIVE_TOKENS_PER_TENANT", "10")
+    )
 
     engine = get_engine()
     with Session(engine) as session:
@@ -123,7 +137,9 @@ def create_enrollment_token(
             .scalar()
         )
         if int(active_count or 0) >= max_active_per_tenant:
-            raise HTTPException(status_code=429, detail="too many active enrollment tokens for tenant")
+            raise HTTPException(
+                status_code=429, detail="too many active enrollment tokens for tenant"
+            )
 
         session.add(
             AgentEnrollmentToken(
@@ -181,7 +197,9 @@ def list_devices(
                     tenant_id=row.tenant_id,
                     status=row.status,
                     suspicious=bool(row.suspicious),
-                    last_seen_at=(row.last_seen_at.isoformat() if row.last_seen_at else None),
+                    last_seen_at=(
+                        row.last_seen_at.isoformat() if row.last_seen_at else None
+                    ),
                     last_ip=row.last_ip,
                     last_version=row.last_version,
                 )

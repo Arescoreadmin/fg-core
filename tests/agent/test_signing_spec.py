@@ -26,7 +26,9 @@ def test_shared_signing_vector() -> None:
         json.dumps(body, separators=(",", ":"), sort_keys=True).encode("utf-8")
     ).hexdigest()
     canonical = _canonical_request(method, path, body_hash, ts, nonce)
-    sig = hmac.new(secret.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
+    sig = hmac.new(
+        secret.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
 
     assert canonical == (
         "POST\n"

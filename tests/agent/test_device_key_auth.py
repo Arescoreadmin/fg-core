@@ -6,7 +6,12 @@ from tests.agent.helpers import admin_headers, enroll_device, signed_headers
 
 
 def _heartbeat_body() -> dict:
-    return {"ts": "2026-01-01T00:00:00Z", "agent_version": "1.0.0", "os": "linux", "hostname": "h"}
+    return {
+        "ts": "2026-01-01T00:00:00Z",
+        "agent_version": "1.0.0",
+        "os": "linux",
+        "hostname": "h",
+    }
 
 
 def test_heartbeat_valid_signature(build_app):
@@ -14,7 +19,9 @@ def test_heartbeat_valid_signature(build_app):
     client = TestClient(app)
     enrolled = enroll_device(client)
     body = _heartbeat_body()
-    headers = signed_headers("/agent/heartbeat", body, enrolled["device_key_prefix"], enrolled["device_key"])
+    headers = signed_headers(
+        "/agent/heartbeat", body, enrolled["device_key_prefix"], enrolled["device_key"]
+    )
     res = client.post("/agent/heartbeat", headers=headers, json=body)
     assert res.status_code == 200
     assert res.json()["status"] == "ok"
@@ -25,11 +32,15 @@ def test_revoked_device_key_fails(build_app):
     client = TestClient(app)
     enrolled = enroll_device(client)
 
-    revoke = client.post(f"/admin/agent/devices/{enrolled['device_id']}/revoke", headers=admin_headers())
+    revoke = client.post(
+        f"/admin/agent/devices/{enrolled['device_id']}/revoke", headers=admin_headers()
+    )
     assert revoke.status_code == 200
 
     body = _heartbeat_body()
-    headers = signed_headers("/agent/heartbeat", body, enrolled["device_key_prefix"], enrolled["device_key"])
+    headers = signed_headers(
+        "/agent/heartbeat", body, enrolled["device_key_prefix"], enrolled["device_key"]
+    )
     denied = client.post("/agent/heartbeat", headers=headers, json=body)
     assert denied.status_code == 403
 
@@ -58,7 +69,11 @@ def test_signature_edge_cases(build_app):
     enrolled = enroll_device(client)
     body = _heartbeat_body()
 
-    missing = client.post("/agent/heartbeat", json=body, headers={"X-FG-DEVICE-KEY": enrolled["device_key_prefix"]})
+    missing = client.post(
+        "/agent/heartbeat",
+        json=body,
+        headers={"X-FG-DEVICE-KEY": enrolled["device_key_prefix"]},
+    )
     assert missing.status_code == 401
 
     future_headers = signed_headers(

@@ -181,11 +181,19 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 conn, "security_audit_log", "entry_hash", "TEXT"
             )
         if "agent_enrollment_tokens" in tables:
-            _sqlite_add_column_if_missing(conn, "agent_enrollment_tokens", "created_by", "TEXT DEFAULT 'unknown'")
-            _sqlite_add_column_if_missing(conn, "agent_enrollment_tokens", "reason", "TEXT DEFAULT 'unspecified'")
-            _sqlite_add_column_if_missing(conn, "agent_enrollment_tokens", "ticket", "TEXT")
+            _sqlite_add_column_if_missing(
+                conn, "agent_enrollment_tokens", "created_by", "TEXT DEFAULT 'unknown'"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "agent_enrollment_tokens", "reason", "TEXT DEFAULT 'unspecified'"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "agent_enrollment_tokens", "ticket", "TEXT"
+            )
         if "agent_device_keys" in tables:
-            _sqlite_add_column_if_missing(conn, "agent_device_keys", "hmac_secret_enc", "TEXT DEFAULT ''")
+            _sqlite_add_column_if_missing(
+                conn, "agent_device_keys", "hmac_secret_enc", "TEXT DEFAULT ''"
+            )
 
         conn.exec_driver_sql(
             """
