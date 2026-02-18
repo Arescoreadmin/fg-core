@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frostgate/contracts/artifacts/ai_plane_evidence.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "git_sha",
+    "timestamp",
+    "feature_flag_snapshot",
+    "total_inference_calls",
+    "total_blocked_calls",
+    "total_policy_violations",
+    "simulated_mode",
+    "route_snapshot"
+  ],
+  "properties": {
+    "git_sha": {"type": "string", "minLength": 1},
+    "timestamp": {"type": "string", "minLength": 1},
+    "feature_flag_snapshot": {"type": "object"},
+    "total_inference_calls": {"type": "integer", "minimum": 0},
+    "total_blocked_calls": {"type": "integer", "minimum": 0},
+    "total_policy_violations": {"type": "integer", "minimum": 0},
+    "simulated_mode": {"type": "boolean", "const": true},
+    "route_snapshot": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^/ai/"}
+    }
+  }
+}

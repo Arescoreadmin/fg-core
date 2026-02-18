@@ -1,0 +1,18 @@
+{
+  "models": [
+    {
+      "model_id": "fg-gpt-safe-1",
+      "provider": "internal",
+      "model_name": "FG GPT Safe 1",
+      "risk_tier": "medium",
+      "metadata_json": "{\"region\":\"us\",\"purpose\":\"governed_assist\"}"
+    },
+    {
+      "model_id": "fg-embed-1",
+      "provider": "internal",
+      "model_name": "FG Embed 1",
+      "risk_tier": "low",
+      "metadata_json": "{\"region\":\"us\",\"purpose\":\"retrieval\"}"
+    }
+  ]
+}

@@ -14,9 +14,11 @@ from api.auth_scopes import require_bound_tenant, require_scopes, verify_api_key
 from api.config.startup_validation import compliance_module_enabled
 from api.deps import tenant_db_required
 from api.db_models import PolicyChangeRequest as PolicyChangeRequestModel
+from services.governance_risk_extension import GovernanceRiskExtension
 
 log = logging.getLogger("frostgate.governance")
 _security_log = logging.getLogger("frostgate.security")
+risk_extension = GovernanceRiskExtension()
 
 
 def _utcnow() -> datetime:
@@ -165,6 +167,12 @@ def create_change(
         tenant_id = _require_known_tenant(request)
         change_id = f"pcr-{uuid.uuid4().hex[:8]}"
 
+        risk_meta = risk_extension.evaluate(
+            proposed_by=req.proposed_by,
+            approver="",
+            required_roles=["security-lead", "ciso"],
+        )
+
         model = PolicyChangeRequestModel(
             change_id=change_id,
             tenant_id=tenant_id,
@@ -174,7 +182,7 @@ def create_change(
             justification=req.justification,
             rule_definition_json=req.rule_definition,
             roe_update_json=req.roe_update,
-            simulation_results_json={},
+            simulation_results_json={"governance_risk": risk_meta},
             estimated_false_positives=0,
             estimated_true_positives=0,
             confidence="medium",
@@ -244,6 +252,13 @@ def approve_change(
 
         # Check if fully approved
         required = model.requires_approval_from_json or []
+        risk_eval = risk_extension.evaluate(
+            proposed_by=model.proposed_by,
+            approver=req.approver,
+            required_roles=list(required),
+        )
+        if risk_eval.get("enabled") and not risk_eval.get("sod_ok"):
+            raise HTTPException(status_code=403, detail="governance_sod_violation")
         if len(approvals) >= len(required):
             model.status = "deployed"
             model.deployed_at = _utcnow()

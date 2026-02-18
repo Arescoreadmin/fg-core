@@ -1,0 +1,16 @@
+{
+  "protected_prefixes": [
+    "/ai/infer",
+    "/ai-plane/",
+    "/auth/federation/validate",
+    "/breakglass/",
+    "/exceptions/",
+    "/evidence/",
+    "/planes"
+  ],
+  "waived_401_403": {
+    "GET /evidence/bundles/{bundle_id}": "legacy endpoint pending response contract hardening",
+    "POST /evidence/bundles": "legacy endpoint pending response contract hardening",
+    "POST /evidence/verify": "legacy endpoint pending response contract hardening"
+  }
+}
