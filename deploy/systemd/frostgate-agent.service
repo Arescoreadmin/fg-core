@@ -1,0 +1,19 @@
+[Unit]
+Description=FrostGate Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/frostgate-agent
+Restart=always
+RestartSec=5
+User=frostgate-agent
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/frostgate-agent /etc/frostgate/agent
+
+[Install]
+WantedBy=multi-user.target
