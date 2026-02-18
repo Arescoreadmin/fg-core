@@ -36,8 +36,7 @@ def _get_key_pepper() -> str:
         return pepper
     if is_production_env():
         raise RuntimeError("FG_KEY_PEPPER is required in production")
-    log.warning("FG_KEY_PEPPER not set; using dev default pepper")
-    return "dev-unsafe-pepper"
+    raise RuntimeError("FG_KEY_PEPPER is required")
 
 
 def _key_lookup_hash(secret: str, pepper: str) -> str:
