@@ -1,7 +1,8 @@
-$ErrorActionPreference = "Stop"
 param(
   [string]$ExePath = "dist/frostgate-agent.exe"
 )
+
+$ErrorActionPreference = "Stop"
 
 if (-not $env:FG_SIGN_CERT_PATH -or -not $env:FG_SIGN_CERT_PASSWORD) {
   Write-Host "No signing certificate configured; leaving artifact unsigned"
