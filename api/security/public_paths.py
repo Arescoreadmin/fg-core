@@ -14,6 +14,9 @@ PUBLIC_PATHS_EXACT: tuple[str, ...] = (
     "/status",
     "/v1/status",
     "/stats/debug",
+    "/agent/enroll",
+    "/agent/heartbeat",
+    "/agent/key/rotate",
 )
 
 PUBLIC_PATHS_PREFIX: tuple[str, ...] = (

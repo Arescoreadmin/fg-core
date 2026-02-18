@@ -1,0 +1,16 @@
+{
+  "id": "policy-default",
+  "version": "1.0.0",
+  "allowed_providers": [
+    "simulated"
+  ],
+  "default_provider": "simulated",
+  "default_model": "SIMULATED_V1",
+  "tenant_max_tokens_per_day": 100000,
+  "device_max_tokens_per_day": 25000,
+  "pii_deny_terms": [
+    "private key",
+    "social security"
+  ],
+  "max_tokens_per_request": 4096
+}
