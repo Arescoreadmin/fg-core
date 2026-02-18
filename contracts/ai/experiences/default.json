@@ -1,0 +1,12 @@
+{
+  "id": "experience-default",
+  "version": "1.0.0",
+  "tenant_id": "tenant-dev",
+  "policy_id": "policy-default",
+  "theme_id": "theme-default",
+  "is_default": true,
+  "capabilities": {
+    "chat": true,
+    "search": false
+  }
+}

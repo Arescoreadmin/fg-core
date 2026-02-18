@@ -384,6 +384,81 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             )
             """
         )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS ai_device_registry (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                device_id TEXT NOT NULL,
+                enabled BOOLEAN NOT NULL DEFAULT 0,
+                registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                telemetry_json TEXT NOT NULL DEFAULT '{}',
+                UNIQUE(tenant_id, device_id)
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS ai_token_usage (
+                id INTEGER PRIMARY KEY,
+                usage_record_id TEXT NOT NULL UNIQUE,
+                tenant_id TEXT NOT NULL,
+                device_id TEXT NOT NULL,
+                user_id TEXT,
+                persona TEXT NOT NULL DEFAULT 'default',
+                provider TEXT NOT NULL,
+                model TEXT NOT NULL,
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                usage_day TEXT NOT NULL,
+                metering_mode TEXT NOT NULL DEFAULT 'unknown',
+                estimation_mode TEXT NOT NULL DEFAULT 'estimated',
+                request_hash TEXT NOT NULL,
+                policy_hash TEXT NOT NULL,
+                experience_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_ai_token_usage_tenant_day ON ai_token_usage(tenant_id, usage_day)"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_ai_token_usage_tenant_device_day ON ai_token_usage(tenant_id, device_id, usage_day)"
+        )
+        conn.exec_driver_sql(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_token_usage_record_id ON ai_token_usage(usage_record_id)"
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS ai_quota_daily (
+                id INTEGER PRIMARY KEY,
+                quota_scope TEXT NOT NULL,
+                tenant_id TEXT NOT NULL,
+                device_id TEXT,
+                usage_day TEXT NOT NULL,
+                token_limit INTEGER NOT NULL DEFAULT 0,
+                used_tokens INTEGER NOT NULL DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                UNIQUE(quota_scope, usage_day)
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_ai_quota_daily_tenant_day ON ai_quota_daily(tenant_id, usage_day)"
+        )
+        if "ai_token_usage" in tables:
+            _sqlite_add_column_if_missing(
+                conn, "ai_token_usage", "usage_record_id", "TEXT"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "ai_token_usage", "metering_mode", "TEXT DEFAULT 'unknown'"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "ai_token_usage", "estimation_mode", "TEXT DEFAULT 'estimated'"
+            )
         if "ai_inference_records" in tables:
             _sqlite_add_column_if_missing(
                 conn, "ai_inference_records", "inference_id", "TEXT"

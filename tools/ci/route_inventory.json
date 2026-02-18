@@ -76,6 +76,36 @@
     "tenant_bound": true
   },
   {
+    "file": "api/ui_ai_console.py",
+    "method": "GET",
+    "path": "/admin/devices",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "POST",
+    "path": "/admin/devices/{device_id}/disable",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "POST",
+    "path": "/admin/devices/{device_id}/enable",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
     "file": "api/admin.py",
     "method": "GET",
     "path": "/admin/keys",
@@ -1278,6 +1308,48 @@
     "tenant_bound": false
   },
   {
+    "file": "api/ui_ai_console.py",
+    "method": "GET",
+    "path": "/ui/ai",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "POST",
+    "path": "/ui/ai/chat",
+    "scoped": true,
+    "scopes": [
+      "ai:chat",
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "GET",
+    "path": "/ui/ai/experience",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "GET",
+    "path": "/ui/ai/usage",
+    "scoped": true,
+    "scopes": [
+      "ai:chat",
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
     "file": "api/ui_audit_dashboard.py",
     "method": "GET",
     "path": "/ui/audit/chain-integrity",
@@ -1451,6 +1523,28 @@
     "path": "/ui/decisions",
     "scoped": true,
     "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "POST",
+    "path": "/ui/devices/{device_id}/disable",
+    "scoped": true,
+    "scopes": [
+      "admin:write",
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "POST",
+    "path": "/ui/devices/{device_id}/enable",
+    "scoped": true,
+    "scopes": [
+      "admin:write",
       "ui:read"
     ],
     "tenant_bound": true

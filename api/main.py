@@ -39,6 +39,8 @@ from api.ui_dashboards import router as ui_dashboards_router
 from api.audit import router as audit_router
 from api.ui_audit_dashboard import router as ui_audit_dashboard_router
 from api.ui_compliance_dashboard import router as ui_compliance_dashboard_router
+from api.ui_ai_console import admin_router as ui_ai_admin_router
+from api.ui_ai_console import router as ui_ai_router
 from api.compliance import router as compliance_router
 from api.billing import router as billing_router
 from api.compliance_cp_extension import router as compliance_cp_extension_router
@@ -515,6 +517,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         app.include_router(ui_dashboards_router)
         app.include_router(ui_audit_dashboard_router)
         app.include_router(ui_compliance_dashboard_router)
+        app.include_router(ui_ai_router)
+        app.include_router(ui_ai_admin_router)
 
     app.include_router(keys_router)
     app.include_router(forensics_router)

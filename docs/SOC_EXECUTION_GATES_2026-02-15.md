@@ -294,14 +294,8 @@ Reviewed formatting-only edits to critical paths:
 Disposition: no semantic change; formatting normalization only.
 
 
-## SOC Sync Update (2026-02-18)
+## 2026-02-18 Security Review Sync Update
 
-Reviewed security-critical changes in this branch for:
-- `.github/workflows/ci.yml`
-- `api/auth_scopes/helpers.py`
-- `api/security/public_paths.py`
-
-Assessment:
-- Route inventory and SOC manifest gates remain enforced fail-closed.
-- Agent endpoint public allowlist changes are explicit-path only (no wildcard broadening).
-- Auth helper hardening remains aligned with fail-closed key pepper requirements.
+- Updated SOC review for Enterprise AI Console route additions and corresponding route inventory regeneration (`tools/ci/route_inventory.json`).
+- Confirmed `tools/ci/validate_ai_contracts.py` is part of security-critical CI surface and remains enforced through `fg-contract`/CI lanes.
+- Re-validated that `route-inventory-audit` and `soc-review-sync` must pass before merge.
