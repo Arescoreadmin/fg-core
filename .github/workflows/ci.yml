@@ -55,40 +55,7 @@ jobs:
 
       - name: Detect changed paths
         id: filter
-        uses: dorny/paths-filter@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          filters: |
-            python:
-              - "**/*.py"
-              - "pyproject.toml"
-              - "requirements*.txt"
-              - "uv.lock"
-              - "poetry.lock"
-            core:
-              - "api/**"
-              - "engine/**"
-              - "tests/**"
-              - "Makefile"
-              - ".github/**"
-              - "CONTRACT.md"
-              - "README.md"
-              - "policy/**"
-              - "migrations/**"
-              - "scripts/**"
-            console:
-              - "console/**"
-              - "package.json"
-              - "package-lock.json"
-              - ".github/**"
-            compliance:
-              - "compliance/**"
-              - "Makefile"
-              - ".github/**"
-              - "pyproject.toml"
-              - "requirements*.txt"
-              - "uv.lock"
-              - "poetry.lock"
+        run: python tools/ci/detect_changed_paths.py
 
       - name: Generate CI secrets
         uses: ./.github/actions/fg-secrets
