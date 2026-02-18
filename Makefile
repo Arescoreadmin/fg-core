@@ -115,6 +115,7 @@ FG_ENV                  ?= dev
 FG_SERVICE              ?= frostgate-core
 FG_AUTH_ENABLED         ?= 1
 FG_API_KEY              ?=
+FG_KEY_PEPPER         ?= ci-test-pepper
 FG_ENFORCEMENT_MODE     ?= observe
 FG_DEV_EVENTS_ENABLED   ?= 0
 FG_UI_TOKEN_GET_ENABLED ?= 1
@@ -158,6 +159,7 @@ FG_ENV="$(FG_ENV)" \
 FG_SERVICE="$(FG_SERVICE)" \
 FG_AUTH_ENABLED="$(FG_AUTH_ENABLED)" \
 FG_API_KEY="$(FG_API_KEY)" \
+FG_KEY_PEPPER="$(FG_KEY_PEPPER)" \
 FG_ENFORCEMENT_MODE="$(FG_ENFORCEMENT_MODE)" \
 FG_STATE_DIR="$(FG_STATE_DIR)" \
 FG_SQLITE_PATH="$(FG_SQLITE_PATH)" \
@@ -244,7 +246,7 @@ ci-local: fix fg-fast
 
 .PHONY: guard-scripts fg-audit-make fg-contract fg-compile \
 	contracts-gen contracts-core-gen contracts-core-diff \
-	artifact-contract-check contract-authority-check contract-authority-refresh \
+	artifact-contract-check contract-authority-check contract-authority-refresh validate-ai-contracts \
 	check-no-engine-evaluate opa-check verify-spine-modules verify-schemas verify-drift align-score \
 	contracts-gen-prod fg-contract-prod test-unit
 
@@ -319,6 +321,9 @@ contract-authority-refresh: venv
 	@FG_ENV=prod $(MAKE) -s contracts-gen
 	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) scripts/refresh_contract_authority.py
 
+validate-ai-contracts: venv
+	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) tools/ci/validate_ai_contracts.py
+
 fg-contract: venv guard-scripts
 	@FG_ENV=prod $(MAKE) -s contracts-gen
 	@$(PY_CONTRACT) scripts/contract_toolchain_check.py
@@ -326,6 +331,7 @@ fg-contract: venv guard-scripts
 	@git diff --exit-code contracts/admin
 	@$(PY_CONTRACT) scripts/contracts_diff_core.py
 	@$(PY_CONTRACT) scripts/contract_authority_check.py
+	@$(MAKE) -s validate-ai-contracts
 	@$(PY_CONTRACT) scripts/artifact_schema_check.py
 	@$(PY_CONTRACT) tools/ci/check_dashboard_contracts.py
 	@echo "Contract diff: OK (admin/core/artifacts/dashboard)"
@@ -522,6 +528,22 @@ fg-lint: fmt-check
 test-unit: venv _require-pytest-venv
 	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q -m "not postgres"
 
+
+.PHONY: agent-unit agent-build-windows agent-smoke
+agent-unit: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/agent
+
+agent-build-windows:
+ifeq ($(OS),Windows_NT)
+	powershell -ExecutionPolicy Bypass -File tools/build/build_agent_windows.ps1
+	powershell -ExecutionPolicy Bypass -File tools/build/sign_agent_windows.ps1
+else
+	@echo "agent-build-windows: no-op on non-Windows"
+endif
+
+agent-smoke: venv
+	@$(PY) -c "print('agent smoke: use local config and run python -m agent.main')"
+
 # =============================================================================
 # Fast lane + audit/compliance
 # =============================================================================
@@ -702,19 +724,19 @@ itest-db-reset: venv
 itest-down:
 	@set -euo pipefail; \
 	$(MAKE) -s fg-down HOST="$(ITEST_HOST)" PORT="$(ITEST_PORT)" BASE_URL="$(ITEST_BASE_URL)" \
-	FG_SQLITE_PATH="$(ITEST_DB)" FG_API_KEY="$(FG_API_KEY)" FG_AUTH_ENABLED="$(FG_AUTH_ENABLED)" \
+	FG_SQLITE_PATH="$(ITEST_DB)" FG_API_KEY="$(FG_API_KEY)" FG_KEY_PEPPER="$(FG_KEY_PEPPER)" FG_AUTH_ENABLED="$(FG_AUTH_ENABLED)" \
 	>/dev/null 2>&1 || true
 
 itest-up: itest-db-reset
 	@set -euo pipefail; \
 	$(MAKE) -s fg-up HOST="$(ITEST_HOST)" PORT="$(ITEST_PORT)" BASE_URL="$(ITEST_BASE_URL)" \
-	FG_SQLITE_PATH="$(ITEST_DB)" FG_API_KEY="$(FG_API_KEY)" FG_AUTH_ENABLED="$(FG_AUTH_ENABLED)"
+	FG_SQLITE_PATH="$(ITEST_DB)" FG_API_KEY="$(FG_API_KEY)" FG_KEY_PEPPER="$(FG_KEY_PEPPER)" FG_AUTH_ENABLED="$(FG_AUTH_ENABLED)"
 
 itest-local: itest-down itest-up
 	@set -euo pipefail; \
 	trap 'st=$$?; $(MAKE) -s itest-down >/dev/null 2>&1 || true; exit $$st' EXIT; \
-	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(ITEST_DB)" ./scripts/smoke_auth.sh; \
-	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(ITEST_DB)" $(MAKE) -s test-integration
+	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_KEY_PEPPER="$(FG_KEY_PEPPER)" FG_SQLITE_PATH="$(ITEST_DB)" ./scripts/smoke_auth.sh; \
+	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_KEY_PEPPER="$(FG_KEY_PEPPER)" FG_SQLITE_PATH="$(ITEST_DB)" $(MAKE) -s test-integration
 
 # =============================================================================
 # CI lanes
@@ -774,9 +796,9 @@ evidence: venv
 ci-evidence: venv itest-down itest-up
 	@set -euo pipefail; \
 	trap 'st=$$?; $(MAKE) -s itest-down >/dev/null 2>&1 || true; exit $$st' EXIT; \
-	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(ITEST_DB)" ./scripts/smoke_auth.sh; \
-	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(ITEST_DB)" $(MAKE) -s test-integration; \
-	SCENARIO="$${SCENARIO:-spike}" BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_SQLITE_PATH="$(ITEST_DB)" $(MAKE) -s evidence
+	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_KEY_PEPPER="$(FG_KEY_PEPPER)" FG_SQLITE_PATH="$(ITEST_DB)" ./scripts/smoke_auth.sh; \
+	BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_KEY_PEPPER="$(FG_KEY_PEPPER)" FG_SQLITE_PATH="$(ITEST_DB)" $(MAKE) -s test-integration; \
+	SCENARIO="$${SCENARIO:-spike}" BASE_URL="$(ITEST_BASE_URL)" FG_API_KEY="$(FG_API_KEY)" FG_KEY_PEPPER="$(FG_KEY_PEPPER)" FG_SQLITE_PATH="$(ITEST_DB)" $(MAKE) -s evidence
 
 # =============================================================================
 # PT lane + hardening suites

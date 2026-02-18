@@ -1,0 +1,10 @@
+{
+  "id": "theme-default",
+  "version": "1.0.0",
+  "name": "FrostGate Default",
+  "colors": {
+    "bg": "#07090e",
+    "fg": "#e5e9f5",
+    "accent": "#2b5cff"
+  }
+}

@@ -52,6 +52,8 @@ from api.auth_federation import router as auth_federation_router
 from api.ai_plane_extension import router as ai_plane_extension_router
 from api.planes import router as planes_router
 from api.evidence_index import router as evidence_index_router
+from api.agent_enrollment import router as agent_enrollment_router
+from api.agent_tokens import router as agent_tokens_router
 from services.ai_plane_extension import ai_external_provider_enabled, ai_plane_enabled
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
@@ -522,6 +524,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     app.include_router(keys_router)
     app.include_router(forensics_router)
+    app.include_router(agent_enrollment_router)
+    app.include_router(agent_tokens_router)
 
     # ---- Compliance routers ----
     if compliance_module_enabled("mission_envelope") and mission_router is not None:
@@ -781,6 +785,8 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(evidence_index_router)
     app.include_router(keys_router)
     app.include_router(forensics_router)
+    app.include_router(agent_enrollment_router)
+    app.include_router(agent_tokens_router)
     if mission_router is not None:
         app.include_router(mission_router)
     if ring_router is not None:
