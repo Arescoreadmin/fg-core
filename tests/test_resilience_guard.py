@@ -9,7 +9,9 @@ from api.db import init_db, reset_engine_cache
 from api.main import build_app
 
 
-def _client(tmp_path: Path, *, degraded: bool, backpressure: bool) -> tuple[TestClient, str]:
+def _client(
+    tmp_path: Path, *, degraded: bool, backpressure: bool
+) -> tuple[TestClient, str]:
     import os
 
     db_path = tmp_path / "resilience.db"

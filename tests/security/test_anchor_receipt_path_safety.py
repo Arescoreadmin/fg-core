@@ -19,7 +19,9 @@ def test_safe_path_join_blocks_traversal(tmp_path: Path) -> None:
         safe_path_join(base, "..", "escape.json")
 
 
-def test_receipt_rejects_unsafe_id(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_receipt_rejects_unsafe_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("FG_ARTIFACTS_DIR", str(tmp_path / "artifacts"))
     payload = {
         "receipt_id": "../../evil",
@@ -33,7 +35,9 @@ def test_receipt_rejects_unsafe_id(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
         _write_anchor_receipt(payload)
 
 
-def test_receipt_rejects_oversize_payload(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_receipt_rejects_oversize_payload(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("FG_ARTIFACTS_DIR", str(tmp_path / "artifacts"))
     payload = {
         "receipt_id": "safe-id-1",
@@ -47,7 +51,9 @@ def test_receipt_rejects_oversize_payload(monkeypatch: pytest.MonkeyPatch, tmp_p
         _write_anchor_receipt(payload)
 
 
-def test_receipt_uses_restricted_permissions(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_receipt_uses_restricted_permissions(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("FG_ARTIFACTS_DIR", str(tmp_path / "artifacts"))
     payload = {
         "receipt_id": "safe-id-2",

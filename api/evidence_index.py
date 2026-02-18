@@ -27,21 +27,31 @@ class EvidenceRunRegisterRequest(BaseModel):
 
 
 @router.get("/evidence/runs", dependencies=[Depends(require_scopes("compliance:read"))])
-def list_evidence_runs(request: Request, db: Session = Depends(tenant_db_required)) -> dict[str, object]:
+def list_evidence_runs(
+    request: Request, db: Session = Depends(tenant_db_required)
+) -> dict[str, object]:
     tenant_id = require_bound_tenant(request)
     return {"runs": service.list_runs(db, tenant_id)}
 
 
-@router.get("/evidence/runs/{run_id}", dependencies=[Depends(require_scopes("compliance:read"))])
-def get_evidence_run(run_id: str, request: Request, db: Session = Depends(tenant_db_required)) -> dict[str, object]:
+@router.get(
+    "/evidence/runs/{run_id}", dependencies=[Depends(require_scopes("compliance:read"))]
+)
+def get_evidence_run(
+    run_id: str, request: Request, db: Session = Depends(tenant_db_required)
+) -> dict[str, object]:
     tenant_id = require_bound_tenant(request)
     row = service.get_run(db, tenant_id, run_id)
     if row is None:
-        raise HTTPException(status_code=404, detail={"error_code": "EVIDENCE_RUN_NOT_FOUND"})
+        raise HTTPException(
+            status_code=404, detail={"error_code": "EVIDENCE_RUN_NOT_FOUND"}
+        )
     return row
 
 
-@router.post("/evidence/runs/register", dependencies=[Depends(require_scopes("admin:write"))])
+@router.post(
+    "/evidence/runs/register", dependencies=[Depends(require_scopes("admin:write"))]
+)
 def register_evidence_run(
     request: Request,
     payload: EvidenceRunRegisterRequest,

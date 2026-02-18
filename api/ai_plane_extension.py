@@ -5,7 +5,11 @@ from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes
 from api.deps import tenant_db_required
-from services.ai_plane_extension import AIInferRequest, AIPlaneService, AIPolicyUpsertRequest
+from services.ai_plane_extension import (
+    AIInferRequest,
+    AIPlaneService,
+    AIPolicyUpsertRequest,
+)
 
 router = APIRouter(tags=["ai-plane"])
 service = AIPlaneService()

@@ -7,7 +7,11 @@ from jsonschema import Draft202012Validator
 
 
 def test_anchor_receipt_schema_validates() -> None:
-    schema = json.loads(Path("contracts/artifacts/anchor_receipt.schema.json").read_text(encoding="utf-8"))
+    schema = json.loads(
+        Path("contracts/artifacts/anchor_receipt.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
     payload = {
         "receipt_id": "ar-123",
         "tenant_id": "tenant-a",

@@ -19,7 +19,10 @@ def validate_federated_identity(request: Request) -> dict[str, object]:
     if not bearer.lower().startswith("bearer "):
         raise HTTPException(
             status_code=401,
-            detail={"error_code": "federation_missing_bearer", "reason": "missing bearer token"},
+            detail={
+                "error_code": "federation_missing_bearer",
+                "reason": "missing bearer token",
+            },
         )
     token = bearer.split(" ", 1)[1].strip()
     try:
@@ -34,13 +37,19 @@ def validate_federated_identity(request: Request) -> dict[str, object]:
     if not tenant_id:
         raise HTTPException(
             status_code=403,
-            detail={"error_code": "federation_missing_tenant_claim", "reason": "tenant claim required"},
+            detail={
+                "error_code": "federation_missing_tenant_claim",
+                "reason": "tenant claim required",
+            },
         )
 
     if tenant_id != bound_tenant:
         raise HTTPException(
             status_code=403,
-            detail={"error_code": "federation_tenant_mismatch", "reason": "token tenant mismatch"},
+            detail={
+                "error_code": "federation_tenant_mismatch",
+                "reason": "token tenant mismatch",
+            },
         )
 
     groups = claims.get("groups") if isinstance(claims.get("groups"), list) else []

@@ -5,7 +5,10 @@ from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes
 from api.deps import tenant_db_required
-from services.evidence_anchor_extension import EvidenceAnchorCreate, EvidenceAnchorService
+from services.evidence_anchor_extension import (
+    EvidenceAnchorCreate,
+    EvidenceAnchorService,
+)
 
 router = APIRouter(tags=["evidence-anchors"])
 service = EvidenceAnchorService()
@@ -26,7 +29,10 @@ def create_anchor(
     except FileNotFoundError as exc:
         raise HTTPException(
             status_code=404,
-            detail={"error_code": "evidence_anchor_artifact_not_found", "reason": str(exc)},
+            detail={
+                "error_code": "evidence_anchor_artifact_not_found",
+                "reason": str(exc),
+            },
         ) from exc
     except ValueError as exc:
         raise HTTPException(

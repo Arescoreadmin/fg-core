@@ -250,7 +250,6 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 "CREATE INDEX IF NOT EXISTS ix_decisions_tenant_config_created ON decisions(tenant_id, config_hash, created_at)"
             )
 
-
         conn.exec_driver_sql(
             """
             CREATE TABLE IF NOT EXISTS enterprise_framework_catalog (
@@ -372,13 +371,30 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             """
         )
         if "ai_inference_records" in tables:
-            _sqlite_add_column_if_missing(conn, "ai_inference_records", "inference_id", "TEXT")
-            _sqlite_add_column_if_missing(conn, "ai_inference_records", "response_text", "TEXT DEFAULT ''")
-            _sqlite_add_column_if_missing(conn, "ai_inference_records", "context_refs_json", "TEXT DEFAULT '[]'")
-            _sqlite_add_column_if_missing(conn, "ai_inference_records", "created_at_utc", "TEXT DEFAULT '1970-01-01T00:00:00Z'")
-            _sqlite_add_column_if_missing(conn, "ai_inference_records", "output_sha256", "TEXT DEFAULT ''")
-            _sqlite_add_column_if_missing(conn, "ai_inference_records", "retrieval_id", "TEXT DEFAULT 'stub'")
-            _sqlite_add_column_if_missing(conn, "ai_inference_records", "policy_result", "TEXT DEFAULT 'pass'")
+            _sqlite_add_column_if_missing(
+                conn, "ai_inference_records", "inference_id", "TEXT"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "ai_inference_records", "response_text", "TEXT DEFAULT ''"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "ai_inference_records", "context_refs_json", "TEXT DEFAULT '[]'"
+            )
+            _sqlite_add_column_if_missing(
+                conn,
+                "ai_inference_records",
+                "created_at_utc",
+                "TEXT DEFAULT '1970-01-01T00:00:00Z'",
+            )
+            _sqlite_add_column_if_missing(
+                conn, "ai_inference_records", "output_sha256", "TEXT DEFAULT ''"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "ai_inference_records", "retrieval_id", "TEXT DEFAULT 'stub'"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "ai_inference_records", "policy_result", "TEXT DEFAULT 'pass'"
+            )
         if "ai_policy_violations" not in tables:
             conn.exec_driver_sql(
                 """

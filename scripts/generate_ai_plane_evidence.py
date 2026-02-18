@@ -12,7 +12,9 @@ from services.evidence_index import EvidenceIndexService
 
 
 def _git_sha() -> str:
-    proc = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=False)
+    proc = subprocess.run(
+        ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=False
+    )
     return (proc.stdout or "").strip() or "unknown"
 
 
@@ -20,8 +22,14 @@ def main() -> int:
     init_db()
     SessionLocal = get_sessionmaker()
     with SessionLocal() as db:
-        total_inference = db.execute(text("SELECT COUNT(*) FROM ai_inference_records WHERE model_id='SIMULATED_V1'" )).scalar_one()
-        total_blocked = db.execute(text("SELECT COUNT(*) FROM ai_policy_violations")).scalar_one()
+        total_inference = db.execute(
+            text(
+                "SELECT COUNT(*) FROM ai_inference_records WHERE model_id='SIMULATED_V1'"
+            )
+        ).scalar_one()
+        total_blocked = db.execute(
+            text("SELECT COUNT(*) FROM ai_policy_violations")
+        ).scalar_one()
         total_violations = total_blocked
 
     payload = write_ai_plane_evidence(
@@ -30,7 +38,9 @@ def main() -> int:
         git_sha=_git_sha(),
         feature_flag_snapshot={
             "FG_AI_PLANE_ENABLED": (os.getenv("FG_AI_PLANE_ENABLED") or "0"),
-            "FG_AI_EXTERNAL_PROVIDER_ENABLED": (os.getenv("FG_AI_EXTERNAL_PROVIDER_ENABLED") or "0"),
+            "FG_AI_EXTERNAL_PROVIDER_ENABLED": (
+                os.getenv("FG_AI_EXTERNAL_PROVIDER_ENABLED") or "0"
+            ),
         },
         total_inference_calls=int(total_inference or 0),
         total_blocked_calls=int(total_blocked or 0),
@@ -63,7 +73,9 @@ def main() -> int:
 
             body = json.loads(art.read_text(encoding="utf-8"))
             body["evidence_index_status"] = "EVIDENCE_INDEX_UNAVAILABLE"
-            art.write_text(json.dumps(body, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+            art.write_text(
+                json.dumps(body, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+            )
 
     return 0
 

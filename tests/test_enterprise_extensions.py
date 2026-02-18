@@ -23,8 +23,12 @@ def _setup_client(tmp_path: Path) -> tuple[TestClient, str, str]:
     os.environ["FG_COMPLIANCE_HMAC_KEY_ID_CURRENT"] = "v1"
     reset_engine_cache()
     init_db(sqlite_path=str(db_path))
-    key_a = mint_key("admin:write", "compliance:read", "governance:write", tenant_id="tenant-a")
-    key_b = mint_key("admin:write", "compliance:read", "governance:write", tenant_id="tenant-b")
+    key_a = mint_key(
+        "admin:write", "compliance:read", "governance:write", tenant_id="tenant-a"
+    )
+    key_b = mint_key(
+        "admin:write", "compliance:read", "governance:write", tenant_id="tenant-b"
+    )
     client = TestClient(build_app(auth_enabled=True))
     return client, key_a, key_b
 
@@ -44,7 +48,9 @@ def test_compliance_cp_happy_and_tenant_isolation(tmp_path: Path) -> None:
     assert r2.json()["tenant_id"] == "tenant-b"
 
 
-def test_enterprise_controls_happy_and_forbidden_tenant_mismatch(tmp_path: Path) -> None:
+def test_enterprise_controls_happy_and_forbidden_tenant_mismatch(
+    tmp_path: Path,
+) -> None:
     client, key_a, _ = _setup_client(tmp_path)
     ok = client.get("/enterprise-controls/frameworks", headers={"X-API-Key": key_a})
     assert ok.status_code == 200
@@ -96,7 +102,10 @@ def test_evidence_anchor_happy_tenant_isolation_and_error_code(tmp_path: Path) -
     assert list_b.json()["anchors"] == []
     missing = client.post(
         "/evidence/anchors",
-        json={"artifact_path": str(tmp_path / 'missing.json'), "immutable_retention": True},
+        json={
+            "artifact_path": str(tmp_path / "missing.json"),
+            "immutable_retention": True,
+        },
         headers={"X-API-Key": key_a},
     )
     assert missing.status_code == 404
@@ -115,7 +124,11 @@ def test_federation_error_and_happy(tmp_path: Path) -> None:
         "tenant_id": "tenant-a",
         "groups": ["ops"],
     }
-    p = base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("utf-8").rstrip("=")
+    p = (
+        base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8"))
+        .decode("utf-8")
+        .rstrip("=")
+    )
     token = f"x.{p}.y"
     resp = client.post(
         "/auth/federation/validate",

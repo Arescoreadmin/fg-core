@@ -7,7 +7,9 @@ from api.db import get_sessionmaker, init_db
 from services.evidence_index.storage import list_retention_policies
 
 
-def test_retention_policies_list_is_tenant_scoped(monkeypatch: pytest.MonkeyPatch, tmp_path):
+def test_retention_policies_list_is_tenant_scoped(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
     db_path = str(tmp_path / "iso.db")
     monkeypatch.setenv("FG_SQLITE_PATH", db_path)
     monkeypatch.setenv("FG_ENV", "test")

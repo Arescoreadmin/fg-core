@@ -47,7 +47,7 @@ def test_generator_degraded_index_unavailable(monkeypatch, tmp_path: Path) -> No
             return _R()
 
     monkeypatch.setattr(mod, "init_db", lambda: None)
-    monkeypatch.setattr(mod, "get_sessionmaker", lambda: (lambda: _FakeDB()))
+    monkeypatch.setattr(mod, "get_sessionmaker", lambda: lambda: _FakeDB())
 
     assert mod.main() == 0
     assert (tmp_path / "artifacts" / "ai_plane_evidence.json").exists()

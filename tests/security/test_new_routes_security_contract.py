@@ -9,24 +9,77 @@ ROUTES = [
     ("GET", "/compliance-cp/summary", None, "compliance:read"),
     ("GET", "/compliance-cp/portfolio", None, "compliance:read"),
     ("GET", "/compliance-cp/controls", None, "compliance:read"),
-    ("POST", "/compliance-cp/evidence/ingest", {"evidence_id": "e1", "content": {}}, "admin:write"),
+    (
+        "POST",
+        "/compliance-cp/evidence/ingest",
+        {"evidence_id": "e1", "content": {}},
+        "admin:write",
+    ),
     ("GET", "/enterprise-controls/frameworks", None, "compliance:read"),
     ("GET", "/enterprise-controls/catalog", None, "compliance:read"),
     ("GET", "/enterprise-controls/crosswalk", None, "compliance:read"),
-    ("POST", "/enterprise-controls/tenant-state", {"control_id": "CTRL-001", "status": "implemented"}, "admin:write"),
-    ("POST", "/exceptions/requests", {"subject_type": "control", "subject_id": "CTRL-001", "justification": "test", "expires_at_utc": "2099-01-01T00:00:00Z"}, "governance:write"),
-    ("POST", "/breakglass/sessions", {"reason": "incident", "expires_at_utc": "2099-01-01T00:00:00Z"}, "governance:write"),
+    (
+        "POST",
+        "/enterprise-controls/tenant-state",
+        {"control_id": "CTRL-001", "status": "implemented"},
+        "admin:write",
+    ),
+    (
+        "POST",
+        "/exceptions/requests",
+        {
+            "subject_type": "control",
+            "subject_id": "CTRL-001",
+            "justification": "test",
+            "expires_at_utc": "2099-01-01T00:00:00Z",
+        },
+        "governance:write",
+    ),
+    (
+        "POST",
+        "/breakglass/sessions",
+        {"reason": "incident", "expires_at_utc": "2099-01-01T00:00:00Z"},
+        "governance:write",
+    ),
     ("POST", "/auth/federation/validate", None, "admin:write"),
     ("POST", "/ai/infer", {"query": "hello"}, "compliance:read"),
-    ("POST", "/evidence/anchors", {"artifact_path": "artifacts/ai_plane_evidence.json", "external_anchor_ref": None, "immutable_retention": True}, "compliance:read"),
+    (
+        "POST",
+        "/evidence/anchors",
+        {
+            "artifact_path": "artifacts/ai_plane_evidence.json",
+            "external_anchor_ref": None,
+            "immutable_retention": True,
+        },
+        "compliance:read",
+    ),
     ("GET", "/evidence/runs", None, "compliance:read"),
     ("GET", "/evidence/runs/nonexistent", None, "compliance:read"),
-    ("POST", "/evidence/runs/register", {"plane_id": "ai_plane", "artifact_type": "ai_plane_evidence", "artifact_path": "artifacts/ai_plane_evidence.json", "schema_version": "v1", "git_sha": "deadbeef", "status": "PASS", "summary_json": {}}, "admin:write"),
+    (
+        "POST",
+        "/evidence/runs/register",
+        {
+            "plane_id": "ai_plane",
+            "artifact_type": "ai_plane_evidence",
+            "artifact_path": "artifacts/ai_plane_evidence.json",
+            "schema_version": "v1",
+            "git_sha": "deadbeef",
+            "status": "PASS",
+            "summary_json": {},
+        },
+        "admin:write",
+    ),
     ("GET", "/planes", None, "admin:write"),
 ]
 
 
-def _request(client: TestClient, method: str, path: str, headers: dict[str, str] | None, body: dict | None):
+def _request(
+    client: TestClient,
+    method: str,
+    path: str,
+    headers: dict[str, str] | None,
+    body: dict | None,
+):
     if method == "GET":
         return client.get(path, headers=headers or {})
     return client.post(path, headers=headers or {}, json=body)
@@ -46,7 +99,11 @@ def test_new_routes_require_auth_scope_and_tenant(build_app, monkeypatch):
             client,
             method,
             path,
-            {"X-API-Key": wrong_scope_key, "X-Tenant-Id": "tenant-a", "Authorization": "Bearer test.token.value"},
+            {
+                "X-API-Key": wrong_scope_key,
+                "X-Tenant-Id": "tenant-a",
+                "Authorization": "Bearer test.token.value",
+            },
             body,
         )
         assert wrong_scope.status_code == 403
@@ -56,7 +113,11 @@ def test_new_routes_require_auth_scope_and_tenant(build_app, monkeypatch):
             client,
             method,
             path,
-            {"X-API-Key": scoped_key, "X-Tenant-Id": "tenant-b", "Authorization": "Bearer test.token.value"},
+            {
+                "X-API-Key": scoped_key,
+                "X-Tenant-Id": "tenant-b",
+                "Authorization": "Bearer test.token.value",
+            },
             body,
         )
         assert tenant_mismatch.status_code in {401, 403, 409}

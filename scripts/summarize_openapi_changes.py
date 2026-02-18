@@ -18,7 +18,15 @@ def _ops(spec):
             continue
         for m, op in body.items():
             mm = str(m).lower()
-            if mm in {"get", "post", "put", "patch", "delete", "head", "options"} and isinstance(op, dict):
+            if mm in {
+                "get",
+                "post",
+                "put",
+                "patch",
+                "delete",
+                "head",
+                "options",
+            } and isinstance(op, dict):
                 out[(mm.upper(), p)] = op
     return out
 
@@ -36,8 +44,15 @@ def main() -> int:
 
     new = sorted(set(co) - set(bo))
     removed = sorted(set(bo) - set(co))
-    changed_security = sorted(k for k in set(co) & set(bo) if _auth(co[k]) != _auth(bo[k]))
-    missing_401_403 = sorted(k for k, op in co.items() if isinstance(op.get("responses"), dict) and ("401" not in op["responses"] or "403" not in op["responses"]))
+    changed_security = sorted(
+        k for k in set(co) & set(bo) if _auth(co[k]) != _auth(bo[k])
+    )
+    missing_401_403 = sorted(
+        k
+        for k, op in co.items()
+        if isinstance(op.get("responses"), dict)
+        and ("401" not in op["responses"] or "403" not in op["responses"])
+    )
 
     lines = [
         "# OpenAPI Security Summary",

@@ -283,3 +283,12 @@ Reviewed critical-path additive changes for SOC-HIGH-002 coverage:
 - `tools/ci/route_inventory.json`
 
 Disposition: additive-only governance hardening; no route removals; deterministic gate/test coverage added.
+
+
+## 2026-02-18 Formatting-only follow-up
+
+Reviewed formatting-only edits to critical paths:
+- `api/auth_federation.py`
+- `api/middleware/resilience_guard.py`
+
+Disposition: no semantic change; formatting normalization only.

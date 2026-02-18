@@ -15,7 +15,9 @@ from services.ai_plane_extension import rag_stub
 from services.ai_plane_extension.service import write_ai_plane_evidence
 
 
-def _setup_client(tmp_path: Path, *, ai_enabled: bool = True) -> tuple[TestClient, str, str]:
+def _setup_client(
+    tmp_path: Path, *, ai_enabled: bool = True
+) -> tuple[TestClient, str, str]:
     db_path = tmp_path / "ai-plane.db"
     os.environ["FG_ENV"] = "test"
     os.environ["FG_SQLITE_PATH"] = str(db_path)
@@ -25,8 +27,12 @@ def _setup_client(tmp_path: Path, *, ai_enabled: bool = True) -> tuple[TestClien
     os.environ["FG_AI_EXTERNAL_PROVIDER_ENABLED"] = "0"
     reset_engine_cache()
     init_db(sqlite_path=str(db_path))
-    key_a = mint_key("admin:write", "compliance:read", "governance:write", tenant_id="tenant-a")
-    key_b = mint_key("admin:write", "compliance:read", "governance:write", tenant_id="tenant-b")
+    key_a = mint_key(
+        "admin:write", "compliance:read", "governance:write", tenant_id="tenant-a"
+    )
+    key_b = mint_key(
+        "admin:write", "compliance:read", "governance:write", tenant_id="tenant-b"
+    )
     client = TestClient(build_app(auth_enabled=True))
     return client, key_a, key_b
 
@@ -60,8 +66,12 @@ def test_ai_input_policy_blocked_secret(tmp_path: Path) -> None:
 
 def test_ai_output_deterministic_same_input_same_output(tmp_path: Path) -> None:
     client, key_a, _ = _setup_client(tmp_path, ai_enabled=True)
-    r1 = client.post("/ai/infer", json={"query": "deterministic"}, headers={"X-API-Key": key_a})
-    r2 = client.post("/ai/infer", json={"query": "deterministic"}, headers={"X-API-Key": key_a})
+    r1 = client.post(
+        "/ai/infer", json={"query": "deterministic"}, headers={"X-API-Key": key_a}
+    )
+    r2 = client.post(
+        "/ai/infer", json={"query": "deterministic"}, headers={"X-API-Key": key_a}
+    )
     assert r1.status_code == 200
     assert r2.status_code == 200
     assert r1.json()["response"] == r2.json()["response"]
@@ -83,18 +93,24 @@ def test_rag_stub_never_touches_db(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_inference_record_hash_only_no_raw_prompt(tmp_path: Path) -> None:
     client, key_a, _ = _setup_client(tmp_path, ai_enabled=True)
     prompt = "top-secret-prompt"
-    resp = client.post("/ai/infer", json={"query": prompt}, headers={"X-API-Key": key_a})
+    resp = client.post(
+        "/ai/infer", json={"query": prompt}, headers={"X-API-Key": key_a}
+    )
     assert resp.status_code == 200
 
     SessionLocal = get_sessionmaker()
     with SessionLocal() as db:
-        row = db.execute(
-            text(
-                "SELECT prompt_sha256, output_sha256, response_text "
-                "FROM ai_inference_records WHERE tenant_id='tenant-a' AND model_id='SIMULATED_V1' "
-                "ORDER BY id DESC LIMIT 1"
+        row = (
+            db.execute(
+                text(
+                    "SELECT prompt_sha256, output_sha256, response_text "
+                    "FROM ai_inference_records WHERE tenant_id='tenant-a' AND model_id='SIMULATED_V1' "
+                    "ORDER BY id DESC LIMIT 1"
+                )
             )
-        ).mappings().first()
+            .mappings()
+            .first()
+        )
     assert row is not None
     assert row["prompt_sha256"] != prompt
     assert prompt not in row["prompt_sha256"]
@@ -102,11 +118,15 @@ def test_inference_record_hash_only_no_raw_prompt(tmp_path: Path) -> None:
 
 def test_ai_route_not_mounted_when_feature_disabled(tmp_path: Path) -> None:
     client, key_a, _ = _setup_client(tmp_path, ai_enabled=False)
-    resp = client.post("/ai/infer", json={"query": "hello"}, headers={"X-API-Key": key_a})
+    resp = client.post(
+        "/ai/infer", json={"query": "hello"}, headers={"X-API-Key": key_a}
+    )
     assert resp.status_code == 404
 
 
-def test_external_provider_flag_fails_startup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_external_provider_flag_fails_startup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     db_path = tmp_path / "startup.db"
     monkeypatch.setenv("FG_ENV", "test")
     monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
@@ -128,7 +148,10 @@ def test_ai_artifact_generation_schema_validation(tmp_path: Path) -> None:
         out_path=str(out_path),
         schema_path=str(schema_path),
         git_sha="abc123",
-        feature_flag_snapshot={"FG_AI_PLANE_ENABLED": True, "FG_AI_EXTERNAL_PROVIDER_ENABLED": False},
+        feature_flag_snapshot={
+            "FG_AI_PLANE_ENABLED": True,
+            "FG_AI_EXTERNAL_PROVIDER_ENABLED": False,
+        },
         total_inference_calls=2,
         total_blocked_calls=1,
         total_policy_violations=1,

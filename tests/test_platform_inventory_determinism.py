@@ -18,15 +18,21 @@ def _hashes():
 
 
 def test_platform_inventory_deterministic():
-    subprocess.run([sys.executable, "scripts/generate_platform_inventory.py"], check=True)
+    subprocess.run(
+        [sys.executable, "scripts/generate_platform_inventory.py"], check=True
+    )
     h1 = _hashes()
-    subprocess.run([sys.executable, "scripts/generate_platform_inventory.py"], check=True)
+    subprocess.run(
+        [sys.executable, "scripts/generate_platform_inventory.py"], check=True
+    )
     h2 = _hashes()
     assert h1 == h2
 
 
 def test_platform_inventory_sections_present():
-    subprocess.run([sys.executable, "scripts/generate_platform_inventory.py"], check=True)
+    subprocess.run(
+        [sys.executable, "scripts/generate_platform_inventory.py"], check=True
+    )
     inv = Path("artifacts/PLATFORM_INVENTORY.md").read_text(encoding="utf-8")
     gaps = Path("artifacts/PLATFORM_GAPS.md").read_text(encoding="utf-8")
     assert "## Planes" in inv

@@ -3,7 +3,12 @@ from __future__ import annotations
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-from services.resilience import current_service_state, allow_in_degraded, is_degraded_mode, shed_non_critical
+from services.resilience import (
+    current_service_state,
+    allow_in_degraded,
+    is_degraded_mode,
+    shed_non_critical,
+)
 
 
 def _request_id(request) -> str:
@@ -21,12 +26,14 @@ class ResilienceGuardMiddleware(BaseHTTPMiddleware):
         if shed_non_critical(path):
             return JSONResponse(
                 status_code=503,
-                content={"detail": {
-                    "error_code": "SERVICE_OVERLOADED_SHED",
-                    "request_id": _request_id(request),
-                    "service_state": current_service_state(),
-                    "retry_after_seconds": 5,
-                }},
+                content={
+                    "detail": {
+                        "error_code": "SERVICE_OVERLOADED_SHED",
+                        "request_id": _request_id(request),
+                        "service_state": current_service_state(),
+                        "retry_after_seconds": 5,
+                    }
+                },
                 headers={"Retry-After": "5"},
             )
 
@@ -34,12 +41,14 @@ class ResilienceGuardMiddleware(BaseHTTPMiddleware):
             if method in {"POST", "PUT", "PATCH", "DELETE"}:
                 return JSONResponse(
                     status_code=503,
-                    content={"detail": {
-                        "error_code": "SERVICE_DEGRADED_READONLY",
-                        "request_id": _request_id(request),
-                        "service_state": current_service_state(),
-                        "retry_after_seconds": 0,
-                    }},
+                    content={
+                        "detail": {
+                            "error_code": "SERVICE_DEGRADED_READONLY",
+                            "request_id": _request_id(request),
+                            "service_state": current_service_state(),
+                            "retry_after_seconds": 0,
+                        }
+                    },
                 )
 
         return await call_next(request)

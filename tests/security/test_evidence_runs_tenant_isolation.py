@@ -32,11 +32,15 @@ def test_evidence_runs_tenant_isolation(build_app):
     assert reg.status_code == 200
     run_id = reg.json()["id"]
 
-    own = client.get("/evidence/runs", headers={"X-API-Key": read_a, "X-Tenant-Id": "tenant-a"})
+    own = client.get(
+        "/evidence/runs", headers={"X-API-Key": read_a, "X-Tenant-Id": "tenant-a"}
+    )
     assert own.status_code == 200
     assert any(r["id"] == run_id for r in own.json()["runs"])
 
-    other = client.get("/evidence/runs", headers={"X-API-Key": read_b, "X-Tenant-Id": "tenant-b"})
+    other = client.get(
+        "/evidence/runs", headers={"X-API-Key": read_b, "X-Tenant-Id": "tenant-b"}
+    )
     assert other.status_code == 200
     assert all(r["id"] != run_id for r in other.json()["runs"])
 
