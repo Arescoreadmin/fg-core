@@ -2,6 +2,13 @@ from __future__ import annotations
 
 import os
 
+# Set deterministic, writable defaults before importing modules that may touch DB paths.
+os.environ.setdefault("FG_ENV", "test")
+os.environ.setdefault("FG_API_KEY", "ci-test-key-00000000000000000000000000000000")
+os.environ.setdefault("FG_KEY_PEPPER", "ci-test-pepper")
+os.environ.setdefault("FG_STATE_DIR", "/tmp/frostgate/state")
+os.environ.setdefault("FG_SQLITE_PATH", "/tmp/frostgate/fg-conftest.db")
+
 import pytest
 
 from api.db import init_db, reset_engine_cache
