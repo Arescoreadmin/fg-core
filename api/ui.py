@@ -757,7 +757,7 @@ tbody.addEventListener("click", async (evt) => {
   setFooter(data.request_id);
 });
 
-refreshBtn.addEventListener("click", () => { offset = 0; loadPosture(); loadDecisions(); });
+refreshBtn.onclick = () => { offset = 0; loadPosture(); loadDecisions(); };
 limitEl.addEventListener("change", () => { offset = 0; loadDecisions(); });
 prevBtn.addEventListener("click", () => { offset = Math.max(0, offset - parseInt(limitEl.value || "25", 10)); loadDecisions(); });
 nextBtn.addEventListener("click", () => { offset = offset + parseInt(limitEl.value || "25", 10); loadDecisions(); });
@@ -842,7 +842,7 @@ async function ensureCsrf() {
 
 async function verifyChain() {
   const tenant = tenantParam();
-  const resp = await fetch(`/ui/forensics/chain/verify`)
+  const resp = await fetch(`/ui/forensics/chain/verify?tenant_id=${encodeURIComponent(tenant)}`)
   if (!resp.ok) return;
   const data = await resp.json();
   verifyStatus.textContent = `Status: ${data.status}`;

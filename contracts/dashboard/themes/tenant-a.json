@@ -1,0 +1,1 @@
+{"brand_name": "Tenant A Security", "logo_url": "https://example.com/tenant-a-logo.png", "palette": {"primary": "#0055aa", "accent": "#11cc88", "background": "#01070c"}, "title_suffix": "Tenant A", "css_overrides": ".brand { letter-spacing: 0.03em; }"}

@@ -1,10 +1,25 @@
 {
-  "dashboard": {
-    "view_id": "default",
-    "widgets": [
-      "system_health",
-      "recent_decisions",
-      "drift_status"
-    ]
-  }
+  "dashboards": [
+    {
+      "id": "posture",
+      "title": "Posture Dashboard",
+      "persona": {"allowed": ["analyst", "admin"]},
+      "widgets": ["system_health", "recent_decisions", "drift_status"],
+      "context_default": {"time_range": "24h"}
+    },
+    {
+      "id": "forensics",
+      "title": "Forensics Dashboard",
+      "persona": {"allowed": ["forensics", "admin"]},
+      "widgets": ["drift_status", "recent_decisions"],
+      "context_default": {"time_range": "24h"}
+    },
+    {
+      "id": "controls",
+      "title": "Controls Dashboard",
+      "persona": {"allowed": ["controls", "admin"]},
+      "widgets": ["system_health"],
+      "context_default": {"time_range": "7d"}
+    }
+  ]
 }

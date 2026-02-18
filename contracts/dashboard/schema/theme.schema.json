@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["brand_name", "logo_url", "palette", "title_suffix"],
+  "properties": {
+    "brand_name": {"type": "string", "minLength": 1},
+    "logo_url": {"type": "string", "minLength": 1},
+    "palette": {"type": "object"},
+    "title_suffix": {"type": "string"},
+    "css_overrides": {"type": ["string", "null"]}
+  },
+  "additionalProperties": true
+}
