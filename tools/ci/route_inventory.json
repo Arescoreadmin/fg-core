@@ -16,14 +16,6 @@
     "tenant_bound": false
   },
   {
-    "file": "api/_scratch/ui_legacy.py",
-    "method": "GET",
-    "path": "/_legacy/ui_legacy/_disabled",
-    "scoped": false,
-    "scopes": [],
-    "tenant_bound": false
-  },
-  {
     "file": "api/admin.py",
     "method": "POST",
     "path": "/admin/audit/export",
@@ -194,6 +186,46 @@
     "tenant_bound": false
   },
   {
+    "file": "api/ai_plane_extension.py",
+    "method": "GET",
+    "path": "/ai-plane/inference",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ai_plane_extension.py",
+    "method": "GET",
+    "path": "/ai-plane/policies",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ai_plane_extension.py",
+    "method": "POST",
+    "path": "/ai-plane/policies",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ai_plane_extension.py",
+    "method": "POST",
+    "path": "/ai/infer",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
     "file": "api/attestation.py",
     "method": "POST",
     "path": "/approvals",
@@ -300,6 +332,16 @@
     "scoped": true,
     "scopes": [
       "audit:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/auth_federation.py",
+    "method": "POST",
+    "path": "/auth/federation/validate",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
     ],
     "tenant_bound": true
   },
@@ -514,6 +556,57 @@
     "tenant_bound": true
   },
   {
+    "file": "api/exception_breakglass.py",
+    "method": "POST",
+    "path": "/breakglass/sessions",
+    "scoped": true,
+    "scopes": [
+      "governance:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/compliance_cp_extension.py",
+    "method": "GET",
+    "path": "/compliance-cp/controls",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/compliance_cp_extension.py",
+    "method": "POST",
+    "path": "/compliance-cp/evidence/ingest",
+    "scoped": true,
+    "scopes": [
+      "admin:write",
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/compliance_cp_extension.py",
+    "method": "GET",
+    "path": "/compliance-cp/portfolio",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/compliance_cp_extension.py",
+    "method": "GET",
+    "path": "/compliance-cp/summary",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
     "file": "api/compliance.py",
     "method": "POST",
     "path": "/compliance/findings/import",
@@ -634,6 +727,67 @@
     "tenant_bound": true
   },
   {
+    "file": "api/enterprise_controls.py",
+    "method": "GET",
+    "path": "/enterprise-controls/catalog",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/enterprise_controls.py",
+    "method": "GET",
+    "path": "/enterprise-controls/crosswalk",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/enterprise_controls.py",
+    "method": "GET",
+    "path": "/enterprise-controls/frameworks",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/enterprise_controls.py",
+    "method": "POST",
+    "path": "/enterprise-controls/tenant-state",
+    "scoped": true,
+    "scopes": [
+      "admin:write",
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/evidence_anchors.py",
+    "method": "GET",
+    "path": "/evidence/anchors",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/evidence_anchors.py",
+    "method": "POST",
+    "path": "/evidence/anchors",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
     "file": "api/attestation.py",
     "method": "POST",
     "path": "/evidence/bundles",
@@ -654,6 +808,36 @@
     "tenant_bound": false
   },
   {
+    "file": "api/evidence_index.py",
+    "method": "GET",
+    "path": "/evidence/runs",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/evidence_index.py",
+    "method": "POST",
+    "path": "/evidence/runs/register",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/evidence_index.py",
+    "method": "GET",
+    "path": "/evidence/runs/{run_id}",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
     "file": "api/attestation.py",
     "method": "POST",
     "path": "/evidence/verify",
@@ -662,6 +846,26 @@
       "attestation:admin"
     ],
     "tenant_bound": false
+  },
+  {
+    "file": "api/exception_breakglass.py",
+    "method": "POST",
+    "path": "/exceptions/requests",
+    "scoped": true,
+    "scopes": [
+      "governance:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/exception_breakglass.py",
+    "method": "POST",
+    "path": "/exceptions/requests/{request_id}/approve",
+    "scoped": true,
+    "scopes": [
+      "governance:write"
+    ],
+    "tenant_bound": true
   },
   {
     "file": "api/feed.py",
@@ -932,6 +1136,16 @@
       "attestation:admin"
     ],
     "tenant_bound": false
+  },
+  {
+    "file": "api/planes.py",
+    "method": "GET",
+    "path": "/planes",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
   },
   {
     "file": "api/ring_router.py",

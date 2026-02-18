@@ -33,8 +33,10 @@ def _artifact_root() -> Path:
     return Path(os.getenv("FG_ARTIFACTS_DIR", "artifacts")).resolve()
 
 
-def build_decision_evidence_payload(record: DecisionRecord) -> dict[str, Any]:
-    return {
+def build_decision_evidence_payload(
+    record: DecisionRecord, control_refs: list[str] | None = None
+) -> dict[str, Any]:
+    payload = {
         "schema_version": DECISION_EVIDENCE_SCHEMA_VERSION,
         "decision_id": int(record.id),
         "created_at": record.created_at.isoformat() if record.created_at else None,
@@ -53,6 +55,9 @@ def build_decision_evidence_payload(record: DecisionRecord) -> dict[str, Any]:
         "chain_alg": record.chain_alg,
         "chain_ts": record.chain_ts.isoformat() if record.chain_ts else None,
     }
+    if control_refs:
+        payload["control_refs"] = [str(c) for c in control_refs]
+    return payload
 
 
 def emit_decision_evidence(

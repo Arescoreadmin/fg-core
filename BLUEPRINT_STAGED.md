@@ -5,7 +5,7 @@ Title: FrostGate-Core Blueprint v2 (Staged, Strict)
 Blueprint Version: 2.x.x
 
 Contract Authority: contracts/core/openapi.json (prod)
-Contract-Authority-SHA256: 169fe11aadd4387863744b708832171ccf6f0f5a79514645f05c28bce08a1e56
+Contract-Authority-SHA256: 4ebe6c0a8b09db5dba5680d5a152521acf5b4e611872ced45cda36ef51aed55c
 Single Source of Truth: The prod OpenAPI spec above is authoritative. Any conflicting requirements elsewhere are invalid.
 
 Enforced By: tools/align_score.py, tools/drift_check.py, CI job blueprint_gate
@@ -184,3 +184,9 @@ align_score.py must map each requirement ID → check
 drift_check.py must fail CI for RED items above threshold
 
 “No stage regression” rule
+
+## Implementation Notes (Additive Enterprise Extensions)
+- Added logical compliance control-plane extension routes under `/compliance-cp/*` without altering existing `api/compliance.py` contracts.
+- Added additive exception and break-glass implementations under `/exceptions/*` and `/breakglass/*` while preserving existing governance API semantics.
+- Added additive AI Plane extension implementation notes under `/ai-plane/*` without changing existing endpoint semantics.
+- Added additive nuclear-hardening overlays: plane registry, evidence index, resilience guard, and self-heal watchdog controls.

@@ -440,6 +440,8 @@ prod-unsafe-config-check: venv
 
 security-regression-gates: venv
 	@$(PY) tools/ci/check_security_regression_gates.py
+	@$(PY) tools/ci/check_openapi_security_diff.py
+	@$(PY) tools/ci/check_artifact_policy.py
 
 soc-invariants: venv
 	@PYTHONPATH=. $(PY) tools/ci/check_soc_invariants.py
@@ -1080,3 +1082,99 @@ route-inventory-update:
 	@$(MAKE) route-inventory-generate
 	@$(MAKE) route-inventory-audit
 	@echo "✅ route inventory updated; commit tools/ci/route_inventory.json"
+
+.PHONY: compliance-cp-spot enterprise-controls-spot breakglass-spot governance-risk-spot evidence-anchor-spot federation-spot
+
+compliance-cp-spot: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_enterprise_extensions.py -k compliance_cp
+
+enterprise-controls-spot: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_enterprise_extensions.py -k enterprise_controls
+
+breakglass-spot: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_enterprise_extensions.py -k breakglass
+
+governance-risk-spot: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_enterprise_extensions.py -k governance_risk
+
+evidence-anchor-spot: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_enterprise_extensions.py -k evidence_anchor
+
+federation-spot: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_enterprise_extensions.py -k federation
+
+.PHONY: ai-plane-spot
+ai-plane-spot: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_ai_plane_extension.py
+
+.PHONY: enterprise-ext-spot ai-plane-full enterprise-smoke
+
+enterprise-ext-spot: compliance-cp-spot enterprise-controls-spot breakglass-spot governance-risk-spot evidence-anchor-spot federation-spot
+
+ai-plane-full: venv _require-pytest-venv
+	@FG_ENV=test FG_AI_PLANE_ENABLED=1 FG_AI_EXTERNAL_PROVIDER_ENABLED=0 $(PYTEST_ENV) $(PYTEST) -q tests/test_ai_plane_extension.py
+	@FG_ENV=test FG_AI_PLANE_ENABLED=1 FG_AI_EXTERNAL_PROVIDER_ENABLED=0 $(PY) scripts/generate_ai_plane_evidence.py
+	@FG_ENV=test FG_AI_PLANE_ENABLED=1 FG_AI_EXTERNAL_PROVIDER_ENABLED=0 $(PYTEST_ENV) $(PYTEST) -q tests/test_ai_plane_extension.py::test_ai_artifact_generation_schema_validation
+	@$(MAKE) route-inventory-audit
+
+enterprise-smoke: venv
+	@FG_ENV=test FG_AI_PLANE_ENABLED=1 FG_AI_EXTERNAL_PROVIDER_ENABLED=0 $(PY) scripts/run_enterprise_smoke.py
+
+
+.PHONY: openapi-security-diff
+openapi-security-diff: venv
+	@$(PY) tools/ci/check_openapi_security_diff.py
+
+.PHONY: plane-registry-spot evidence-index-spot resilience-smoke nuclear-full governance-invariants
+
+plane-registry-spot: venv
+	@$(PY) tools/ci/check_plane_registry.py
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_plane_registry.py
+
+evidence-index-spot: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_evidence_index.py
+
+resilience-smoke: venv _require-pytest-venv
+	@FG_ENV=test FG_DEGRADED_MODE=1 FG_BACKPRESSURE_ENABLED=1 $(PYTEST_ENV) $(PYTEST) -q tests/test_resilience_guard.py tests/test_self_heal_watchdog.py
+
+governance-invariants: venv
+	@$(PY) tools/ci/check_governance_invariants.py
+
+nuclear-full: venv
+	@$(MAKE) route-inventory-generate
+	@$(MAKE) route-inventory-audit
+	@$(MAKE) contract-authority-refresh
+	@$(MAKE) fg-contract
+	@$(MAKE) plane-registry-spot
+	@$(MAKE) evidence-index-spot
+	@$(MAKE) enterprise-ext-spot
+	@$(MAKE) ai-plane-spot
+	@$(MAKE) ai-plane-full
+	@$(MAKE) resilience-smoke
+	@$(MAKE) governance-invariants
+	@$(MAKE) openapi-security-diff
+	@$(MAKE) platform-inventory
+	@$(MAKE) openapi-summary
+	@$(MAKE) enterprise-smoke
+
+
+.PHONY: pr-merge-smoke
+pr-merge-smoke: venv
+	@mkdir -p artifacts
+	@ruff check
+	@$(PYTEST) -q
+	@$(MAKE) route-inventory-generate
+	@$(MAKE) route-inventory-audit
+	@$(MAKE) contract-authority-refresh
+	@$(MAKE) fg-contract
+	@$(MAKE) platform-inventory
+	@$(MAKE) openapi-summary
+	@$(MAKE) nuclear-full
+
+
+.PHONY: platform-inventory openapi-summary
+platform-inventory: venv
+	@$(PY) scripts/generate_platform_inventory.py
+
+openapi-summary: venv
+	@$(PY) scripts/summarize_openapi_changes.py

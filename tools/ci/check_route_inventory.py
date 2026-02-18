@@ -149,6 +149,34 @@ def _validate_inventory(
     return failures, warnings
 
 
+def _validate_ai_plane_routes(cur: list[dict[str, object]], failures: list[str]) -> None:
+    ai_routes = [r for r in cur if str(r.get("path", "")).startswith("/ai/")]
+    expected_key = ("POST", "/ai/infer")
+
+    found_expected = False
+    for r in ai_routes:
+        method = str(r.get("method", "")).upper()
+        path = str(r.get("path", ""))
+        if (method, path) == expected_key:
+            found_expected = True
+            if r.get("scoped") is not True:
+                failures.append("/ai/infer must be scope-protected")
+            if r.get("tenant_bound") is not True:
+                failures.append("/ai/infer must be tenant-bound")
+            scopes = set(str(x) for x in (r.get("scopes") or []))
+            if "compliance:read" not in scopes:
+                failures.append("/ai/infer must require compliance:read scope")
+        else:
+            failures.append(f"unexpected /ai/* route present: {method} {path}")
+
+    if not found_expected:
+        failures.append("missing required AI route: POST /ai/infer")
+
+    main_py = (REPO / "api/main.py").read_text(encoding="utf-8")
+    if "ai_plane_enabled()" not in main_py:
+        failures.append("AI route mounting must be gated by FG_AI_PLANE_ENABLED")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Route inventory check/generator")
     parser.add_argument(
@@ -170,6 +198,7 @@ def main() -> int:
 
     expected = json.loads(INVENTORY.read_text(encoding="utf-8"))
     failures, warnings = _validate_inventory(expected, cur)
+    _validate_ai_plane_routes(cur, failures)
 
     if failures:
         print("route inventory: FAILED")

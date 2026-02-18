@@ -1,0 +1,16 @@
+{
+  "allowed_committed_artifacts": [
+    "artifacts/SOC_AUDIT_GATES.md",
+    "artifacts/ENTERPRISE_ADDITIVE_PLAN.md",
+    "artifacts/NUCLEAR_HARDENING_PLAN.md",
+    "artifacts/ai_plane_evidence.json",
+    "artifacts/PLATFORM_INVENTORY.md",
+    "artifacts/PLATFORM_GAPS.md",
+    "artifacts/OPENAPI_SECURITY_SUMMARY.md",
+    "artifacts/platform_inventory.json"
+  ],
+  "generated_patterns_prohibited": [
+    "artifacts/*_evidence.json",
+    "artifacts/anchor_receipts/*.json"
+  ]
+}

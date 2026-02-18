@@ -252,6 +252,205 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
 
         conn.exec_driver_sql(
             """
+            CREATE TABLE IF NOT EXISTS enterprise_framework_catalog (
+                framework_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                version TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS enterprise_control_catalog (
+                control_id TEXT PRIMARY KEY,
+                domain TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS enterprise_control_crosswalk (
+                crosswalk_id TEXT PRIMARY KEY,
+                control_id TEXT NOT NULL,
+                framework_id TEXT NOT NULL,
+                framework_control_ref TEXT NOT NULL,
+                mapping_strength TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS tenant_control_state (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                control_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                note TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                UNIQUE(tenant_id, control_id)
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS evidence_anchor_records (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                artifact_path TEXT NOT NULL,
+                artifact_sha256 TEXT NOT NULL,
+                anchored_at_utc TEXT NOT NULL,
+                external_anchor_ref TEXT,
+                immutable_retention BOOLEAN NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS ai_model_catalog (
+                model_id TEXT PRIMARY KEY,
+                provider TEXT NOT NULL,
+                model_name TEXT NOT NULL,
+                risk_tier TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS tenant_ai_policy (
+                tenant_id TEXT PRIMARY KEY,
+                max_prompt_chars INTEGER NOT NULL DEFAULT 2000,
+                blocked_topics_json TEXT NOT NULL DEFAULT '[]',
+                require_human_review BOOLEAN NOT NULL DEFAULT 1,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS ai_inference_records (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                inference_id TEXT NOT NULL UNIQUE,
+                model_id TEXT NOT NULL,
+                prompt_sha256 TEXT NOT NULL,
+                response_text TEXT NOT NULL,
+                context_refs_json TEXT NOT NULL DEFAULT '[]',
+                created_at_utc TEXT NOT NULL,
+                output_sha256 TEXT NOT NULL DEFAULT '',
+                retrieval_id TEXT NOT NULL DEFAULT 'stub',
+                policy_result TEXT NOT NULL DEFAULT 'pass',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS ai_governance_reviews (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                review_id TEXT NOT NULL UNIQUE,
+                inference_id TEXT NOT NULL,
+                reviewer TEXT NOT NULL,
+                decision TEXT NOT NULL,
+                notes TEXT,
+                created_at_utc TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        if "ai_inference_records" in tables:
+            _sqlite_add_column_if_missing(
+                conn, "ai_inference_records", "inference_id", "TEXT"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "ai_inference_records", "response_text", "TEXT DEFAULT ''"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "ai_inference_records", "context_refs_json", "TEXT DEFAULT '[]'"
+            )
+            _sqlite_add_column_if_missing(
+                conn,
+                "ai_inference_records",
+                "created_at_utc",
+                "TEXT DEFAULT '1970-01-01T00:00:00Z'",
+            )
+            _sqlite_add_column_if_missing(
+                conn, "ai_inference_records", "output_sha256", "TEXT DEFAULT ''"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "ai_inference_records", "retrieval_id", "TEXT DEFAULT 'stub'"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "ai_inference_records", "policy_result", "TEXT DEFAULT 'pass'"
+            )
+        if "ai_policy_violations" not in tables:
+            conn.exec_driver_sql(
+                """
+                CREATE TABLE IF NOT EXISTS ai_policy_violations (
+                    id INTEGER PRIMARY KEY,
+                    tenant_id TEXT NOT NULL,
+                    violation_code TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+                """
+            )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS ai_policy_violations (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                violation_code TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS evidence_runs (
+                id TEXT PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                plane_id TEXT NOT NULL,
+                artifact_type TEXT NOT NULL,
+                artifact_path TEXT NOT NULL,
+                artifact_sha256 TEXT NOT NULL,
+                schema_version TEXT NOT NULL,
+                git_sha TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                status TEXT NOT NULL,
+                summary_json TEXT NOT NULL DEFAULT '{}',
+                retention_class TEXT NOT NULL DEFAULT 'hot',
+                anchor_status TEXT NOT NULL DEFAULT 'none'
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS retention_policies (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                artifact_type TEXT NOT NULL,
+                retention_days INTEGER NOT NULL,
+                immutable_required BOOLEAN NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                UNIQUE(tenant_id, artifact_type)
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
             CREATE TABLE IF NOT EXISTS audit_ledger (
                 id INTEGER PRIMARY KEY,
                 session_id TEXT NOT NULL,

@@ -41,6 +41,15 @@ from api.ui_audit_dashboard import router as ui_audit_dashboard_router
 from api.ui_compliance_dashboard import router as ui_compliance_dashboard_router
 from api.compliance import router as compliance_router
 from api.billing import router as billing_router
+from api.compliance_cp_extension import router as compliance_cp_extension_router
+from api.enterprise_controls import router as enterprise_controls_router
+from api.exception_breakglass import router as exception_breakglass_router
+from api.evidence_anchors import router as evidence_anchors_router
+from api.auth_federation import router as auth_federation_router
+from api.ai_plane_extension import router as ai_plane_extension_router
+from api.planes import router as planes_router
+from api.evidence_index import router as evidence_index_router
+from services.ai_plane_extension import ai_external_provider_enabled, ai_plane_enabled
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
 from api.middleware.request_validation import (
@@ -53,6 +62,8 @@ from api.middleware.security_headers import (
     SecurityHeadersMiddleware,
 )
 from api.middleware.exception_shield import FGExceptionShieldMiddleware
+from api.middleware.resilience_guard import ResilienceGuardMiddleware
+from services.self_heal import SelfHealWatchdog
 
 # Canonical app logger (fastapi.logger is NOT a stdlib logger)
 log = logging.getLogger("frostgate")
@@ -193,6 +204,9 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         app.state.effective_env = effective_env
         app.state.effective_env_source = source
 
+        if ai_external_provider_enabled():
+            raise RuntimeError("AI_EXTERNAL_PROVIDER_NOT_ALLOWED")
+
         # ---- Startup validation ----
         assert_prod_invariants()
         is_production = False
@@ -231,6 +245,11 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             if is_production or is_strict_env_required():
                 raise
 
+        # ---- Self-heal watchdog ----
+        self_heal_watchdog = SelfHealWatchdog()
+        self_heal_watchdog.start()
+        app.state.self_heal_watchdog = self_heal_watchdog
+
         # ---- Graceful shutdown ----
         if spine_modules.get_shutdown_manager is not None:
             try:
@@ -245,6 +264,12 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             app.state.shutdown_manager = None
 
         yield
+
+        if hasattr(app.state, "self_heal_watchdog"):
+            try:
+                app.state.self_heal_watchdog.stop()
+            except Exception:
+                pass
 
         if app.state.shutdown_manager is not None:
             try:
@@ -375,6 +400,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.add_middleware(
         RequestValidationMiddleware, config=RequestValidationConfig.from_env()
     )
+    app.add_middleware(ResilienceGuardMiddleware)
 
     # ---- App state ----
     app.state.auth_enabled = bool(resolved_auth_enabled)
@@ -472,6 +498,15 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(billing_router)
     app.include_router(audit_router)
     app.include_router(compliance_router)
+    app.include_router(compliance_cp_extension_router)
+    app.include_router(enterprise_controls_router)
+    app.include_router(exception_breakglass_router)
+    app.include_router(evidence_anchors_router)
+    app.include_router(auth_federation_router)
+    if ai_plane_enabled():
+        app.include_router(ai_plane_extension_router)
+    app.include_router(planes_router)
+    app.include_router(evidence_index_router)
 
     if ui_enabled():
         app.include_router(ui_router)
@@ -729,6 +764,15 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(billing_router)
     app.include_router(audit_router)
     app.include_router(compliance_router)
+    app.include_router(compliance_cp_extension_router)
+    app.include_router(enterprise_controls_router)
+    app.include_router(exception_breakglass_router)
+    app.include_router(evidence_anchors_router)
+    app.include_router(auth_federation_router)
+    if ai_plane_enabled():
+        app.include_router(ai_plane_extension_router)
+    app.include_router(planes_router)
+    app.include_router(evidence_index_router)
     app.include_router(keys_router)
     app.include_router(forensics_router)
     if mission_router is not None:

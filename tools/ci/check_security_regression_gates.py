@@ -202,6 +202,63 @@ def check_no_unknown_tenant_fallback(failures: list[str]) -> None:
         )
 
 
+def check_enterprise_extension_surfaces(failures: list[str]) -> None:
+    required_dirs = [
+        "services/compliance_cp_extension",
+        "services/enterprise_controls_extension",
+        "services/exception_breakglass_extension",
+        "services/governance_risk_extension",
+        "services/evidence_anchor_extension",
+        "services/federation_extension",
+        "services/ai_plane_extension",
+        "services/plane_registry",
+        "services/evidence_index",
+        "services/resilience",
+    ]
+    for rel in required_dirs:
+        if not (REPO / rel).exists():
+            failures.append(f"missing required enterprise extension directory: {rel}")
+
+    makefile = _read("Makefile")
+    required_targets = [
+        "compliance-cp-spot:",
+        "enterprise-controls-spot:",
+        "breakglass-spot:",
+        "governance-risk-spot:",
+        "evidence-anchor-spot:",
+        "federation-spot:",
+        "ai-plane-spot:",
+        "ai-plane-full:",
+        "enterprise-ext-spot:",
+        "enterprise-smoke:",
+        "plane-registry-spot:",
+        "evidence-index-spot:",
+        "resilience-smoke:",
+        "nuclear-full:",
+        "platform-inventory:",
+        "openapi-summary:",
+        "pr-merge-smoke:",
+    ]
+    for marker in required_targets:
+        if marker not in makefile:
+            failures.append(f"Makefile missing enterprise target marker: {marker}")
+
+
+
+def check_required_new_governance_assets(failures: list[str]) -> None:
+    required_files = [
+        "tools/ci/check_openapi_security_diff.py",
+        "tools/ci/check_artifact_policy.py",
+        "tools/ci/openapi_baseline.json",
+        "tools/ci/protected_routes_allowlist.json",
+        "tools/ci/artifact_policy_allowlist.json",
+        "scripts/generate_platform_inventory.py",
+        "scripts/summarize_openapi_changes.py",
+    ]
+    for rel in required_files:
+        if not (REPO / rel).exists():
+            failures.append(f"missing required governance asset: {rel}")
+
 def main() -> int:
     failures: list[str] = []
     check_no_placeholder_security_tests(failures)
@@ -213,6 +270,8 @@ def main() -> int:
     check_middleware_tenant_assignment_is_key_derived(failures)
     check_tenant_binding_helper_usage(failures)
     check_no_unknown_tenant_fallback(failures)
+    check_enterprise_extension_surfaces(failures)
+    check_required_new_governance_assets(failures)
 
     if failures:
         print("security regression gates: FAILED")

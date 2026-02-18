@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frostgate/contracts/artifacts/plane_registry_response.schema.json",
+  "type": "object",
+  "required": ["planes"],
+  "properties": {
+    "planes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["plane_id", "route_prefixes", "mount_flag", "required_make_targets"],
+        "properties": {
+          "plane_id": {"type": "string"},
+          "route_prefixes": {"type": "array", "items": {"type": "string"}},
+          "mount_flag": {"type": "string"},
+          "required_make_targets": {"type": "array", "items": {"type": "string"}},
+          "evidence": {"type": "array"},
+          "required_route_invariants": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}
