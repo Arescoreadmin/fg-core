@@ -38,6 +38,9 @@
         "/admin/audit/export",
         "/admin/audit/search",
         "/admin/config/changes/{change_id}/revert",
+        "/admin/devices",
+        "/admin/devices/{device_id}/disable",
+        "/admin/devices/{device_id}/enable",
         "/admin/keys",
         "/admin/keys/needing-rotation",
         "/admin/keys/{key_prefix}/revoke",
@@ -129,6 +132,10 @@
         "/stats/debug",
         "/stats/summary",
         "/status",
+        "/ui/ai/chat",
+        "/ui/ai/device/disable",
+        "/ui/ai/device/enable",
+        "/ui/ai/experience",
         "/ui/audit/chain-integrity",
         "/ui/audit/export-link",
         "/ui/audit/overview",
@@ -145,12 +152,19 @@
         "/ui/dash/controls",
         "/ui/dash/forensics",
         "/ui/dash/posture",
+        "/ui/dashboard-data/snapshot",
         "/ui/decision/{decision_id}",
         "/ui/decisions",
+        "/ui/devices/{device_id}/disable",
+        "/ui/devices/{device_id}/enable",
         "/ui/feed",
         "/ui/forensics/chain/verify",
         "/ui/posture",
+        "/ui/registry/dashboards",
+        "/ui/registry/dashboards/{dashboard_id}",
+        "/ui/registry/persona",
         "/ui/scopes",
+        "/ui/theme",
         "/ui/token",
         "/v1/status"
       ],
@@ -158,7 +172,7 @@
       "type": "unexpected_route_prefixes"
     }
   ],
-  "git_sha": "cc27041373126c13f54fdf0424c292cef6780280",
+  "git_sha": "18c400f6b701abad5afa4784f01ead0d34545c39",
   "planes": [
     {
       "evidence": [
