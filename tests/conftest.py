@@ -8,6 +8,8 @@ os.environ.setdefault("FG_API_KEY", "ci-test-key-0000000000000000000000000000000
 os.environ.setdefault("FG_KEY_PEPPER", "ci-test-pepper")
 os.environ.setdefault("FG_STATE_DIR", "/tmp/frostgate/state")
 os.environ.setdefault("FG_SQLITE_PATH", "/tmp/frostgate/fg-conftest.db")
+os.environ.setdefault("FG_DEVICE_KEY_KEK_CURRENT_VERSION", "v1")
+os.environ.setdefault("FG_DEVICE_KEY_KEK_V1", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 
 import pytest
 
@@ -23,6 +25,8 @@ def pytest_configure() -> None:
     os.environ.setdefault("FG_API_KEY", "ci-test-key-00000000000000000000000000000000")
     os.environ.setdefault("FG_KEY_PEPPER", "ci-test-pepper")
     os.environ.setdefault("FG_ENV", "test")
+    os.environ.setdefault("FG_DEVICE_KEY_KEK_CURRENT_VERSION", "v1")
+    os.environ.setdefault("FG_DEVICE_KEY_KEK_V1", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -30,6 +34,8 @@ def _test_env_defaults() -> None:
     os.environ.setdefault("FG_API_KEY", "ci-test-key-00000000000000000000000000000000")
     os.environ.setdefault("FG_KEY_PEPPER", "ci-test-pepper")
     os.environ.setdefault("FG_ENV", "test")
+    os.environ.setdefault("FG_DEVICE_KEY_KEK_CURRENT_VERSION", "v1")
+    os.environ.setdefault("FG_DEVICE_KEY_KEK_V1", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 
 
 @pytest.fixture(autouse=True)
@@ -59,6 +65,8 @@ def _session_env(tmp_path_factory: pytest.TempPathFactory):
     _setenv("FG_API_KEY", _require_api_key())
     _setenv("FG_KEY_PEPPER", "ci-test-pepper")
     _setenv("FG_UI_TOKEN_GET_ENABLED", "1")
+    _setenv("FG_DEVICE_KEY_KEK_CURRENT_VERSION", "v1")
+    _setenv("FG_DEVICE_KEY_KEK_V1", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 
     reset_engine_cache()
     init_db(sqlite_path=db_path)
@@ -91,6 +99,8 @@ def build_app(tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch)
         monkeypatch.setenv(
             "FG_UI_TOKEN_GET_ENABLED", "1" if ui_token_get_enabled else "0"
         )
+        monkeypatch.setenv("FG_DEVICE_KEY_KEK_CURRENT_VERSION", "v1")
+        monkeypatch.setenv("FG_DEVICE_KEY_KEK_V1", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 
         reset_engine_cache()
         init_db(sqlite_path=db_path)
@@ -113,6 +123,8 @@ def fresh_db(tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("FG_API_KEY", _require_api_key())
     monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
     monkeypatch.setenv("FG_UI_TOKEN_GET_ENABLED", "1")
+    monkeypatch.setenv("FG_DEVICE_KEY_KEK_CURRENT_VERSION", "v1")
+    monkeypatch.setenv("FG_DEVICE_KEY_KEK_V1", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 
     reset_engine_cache()
     init_db(sqlite_path=db_path)

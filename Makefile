@@ -520,6 +520,22 @@ fg-lint: fmt-check
 test-unit: venv _require-pytest-venv
 	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q -m "not postgres"
 
+
+.PHONY: agent-unit agent-build-windows agent-smoke
+agent-unit: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/agent
+
+agent-build-windows:
+ifeq ($(OS),Windows_NT)
+	powershell -ExecutionPolicy Bypass -File tools/build/build_agent_windows.ps1
+	powershell -ExecutionPolicy Bypass -File tools/build/sign_agent_windows.ps1
+else
+	@echo "agent-build-windows: no-op on non-Windows"
+endif
+
+agent-smoke: venv
+	@$(PY) -c "print('agent smoke: use local config and run python -m agent.main')"
+
 # =============================================================================
 # Fast lane + audit/compliance
 # =============================================================================
