@@ -244,7 +244,7 @@ ci-local: fix fg-fast
 
 .PHONY: guard-scripts fg-audit-make fg-contract fg-compile \
 	contracts-gen contracts-core-gen contracts-core-diff \
-	artifact-contract-check contract-authority-check contract-authority-refresh \
+	artifact-contract-check contract-authority-check contract-authority-refresh validate-ai-contracts \
 	check-no-engine-evaluate opa-check verify-spine-modules verify-schemas verify-drift align-score \
 	contracts-gen-prod fg-contract-prod test-unit
 
@@ -318,6 +318,9 @@ contract-authority-refresh: venv
 	@FG_ENV=prod $(MAKE) -s contracts-gen
 	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) scripts/refresh_contract_authority.py
 
+validate-ai-contracts: venv
+	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) tools/ci/validate_ai_contracts.py
+
 fg-contract: venv guard-scripts
 	@FG_ENV=prod $(MAKE) -s contracts-gen
 	@$(PY_CONTRACT) scripts/contract_toolchain_check.py
@@ -325,6 +328,7 @@ fg-contract: venv guard-scripts
 	@git diff --exit-code contracts/admin
 	@$(PY_CONTRACT) scripts/contracts_diff_core.py
 	@$(PY_CONTRACT) scripts/contract_authority_check.py
+	@$(MAKE) -s validate-ai-contracts
 	@$(PY_CONTRACT) scripts/artifact_schema_check.py
 	@echo "Contract diff: OK (admin/core/artifacts)"
 
