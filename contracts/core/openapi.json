@@ -490,7 +490,7 @@
         "additionalProperties": false,
         "properties": {
           "command_type": {
-            "pattern": "^(refresh_policy|rotate_key|update_agent|quarantine_device|unquarantine)$",
+            "pattern": "^(collect_diagnostics|rotate_identity|flush_cache|run_integrity_check|fetch_inventory)$",
             "title": "Command Type",
             "type": "string"
           },
@@ -498,7 +498,21 @@
             "title": "Device Id",
             "type": "string"
           },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 8,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
           "payload": {
+            "maxProperties": 128,
             "title": "Payload",
             "type": "object"
           },
@@ -515,6 +529,29 @@
           "command_type"
         ],
         "title": "CommandIssueRequest",
+        "type": "object"
+      },
+      "CommandLeaseRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "controller_id": {
+            "maxLength": 128,
+            "minLength": 3,
+            "title": "Controller Id",
+            "type": "string"
+          },
+          "lease_seconds": {
+            "default": 60,
+            "maximum": 600.0,
+            "minimum": 10.0,
+            "title": "Lease Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "controller_id"
+        ],
+        "title": "CommandLeaseRequest",
         "type": "object"
       },
       "ComplianceCPEvidenceIngestRequest": {
@@ -3475,6 +3512,51 @@
         "title": "RingRouteResponse",
         "type": "object"
       },
+      "RolloutConfigRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "broad_percent_per_hour": {
+            "default": 100,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Broad Percent Per Hour",
+            "type": "integer"
+          },
+          "canary_error_budget": {
+            "default": 5,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Canary Error Budget",
+            "type": "integer"
+          },
+          "canary_percent_per_hour": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Canary Percent Per Hour",
+            "type": "integer"
+          },
+          "kill_switch": {
+            "default": false,
+            "title": "Kill Switch",
+            "type": "boolean"
+          },
+          "paused": {
+            "default": false,
+            "title": "Paused",
+            "type": "boolean"
+          },
+          "pilot_percent_per_hour": {
+            "default": 30,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Pilot Percent Per Hour",
+            "type": "integer"
+          }
+        },
+        "title": "RolloutConfigRequest",
+        "type": "object"
+      },
       "RotateKeyRequest": {
         "description": "Request to rotate an API key.",
         "properties": {
@@ -4205,6 +4287,16 @@
     "/agent/commands/poll": {
       "post": {
         "operationId": "poll_commands_agent_commands_poll_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommandLeaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
@@ -4222,6 +4314,16 @@
           },
           "403": {
             "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Poll Commands",
@@ -4450,6 +4552,38 @@
           },
           "403": {
             "description": "Forbidden"
+          },
+          "429": {
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Update Manifest",
+        "tags": [
+          "agent-phase2"
+        ]
+      },
+      "post": {
+        "operationId": "update_manifest_agent_update_manifest_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Update Manifest Agent Update Manifest Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "429": {
+            "description": "Too Many Requests"
           }
         },
         "summary": "Update Manifest",
