@@ -385,6 +385,73 @@
         "title": "BreakglassSessionCreate",
         "type": "object"
       },
+      "CertEnrollRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "csr_pem": {
+            "title": "Csr Pem",
+            "type": "string"
+          },
+          "device_fingerprint": {
+            "maxLength": 1024,
+            "minLength": 8,
+            "title": "Device Fingerprint",
+            "type": "string"
+          },
+          "device_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Name"
+          },
+          "enrollment_token": {
+            "maxLength": 256,
+            "minLength": 8,
+            "title": "Enrollment Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enrollment_token",
+          "device_fingerprint",
+          "csr_pem"
+        ],
+        "title": "CertEnrollRequest",
+        "type": "object"
+      },
+      "CertEnrollResponse": {
+        "properties": {
+          "certificate_chain_pem": {
+            "title": "Certificate Chain Pem",
+            "type": "string"
+          },
+          "certificate_pem": {
+            "title": "Certificate Pem",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id",
+          "certificate_pem",
+          "certificate_chain_pem",
+          "expires_at"
+        ],
+        "title": "CertEnrollResponse",
+        "type": "object"
+      },
       "ClassificationRing": {
         "enum": [
           "UNCLASS",
@@ -394,6 +461,61 @@
         ],
         "title": "ClassificationRing",
         "type": "string"
+      },
+      "CommandAckRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "title": "Command Id",
+            "type": "string"
+          },
+          "result": {
+            "title": "Result",
+            "type": "object"
+          },
+          "status": {
+            "pattern": "^(ok|failed)$",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command_id",
+          "status"
+        ],
+        "title": "CommandAckRequest",
+        "type": "object"
+      },
+      "CommandIssueRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "command_type": {
+            "pattern": "^(refresh_policy|rotate_key|update_agent|quarantine_device|unquarantine)$",
+            "title": "Command Type",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "payload": {
+            "title": "Payload",
+            "type": "object"
+          },
+          "ttl_seconds": {
+            "default": 300,
+            "maximum": 86400.0,
+            "minimum": 30.0,
+            "title": "Ttl Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "device_id",
+          "command_type"
+        ],
+        "title": "CommandIssueRequest",
+        "type": "object"
       },
       "ComplianceCPEvidenceIngestRequest": {
         "additionalProperties": false,
@@ -2455,6 +2577,21 @@
         "title": "ListKeysResponse",
         "type": "object"
       },
+      "LogAnchorRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "hash": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hash"
+        ],
+        "title": "LogAnchorRequest",
+        "type": "object"
+      },
       "MissionEnvelope": {
         "properties": {
           "allowed_mitigations": {
@@ -2914,6 +3051,46 @@
           "allow"
         ],
         "title": "PolicyDecision",
+        "type": "object"
+      },
+      "PolicyPublishRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "policy_json": {
+            "title": "Policy Json",
+            "type": "object"
+          },
+          "signature": {
+            "title": "Signature",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "policy_json",
+          "signature"
+        ],
+        "title": "PolicyPublishRequest",
+        "type": "object"
+      },
+      "QuarantineRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 512,
+            "minLength": 2,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "QuarantineRequest",
         "type": "object"
       },
       "ROEEvaluationRequest": {
@@ -3783,6 +3960,36 @@
         "title": "TopItem",
         "type": "object"
       },
+      "UpdateReportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "status"
+        ],
+        "title": "UpdateReportRequest",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -3824,6 +4031,205 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/agent/cert/enroll": {
+      "post": {
+        "operationId": "cert_enroll_agent_cert_enroll_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CertEnrollRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertEnrollResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cert Enroll",
+        "tags": [
+          "agent-phase2"
+        ]
+      }
+    },
+    "/agent/cert/renew": {
+      "post": {
+        "operationId": "cert_renew_agent_cert_renew_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertEnrollResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cert Renew",
+        "tags": [
+          "agent-phase2"
+        ]
+      }
+    },
+    "/agent/cert/status": {
+      "get": {
+        "operationId": "cert_status_agent_cert_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Cert Status Agent Cert Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "summary": "Cert Status",
+        "tags": [
+          "agent-phase2"
+        ]
+      }
+    },
+    "/agent/commands/ack": {
+      "post": {
+        "operationId": "ack_command_agent_commands_ack_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommandAckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Ack Command Agent Commands Ack Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ack Command",
+        "tags": [
+          "agent-phase2"
+        ]
+      }
+    },
+    "/agent/commands/poll": {
+      "post": {
+        "operationId": "poll_commands_agent_commands_poll_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Poll Commands Agent Commands Poll Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "summary": "Poll Commands",
+        "tags": [
+          "agent-phase2"
+        ]
+      }
+    },
     "/agent/enroll": {
       "post": {
         "operationId": "enroll_agent_agent_enroll_post",
@@ -3945,6 +4351,158 @@
         "summary": "Rotate Device Key",
         "tags": [
           "agent"
+        ]
+      }
+    },
+    "/agent/log/anchor": {
+      "post": {
+        "operationId": "anchor_log_hash_agent_log_anchor_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogAnchorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Anchor Log Hash Agent Log Anchor Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Anchor Log Hash",
+        "tags": [
+          "agent-phase2"
+        ]
+      }
+    },
+    "/agent/policy/fetch": {
+      "get": {
+        "operationId": "fetch_policy_agent_policy_fetch_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Fetch Policy Agent Policy Fetch Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "summary": "Fetch Policy",
+        "tags": [
+          "agent-phase2"
+        ]
+      }
+    },
+    "/agent/update/manifest": {
+      "get": {
+        "operationId": "update_manifest_agent_update_manifest_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Update Manifest Agent Update Manifest Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "summary": "Update Manifest",
+        "tags": [
+          "agent-phase2"
+        ]
+      }
+    },
+    "/agent/update/report": {
+      "post": {
+        "operationId": "report_update_event_agent_update_report_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Report Update Event Agent Update Report Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Update Event",
+        "tags": [
+          "agent-phase2"
         ]
       }
     },

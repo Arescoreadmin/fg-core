@@ -191,6 +191,7 @@ class AgentDeviceRegistry(Base):
     last_seen_at = Column(DateTime(timezone=True), nullable=True)
     last_ip = Column(String(64), nullable=True)
     last_version = Column(String(64), nullable=True)
+    ring = Column(String(16), nullable=False, default="broad", server_default=text("'broad'"))
 
 
 class AgentDeviceKey(Base):
@@ -227,6 +228,136 @@ class AgentDeviceNonce(Base):
     id = Column(Integer, primary_key=True)
     device_id = Column(String(64), nullable=False, index=True)
     nonce_hash = Column(String(64), nullable=False, index=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+
+
+class AgentDeviceIdentity(Base):
+    __tablename__ = "agent_device_identities"
+
+    id = Column(Integer, primary_key=True)
+    device_id = Column(String(64), nullable=False, unique=True, index=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    cert_fingerprint = Column(String(64), nullable=False, index=True)
+    cert_pem = Column(Text, nullable=False)
+    cert_chain_pem = Column(Text, nullable=True)
+    cert_not_after = Column(DateTime(timezone=True), nullable=False)
+    status = Column(String(16), nullable=False, default="active", index=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+
+
+class AgentCommand(Base):
+    __tablename__ = "agent_commands"
+
+    id = Column(Integer, primary_key=True)
+    command_id = Column(String(64), nullable=False, unique=True, index=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    device_id = Column(String(64), nullable=False, index=True)
+    command_type = Column(String(64), nullable=False, index=True)
+    payload = Column(JSON, nullable=False, server_default=text("'{}'"))
+    issued_by = Column(String(128), nullable=False)
+    issued_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    signature = Column(Text, nullable=False)
+    nonce = Column(String(128), nullable=False)
+    idempotency_key = Column(String(128), nullable=True, index=True)
+    lease_owner = Column(String(128), nullable=True, index=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
+    attempt_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    status = Column(String(32), nullable=False, default="issued", index=True)
+    terminal_state = Column(String(32), nullable=True, index=True)
+    acked_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class AgentUpdateRollout(Base):
+    __tablename__ = "agent_update_rollouts"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, unique=True, index=True)
+    canary_percent_per_hour = Column(Integer, nullable=False, default=10)
+    pilot_percent_per_hour = Column(Integer, nullable=False, default=30)
+    broad_percent_per_hour = Column(Integer, nullable=False, default=100)
+    canary_error_budget = Column(Integer, nullable=False, default=5)
+    canary_error_count = Column(Integer, nullable=False, default=0)
+    paused = Column(Boolean, nullable=False, default=False, server_default=text("0"))
+    kill_switch = Column(Boolean, nullable=False, default=False, server_default=text("0"))
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+
+
+class AgentRateBudgetCounter(Base):
+    __tablename__ = "agent_rate_budget_counters"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    device_id = Column(String(64), nullable=True, index=True)
+    metric = Column(String(64), nullable=False, index=True)
+    window_start = Column(DateTime(timezone=True), nullable=False, index=True)
+    count = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+
+
+class AgentPolicyBundle(Base):
+    __tablename__ = "agent_policy_bundles"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    version = Column(String(64), nullable=False)
+    policy_hash = Column(String(64), nullable=False, index=True)
+    policy_json = Column(JSON, nullable=False, server_default=text("'{}'"))
+    signature = Column(Text, nullable=False)
+    revoked = Column(Boolean, nullable=False, default=False, server_default=text("0"))
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+
+
+class AgentLogAnchor(Base):
+    __tablename__ = "agent_log_anchors"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    device_id = Column(String(64), nullable=False, index=True)
+    hash = Column(String(64), nullable=False)
+    anchored_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+
+
+class AgentQuarantineEvent(Base):
+    __tablename__ = "agent_quarantine_events"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    device_id = Column(String(64), nullable=False, index=True)
+    action = Column(String(32), nullable=False)
+    reason = Column(String(512), nullable=True)
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,

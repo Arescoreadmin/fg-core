@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frostgate/contracts/agent/update_manifest.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "sha256",
+    "size",
+    "min_supported_version",
+    "download_url",
+    "signature"
+  ],
+  "properties": {
+    "version": {"type": "string", "minLength": 1},
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "size": {"type": "integer", "minimum": 1},
+    "min_supported_version": {"type": "string", "minLength": 1},
+    "download_url": {"type": "string", "format": "uri", "pattern": "^https://"},
+    "signature": {"type": "string", "minLength": 32}
+  }
+}
