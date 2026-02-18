@@ -292,3 +292,22 @@ Reviewed formatting-only edits to critical paths:
 - `api/middleware/resilience_guard.py`
 
 Disposition: no semantic change; formatting normalization only.
+
+
+## 2026-02-18 Dashboard platform route inventory update
+- Added audited UI registry/theme/snapshot routes and refreshed `tools/ci/route_inventory.json` to keep SOC route inventory gate synchronized.
+
+- Extended `tools/ci/check_dashboard_contracts.py` to validate `widget_runtime_policy.json` references as part of dashboard contract governance.
+
+- Updated `tools/ci/check_dashboard_contracts.py` for runtime-policy precedence/shape validation and widget reference enforcement.
+
+- Added `/ui/ai/*` route inventory entries for AI console UX endpoints to preserve SOC route-audit coverage.
+
+## 2026-02-18 UI AI compatibility + signature hook follow-up
+- Updated `api/ui_ai_console.py` to restore compatibility behaviors required by security lanes:
+  - structured AI error payloads (`detail.code`) for deterministic assertions,
+  - `_day_bucket` helper for quota rollover tests,
+  - provider-denied status normalization (`400`),
+  - request token-cap enforcement before schema rejection,
+  - optional signature-hook header enforcement (`FG_AI_SIGNATURE_HOOK_ENABLED`).
+- Added `/ui/ai/usage` route and refreshed `tools/ci/route_inventory.json` so SOC route inventory remains in sync.
