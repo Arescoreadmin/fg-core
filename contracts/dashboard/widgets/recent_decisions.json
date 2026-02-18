@@ -1,5 +1,13 @@
 {
-  "widget_id": "recent_decisions",
-  "title": "Recent Decisions",
-  "contract": "contracts/dashboard/widgets/recent_decisions.json"
+  "id": "recent_decisions",
+  "version": "1.0.0",
+  "data_provider": "recent_decisions",
+  "permissions": {
+    "scopes": ["ui:read"],
+    "admin_override_allowed": true,
+    "tenant_safe": true
+  },
+  "refresh_policy": {"interval_seconds": 15},
+  "degrade_ok": true,
+  "render_hints": {"type": "table", "priority": 2}
 }

@@ -281,6 +281,7 @@ verify-spine-modules: venv
 
 verify-schemas: venv
 	@$(PY_CONTRACT) scripts/verify_schemas.py
+	@$(PY_CONTRACT) tools/ci/check_dashboard_contracts.py
 
 verify-drift: venv
 	@$(PY_CONTRACT) scripts/verify_drift.py
@@ -326,7 +327,8 @@ fg-contract: venv guard-scripts
 	@$(PY_CONTRACT) scripts/contracts_diff_core.py
 	@$(PY_CONTRACT) scripts/contract_authority_check.py
 	@$(PY_CONTRACT) scripts/artifact_schema_check.py
-	@echo "Contract diff: OK (admin/core/artifacts)"
+	@$(PY_CONTRACT) tools/ci/check_dashboard_contracts.py
+	@echo "Contract diff: OK (admin/core/artifacts/dashboard)"
 
 fg-contract-prod: venv guard-scripts
 	@FG_ENV=prod $(MAKE) -s fg-contract

@@ -1,5 +1,13 @@
 {
-  "widget_id": "system_health",
-  "title": "System Health",
-  "contract": "contracts/dashboard/widgets/system_health.json"
+  "id": "system_health",
+  "version": "1.0.0",
+  "data_provider": "system_health",
+  "permissions": {
+    "scopes": ["ui:read"],
+    "admin_override_allowed": true,
+    "tenant_safe": true
+  },
+  "refresh_policy": {"interval_seconds": 30},
+  "degrade_ok": false,
+  "render_hints": {"type": "status_card", "priority": 1}
 }
