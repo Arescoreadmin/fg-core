@@ -292,3 +292,16 @@ Reviewed formatting-only edits to critical paths:
 - `api/middleware/resilience_guard.py`
 
 Disposition: no semantic change; formatting normalization only.
+
+
+## SOC Sync Update (2026-02-18)
+
+Reviewed security-critical changes in this branch for:
+- `.github/workflows/ci.yml`
+- `api/auth_scopes/helpers.py`
+- `api/security/public_paths.py`
+
+Assessment:
+- Route inventory and SOC manifest gates remain enforced fail-closed.
+- Agent endpoint public allowlist changes are explicit-path only (no wildcard broadening).
+- Auth helper hardening remains aligned with fail-closed key pepper requirements.

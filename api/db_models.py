@@ -151,6 +151,90 @@ class SecurityAuditLog(Base):
     entry_hash = Column(String(64), nullable=False, unique=True, index=True)
 
 
+class AgentEnrollmentToken(Base):
+    __tablename__ = "agent_enrollment_tokens"
+
+    id = Column(Integer, primary_key=True)
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    created_by = Column(String(128), nullable=False, default="unknown")
+    reason = Column(String(256), nullable=False, default="unspecified")
+    ticket = Column(String(128), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    max_uses = Column(Integer, nullable=False, default=1, server_default=text("1"))
+    used_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+
+
+class AgentDeviceRegistry(Base):
+    __tablename__ = "agent_device_registry"
+
+    id = Column(Integer, primary_key=True)
+    device_id = Column(String(64), nullable=False, unique=True, index=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    fingerprint_hash = Column(String(64), nullable=False)
+    status = Column(String(16), nullable=False, default="active", index=True)
+    suspicious = Column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    last_ip = Column(String(64), nullable=True)
+    last_version = Column(String(64), nullable=True)
+
+
+class AgentDeviceKey(Base):
+    __tablename__ = "agent_device_keys"
+
+    id = Column(Integer, primary_key=True)
+    device_id = Column(
+        String(64),
+        ForeignKey("agent_device_registry.device_id"),
+        nullable=False,
+        index=True,
+    )
+    tenant_id = Column(String(128), nullable=False, index=True)
+    key_prefix = Column(String(32), nullable=False, unique=True, index=True)
+    key_hash = Column(Text, nullable=False)
+    key_lookup = Column(String(64), nullable=False, index=True)
+    hash_alg = Column(String(32), nullable=False, default="argon2id")
+    hmac_secret_enc = Column(Text, nullable=False)
+    enabled = Column(Boolean, nullable=False, default=True, server_default=text("1"))
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+
+
+class AgentDeviceNonce(Base):
+    __tablename__ = "agent_device_nonces"
+    __table_args__ = (
+        Index("ix_agent_device_nonces_device_created", "device_id", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    device_id = Column(String(64), nullable=False, index=True)
+    nonce_hash = Column(String(64), nullable=False, index=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+
+
 class ConfigVersion(Base):
     __tablename__ = "config_versions"
     __table_args__ = (

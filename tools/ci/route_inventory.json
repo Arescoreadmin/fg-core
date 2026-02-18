@@ -16,6 +16,36 @@
     "tenant_bound": false
   },
   {
+    "file": "api/agent_tokens.py",
+    "method": "GET",
+    "path": "/admin/agent/devices",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/agent_tokens.py",
+    "method": "POST",
+    "path": "/admin/agent/devices/{device_id}/revoke",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/agent_tokens.py",
+    "method": "POST",
+    "path": "/admin/agent/enrollment-tokens",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
     "file": "api/admin.py",
     "method": "POST",
     "path": "/admin/audit/export",
@@ -183,6 +213,30 @@
     "scopes": [
       "admin:read"
     ],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/agent_enrollment.py",
+    "method": "POST",
+    "path": "/agent/enroll",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/agent_enrollment.py",
+    "method": "POST",
+    "path": "/agent/heartbeat",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/agent_enrollment.py",
+    "method": "POST",
+    "path": "/agent/key/rotate",
+    "scoped": false,
+    "scopes": [],
     "tenant_bound": false
   },
   {
