@@ -1,5 +1,1 @@
-{
-  "widget_id": "drift_status",
-  "title": "Drift Status",
-  "contract": "contracts/dashboard/widgets/drift_status.json"
-}
+{"id": "drift_status", "version": "1.0.0", "data_provider": "drift_status", "permissions": {"scopes": ["forensics:read"], "admin_override_allowed": true, "tenant_safe": true}, "refresh_policy": {"interval_seconds": 60}, "degrade_ok": true, "render_hints": {"type": "chip", "priority": 3}}

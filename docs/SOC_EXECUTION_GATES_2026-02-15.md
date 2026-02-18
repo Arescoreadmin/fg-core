@@ -292,3 +292,11 @@ Reviewed formatting-only edits to critical paths:
 - `api/middleware/resilience_guard.py`
 
 Disposition: no semantic change; formatting normalization only.
+
+
+## 2026-02-18 Dashboard platform route inventory update
+- Added audited UI registry/theme/snapshot routes and refreshed `tools/ci/route_inventory.json` to keep SOC route inventory gate synchronized.
+
+- Extended `tools/ci/check_dashboard_contracts.py` to validate `widget_runtime_policy.json` references as part of dashboard contract governance.
+
+- Updated `tools/ci/check_dashboard_contracts.py` for runtime-policy precedence/shape validation and widget reference enforcement.
