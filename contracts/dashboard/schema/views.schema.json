@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["dashboards"],
+  "properties": {
+    "dashboards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "widgets", "persona"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "title": {"type": "string", "minLength": 1},
+          "widgets": {"type": "array", "items": {"type": "string"}},
+          "persona": {
+            "type": "object",
+            "required": ["allowed"],
+            "properties": {"allowed": {"type": "array", "items": {"type": "string"}}},
+            "additionalProperties": false
+          },
+          "context_default": {"type": "object"}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}
