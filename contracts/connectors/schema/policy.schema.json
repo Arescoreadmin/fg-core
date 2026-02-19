@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "enabled_connectors",
+    "connector_scopes",
+    "allowed_collections",
+    "allowed_resources",
+    "retention",
+    "redaction_mode",
+    "rate_limits"
+  ],
+  "properties": {
+    "enabled_connectors": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "connector_scopes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {"type": "string"},
+        "uniqueItems": true
+      }
+    },
+    "allowed_collections": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "allowed_resources": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {"type": "string"},
+        "uniqueItems": true
+      }
+    },
+    "retention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["days"],
+      "properties": {
+        "days": {"type": "integer", "minimum": 1, "maximum": 3650}
+      }
+    },
+    "redaction_mode": {"type": "string", "enum": ["strict", "balanced"]},
+    "rate_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tenant_dispatch_per_minute",
+        "connector_dispatch_per_minute",
+        "failure_cooldown_threshold",
+        "failure_cooldown_seconds"
+      ],
+      "properties": {
+        "tenant_dispatch_per_minute": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "connector_dispatch_per_minute": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "failure_cooldown_threshold": {"type": "integer", "minimum": 1, "maximum": 100},
+        "failure_cooldown_seconds": {"type": "integer", "minimum": 1, "maximum": 86400}
+      }
+    }
+  }
+}

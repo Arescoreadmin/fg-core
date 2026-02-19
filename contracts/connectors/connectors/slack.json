@@ -1,0 +1,10 @@
+{
+  "id": "slack",
+  "display_name": "Slack Workspace",
+  "provider": "slack",
+  "capabilities": ["read", "ingest"],
+  "required_scopes": ["channels:history", "users:read"],
+  "allowed_auth_modes": ["oauth2"],
+  "webhook_support": true,
+  "version": "1.0.0"
+}
