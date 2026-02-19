@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frostgate/contracts/agent/policy.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "policy_hash", "heartbeat_frequency_s", "rules"],
+  "properties": {
+    "version": {"type": "string"},
+    "policy_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "heartbeat_frequency_s": {"type": "integer", "minimum": 10},
+    "rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowed_processes": {"type": "array", "items": {"type": "string"}},
+        "minimum_config_state": {"type": "object"},
+        "allowed_outbound_domains": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "signature": {"type": "string"}
+  }
+}
