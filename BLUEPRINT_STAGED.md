@@ -184,3 +184,9 @@ align_score.py must map each requirement ID → check
 drift_check.py must fail CI for RED items above threshold
 
 “No stage regression” rule
+
+## Implementation Notes (Additive Enterprise Extensions)
+- Added logical compliance control-plane extension routes under `/compliance-cp/*` without altering existing `api/compliance.py` contracts.
+- Added additive exception and break-glass implementations under `/exceptions/*` and `/breakglass/*` while preserving existing governance API semantics.
+- Added additive AI Plane extension implementation notes under `/ai-plane/*` without changing existing endpoint semantics.
+- Added additive nuclear-hardening overlays: plane registry, evidence index, resilience guard, and self-heal watchdog controls.

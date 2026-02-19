@@ -264,3 +264,38 @@ Direct invocation:
 PYTHONPATH=. .venv/bin/python tools/ci/sync_soc_manifest_status.py --mode verify --fail-on-unresolved-p0
 PYTHONPATH=. .venv/bin/python tools/ci/sync_soc_manifest_status.py --mode sync --write
 ```
+
+
+## 2026-02-18 Additive Security/Platform Gate Update
+
+Reviewed critical-path additive changes for SOC-HIGH-002 coverage:
+- `api/auth_federation.py`
+- `api/middleware/resilience_guard.py`
+- `tools/ci/check_openapi_security_diff.py`
+- `tools/ci/check_artifact_policy.py`
+- `tools/ci/check_governance_invariants.py`
+- `tools/ci/check_plane_registry.py`
+- `tools/ci/check_route_inventory.py`
+- `tools/ci/check_security_regression_gates.py`
+- `tools/ci/openapi_baseline.json`
+- `tools/ci/protected_routes_allowlist.json`
+- `tools/ci/artifact_policy_allowlist.json`
+- `tools/ci/route_inventory.json`
+
+Disposition: additive-only governance hardening; no route removals; deterministic gate/test coverage added.
+
+
+## 2026-02-18 Formatting-only follow-up
+
+Reviewed formatting-only edits to critical paths:
+- `api/auth_federation.py`
+- `api/middleware/resilience_guard.py`
+
+Disposition: no semantic change; formatting normalization only.
+
+
+## 2026-02-18 Security Review Sync Update
+
+- Updated SOC review for Enterprise AI Console route additions and corresponding route inventory regeneration (`tools/ci/route_inventory.json`).
+- Confirmed `tools/ci/validate_ai_contracts.py` is part of security-critical CI surface and remains enforced through `fg-contract`/CI lanes.
+- Re-validated that `route-inventory-audit` and `soc-review-sync` must pass before merge.

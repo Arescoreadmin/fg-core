@@ -55,40 +55,7 @@ jobs:
 
       - name: Detect changed paths
         id: filter
-        uses: dorny/paths-filter@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          filters: |
-            python:
-              - "**/*.py"
-              - "pyproject.toml"
-              - "requirements*.txt"
-              - "uv.lock"
-              - "poetry.lock"
-            core:
-              - "api/**"
-              - "engine/**"
-              - "tests/**"
-              - "Makefile"
-              - ".github/**"
-              - "CONTRACT.md"
-              - "README.md"
-              - "policy/**"
-              - "migrations/**"
-              - "scripts/**"
-            console:
-              - "console/**"
-              - "package.json"
-              - "package-lock.json"
-              - ".github/**"
-            compliance:
-              - "compliance/**"
-              - "Makefile"
-              - ".github/**"
-              - "pyproject.toml"
-              - "requirements*.txt"
-              - "uv.lock"
-              - "poetry.lock"
+        run: python tools/ci/detect_changed_paths.py
 
       - name: Generate CI secrets
         uses: ./.github/actions/fg-secrets
@@ -709,4 +676,51 @@ jobs:
             artifacts/latest_evidence_dir*.txt
             artifacts/**
             state/**
+          if-no-files-found: error
+
+
+  agent_linux:
+    name: Agent Linux (unit + contract)
+    runs-on: ubuntu-latest
+    needs: unit
+    if: ${{ always() && needs.unit.result == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/fg-secrets
+      - uses: ./.github/actions/fg-python-setup
+        with:
+          python-version: "3.12"
+          install-os-deps: "true"
+          prepare-workspace: "true"
+          build-venv: "true"
+      - name: Agent unit tests
+        run: make agent-unit
+      - name: Core OpenAPI contract refresh check
+        run: make contracts-core-gen && git diff --exit-code contracts/core/openapi.json
+
+  agent_windows:
+    name: Agent Windows Build
+    runs-on: windows-latest
+    needs: unit
+    if: ${{ always() && needs.unit.result == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build Windows agent
+        shell: powershell
+        run: make agent-build-windows
+      - name: Verify dist manifest and hash
+        shell: powershell
+        run: |
+          if (!(Test-Path dist/manifest.json)) { throw "manifest missing" }
+          if (!(Test-Path dist/frostgate-agent.exe.sha256)) { throw "sha256 missing" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frostgate-agent-windows
+          path: |
+            dist/frostgate-agent.exe
+            dist/frostgate-agent.exe.sha256
+            dist/manifest.json
           if-no-files-found: error

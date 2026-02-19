@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frostgate/contracts/artifacts/anchor_receipt.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["receipt_id", "tenant_id", "artifact_sha256", "provider", "created_at"],
+  "properties": {
+    "receipt_id": {"type": "string", "minLength": 1},
+    "tenant_id": {"type": "string", "minLength": 1},
+    "artifact_sha256": {"type": "string", "minLength": 64, "maxLength": 64},
+    "provider": {"type": "string"},
+    "anchor_ref": {"type": ["string", "null"]},
+    "created_at": {"type": "string", "minLength": 1}
+  }
+}

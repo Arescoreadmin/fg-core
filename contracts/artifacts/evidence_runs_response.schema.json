@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frostgate/contracts/artifacts/evidence_runs_response.schema.json",
+  "type": "object",
+  "required": ["runs"],
+  "properties": {
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "plane_id", "artifact_type", "artifact_path", "status"],
+        "properties": {
+          "id": {"type": "string"},
+          "plane_id": {"type": "string"},
+          "artifact_type": {"type": "string"},
+          "artifact_path": {"type": "string"},
+          "artifact_sha256": {"type": "string"},
+          "schema_version": {"type": "string"},
+          "git_sha": {"type": "string"},
+          "created_at": {"type": "string"},
+          "status": {"type": "string"},
+          "summary_json": {},
+          "retention_class": {"type": "string"},
+          "anchor_status": {"type": "string"}
+        }
+      }
+    }
+  }
+}

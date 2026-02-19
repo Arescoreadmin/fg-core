@@ -25,3 +25,19 @@
 ## Suggested CI snippets
 - `make security-regression-gates`
 - `make fg-fast`
+
+## Enterprise additive gate IDs
+- EG-CP-001: compliance control-plane extension surface exists and is tenant-scoped.
+- EG-CTL-001: enterprise control catalog/crosswalk APIs and tables are present.
+- EG-EXC-001: exceptions/breakglass workflows emit append-only approval logs.
+- EG-GOV-001: governance risk extension supports optional SoD/quorum enforcement.
+- EG-EVD-001: evidence anchor records and immutable retention flag available.
+- EG-IAM-001: federation validation and group-role mapping available without removing API key auth.
+- EG-AI-001: AI plane model/policy/inference/review extension surfaces are present and tenant-scoped.
+
+- EG-PLANE-001: plane registry and plane drift checker must pass.
+- EG-EVID-INDEX-001: evidence index registration/listing must be tenant-scoped and available.
+- EG-RES-001: resilience smoke checks must pass degraded/overload deterministic behavior.
+
+- EG-ART-001: artifact policy gate (`check_artifact_policy.py`) must pass.
+- EG-INV-001: platform inventory gate (`make platform-inventory`) must produce deterministic outputs.

@@ -1,0 +1,48 @@
+{
+  "frameworks": [
+    {
+      "framework_id": "SOC2",
+      "name": "SOC 2",
+      "version": "2017",
+      "metadata_json": "{\"trust_service_criteria\": [\"CC\"]}"
+    },
+    {
+      "framework_id": "NIST80053",
+      "name": "NIST 800-53",
+      "version": "rev5",
+      "metadata_json": "{\"family\": \"AC\"}"
+    }
+  ],
+  "controls": [
+    {
+      "control_id": "CTRL-001",
+      "domain": "access",
+      "title": "Access Governance",
+      "description": "Control privileged access approvals and recertification.",
+      "metadata_json": "{\"tier\": \"high\"}"
+    },
+    {
+      "control_id": "CTRL-002",
+      "domain": "audit",
+      "title": "Immutable Audit Trail",
+      "description": "Maintain immutable and independently verifiable audit records.",
+      "metadata_json": "{\"tier\": \"high\"}"
+    }
+  ],
+  "crosswalk": [
+    {
+      "crosswalk_id": "XW-001",
+      "control_id": "CTRL-001",
+      "framework_id": "SOC2",
+      "framework_control_ref": "CC6.1",
+      "mapping_strength": "strong"
+    },
+    {
+      "crosswalk_id": "XW-002",
+      "control_id": "CTRL-002",
+      "framework_id": "NIST80053",
+      "framework_control_ref": "AU-9",
+      "mapping_strength": "strong"
+    }
+  ]
+}

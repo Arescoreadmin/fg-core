@@ -255,6 +255,92 @@
         "title": "BillingRunCreateRequest",
         "type": "object"
       },
+      "BreakglassSessionCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at_utc": {
+            "title": "Expires At Utc",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "expires_at_utc"
+        ],
+        "title": "BreakglassSessionCreate",
+        "type": "object"
+      },
+      "CertEnrollRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "csr_pem": {
+            "title": "Csr Pem",
+            "type": "string"
+          },
+          "device_fingerprint": {
+            "maxLength": 1024,
+            "minLength": 8,
+            "title": "Device Fingerprint",
+            "type": "string"
+          },
+          "device_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Name"
+          },
+          "enrollment_token": {
+            "maxLength": 256,
+            "minLength": 8,
+            "title": "Enrollment Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enrollment_token",
+          "device_fingerprint",
+          "csr_pem"
+        ],
+        "title": "CertEnrollRequest",
+        "type": "object"
+      },
+      "CertEnrollResponse": {
+        "properties": {
+          "certificate_chain_pem": {
+            "title": "Certificate Chain Pem",
+            "type": "string"
+          },
+          "certificate_pem": {
+            "title": "Certificate Pem",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id",
+          "certificate_pem",
+          "certificate_chain_pem",
+          "expires_at"
+        ],
+        "title": "CertEnrollResponse",
+        "type": "object"
+      },
       "ClassificationRing": {
         "enum": [
           "UNCLASS",
@@ -264,6 +350,153 @@
         ],
         "title": "ClassificationRing",
         "type": "string"
+      },
+      "CommandAckRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "title": "Command Id",
+            "type": "string"
+          },
+          "result": {
+            "title": "Result",
+            "type": "object"
+          },
+          "status": {
+            "pattern": "^(ok|failed)$",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command_id",
+          "status"
+        ],
+        "title": "CommandAckRequest",
+        "type": "object"
+      },
+      "CommandIssueRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "command_type": {
+            "pattern": "^(collect_diagnostics|rotate_identity|flush_cache|run_integrity_check|fetch_inventory)$",
+            "title": "Command Type",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 8,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
+          "payload": {
+            "maxProperties": 128,
+            "title": "Payload",
+            "type": "object"
+          },
+          "ttl_seconds": {
+            "default": 300,
+            "maximum": 86400.0,
+            "minimum": 30.0,
+            "title": "Ttl Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "device_id",
+          "command_type"
+        ],
+        "title": "CommandIssueRequest",
+        "type": "object"
+      },
+      "CommandLeaseRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "controller_id": {
+            "maxLength": 128,
+            "minLength": 3,
+            "title": "Controller Id",
+            "type": "string"
+          },
+          "lease_seconds": {
+            "default": 60,
+            "maximum": 600.0,
+            "minimum": 10.0,
+            "title": "Lease Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "controller_id"
+        ],
+        "title": "CommandLeaseRequest",
+        "type": "object"
+      },
+      "ComplianceCPEvidenceIngestRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "control_refs": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Control Refs"
+          },
+          "details": {
+            "title": "Details",
+            "type": "string"
+          },
+          "detected_at_utc": {
+            "title": "Detected At Utc",
+            "type": "string"
+          },
+          "finding_id": {
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "req_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Req Ids",
+            "type": "array"
+          },
+          "severity": {
+            "default": "med",
+            "title": "Severity",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding_id",
+          "title",
+          "details",
+          "detected_at_utc"
+        ],
+        "title": "ComplianceCPEvidenceIngestRequest",
+        "type": "object"
       },
       "ConfigWriteRequest": {
         "properties": {
@@ -945,6 +1178,70 @@
         "title": "DeviceEnrollRequest",
         "type": "object"
       },
+      "DeviceInfo": {
+        "properties": {
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "last_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Ip"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "last_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Version"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "suspicious": {
+            "title": "Suspicious",
+            "type": "boolean"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id",
+          "tenant_id",
+          "status",
+          "suspicious",
+          "last_seen_at",
+          "last_ip",
+          "last_version"
+        ],
+        "title": "DeviceInfo",
+        "type": "object"
+      },
       "DeviceUpsertRequest": {
         "properties": {
           "agent_stable_id": {
@@ -1090,6 +1387,96 @@
         "title": "DisputeResolveRequest",
         "type": "object"
       },
+      "EnrollmentTokenCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "max_uses": {
+            "default": 1,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Max Uses",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 256,
+            "minLength": 4,
+            "title": "Reason",
+            "type": "string"
+          },
+          "ticket": {
+            "maxLength": 128,
+            "minLength": 2,
+            "title": "Ticket",
+            "type": "string"
+          },
+          "ttl_minutes": {
+            "default": 15,
+            "maximum": 1440.0,
+            "minimum": 1.0,
+            "title": "Ttl Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reason",
+          "ticket"
+        ],
+        "title": "EnrollmentTokenCreateRequest",
+        "type": "object"
+      },
+      "EnrollmentTokenCreateResponse": {
+        "properties": {
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "max_uses": {
+            "title": "Max Uses",
+            "type": "integer"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "expires_at",
+          "max_uses"
+        ],
+        "title": "EnrollmentTokenCreateResponse",
+        "type": "object"
+      },
+      "EvidenceAnchorCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_path": {
+            "title": "Artifact Path",
+            "type": "string"
+          },
+          "external_anchor_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Anchor Ref"
+          },
+          "immutable_retention": {
+            "default": true,
+            "title": "Immutable Retention",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "artifact_path"
+        ],
+        "title": "EvidenceAnchorCreate",
+        "type": "object"
+      },
       "EvidenceBundleCreateRequest": {
         "properties": {
           "artifacts": {
@@ -1163,6 +1550,60 @@
           "created_at"
         ],
         "title": "EvidenceBundleCreateResponse",
+        "type": "object"
+      },
+      "EvidenceRunRegisterRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor_status": {
+            "default": "none",
+            "title": "Anchor Status",
+            "type": "string"
+          },
+          "artifact_path": {
+            "title": "Artifact Path",
+            "type": "string"
+          },
+          "artifact_type": {
+            "title": "Artifact Type",
+            "type": "string"
+          },
+          "git_sha": {
+            "title": "Git Sha",
+            "type": "string"
+          },
+          "plane_id": {
+            "title": "Plane Id",
+            "type": "string"
+          },
+          "retention_class": {
+            "default": "hot",
+            "title": "Retention Class",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "summary_json": {
+            "title": "Summary Json",
+            "type": "object"
+          }
+        },
+        "required": [
+          "plane_id",
+          "artifact_type",
+          "artifact_path",
+          "schema_version",
+          "git_sha",
+          "status",
+          "summary_json"
+        ],
+        "title": "EvidenceRunRegisterRequest",
         "type": "object"
       },
       "EvidenceVerifyRequest": {
@@ -1865,6 +2306,21 @@
         "title": "ListKeysResponse",
         "type": "object"
       },
+      "LogAnchorRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "hash": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hash"
+        ],
+        "title": "LogAnchorRequest",
+        "type": "object"
+      },
       "MissionEnvelope": {
         "properties": {
           "allowed_mitigations": {
@@ -2326,6 +2782,46 @@
         "title": "PolicyDecision",
         "type": "object"
       },
+      "PolicyPublishRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "policy_json": {
+            "title": "Policy Json",
+            "type": "object"
+          },
+          "signature": {
+            "title": "Signature",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "policy_json",
+          "signature"
+        ],
+        "title": "PolicyPublishRequest",
+        "type": "object"
+      },
+      "QuarantineRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 512,
+            "minLength": 2,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "QuarantineRequest",
+        "type": "object"
+      },
       "ROEEvaluationRequest": {
         "properties": {
           "classification": {
@@ -2517,6 +3013,51 @@
           "policy"
         ],
         "title": "RingRouteResponse",
+        "type": "object"
+      },
+      "RolloutConfigRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "broad_percent_per_hour": {
+            "default": 100,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Broad Percent Per Hour",
+            "type": "integer"
+          },
+          "canary_error_budget": {
+            "default": 5,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Canary Error Budget",
+            "type": "integer"
+          },
+          "canary_percent_per_hour": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Canary Percent Per Hour",
+            "type": "integer"
+          },
+          "kill_switch": {
+            "default": false,
+            "title": "Kill Switch",
+            "type": "boolean"
+          },
+          "paused": {
+            "default": false,
+            "title": "Paused",
+            "type": "boolean"
+          },
+          "pilot_percent_per_hour": {
+            "default": 30,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Pilot Percent Per Hour",
+            "type": "integer"
+          }
+        },
+        "title": "RolloutConfigRequest",
         "type": "object"
       },
       "RotateKeyRequest": {
@@ -2850,6 +3391,36 @@
         "title": "TelemetryInput",
         "type": "object"
       },
+      "TenantControlStateUpsert": {
+        "additionalProperties": false,
+        "properties": {
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "control_id",
+          "status"
+        ],
+        "title": "TenantControlStateUpsert",
+        "type": "object"
+      },
       "ThreatCounts": {
         "properties": {
           "high": {
@@ -2974,6 +3545,36 @@
         "title": "TopItem",
         "type": "object"
       },
+      "UpdateReportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "status"
+        ],
+        "title": "UpdateReportRequest",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -3084,6 +3685,25 @@
             }
           },
           {
+            "in": "query",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "title": "Tenant Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_age_days",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "title": "Max Age Days",
+              "type": "integer"
+            }
+          },
+          {
             "in": "header",
             "name": "X-API-Key",
             "required": false,
@@ -3143,8 +3763,17 @@
         "operationId": "create_approval_approvals_post",
         "parameters": [
           {
-            "in": "header",
-            "name": "X-API-Key",
+            "in": "path",
+            "name": "claim_id",
+            "required": true,
+            "schema": {
+              "title": "Claim Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
             "required": false,
             "schema": {
               "anyOf": [
@@ -3155,7 +3784,7 @@
                   "type": "null"
                 }
               ],
-              "title": "X-Api-Key"
+              "title": "Tenant Id"
             }
           }
         ],
@@ -3430,10 +4059,17 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Tenant Id",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           },
           {
@@ -3453,6 +4089,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BreakglassSessionCreate"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
@@ -3478,7 +4124,8 @@
         },
         "summary": "Export Credit Note Evidence",
         "tags": [
-          "billing"
+          "exceptions",
+          "breakglass"
         ]
       }
     },
@@ -3547,7 +4194,7 @@
         },
         "summary": "Sync Daily Counts",
         "tags": [
-          "billing"
+          "compliance-cp"
         ]
       }
     },
@@ -3622,7 +4269,7 @@
         },
         "summary": "List Devices",
         "tags": [
-          "billing"
+          "compliance-cp"
         ]
       }
     },
@@ -3698,7 +4345,7 @@
         },
         "summary": "Record Device Activity Proof",
         "tags": [
-          "billing"
+          "compliance-cp"
         ]
       }
     },
@@ -3707,8 +4354,8 @@
         "operationId": "enroll_device_billing_devices_enroll_post",
         "parameters": [
           {
-            "in": "query",
-            "name": "tenant_id",
+            "in": "header",
+            "name": "X-API-Key",
             "required": false,
             "schema": {
               "anyOf": [
@@ -3719,9 +4366,43 @@
                   "type": "null"
                 }
               ],
-              "title": "Tenant Id"
+              "title": "X-Api-Key"
             }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Compliance Cp Summary Compliance Cp Summary Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
           },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compliance Cp Summary",
+        "tags": [
+          "compliance-cp"
+        ]
+      }
+    },
+    "/compliance/findings/import": {
+      "post": {
+        "operationId": "import_findings_compliance_findings_import_post",
+        "parameters": [
           {
             "in": "header",
             "name": "X-API-Key",
@@ -3774,7 +4455,7 @@
         },
         "summary": "Enroll Device",
         "tags": [
-          "billing"
+          "compliance"
         ]
       }
     },
@@ -3850,7 +4531,7 @@
         },
         "summary": "Upsert Device",
         "tags": [
-          "billing"
+          "compliance"
         ]
       }
     },
@@ -3893,6 +4574,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequirementImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
@@ -3918,7 +4609,7 @@
         },
         "summary": "Coverage Timeline",
         "tags": [
-          "billing"
+          "compliance"
         ]
       }
     },
@@ -3987,7 +4678,7 @@
         },
         "summary": "List Identity Disputes",
         "tags": [
-          "billing"
+          "compliance"
         ]
       }
     },
@@ -4072,7 +4763,7 @@
         },
         "summary": "Resolve Identity Dispute",
         "tags": [
-          "billing"
+          "compliance"
         ]
       }
     },
@@ -4085,7 +4776,7 @@
             "name": "tenant_id",
             "required": true,
             "schema": {
-              "title": "Tenant Id",
+              "title": "Update Id",
               "type": "string"
             }
           },
@@ -4131,7 +4822,7 @@
         },
         "summary": "List Invoices",
         "tags": [
-          "billing"
+          "compliance"
         ]
       },
       "post": {
@@ -4205,7 +4896,7 @@
         },
         "summary": "Create Invoice",
         "tags": [
-          "billing"
+          "config"
         ]
       }
     },
@@ -4214,26 +4905,44 @@
         "operationId": "invoice_details_billing_invoices__invoice_id__get",
         "parameters": [
           {
-            "in": "path",
-            "name": "invoice_id",
-            "required": true,
+            "in": "query",
+            "name": "limit",
+            "required": false,
             "schema": {
-              "title": "Invoice Id",
-              "type": "string"
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 200000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Include request/response JSON blobs (slower)",
+            "in": "query",
+            "name": "include_raw",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include request/response JSON blobs (slower)",
+              "title": "Include Raw",
+              "type": "boolean"
             }
           },
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
-            "schema": {
-              "title": "Tenant Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-API-Key",
             "required": false,
             "schema": {
               "anyOf": [
@@ -4244,7 +4953,7 @@
                   "type": "null"
                 }
               ],
-              "title": "X-Api-Key"
+              "title": "Tenant Id"
             }
           }
         ],
@@ -4260,11 +4969,18 @@
             },
             "description": "Successful Response"
           },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+          {
+            "in": "query",
+            "name": "event_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
                 }
               }
             },
@@ -4292,11 +5008,19 @@
           },
           {
             "in": "query",
-            "name": "tenant_id",
-            "required": true,
+            "name": "threat_level",
+            "required": false,
             "schema": {
-              "title": "Tenant Id",
-              "type": "string"
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Threat Level"
             }
           },
           {
@@ -4341,7 +5065,7 @@
         },
         "summary": "List Credit Notes",
         "tags": [
-          "billing"
+          "decisions"
         ]
       },
       "post": {
@@ -4424,7 +5148,7 @@
         },
         "summary": "Create Credit Note",
         "tags": [
-          "billing"
+          "decisions"
         ]
       }
     },
@@ -4845,11 +5569,9 @@
         "tags": [
           "billing"
         ]
-      }
-    },
-    "/config/versions": {
+      },
       "post": {
-        "operationId": "write_config_version_config_versions_post",
+        "operationId": "create_anchor_evidence_anchors_post",
         "parameters": [
           {
             "in": "query",
@@ -4888,7 +5610,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ConfigWriteRequest"
+                "$ref": "#/components/schemas/EvidenceAnchorCreate"
               }
             }
           },
@@ -4899,7 +5621,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "title": "Response Write Config Version Config Versions Post",
+                  "title": "Response Create Anchor Evidence Anchors Post",
                   "type": "object"
                 }
               }
@@ -4917,313 +5639,9 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Write Config Version",
+        "summary": "Create Anchor",
         "tags": [
-          "config"
-        ]
-      }
-    },
-    "/decisions": {
-      "get": {
-        "operationId": "list_decisions_decisions_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 20,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "required": false,
-            "schema": {
-              "default": 0,
-              "maximum": 200000,
-              "minimum": 0,
-              "title": "Offset",
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Include request/response JSON blobs (slower)",
-            "in": "query",
-            "name": "include_raw",
-            "required": false,
-            "schema": {
-              "default": false,
-              "description": "Include request/response JSON blobs (slower)",
-              "title": "Include Raw",
-              "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "tenant_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Tenant Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "event_type",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Event Type"
-            }
-          },
-          {
-            "in": "query",
-            "name": "threat_level",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Threat Level"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-API-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DecisionsPage"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Decisions",
-        "tags": [
-          "decisions"
-        ]
-      }
-    },
-    "/decisions/{decision_id}": {
-      "get": {
-        "operationId": "get_decision_decisions__decision_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "decision_id",
-            "required": true,
-            "schema": {
-              "title": "Decision Id",
-              "type": "integer"
-            }
-          },
-          {
-            "description": "Include request/response JSON blobs",
-            "in": "query",
-            "name": "include_raw",
-            "required": false,
-            "schema": {
-              "default": true,
-              "description": "Include request/response JSON blobs",
-              "title": "Include Raw",
-              "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "tenant_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Tenant Id"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-API-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DecisionOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Decision",
-        "tags": [
-          "decisions"
-        ]
-      }
-    },
-    "/defend": {
-      "post": {
-        "operationId": "defend_defend_post",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "_",
-            "required": false,
-            "schema": {
-              "title": " "
-            }
-          },
-          {
-            "in": "query",
-            "name": "sqlite_path",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Sqlite Path"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-API-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TelemetryInput"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DefendResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Defend",
-        "tags": [
-          "defend"
+          "evidence-anchors"
         ]
       }
     },
@@ -5345,6 +5763,223 @@
         ]
       }
     },
+    "/evidence/runs": {
+      "get": {
+        "operationId": "list_evidence_runs_evidence_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Evidence Runs Evidence Runs Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Evidence Runs",
+        "tags": [
+          "evidence-index"
+        ]
+      }
+    },
+    "/evidence/runs/register": {
+      "post": {
+        "operationId": "register_evidence_run_evidence_runs_register_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvidenceRunRegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Register Evidence Run Evidence Runs Register Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register Evidence Run",
+        "tags": [
+          "evidence-index"
+        ]
+      }
+    },
+    "/evidence/runs/{run_id}": {
+      "get": {
+        "operationId": "get_evidence_run_evidence_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Evidence Run Evidence Runs  Run Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Evidence Run",
+        "tags": [
+          "evidence-index"
+        ]
+      }
+    },
     "/evidence/verify": {
       "post": {
         "operationId": "verify_evidence_evidence_verify_post",
@@ -5401,6 +6036,169 @@
         "summary": "Verify Evidence",
         "tags": [
           "attestation"
+        ]
+      }
+    },
+    "/exceptions/requests": {
+      "post": {
+        "operationId": "create_exception_request_exceptions_requests_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExceptionRequestCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Create Exception Request Exceptions Requests Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Exception Request",
+        "tags": [
+          "exceptions",
+          "breakglass"
+        ]
+      }
+    },
+    "/exceptions/requests/{request_id}/approve": {
+      "post": {
+        "operationId": "approve_exception_request_exceptions_requests__request_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExceptionApproval"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Approve Exception Request Exceptions Requests  Request Id  Approve Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Exception Request",
+        "tags": [
+          "exceptions",
+          "breakglass"
         ]
       }
     },
@@ -7330,6 +8128,56 @@
         "summary": "Get Module",
         "tags": [
           "attestation"
+        ]
+      }
+    },
+    "/planes": {
+      "get": {
+        "operationId": "get_planes_planes_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Planes Planes Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Planes",
+        "tags": [
+          "planes"
         ]
       }
     },

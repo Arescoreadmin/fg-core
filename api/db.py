@@ -180,6 +180,20 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             _sqlite_add_column_if_missing(
                 conn, "security_audit_log", "entry_hash", "TEXT"
             )
+        if "agent_enrollment_tokens" in tables:
+            _sqlite_add_column_if_missing(
+                conn, "agent_enrollment_tokens", "created_by", "TEXT DEFAULT 'unknown'"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "agent_enrollment_tokens", "reason", "TEXT DEFAULT 'unspecified'"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "agent_enrollment_tokens", "ticket", "TEXT"
+            )
+        if "agent_device_keys" in tables:
+            _sqlite_add_column_if_missing(
+                conn, "agent_device_keys", "hmac_secret_enc", "TEXT DEFAULT ''"
+            )
 
         conn.exec_driver_sql(
             """
@@ -250,6 +264,280 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 "CREATE INDEX IF NOT EXISTS ix_decisions_tenant_config_created ON decisions(tenant_id, config_hash, created_at)"
             )
 
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS enterprise_framework_catalog (
+                framework_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                version TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS enterprise_control_catalog (
+                control_id TEXT PRIMARY KEY,
+                domain TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS enterprise_control_crosswalk (
+                crosswalk_id TEXT PRIMARY KEY,
+                control_id TEXT NOT NULL,
+                framework_id TEXT NOT NULL,
+                framework_control_ref TEXT NOT NULL,
+                mapping_strength TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS tenant_control_state (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                control_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                note TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                UNIQUE(tenant_id, control_id)
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS evidence_anchor_records (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                artifact_path TEXT NOT NULL,
+                artifact_sha256 TEXT NOT NULL,
+                anchored_at_utc TEXT NOT NULL,
+                external_anchor_ref TEXT,
+                immutable_retention BOOLEAN NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS ai_model_catalog (
+                model_id TEXT PRIMARY KEY,
+                provider TEXT NOT NULL,
+                model_name TEXT NOT NULL,
+                risk_tier TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS tenant_ai_policy (
+                tenant_id TEXT PRIMARY KEY,
+                max_prompt_chars INTEGER NOT NULL DEFAULT 2000,
+                blocked_topics_json TEXT NOT NULL DEFAULT '[]',
+                require_human_review BOOLEAN NOT NULL DEFAULT 1,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS ai_inference_records (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                inference_id TEXT NOT NULL UNIQUE,
+                model_id TEXT NOT NULL,
+                prompt_sha256 TEXT NOT NULL,
+                response_text TEXT NOT NULL,
+                context_refs_json TEXT NOT NULL DEFAULT '[]',
+                created_at_utc TEXT NOT NULL,
+                output_sha256 TEXT NOT NULL DEFAULT '',
+                retrieval_id TEXT NOT NULL DEFAULT 'stub',
+                policy_result TEXT NOT NULL DEFAULT 'pass',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS ai_governance_reviews (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                review_id TEXT NOT NULL UNIQUE,
+                inference_id TEXT NOT NULL,
+                reviewer TEXT NOT NULL,
+                decision TEXT NOT NULL,
+                notes TEXT,
+                created_at_utc TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS ai_device_registry (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                device_id TEXT NOT NULL,
+                enabled BOOLEAN NOT NULL DEFAULT 0,
+                registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                telemetry_json TEXT NOT NULL DEFAULT '{}',
+                UNIQUE(tenant_id, device_id)
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS ai_token_usage (
+                id INTEGER PRIMARY KEY,
+                usage_record_id TEXT NOT NULL UNIQUE,
+                tenant_id TEXT NOT NULL,
+                device_id TEXT NOT NULL,
+                user_id TEXT,
+                persona TEXT NOT NULL DEFAULT 'default',
+                provider TEXT NOT NULL,
+                model TEXT NOT NULL,
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                usage_day TEXT NOT NULL,
+                metering_mode TEXT NOT NULL DEFAULT 'unknown',
+                estimation_mode TEXT NOT NULL DEFAULT 'estimated',
+                request_hash TEXT NOT NULL,
+                policy_hash TEXT NOT NULL,
+                experience_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_ai_token_usage_tenant_day ON ai_token_usage(tenant_id, usage_day)"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_ai_token_usage_tenant_device_day ON ai_token_usage(tenant_id, device_id, usage_day)"
+        )
+        conn.exec_driver_sql(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_token_usage_record_id ON ai_token_usage(usage_record_id)"
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS ai_quota_daily (
+                id INTEGER PRIMARY KEY,
+                quota_scope TEXT NOT NULL,
+                tenant_id TEXT NOT NULL,
+                device_id TEXT,
+                usage_day TEXT NOT NULL,
+                token_limit INTEGER NOT NULL DEFAULT 0,
+                used_tokens INTEGER NOT NULL DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                UNIQUE(quota_scope, usage_day)
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_ai_quota_daily_tenant_day ON ai_quota_daily(tenant_id, usage_day)"
+        )
+        if "ai_token_usage" in tables:
+            _sqlite_add_column_if_missing(
+                conn, "ai_token_usage", "usage_record_id", "TEXT"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "ai_token_usage", "metering_mode", "TEXT DEFAULT 'unknown'"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "ai_token_usage", "estimation_mode", "TEXT DEFAULT 'estimated'"
+            )
+        if "ai_inference_records" in tables:
+            _sqlite_add_column_if_missing(
+                conn, "ai_inference_records", "inference_id", "TEXT"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "ai_inference_records", "response_text", "TEXT DEFAULT ''"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "ai_inference_records", "context_refs_json", "TEXT DEFAULT '[]'"
+            )
+            _sqlite_add_column_if_missing(
+                conn,
+                "ai_inference_records",
+                "created_at_utc",
+                "TEXT DEFAULT '1970-01-01T00:00:00Z'",
+            )
+            _sqlite_add_column_if_missing(
+                conn, "ai_inference_records", "output_sha256", "TEXT DEFAULT ''"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "ai_inference_records", "retrieval_id", "TEXT DEFAULT 'stub'"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "ai_inference_records", "policy_result", "TEXT DEFAULT 'pass'"
+            )
+        if "ai_policy_violations" not in tables:
+            conn.exec_driver_sql(
+                """
+                CREATE TABLE IF NOT EXISTS ai_policy_violations (
+                    id INTEGER PRIMARY KEY,
+                    tenant_id TEXT NOT NULL,
+                    violation_code TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+                )
+                """
+            )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS ai_policy_violations (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                violation_code TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+            )
+            """
+        )
+
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS evidence_runs (
+                id TEXT PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                plane_id TEXT NOT NULL,
+                artifact_type TEXT NOT NULL,
+                artifact_path TEXT NOT NULL,
+                artifact_sha256 TEXT NOT NULL,
+                schema_version TEXT NOT NULL,
+                git_sha TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                status TEXT NOT NULL,
+                summary_json TEXT NOT NULL DEFAULT '{}',
+                retention_class TEXT NOT NULL DEFAULT 'hot',
+                anchor_status TEXT NOT NULL DEFAULT 'none'
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS retention_policies (
+                id INTEGER PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                artifact_type TEXT NOT NULL,
+                retention_days INTEGER NOT NULL,
+                immutable_required BOOLEAN NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                UNIQUE(tenant_id, artifact_type)
+            )
+            """
+        )
         conn.exec_driver_sql(
             """
             CREATE TABLE IF NOT EXISTS audit_ledger (

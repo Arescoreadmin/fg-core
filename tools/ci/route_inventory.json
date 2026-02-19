@@ -16,12 +16,104 @@
     "tenant_bound": false
   },
   {
-    "file": "api/_scratch/ui_legacy.py",
+    "file": "api/agent_phase2.py",
+    "method": "POST",
+    "path": "/admin/agent/commands/issue",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/agent_tokens.py",
     "method": "GET",
-    "path": "/_legacy/ui_legacy/_disabled",
-    "scoped": false,
-    "scopes": [],
-    "tenant_bound": false
+    "path": "/admin/agent/devices",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/agent_tokens.py",
+    "method": "POST",
+    "path": "/admin/agent/devices/{device_id}/revoke",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/agent_tokens.py",
+    "method": "POST",
+    "path": "/admin/agent/enrollment-tokens",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "GET",
+    "path": "/admin/agent/evidence/export/{device_id}",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "POST",
+    "path": "/admin/agent/policy/publish",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "POST",
+    "path": "/admin/agent/policy/revoke/{policy_hash}",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "POST",
+    "path": "/admin/agent/quarantine/{device_id}",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "POST",
+    "path": "/admin/agent/unquarantine/{device_id}",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "POST",
+    "path": "/admin/agent/update/rollout",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
   },
   {
     "file": "api/admin.py",
@@ -47,6 +139,36 @@
     "file": "api/admin.py",
     "method": "POST",
     "path": "/admin/config/changes/{change_id}/revert",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "GET",
+    "path": "/admin/devices",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "POST",
+    "path": "/admin/devices/{device_id}/disable",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "POST",
+    "path": "/admin/devices/{device_id}/enable",
     "scoped": true,
     "scopes": [
       "admin:write"
@@ -314,6 +436,16 @@
     "tenant_bound": true
   },
   {
+    "file": "api/auth_federation.py",
+    "method": "POST",
+    "path": "/auth/federation/validate",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
     "file": "api/billing.py",
     "method": "POST",
     "path": "/billing/coverage/change",
@@ -524,6 +656,57 @@
     "tenant_bound": true
   },
   {
+    "file": "api/exception_breakglass.py",
+    "method": "POST",
+    "path": "/breakglass/sessions",
+    "scoped": true,
+    "scopes": [
+      "governance:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/compliance_cp_extension.py",
+    "method": "GET",
+    "path": "/compliance-cp/controls",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/compliance_cp_extension.py",
+    "method": "POST",
+    "path": "/compliance-cp/evidence/ingest",
+    "scoped": true,
+    "scopes": [
+      "admin:write",
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/compliance_cp_extension.py",
+    "method": "GET",
+    "path": "/compliance-cp/portfolio",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/compliance_cp_extension.py",
+    "method": "GET",
+    "path": "/compliance-cp/summary",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
     "file": "api/compliance.py",
     "method": "POST",
     "path": "/compliance/findings/import",
@@ -644,6 +827,67 @@
     "tenant_bound": true
   },
   {
+    "file": "api/enterprise_controls.py",
+    "method": "GET",
+    "path": "/enterprise-controls/catalog",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/enterprise_controls.py",
+    "method": "GET",
+    "path": "/enterprise-controls/crosswalk",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/enterprise_controls.py",
+    "method": "GET",
+    "path": "/enterprise-controls/frameworks",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/enterprise_controls.py",
+    "method": "POST",
+    "path": "/enterprise-controls/tenant-state",
+    "scoped": true,
+    "scopes": [
+      "admin:write",
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/evidence_anchors.py",
+    "method": "GET",
+    "path": "/evidence/anchors",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/evidence_anchors.py",
+    "method": "POST",
+    "path": "/evidence/anchors",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
     "file": "api/attestation.py",
     "method": "POST",
     "path": "/evidence/bundles",
@@ -664,6 +908,36 @@
     "tenant_bound": false
   },
   {
+    "file": "api/evidence_index.py",
+    "method": "GET",
+    "path": "/evidence/runs",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/evidence_index.py",
+    "method": "POST",
+    "path": "/evidence/runs/register",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/evidence_index.py",
+    "method": "GET",
+    "path": "/evidence/runs/{run_id}",
+    "scoped": true,
+    "scopes": [
+      "compliance:read"
+    ],
+    "tenant_bound": true
+  },
+  {
     "file": "api/attestation.py",
     "method": "POST",
     "path": "/evidence/verify",
@@ -672,6 +946,26 @@
       "attestation:admin"
     ],
     "tenant_bound": false
+  },
+  {
+    "file": "api/exception_breakglass.py",
+    "method": "POST",
+    "path": "/exceptions/requests",
+    "scoped": true,
+    "scopes": [
+      "governance:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/exception_breakglass.py",
+    "method": "POST",
+    "path": "/exceptions/requests/{request_id}/approve",
+    "scoped": true,
+    "scopes": [
+      "governance:write"
+    ],
+    "tenant_bound": true
   },
   {
     "file": "api/feed.py",
@@ -944,6 +1238,16 @@
     "tenant_bound": false
   },
   {
+    "file": "api/planes.py",
+    "method": "GET",
+    "path": "/planes",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
     "file": "api/ring_router.py",
     "method": "GET",
     "path": "/rings/isolation",
@@ -1018,6 +1322,48 @@
     "scoped": false,
     "scopes": [],
     "tenant_bound": false
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "GET",
+    "path": "/ui/ai",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "POST",
+    "path": "/ui/ai/chat",
+    "scoped": true,
+    "scopes": [
+      "ai:chat",
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "GET",
+    "path": "/ui/ai/experience",
+    "scoped": true,
+    "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "GET",
+    "path": "/ui/ai/usage",
+    "scoped": true,
+    "scopes": [
+      "ai:chat",
+      "ui:read"
+    ],
+    "tenant_bound": true
   },
   {
     "file": "api/ui_audit_dashboard.py",
@@ -1193,6 +1539,28 @@
     "path": "/ui/decisions",
     "scoped": true,
     "scopes": [
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "POST",
+    "path": "/ui/devices/{device_id}/disable",
+    "scoped": true,
+    "scopes": [
+      "admin:write",
+      "ui:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/ui_ai_console.py",
+    "method": "POST",
+    "path": "/ui/devices/{device_id}/enable",
+    "scoped": true,
+    "scopes": [
+      "admin:write",
       "ui:read"
     ],
     "tenant_bound": true

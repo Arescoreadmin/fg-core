@@ -30,10 +30,14 @@ def _load_migrations() -> list[Migration]:
     if not mig_dir.exists():
         raise RuntimeError(f"Missing migrations directory: {mig_dir}")
     migrations: list[Migration] = []
+    seen_versions: set[str] = set()
     for path in sorted(mig_dir.glob("*.sql")):
         if path.name.endswith(".rollback.sql"):
             continue
         version = path.name.split("_", 1)[0]
+        if version in seen_versions:
+            raise RuntimeError(f"Duplicate migration version detected: {version}")
+        seen_versions.add(version)
         migrations.append(Migration(version=version, path=path))
     if not migrations:
         raise RuntimeError("No postgres migrations found.")
@@ -111,6 +115,9 @@ def assert_append_only_triggers(engine: Engine) -> None:
         "compliance_snapshots",
         "audit_exam_sessions",
         "compliance_requirement_updates",
+        "ai_device_registry",
+        "ai_token_usage",
+        "ai_quota_daily",
     }
     with engine.begin() as conn:
         rows = conn.exec_driver_sql(
@@ -158,6 +165,9 @@ def assert_tenant_rls(engine: Engine) -> None:
         "compliance_snapshots",
         "audit_exam_sessions",
         "compliance_requirement_updates",
+        "ai_device_registry",
+        "ai_token_usage",
+        "ai_quota_daily",
     }
     with engine.begin() as conn:
         rows = conn.execute(

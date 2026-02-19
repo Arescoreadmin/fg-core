@@ -1,0 +1,313 @@
+{
+  "artifact_schemas": [
+    "contracts/artifacts/ai_plane_evidence.schema.json",
+    "contracts/artifacts/anchor_receipt.schema.json",
+    "contracts/artifacts/decision.schema.json",
+    "contracts/artifacts/evidence_runs_response.schema.json",
+    "contracts/artifacts/plane_registry_response.schema.json"
+  ],
+  "gaps": [
+    {
+      "details": "plane id not referenced in SOC gate artifact",
+      "plane": "ai_plane",
+      "suggested_fix": "Add SOC gate mapping entry for plane.",
+      "type": "missing_soc_gate_reference"
+    },
+    {
+      "details": "plane id not referenced in SOC gate artifact",
+      "plane": "compliance_cp",
+      "suggested_fix": "Add SOC gate mapping entry for plane.",
+      "type": "missing_soc_gate_reference"
+    },
+    {
+      "details": "plane id not referenced in SOC gate artifact",
+      "plane": "enterprise_controls",
+      "suggested_fix": "Add SOC gate mapping entry for plane.",
+      "type": "missing_soc_gate_reference"
+    },
+    {
+      "details": "plane id not referenced in SOC gate artifact",
+      "plane": "evidence_anchor",
+      "suggested_fix": "Add SOC gate mapping entry for plane.",
+      "type": "missing_soc_gate_reference"
+    },
+    {
+      "details": [
+        "/_debug/routes",
+        "/_legacy/ui_feed/_disabled",
+        "/admin/agent/commands/issue",
+        "/admin/agent/devices",
+        "/admin/agent/devices/{device_id}/revoke",
+        "/admin/agent/enrollment-tokens",
+        "/admin/agent/policy/publish",
+        "/admin/agent/policy/revoke/{policy_hash}",
+        "/admin/agent/quarantine/{device_id}",
+        "/admin/agent/unquarantine/{device_id}",
+        "/admin/audit/export",
+        "/admin/audit/search",
+        "/admin/config/changes/{change_id}/revert",
+        "/admin/devices",
+        "/admin/devices/{device_id}/disable",
+        "/admin/devices/{device_id}/enable",
+        "/admin/keys",
+        "/admin/keys/needing-rotation",
+        "/admin/keys/{key_prefix}/revoke",
+        "/admin/keys/{key_prefix}/rotate",
+        "/admin/keys/{key_prefix}/rotation-status",
+        "/admin/system/health",
+        "/admin/tenants/{tenant_id}/activate",
+        "/admin/tenants/{tenant_id}/quota",
+        "/admin/tenants/{tenant_id}/suspend",
+        "/admin/tenants/{tenant_id}/tier",
+        "/admin/tenants/{tenant_id}/usage",
+        "/admin/usage/all",
+        "/agent/cert/enroll",
+        "/agent/cert/renew",
+        "/agent/cert/status",
+        "/agent/commands/ack",
+        "/agent/commands/poll",
+        "/agent/enroll",
+        "/agent/heartbeat",
+        "/agent/key/rotate",
+        "/agent/log/anchor",
+        "/agent/policy/fetch",
+        "/agent/update/manifest",
+        "/agent/update/report",
+        "/approvals",
+        "/approvals/verify",
+        "/approvals/{subject_type}/{subject_id}",
+        "/audit/exam-snapshot",
+        "/audit/exams",
+        "/audit/exams/run",
+        "/audit/exams/{exam_id}/export",
+        "/audit/exams/{exam_id}/reproduce",
+        "/audit/export",
+        "/audit/reproduce",
+        "/audit/sessions",
+        "/billing/coverage/change",
+        "/billing/credits/{credit_note_id}/evidence",
+        "/billing/daily-counts/sync",
+        "/billing/devices",
+        "/billing/devices/activity",
+        "/billing/devices/enroll",
+        "/billing/devices/upsert",
+        "/billing/devices/{device_id}/coverage-timeline",
+        "/billing/identity/disputes",
+        "/billing/identity/disputes/{claim_id}/resolve",
+        "/billing/invoices",
+        "/billing/invoices/{invoice_id}",
+        "/billing/invoices/{invoice_id}/credits",
+        "/billing/invoices/{invoice_id}/evidence",
+        "/billing/invoices/{invoice_id}/finalize",
+        "/billing/invoices/{invoice_id}/reproduce",
+        "/billing/runs",
+        "/compliance/findings/import",
+        "/compliance/requirements/diff",
+        "/compliance/requirements/import",
+        "/compliance/requirements/updates",
+        "/compliance/requirements/updates/available",
+        "/compliance/requirements/updates/{update_id}/apply",
+        "/config/versions",
+        "/decisions",
+        "/decisions/{decision_id}",
+        "/defend",
+        "/dev/emit",
+        "/dev/seed",
+        "/evidence/bundles",
+        "/evidence/bundles/{bundle_id}",
+        "/evidence/runs",
+        "/evidence/runs/register",
+        "/evidence/runs/{run_id}",
+        "/evidence/verify",
+        "/feed/live",
+        "/feed/stream",
+        "/forensics/audit_trail/{event_id}",
+        "/forensics/chain/verify",
+        "/forensics/snapshot/{event_id}",
+        "/governance/changes",
+        "/governance/changes/{change_id}/approve",
+        "/health",
+        "/health/detailed",
+        "/health/live",
+        "/health/ready",
+        "/ingest",
+        "/keys",
+        "/keys/revoke",
+        "/keys/rotate",
+        "/keys/{prefix}",
+        "/missions",
+        "/missions/{mission_id}",
+        "/missions/{mission_id}/status",
+        "/modules",
+        "/modules/enforce/{module_id}",
+        "/modules/register",
+        "/modules/{module_id}",
+        "/planes",
+        "/rings/isolation",
+        "/rings/policies",
+        "/rings/route",
+        "/roe/evaluate",
+        "/roe/policy",
+        "/stats",
+        "/stats/debug",
+        "/stats/summary",
+        "/status",
+        "/ui/ai",
+        "/ui/ai/chat",
+        "/ui/ai/experience",
+        "/ui/ai/usage",
+        "/ui/audit/chain-integrity",
+        "/ui/audit/export-link",
+        "/ui/audit/overview",
+        "/ui/audit/packet",
+        "/ui/audit/packet/{packet_id}/download",
+        "/ui/audit/status",
+        "/ui/compliance/exam-readiness",
+        "/ui/compliance/findings",
+        "/ui/compliance/overview",
+        "/ui/compliance/requirements/status",
+        "/ui/controls",
+        "/ui/controls/{inv_id}",
+        "/ui/csrf",
+        "/ui/dash/controls",
+        "/ui/dash/forensics",
+        "/ui/dash/posture",
+        "/ui/decision/{decision_id}",
+        "/ui/decisions",
+        "/ui/devices/{device_id}/disable",
+        "/ui/devices/{device_id}/enable",
+        "/ui/feed",
+        "/ui/forensics/chain/verify",
+        "/ui/posture",
+        "/ui/scopes",
+        "/ui/token",
+        "/v1/status"
+      ],
+      "suggested_fix": "Map route prefixes to a plane or explicitly exempt in inventory governance.",
+      "type": "unexpected_route_prefixes"
+    }
+  ],
+  "git_sha": "85dc5bde30585ef7508780761ac16a1639a7392b",
+  "planes": [
+    {
+      "evidence": [
+        {
+          "generator": "scripts/generate_ai_plane_evidence.py",
+          "schema": "contracts/artifacts/ai_plane_evidence.schema.json"
+        }
+      ],
+      "mount_flag": "FG_AI_PLANE_ENABLED",
+      "plane_id": "ai_plane",
+      "required_make_targets": [
+        "ai-plane-full",
+        "ai-plane-spot"
+      ],
+      "route_prefixes": [
+        "/ai",
+        "/ai-plane"
+      ]
+    },
+    {
+      "evidence": [],
+      "mount_flag": "FG_BREAKGLASS_ENABLED",
+      "plane_id": "breakglass",
+      "required_make_targets": [
+        "breakglass-spot"
+      ],
+      "route_prefixes": [
+        "/breakglass",
+        "/exceptions"
+      ]
+    },
+    {
+      "evidence": [],
+      "mount_flag": "FG_COMPLIANCE_CP_ENABLED",
+      "plane_id": "compliance_cp",
+      "required_make_targets": [
+        "compliance-cp-spot"
+      ],
+      "route_prefixes": [
+        "/compliance-cp"
+      ]
+    },
+    {
+      "evidence": [],
+      "mount_flag": "FG_ENTERPRISE_CONTROLS_ENABLED",
+      "plane_id": "enterprise_controls",
+      "required_make_targets": [
+        "enterprise-controls-spot"
+      ],
+      "route_prefixes": [
+        "/enterprise-controls"
+      ]
+    },
+    {
+      "evidence": [
+        {
+          "generator": "scripts/generate_ai_plane_evidence.py",
+          "schema": "contracts/artifacts/anchor_receipt.schema.json"
+        }
+      ],
+      "mount_flag": "FG_EVIDENCE_ANCHOR_ENABLED",
+      "plane_id": "evidence_anchor",
+      "required_make_targets": [
+        "evidence-anchor-spot"
+      ],
+      "route_prefixes": [
+        "/evidence/anchors"
+      ]
+    },
+    {
+      "evidence": [],
+      "mount_flag": "FG_FEDERATION_ENABLED",
+      "plane_id": "federation",
+      "required_make_targets": [
+        "federation-spot"
+      ],
+      "route_prefixes": [
+        "/auth/federation"
+      ]
+    }
+  ],
+  "readiness": {
+    "artifact_policy_enforced": true,
+    "openapi_security_diff_enforced": true,
+    "resilience_guard_present": true,
+    "rls_sensitive_tables_present": true,
+    "route_inventory_enforced": true,
+    "self_heal_bounded_off_by_default": true,
+    "tenant_binding_coverage": false
+  },
+  "routes_by_plane": {
+    "ai_plane": [
+      "GET /ai-plane/inference",
+      "GET /ai-plane/policies",
+      "POST /ai-plane/policies",
+      "POST /ai/infer"
+    ],
+    "breakglass": [
+      "POST /breakglass/sessions",
+      "POST /exceptions/requests",
+      "POST /exceptions/requests/{request_id}/approve"
+    ],
+    "compliance_cp": [
+      "GET /compliance-cp/controls",
+      "GET /compliance-cp/portfolio",
+      "GET /compliance-cp/summary",
+      "POST /compliance-cp/evidence/ingest"
+    ],
+    "enterprise_controls": [
+      "GET /enterprise-controls/catalog",
+      "GET /enterprise-controls/crosswalk",
+      "GET /enterprise-controls/frameworks",
+      "POST /enterprise-controls/tenant-state"
+    ],
+    "evidence_anchor": [
+      "GET /evidence/anchors",
+      "POST /evidence/anchors"
+    ],
+    "federation": [
+      "POST /auth/federation/validate"
+    ]
+  }
+}
