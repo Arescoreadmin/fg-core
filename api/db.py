@@ -904,3 +904,87 @@ def init_db(*, sqlite_path: Optional[str] = None) -> None:  # type: ignore[overr
 
 
 # =================== END PATCH_FG_API_KEYS_SQLITE_V1 ====================
+
+
+def _ensure_connectors_sqlite(sqlite_path: str) -> None:
+    con = sqlite3.connect(sqlite_path)
+    try:
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS connectors_tenant_state (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL,
+                connector_id TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 0,
+                config_hash TEXT NOT NULL,
+                last_success_at TEXT,
+                last_error_code TEXT,
+                failure_count INTEGER NOT NULL DEFAULT 0,
+                updated_by TEXT NOT NULL DEFAULT 'unknown',
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(tenant_id, connector_id)
+            )
+            """
+        )
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS connectors_credentials (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL,
+                connector_id TEXT NOT NULL,
+                credential_id TEXT NOT NULL DEFAULT 'primary',
+                principal_id TEXT NOT NULL,
+                auth_mode TEXT NOT NULL,
+                ciphertext TEXT NOT NULL,
+                kek_version TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                revoked_at TEXT
+            )
+            """
+        )
+
+        cols_state = {r[1] for r in con.execute("PRAGMA table_info(connectors_tenant_state)").fetchall()}
+        if "last_success_at" not in cols_state:
+            con.execute("ALTER TABLE connectors_tenant_state ADD COLUMN last_success_at TEXT")
+        if "last_error_code" not in cols_state:
+            con.execute("ALTER TABLE connectors_tenant_state ADD COLUMN last_error_code TEXT")
+        if "failure_count" not in cols_state:
+            con.execute("ALTER TABLE connectors_tenant_state ADD COLUMN failure_count INTEGER NOT NULL DEFAULT 0")
+
+        cols_cred = {r[1] for r in con.execute("PRAGMA table_info(connectors_credentials)").fetchall()}
+        if "credential_id" not in cols_cred:
+            con.execute("ALTER TABLE connectors_credentials ADD COLUMN credential_id TEXT NOT NULL DEFAULT 'primary'")
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS connectors_audit_ledger (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL,
+                connector_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                params_hash TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                request_id TEXT NOT NULL DEFAULT '',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+try:
+    _orig_init_db_connectors = init_db
+except Exception:
+    _orig_init_db_connectors = None
+
+
+def init_db(*, sqlite_path: Optional[str] = None) -> None:  # type: ignore[override]
+    if _orig_init_db_connectors is not None:
+        _orig_init_db_connectors(sqlite_path=sqlite_path)
+    try:
+        resolved = _resolve_sqlite_path(sqlite_path)
+    except Exception:
+        resolved = str(sqlite_path) if sqlite_path else ""
+    if resolved:
+        _ensure_connectors_sqlite(resolved)

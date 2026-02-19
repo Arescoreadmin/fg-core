@@ -239,3 +239,26 @@ Format: `Risk | File | Description | Exploit Path | Fix Strategy`
 
 ### Reviewer
 - Jason (repo owner / final authority)
+
+## SOC Review Sync Update (2026-02-19T00:00:00Z)
+
+**Commit:** e76b733
+
+### Files reviewed (required by SOC-HIGH-002)
+- tools/ci/check_connectors_rls.py
+- tools/ci/route_inventory.json
+- tools/ci/validate_connector_contracts.py
+
+### Summary
+- Reviewed connector control-plane CI hardening changes in security-critical tooling paths.
+- Verified new connector RLS checker and connectors-gate wiring align with existing enforcement model.
+- Verified route inventory and contract-validation tooling updates are reflected in SOC review docs per gate policy.
+
+### Verification
+- make soc-review-sync
+- make connectors-gate
+- make route-inventory-audit
+- python tools/ci/check_connectors_rls.py
+
+### Reviewer
+- Jason (repo owner / final authority)

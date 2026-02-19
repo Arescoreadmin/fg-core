@@ -1280,3 +1280,63 @@ def _security_audit_defaults(mapper, connection, target) -> None:
         target.entry_hash = hashlib.sha256(
             f"{target.prev_hash}|{json.dumps(payload, sort_keys=True)}".encode("utf-8")
         ).hexdigest()
+
+
+class ConnectorTenantState(Base):
+    __tablename__ = "connectors_tenant_state"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "connector_id", name="uq_connectors_tenant_state"),
+        Index("ix_connectors_tenant_state_tenant_enabled", "tenant_id", "enabled"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    connector_id = Column(String(128), nullable=False, index=True)
+    enabled = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    config_hash = Column(String(128), nullable=False)
+    last_success_at = Column(DateTime(timezone=True), nullable=True)
+    last_error_code = Column(String(64), nullable=True)
+    failure_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    updated_by = Column(String(128), nullable=False, default="unknown")
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now(), onupdate=utcnow
+    )
+
+
+class ConnectorCredential(Base):
+    __tablename__ = "connectors_credentials"
+    __table_args__ = (
+        Index("ix_connectors_credentials_tenant_connector", "tenant_id", "connector_id"),
+        Index("ix_connectors_credentials_tenant_active", "tenant_id", "revoked_at"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    connector_id = Column(String(128), nullable=False, index=True)
+    credential_id = Column(String(64), nullable=False, default="primary")
+    principal_id = Column(String(128), nullable=False)
+    auth_mode = Column(String(64), nullable=False)
+    ciphertext = Column(Text, nullable=False)
+    kek_version = Column(String(32), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class ConnectorAuditLedger(Base):
+    __tablename__ = "connectors_audit_ledger"
+    __table_args__ = (
+        Index("ix_connectors_audit_tenant_connector", "tenant_id", "connector_id", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    connector_id = Column(String(128), nullable=False, index=True)
+    action = Column(String(64), nullable=False)
+    params_hash = Column(String(64), nullable=False)
+    actor = Column(String(128), nullable=False)
+    request_id = Column(String(128), nullable=False, default="")
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+    )
