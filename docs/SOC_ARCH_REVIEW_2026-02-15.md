@@ -239,3 +239,28 @@ Format: `Risk | File | Description | Exploit Path | Fix Strategy`
 
 ### Reviewer
 - Jason (repo owner / final authority)
+
+
+## SOC Review Sync Update (2026-02-18T22:38:24Z)
+
+**Commit:** a383a8a
+
+### Files reviewed (required by SOC-HIGH-002)
+- api/security/public_paths.py
+- tools/ci/check_agent_phase2_public_paths.py
+- tools/ci/check_agent_phase2_rls.py
+- tools/ci/route_inventory.json
+
+### Summary
+- Reviewed security impact of newly added Phase2.1 public-path enumeration and RLS expectation checks.
+- Verified route inventory updates remain explicit and additive-only; no wildcard public-path expansion for `/agent/*`.
+
+### Verification
+- python tools/ci/check_agent_phase2_public_paths.py
+- python tools/ci/check_agent_phase2_rls.py
+- make route-inventory-generate
+- make route-inventory-audit
+- make soc-review-sync
+
+### Reviewer
+- Jason (repo owner / final authority)
