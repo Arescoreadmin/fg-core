@@ -1,0 +1,10 @@
+{
+  "id": "google_drive",
+  "display_name": "Google Drive",
+  "provider": "google",
+  "capabilities": ["read", "ingest"],
+  "required_scopes": ["https://www.googleapis.com/auth/drive.readonly"],
+  "allowed_auth_modes": ["oauth2", "service_account"],
+  "webhook_support": false,
+  "version": "1.0.0"
+}

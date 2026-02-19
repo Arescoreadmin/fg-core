@@ -246,7 +246,7 @@ ci-local: fix fg-fast
 
 .PHONY: guard-scripts fg-audit-make fg-contract fg-compile \
 	contracts-gen contracts-core-gen contracts-core-diff \
-	artifact-contract-check contract-authority-check contract-authority-refresh validate-ai-contracts \
+	artifact-contract-check contract-authority-check contract-authority-refresh validate-ai-contracts validate-connector-contracts \
 	check-no-engine-evaluate opa-check verify-spine-modules verify-schemas verify-drift align-score \
 	contracts-gen-prod fg-contract-prod test-unit
 
@@ -323,6 +323,9 @@ contract-authority-refresh: venv
 validate-ai-contracts: venv
 	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) tools/ci/validate_ai_contracts.py
 
+validate-connector-contracts: venv
+	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. $(PY_CONTRACT) tools/ci/validate_connector_contracts.py
+
 fg-contract: venv guard-scripts
 	@FG_ENV=prod $(MAKE) -s contracts-gen
 	@$(PY_CONTRACT) scripts/contract_toolchain_check.py
@@ -331,6 +334,7 @@ fg-contract: venv guard-scripts
 	@$(PY_CONTRACT) scripts/contracts_diff_core.py
 	@$(PY_CONTRACT) scripts/contract_authority_check.py
 	@$(MAKE) -s validate-ai-contracts
+	@$(MAKE) -s validate-connector-contracts
 	@$(PY_CONTRACT) scripts/artifact_schema_check.py
 	@echo "Contract diff: OK (admin/core/artifacts)"
 
@@ -452,6 +456,9 @@ security-regression-gates: venv
 soc-invariants: venv
 	@PYTHONPATH=. $(PY) tools/ci/check_soc_invariants.py
 
+check-connectors-rls: venv
+	@$(PY) tools/ci/check_connectors_rls.py
+
 enforcement-mode-matrix: venv
 	@$(PY) tools/ci/check_enforcement_mode_matrix.py
 
@@ -565,12 +572,19 @@ exam-export-test: venv _require-pytest-venv
 exam-reproduce-test: venv _require-pytest-venv
 	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_audit_engine.py -k "exam_reproduce"
 
-.PHONY: fg-fast fg-fast-ci fg-fast-full
+.PHONY: fg-fast fg-fast-ci fg-fast-full connectors-gate
+
+connectors-gate: venv _require-pytest-venv
+	@$(MAKE) -s validate-connector-contracts
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_connector_contract_gate.py tests/security/test_connector_control_plane_security.py
+	@$(MAKE) -s route-inventory-audit
+	@$(PY) tools/ci/check_openapi_security_diff.py
+	@$(MAKE) -s check-connectors-rls
 
 fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check \
 	prod-unsafe-config-check security-regression-gates soc-invariants soc-manifest-verify \
 	route-inventory-audit test-quality-gate soc-review-sync pr-base-mainline-check \
-	audit-chain-verify dos-hardening-check sql-migration-percent-guard gap-audit \
+	audit-chain-verify dos-hardening-check sql-migration-percent-guard gap-audit check-connectors-rls \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate \
