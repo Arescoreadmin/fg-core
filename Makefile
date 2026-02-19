@@ -1165,3 +1165,70 @@ dev-venv:
 	. .venv/bin/activate && python -m pip install -U pip wheel setuptools
 	. .venv/bin/activate && python -m pip install -r requirements.txt -r requirements-dev.txt
 
+# =============================================================================
+# Enterprise regression marker targets (required by tools/ci/check_security_regression_gates.py)
+# These targets are SECURITY CONTRACT MARKERS. Do not delete/rename without updating the checker.
+# =============================================================================
+
+.PHONY: \
+  compliance-cp-spot enterprise-controls-spot breakglass-spot governance-risk-spot \
+  evidence-anchor-spot federation-spot ai-plane-spot ai-plane-full enterprise-ext-spot \
+  enterprise-smoke plane-registry-spot evidence-index-spot resilience-smoke nuclear-full \
+  platform-inventory openapi-summary pr-merge-smoke
+
+# --- Spot checks (fast) -------------------------------------------------------
+
+compliance-cp-spot:
+	@$(MAKE) -s bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate
+
+enterprise-controls-spot:
+	@$(MAKE) -s soc-invariants security-regression-gates prod-unsafe-config-gate
+
+breakglass-spot:
+	@echo "TODO: implement breakglass drills"; exit 2
+
+governance-risk-spot:
+	@$(MAKE) -s soc-review-sync
+
+evidence-anchor-spot:
+	@$(MAKE) -s audit-chain-verification-gate
+
+federation-spot:
+	@echo "TODO: implement federation spot checks"; exit 2
+
+ai-plane-spot:
+	@$(MAKE) -s test-ai-spot
+
+plane-registry-spot:
+	@$(MAKE) -s schema-registry-verify
+
+evidence-index-spot:
+	@echo "TODO: implement evidence index spot checks"; exit 2
+
+openapi-summary:
+	@$(MAKE) -s fg-contract
+
+platform-inventory:
+	@$(MAKE) -s route-inventory-audit
+
+# --- Full / smoke -------------------------------------------------------------
+
+ai-plane-full:
+	@$(MAKE) -s test-ai-full
+
+enterprise-ext-spot:
+	@echo "TODO: implement enterprise extension spot checks"; exit 2
+
+enterprise-smoke:
+	@$(MAKE) -s fg-fast
+
+resilience-smoke:
+	@echo "TODO: implement resilience smoke"; exit 2
+
+nuclear-full:
+	@$(MAKE) -s fg-fast-full
+
+pr-merge-smoke:
+	@$(MAKE) -s fg-fast
+
+
