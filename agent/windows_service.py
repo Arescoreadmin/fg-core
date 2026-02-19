@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import servicemanager
 import win32event
 import win32service
@@ -21,7 +23,10 @@ class FrostGateAgentService(win32serviceutil.ServiceFramework):
         win32event.SetEvent(self.stop_event)
 
     def SvcDoRun(self):
-        servicemanager.LogInfoMsg("FrostGate Agent service starting")
+        servicemanager.LogInfoMsg("FrostGate Agent service starting (phase2)")
+        os.environ.setdefault("FG_AGENT_ENABLE_UPDATE", "1")
+        os.environ.setdefault("FG_AGENT_ENABLE_POLICY", "1")
+        os.environ.setdefault("FG_AGENT_ENABLE_QUARANTINE", "1")
         run_agent()
 
 

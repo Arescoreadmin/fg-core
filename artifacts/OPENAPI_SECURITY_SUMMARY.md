@@ -3,7 +3,18 @@
 non-cosmetic changes only
 
 ## New routes
-- none
+- GET /agent/cert/status
+- GET /agent/policy/fetch
+- GET /agent/update/manifest
+- POST /agent/cert/enroll
+- POST /agent/cert/renew
+- POST /agent/commands/ack
+- POST /agent/commands/poll
+- POST /agent/enroll
+- POST /agent/heartbeat
+- POST /agent/key/rotate
+- POST /agent/log/anchor
+- POST /agent/update/report
 
 ## Removed routes (should be none)
 - GET /ai-plane/inference
@@ -67,6 +78,7 @@ non-cosmetic changes only
 - GET /stats
 - GET /stats/summary
 - HEAD /feed/stream
+- POST /agent/enroll
 - POST /approvals
 - POST /approvals/verify
 - POST /audit/exams/run

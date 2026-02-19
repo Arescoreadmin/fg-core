@@ -16,6 +16,16 @@
     "tenant_bound": false
   },
   {
+    "file": "api/agent_phase2.py",
+    "method": "POST",
+    "path": "/admin/agent/commands/issue",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
     "file": "api/agent_tokens.py",
     "method": "GET",
     "path": "/admin/agent/devices",
@@ -39,6 +49,66 @@
     "file": "api/agent_tokens.py",
     "method": "POST",
     "path": "/admin/agent/enrollment-tokens",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "GET",
+    "path": "/admin/agent/evidence/export/{device_id}",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "POST",
+    "path": "/admin/agent/policy/publish",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "POST",
+    "path": "/admin/agent/policy/revoke/{policy_hash}",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "POST",
+    "path": "/admin/agent/quarantine/{device_id}",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "POST",
+    "path": "/admin/agent/unquarantine/{device_id}",
+    "scoped": true,
+    "scopes": [
+      "keys:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "POST",
+    "path": "/admin/agent/update/rollout",
     "scoped": true,
     "scopes": [
       "keys:admin"
@@ -306,6 +376,46 @@
     "tenant_bound": false
   },
   {
+    "file": "api/agent_phase2.py",
+    "method": "POST",
+    "path": "/agent/cert/enroll",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "POST",
+    "path": "/agent/cert/renew",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "GET",
+    "path": "/agent/cert/status",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "POST",
+    "path": "/agent/commands/ack",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "POST",
+    "path": "/agent/commands/poll",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
     "file": "api/agent_enrollment.py",
     "method": "POST",
     "path": "/agent/enroll",
@@ -325,6 +435,46 @@
     "file": "api/agent_enrollment.py",
     "method": "POST",
     "path": "/agent/key/rotate",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "POST",
+    "path": "/agent/log/anchor",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "GET",
+    "path": "/agent/policy/fetch",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "GET",
+    "path": "/agent/update/manifest",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "POST",
+    "path": "/agent/update/manifest",
+    "scoped": false,
+    "scopes": [],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/agent_phase2.py",
+    "method": "POST",
+    "path": "/agent/update/report",
     "scoped": false,
     "scopes": [],
     "tenant_bound": false
