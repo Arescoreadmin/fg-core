@@ -3,12 +3,12 @@
     "FG_AI_EXTERNAL_PROVIDER_ENABLED": "0",
     "FG_AI_PLANE_ENABLED": "1"
   },
-  "git_sha": "5886126ae1d6b4c5e370e697ced662fb570b259d",
+  "git_sha": "85dc5bde30585ef7508780761ac16a1639a7392b",
   "route_snapshot": [
     "/ai/infer"
   ],
   "simulated_mode": true,
-  "timestamp": "2026-02-18T11:33:39.586336Z",
+  "timestamp": "2026-02-18T20:33:17.430663Z",
   "total_blocked_calls": 0,
   "total_inference_calls": 0,
   "total_policy_violations": 0

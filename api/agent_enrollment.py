@@ -368,9 +368,15 @@ async def require_device_signature(request: Request) -> DeviceAuthContext:
             .first()
         )
         if device is None or device.status == "revoked":
-            raise HTTPException(status_code=403, detail="device revoked")
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "DEVICE_REVOKED", "message": "device revoked"},
+            )
         if not key_row.enabled:
-            raise HTTPException(status_code=403, detail="device revoked")
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "DEVICE_REVOKED", "message": "device revoked"},
+            )
 
         secret = _decrypt_secret(key_row.hmac_secret_enc)
         await _validate_signed_request(request, secret)
@@ -532,7 +538,10 @@ def agent_heartbeat(
             .first()
         )
         if reg is None or reg.status == "revoked":
-            raise HTTPException(status_code=403, detail="device revoked")
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "DEVICE_REVOKED", "message": "device revoked"},
+            )
 
         if body.signals.get("tamper"):
             reg.status = _transition_state(reg.status, "tamper")

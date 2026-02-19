@@ -1214,3 +1214,14 @@ platform-inventory: venv
 
 openapi-summary: venv
 	@$(PY) scripts/summarize_openapi_changes.py
+
+
+.PHONY: agent-phase2-gate
+agent-phase2-gate: venv _require-pytest-venv
+	@$(MAKE) route-inventory-audit
+	@$(PY) tools/ci/check_agent_phase2_public_paths.py
+	@$(PY) tools/ci/check_openapi_security_diff.py
+	@ruff check api/agent_phase2.py services/agent_update services/agent_log_integrity
+	@$(PY) -m py_compile api/agent_phase2.py services/agent_update/manifest.py services/agent_log_integrity/chain.py
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/agent/test_phase2_enterprise.py tests/agent/test_phase2_acceptance.py tests/agent/test_phase21_command_lease.py tests/agent/test_phase21_command_allowlist.py tests/agent/test_phase21_rollout.py tests/agent/test_phase21_rate_limits.py tests/services/test_agent_update_security.py tests/services/test_agent_update_safe_mode.py tests/services/test_agent_log_integrity.py tests/services/test_agent_log_anchor_cadence.py
+	@$(PY) tools/ci/check_agent_phase2_rls.py
