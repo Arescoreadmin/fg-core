@@ -584,7 +584,11 @@ billing-evidence-verify: venv
 # Postgres verification (CI + local)
 # =============================================================================
 
-.PHONY: db-postgres-up db-postgres-migrate db-postgres-assert db-postgres-test db-postgres-verify db-postgres-down
+.PHONY: db-postgres-up db-postgres-migrate db-postgres-assert db-postgres-test db-postgres-test-compose db-postgres-verify db-postgres-down
+
+# Defaults (override from env or CLI)
+FG_DB_URL_LOCAL   ?= postgresql+psycopg://$(APP_DB_USER):$(APP_DB_PASSWORD)@127.0.0.1:5432/$(POSTGRES_DB)
+FG_DB_URL_COMPOSE ?= postgresql+psycopg://$(APP_DB_USER):$(APP_DB_PASSWORD)@postgres:5432/$(POSTGRES_DB)
 
 db-postgres-up:
 	@$(MAKE) -s require-docker
@@ -623,8 +627,19 @@ db-postgres-migrate: venv
 db-postgres-assert: venv
 	@FG_DB_URL="$(APP_DB_URL)" FG_DB_BACKEND="postgres" $(PY) -m api.db_migrations --backend postgres --assert
 
+# Default: local host tests (works from your shell)
 db-postgres-test: venv
-	@FG_DB_URL="$(APP_DB_URL_COMPOSE)" FG_DB_BACKEND="postgres" FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/postgres -rs
+	@FG_POSTGRES_TESTS=1 \
+	FG_DB_BACKEND="postgres" \
+	FG_DB_URL="$${FG_DB_URL:-$(FG_DB_URL_LOCAL)}" \
+	$(VENV_BIN)/pytest -q tests/postgres
+
+# Optional: run postgres tests using docker-compose hostname (only if your test runner can resolve it)
+db-postgres-test-compose: venv
+	@FG_POSTGRES_TESTS=1 \
+	FG_DB_BACKEND="postgres" \
+	FG_DB_URL="$${FG_DB_URL:-$(FG_DB_URL_COMPOSE)}" \
+	$(VENV_BIN)/pytest -q tests/postgres
 
 db-postgres-verify: db-postgres-up db-postgres-migrate db-postgres-assert db-postgres-test
 
@@ -1080,3 +1095,49 @@ route-inventory-update:
 	@$(MAKE) route-inventory-generate
 	@$(MAKE) route-inventory-audit
 	@echo "✅ route inventory updated; commit tools/ci/route_inventory.json"
+
+	.PHONY: ai-spot ai-full dev-run dev-env
+
+dev-env:
+	@mkdir -p .state
+	@echo "FG_STATE_DIR=$(PWD)/.state"
+	@echo "FG_API_KEY=dev-$$($(PY) -c 'import secrets; print(secrets.token_hex(16))')"
+
+dev-run:
+	@mkdir -p .state
+	@FG_STATE_DIR=$(PWD)/.state \
+	FG_API_KEY=dev-$$($(PY) -c 'import secrets; print(secrets.token_hex(16))') \
+	uvicorn api.main:app --host 127.0.0.1 --port 18000
+
+# Spot test: AI + breaker + router invariants only
+ai-spot: venv
+	@$(RUFF) check api/ai api/middleware api/main.py
+	@$(RUFF) format --check api/ai api/middleware api/main.py
+	@$(PYTEST) -q -k "ai or breaker or rag or llm or responses or openai"
+	@$(MAKE) route-inventory-audit
+	@$(MAKE) soc-review-sync
+
+# Full: what you already trust locally
+ai-full: venv
+	@$(MAKE) fg-fast-full
+
+.PHONY: test-ai-spot test-ai-full
+
+# Spot: only the AI auth/threading regressions + route inventory assertions
+test-ai-spot: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q \
+		tests/security/test_route_inventory_ai_query.py \
+		tests/security/test_ai_query_unscoped_key_requires_tenant_header.py
+
+# Full: everything relevant to AI guard + breaker + RAG-ish plumbing (still not your whole suite)
+test-ai-full: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q -k "ai or breaker or rag or llm or responses or openai"
+
+
+
+.PHONY: dev-venv
+dev-venv:
+	python3 -m venv .venv
+	. .venv/bin/activate && python -m pip install -U pip wheel setuptools
+	. .venv/bin/activate && python -m pip install -r requirements.txt -r requirements-dev.txt
+

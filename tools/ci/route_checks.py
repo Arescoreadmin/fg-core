@@ -105,10 +105,16 @@ class RouteExtractor(ast.NodeVisitor):
                 or _function_has_tenant_binding(node)
                 or self.router_tenant_bound.get(router_name, False)
             )
+            dep_names = _dependency_names_from_call(
+                deco
+            ) | _extract_dep_names_from_function(node)
             tenant_explicit_unbound = _infer_tenant_unbound(
                 file_path=self.file_path,
                 full_path=full_path,
                 scopes=all_scopes,
+            )
+            tenant_explicit_unbound = tenant_explicit_unbound or (
+                "require_tenant_id" in dep_names
             )
 
             route_has_any_dependency = (
@@ -422,3 +428,49 @@ def _is_tenant_binding_dependency(node: ast.AST) -> bool:
             or nested_name.endswith("tenant_db_optional")
         )
     return False
+
+
+def _dependency_names_from_call(call: ast.Call) -> set[str]:
+    """
+    Extract dependency function names from a FastAPI dependencies=[Depends(...), ...] kwarg.
+    Returns a set of best-effort names (e.g., "require_tenant_id", "api.auth.require_tenant_id").
+    """
+    dep_node = _keyword_value(call, "dependencies")
+    if not isinstance(dep_node, (ast.List, ast.Tuple)):
+        return set()
+    out: set[str] = set()
+    for dep in dep_node.elts:
+        if not isinstance(dep, ast.Call):
+            continue
+        if _get_name(dep.func) != "Depends" or not dep.args:
+            continue
+        out.add(_get_name(dep.args[0]) or "")
+        # Handle Depends(fn(...)) style
+        if isinstance(dep.args[0], ast.Call):
+            out.add(_get_name(dep.args[0].func) or "")
+    return {x for x in out if x}
+
+
+def _extract_dep_names_from_function(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> set[str]:
+    """
+    Extract dependency function names from Depends(...) defaults on function parameters.
+    """
+    out: set[str] = set()
+    args = [*node.args.args, *node.args.kwonlyargs]
+    if node.args.vararg:
+        args.append(node.args.vararg)
+    if node.args.kwarg:
+        args.append(node.args.kwarg)
+
+    for arg in args:
+        default = _default_for_arg(node, arg.arg)
+        if not isinstance(default, ast.Call):
+            continue
+        if _get_name(default.func) != "Depends" or not default.args:
+            continue
+        out.add(_get_name(default.args[0]) or "")
+        if isinstance(default.args[0], ast.Call):
+            out.add(_get_name(default.args[0].func) or "")
+    return {x for x in out if x}

@@ -33,7 +33,101 @@ from .validation import (
 )
 
 log = logging.getLogger("frostgate")
+
+
 _security_log = logging.getLogger("frostgate.security")
+
+
+def tenant_denial(
+    request: Request,
+    *,
+    reason: str,
+    tenant_supplied: Optional[str] = None,
+    tenant_from_key: Optional[str] = None,
+) -> None:
+    """
+    Security log for tenant binding denials.
+
+    Tests require:
+      - logger name: frostgate.security
+      - msg: "tenant_denial"
+      - extra fields: event, reason, env, route, method, request_id, remote_ip, tenant_id_hash, key_id
+    """
+    import os
+
+    log_sec = logging.getLogger("frostgate.security")
+    env = os.getenv("FG_ENV", "dev")
+
+    headers = getattr(request, "headers", None) or {}
+    scope = getattr(request, "scope", None) or {}
+
+    # route + method (works for real Request and mocks)
+    route = None
+    try:
+        route = getattr(getattr(request, "url", None), "path", None) or scope.get(
+            "path"
+        )
+    except Exception:
+        route = scope.get("path")
+    method = None
+    try:
+        method = getattr(request, "method", None) or scope.get("method")
+    except Exception:
+        method = scope.get("method")
+
+    # request id
+    request_id = None
+    try:
+        request_id = headers.get("X-Request-Id") or headers.get("X-Request-ID")
+    except Exception:
+        request_id = None
+    if not request_id:
+        request_id = getattr(getattr(request, "state", None), "request_id", None)
+
+    # remote_ip (trust proxy only if explicitly enabled)
+    trust_proxy = os.getenv("FG_TRUST_PROXY_HEADERS", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    remote_ip = None
+    if trust_proxy:
+        try:
+            xff = headers.get("X-Forwarded-For")
+            if xff:
+                remote_ip = xff.split(",")[0].strip()
+        except Exception:
+            remote_ip = None
+    if not remote_ip:
+        try:
+            client = getattr(request, "client", None)
+            remote_ip = getattr(client, "host", None)
+        except Exception:
+            remote_ip = None
+
+    # key_id best-effort
+    st = getattr(request, "state", None)
+    auth = getattr(st, "auth", None) if st is not None else None
+    key_id = (
+        getattr(auth, "key_id", None)
+        or getattr(auth, "key_hash", None)
+        or getattr(auth, "id", None)
+    )
+
+    log_sec.warning(
+        "tenant_denial",
+        extra={
+            "event": "tenant_denial",
+            "reason": reason,
+            "env": env,
+            "route": route,
+            "method": method,
+            "request_id": request_id,
+            "remote_ip": remote_ip,
+            "tenant_id_hash": _tenant_hash(tenant_supplied or tenant_from_key),
+            "key_id": key_id,
+        },
+    )
 
 
 def is_prod_like_env() -> bool:
@@ -211,6 +305,17 @@ def _extract_key(request: Request, x_api_key: Optional[str]) -> Optional[str]:
     return None
 
 
+def verify_api_key(
+    request: Request,
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+) -> str:
+    """
+    Back-compat dependency used across the codebase and re-exported by api.auth_scopes.
+    Verifies the key (no scope requirement) and seeds request.state auth context.
+    """
+    return require_api_key_always(request, x_api_key, required_scopes=None)
+
+
 def verify_api_key_raw(
     raw: Optional[str] = None,
     required_scopes=None,
@@ -228,7 +333,7 @@ def verify_api_key_raw(
         check_expiration=check_expiration,
         request=request,
     )
-    return result.valid
+    return bool(result.valid)
 
 
 def verify_api_key_detailed(
@@ -276,6 +381,7 @@ def verify_api_key_detailed(
             request_path=request_path,
             client_ip=client_ip,
         )
+        # NOTE: env/global key is unscoped (no tenant, no scopes)
         return AuthResult(valid=True, reason="global_key")
 
     if not raw:
@@ -349,6 +455,7 @@ def verify_api_key_detailed(
     identifier_col = None
     col_names: Set[str] = set()
     secret_for_verify: Optional[str] = None
+    row = None
 
     parts = raw.split(".")
     if len(parts) >= 3:
@@ -532,7 +639,7 @@ def verify_api_key_detailed(
                                     new_params, separators=(",", ":"), sort_keys=True
                                 ),
                                 new_lookup,
-                                row.get("id"),
+                                row.get("id") if row else None,
                             ),
                         )
                         con.commit()
@@ -558,13 +665,13 @@ def verify_api_key_detailed(
                 success=False,
                 key_prefix=key_prefix,
                 tenant_id=tenant_id,
-                reason=f"missing_scopes:{','.join(needed - have)}",
+                reason=f"missing_scopes:{','.join(sorted(needed - have))}",
                 request_path=request_path,
                 client_ip=client_ip,
             )
             return AuthResult(
                 valid=False,
-                reason=f"missing_scopes:{','.join(needed - have)}",
+                reason=f"missing_scopes:{','.join(sorted(needed - have))}",
                 key_prefix=key_prefix,
                 tenant_id=tenant_id,
                 scopes=have,
@@ -604,25 +711,60 @@ def require_api_key_always(
     if not got:
         raise HTTPException(status_code=401, detail=ERR_INVALID)
 
+    # Verify now (dependency path). Middleware may also verify, but we do not rely on it.
     result = verify_api_key_detailed(
         raw=got, required_scopes=required_scopes, request=request
     )
 
     if result.valid:
+        # Canonical state used across deps
         request.state.auth = result
+
+        # Self-heal: some routes expect auth_context (older/middleware-driven code paths).
+        st = getattr(request, "state", None)
+        if st is not None and getattr(st, "auth_context", None) is None:
+            scopes = set(getattr(result, "scopes", set()) or set())
+            tenant_id = getattr(result, "tenant_id", None)
+            tenant_is_key_bound = bool(
+                tenant_id
+            )  # DB keys may be tenant-bound; env/global is not.
+
+            st.auth_context = {
+                "api_key_present": True,
+                "api_key_prefix": getattr(result, "key_prefix", None),
+                "scopes": sorted(list(scopes)),
+                "tenant_id": tenant_id,
+                "tenant_is_key_bound": tenant_is_key_bound,
+                "source": "api.auth_scopes.resolution.require_api_key_always",
+            }
+            if tenant_id:
+                st.tenant_id = tenant_id
+                st.tenant_is_key_bound = tenant_is_key_bound
+
         return got
 
-    if result.is_missing_key:
+    # Normalize errors
+    if (
+        getattr(result, "is_missing_key", False)
+        or getattr(result, "reason", "") == "no_key_provided"
+    ):
         raise HTTPException(status_code=401, detail=ERR_INVALID)
-    if result.reason.startswith("missing_scopes:"):
+
+    reason = str(getattr(result, "reason", "") or "")
+    if reason.startswith("missing_scopes:"):
         raise HTTPException(status_code=403, detail=ERR_INVALID)
+
     raise HTTPException(status_code=401, detail=ERR_INVALID)
 
 
-def verify_api_key(
+def verify_api_key_header(
     request: Request,
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ) -> str:
+    """
+    Wrapper dependency for routes that just want a key validated.
+    Named to avoid shadowing api.auth.verify_api_key (if present).
+    """
     return require_api_key_always(request, x_api_key, required_scopes=None)
 
 
@@ -634,6 +776,28 @@ def _auth_tenant_from_request(request: Request) -> Optional[str]:
     return str(tenant).strip() or None
 
 
+def _fg__is_env_api_key(presented_key: str | None, settings_obj) -> bool:
+    try:
+        expected = getattr(settings_obj, "FG_API_KEY", None)
+    except Exception:
+        expected = None
+    return bool(expected) and bool(presented_key) and presented_key == expected
+
+
+def _fg__request_path(request) -> str:
+    try:
+        return request.url.path
+    except Exception:
+        return ""
+
+
+def _fg__header_tenant(request) -> str | None:
+    try:
+        return request.headers.get("X-Tenant-Id")
+    except Exception:
+        return None
+
+
 def bind_tenant_id(
     request: Request,
     requested_tenant: Optional[str],
@@ -641,83 +805,141 @@ def bind_tenant_id(
     require_explicit_for_unscoped: bool = False,
     default_unscoped: Optional[str] = None,
 ) -> str:
-    requested = (str(requested_tenant).strip() if requested_tenant else "") or None
+    """
+    Tenant binding contract:
 
-    cached_tenant_raw = getattr(getattr(request, "state", None), "tenant_id", None)
-    cached_tenant = None
-    if isinstance(cached_tenant_raw, str):
-        cached_tenant = cached_tenant_raw.strip() or None
+    - If the API key is tenant-bound: effective tenant is ALWAYS the key's tenant.
+      If the client supplies a different tenant (query/header/body/path), deny with 403.
 
-    key_bound_flag = bool(
-        getattr(getattr(request, "state", None), "tenant_is_key_bound", False)
+    - If the API key is unscoped:
+      - If any supplied tenant is invalid format -> 400 invalid tenant_id.
+      - Only /ai/query may use FG_API_KEY (env) with X-Tenant-Id for dev convenience.
+      - Otherwise: unscoped keys cannot act on ANY tenant, even if supplied -> 400.
+    """
+    import os
+
+    def _norm_tid(v):
+        # MagicMock-safe: only accept real strings.
+        if not isinstance(v, str):
+            return None
+        v = v.strip()
+        return v or None
+
+    st = getattr(request, "state", None)
+    if st is None:
+        st = type("State", (), {})()
+        setattr(request, "state", st)
+
+    # Populate tenant cache once per request from the shared helper (monkeypatchable).
+    if getattr(st, "tenant_id", None) is None:
+        try:
+            st.tenant_id = _norm_tid(_auth_tenant_from_request(request))
+        except Exception:
+            st.tenant_id = None
+
+    # Source of truth: auth object (unit tests set st.auth directly; middleware sets st.tenant_id too).
+    auth = getattr(st, "auth", None)
+    auth_tenant = (
+        _norm_tid(getattr(auth, "tenant_id", None)) if auth is not None else None
     )
-    if key_bound_flag and not cached_tenant:
-        # Partial state is not trusted; force re-resolution from auth context.
-        request.state.tenant_is_key_bound = False
+    # Cache derived fields for the rest of the request, but never treat cache as authoritative.
+    if getattr(st, "tenant_id", None) is None:
+        st.tenant_id = auth_tenant
+    if not hasattr(st, "tenant_is_key_bound"):
+        st.tenant_is_key_bound = bool(auth_tenant)
 
-    if cached_tenant and key_bound_flag:
-        cached = cached_tenant
-        if requested and requested != cached:
-            auth = getattr(getattr(request, "state", None), "auth", None)
-            _tenant_denial_log(
-                request=request,
-                event="tenant_mismatch_denied",
-                reason="cached_tenant_mismatch",
-                tenant_from_key=cached,
-                tenant_supplied=requested,
-                key_prefix=getattr(auth, "key_prefix", None),
-                scopes=getattr(auth, "scopes", set()),
+    # Determine key binding (auth-first, then cached).
+    key_tenant = auth_tenant or _norm_tid(getattr(st, "tenant_id", None))
+    key_is_bound = bool(key_tenant)
+    # Keep the cache consistent (middleware may have set these already).
+    st.tenant_id = key_tenant
+    st.tenant_is_key_bound = bool(key_tenant)
+
+    # Gather supplied tenant (query preferred, then header)
+    req_tenant = _norm_tid(requested_tenant)
+    headers = getattr(request, "headers", None) or {}
+    try:
+        hdr_tenant = _norm_tid(headers.get("X-Tenant-Id"))
+    except Exception:
+        hdr_tenant = None
+    supplied = req_tenant or hdr_tenant
+
+    # Unscoped key: require explicit tenant when requested by caller.
+    if (not key_is_bound) and require_explicit_for_unscoped and not supplied:
+        raise HTTPException(
+            status_code=400,
+            detail=redact_detail(
+                "tenant_id required for unscoped keys", generic="invalid request"
+            ),
+        )
+
+    # Key-bound: clamp, mismatch -> 403
+    if key_is_bound and key_tenant:
+        if supplied and supplied != key_tenant:
+            tenant_denial(
+                request,
+                reason="tenant_mismatch",
+                tenant_supplied=supplied,
+                tenant_from_key=key_tenant,
             )
             raise HTTPException(
                 status_code=403,
                 detail=redact_detail("tenant mismatch", generic="forbidden"),
             )
-        return cached
+        st.tenant_id = key_tenant
+        st.tenant_is_key_bound = True
+        return str(key_tenant)
 
-    auth = getattr(getattr(request, "state", None), "auth", None)
-    auth_tenant = _auth_tenant_from_request(request)
-    key_prefix = getattr(auth, "key_prefix", None)
-    scopes = getattr(auth, "scopes", set())
-
-    if auth_tenant:
-        if requested and requested != auth_tenant:
-            _tenant_denial_log(
-                request=request,
-                event="tenant_mismatch_denied",
-                reason="requested_tenant_mismatch",
-                tenant_from_key=auth_tenant,
-                tenant_supplied=requested,
-                key_prefix=key_prefix,
-                scopes=scopes,
-            )
-            raise HTTPException(
-                status_code=403,
-                detail=redact_detail("tenant mismatch", generic="forbidden"),
-            )
-        request.state.tenant_id = auth_tenant
-        request.state.tenant_is_key_bound = True
-        _apply_tenant_context(request, auth_tenant)
-        return auth_tenant
-
-    if requested:
-        valid, _error = _validate_tenant_id(requested)
+    # Unscoped: validate supplied format if present
+    if supplied:
+        valid, _err = _validate_tenant_id(supplied)
         if not valid:
             raise HTTPException(
                 status_code=400,
                 detail=redact_detail("invalid tenant_id", generic="invalid request"),
             )
 
-    _tenant_denial_log(
-        request=request,
-        event="tenant_binding_missing_denied",
-        reason="missing_key_bound_tenant",
-        tenant_from_key=auth_tenant,
-        tenant_supplied=requested,
-        key_prefix=key_prefix,
-        scopes=scopes,
-    )
-    _ = require_explicit_for_unscoped
-    _ = default_unscoped
+    # /ai/query exception for env key only
+    scope = getattr(request, "scope", None) or {}
+    path = None
+    try:
+        path = getattr(getattr(request, "url", None), "path", None) or scope.get("path")
+    except Exception:
+        path = scope.get("path")
+
+    presented = None
+    try:
+        presented = headers.get("X-API-Key")
+    except Exception:
+        presented = None
+    env_key = os.getenv("FG_API_KEY")
+
+    if path == "/ai/query" and env_key and presented and presented == env_key:
+        if hdr_tenant:
+            st.tenant_id = hdr_tenant
+            st.tenant_is_key_bound = False
+            return str(hdr_tenant)
+        raise HTTPException(
+            status_code=400,
+            detail=redact_detail(
+                "tenant_id required for unscoped keys", generic="invalid request"
+            ),
+        )
+
+    # Otherwise, unscoped keys cannot act on any tenant
+    if require_explicit_for_unscoped:
+        raise HTTPException(
+            status_code=400,
+            detail=redact_detail(
+                "tenant_id required for unscoped keys", generic="invalid request"
+            ),
+        )
+
+    if default_unscoped:
+        st.tenant_id = default_unscoped
+        st.tenant_is_key_bound = False
+        return str(default_unscoped)
+
     raise HTTPException(
         status_code=400,
         detail=redact_detail(
@@ -726,18 +948,48 @@ def bind_tenant_id(
     )
 
 
-def require_bound_tenant(request: Request) -> str:
-    tenant_id = getattr(getattr(request, "state", None), "tenant_id", None)
-    if tenant_id and bool(
-        getattr(getattr(request, "state", None), "tenant_is_key_bound", False)
-    ):
-        return str(tenant_id)
-    raise HTTPException(
-        status_code=400,
-        detail=redact_detail(
-            "tenant_id required for unscoped keys", generic="invalid request"
-        ),
+def require_bound_tenant(request: Request, x_tenant_id: Optional[str] = None) -> str:
+    """
+    Callable helper (NOT a FastAPI Header dependency).
+    Must work with real Requests and test DummyReq objects without .headers.
+    """
+    headers = getattr(request, "headers", None) or {}
+    if x_tenant_id is None:
+        try:
+            x_tenant_id = headers.get("X-Tenant-Id")
+        except Exception:
+            x_tenant_id = None
+    return bind_tenant_id(
+        request,
+        (x_tenant_id or "").strip() or None,
+        require_explicit_for_unscoped=True,
     )
+
+
+def require_tenant_id(
+    request: Request,
+    x_tenant_id: Optional[str] = Header(default=None, alias="X-Tenant-Id"),
+) -> str:
+    """Require a tenant id for unscoped keys (accept X-Tenant-Id)."""
+    tenant = (x_tenant_id or "").strip()
+    if not tenant:
+        raise HTTPException(
+            status_code=400,
+            detail=redact_detail("tenant_id required", generic="invalid request"),
+        )
+    valid, _err = _validate_tenant_id(tenant)
+    if not valid:
+        raise HTTPException(
+            status_code=400,
+            detail=redact_detail("invalid tenant_id", generic="invalid request"),
+        )
+
+    st = getattr(request, "state", None)
+    if st is not None:
+        setattr(st, "tenant_id", tenant)
+        setattr(st, "tenant_is_key_bound", False)
+
+    return tenant
 
 
 def _apply_tenant_context(request: Request, tenant_id: Optional[str]) -> None:

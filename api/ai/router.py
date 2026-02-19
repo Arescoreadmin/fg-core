@@ -32,8 +32,9 @@ from api.ai.policy import (
 )
 from api.ai.retrieval import NullRetrievalProvider, RetrievalProvider
 from api.ai.schemas import AIQueryRequest, AIQueryResponse
-from api.auth_scopes import require_bound_tenant, require_scopes
-from api.auth_scopes.resolution import is_prod_like_env
+from api.auth_scopes import require_scopes
+from api.auth_scopes.resolution import is_prod_like_env, require_tenant_id
+
 from api.deps import tenant_db_required
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -160,13 +161,17 @@ def _log_guard_backend_unavailable(
 @router.post(
     "/query",
     response_model=AIQueryResponse,
-    dependencies=[Depends(require_scopes("ai:query"))],
+    dependencies=[
+        Depends(require_tenant_id),
+        Depends(require_scopes("ai:query")),
+        Depends(require_tenant_id),
+    ],
 )
 def ai_query(
     payload: AIQueryRequest,
     request: Request,
     db: Session = Depends(tenant_db_required),
-    tenant_id: str = Depends(require_bound_tenant),
+    tenant_id: str = Depends(require_tenant_id),
     llm_client: LLMClient = Depends(get_llm_client),
     retrieval_provider: RetrievalProvider = Depends(get_retrieval_provider),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),

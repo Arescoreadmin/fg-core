@@ -395,6 +395,44 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         v = str(v).strip() if v is not None else ""
         return v or None
 
+    def _ensure_auth_context(
+        req: Request,
+        api_key: str,
+        tenant_id: Optional[str],
+        scopes: Optional[set[str]] = None,
+    ) -> None:
+        """
+        Ensure request.state.auth_context exists for downstream scope/tenant deps.
+
+        This fixes the "Missing auth context" failure mode where scope dependencies
+        assume middleware populated request.state.auth_context.
+        """
+        st = getattr(req, "state", None)
+        if st is None:
+            return
+
+        # Populate tenant fields (even for unscoped env/dev keys) so tenant deps can work.
+        if tenant_id:
+            if getattr(st, "tenant_id", None) in (None, "", "unknown"):
+                st.tenant_id = tenant_id
+            if getattr(st, "tenant_is_key_bound", None) is None:
+                # In env/dev key mode, we treat tenant as explicitly provided (not key-bound).
+                st.tenant_is_key_bound = False
+
+        if getattr(st, "auth_context", None) is not None:
+            return
+
+        prefix = str(api_key)[:8]
+        st.auth_context = {
+            "api_key_present": True,
+            "api_key_prefix": prefix,
+            "scopes": sorted(list(scopes or set())),
+            "tenant_id": tenant_id,
+            "tenant_is_key_bound": bool(getattr(st, "tenant_is_key_bound", False)),
+            "auth_enabled": bool(getattr(req.app.state, "auth_enabled", False)),
+            "source": "api.main.require_status_auth",
+        }
+
     def check_tenant_if_present(req: Request) -> None:
         tenant_id = _hdr(req, "X-Tenant-Id")
         if not tenant_id:
@@ -428,10 +466,25 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         if expected is None or str(expected) != str(api_key):
             _fail()
 
+        # Tenant header validated, seed auth context so downstream deps don't explode.
+        _ensure_auth_context(
+            req, api_key=str(api_key), tenant_id=str(tenant_id), scopes=set()
+        )
+
     def require_status_auth(req: Request) -> None:
+        # Validate tenant header if supplied.
         check_tenant_if_present(req)
 
+        # If auth is disabled, still seed context for tenant-bound flows (dev/test).
         if not bool(app.state.auth_enabled):
+            api_key = _hdr(req, "X-API-Key")
+            if api_key:
+                _ensure_auth_context(
+                    req,
+                    api_key=str(api_key),
+                    tenant_id=_hdr(req, "X-Tenant-Id"),
+                    scopes=set(),
+                )
             return
 
         api_key = _hdr(req, "X-API-Key")
@@ -443,6 +496,11 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
         if api_key != _global_expected_api_key():
             _fail()
+
+        # Auth succeeded. Seed auth context to satisfy scope/tenant dependencies.
+        _ensure_auth_context(
+            req, api_key=str(api_key), tenant_id=_hdr(req, "X-Tenant-Id"), scopes=set()
+        )
 
     # Compatibility shim for older tests/modules
     try:
@@ -608,7 +666,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
         if failures:
             raise HTTPException(
-                status_code=503, detail=f"dependencies_unhealthy: {'; '.join(failures)}"
+                status_code=503,
+                detail=f"dependencies_unhealthy: {'; '.join(failures)}",
             )
 
         return {"status": "ready", "dependencies": deps_status}
