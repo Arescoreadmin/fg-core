@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "required": ["id", "version", "tenant_id", "policy_id", "theme_id", "capabilities"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string"},
+    "version": {"type": "string"},
+    "tenant_id": {"type": "string"},
+    "policy_id": {"type": "string"},
+    "theme_id": {"type": "string"},
+    "is_default": {"type": "boolean"},
+    "capabilities": {"type": "object"}
+  }
+}
