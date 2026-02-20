@@ -1197,6 +1197,7 @@ nuclear-full: venv
 .PHONY: pr-merge-smoke
 pr-merge-smoke: venv
 	@mkdir -p artifacts
+	@$(PY) tools/ci/guard_unique_migration_versions.py
 	@ruff check
 	@$(PYTEST) -q
 	@$(MAKE) route-inventory-generate

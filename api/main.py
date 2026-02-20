@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
 from api.config.env import is_production_env, is_strict_env_required, resolve_env
@@ -52,6 +53,8 @@ from api.ai_plane_extension import router as ai_plane_extension_router
 from api.planes import router as planes_router
 from api.evidence_index import router as evidence_index_router
 from api.agent_enrollment import router as agent_enrollment_router
+from api.agent_phase2 import admin_router as agent_phase2_admin_router
+from api.agent_phase2 import router as agent_phase2_router
 from api.agent_tokens import router as agent_tokens_router
 from api.connectors_control_plane import router as connectors_control_plane_router
 from services.ai_plane_extension import ai_external_provider_enabled, ai_plane_enabled
@@ -184,6 +187,57 @@ ring_router = _optional_router("api.ring_router", "router")
 roe_router = _optional_router("api.roe_engine", "router")
 
 
+def _normalize_ingest_request_schema(openapi_schema: dict[str, Any]) -> None:
+    components = openapi_schema.get("components")
+    if not isinstance(components, dict):
+        return
+
+    schemas = components.get("schemas")
+    if not isinstance(schemas, dict):
+        return
+
+    prefixed = "api__ingest_schemas__IngestRequest"
+    canonical = "IngestRequest"
+    if prefixed not in schemas:
+        return
+
+    schemas[canonical] = schemas[prefixed]
+
+    old_ref = f"#/components/schemas/{prefixed}"
+    new_ref = f"#/components/schemas/{canonical}"
+
+    def _rewrite_refs(node: Any) -> None:
+        if isinstance(node, dict):
+            if node.get("$ref") == old_ref:
+                node["$ref"] = new_ref
+            for value in node.values():
+                _rewrite_refs(value)
+        elif isinstance(node, list):
+            for item in node:
+                _rewrite_refs(item)
+
+    _rewrite_refs(openapi_schema)
+    schemas.pop(prefixed, None)
+
+
+def _install_openapi_shim(app: FastAPI) -> None:
+    def _custom_openapi() -> dict[str, Any]:
+        if app.openapi_schema is not None:
+            return app.openapi_schema
+
+        openapi_schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            routes=app.routes,
+            description=app.description,
+        )
+        _normalize_ingest_request_schema(openapi_schema)
+        app.openapi_schema = openapi_schema
+        return app.openapi_schema
+
+    app.openapi = _custom_openapi
+
+
 def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     resolved_auth_enabled = (
         _resolve_auth_enabled_from_env() if auth_enabled is None else bool(auth_enabled)
@@ -285,6 +339,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 log.warning("Graceful shutdown error: %s", e)
 
     app = FastAPI(title="frostgate-core", version=APP_VERSION, lifespan=lifespan)
+    _install_openapi_shim(app)
 
     # ---- Request validation: stable 400 for missing ingest event_id ----
     @app.exception_handler(RequestValidationError)
@@ -524,7 +579,9 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(keys_router)
     app.include_router(forensics_router)
     app.include_router(agent_enrollment_router)
+    app.include_router(agent_phase2_router)
     app.include_router(agent_tokens_router)
+    app.include_router(agent_phase2_admin_router)
     app.include_router(connectors_control_plane_router)
 
     # ---- Compliance routers ----
@@ -757,6 +814,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app = FastAPI(
         title=cfg.title, version=cfg.version, servers=list(cfg.servers), root_path=""
     )
+    _install_openapi_shim(app)
     app.state.auth_enabled = True
     app.state.service = getattr(cfg, "service", "frostgate-core")
     app.state.env = getattr(cfg, "env", "contract")
@@ -786,7 +844,9 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(keys_router)
     app.include_router(forensics_router)
     app.include_router(agent_enrollment_router)
+    app.include_router(agent_phase2_router)
     app.include_router(agent_tokens_router)
+    app.include_router(agent_phase2_admin_router)
     app.include_router(connectors_control_plane_router)
     if mission_router is not None:
         app.include_router(mission_router)
