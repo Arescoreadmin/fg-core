@@ -19,14 +19,16 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
-from urllib.parse import urljoin
-
 from api.security_alerts import (
     SSRFBlocked,
     MAX_REDIRECT_HOPS,
     sanitize_header_value,
     sanitize_url_for_log,
-    validate_target,
+)
+from api.security.outbound_policy import (
+    OutboundPolicyError,
+    safe_post_with_redirects,
+    sanitize_outbound_headers,
 )
 
 log = logging.getLogger("frostgate.tripwire")
@@ -152,7 +154,10 @@ class WebhookDeliveryService:
     async def close(self):
         """Close HTTP client."""
         if self._http_client is not None:
-            await self._http_client.aclose()
+            if hasattr(self._http_client, "aclose"):
+                await self._http_client.aclose()
+            elif hasattr(self._http_client, "close"):
+                await self._http_client.close()
             self._http_client = None
 
     async def deliver(
@@ -175,19 +180,11 @@ class WebhookDeliveryService:
             try:
                 client = await self._get_http_client()
 
-                # Determine client type and make request
-                if hasattr(client, "post"):  # httpx
-                    response = await self._safe_post(
-                        client, url, payload, alert_type, severity
-                    )
-                    status_code = response.status_code
-                    response_time = (time.time() - start_time) * 1000
-                else:  # aiohttp
-                    response = await self._safe_post(
-                        client, url, payload, alert_type, severity
-                    )
-                    status_code = response.status
-                    response_time = (time.time() - start_time) * 1000
+                response = await self._safe_post(client, url, payload, alert_type, severity)
+                status_code = getattr(response, "status_code", None)
+                if status_code is None:
+                    status_code = getattr(response, "status", 0)
+                response_time = (time.time() - start_time) * 1000
 
                 last_status = status_code
 
@@ -324,34 +321,17 @@ class WebhookDeliveryService:
             "X-Alert-Type": alert_type,
             "X-Alert-Severity": severity,
         }
-        current_url = url
-        is_httpx_client = client.__class__.__module__.startswith("httpx")
-        for hop in range(MAX_REDIRECT_HOPS + 1):
-            normalized_url, _ = validate_target(current_url)
-            request_kwargs = {
-                "json": payload,
-                "headers": headers,
-                "timeout": self.timeout,
-            }
-            if is_httpx_client:
-                request_kwargs["follow_redirects"] = False
-            else:
-                request_kwargs["allow_redirects"] = False
-
-            response = await client.post(normalized_url, **request_kwargs)
-            status_code = getattr(response, "status_code", None)
-            if status_code is None:
-                status_code = getattr(response, "status", 0)
-            if 300 <= status_code < 400:
-                location = (getattr(response, "headers", {}) or {}).get("Location")
-                if not location:
-                    raise SSRFBlocked("redirect_location_missing")
-                if hop >= MAX_REDIRECT_HOPS:
-                    raise SSRFBlocked("redirect_hop_limit_exceeded")
-                current_url = urljoin(normalized_url, location)
-                continue
-            return response
-        raise SSRFBlocked("redirect_hop_limit_exceeded")
+        try:
+            return await safe_post_with_redirects(
+                client,
+                url,
+                json_body=payload,
+                headers=sanitize_outbound_headers(headers),
+                timeout=self.timeout,
+                max_redirect_hops=MAX_REDIRECT_HOPS,
+            )
+        except OutboundPolicyError as exc:
+            raise SSRFBlocked(str(exc)) from exc
 
 
 # Singleton delivery service instance

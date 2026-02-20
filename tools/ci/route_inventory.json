@@ -146,7 +146,7 @@
     "tenant_bound": true
   },
   {
-    "file": "api/connectors_control_plane.py",
+    "file": "api/connectors_policy.py",
     "method": "GET",
     "path": "/admin/connectors/policy",
     "scoped": true,
@@ -156,7 +156,7 @@
     "tenant_bound": true
   },
   {
-    "file": "api/connectors_control_plane.py",
+    "file": "api/connectors_policy.py",
     "method": "POST",
     "path": "/admin/connectors/policy",
     "scoped": true,
@@ -166,7 +166,7 @@
     "tenant_bound": true
   },
   {
-    "file": "api/connectors_control_plane.py",
+    "file": "api/connectors_status.py",
     "method": "GET",
     "path": "/admin/connectors/status",
     "scoped": true,
@@ -176,29 +176,9 @@
     "tenant_bound": true
   },
   {
-    "file": "api/connectors_control_plane.py",
-    "method": "POST",
-    "path": "/admin/connectors/{connector_id}/connect",
-    "scoped": true,
-    "scopes": [
-      "admin:write"
-    ],
-    "tenant_bound": true
-  },
-  {
-    "file": "api/connectors_control_plane.py",
+    "file": "api/connectors_admin.py",
     "method": "POST",
     "path": "/admin/connectors/{connector_id}/revoke",
-    "scoped": true,
-    "scopes": [
-      "admin:write"
-    ],
-    "tenant_bound": true
-  },
-  {
-    "file": "api/connectors_control_plane.py",
-    "method": "POST",
-    "path": "/admin/connectors/{connector_id}/state",
     "scoped": true,
     "scopes": [
       "admin:write"
@@ -1318,7 +1298,7 @@
     "tenant_bound": true
   },
   {
-    "file": "api/connectors_control_plane.py",
+    "file": "api/connectors_internal.py",
     "method": "POST",
     "path": "/internal/connectors/{connector_id}/ingest",
     "scoped": true,

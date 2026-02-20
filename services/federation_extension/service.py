@@ -4,8 +4,11 @@ import base64
 import json
 import os
 import time
-import urllib.request
 from typing import Any
+
+import requests
+
+from api.security.outbound_policy import sanitize_url_for_log, validate_target
 
 
 class JWKSCache:
@@ -17,8 +20,11 @@ class JWKSCache:
         now = time.time()
         if self._doc is not None and now < self._exp:
             return self._doc
-        with urllib.request.urlopen(url, timeout=5) as resp:  # noqa: S310
-            payload = json.loads(resp.read().decode("utf-8"))
+        normalized_url, _ = validate_target(url)
+        resp = requests.get(normalized_url, timeout=5, allow_redirects=False)
+        if resp.status_code != 200:
+            raise ValueError(f"jwks_fetch_failed:{resp.status_code}:{sanitize_url_for_log(url)}")
+        payload = resp.json()
         self._doc = payload
         self._exp = now + ttl_seconds
         return payload
