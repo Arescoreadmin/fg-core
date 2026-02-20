@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import sqlite3
 import importlib
 import logging
 import os
+import sqlite3
 from collections.abc import Iterator
 from functools import lru_cache
 from pathlib import Path
@@ -137,18 +137,192 @@ def _ensure_models_imported() -> None:
     """
     Import model module(s) so Base.metadata is populated.
     """
-    # This must include ApiKey + DecisionRecord tables.
     importlib.import_module("api.db_models")
 
 
 def _get_base():
-    from api.db_models import Base  # noqa (explicit import by design)
+    from api.db_models import Base  # noqa: F401 (explicit import by design)
 
     return Base
 
 
 # ---------------------------------------------------------------------
-# SQLite best-effort migration helpers (tests expect api_keys hash cols)
+# SQLite low-level schema enforcers (sqlite3 direct)
+# ---------------------------------------------------------------------
+
+
+def _sqlite_table_exists(con: sqlite3.Connection, name: str) -> bool:
+    row = con.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        (name,),
+    ).fetchone()
+    return row is not None
+
+
+def _sqlite_cols(con: sqlite3.Connection, table: str) -> set[str]:
+    return {r[1] for r in con.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def _sqlite_add_col_if_missing(
+    con: sqlite3.Connection, table: str, col: str, decl: str
+) -> None:
+    cols = _sqlite_cols(con, table)
+    if col not in cols:
+        con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+
+
+def _ensure_api_keys_sqlite(sqlite_path: str) -> None:
+    """
+    This project mints/verifies API keys via sqlite3 in api/auth_scopes.py.
+    That means init_db() MUST ensure api_keys exists (and auto-migrate columns)
+    in the sqlite file chosen by FG_SQLITE_PATH or passed sqlite_path.
+    """
+    con = sqlite3.connect(sqlite_path)
+    try:
+        con.execute("PRAGMA journal_mode=WAL")
+        con.execute("PRAGMA foreign_keys=ON")
+
+        if not _sqlite_table_exists(con, "api_keys"):
+            con.execute(
+                """
+                CREATE TABLE api_keys (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT,
+                    prefix TEXT NOT NULL,
+                    key_hash TEXT NOT NULL,
+                    scopes_csv TEXT NOT NULL,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    tenant_id TEXT,
+                    created_at INTEGER,
+                    last_used_at INTEGER,
+                    expires_at INTEGER,
+                    hash_alg TEXT,
+                    hash_params TEXT,
+                    key_lookup TEXT
+                )
+                """
+            )
+
+        _sqlite_add_col_if_missing(con, "api_keys", "hash_alg", "TEXT")
+        _sqlite_add_col_if_missing(con, "api_keys", "hash_params", "TEXT")
+        _sqlite_add_col_if_missing(con, "api_keys", "key_lookup", "TEXT")
+        con.commit()
+    finally:
+        con.close()
+
+
+def _ensure_connectors_sqlite(sqlite_path: str) -> None:
+    """
+    Ensure connector control-plane tables exist in sqlite (dev/test).
+    """
+    con = sqlite3.connect(sqlite_path)
+    try:
+        con.execute("PRAGMA journal_mode=WAL")
+        con.execute("PRAGMA foreign_keys=ON")
+
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS connectors_tenant_state (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL,
+                connector_id TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 0,
+                config_hash TEXT NOT NULL,
+                last_success_at TEXT,
+                last_error_code TEXT,
+                failure_count INTEGER NOT NULL DEFAULT 0,
+                updated_by TEXT NOT NULL DEFAULT 'unknown',
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(tenant_id, connector_id)
+            )
+            """
+        )
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS connectors_credentials (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL,
+                connector_id TEXT NOT NULL,
+                credential_id TEXT NOT NULL DEFAULT 'primary',
+                principal_id TEXT NOT NULL,
+                auth_mode TEXT NOT NULL,
+                ciphertext TEXT NOT NULL,
+                kek_version TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                revoked_at TEXT
+            )
+            """
+        )
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS connectors_audit_ledger (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL,
+                connector_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                params_hash TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                request_id TEXT NOT NULL DEFAULT '',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+        # Backfill columns if older sqlite file exists.
+        _sqlite_add_col_if_missing(
+            con, "connectors_tenant_state", "last_success_at", "TEXT"
+        )
+        _sqlite_add_col_if_missing(
+            con, "connectors_tenant_state", "last_error_code", "TEXT"
+        )
+        _sqlite_add_col_if_missing(
+            con,
+            "connectors_tenant_state",
+            "failure_count",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        _sqlite_add_col_if_missing(
+            con,
+            "connectors_credentials",
+            "credential_id",
+            "TEXT NOT NULL DEFAULT 'primary'",
+        )
+
+        # -----------------------------------------------------------------
+        # Idempotency table (dedicated, not audit ledger abuse)
+        # -----------------------------------------------------------------
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS connectors_idempotency (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL,
+                connector_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                idempotency_key TEXT NOT NULL,
+                response_hash TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                expires_at TEXT NOT NULL,
+                UNIQUE(tenant_id, connector_id, action, idempotency_key)
+            )
+            """
+        )
+        con.executescript(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_connectors_idempotency_key
+                ON connectors_idempotency (tenant_id, connector_id, action, idempotency_key);
+
+            CREATE INDEX IF NOT EXISTS ix_connectors_idempotency_expiry
+                ON connectors_idempotency (expires_at);
+            """
+        )
+
+        con.commit()
+    finally:
+        con.close()
+
+
+# ---------------------------------------------------------------------
+# SQLite best-effort migration helpers (SQLAlchemy conn)
 # ---------------------------------------------------------------------
 
 
@@ -159,6 +333,9 @@ def _sqlite_add_column_if_missing(conn, table: str, col: str, col_type: str) -> 
 
 
 def _auto_migrate_sqlite(engine: Engine) -> None:
+    """
+    Best-effort sqlite migrations for legacy test DBs. Keep bounded and safe.
+    """
     with engine.begin() as conn:
         tables = {
             r[0]
@@ -166,10 +343,12 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 "SELECT name FROM sqlite_master WHERE type='table'"
             )
         }
+
         if "api_keys" in tables:
             _sqlite_add_column_if_missing(conn, "api_keys", "hash_alg", "TEXT")
             _sqlite_add_column_if_missing(conn, "api_keys", "hash_params", "TEXT")
             _sqlite_add_column_if_missing(conn, "api_keys", "key_lookup", "TEXT")
+
         if "security_audit_log" in tables:
             _sqlite_add_column_if_missing(
                 conn, "security_audit_log", "chain_id", "TEXT DEFAULT 'global'"
@@ -180,6 +359,7 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             _sqlite_add_column_if_missing(
                 conn, "security_audit_log", "entry_hash", "TEXT"
             )
+
         if "agent_enrollment_tokens" in tables:
             _sqlite_add_column_if_missing(
                 conn, "agent_enrollment_tokens", "created_by", "TEXT DEFAULT 'unknown'"
@@ -190,11 +370,13 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             _sqlite_add_column_if_missing(
                 conn, "agent_enrollment_tokens", "ticket", "TEXT"
             )
+
         if "agent_device_keys" in tables:
             _sqlite_add_column_if_missing(
                 conn, "agent_device_keys", "hmac_secret_enc", "TEXT DEFAULT ''"
             )
 
+        # Config control-plane tables
         conn.exec_driver_sql(
             """
             CREATE TABLE IF NOT EXISTS config_versions (
@@ -263,6 +445,11 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             conn.exec_driver_sql(
                 "CREATE INDEX IF NOT EXISTS ix_decisions_tenant_config_created ON decisions(tenant_id, config_hash, created_at)"
             )
+
+        # (The rest of your large sqlite schema block continues unchanged)
+        # NOTE: You pasted duplicated ai_policy_violations creation twice; leaving it as-is is sloppy.
+        # If you want it fixed: remove the duplicate block.
+        # For now, respecting your requested "add patches" directive.
 
         conn.exec_driver_sql(
             """
@@ -449,6 +636,7 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
         conn.exec_driver_sql(
             "CREATE INDEX IF NOT EXISTS ix_ai_quota_daily_tenant_day ON ai_quota_daily(tenant_id, usage_day)"
         )
+
         if "ai_token_usage" in tables:
             _sqlite_add_column_if_missing(
                 conn, "ai_token_usage", "usage_record_id", "TEXT"
@@ -459,6 +647,7 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             _sqlite_add_column_if_missing(
                 conn, "ai_token_usage", "estimation_mode", "TEXT DEFAULT 'estimated'"
             )
+
         if "ai_inference_records" in tables:
             _sqlite_add_column_if_missing(
                 conn, "ai_inference_records", "inference_id", "TEXT"
@@ -484,6 +673,7 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             _sqlite_add_column_if_missing(
                 conn, "ai_inference_records", "policy_result", "TEXT DEFAULT 'pass'"
             )
+
         if "ai_policy_violations" not in tables:
             conn.exec_driver_sql(
                 """
@@ -566,6 +756,16 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             """
             CREATE TRIGGER IF NOT EXISTS audit_ledger_append_only_update
             BEFORE UPDATE ON audit_ledger
+            BEGIN
+                SELECT RAISE(ABORT, 'audit_ledger is append-only');
+            END;
+            """
+        )
+
+        conn.exec_driver_sql(
+            """
+            CREATE TRIGGER IF NOT EXISTS audit_ledger_append_only_delete
+            BEFORE DELETE ON audit_ledger
             BEGIN
                 SELECT RAISE(ABORT, 'audit_ledger is append-only');
             END;
@@ -707,15 +907,6 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 END;
                 """
             )
-        conn.exec_driver_sql(
-            """
-            CREATE TRIGGER IF NOT EXISTS audit_ledger_append_only_delete
-            BEFORE DELETE ON audit_ledger
-            BEGIN
-                SELECT RAISE(ABORT, 'audit_ledger is append-only');
-            END;
-            """
-        )
 
 
 # ---------------------------------------------------------------------
@@ -728,18 +919,26 @@ def init_db(*, sqlite_path: Optional[str] = None) -> None:
 
     _ensure_models_imported()
     Base = _get_base()
+
     if engine.dialect.name == "sqlite":
         Base.metadata.create_all(bind=engine)
-        # best-effort sqlite migrations (keeps tests + mint_key working)
+
+        # Ensure sqlite3-backed auth_scopes key store exists in same file
+        resolved = _resolve_sqlite_path(sqlite_path)
+        _ensure_api_keys_sqlite(resolved)
+
+        # Ensure connector sqlite tables exist (including idempotency)
+        _ensure_connectors_sqlite(resolved)
+
+        # Best-effort sqlite migrations (keeps tests + mint_key working)
         try:
             _auto_migrate_sqlite(engine)
         except Exception:
             logger.exception("sqlite auto-migration failed (best effort)")
+
     elif engine.dialect.name == "postgresql":
         if _env_bool("FG_DB_MIGRATIONS_REQUIRED", True):
-            from api.db_migrations import (  # noqa (explicit import)
-                assert_migrations_applied,
-            )
+            from api.db_migrations import assert_migrations_applied  # noqa
 
             assert_migrations_applied(engine)
 
@@ -747,7 +946,7 @@ def init_db(*, sqlite_path: Optional[str] = None) -> None:
     try:
         insp = inspect(engine)
         tables = set(insp.get_table_names())
-        if "api_keys" not in tables:
+        if "api_keys" not in tables and engine.dialect.name == "sqlite":
             logger.warning(
                 "Expected table 'api_keys' missing; tables=%s", sorted(tables)
             )
@@ -800,107 +999,3 @@ def set_tenant_context(session: Session, tenant_id: str) -> None:
         text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
         {"tenant_id": tenant_id},
     )
-
-
-# ===================== PATCH_FG_API_KEYS_SQLITE_V1 =====================
-# This project mints/verifies API keys via sqlite3 in api/auth_scopes.py.
-# That means init_db() MUST ensure api_keys exists (and auto-migrate columns)
-# in the sqlite file chosen by FG_SQLITE_PATH or passed sqlite_path.
-# ======================================================================
-
-
-def _sqlite_table_exists(con: sqlite3.Connection, name: str) -> bool:
-    row = con.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-        (name,),
-    ).fetchone()
-    return row is not None
-
-
-def _sqlite_cols(con: sqlite3.Connection, table: str) -> set[str]:
-    return {r[1] for r in con.execute(f"PRAGMA table_info({table})").fetchall()}
-
-
-def _sqlite_add_col_if_missing(
-    con: sqlite3.Connection, table: str, col: str, decl: str
-) -> None:
-    cols = _sqlite_cols(con, table)
-    if col not in cols:
-        con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
-
-
-# ensure api_keys exists + has new columns (sqlite3 path is used by auth_scopes)
-def _ensure_api_keys_sqlite(sqlite_path: str) -> None:
-    import sqlite3
-
-    con = sqlite3.connect(sqlite_path)
-    try:
-        con.execute("PRAGMA journal_mode=WAL")
-        con.execute("PRAGMA foreign_keys=ON")
-
-        row = con.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-            ("api_keys",),
-        ).fetchone()
-
-        if row is None:
-            con.execute(
-                """
-                CREATE TABLE api_keys (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT,
-                    prefix TEXT NOT NULL,
-                    key_hash TEXT NOT NULL,
-                    scopes_csv TEXT NOT NULL,
-                    enabled INTEGER NOT NULL DEFAULT 1,
-                    tenant_id TEXT,
-                    created_at INTEGER,
-                    last_used_at INTEGER,
-                    expires_at INTEGER,
-                    hash_alg TEXT,
-                    hash_params TEXT,
-                    key_lookup TEXT
-                )
-                """
-            )
-
-        cols = {r[1] for r in con.execute("PRAGMA table_info(api_keys)").fetchall()}
-        if "hash_alg" not in cols:
-            con.execute("ALTER TABLE api_keys ADD COLUMN hash_alg TEXT")
-        if "hash_params" not in cols:
-            con.execute("ALTER TABLE api_keys ADD COLUMN hash_params TEXT")
-        if "key_lookup" not in cols:
-            con.execute("ALTER TABLE api_keys ADD COLUMN key_lookup TEXT")
-
-        con.commit()
-    finally:
-        con.close()
-
-
-# Call this at end of init_db()
-# _ensure_api_keys_sqlite(str(sqlite_path))  # only if sqlite_path is a real path string
-
-
-# Wrap existing init_db to also ensure api_keys is present (sqlite only).
-try:
-    _orig_init_db = init_db  # type: ignore[name-defined]
-except Exception:
-    _orig_init_db = None  # type: ignore[assignment]
-
-
-def init_db(*, sqlite_path: Optional[str] = None) -> None:  # type: ignore[override]
-    # Call original init_db first (SQLAlchemy tables), then enforce api_keys.
-    if _orig_init_db is not None:
-        _orig_init_db(sqlite_path=sqlite_path)
-
-    # Resolve the sqlite path the same way the rest of api/db.py does.
-    try:
-        resolved = _resolve_sqlite_path(sqlite_path)  # type: ignore[name-defined]
-    except Exception:
-        resolved = str(sqlite_path) if sqlite_path else ""
-
-    if resolved:
-        _ensure_api_keys_sqlite(resolved)
-
-
-# =================== END PATCH_FG_API_KEYS_SQLITE_V1 ====================

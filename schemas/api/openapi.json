@@ -657,6 +657,20 @@
         "title": "ConfigWriteRequest",
         "type": "object"
       },
+      "ConnectorStateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "ConnectorStateRequest",
+        "type": "object"
+      },
       "CoverageChangeRequest": {
         "properties": {
           "action": {
@@ -855,6 +869,37 @@
           "expires_at"
         ],
         "title": "CreateKeyResponse",
+        "type": "object"
+      },
+      "CredentialConnectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "auth_mode": {
+            "minLength": 1,
+            "title": "Auth Mode",
+            "type": "string"
+          },
+          "credential_id": {
+            "default": "primary",
+            "minLength": 1,
+            "title": "Credential Id",
+            "type": "string"
+          },
+          "principal_id": {
+            "minLength": 1,
+            "title": "Principal Id",
+            "type": "string"
+          },
+          "secret_payload": {
+            "title": "Secret Payload",
+            "type": "object"
+          }
+        },
+        "required": [
+          "principal_id",
+          "auth_mode"
+        ],
+        "title": "CredentialConnectRequest",
         "type": "object"
       },
       "CreditNoteCreateRequest": {
@@ -2218,104 +2263,54 @@
       "Health": {
         "$ref": "schemas/api/health.schema.json"
       },
-      "IngestRequest": {
-        "additionalProperties": true,
+      "IngestPayload": {
+        "additionalProperties": false,
         "properties": {
-          "classification": {
+          "cursor": {
             "anyOf": [
               {
-                "maxLength": 64,
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Classification"
+            "title": "Cursor"
           },
-          "event": {
-            "title": "Event",
-            "type": "object"
-          },
-          "event_id": {
-            "title": "Event Id",
-            "type": "string"
-          },
-          "event_type": {
+          "limit": {
             "anyOf": [
               {
-                "maxLength": 128,
+                "maximum": 500.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 100,
+            "title": "Limit"
+          },
+          "resource_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Resource Ids",
+            "type": "array"
+          },
+          "since_ts": {
+            "anyOf": [
+              {
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Event Type"
-          },
-          "payload": {
-            "title": "Payload",
-            "type": "object"
-          },
-          "persona": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Persona"
-          },
-          "source": {
-            "maxLength": 256,
-            "title": "Source",
-            "type": "string"
-          },
-          "src_ip": {
-            "anyOf": [
-              {
-                "maxLength": 45,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Src Ip"
-          },
-          "tenant_id": {
-            "anyOf": [
-              {
-                "maxLength": 128,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tenant Id"
-          },
-          "timestamp": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Timestamp"
+            "title": "Since Ts"
           }
         },
-        "required": [
-          "source",
-          "event_id"
-        ],
-        "title": "IngestRequest",
+        "title": "IngestPayload",
         "type": "object"
       },
       "IngestResponse": {
@@ -3090,44 +3085,19 @@
         "title": "PolicyDecision",
         "type": "object"
       },
-      "PolicyPublishRequest": {
+      "PolicySetRequest": {
         "additionalProperties": false,
         "properties": {
-          "policy_json": {
-            "title": "Policy Json",
-            "type": "object"
-          },
-          "signature": {
-            "title": "Signature",
-            "type": "string"
-          },
           "version": {
+            "minLength": 1,
             "title": "Version",
             "type": "string"
           }
         },
         "required": [
-          "version",
-          "policy_json",
-          "signature"
+          "version"
         ],
-        "title": "PolicyPublishRequest",
-        "type": "object"
-      },
-      "QuarantineRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "reason": {
-            "maxLength": 512,
-            "minLength": 2,
-            "title": "Reason",
-            "type": "string"
-          }
-        },
-        "required": [
-          "reason"
-        ],
-        "title": "QuarantineRequest",
+        "title": "PolicySetRequest",
         "type": "object"
       },
       "ROEEvaluationRequest": {
@@ -4103,6 +4073,124 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "api__connectors_control_plane__IngestRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "collection_id": {
+            "minLength": 1,
+            "title": "Collection Id",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/IngestPayload"
+          }
+        },
+        "required": [
+          "collection_id"
+        ],
+        "title": "IngestRequest",
+        "type": "object"
+      },
+      "api__ingest_schemas__IngestRequest": {
+        "additionalProperties": true,
+        "properties": {
+          "classification": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification"
+          },
+          "event": {
+            "title": "Event",
+            "type": "object"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Type"
+          },
+          "payload": {
+            "title": "Payload",
+            "type": "object"
+          },
+          "persona": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona"
+          },
+          "source": {
+            "maxLength": 256,
+            "title": "Source",
+            "type": "string"
+          },
+          "src_ip": {
+            "anyOf": [
+              {
+                "maxLength": 45,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Src Ip"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          }
+        },
+        "required": [
+          "source",
+          "event_id"
+        ],
+        "title": "IngestRequest",
         "type": "object"
       }
     }
@@ -9952,7 +10040,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/IngestRequest"
+                "$ref": "#/components/schemas/api__ingest_schemas__IngestRequest"
               }
             }
           },
@@ -10030,6 +10118,91 @@
         "summary": "Ingest",
         "tags": [
           "ingest"
+        ]
+      }
+    },
+    "/internal/connectors/{connector_id}/ingest": {
+      "post": {
+        "operationId": "ingest_connector_internal_connectors__connector_id__ingest_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "title": "Connector Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api__connectors_control_plane__IngestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Ingest Connector Internal Connectors  Connector Id  Ingest Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ingest Connector",
+        "tags": [
+          "connectors-control-plane"
         ]
       }
     },

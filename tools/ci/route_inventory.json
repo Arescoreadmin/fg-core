@@ -146,6 +146,66 @@
     "tenant_bound": true
   },
   {
+    "file": "api/connectors_control_plane.py",
+    "method": "GET",
+    "path": "/admin/connectors/policy",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/connectors_control_plane.py",
+    "method": "POST",
+    "path": "/admin/connectors/policy",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/connectors_control_plane.py",
+    "method": "GET",
+    "path": "/admin/connectors/status",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/connectors_control_plane.py",
+    "method": "POST",
+    "path": "/admin/connectors/{connector_id}/connect",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/connectors_control_plane.py",
+    "method": "POST",
+    "path": "/admin/connectors/{connector_id}/revoke",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/connectors_control_plane.py",
+    "method": "POST",
+    "path": "/admin/connectors/{connector_id}/state",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
+    ],
+    "tenant_bound": true
+  },
+  {
     "file": "api/ui_ai_console.py",
     "method": "GET",
     "path": "/admin/devices",
@@ -1254,6 +1314,16 @@
     "scoped": true,
     "scopes": [
       "ingest:write"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/connectors_control_plane.py",
+    "method": "POST",
+    "path": "/internal/connectors/{connector_id}/ingest",
+    "scoped": true,
+    "scopes": [
+      "admin:write"
     ],
     "tenant_bound": true
   },

@@ -40,6 +40,46 @@ CREATE TABLE IF NOT EXISTS agent_rate_budget_counters (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS connectors_idempotency (
+    id BIGSERIAL PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    connector_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    response_hash TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '7 days')
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_connectors_idempotency_key
+ON connectors_idempotency (tenant_id, connector_id, action, idempotency_key);
+
+CREATE INDEX IF NOT EXISTS ix_connectors_idempotency_expiry
+ON connectors_idempotency (expires_at);
+
+ALTER TABLE connectors_idempotency ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE tablename='connectors_idempotency'
+          AND policyname='connectors_idempotency_tenant_isolation'
+    ) THEN
+        CREATE POLICY connectors_idempotency_tenant_isolation ON connectors_idempotency
+            USING (
+                tenant_id IS NOT NULL
+                AND current_setting('app.tenant_id', true) IS NOT NULL
+                AND tenant_id = current_setting('app.tenant_id', true)
+            )
+            WITH CHECK (
+                tenant_id IS NOT NULL
+                AND current_setting('app.tenant_id', true) IS NOT NULL
+                AND tenant_id = current_setting('app.tenant_id', true)
+            );
+    END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS ix_agent_rate_budget_counters_scope
     ON agent_rate_budget_counters (tenant_id, device_id, metric, window_start);
 
