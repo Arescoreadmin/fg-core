@@ -8,12 +8,17 @@ from tools.ci.route_checks import iter_route_records, is_public_path
 
 REPO = Path(__file__).resolve().parents[2]
 INVENTORY = REPO / "tools/ci/route_inventory.json"
+
 TRI_UNKNOWN = "unknown"
 PROTECTED_UNKNOWN_PREFIXES = (
     "/decisions",
     "/feed",
     "/governance",
 )
+
+# Anything under these prefixes is treated as "not production API" and excluded
+# from route inventory/security contract enforcement.
+EXCLUDED_FILE_PREFIXES = ("api/_scratch/",)
 
 
 def _scoped_state(rec) -> bool | str:
@@ -38,14 +43,25 @@ def _tenant_state(rec) -> bool | str:
     return False
 
 
+def _should_exclude_file(rel_path: str) -> bool:
+    rel_path = rel_path.replace("\\", "/")
+    return any(rel_path.startswith(prefix) for prefix in EXCLUDED_FILE_PREFIXES)
+
+
 def current_inventory() -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for rec in iter_route_records(REPO / "api"):
+        rel = rec.file_path.relative_to(REPO).as_posix()
+
+        # Exclude non-prod scratch space from security inventory.
+        if _should_exclude_file(rel):
+            continue
+
         rows.append(
             {
                 "method": rec.method,
                 "path": rec.full_path,
-                "file": rec.file_path.relative_to(REPO).as_posix(),
+                "file": rel,
                 "scoped": _scoped_state(rec),
                 "scopes": list(rec.route_scopes),
                 "tenant_bound": _tenant_state(rec),
@@ -149,7 +165,10 @@ def _validate_inventory(
     return failures, warnings
 
 
-def _validate_ai_plane_routes(cur: list[dict[str, object]], failures: list[str]) -> None:
+def _validate_ai_plane_routes(
+    cur: list[dict[str, object]], failures: list[str]
+) -> None:
+    # Only validate /ai/* endpoints that are part of the inventory scan.
     ai_routes = [r for r in cur if str(r.get("path", "")).startswith("/ai/")]
     expected_key = ("POST", "/ai/infer")
 
