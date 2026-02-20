@@ -2313,6 +2313,106 @@
         "title": "IngestPayload",
         "type": "object"
       },
+      "IngestRequest": {
+        "additionalProperties": true,
+        "properties": {
+          "classification": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification"
+          },
+          "event": {
+            "title": "Event",
+            "type": "object"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Type"
+          },
+          "payload": {
+            "title": "Payload",
+            "type": "object"
+          },
+          "persona": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona"
+          },
+          "source": {
+            "maxLength": 256,
+            "title": "Source",
+            "type": "string"
+          },
+          "src_ip": {
+            "anyOf": [
+              {
+                "maxLength": 45,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Src Ip"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          }
+        },
+        "required": [
+          "source",
+          "event_id"
+        ],
+        "title": "IngestRequest",
+        "type": "object"
+      },
       "IngestResponse": {
         "properties": {
           "config_hash": {
@@ -4089,106 +4189,6 @@
         },
         "required": [
           "collection_id"
-        ],
-        "title": "IngestRequest",
-        "type": "object"
-      },
-      "api__ingest_schemas__IngestRequest": {
-        "additionalProperties": true,
-        "properties": {
-          "classification": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Classification"
-          },
-          "event": {
-            "title": "Event",
-            "type": "object"
-          },
-          "event_id": {
-            "title": "Event Id",
-            "type": "string"
-          },
-          "event_type": {
-            "anyOf": [
-              {
-                "maxLength": 128,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Event Type"
-          },
-          "payload": {
-            "title": "Payload",
-            "type": "object"
-          },
-          "persona": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Persona"
-          },
-          "source": {
-            "maxLength": 256,
-            "title": "Source",
-            "type": "string"
-          },
-          "src_ip": {
-            "anyOf": [
-              {
-                "maxLength": 45,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Src Ip"
-          },
-          "tenant_id": {
-            "anyOf": [
-              {
-                "maxLength": 128,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tenant Id"
-          },
-          "timestamp": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Timestamp"
-          }
-        },
-        "required": [
-          "source",
-          "event_id"
         ],
         "title": "IngestRequest",
         "type": "object"
@@ -10040,7 +10040,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/api__ingest_schemas__IngestRequest"
+                "$ref": "#/components/schemas/IngestRequest"
               }
             }
           },
