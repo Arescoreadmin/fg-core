@@ -39,13 +39,20 @@
         "/admin/agent/devices",
         "/admin/agent/devices/{device_id}/revoke",
         "/admin/agent/enrollment-tokens",
+        "/admin/agent/evidence/export/{device_id}",
         "/admin/agent/policy/publish",
         "/admin/agent/policy/revoke/{policy_hash}",
         "/admin/agent/quarantine/{device_id}",
         "/admin/agent/unquarantine/{device_id}",
+        "/admin/agent/update/rollout",
         "/admin/audit/export",
         "/admin/audit/search",
         "/admin/config/changes/{change_id}/revert",
+        "/admin/connectors/policy",
+        "/admin/connectors/status",
+        "/admin/connectors/{connector_id}/connect",
+        "/admin/connectors/{connector_id}/revoke",
+        "/admin/connectors/{connector_id}/state",
         "/admin/devices",
         "/admin/devices/{device_id}/disable",
         "/admin/devices/{device_id}/enable",
@@ -131,6 +138,7 @@
         "/health/live",
         "/health/ready",
         "/ingest",
+        "/internal/connectors/{connector_id}/ingest",
         "/keys",
         "/keys/revoke",
         "/keys/rotate",
@@ -187,7 +195,7 @@
       "type": "unexpected_route_prefixes"
     }
   ],
-  "git_sha": "85dc5bde30585ef7508780761ac16a1639a7392b",
+  "git_sha": "8b455ad89c59cbe60b25db6f63b196b2d43bf1bb",
   "planes": [
     {
       "evidence": [

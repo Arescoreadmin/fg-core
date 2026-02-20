@@ -25,7 +25,10 @@ def _load_keks() -> tuple[_KEK, dict[str, bytes]]:
     prefix = "FG_CONNECTOR_KEK_"
     keys: dict[str, bytes] = {}
     for env_name, value in os.environ.items():
-        if not env_name.startswith(prefix) or env_name == "FG_CONNECTOR_KEK_CURRENT_VERSION":
+        if (
+            not env_name.startswith(prefix)
+            or env_name == "FG_CONNECTOR_KEK_CURRENT_VERSION"
+        ):
             continue
         ver = env_name[len(prefix) :].strip().lower()
         if not ver:
@@ -38,11 +41,25 @@ def _load_keks() -> tuple[_KEK, dict[str, bytes]]:
     return _KEK(version=current, key=keys[current]), keys
 
 
-def _aad(*, tenant_id: str, connector_id: str, credential_id: str, kek_version: str) -> bytes:
+def _aad(
+    *,
+    tenant_id: str,
+    connector_id: str,
+    principal_id: str,
+    credential_id: str,
+    kek_version: str,
+) -> bytes:
+    """
+    AES-GCM AAD binds ciphertext to the full identity boundary:
+    tenant + connector + principal + credential + kek_version + env.
+
+    This prevents cross-principal substitution within a tenant/connector namespace.
+    """
     env = (os.getenv("FG_ENV") or "dev").strip().lower()
     binding = {
         "tenant_id": tenant_id,
         "connector_id": connector_id,
+        "principal_id": principal_id,
         "credential_id": credential_id,
         "kek_version": kek_version,
         "env": env,
@@ -51,13 +68,19 @@ def _aad(*, tenant_id: str, connector_id: str, credential_id: str, kek_version: 
 
 
 def _encrypt_secret(
-    payload: dict[str, Any], *, tenant_id: str, connector_id: str, credential_id: str
+    payload: dict[str, Any],
+    *,
+    tenant_id: str,
+    connector_id: str,
+    principal_id: str,
+    credential_id: str,
 ) -> tuple[str, str]:
     current, _ = _load_keks()
     nonce = os.urandom(12)
     aad = _aad(
         tenant_id=tenant_id,
         connector_id=connector_id,
+        principal_id=principal_id,
         credential_id=credential_id,
         kek_version=current.version,
     )
@@ -75,7 +98,12 @@ def _encrypt_secret(
 
 
 def _decrypt_secret(
-    blob: str, *, tenant_id: str, connector_id: str, credential_id: str
+    blob: str,
+    *,
+    tenant_id: str,
+    connector_id: str,
+    principal_id: str,
+    credential_id: str,
 ) -> dict[str, Any]:
     payload = json.loads(blob)
     ver = str(payload["ver"]).strip().lower()
@@ -88,6 +116,7 @@ def _decrypt_secret(
     aad = _aad(
         tenant_id=tenant_id,
         connector_id=connector_id,
+        principal_id=principal_id,
         credential_id=credential_id,
         kek_version=ver,
     )
@@ -111,6 +140,7 @@ def upsert_credential(
         secret_payload,
         tenant_id=tenant_id,
         connector_id=connector_id,
+        principal_id=principal_id,
         credential_id=credential_id,
     )
     row = db.execute(
@@ -141,14 +171,20 @@ def upsert_credential(
     return row
 
 
-def revoke_connector_credentials(db: Session, *, tenant_id: str, connector_id: str) -> int:
-    rows = db.execute(
-        select(ConnectorCredential).where(
-            ConnectorCredential.tenant_id == tenant_id,
-            ConnectorCredential.connector_id == connector_id,
-            ConnectorCredential.revoked_at.is_(None),
+def revoke_connector_credentials(
+    db: Session, *, tenant_id: str, connector_id: str
+) -> int:
+    rows = (
+        db.execute(
+            select(ConnectorCredential).where(
+                ConnectorCredential.tenant_id == tenant_id,
+                ConnectorCredential.connector_id == connector_id,
+                ConnectorCredential.revoked_at.is_(None),
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     now = datetime.now(UTC)
     for row in rows:
         row.revoked_at = now
@@ -179,5 +215,6 @@ def load_active_secret(
         row.ciphertext,
         tenant_id=tenant_id,
         connector_id=connector_id,
+        principal_id=principal_id,
         credential_id=credential_id,
     )

@@ -6,17 +6,23 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, ForeignKey, Index, String, text
-from sqlalchemy import ForeignKeyConstraint, UniqueConstraint
-from sqlalchemy import JSON, Text
 from sqlalchemy import (
+    JSON,
     Boolean,
+    Column,
     Date,
     DateTime,
     Float,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
     Integer,
+    String,
+    Text,
+    UniqueConstraint,
     event,
     func,
+    text,
 )
 from sqlalchemy.orm import declarative_base
 
@@ -25,7 +31,7 @@ from api.signed_artifacts import canonical_hash
 Base = declarative_base()
 
 
-def utcnow():
+def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
@@ -69,9 +75,7 @@ class ApiKey(Base):
     # Key rotation and lifecycle support (SaaS-ready)
     version = Column(Integer, nullable=False, default=1, server_default=text("1"))
     expires_at = Column(DateTime(timezone=True), nullable=True)
-    rotated_from = Column(
-        String(64), nullable=True
-    )  # Previous key_hash for rotation chain
+    rotated_from = Column(String(64), nullable=True)  # previous key_hash
     last_used_at = Column(DateTime(timezone=True), nullable=True)
     use_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
 
@@ -85,19 +89,13 @@ class ApiKey(Base):
     )
 
     # Security metadata
-    created_by = Column(String(128), nullable=True)  # Who created the key
-    description = Column(Text, nullable=True)  # Purpose/description
+    created_by = Column(String(128), nullable=True)
+    description = Column(Text, nullable=True)
 
 
 class SecurityAuditLog(Base):
     """
     Security audit log for compliance and forensics.
-
-    Records all security-relevant events:
-    - Authentication attempts (success/failure)
-    - Key operations (create, revoke, rotate)
-    - Rate limit events
-    - Suspicious activity
     """
 
     __tablename__ = "security_audit_log"
@@ -115,25 +113,19 @@ class SecurityAuditLog(Base):
         server_default=func.now(),
     )
 
-    # Event classification
     event_type = Column(String(64), nullable=False, index=True)
     event_category = Column(String(32), nullable=False, default="security")
-    severity = Column(
-        String(16), nullable=False, default="info"
-    )  # info, warning, error, critical
+    severity = Column(String(16), nullable=False, default="info")
 
-    # Actor information
     tenant_id = Column(String(128), nullable=True, index=True)
     key_prefix = Column(String(64), nullable=True)
     client_ip = Column(String(45), nullable=True)  # IPv6 max length
     user_agent = Column(String(512), nullable=True)
 
-    # Request context
     request_id = Column(String(64), nullable=True, index=True)
     request_path = Column(String(256), nullable=True)
     request_method = Column(String(16), nullable=True)
 
-    # Event details
     success = Column(Boolean, nullable=False, default=True)
     reason = Column(String(256), nullable=True)
     details_json = Column(JSON, nullable=True)
@@ -146,7 +138,10 @@ class SecurityAuditLog(Base):
         index=True,
     )
     prev_hash = Column(
-        String(64), nullable=False, default="GENESIS", server_default=text("'GENESIS'")
+        String(64),
+        nullable=False,
+        default="GENESIS",
+        server_default=text("'GENESIS'"),
     )
     entry_hash = Column(String(64), nullable=False, unique=True, index=True)
 
@@ -455,25 +450,13 @@ class DecisionRecord(Base):
     ai_adversarial_score = Column(Float, nullable=True)
     pq_fallback = Column(Boolean, nullable=True)
 
-    # DB-side defaults are REQUIRED because tests insert via raw sqlite and omit some columns.
     rules_triggered_json = Column(
-        JSON,
-        nullable=False,
-        default=list,
-        server_default=text("'[]'"),
+        JSON, nullable=False, default=list, server_default=text("'[]'")
     )
     decision_diff_json = Column(JSON, nullable=True)
 
-    request_json = Column(
-        JSON,
-        nullable=False,
-        server_default=text("'{}'"),
-    )
-    response_json = Column(
-        JSON,
-        nullable=False,
-        server_default=text("'{}'"),
-    )
+    request_json = Column(JSON, nullable=False, server_default=text("'{}'"))
+    response_json = Column(JSON, nullable=False, server_default=text("'{}'"))
 
     prev_hash = Column(String(64), nullable=True)
     chain_hash = Column(String(64), nullable=True)
@@ -670,10 +653,7 @@ class BillingIdentityClaim(Base):
     source_ip = Column(String(64), nullable=True)
     attestation_level = Column(String(32), nullable=False, default="none")
     conflict_state = Column(
-        String(32),
-        nullable=False,
-        default="clean",
-        server_default=text("'clean'"),
+        String(32), nullable=False, default="clean", server_default=text("'clean'")
     )
 
 
@@ -1330,6 +1310,7 @@ def _raise_immutable(mapper, connection, target) -> None:
     raise ValueError(f"{target.__class__.__name__} rows are append-only")
 
 
+# append-only enforcement (ORM-level)
 event.listen(DecisionRecord, "before_update", _raise_immutable)
 event.listen(DecisionRecord, "before_delete", _raise_immutable)
 event.listen(DecisionEvidenceArtifact, "before_update", _raise_immutable)
@@ -1357,11 +1338,6 @@ event.listen(ComplianceRequirementUpdateRecord, "before_delete", _raise_immutabl
 class PolicyChangeRequest(Base):
     """
     Persistent storage for governance policy change requests.
-
-    Security requirements (P0):
-    - Survives restart (database-backed)
-    - Auditable (all changes logged with timestamps)
-    - Fail-closed on DB error
     """
 
     __tablename__ = "policy_change_requests"
@@ -1379,17 +1355,14 @@ class PolicyChangeRequest(Base):
     )
     justification = Column(Text, nullable=False)
 
-    # Policy content (nullable for different change types)
     rule_definition_json = Column(JSON, nullable=True)
     roe_update_json = Column(JSON, nullable=True)
 
-    # Simulation and confidence
     simulation_results_json = Column(JSON, nullable=False, default=dict)
     estimated_false_positives = Column(Integer, nullable=False, default=0)
     estimated_true_positives = Column(Integer, nullable=False, default=0)
     confidence = Column(String(16), nullable=False, default="medium")
 
-    # Approval workflow
     requires_approval_from_json = Column(JSON, nullable=False, default=list)
     approvals_json = Column(JSON, nullable=False, default=list)
     status = Column(String(32), nullable=False, default="pending", index=True)
@@ -1417,31 +1390,46 @@ def _security_audit_defaults(mapper, connection, target) -> None:
         ).hexdigest()
 
 
+# ---------------------------------------------------------------------
+# Connectors
+# ---------------------------------------------------------------------
+
+
 class ConnectorTenantState(Base):
     __tablename__ = "connectors_tenant_state"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "connector_id", name="uq_connectors_tenant_state"),
+        UniqueConstraint(
+            "tenant_id", "connector_id", name="uq_connectors_tenant_state"
+        ),
         Index("ix_connectors_tenant_state_tenant_enabled", "tenant_id", "enabled"),
     )
 
     id = Column(Integer, primary_key=True)
     tenant_id = Column(String(128), nullable=False, index=True)
     connector_id = Column(String(128), nullable=False, index=True)
-    enabled = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    enabled = Column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     config_hash = Column(String(128), nullable=False)
     last_success_at = Column(DateTime(timezone=True), nullable=True)
     last_error_code = Column(String(64), nullable=True)
     failure_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
     updated_by = Column(String(128), nullable=False, default="unknown")
     updated_at = Column(
-        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now(), onupdate=utcnow
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+        onupdate=utcnow,
     )
 
 
 class ConnectorCredential(Base):
     __tablename__ = "connectors_credentials"
     __table_args__ = (
-        Index("ix_connectors_credentials_tenant_connector", "tenant_id", "connector_id"),
+        Index(
+            "ix_connectors_credentials_tenant_connector", "tenant_id", "connector_id"
+        ),
         Index("ix_connectors_credentials_tenant_active", "tenant_id", "revoked_at"),
     )
 
@@ -1454,7 +1442,10 @@ class ConnectorCredential(Base):
     ciphertext = Column(Text, nullable=False)
     kek_version = Column(String(32), nullable=False)
     created_at = Column(
-        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
     )
     revoked_at = Column(DateTime(timezone=True), nullable=True)
 
@@ -1462,7 +1453,12 @@ class ConnectorCredential(Base):
 class ConnectorAuditLedger(Base):
     __tablename__ = "connectors_audit_ledger"
     __table_args__ = (
-        Index("ix_connectors_audit_tenant_connector", "tenant_id", "connector_id", "created_at"),
+        Index(
+            "ix_connectors_audit_tenant_connector",
+            "tenant_id",
+            "connector_id",
+            "created_at",
+        ),
     )
 
     id = Column(Integer, primary_key=True)
@@ -1473,5 +1469,37 @@ class ConnectorAuditLedger(Base):
     actor = Column(String(128), nullable=False)
     request_id = Column(String(128), nullable=False, default="")
     created_at = Column(
-        DateTime(timezone=True), nullable=False, default=utcnow, server_default=func.now()
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
     )
+
+
+class ConnectorIdempotency(Base):
+    __tablename__ = "connectors_idempotency"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "connector_id",
+            "action",
+            "idempotency_key",
+            name="uq_connectors_idempotency_key",
+        ),
+        Index("ix_connectors_idempotency_expiry", "expires_at"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String(128), nullable=False, index=True)
+    connector_id = Column(String(128), nullable=False, index=True)
+    action = Column(String(64), nullable=False)
+    idempotency_key = Column(String(128), nullable=False)
+    response_hash = Column(String(64), nullable=True)
+
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+    expires_at = Column(DateTime(timezone=True), nullable=False)
