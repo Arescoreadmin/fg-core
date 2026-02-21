@@ -410,7 +410,7 @@ class TestLockerCommandBus:
             outcome = bus.dispatch(cmd)
 
         assert outcome.result == CommandResult.REJECTED
-        assert outcome.error_code == "CP-LOCK-006"
+        assert outcome.error_code == "CP-LOCK-008"  # ERR_INVALID_REASON
 
     def test_restart_fails_without_locker(self):
         from services.locker_command_bus import CommandResult, LockerCommandBus
@@ -1035,3 +1035,746 @@ class TestCooldownTracker:
         allowed, remaining = tracker.check("locker_x")
         # With 0s cooldown, should immediately be allowed again
         assert allowed is True
+
+
+# ============================================================================
+# P1: Error Sanitizer
+# ============================================================================
+
+
+class TestErrorSanitizer:
+    """
+    Inject known secret patterns into error strings and assert they are
+    stripped by sanitize_error_detail(). No secret must survive.
+    """
+
+    def _sanitize(self, text):
+        from services.error_sanitizer import sanitize_error_detail
+        return sanitize_error_detail(text)
+
+    def test_none_returns_none(self):
+        assert self._sanitize(None) is None
+
+    def test_credentials_in_url_stripped(self):
+        raw = "connect failed: postgres://admin:s3cr3tP@ss@db.internal:5432/mydb"
+        result = self._sanitize(raw)
+        assert "s3cr3tP@ss" not in result
+        assert "[REDACTED-URL-CREDS]" in result
+        # Host/context still present for debugging
+        assert "connect failed" in result
+
+    def test_token_in_query_string_stripped(self):
+        raw = "request failed at https://api.example.com/v1/data?token=eyABC123secret&format=json"
+        result = self._sanitize(raw)
+        assert "eyABC123secret" not in result
+        assert "[REDACTED]" in result
+
+    def test_api_key_in_query_string_stripped(self):
+        raw = "downstream call: GET /service?api_key=my-secret-key-9999&limit=10"
+        result = self._sanitize(raw)
+        assert "my-secret-key-9999" not in result
+
+    def test_authorization_header_stripped(self):
+        raw = "header dump: Authorization: Bearer eyJhbGciOiJSUzI1NiJ9.payload.sig"
+        result = self._sanitize(raw)
+        assert "eyJhbGciOiJSUzI1NiJ9.payload.sig" not in result
+        assert "[REDACTED]" in result
+
+    def test_jwt_token_stripped(self):
+        # Realistic JWT with three base64url segments
+        jwt = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk"
+        raw = f"auth error: received token {jwt} from client"
+        result = self._sanitize(raw)
+        assert jwt not in result
+        assert "[REDACTED-JWT]" in result
+
+    def test_cookie_session_value_stripped(self):
+        raw = "request headers: Cookie: session=abc123XYZ789; path=/"
+        result = self._sanitize(raw)
+        assert "abc123XYZ789" not in result
+
+    def test_python_traceback_frame_stripped(self):
+        raw = (
+            'error during startup: File "/app/services/db.py", line 42, '
+            'in connect\n    raise ConnectionError("refused")'
+        )
+        result = self._sanitize(raw)
+        assert "/app/services/db.py" not in result
+        assert "[REDACTED-TRACEBACK-FRAME]" in result
+
+    def test_plain_text_not_mangled(self):
+        raw = "connection refused after 3 retries"
+        result = self._sanitize(raw)
+        assert result == raw
+
+    def test_multiple_secrets_all_stripped(self):
+        raw = (
+            "postgres://user:PASS@host/db "
+            "?token=secret123 "
+            "Authorization: Bearer tkn9999"
+        )
+        result = self._sanitize(raw)
+        assert "PASS" not in result
+        assert "secret123" not in result
+        assert "tkn9999" not in result
+
+
+# ============================================================================
+# P0: Tenant Scoping Hardening
+# ============================================================================
+
+
+class TestTenantScopingHardening:
+    """
+    Verifies that tenant boundaries are enforced at both event bus and
+    module registry layers. Cross-tenant access is denied; no data leaks.
+    """
+
+    def setup_method(self):
+        from services.event_stream import EventStreamBus
+        from services.module_registry import ModuleRegistry
+        EventStreamBus()._reset()
+        ModuleRegistry()._reset()
+
+    def test_tenant_subscriber_does_not_receive_other_tenant_events(self):
+        """
+        Core P0: tenant admin cannot subscribe to other tenants' events,
+        even if they know the other tenant's IDs.
+        """
+        from services.event_stream import ControlEvent, ControlEventType, EventStreamBus
+
+        bus = EventStreamBus()
+        sub_t1 = bus.subscribe(tenant_id="tenant-alpha")
+        sub_t2 = bus.subscribe(tenant_id="tenant-beta")
+
+        # Publish event for tenant-alpha
+        bus.publish(ControlEvent(
+            event_type=ControlEventType.MODULE_STATE_CHANGED,
+            module_id="mod-alpha",
+            tenant_id="tenant-alpha",
+            payload={"state": "ready"},
+        ))
+
+        # tenant-alpha subscriber receives it
+        assert not sub_t1._queue.empty()
+        # tenant-beta subscriber does NOT receive it
+        assert sub_t2._queue.empty()
+
+    def test_global_event_received_by_all_subscribers(self):
+        """
+        Global system events (tenant_id='global') are broadcast to all.
+        Audit payload still carries tenant context.
+        """
+        from services.event_stream import ControlEvent, ControlEventType, EventStreamBus
+
+        bus = EventStreamBus()
+        sub_t1 = bus.subscribe(tenant_id="tenant-alpha")
+        sub_t2 = bus.subscribe(tenant_id="tenant-beta")
+
+        bus.publish(ControlEvent(
+            event_type=ControlEventType.HEARTBEAT,
+            module_id="system",
+            tenant_id="global",
+            payload={"seq": 1},
+        ))
+
+        # Both subscribers receive the global event
+        assert not sub_t1._queue.empty()
+        assert not sub_t2._queue.empty()
+
+    def test_module_registry_cross_tenant_get_returns_none(self):
+        """
+        Requesting a module that belongs to a different tenant returns
+        None (404 semantics) — no cross-tenant information disclosure.
+        """
+        from services.module_registry import ModuleRegistry
+
+        reg = ModuleRegistry()
+        reg.register(
+            module_id="alpha-mod",
+            name="Alpha Module",
+            version="1.0.0",
+            tenant_id="tenant-alpha",
+        )
+
+        # tenant-beta tries to get tenant-alpha's module
+        result = reg.get_module("alpha-mod", redact=False, tenant_id="tenant-beta")
+        assert result is None, "cross-tenant module access must return None"
+
+    def test_module_registry_tenant_filter_list(self):
+        """
+        list_modules(tenant_id=X) returns only modules for tenant X.
+        """
+        from services.module_registry import ModuleRegistry
+
+        reg = ModuleRegistry()
+        reg.register(module_id="m-alpha", name="A", version="1.0", tenant_id="t-alpha")
+        reg.register(module_id="m-beta", name="B", version="1.0", tenant_id="t-beta")
+        reg.register(module_id="m-alpha2", name="A2", version="1.0", tenant_id="t-alpha")
+
+        alpha_mods = reg.list_modules(redact=False, tenant_id="t-alpha")
+        assert len(alpha_mods) == 2
+        assert all(m["tenant_id"] == "t-alpha" for m in alpha_mods)
+
+        beta_mods = reg.list_modules(redact=False, tenant_id="t-beta")
+        assert len(beta_mods) == 1
+        assert beta_mods[0]["module_id"] == "m-beta"
+
+    def test_module_registry_global_admin_sees_all(self):
+        """
+        list_modules(tenant_id=None) returns all modules (global admin).
+        """
+        from services.module_registry import ModuleRegistry
+
+        reg = ModuleRegistry()
+        reg.register(module_id="m1", name="M1", version="1.0", tenant_id="t1")
+        reg.register(module_id="m2", name="M2", version="1.0", tenant_id="t2")
+
+        all_mods = reg.list_modules(redact=False, tenant_id=None)
+        ids = {m["module_id"] for m in all_mods}
+        assert "m1" in ids
+        assert "m2" in ids
+
+    def test_recent_events_tenant_isolated(self):
+        """recent_events() never returns events from another tenant."""
+        from services.event_stream import ControlEvent, ControlEventType, EventStreamBus
+
+        bus = EventStreamBus()
+        for i in range(3):
+            bus.publish(ControlEvent(
+                event_type=ControlEventType.MODULE_STATE_CHANGED,
+                module_id=f"mod-{i}",
+                tenant_id="secret-tenant",
+                payload={},
+            ))
+
+        events = bus.recent_events(tenant_id="attacker-tenant")
+        assert len(events) == 0, "attacker must not see secret-tenant events"
+
+
+# ============================================================================
+# P0/P1: Event Stream Hardening (dual IDs, max subscribers)
+# ============================================================================
+
+
+class TestEventStreamHardening:
+    def setup_method(self):
+        from services.event_stream import EventStreamBus
+        EventStreamBus()._reset()
+
+    def test_event_has_both_event_id_and_instance_id(self):
+        """Both content_hash (event_id) and event_instance_id must be present."""
+        from services.event_stream import ControlEvent, ControlEventType
+
+        ev = ControlEvent(
+            event_type=ControlEventType.MODULE_STATE_CHANGED,
+            module_id="mod1",
+            tenant_id="t1",
+            payload={},
+        )
+        assert ev.event_id.startswith("evt-"), "event_id must be content hash"
+        assert ev.event_instance_id.startswith("evti-"), "event_instance_id must be unique"
+
+    def test_content_hash_is_deterministic_same_inputs(self):
+        """event_id (content hash) is deterministic for identical inputs."""
+        from services.event_stream import _deterministic_event_id
+
+        h1 = _deterministic_event_id(
+            event_type="module_state_changed",
+            module_id="mod1",
+            tenant_id="t1",
+            timestamp="2024-01-01T00:00:00Z",
+        )
+        h2 = _deterministic_event_id(
+            event_type="module_state_changed",
+            module_id="mod1",
+            tenant_id="t1",
+            timestamp="2024-01-01T00:00:00Z",
+        )
+        assert h1 == h2
+        assert h1.startswith("evt-")
+
+    def test_instance_ids_are_unique_across_publishes(self):
+        """event_instance_id must be unique even for identical-content events."""
+        from services.event_stream import ControlEvent, ControlEventType
+
+        events = [
+            ControlEvent(
+                event_type=ControlEventType.HEARTBEAT,
+                module_id="mod1",
+                tenant_id="t1",
+                payload={},
+            )
+            for _ in range(10)
+        ]
+        instance_ids = [e.event_instance_id for e in events]
+        assert len(set(instance_ids)) == 10, "all instance IDs must be unique"
+
+    def test_to_dict_includes_both_ids(self):
+        """Serialized event must include both event_id and event_instance_id."""
+        from services.event_stream import ControlEvent, ControlEventType
+
+        ev = ControlEvent(
+            event_type=ControlEventType.MODULE_STATE_CHANGED,
+            module_id="mod1",
+            tenant_id="t1",
+            payload={"state": "ready"},
+        )
+        d = ev.to_dict()
+        assert "event_id" in d
+        assert "event_instance_id" in d
+        assert d["event_id"] != d["event_instance_id"]
+
+    def test_max_subscribers_per_tenant_enforced(self, monkeypatch):
+        """subscribe() raises MaxSubscribersExceededError after tenant cap."""
+        from services.event_stream import EventStreamBus, MaxSubscribersExceededError
+
+        monkeypatch.setenv("FG_CP_MAX_SUBSCRIBERS_PER_TENANT", "3")
+        bus = EventStreamBus()
+
+        subs = [bus.subscribe(tenant_id="t-cap") for _ in range(3)]
+        assert len(subs) == 3
+
+        with pytest.raises(MaxSubscribersExceededError):
+            bus.subscribe(tenant_id="t-cap")
+
+    def test_max_subscribers_per_tenant_isolated_across_tenants(self, monkeypatch):
+        """Subscriber cap is per-tenant; other tenants are not affected."""
+        from services.event_stream import EventStreamBus, MaxSubscribersExceededError
+
+        monkeypatch.setenv("FG_CP_MAX_SUBSCRIBERS_PER_TENANT", "2")
+        bus = EventStreamBus()
+
+        # Fill up t1
+        bus.subscribe(tenant_id="t1")
+        bus.subscribe(tenant_id="t1")
+        with pytest.raises(MaxSubscribersExceededError):
+            bus.subscribe(tenant_id="t1")
+
+        # t2 is unaffected
+        sub_t2 = bus.subscribe(tenant_id="t2")
+        assert sub_t2 is not None
+
+    def test_slow_consumer_disconnected_after_threshold(self, monkeypatch):
+        """A slow consumer that drops FG_CP_SLOW_CONSUMER_DROP_THRESHOLD events is closed."""
+        from services.event_stream import ControlEvent, ControlEventType, EventStreamBus
+
+        monkeypatch.setenv("FG_CP_SLOW_CONSUMER_DROP_THRESHOLD", "3")
+        bus = EventStreamBus()
+        # Create subscriber with queue_size=1 to force drops
+        sub = bus.subscribe(tenant_id="t1", queue_size=1)
+
+        # Fill the queue (first event succeeds)
+        for i in range(10):
+            ev = ControlEvent(
+                event_type=ControlEventType.HEARTBEAT,
+                module_id="sys",
+                tenant_id="t1",
+                payload={"seq": i},
+            )
+            sub.try_put(ev)
+
+        # After threshold consecutive drops, subscriber must be closed
+        assert sub.is_closed(), "slow consumer must be disconnected after threshold drops"
+
+    def test_unsubscribed_tenant_count_decremented(self):
+        from services.event_stream import EventStreamBus
+
+        bus = EventStreamBus()
+        sub = bus.subscribe(tenant_id="t1")
+        assert bus.subscriber_count("t1") == 1
+
+        bus.unsubscribe(sub.subscriber_id)
+        assert bus.subscriber_count("t1") == 0
+
+
+# ============================================================================
+# P1: Command Bus Safety Hardening
+# ============================================================================
+
+
+class TestCommandBusSafetyHardening:
+    """
+    P1: Strict validation, tenant-scoped idempotency, audit chain integrity.
+    """
+
+    def setup_method(self):
+        from services.locker_command_bus import LockerCommandBus
+        LockerCommandBus()._reset()
+
+    def _register_locker(self, locker_id="locker-h1", tenant_id="tenant-h1"):
+        from services.locker_command_bus import LockerCommandBus, LockerState
+        return LockerCommandBus().register_locker(
+            locker_id=locker_id,
+            name="Hardening Locker",
+            version="1.0.0",
+            tenant_id=tenant_id,
+        )
+
+    def _make_cmd(
+        self,
+        locker_id="locker-h1",
+        tenant_id="tenant-h1",
+        reason="valid reason",
+        idempotency_key=None,
+        command=None,
+    ):
+        from services.locker_command_bus import LockerCommand, LockerCommandRequest
+        return LockerCommandRequest(
+            locker_id=locker_id,
+            command=command or LockerCommand.RESTART,
+            reason=reason,
+            actor_id="test_actor",
+            idempotency_key=idempotency_key or str(uuid.uuid4()),
+            tenant_id=tenant_id,
+        )
+
+    def test_oversized_reason_rejected_deterministically(self):
+        """A reason exceeding 512 chars is rejected with ERR_INVALID_REASON."""
+        from services.locker_command_bus import CommandResult, LockerCommandBus
+
+        self._register_locker()
+        bus = LockerCommandBus()
+        oversized_reason = "x" * 513
+
+        with patch("services.locker_command_bus.emit_command_audit"):
+            cmd = self._make_cmd(reason=oversized_reason)
+            outcome = bus.dispatch(cmd)
+
+        assert outcome.result == CommandResult.REJECTED
+        assert outcome.error_code == "CP-LOCK-008"
+
+    def test_reason_with_control_char_rejected(self):
+        """Reason with control characters (null byte, tab as non-printable) is rejected."""
+        from services.locker_command_bus import CommandResult, LockerCommandBus
+
+        self._register_locker()
+        bus = LockerCommandBus()
+
+        with patch("services.locker_command_bus.emit_command_audit"):
+            cmd = self._make_cmd(reason="bad\x00reason")
+            outcome = bus.dispatch(cmd)
+
+        assert outcome.result == CommandResult.REJECTED
+        assert outcome.error_code == "CP-LOCK-008"
+
+    def test_same_idempotency_key_across_tenants_does_not_collide(self):
+        """
+        Same user-supplied idempotency key in different tenants must NOT collide.
+        Tenant-A and Tenant-B can both use "key-123" without interference.
+        """
+        from services.locker_command_bus import CommandResult, LockerCommandBus
+
+        # Register same locker ID for two tenants (in real life different lockers)
+        LockerCommandBus().register_locker(
+            locker_id="shared-locker-a", name="L", version="1.0", tenant_id="tenant-A"
+        )
+        LockerCommandBus().register_locker(
+            locker_id="shared-locker-b", name="L", version="1.0", tenant_id="tenant-B"
+        )
+
+        shared_key = "user-supplied-key-123"
+
+        with patch("services.locker_command_bus.emit_command_audit"):
+            cmd_a = self._make_cmd(
+                locker_id="shared-locker-a",
+                tenant_id="tenant-A",
+                idempotency_key=shared_key,
+            )
+            outcome_a = LockerCommandBus().dispatch(cmd_a)
+
+            cmd_b = self._make_cmd(
+                locker_id="shared-locker-b",
+                tenant_id="tenant-B",
+                idempotency_key=shared_key,
+            )
+            outcome_b = LockerCommandBus().dispatch(cmd_b)
+
+        # Both should be ACCEPTED — no cross-tenant collision
+        assert outcome_a.result == CommandResult.ACCEPTED, (
+            f"tenant-A should be accepted, got {outcome_a.result}"
+        )
+        assert outcome_b.result == CommandResult.ACCEPTED, (
+            f"tenant-B should be accepted, got {outcome_b.result}"
+        )
+
+    def test_same_composite_key_within_tenant_is_idempotent(self):
+        """Same idempotency_key + tenant + locker + command = idempotent replay."""
+        from services.locker_command_bus import CommandResult, LockerCommandBus
+
+        self._register_locker()
+        bus = LockerCommandBus()
+        shared_key = "repeat-key-xyz"
+
+        with patch("services.locker_command_bus.emit_command_audit"):
+            cmd1 = self._make_cmd(idempotency_key=shared_key)
+            outcome1 = bus.dispatch(cmd1)
+            assert outcome1.result == CommandResult.ACCEPTED
+
+            cmd2 = self._make_cmd(idempotency_key=shared_key)
+            outcome2 = bus.dispatch(cmd2)
+
+        assert outcome2.result == CommandResult.IDEMPOTENT
+
+    def test_audit_emitted_with_hash_chain_fields(self):
+        """Audit must include prev_audit_hash and audit_chain_hash."""
+        from services.locker_command_bus import LockerCommandBus
+
+        self._register_locker()
+        bus = LockerCommandBus()
+
+        captured = []
+        with patch(
+            "api.security_audit.audit_admin_action",
+            side_effect=lambda **kwargs: captured.append(kwargs),
+        ):
+            cmd = self._make_cmd()
+            bus.dispatch(cmd)
+
+        assert len(captured) == 1
+        details = captured[0]["details"]
+        assert "prev_audit_hash" in details
+        assert "audit_chain_hash" in details
+        # First entry prev_hash should be "genesis"
+        assert details["prev_audit_hash"] == "genesis"
+        # Chain hash should be a non-empty hex string
+        assert len(details["audit_chain_hash"]) == 64  # SHA-256 hex
+
+    def test_quarantined_locker_rejects_all_but_resume_with_admin_scope(self):
+        """Even with admin scope, quarantined locker rejects non-RESUME commands."""
+        from services.locker_command_bus import (
+            CommandResult,
+            LockerCommand,
+            LockerCommandBus,
+            LockerState,
+        )
+
+        self._register_locker()
+        bus = LockerCommandBus()
+        bus.update_locker_state("locker-h1", LockerState.QUARANTINED)
+
+        with patch("services.locker_command_bus.emit_command_audit"):
+            for cmd_type in (
+                LockerCommand.RESTART,
+                LockerCommand.PAUSE,
+                LockerCommand.QUARANTINE,
+            ):
+                cmd = self._make_cmd(command=cmd_type)
+                outcome = bus.dispatch(cmd)
+                assert outcome.result == CommandResult.REJECTED
+                assert outcome.error_code == "CP-LOCK-007", (
+                    f"{cmd_type.value} should be rejected on quarantined locker"
+                )
+
+
+# ============================================================================
+# P2: Registry Liveness Semantics
+# ============================================================================
+
+
+class TestRegistryLiveness:
+    def setup_method(self):
+        from services.module_registry import ModuleRegistry
+        ModuleRegistry()._reset()
+
+    def test_heartbeat_updates_last_seen_ts(self):
+        from services.module_registry import ModuleRegistry
+
+        reg = ModuleRegistry()
+        reg.register(module_id="live-mod", name="Live", version="1.0")
+
+        reg_obj = reg.get_registration("live-mod")
+        assert reg_obj is not None
+        original_ts = reg_obj.last_seen_ts
+
+        time.sleep(0.02)
+        reg.heartbeat("live-mod")
+
+        assert reg_obj.last_seen_ts != original_ts, "heartbeat must update last_seen_ts"
+
+    def test_is_stale_false_immediately_after_registration(self):
+        from services.module_registry import ModuleRegistry
+
+        reg = ModuleRegistry()
+        reg.register(module_id="fresh-mod", name="Fresh", version="1.0")
+
+        reg_obj = reg.get_registration("fresh-mod")
+        assert not reg_obj.is_stale(ttl_s=60), "freshly registered module is not stale"
+
+    def test_is_stale_true_when_ttl_exceeded(self):
+        from services.module_registry import ModuleRegistry
+
+        reg = ModuleRegistry()
+        reg.register(module_id="old-mod", name="Old", version="1.0")
+        reg_obj = reg.get_registration("old-mod")
+
+        # Use ttl_s=0 to simulate TTL exceeded immediately
+        assert reg_obj.is_stale(ttl_s=0), "module with ttl_s=0 should be stale"
+
+    def test_stale_module_shows_stale_state_in_dict(self):
+        from services.module_registry import ModuleRegistry
+
+        reg = ModuleRegistry()
+        reg.register(module_id="stale-mod", name="Stale", version="1.0")
+
+        result = reg.get_module("stale-mod", redact=False)
+        assert result is not None
+        # ttl=0 → stale immediately; but default ttl is 60s so freshly registered is not stale
+        # We test via to_dict with is_stale(ttl_s=0) scenario via registration object
+        reg_obj = reg.get_registration("stale-mod")
+        assert "stale" in reg_obj.to_dict(redact=False)
+
+    def test_heartbeat_clears_stale_state(self):
+        from services.module_registry import ModuleRegistry
+
+        reg = ModuleRegistry()
+        reg.register(module_id="recover-mod", name="Recover", version="1.0")
+        reg_obj = reg.get_registration("recover-mod")
+
+        # Initially stale with ttl=0
+        assert reg_obj.is_stale(ttl_s=0)
+
+        # Heartbeat
+        reg.heartbeat("recover-mod")
+
+        # After heartbeat, should NOT be stale with ttl=60
+        assert not reg_obj.is_stale(ttl_s=60), "heartbeat should reset stale state"
+
+    def test_node_id_conflict_detected(self):
+        """Two different module_ids registering with same node_id logs a warning."""
+        import logging
+        from services.module_registry import ModuleRegistry
+
+        reg = ModuleRegistry()
+
+        with patch("services.module_registry.log") as mock_log:
+            reg.register(
+                module_id="mod-node-1", name="M1", version="1.0", node_id="node-xyz"
+            )
+            reg.register(
+                module_id="mod-node-2", name="M2", version="1.0", node_id="node-xyz"
+            )
+            # Second registration with same node_id should trigger warning
+            warning_calls = [
+                str(call) for call in mock_log.warning.call_args_list
+            ]
+            assert any("node_id_conflict" in c for c in warning_calls), (
+                "node_id conflict should generate a warning log"
+            )
+
+    def test_last_seen_ts_in_module_dict(self):
+        from services.module_registry import ModuleRegistry
+
+        reg = ModuleRegistry()
+        reg.register(module_id="ts-mod", name="TS", version="1.0")
+
+        result = reg.get_module("ts-mod", redact=False)
+        assert "last_seen_ts" in result
+        assert result["last_seen_ts"] is not None
+
+
+# ============================================================================
+# P2: DependencyProbe Correctness
+# ============================================================================
+
+
+class TestDependencyProbeHardening:
+    def test_measured_at_ts_set_automatically(self):
+        from services.module_registry import DependencyProbe, DependencyStatus
+
+        probe = DependencyProbe(name="redis", status=DependencyStatus.OK)
+        assert probe.measured_at_ts is not None, "measured_at_ts must be set automatically"
+
+    def test_timeout_ms_stored(self):
+        from services.module_registry import DependencyProbe, DependencyStatus
+
+        probe = DependencyProbe(
+            name="db",
+            status=DependencyStatus.OK,
+            latency_ms=5.0,
+            timeout_ms=1000.0,
+        )
+        result = probe.to_dict(redact=False)
+        assert result["timeout_ms"] == 1000.0
+
+    def test_negative_latency_clamped_to_zero(self):
+        """Negative latency_ms is a measurement bug — must be clamped to 0."""
+        from services.module_registry import DependencyProbe, DependencyStatus
+
+        probe = DependencyProbe(
+            name="db",
+            status=DependencyStatus.OK,
+            latency_ms=-42.5,
+        )
+        assert probe.latency_ms == 0.0, "negative latency must be clamped to 0"
+
+    def test_implausibly_large_latency_clamped_to_none(self):
+        """Latency > 1 hour is clearly a bug and must be clamped to None."""
+        from services.module_registry import DependencyProbe, DependencyStatus
+
+        probe = DependencyProbe(
+            name="db",
+            status=DependencyStatus.OK,
+            latency_ms=999_999_999.0,  # > 1 hour
+        )
+        assert probe.latency_ms is None
+
+    def test_non_positive_timeout_clamped_to_none(self):
+        from services.module_registry import DependencyProbe, DependencyStatus
+
+        probe = DependencyProbe(
+            name="db",
+            status=DependencyStatus.OK,
+            timeout_ms=-1.0,
+        )
+        assert probe.timeout_ms is None
+
+    def test_zero_timeout_clamped_to_none(self):
+        from services.module_registry import DependencyProbe, DependencyStatus
+
+        probe = DependencyProbe(
+            name="db",
+            status=DependencyStatus.OK,
+            timeout_ms=0.0,
+        )
+        assert probe.timeout_ms is None
+
+    def test_error_detail_sanitized_on_store(self):
+        """Error detail with credentials is sanitized at DependencyProbe init time."""
+        from services.module_registry import DependencyProbe, DependencyStatus
+
+        raw_error = "connect failed: postgres://admin:SuperSecret@host:5432/db"
+        probe = DependencyProbe(
+            name="db",
+            status=DependencyStatus.FAILED,
+            error_detail=raw_error,
+        )
+        assert "SuperSecret" not in (probe.error_detail or ""), (
+            "credentials in error_detail must be sanitized at init"
+        )
+        assert "[REDACTED-URL-CREDS]" in (probe.error_detail or "")
+
+    def test_to_dict_includes_measured_at_ts_and_timeout_ms(self):
+        from services.module_registry import DependencyProbe, DependencyStatus
+
+        probe = DependencyProbe(
+            name="nats",
+            status=DependencyStatus.OK,
+            latency_ms=2.5,
+            timeout_ms=500.0,
+            measured_at_ts="2024-01-01T00:00:00Z",
+        )
+        result = probe.to_dict(redact=False)
+        assert result["measured_at_ts"] == "2024-01-01T00:00:00Z"
+        assert result["timeout_ms"] == 500.0
+        assert result["latency_ms"] == 2.5
+
+    def test_valid_latency_preserved(self):
+        from services.module_registry import DependencyProbe, DependencyStatus
+
+        probe = DependencyProbe(
+            name="cache",
+            status=DependencyStatus.OK,
+            latency_ms=1.234,
+        )
+        assert probe.latency_ms == 1.234

@@ -5,11 +5,18 @@ Safe in-process command bus for locker runtime control.
 
 SECURITY INVARIANTS:
 - Zero subprocess / shell execution. All control is in-process via queues.
-- Idempotency enforced per (locker_id, idempotency_key).
+- Idempotency enforced per composite key (tenant_id + locker_id + cmd + user_key).
 - Cooldown per locker enforced (configurable, default 60s).
 - Every command produces a deterministic audit ledger entry.
 - Fail-closed: unknown lockers or expired keys always return error.
 - Rate limiting enforced at the API layer; bus enforces cooldown.
+
+P1 Hardening:
+- Reason charset: printable ASCII only (0x20–0x7E). Blank or control chars rejected.
+- Idempotency: composite key = SHA-256(tenant_id + locker_id + cmd + user_key).
+  Same user-supplied key across different tenants CANNOT collide.
+- Hash-chained audit: each tenant's audit chain carries prev_audit_hash so entries
+  are tamper-evident within a process lifetime.
 """
 from __future__ import annotations
 
@@ -38,6 +45,7 @@ ERR_COMMAND_REJECTED = "CP-LOCK-004"
 ERR_BUS_FULL = "CP-LOCK-005"
 ERR_INVALID_COMMAND = "CP-LOCK-006"
 ERR_QUARANTINE_ACTIVE = "CP-LOCK-007"
+ERR_INVALID_REASON = "CP-LOCK-008"
 
 
 # ---------------------------------------------------------------------------
@@ -159,13 +167,16 @@ class LockerRuntime:
 
 
 # ---------------------------------------------------------------------------
-# Idempotency store
+# Idempotency store (P1: tenant-scoped composite keys)
 # ---------------------------------------------------------------------------
 
 class IdempotencyStore:
     """
     In-memory idempotency key store with TTL.
     Keys expire after TTL (default 86400s = 24h).
+
+    P1: Keys are composite — callers should pass a tenant-scoped key via
+    _idempotency_composite_key(). The store itself is key-agnostic.
     """
 
     def __init__(self, ttl_seconds: int = 86400) -> None:
@@ -197,6 +208,19 @@ class IdempotencyStore:
         expired = [k for k, (_, expiry) in self._store.items() if now >= expiry]
         for k in expired:
             del self._store[k]
+
+
+def _idempotency_composite_key(cmd: "LockerCommandRequest") -> str:
+    """
+    Build a tenant-scoped composite idempotency key.
+
+    P1: Ensures same user-supplied key across different tenants
+    cannot collide in the idempotency store.
+
+    Key input: tenant_id + locker_id + command + user_idempotency_key
+    """
+    raw = f"{cmd.tenant_id}:{cmd.locker_id}:{cmd.command.value}:{cmd.idempotency_key}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -236,20 +260,102 @@ class CooldownTracker:
 
 
 # ---------------------------------------------------------------------------
+# Reason charset validation (P1)
+# ---------------------------------------------------------------------------
+
+def _validate_reason(reason: str) -> Optional[str]:
+    """
+    Validate that reason contains only printable ASCII characters (0x20–0x7E).
+    Returns an error message string if invalid, or None if valid.
+    """
+    if not reason or not reason.strip():
+        return "reason is required and must not be blank"
+    for idx, ch in enumerate(reason):
+        code = ord(ch)
+        if code < 0x20 or code > 0x7E:
+            return (
+                f"reason contains invalid character at position {idx} "
+                f"(U+{code:04X}); only printable ASCII (0x20–0x7E) is allowed"
+            )
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Hash-chained audit ledger (P1)
+# ---------------------------------------------------------------------------
+
+class AuditChain:
+    """
+    Per-tenant hash chain for tamper-evident audit entries within a session.
+
+    Each entry carries:
+      - prev_audit_hash: SHA-256 of the previous entry (or "genesis" for first)
+      - audit_chain_hash: SHA-256 of this entry's content + prev_audit_hash
+
+    Provides tamper evidence within a process lifetime. Not persistent across
+    restarts (an out-of-band audit export system handles persistence).
+    """
+
+    def __init__(self) -> None:
+        self._chain: Dict[str, str] = {}  # tenant_id -> last_hash
+        self._lock = threading.Lock()
+
+    def record(
+        self,
+        *,
+        tenant_id: str,
+        action: str,
+        result: str,
+        actor: str,
+        timestamp: str,
+    ) -> tuple[str, str]:
+        """
+        Returns (prev_hash, new_hash) and advances the chain.
+        Thread-safe.
+        """
+        with self._lock:
+            prev = self._chain.get(tenant_id, "genesis")
+            raw = f"{tenant_id}:{action}:{result}:{actor}:{timestamp}:{prev}"
+            new_hash = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+            self._chain[tenant_id] = new_hash
+            return prev, new_hash
+
+    def _reset(self) -> None:
+        with self._lock:
+            self._chain.clear()
+
+
+# ---------------------------------------------------------------------------
 # Audit ledger entry emitter
 # ---------------------------------------------------------------------------
 
 def emit_command_audit(
     *,
-    command: LockerCommandRequest,
+    command: "LockerCommandRequest",
     outcome: CommandOutcome,
+    audit_chain: Optional["AuditChain"] = None,
     config_hash: str = "",
 ) -> None:
     """
     Emit a deterministic audit ledger entry for every control action.
     No control action without audit. This is a hard invariant.
+
+    P1: Includes prev_audit_hash and audit_chain_hash for tamper evidence.
     """
     from api.security_audit import audit_admin_action
+
+    now = _utc_now_iso()
+    prev_hash = "genesis"
+    chain_hash = ""
+
+    if audit_chain is not None:
+        prev_hash, chain_hash = audit_chain.record(
+            tenant_id=command.tenant_id,
+            action=command.command.value,
+            result=outcome.result.value,
+            actor=command.actor_id,
+            timestamp=now,
+        )
 
     try:
         audit_admin_action(
@@ -268,6 +374,9 @@ def emit_command_audit(
                 "config_hash": config_hash or _config_hash(),
                 "idempotency_key": command.idempotency_key,
                 "command": command.command.value,
+                # P1: Hash chain fields
+                "prev_audit_hash": prev_hash,
+                "audit_chain_hash": chain_hash,
             },
         )
     except Exception as e:
@@ -292,6 +401,11 @@ class LockerCommandBus:
 
     NO subprocess. NO shell. Pure queue-based in-process control.
     Lockers subscribe via register_locker() and poll their command queues.
+
+    P1 Hardening:
+    - Reason must be printable ASCII, max 512 chars.
+    - Idempotency keys are tenant-scoped composites (cross-tenant isolation).
+    - Audit entries are hash-chained per tenant for tamper evidence.
     """
 
     _instance: Optional["LockerCommandBus"] = None
@@ -306,6 +420,7 @@ class LockerCommandBus:
                     obj._lock = threading.RLock()
                     obj._idempotency = IdempotencyStore()
                     obj._cooldown = CooldownTracker()
+                    obj._audit_chain = AuditChain()  # P1: hash-chained audit
                     cls._instance = obj
         return cls._instance
 
@@ -355,26 +470,46 @@ class LockerCommandBus:
         """
         Dispatch a command to the target locker.
 
-        Enforces:
-        1. Locker existence
-        2. Idempotency
-        3. Cooldown
-        4. Tenant binding (caller must have already verified)
-        5. Queue delivery
-        6. Audit emission (always, before returning)
+        Enforces (in order):
+        1. Reason validation: not blank, printable ASCII, max 512 chars
+        2. Locker existence
+        3. Quarantine guard
+        4. Idempotency (tenant-scoped composite key)
+        5. Cooldown
+        6. Queue delivery
+        7. Record cooldown + update runtime state
+        All paths call emit_command_audit() before returning.
         """
-        # 1. Validate reason (required)
-        if not cmd.reason or not cmd.reason.strip():
+        # 1. Validate reason: required, printable ASCII, max 512 chars
+        reason_error = _validate_reason(cmd.reason)
+        if reason_error:
             outcome = CommandOutcome(
                 request_id=cmd.request_id,
                 locker_id=cmd.locker_id,
                 command=cmd.command,
                 result=CommandResult.REJECTED,
-                error_code=ERR_INVALID_COMMAND,
-                error_message="reason is required",
+                error_code=ERR_INVALID_REASON,
+                error_message=reason_error,
                 issued_at=_utc_now_iso(),
             )
-            emit_command_audit(command=cmd, outcome=outcome)
+            emit_command_audit(
+                command=cmd, outcome=outcome, audit_chain=self._audit_chain
+            )
+            return outcome
+
+        if len(cmd.reason) > 512:
+            outcome = CommandOutcome(
+                request_id=cmd.request_id,
+                locker_id=cmd.locker_id,
+                command=cmd.command,
+                result=CommandResult.REJECTED,
+                error_code=ERR_INVALID_REASON,
+                error_message="reason exceeds maximum length of 512 characters",
+                issued_at=_utc_now_iso(),
+            )
+            emit_command_audit(
+                command=cmd, outcome=outcome, audit_chain=self._audit_chain
+            )
             return outcome
 
         # 2. Locker existence check
@@ -389,7 +524,9 @@ class LockerCommandBus:
                 error_message="locker not registered",
                 issued_at=_utc_now_iso(),
             )
-            emit_command_audit(command=cmd, outcome=outcome)
+            emit_command_audit(
+                command=cmd, outcome=outcome, audit_chain=self._audit_chain
+            )
             return outcome
 
         # 3. Quarantine guard: quarantined lockers reject non-resume commands
@@ -407,18 +544,22 @@ class LockerCommandBus:
                     error_message="locker is quarantined; only resume is allowed",
                     issued_at=_utc_now_iso(),
                 )
-                emit_command_audit(command=cmd, outcome=outcome)
+                emit_command_audit(
+                    command=cmd, outcome=outcome, audit_chain=self._audit_chain
+                )
                 return outcome
 
-        # 4. Idempotency check
+        # 4. Idempotency check (P1: tenant-scoped composite key)
+        composite_key = _idempotency_composite_key(cmd)
         is_new, existing_request_id = self._idempotency.check_and_set(
-            cmd.idempotency_key, cmd.request_id
+            composite_key, cmd.request_id
         )
         if not is_new:
             log.info(
-                "idempotent_replay idempotency_key=%s locker_id=%s",
+                "idempotent_replay idempotency_key=%s locker_id=%s tenant=%s",
                 cmd.idempotency_key,
                 cmd.locker_id,
+                cmd.tenant_id,
             )
             outcome = CommandOutcome(
                 request_id=existing_request_id or cmd.request_id,
@@ -430,7 +571,9 @@ class LockerCommandBus:
                 issued_at=_utc_now_iso(),
             )
             # Still emit audit for idempotent replays
-            emit_command_audit(command=cmd, outcome=outcome)
+            emit_command_audit(
+                command=cmd, outcome=outcome, audit_chain=self._audit_chain
+            )
             return outcome
 
         # 5. Cooldown check
@@ -446,7 +589,9 @@ class LockerCommandBus:
                 cooldown_remaining_s=remaining,
                 issued_at=_utc_now_iso(),
             )
-            emit_command_audit(command=cmd, outcome=outcome)
+            emit_command_audit(
+                command=cmd, outcome=outcome, audit_chain=self._audit_chain
+            )
             return outcome
 
         # 6. Queue delivery (no subprocess)
@@ -462,7 +607,9 @@ class LockerCommandBus:
                 error_message="locker command queue full",
                 issued_at=_utc_now_iso(),
             )
-            emit_command_audit(command=cmd, outcome=outcome)
+            emit_command_audit(
+                command=cmd, outcome=outcome, audit_chain=self._audit_chain
+            )
             return outcome
 
         # 7. Record cooldown & update runtime state
@@ -480,10 +627,11 @@ class LockerCommandBus:
                 runtime.state = LockerState.QUARANTINED
 
         log.info(
-            "locker_command_dispatched locker_id=%s command=%s actor=%s",
+            "locker_command_dispatched locker_id=%s command=%s actor=%s tenant=%s",
             cmd.locker_id,
             cmd.command.value,
             cmd.actor_id,
+            cmd.tenant_id,
         )
 
         outcome = CommandOutcome(
@@ -493,7 +641,9 @@ class LockerCommandBus:
             result=CommandResult.ACCEPTED,
             issued_at=_utc_now_iso(),
         )
-        emit_command_audit(command=cmd, outcome=outcome)
+        emit_command_audit(
+            command=cmd, outcome=outcome, audit_chain=self._audit_chain
+        )
         return outcome
 
     # ------------------------------------------------------------------
@@ -568,6 +718,7 @@ class LockerCommandBus:
             self._lockers.clear()
             self._idempotency = IdempotencyStore()
             self._cooldown = CooldownTracker()
+            self._audit_chain = AuditChain()
 
 
 # ---------------------------------------------------------------------------

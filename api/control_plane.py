@@ -5,14 +5,21 @@ Production-grade command and telemetry layer.
 
 SECURITY INVARIANTS:
 - All endpoints require admin:read or admin:write scope
-- All control actions require tenant binding
+- All control actions require tenant binding (verified from auth context, not headers)
 - Zero shell execution / subprocess in API layer
 - Fail-closed: any unresolvable state returns 403/503, never 200
-- Rate limiting enforced per endpoint
-- Idempotency enforced for all command endpoints
-- Full audit ledger entry on every control action
+- Rate limiting enforced per endpoint AND per tenant
+- Idempotency enforced for all command endpoints (tenant-scoped composite key)
+- Full audit ledger entry on every control action (hash-chained)
 - Error codes are deterministic and redacted in production
-- WebSocket: authenticated, tenant-bound, no unauthenticated upgrade
+- WebSocket: authenticated, tenant-bound, subscriber cap per tenant
+
+P0: tenant_id always resolved from verified auth context (request.state.auth.tenant_id).
+    Never from request headers or query params.
+    Admin endpoints filter data by tenant; global admin (no tenant) sees all.
+    WS enforces tenant context identically to HTTP endpoints.
+P1: Per-tenant rate limits for WS, dep-matrix, locker dispatch.
+    Max subscribers per tenant enforced via EventStreamBus.
 
 HTTP Endpoints:
   GET  /control-plane/modules
@@ -25,6 +32,7 @@ HTTP Endpoints:
   POST /control-plane/lockers/{id}/quarantine
   GET  /control-plane/lockers
   GET  /control-plane/audit
+  GET  /control-plane/dependency-matrix
   WS   /control-plane/events
 """
 from __future__ import annotations
@@ -33,6 +41,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -79,6 +88,7 @@ from services.locker_command_bus import (
 from services.event_stream import (
     ControlEventType,
     EventStreamBus,
+    MaxSubscribersExceededError,
     emit_locker_state_changed,
     emit_restart_started,
     emit_restart_completed,
@@ -98,10 +108,14 @@ ERR_CP_INVALID_REQUEST = "CP-API-005"
 ERR_CP_WS_AUTH_FAILED = "CP-API-006"
 ERR_CP_AUDIT_FAILED = "CP-API-007"
 ERR_CP_BOOT_TRACE_NOT_FOUND = "CP-API-008"
+ERR_CP_MAX_SUBSCRIBERS = "CP-API-009"
+
 
 # ---------------------------------------------------------------------------
-# Rate limiting: per-endpoint in-process buckets
-# (uses the existing MemoryRateLimiter from api.ratelimit)
+# Rate limiting: per-actor and per-tenant buckets
+#
+# Actor buckets prevent a single key from hammering an endpoint.
+# Tenant buckets prevent a single tenant from monopolizing shared resources.
 # ---------------------------------------------------------------------------
 
 _RL_MODULES_READ = "cp:modules:read"
@@ -109,27 +123,36 @@ _RL_LOCKER_CMD = "cp:locker:cmd"
 _RL_AUDIT_READ = "cp:audit:read"
 _RL_WS_CONNECT = "cp:ws:connect"
 
+# Per-tenant buckets (stricter, protect shared backend resources)
+_RL_TENANT_DEP_MATRIX = "cp:tenant:dep-matrix"
+_RL_TENANT_LOCKER_CMD = "cp:tenant:locker:cmd"
+_RL_TENANT_WS_SUBSCRIBE = "cp:tenant:ws:subscribe"
+
 _RATE_LIMIT_RULES: dict[str, tuple[float, float]] = {
     # key -> (rate_per_sec, burst)
-    _RL_MODULES_READ: (10.0, 30.0),
-    _RL_LOCKER_CMD: (0.5, 3.0),   # strict: 1 cmd per 2s, burst of 3
-    _RL_AUDIT_READ: (5.0, 20.0),
-    _RL_WS_CONNECT: (2.0, 5.0),
+    _RL_MODULES_READ:         (10.0, 30.0),
+    _RL_LOCKER_CMD:           (0.5, 3.0),    # per-actor: 1 cmd per 2s, burst of 3
+    _RL_AUDIT_READ:           (5.0, 20.0),
+    _RL_WS_CONNECT:           (2.0, 5.0),
+    # Per-tenant limits
+    _RL_TENANT_DEP_MATRIX:    (2.0, 5.0),   # dep-matrix is compute-heavy
+    _RL_TENANT_LOCKER_CMD:    (1.0, 5.0),   # cross-locker command rate per tenant
+    _RL_TENANT_WS_SUBSCRIBE:  (1.0, 3.0),   # WS subscribe rate per tenant
 }
 
 
-def _get_rl_key(bucket: str, actor_id: str) -> str:
-    return f"{bucket}:{actor_id}"
+def _get_rl_key(bucket: str, identity: str) -> str:
+    return f"{bucket}:{identity}"
 
 
-def _rate_limit_check(bucket: str, actor_id: str) -> None:
+def _rate_limit_check(bucket: str, identity: str) -> None:
     """In-process rate limit check. Raises 429 if exceeded."""
     from api.ratelimit import _get_memory_limiter
 
     rate, burst = _RATE_LIMIT_RULES.get(bucket, (10.0, 30.0))
     limiter = _get_memory_limiter()
     ok, limit, remaining, reset = limiter.allow(
-        _get_rl_key(bucket, actor_id),
+        _get_rl_key(bucket, identity),
         rate_per_sec=rate,
         capacity=burst,
     )
@@ -150,25 +173,47 @@ def _rate_limit_check(bucket: str, actor_id: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Auth helpers
+# Auth helpers — all resolve from verified auth context, NEVER from headers
 # ---------------------------------------------------------------------------
 
 def _actor_id_from_request(request: Request) -> str:
+    """Extract actor ID from verified auth state."""
     auth = getattr(getattr(request, "state", None), "auth", None)
     key_prefix = getattr(auth, "key_prefix", None)
     return str(key_prefix or "unknown")[:32]
 
 
 def _tenant_id_from_request(request: Request) -> str:
-    """Extract verified tenant_id from auth state. Fail-closed."""
+    """
+    Extract verified tenant_id from auth state. Fail-closed.
+
+    P0: tenant_id MUST come from request.state.auth.tenant_id (set by the
+    auth middleware from the verified API key record). This function never
+    reads from request headers, query params, or request body.
+    """
     auth = getattr(getattr(request, "state", None), "auth", None)
     tenant_id = getattr(auth, "tenant_id", None)
     if not tenant_id:
         raise HTTPException(
             status_code=400,
-            detail=redact_detail("tenant binding required", "invalid request"),
+            detail={
+                "code": ERR_CP_INVALID_REQUEST,
+                "message": redact_detail("tenant binding required", "invalid request"),
+            },
         )
     return str(tenant_id)
+
+
+def _tenant_id_from_request_optional(request: Request) -> Optional[str]:
+    """
+    Extract tenant_id from auth state if present, else return None.
+
+    Used on read endpoints where global admins (no tenant binding) may list
+    all resources, while tenant-scoped admins see only their tenant's data.
+    """
+    auth = getattr(getattr(request, "state", None), "auth", None)
+    tenant_id = getattr(auth, "tenant_id", None)
+    return str(tenant_id) if tenant_id else None
 
 
 def _request_id(request: Request) -> str:
@@ -188,10 +233,22 @@ class LockerCommandBody(BaseModel):
 
     @field_validator("reason")
     @classmethod
-    def reason_not_blank(cls, v: str) -> str:
-        if not v.strip():
+    def reason_printable_ascii(cls, v: str) -> str:
+        """
+        P1: Reason must be printable ASCII only (0x20–0x7E).
+        Rejects control characters, null bytes, and non-ASCII sequences.
+        """
+        stripped = v.strip()
+        if not stripped:
             raise ValueError("reason must not be blank")
-        return v.strip()
+        for idx, ch in enumerate(stripped):
+            code = ord(ch)
+            if code < 0x20 or code > 0x7E:
+                raise ValueError(
+                    f"reason contains invalid character at position {idx} "
+                    f"(U+{code:04X}); only printable ASCII (0x20–0x7E) is allowed"
+                )
+        return stripped
 
     @field_validator("idempotency_key")
     @classmethod
@@ -221,17 +278,25 @@ router = APIRouter(
     summary="List all registered runtime modules",
 )
 def list_modules(request: Request) -> dict:
+    """
+    P0 Tenant scoping: if auth has tenant_id, filters to that tenant's modules.
+    Global admin (no tenant binding) receives all modules with tenant_id in each record.
+    """
     actor_id = _actor_id_from_request(request)
     _rate_limit_check(_RL_MODULES_READ, actor_id)
 
+    # P0: resolve tenant from verified auth context (None = global admin → see all)
+    tenant_id = _tenant_id_from_request_optional(request)
+
     registry = ModuleRegistry()
     redact = _is_prod_like()
-    modules = registry.list_modules(redact=redact)
+    modules = registry.list_modules(redact=redact, tenant_id=tenant_id)
 
     return {
         "ok": True,
         "count": len(modules),
         "modules": modules,
+        "scoped_to_tenant": tenant_id,
         "fetched_at": _utc_now_iso(),
     }
 
@@ -242,13 +307,18 @@ def list_modules(request: Request) -> dict:
     summary="Get a single module's runtime metadata",
 )
 def get_module(module_id: str, request: Request) -> dict:
+    """
+    P0 Tenant scoping: cross-tenant access returns 404 (no information disclosure).
+    """
     actor_id = _actor_id_from_request(request)
     _rate_limit_check(_RL_MODULES_READ, actor_id)
 
     module_id = _safe_id(module_id)
+    tenant_id = _tenant_id_from_request_optional(request)
     registry = ModuleRegistry()
     redact = _is_prod_like()
-    mod = registry.get_module(module_id, redact=redact)
+    # P0: pass tenant_id for cross-tenant guard (returns None if forbidden)
+    mod = registry.get_module(module_id, redact=redact, tenant_id=tenant_id)
 
     if mod is None:
         raise HTTPException(
@@ -273,9 +343,11 @@ def get_module_dependencies(module_id: str, request: Request) -> dict:
     _rate_limit_check(_RL_MODULES_READ, actor_id)
 
     module_id = _safe_id(module_id)
+    tenant_id = _tenant_id_from_request_optional(request)
     registry = ModuleRegistry()
     redact = _is_prod_like()
-    deps = registry.get_dependencies(module_id, redact=redact)
+    # P0: tenant guard applied inside get_dependencies
+    deps = registry.get_dependencies(module_id, redact=redact, tenant_id=tenant_id)
 
     if deps is None:
         raise HTTPException(
@@ -333,11 +405,13 @@ def _dispatch_locker_command(
 ) -> dict:
     """Shared dispatch logic for all locker control endpoints."""
     actor_id = _actor_id_from_request(request)
+    # P0: tenant_id from verified auth context only — fail-closed
     tenant_id = _tenant_id_from_request(request)
     req_id = _request_id(request)
 
-    # Rate limit (strict for commands)
+    # Rate limit: per-actor strict limit + per-tenant limit
     _rate_limit_check(_RL_LOCKER_CMD, actor_id)
+    _rate_limit_check(_RL_TENANT_LOCKER_CMD, tenant_id)
 
     # Locker must exist
     bus = LockerCommandBus()
@@ -352,7 +426,7 @@ def _dispatch_locker_command(
             },
         )
 
-    # Tenant binding: locker must belong to actor's tenant
+    # P0: Tenant binding — locker must belong to actor's tenant
     locker_info = bus.get_locker(locker_id)
     if locker_info and locker_info.get("tenant_id") != tenant_id:
         log.warning(
@@ -363,7 +437,10 @@ def _dispatch_locker_command(
         )
         raise HTTPException(
             status_code=403,
-            detail=redact_detail("tenant binding mismatch", "forbidden"),
+            detail={
+                "code": ERR_CP_FORBIDDEN,
+                "message": redact_detail("tenant binding mismatch", "forbidden"),
+            },
         )
 
     # Build and dispatch command
@@ -493,11 +570,12 @@ def quarantine_locker(
 @router.get(
     "/lockers",
     dependencies=[Depends(require_scopes("admin:read"))],
-    summary="List all registered lockers",
+    summary="List all registered lockers for the authenticated tenant",
 )
 def list_lockers(request: Request) -> dict:
     actor_id = _actor_id_from_request(request)
     _rate_limit_check(_RL_MODULES_READ, actor_id)
+    # P0: tenant_id from verified auth context
     tenant_id = _tenant_id_from_request(request)
 
     bus = LockerCommandBus()
@@ -528,6 +606,8 @@ def get_control_plane_audit(
 ) -> dict:
     actor_id = _actor_id_from_request(request)
     _rate_limit_check(_RL_AUDIT_READ, actor_id)
+    # P0: audit is always tenant-scoped — global admins must use /audit?tenant_id=...
+    # For now, require tenant binding on audit endpoint (write ops need full trace)
     tenant_id = _tenant_id_from_request(request)
 
     bus = EventStreamBus()
@@ -572,11 +652,15 @@ async def control_plane_events(
     """
     WebSocket endpoint for real-time control plane events.
 
-    Authentication: X-API-Key header required (admin:read scope).
-    Tenant binding: events are filtered to the authenticated tenant only.
-    No unauthenticated upgrade allowed (fail-closed).
+    P0 Authentication: X-API-Key header required (admin:read scope).
+                       Tenant binding resolved from key record — same as HTTP.
+                       No unauthenticated upgrade allowed (fail-closed).
+    P0 Tenant binding: events filtered to authenticated tenant ONLY.
+                       "admin can see all by default" is NOT the behaviour.
+    P1 Max subscribers: per-tenant cap enforced (FG_CP_MAX_SUBSCRIBERS_PER_TENANT).
+    P1 Rate limit: per-actor WS connect + per-tenant WS subscribe limits.
     """
-    # --- WebSocket auth: must authenticate BEFORE accept ---
+    # --- Authenticate BEFORE accept ---
     api_key = (
         x_api_key
         or websocket.headers.get("x-api-key")
@@ -588,7 +672,6 @@ async def control_plane_events(
         log.warning("ws_auth_failed: no API key provided")
         return
 
-    # Verify the key and get auth context
     from api.auth_scopes import verify_api_key_detailed
 
     auth_result = verify_api_key_detailed(raw=api_key, required_scopes={"admin:read"})
@@ -602,16 +685,20 @@ async def control_plane_events(
         )
         return
 
-    # Tenant binding required
+    # P0: Tenant binding required — identical to _tenant_id_from_request()
+    # WS cannot use request.state so we resolve from auth_result directly.
     tenant_id = auth_result.tenant_id
     if not tenant_id:
         await websocket.close(code=4003, reason="tenant binding required")
+        log.warning("ws_auth_failed: no tenant binding on key")
         return
 
-    # Rate limit WebSocket connections
     actor_id = (auth_result.key_prefix or "unknown")[:32]
+
+    # P1: Per-actor WS connect rate limit
     from api.ratelimit import _get_memory_limiter
     limiter = _get_memory_limiter()
+
     rate, burst = _RATE_LIMIT_RULES[_RL_WS_CONNECT]
     ok, _limit, _remaining, _reset = limiter.allow(
         _get_rl_key(_RL_WS_CONNECT, actor_id),
@@ -619,21 +706,43 @@ async def control_plane_events(
         capacity=burst,
     )
     if not ok:
-        await websocket.close(code=4029, reason="rate limit exceeded")
+        await websocket.close(code=4029, reason="rate limit exceeded: connect")
+        return
+
+    # P1: Per-tenant WS subscribe rate limit
+    rate_t, burst_t = _RATE_LIMIT_RULES[_RL_TENANT_WS_SUBSCRIBE]
+    ok_t, _, _, _ = limiter.allow(
+        _get_rl_key(_RL_TENANT_WS_SUBSCRIBE, tenant_id),
+        rate_per_sec=rate_t,
+        capacity=burst_t,
+    )
+    if not ok_t:
+        await websocket.close(code=4029, reason="rate limit exceeded: tenant subscribe")
+        return
+
+    # P1: Max subscribers per tenant (enforced in EventStreamBus.subscribe)
+    bus = EventStreamBus()
+    try:
+        subscriber = bus.subscribe(tenant_id=tenant_id)
+    except MaxSubscribersExceededError:
+        await websocket.close(
+            code=4029, reason="max subscribers exceeded for tenant"
+        )
+        log.warning(
+            "ws_max_subscribers_exceeded tenant=%s actor=%s", tenant_id, actor_id
+        )
         return
 
     await websocket.accept()
     log.info(
-        "ws_connected sub_id=pending tenant=%s actor=%s",
+        "ws_connected sub_id=%s tenant=%s actor=%s",
+        subscriber.subscriber_id,
         tenant_id,
         actor_id,
     )
 
-    bus = EventStreamBus()
-    subscriber = bus.subscribe(tenant_id=tenant_id)
-
     try:
-        # Send connected ack
+        # Send connected ack (includes tenant context for audit trail)
         await websocket.send_text(
             json.dumps({
                 "type": "connected",
@@ -643,8 +752,25 @@ async def control_plane_events(
             })
         )
 
-        # Stream events
+        # Stream events (P0: tenant filter already enforced in EventSubscriber.matches())
         while True:
+            # Check if subscriber was closed by backpressure mechanism
+            if subscriber.is_closed():
+                try:
+                    await websocket.send_text(
+                        json.dumps({
+                            "type": "disconnect",
+                            "reason": "slow_consumer",
+                            "timestamp": _utc_now_iso(),
+                        })
+                    )
+                except WebSocketDisconnect:
+                    pass
+                except OSError as send_err:
+                    log.debug("ws_disconnect_notify_failed sub=%s err=%s",
+                              subscriber.subscriber_id, send_err)
+                break
+
             event = await subscriber.get(timeout=25.0)
 
             if event is None:
@@ -656,7 +782,7 @@ async def control_plane_events(
                             "timestamp": _utc_now_iso(),
                         })
                     )
-                except Exception:
+                except (WebSocketDisconnect, OSError):
                     break
                 continue
 
@@ -665,7 +791,9 @@ async def control_plane_events(
             except WebSocketDisconnect:
                 break
             except Exception as e:
-                log.warning("ws_send_error sub=%s error=%s", subscriber.subscriber_id, e)
+                log.warning(
+                    "ws_send_error sub=%s error=%s", subscriber.subscriber_id, e
+                )
                 break
 
     except WebSocketDisconnect:
@@ -676,7 +804,9 @@ async def control_plane_events(
         log.warning("ws_error sub=%s error=%s", subscriber.subscriber_id, e)
     finally:
         bus.unsubscribe(subscriber.subscriber_id)
-        log.info("ws_disconnected sub=%s tenant=%s", subscriber.subscriber_id, tenant_id)
+        log.info(
+            "ws_disconnected sub=%s tenant=%s", subscriber.subscriber_id, tenant_id
+        )
 
 
 # ===========================================================================
@@ -689,17 +819,30 @@ async def control_plane_events(
     summary="Grid view of all module dependency health statuses",
 )
 def dependency_matrix(request: Request) -> dict:
+    """
+    P0 Tenant scoping: filtered by tenant_id from auth context.
+    P1 Per-tenant rate limit: dependency matrix is a heavier operation.
+    """
     actor_id = _actor_id_from_request(request)
     _rate_limit_check(_RL_MODULES_READ, actor_id)
 
+    # P0: optional tenant filter (global admin sees all)
+    tenant_id = _tenant_id_from_request_optional(request)
+
+    # P1: per-tenant rate limit for heavy dependency matrix endpoint
+    if tenant_id:
+        _rate_limit_check(_RL_TENANT_DEP_MATRIX, tenant_id)
+
     registry = ModuleRegistry()
     redact = _is_prod_like()
-    modules = registry.list_modules(redact=redact)
+    modules = registry.list_modules(redact=redact, tenant_id=tenant_id)
 
     matrix: dict[str, dict[str, str]] = {}
     for mod in modules:
         module_id = mod["module_id"]
-        deps = registry.get_dependencies(module_id, redact=redact) or []
+        deps = registry.get_dependencies(
+            module_id, redact=redact, tenant_id=tenant_id
+        ) or []
         matrix[module_id] = {
             dep["name"]: dep["status"] for dep in deps
         }
@@ -707,6 +850,7 @@ def dependency_matrix(request: Request) -> dict:
     return {
         "ok": True,
         "matrix": matrix,
+        "scoped_to_tenant": tenant_id,
         "fetched_at": _utc_now_iso(),
     }
 
@@ -717,6 +861,5 @@ def dependency_matrix(request: Request) -> dict:
 
 def _safe_id(value: str, max_len: int = 128) -> str:
     """Sanitize path parameters to prevent injection."""
-    import re
     cleaned = re.sub(r"[^\w\-.]", "", value)
     return cleaned[:max_len]
