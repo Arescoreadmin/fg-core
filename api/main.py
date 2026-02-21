@@ -56,6 +56,7 @@ from api.agent_tokens import router as agent_tokens_router
 from api.agent_phase2 import admin_router as agent_phase2_admin_router
 from api.agent_phase2 import router as agent_phase2_router
 from api.connectors_control_plane import router as connectors_control_plane_router
+from api.control_plane import router as control_plane_router
 from services.ai_plane_extension import ai_external_provider_enabled, ai_plane_enabled
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
@@ -529,6 +530,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(agent_tokens_router)
     app.include_router(agent_phase2_router)
     app.include_router(connectors_control_plane_router)
+    app.include_router(control_plane_router)
     if _should_mount_admin_routes():
         app.include_router(agent_phase2_admin_router)
 
@@ -794,6 +796,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(agent_tokens_router)
     app.include_router(agent_phase2_router)
     app.include_router(connectors_control_plane_router)
+    app.include_router(control_plane_router)
     if _should_mount_admin_routes():
         app.include_router(agent_phase2_admin_router)
     if mission_router is not None:
