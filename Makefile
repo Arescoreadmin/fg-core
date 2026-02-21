@@ -1194,6 +1194,23 @@ nuclear-full: venv
 	@$(MAKE) enterprise-smoke
 
 
+# =============================================================================
+# Control Plane CI gate
+# =============================================================================
+
+.PHONY: control-plane-check control-plane-spot
+
+control-plane-spot: venv _require-pytest-venv
+	@echo "==> control-plane: running tests"
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/control_plane/
+	@echo "✅ control-plane tests passed"
+
+control-plane-check: venv control-plane-spot
+	@echo "==> control-plane: verifying security invariants"
+	@$(PY) tools/ci/check_control_plane_invariants.py
+	@echo "✅ control-plane check passed"
+
+
 .PHONY: pr-merge-smoke
 pr-merge-smoke: venv
 	@mkdir -p artifacts
