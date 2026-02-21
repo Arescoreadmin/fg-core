@@ -117,7 +117,9 @@ def generate_openapi(settings: ContractSettings | None = None) -> Dict[str, Any]
 
     effective = settings or ContractSettings()
     prior_env = os.environ.get("FG_ENV")
+    prior_admin = os.environ.get("FG_ADMIN_ENABLED")
     os.environ["FG_ENV"] = "prod"
+    os.environ["FG_ADMIN_ENABLED"] = "0"
     try:
         app = build_contract_app(settings=effective)
     finally:
@@ -125,6 +127,10 @@ def generate_openapi(settings: ContractSettings | None = None) -> Dict[str, Any]
             os.environ.pop("FG_ENV", None)
         else:
             os.environ["FG_ENV"] = prior_env
+        if prior_admin is None:
+            os.environ.pop("FG_ADMIN_ENABLED", None)
+        else:
+            os.environ["FG_ADMIN_ENABLED"] = prior_admin
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=DeprecationWarning)
         openapi = normalize_openapi(app.openapi())
