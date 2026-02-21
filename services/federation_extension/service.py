@@ -4,11 +4,16 @@ import base64
 import json
 import os
 import time
+import urllib.error
+import urllib.request
 from typing import Any
 
-import requests
-
 from api.security.outbound_policy import sanitize_url_for_log, validate_target
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[override]
+        return None
 
 
 class JWKSCache:
@@ -20,11 +25,23 @@ class JWKSCache:
         now = time.time()
         if self._doc is not None and now < self._exp:
             return self._doc
+
         normalized_url, _ = validate_target(url)
-        resp = requests.get(normalized_url, timeout=5, allow_redirects=False)
-        if resp.status_code != 200:
-            raise ValueError(f"jwks_fetch_failed:{resp.status_code}:{sanitize_url_for_log(url)}")
-        payload = resp.json()
+        opener = urllib.request.build_opener(_NoRedirect())
+        req = urllib.request.Request(normalized_url, headers={"Accept": "application/json"})
+        try:
+            with opener.open(req, timeout=5) as resp:
+                status = int(getattr(resp, "status", 200))
+                if status != 200:
+                    raise ValueError(
+                        f"jwks_fetch_failed:{status}:{sanitize_url_for_log(url)}"
+                    )
+                payload = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            raise ValueError(
+                f"jwks_fetch_failed:{exc.code}:{sanitize_url_for_log(url)}"
+            ) from exc
+
         self._doc = payload
         self._exp = now + ttl_seconds
         return payload
