@@ -214,7 +214,7 @@ def test_creds_encrypted_and_kek_missing_fail_closed(monkeypatch: pytest.MonkeyP
 
 
 def test_rls_expectations_present() -> None:
-    sql = Path("migrations/postgres/0024_connectors_control_plane.sql").read_text(
+    sql = Path("migrations/postgres/0026_connectors_control_plane.sql").read_text(
         encoding="utf-8"
     )
     assert "ENABLE ROW LEVEL SECURITY" in sql
