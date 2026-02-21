@@ -1,9 +1,9 @@
 import os
-import sys
-import importlib
 
 import pytest
 from fastapi.testclient import TestClient
+from api.db import reset_engine_cache
+from api.main import build_app as _build_app
 
 
 def build_app(auth_enabled: bool):
@@ -25,27 +25,10 @@ def build_app(auth_enabled: bool):
             raise RuntimeError("FG_API_KEY must be set for test runs.")
         os.environ["FG_API_KEY"] = api_key
 
-    # Hard reset api module tree
-    for name in list(sys.modules.keys()):
-        if name == "api" or name.startswith("api."):
-            sys.modules.pop(name)
-
-    # Re-import config and reset settings
-    import api.config as cfg
-
-    if hasattr(cfg, "get_settings"):
-        try:
-            cfg.get_settings.cache_clear()
-        except AttributeError:
-            pass
-        cfg.settings = cfg.get_settings()
-
-    # Re-import main so it pulls fresh `settings`
-    import api.main as main
-
-    importlib.reload(main)
-
-    return main.app
+    # Keep app construction deterministic without purging global module state,
+    # which can invalidate monkeypatch targets in other tests.
+    reset_engine_cache()
+    return _build_app(auth_enabled=auth_enabled)
 
 
 @pytest.mark.parametrize("auth_enabled", [False, True])

@@ -26,7 +26,7 @@ class IngestPayload(_StrictModel):
     resource_ids: list[str] = Field(default_factory=list)
 
 
-class IngestRequest(_StrictModel):
+class ConnectorIngestRequest(_StrictModel):
     # NOTE: intentionally NO tenant_id field.
     # Any tenant_id in input becomes a 422 via extra="forbid" (as required by tests).
     collection_id: str = Field(min_length=1)
@@ -57,7 +57,7 @@ def _is_connector_enabled(db: Session, *, tenant_id: str, connector_id: str) -> 
 )
 def connector_ingest(
     connector_id: str,
-    body: IngestRequest,
+    body: ConnectorIngestRequest,
     request: Request,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     db: Session = Depends(tenant_db_required),

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import difflib
+import os
 import sys
 from pathlib import Path
 
@@ -16,7 +17,15 @@ def main() -> int:
         return 1
 
     expected = CONTRACT_PATH.read_text(encoding="utf-8")
-    generated = render_openapi(generate_openapi())
+    prior_env = os.environ.get("FG_ENV")
+    os.environ["FG_ENV"] = "prod"
+    try:
+        generated = render_openapi(generate_openapi())
+    finally:
+        if prior_env is None:
+            os.environ.pop("FG_ENV", None)
+        else:
+            os.environ["FG_ENV"] = prior_env
 
     if expected != generated:
         diff = difflib.unified_diff(

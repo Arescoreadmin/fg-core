@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Mapping, Optional
 from urllib.parse import urlsplit
+from api.config.env import is_production_env
 from api.security.outbound_policy import (
     MAX_REDIRECT_HOPS,
     OutboundPolicyError,
@@ -27,7 +28,6 @@ from api.security.outbound_policy import (
     sanitize_header_value,
     sanitize_outbound_headers,
     sanitize_url_for_log,
-    validate_target as _validate_target,
 )
 
 log = logging.getLogger("frostgate.security.alerts")
@@ -611,12 +611,18 @@ def is_ip_blocked(ip_raw: str) -> bool:
 
 def validate_target(url: str) -> tuple[str, list[str]]:
     """Compatibility wrapper that preserves monkeypatch points in tests."""
+    cleaned = str(url)
     try:
-        normalized_url, _ = _validate_target(url)
-    except OutboundPolicyError as exc:
-        raise SSRFBlocked(str(exc)) from exc
-    # Keep explicit resolver calls for deterministic test hooks.
-    host = urlsplit(normalized_url).hostname
+        parsed = urlsplit(cleaned)
+    except Exception as exc:
+        raise SSRFBlocked("malformed_url") from exc
+    if parsed.scheme not in {"http", "https"}:
+        raise SSRFBlocked("scheme_not_allowed")
+    if is_production_env() and parsed.scheme != "https":
+        raise SSRFBlocked("https_required_in_production")
+    if parsed.username is not None or parsed.password is not None:
+        raise SSRFBlocked("userinfo_not_allowed")
+    host = parsed.hostname
     if not host:
         raise SSRFBlocked("host_required")
     ips = resolve_host(host)
@@ -625,4 +631,5 @@ def validate_target(url: str) -> tuple[str, list[str]]:
     rebound_ips = resolve_host(host)
     if rebound_ips != ips:
         raise SSRFBlocked("dns_rebinding_detected")
+    normalized_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path or '/'}"
     return normalized_url, ips

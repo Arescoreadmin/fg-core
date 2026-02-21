@@ -24,10 +24,9 @@ from api.security_alerts import (
     MAX_REDIRECT_HOPS,
     sanitize_header_value,
     sanitize_url_for_log,
+    validate_target,
 )
 from api.security.outbound_policy import (
-    OutboundPolicyError,
-    safe_post_with_redirects,
     sanitize_outbound_headers,
 )
 
@@ -321,17 +320,31 @@ class WebhookDeliveryService:
             "X-Alert-Type": alert_type,
             "X-Alert-Severity": severity,
         }
-        try:
-            return await safe_post_with_redirects(
-                client,
-                url,
-                json_body=payload,
+        current_url = url
+        for hop in range(MAX_REDIRECT_HOPS + 1):
+            normalized_url, _ = validate_target(current_url)
+            response = await client.post(
+                normalized_url,
+                json=payload,
                 headers=sanitize_outbound_headers(headers),
                 timeout=self.timeout,
-                max_redirect_hops=MAX_REDIRECT_HOPS,
+                follow_redirects=False,
             )
-        except OutboundPolicyError as exc:
-            raise SSRFBlocked(str(exc)) from exc
+            status_code = getattr(response, "status_code", None)
+            if status_code is None:
+                status_code = getattr(response, "status", 0)
+            if 300 <= status_code < 400:
+                location = (getattr(response, "headers", {}) or {}).get("Location")
+                if not location:
+                    raise SSRFBlocked("redirect_location_missing")
+                if hop >= MAX_REDIRECT_HOPS:
+                    raise SSRFBlocked("redirect_hop_limit_exceeded")
+                from urllib.parse import urljoin
+
+                current_url = urljoin(normalized_url, location)
+                continue
+            return response
+        raise SSRFBlocked("redirect_hop_limit_exceeded")
 
 
 # Singleton delivery service instance
