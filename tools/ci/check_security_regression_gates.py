@@ -417,6 +417,78 @@ def check_oidc_parse_id_token_not_demo(failures: list[str]) -> None:
             )
 
 
+def check_outbound_clients_follow_redirects_false(failures: list[str]) -> None:
+    """FG-AUD-008/009/010: All internal outbound HTTP clients must set follow_redirects=False.
+
+    Non-vacuity proof: removing follow_redirects=False from any patched call site and
+    re-running this gate will produce a failure for that file.
+    """
+    import re as _re
+
+    check_sites = [
+        ("admin_gateway/audit.py", r"httpx\.AsyncClient\("),
+        ("admin_gateway/routers/admin.py", r"httpx\.AsyncClient\("),
+        ("engine/pipeline.py", r"httpx\.Client\("),
+    ]
+    for path, client_pattern in check_sites:
+        body = _read(path)
+        for match in _re.finditer(client_pattern, body):
+            start = match.start()
+            ctx = body[start : start + 300]
+            if "follow_redirects" not in ctx:
+                lineno = body[:start].count("\n") + 1
+                failures.append(
+                    f"{path}:{lineno}: httpx client constructed without explicit "
+                    "follow_redirects=False (FG-AUD-008/009/010)"
+                )
+
+
+def check_debug_routes_auth_not_swallowed(failures: list[str]) -> None:
+    """FG-AUD-013: /_debug/routes must not catch HTTPException before auth propagates.
+
+    Non-vacuity proof: re-wrapping require_status_auth in try/except HTTPException
+    and re-running this gate will produce a failure.
+    """
+    import re as _re
+
+    body = _read("api/main.py")
+    fn_match = _re.search(
+        r"def debug_routes\(.*?\).*?:(.*?)(?=\n    @app\.|\n    return app\b|\Z)",
+        body,
+        _re.DOTALL,
+    )
+    if not fn_match:
+        return  # endpoint not present in this build
+
+    fn_body = fn_match.group(1)
+    if _re.search(r"try\s*:\s*\n\s+require_status_auth", fn_body):
+        failures.append(
+            "api/main.py: debug_routes wraps require_status_auth in try/except — "
+            "auth failures silently return HTTP 200 instead of 401/403 (FG-AUD-013)"
+        )
+
+
+def check_authgate_config_no_dead_public_paths_property(failures: list[str]) -> None:
+    """FG-AUD-014: AuthGateConfig must not have a dead @property public_paths.
+
+    Non-vacuity proof: re-adding the @property public_paths to AuthGateConfig and
+    re-running this gate will produce a failure.
+    """
+    body = _read("api/middleware/auth_gate.py")
+    tree = _parse("api/middleware/auth_gate.py")
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "public_paths":
+            for decorator in node.decorator_list:
+                if isinstance(decorator, ast.Name) and decorator.id == "property":
+                    failures.append(
+                        f"api/middleware/auth_gate.py:{node.lineno}: dead AuthGateConfig.public_paths "
+                        "@property found — _is_public() uses public_paths_exact/prefix fields "
+                        "only (FG-AUD-014)"
+                    )
+                    break
+
+
 def main() -> int:
     failures: list[str] = []
     check_no_placeholder_security_tests(failures)
@@ -430,13 +502,17 @@ def main() -> int:
     check_no_unknown_tenant_fallback(failures)
     check_enterprise_extension_surfaces(failures)
     check_required_new_governance_assets(failures)
-    # FG-AUD-001/002/003/005/006/007 guards (added by security audit).
+    # FG-AUD-001/002/003/005/006/007 guards (added by security audit round 1).
     check_federation_jwt_signature_verification(failures)
     check_federation_ssrf_guard(failures)
     check_oidc_follow_redirects_disabled(failures)
     check_rate_limiter_not_hardcoded_fail_open(failures)
     check_authgate_unmatched_not_fail_open(failures)
     check_oidc_parse_id_token_not_demo(failures)
+    # FG-AUD-008/009/010/013/014 guards (added by security audit round 2).
+    check_outbound_clients_follow_redirects_false(failures)
+    check_debug_routes_auth_not_swallowed(failures)
+    check_authgate_config_no_dead_public_paths_property(failures)
 
     if failures:
         print("security regression gates: FAILED")

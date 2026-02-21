@@ -716,9 +716,11 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     @app.get("/_debug/routes")
     async def debug_routes(request: Request) -> dict:
-        try:
-            require_status_auth(request)
+        # FG-AUD-013: auth exceptions must propagate as 4xx, not be swallowed into HTTP 200.
+        # require_status_auth raises HTTPException — let it propagate so monitoring sees 401/403.
+        require_status_auth(request)
 
+        try:
             out = []
             for r in request.app.router.routes:
                 path = getattr(r, "path", None)
@@ -740,8 +742,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
             out.sort(key=lambda x: (x["path"], ",".join(x["methods"])))
             return {"ok": True, "error": None, "routes": out}
-        except HTTPException as e:
-            return {"ok": False, "error": f"{e.status_code}: {e.detail}", "routes": []}
         except Exception as e:
             return {"ok": False, "error": f"{type(e).__name__}: {e}", "routes": []}
 

@@ -53,7 +53,11 @@ class AuditLogger:
         if not self.core_base_url or not self.core_api_key:
             return
         if self._client is None:
-            self._client = httpx.AsyncClient(base_url=self.core_base_url, timeout=5.0)
+            # FG-AUD-008: follow_redirects=False prevents SSRF via redirect chain
+            # even when core_base_url is config-controlled.
+            self._client = httpx.AsyncClient(
+                base_url=self.core_base_url, timeout=5.0, follow_redirects=False
+            )
         try:
             await self._client.post(
                 "/admin/audit",

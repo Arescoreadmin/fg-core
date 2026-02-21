@@ -312,7 +312,8 @@ def _evaluate_policy(inp: PipelineInput) -> PolicyDecision:
     url = f"{opa_url.rstrip('/')}{opa_path}"
 
     try:
-        with httpx.Client(timeout=timeout) as client:
+        # FG-AUD-010: follow_redirects=False prevents SSRF even for config-controlled OPA URL.
+        with httpx.Client(timeout=timeout, follow_redirects=False) as client:
             resp = client.post(url, json=payload)
             resp.raise_for_status()
         data = resp.json().get("result", {})

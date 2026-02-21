@@ -120,7 +120,8 @@ async def _proxy_to_core(
         "X-Request-Id": getattr(request.state, "request_id", ""),
     }
 
-    async with httpx.AsyncClient(base_url=base_url, timeout=15.0) as client:
+    # FG-AUD-009: follow_redirects=False prevents SSRF via redirect chain in proxy path.
+    async with httpx.AsyncClient(base_url=base_url, timeout=15.0, follow_redirects=False) as client:
         response = await client.request(
             method,
             path,
@@ -155,8 +156,11 @@ async def _proxy_to_core_raw(
 
     # FG-AUD-004: timeout=None removed.  Streaming exports use a generous read
     # timeout (300 s) but are bounded to prevent indefinitely hung connections.
+    # FG-AUD-009: follow_redirects=False prevents SSRF via redirect chain.
     _export_timeout = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
-    async with httpx.AsyncClient(base_url=base_url, timeout=_export_timeout) as client:
+    async with httpx.AsyncClient(
+        base_url=base_url, timeout=_export_timeout, follow_redirects=False
+    ) as client:
         async with client.stream(
             method,
             path,

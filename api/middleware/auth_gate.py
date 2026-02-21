@@ -70,19 +70,9 @@ class AuthGateConfig:
     header_authgate: str = "x-fg-authgate"
     header_gate: str = "x-fg-gate"
     header_path: str = "x-fg-path"
-
-    @property
-    def public_paths(self) -> tuple[str, ...]:
-        return (
-            "/health",
-            "/health/live",
-            "/health/ready",
-            "/ui",
-            "/ui/token",
-            "/openapi.json",
-            "/docs",
-            "/redoc",
-        )
+    # FG-AUD-014: removed dead `public_paths` property — _is_public() uses
+    # public_paths_exact and public_paths_prefix fields only. The property
+    # was never called and listed a stale, diverged set of paths.
 
 
 def _is_public(path: str, config: AuthGateConfig) -> bool:
