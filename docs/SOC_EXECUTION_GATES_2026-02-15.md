@@ -258,6 +258,31 @@ make fg-fast
 make fg-fast-full
 ```
 
+---
+
+## SOC Review Sync Update Log
+
+### 2026-02-21 — Egress policy + CI guard refresh
+
+Critical-path files updated in this change set:
+
+- `api/security/outbound_policy.py`
+- `api/security_alerts.py`
+- `tools/ci/check_plane_boundaries.py`
+- `tools/ci/check_security_exception_swallowing.py`
+- `tools/ci/route_inventory.json`
+
+SOC review outcome:
+
+- Egress policy logic was centralized and consumed by security alert + tripwire paths.
+- New CI guards were added for plane-boundary imports and forbidden exception swallowing in security code.
+- Route inventory updates were reviewed for connector ownership drift only; no intentional scope/tenant weakening accepted.
+
+Gate impact:
+
+- `soc-review-sync` satisfied by this documentation update.
+- No SOC invariant gate exceptions were added.
+
 Direct invocation:
 
 ```

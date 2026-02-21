@@ -82,22 +82,22 @@ def get_policy(
     tenant_id = require_bound_tenant(request)
     state = _load_policy_state(db, tenant_id)
 
+    if state is None:
+        raise _error(403, "CONNECTOR_POLICY_MISSING", "policy state missing")
+
     # If policy state exists and points to a non-existent policy hash, fail closed.
     # Your test inserts config_hash='missing' and expects 403.
-    if state is not None:
-        cfg = (state.config_hash or "").strip()
-        if cfg and cfg != "default":
-            # "missing" should be denied. We treat any non-default as unavailable for now.
-            raise _error(
-                403, "CONNECTOR_POLICY_MISSING", "policy config hash not found"
-            )
+    cfg = (state.config_hash or "").strip()
+    if cfg and cfg != "default":
+        # "missing" should be denied. We treat any non-default as unavailable for now.
+        raise _error(403, "CONNECTOR_POLICY_MISSING", "policy config hash not found")
 
     # Minimal non-leaky response. Tests only assert status_code for this endpoint.
     # Keep it boring.
     return {
         "tenant_id": tenant_id,
-        "policy": (state.config_hash if state is not None else "default") or "default",
-        "enabled": bool(state.enabled) if state is not None else True,
+        "policy": state.config_hash or "default",
+        "enabled": bool(state.enabled),
     }
 
 

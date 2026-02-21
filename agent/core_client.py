@@ -348,6 +348,7 @@ class CoreClient:
                 json=payload,
                 params=params,
                 timeout=self.timeout,
+                allow_redirects=False,
             )
         finally:
             if created_session is not None:

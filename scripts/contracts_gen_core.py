@@ -6,6 +6,7 @@ from __future__ import annotations
 # =============================================================================
 
 from dataclasses import dataclass
+import os
 import warnings
 from pathlib import Path
 from typing import Any, Dict
@@ -115,7 +116,21 @@ def generate_openapi(settings: ContractSettings | None = None) -> Dict[str, Any]
     from api.main import build_contract_app  # delayed import by design
 
     effective = settings or ContractSettings()
-    app = build_contract_app(settings=effective)
+    prior_env = os.environ.get("FG_ENV")
+    prior_admin = os.environ.get("FG_ADMIN_ENABLED")
+    os.environ["FG_ENV"] = "prod"
+    os.environ["FG_ADMIN_ENABLED"] = "0"
+    try:
+        app = build_contract_app(settings=effective)
+    finally:
+        if prior_env is None:
+            os.environ.pop("FG_ENV", None)
+        else:
+            os.environ["FG_ENV"] = prior_env
+        if prior_admin is None:
+            os.environ.pop("FG_ADMIN_ENABLED", None)
+        else:
+            os.environ["FG_ADMIN_ENABLED"] = prior_admin
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=DeprecationWarning)
         openapi = normalize_openapi(app.openapi())

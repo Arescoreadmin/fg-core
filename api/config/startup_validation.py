@@ -276,6 +276,7 @@ class StartupValidator:
         self._check_opa_enforcement(report)
         self._check_nats_auth(report)
         self._check_migrations_required(report)
+        self._check_connectors_router_wiring(report)
 
         return report
 
@@ -563,6 +564,26 @@ class StartupValidator:
                 passed=True,
                 message=f"CORS origins: {cors_origins[:50]}...",
                 severity="info",
+            )
+
+    def _check_connectors_router_wiring(self, report: StartupValidationReport) -> None:
+        """Ensure connectors control-plane routes are present when module imports succeed."""
+        try:
+            from api.connectors_control_plane import assert_connectors_router_wired
+
+            assert_connectors_router_wired()
+            report.add(
+                name="connectors_router_wiring",
+                passed=True,
+                message="Connectors control-plane router wiring verified.",
+                severity="info",
+            )
+        except Exception as exc:
+            report.add(
+                name="connectors_router_wiring",
+                passed=False,
+                message=f"Connectors control-plane router wiring failed: {exc}",
+                severity="error" if self.is_production else "warning",
             )
 
     def _check_security_headers(self, report: StartupValidationReport) -> None:

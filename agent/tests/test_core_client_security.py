@@ -160,3 +160,29 @@ def test_http_transport_only_mounted_with_override(monkeypatch):
     monkeypatch.setenv("FG_CORE_BASE_URL", "http://core.example")
     client2 = CoreClient.from_env()
     assert "http://" in client2._session.adapters
+
+
+def test_request_never_follows_redirects(monkeypatch):
+    monkeypatch.setattr(
+        "socket.getaddrinfo", lambda *args, **kwargs: [(2, 1, 6, "", ("8.8.8.8", 0))]
+    )
+    client = CoreClient("https://core.example", "k", "t", "a", "2025-01-01")
+
+    class _Resp:
+        status_code = 200
+        content = b"{}"
+
+        @staticmethod
+        def json() -> dict:
+            return {}
+
+    captured: dict[str, object] = {}
+
+    def fake_request(*args, **kwargs):
+        captured.update(kwargs)
+        return _Resp()
+
+    monkeypatch.setattr(client._session, "request", fake_request)
+    client._request("GET", "/v1/agent/commands")
+
+    assert captured.get("allow_redirects") is False

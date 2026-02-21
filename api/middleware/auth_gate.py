@@ -124,7 +124,10 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
             resp = await call_next(request)
             return self._stamp(resp, request, "unmatched")
 
-        got = _extract_key(request, request.headers.get("X-API-Key"))
+        raw_header_key = request.headers.get("X-API-Key")
+        got = _extract_key(request, raw_header_key)
+        if not got and raw_header_key and raw_header_key.strip():
+            got = raw_header_key.strip()
         if not got:
             return self._stamp(
                 JSONResponse(

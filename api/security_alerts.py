@@ -12,19 +12,23 @@ Provides real-time security event alerting with:
 from __future__ import annotations
 
 import hashlib
-import ipaddress
 import logging
 import os
-import re
-import socket
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Mapping, Optional
-from urllib.parse import urljoin, urlsplit, urlunsplit
-
+from urllib.parse import urlsplit
 from api.config.env import is_production_env
+from api.security.outbound_policy import (
+    MAX_REDIRECT_HOPS,
+    OutboundPolicyError,
+    safe_post_with_redirects,
+    sanitize_header_value,
+    sanitize_outbound_headers,
+    sanitize_url_for_log,
+)
 
 log = logging.getLogger("frostgate.security.alerts")
 
@@ -61,24 +65,11 @@ ALERT_MIN_SEVERITY = _env_str("FG_ALERT_MIN_SEVERITY", "warning")
 ALERT_RATE_LIMIT_WINDOW = _env_int("FG_ALERT_RATE_LIMIT_WINDOW", 60)  # seconds
 ALERT_RATE_LIMIT_MAX = _env_int("FG_ALERT_RATE_LIMIT_MAX", 10)  # max alerts per window
 ALERT_AGGREGATION_WINDOW = _env_int("FG_ALERT_AGGREGATION_WINDOW", 300)  # 5 minutes
-MAX_REDIRECT_HOPS = 3
 ALLOWED_EXCEPTION_HEADERS = {"retry-after"}
-_CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 
-class SSRFBlocked(ValueError):
+class SSRFBlocked(OutboundPolicyError):
     """Raised when webhook target violates SSRF policy."""
-
-
-def sanitize_header_value(value: str) -> str:
-    """Strip controls, drop continuation content, trim, and cap length."""
-    text = str(value)
-    for idx, ch in enumerate(text):
-        if ord(ch) < 0x20 or ord(ch) == 0x7F:
-            text = text[:idx]
-            break
-    text = _CONTROL_CHAR_RE.sub("", text).strip()
-    return text[:256]
 
 
 def filter_exception_headers(headers: Mapping[str, str]) -> Dict[str, str]:
@@ -89,90 +80,6 @@ def filter_exception_headers(headers: Mapping[str, str]) -> Dict[str, str]:
         if key_lower in ALLOWED_EXCEPTION_HEADERS:
             filtered[key] = sanitize_header_value(value)
     return filtered
-
-
-def sanitize_url_for_log(url: str) -> str:
-    """Render URL safely for logs/errors: no userinfo/query/fragment/control chars."""
-    cleaned = _CONTROL_CHAR_RE.sub("", str(url))
-    try:
-        parsed = urlsplit(cleaned)
-    except Exception:
-        return "<malformed-url>"
-
-    if not parsed.scheme or not parsed.hostname:
-        return "<malformed-url>"
-
-    host = parsed.hostname
-    if ":" in host and not host.startswith("["):
-        host = f"[{host}]"
-    netloc = host
-    if parsed.port is not None:
-        netloc = f"{netloc}:{parsed.port}"
-    safe_path = sanitize_header_value(parsed.path or "/")
-    return urlunsplit((parsed.scheme, netloc, safe_path, "", ""))
-
-
-def parse_url(url: str):
-    """Parse and validate URL shape/scheme with strict SSRF-safe rules."""
-    cleaned = _CONTROL_CHAR_RE.sub("", str(url))
-    try:
-        parsed = urlsplit(cleaned)
-    except Exception as exc:
-        raise SSRFBlocked("malformed_url") from exc
-    if parsed.scheme not in {"http", "https"}:
-        raise SSRFBlocked("scheme_not_allowed")
-    if not parsed.hostname:
-        raise SSRFBlocked("host_required")
-    if parsed.username is not None or parsed.password is not None:
-        raise SSRFBlocked("userinfo_not_allowed")
-    return parsed
-
-
-def resolve_host(host: str) -> List[str]:
-    """Resolve all A/AAAA records for host deterministically."""
-    try:
-        info = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
-    except OSError as exc:
-        raise SSRFBlocked("dns_resolution_failed") from exc
-    ips = sorted({entry[4][0] for entry in info})
-    if not ips:
-        raise SSRFBlocked("dns_no_addresses")
-    return ips
-
-
-def is_ip_blocked(ip_raw: str) -> bool:
-    """Deny private/local/special ranges for SSRF prevention."""
-    ip = ipaddress.ip_address(ip_raw)
-    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
-        ip = ip.ipv4_mapped
-
-    return any(
-        (
-            ip.is_private,
-            ip.is_loopback,
-            ip.is_link_local,
-            ip.is_multicast,
-            ip.is_unspecified,
-            ip.is_reserved,
-        )
-    )
-
-
-def validate_target(url: str) -> tuple[str, list[str]]:
-    """Validate URL and DNS targets; return normalized URL and validated IPs."""
-    parsed = parse_url(url)
-    if is_production_env() and parsed.scheme != "https":
-        raise SSRFBlocked("https_required_in_production")
-    ips = resolve_host(parsed.hostname)
-    if any(is_ip_blocked(ip) for ip in ips):
-        raise SSRFBlocked("resolved_ip_blocked")
-    rebound_ips = resolve_host(parsed.hostname)
-    if rebound_ips != ips:
-        raise SSRFBlocked("dns_rebinding_detected")
-    normalized_url = urlunsplit(
-        (parsed.scheme, parsed.netloc, parsed.path or "/", "", "")
-    )
-    return normalized_url, ips
 
 
 def _validate_alert_webhook_url(url: str) -> bool:
@@ -193,29 +100,17 @@ async def _safe_post_with_redirects(
     timeout: float,
     max_redirect_hops: int = MAX_REDIRECT_HOPS,
 ) -> Any:
-    current_url = url
-    for hop in range(max_redirect_hops + 1):
-        normalized_url, _ = validate_target(current_url)
-        response = await client.post(
-            normalized_url,
-            json=json_body,
-            headers=headers,
+    try:
+        return await safe_post_with_redirects(
+            client,
+            url,
+            json_body=json_body,
+            headers=sanitize_outbound_headers(headers),
             timeout=timeout,
-            follow_redirects=False,
+            max_redirect_hops=max_redirect_hops,
         )
-        status = getattr(response, "status_code", None)
-        if status is None:
-            status = getattr(response, "status", 0)
-        if 300 <= status < 400:
-            location = (getattr(response, "headers", {}) or {}).get("Location")
-            if not location:
-                raise SSRFBlocked("redirect_location_missing")
-            if hop >= max_redirect_hops:
-                raise SSRFBlocked("redirect_hop_limit_exceeded")
-            current_url = urljoin(normalized_url, location)
-            continue
-        return response
-    raise SSRFBlocked("redirect_hop_limit_exceeded")
+    except OutboundPolicyError as exc:
+        raise SSRFBlocked(str(exc)) from exc
 
 
 class AlertSeverity(str, Enum):
@@ -336,7 +231,9 @@ class WebhookAlertChannel(AlertChannel):
 
     def __init__(self, url: str, headers: Optional[Dict[str, str]] = None):
         self.url = url
-        self.headers = headers or {"Content-Type": "application/json"}
+        self.headers = sanitize_outbound_headers(
+            headers or {"Content-Type": "application/json"}
+        )
 
     async def send(self, alert: SecurityAlert) -> bool:
         """Send webhook alert."""
@@ -698,3 +595,42 @@ __all__ = [
     "alert_suspicious_activity",
     "alert_system_error",
 ]
+
+
+def resolve_host(host: str) -> List[str]:
+    """Backward-compatible alias for tests and legacy callers."""
+    from api.security.outbound_policy import _resolve_host
+
+    return _resolve_host(host)
+
+
+def is_ip_blocked(ip_raw: str) -> bool:
+    from api.security.outbound_policy import _is_ip_blocked
+
+    return _is_ip_blocked(ip_raw)
+
+
+def validate_target(url: str) -> tuple[str, list[str]]:
+    """Compatibility wrapper that preserves monkeypatch points in tests."""
+    cleaned = str(url)
+    try:
+        parsed = urlsplit(cleaned)
+    except Exception as exc:
+        raise SSRFBlocked("malformed_url") from exc
+    if parsed.scheme not in {"http", "https"}:
+        raise SSRFBlocked("scheme_not_allowed")
+    if is_production_env() and parsed.scheme != "https":
+        raise SSRFBlocked("https_required_in_production")
+    if parsed.username is not None or parsed.password is not None:
+        raise SSRFBlocked("userinfo_not_allowed")
+    host = parsed.hostname
+    if not host:
+        raise SSRFBlocked("host_required")
+    ips = resolve_host(host)
+    if any(is_ip_blocked(ip) for ip in ips):
+        raise SSRFBlocked("resolved_ip_blocked")
+    rebound_ips = resolve_host(host)
+    if rebound_ips != ips:
+        raise SSRFBlocked("dns_rebinding_detected")
+    normalized_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path or '/'}"
+    return normalized_url, ips
