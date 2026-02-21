@@ -21,5 +21,7 @@ def test_startup_validation_fails_when_connectors_router_unwired(monkeypatch):
 
     monkeypatch.setattr(ccp.router, "routes", [])
 
-    with pytest.raises(RuntimeError, match="Connectors control-plane router wiring failed"):
+    with pytest.raises(
+        RuntimeError, match="Connectors control-plane router wiring failed"
+    ):
         validate_startup_config(fail_on_error=True, log_results=False)

@@ -82,7 +82,6 @@ def filter_exception_headers(headers: Mapping[str, str]) -> Dict[str, str]:
     return filtered
 
 
-
 def _validate_alert_webhook_url(url: str) -> bool:
     """Validate webhook URL to reduce SSRF risk."""
     try:
@@ -596,6 +595,8 @@ __all__ = [
     "alert_suspicious_activity",
     "alert_system_error",
 ]
+
+
 def resolve_host(host: str) -> List[str]:
     """Backward-compatible alias for tests and legacy callers."""
     from api.security.outbound_policy import _resolve_host

@@ -105,7 +105,9 @@ def validate_target(url: str, *, allow_private: bool = False) -> tuple[str, list
     rebound_ips = _resolve_host(parsed.hostname)
     if rebound_ips != ips:
         raise OutboundPolicyError("dns_rebinding_detected")
-    normalized_url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path or "/", "", ""))
+    normalized_url = urlunsplit(
+        (parsed.scheme, parsed.netloc, parsed.path or "/", "", "")
+    )
     return normalized_url, ips
 
 

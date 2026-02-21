@@ -30,8 +30,6 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-
-
 def _set_default_policy_for_tenant(tenant_id: str) -> None:
     SessionLocal = get_sessionmaker()
     with SessionLocal() as db:
@@ -47,6 +45,7 @@ def _set_default_policy_for_tenant(tenant_id: str) -> None:
             {"tenant_id": tenant_id},
         )
         db.commit()
+
 
 def _contains_sensitive_keys(obj: object) -> bool:
     if isinstance(obj, dict):
@@ -68,7 +67,11 @@ def test_ingest_rejects_tenant_id_override_input() -> None:
         resp = client.post(
             "/internal/connectors/slack/ingest",
             headers={"x-api-key": key},
-            json={"tenant_id": "tenant-b", "collection_id": "rag-default", "payload": {}},
+            json={
+                "tenant_id": "tenant-b",
+                "collection_id": "rag-default",
+                "payload": {},
+            },
         )
     assert resp.status_code == 422
 
@@ -92,7 +95,9 @@ def test_policy_missing_fail_closed() -> None:
     assert resp.status_code == 403
 
 
-def test_connector_cred_aad_binds_tenant_and_connector(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_connector_cred_aad_binds_tenant_and_connector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FG_CONNECTOR_KEK_CURRENT_VERSION", "v1")
     monkeypatch.setenv(
         "FG_CONNECTOR_KEK_V1", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
@@ -185,7 +190,9 @@ def test_dispatch_deny_decision_has_deterministic_error_code() -> None:
     assert resp.json()["detail"] == "CONNECTOR_DISABLED"
 
 
-def test_creds_encrypted_and_kek_missing_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_creds_encrypted_and_kek_missing_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("FG_CONNECTOR_KEK_CURRENT_VERSION", "v1")
     monkeypatch.setenv(
         "FG_CONNECTOR_KEK_V1", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
@@ -204,7 +211,9 @@ def test_creds_encrypted_and_kek_missing_fail_closed(monkeypatch: pytest.MonkeyP
 
     monkeypatch.delenv("FG_CONNECTOR_KEK_V1", raising=False)
     with SessionLocal() as db:
-        with pytest.raises(RuntimeError, match="connector KEK missing|missing KEK version"):
+        with pytest.raises(
+            RuntimeError, match="connector KEK missing|missing KEK version"
+        ):
             load_active_secret(
                 db,
                 tenant_id="tenant-a",
@@ -220,7 +229,6 @@ def test_rls_expectations_present() -> None:
     assert "ENABLE ROW LEVEL SECURITY" in sql
     assert "connectors_credentials_tenant_isolation" in sql
     assert "connectors_audit_ledger_tenant_isolation" in sql
-
 
 
 def test_connector_routes_not_public_paths() -> None:

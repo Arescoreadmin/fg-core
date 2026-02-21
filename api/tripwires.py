@@ -179,7 +179,9 @@ class WebhookDeliveryService:
             try:
                 client = await self._get_http_client()
 
-                response = await self._safe_post(client, url, payload, alert_type, severity)
+                response = await self._safe_post(
+                    client, url, payload, alert_type, severity
+                )
                 status_code = getattr(response, "status_code", None)
                 if status_code is None:
                     status_code = getattr(response, "status", 0)
