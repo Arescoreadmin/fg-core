@@ -153,7 +153,10 @@ async def _proxy_to_core_raw(
         "X-Request-Id": getattr(request.state, "request_id", ""),
     }
 
-    async with httpx.AsyncClient(base_url=base_url, timeout=None) as client:
+    # FG-AUD-004: timeout=None removed.  Streaming exports use a generous read
+    # timeout (300 s) but are bounded to prevent indefinitely hung connections.
+    _export_timeout = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
+    async with httpx.AsyncClient(base_url=base_url, timeout=_export_timeout) as client:
         async with client.stream(
             method,
             path,

@@ -259,6 +259,164 @@ def check_required_new_governance_assets(failures: list[str]) -> None:
         if not (REPO / rel).exists():
             failures.append(f"missing required governance asset: {rel}")
 
+def check_federation_jwt_signature_verification(failures: list[str]) -> None:
+    """FG-AUD-001: federation service must verify JWT signatures cryptographically.
+
+    The previous implementation decoded base64 payload only — not acceptable in production.
+    """
+    body = _read("services/federation_extension/service.py")
+
+    forbidden_markers = [
+        "simplified implementation for demonstration",
+        "without signature verification",
+        "In production, you should verify",
+    ]
+    for marker in forbidden_markers:
+        if marker.lower() in body.lower():
+            failures.append(
+                f"services/federation_extension/service.py contains forbidden marker "
+                f"indicating missing JWT signature verification: {marker!r}"
+            )
+
+    required_markers = ["_verify_signature", "pyjwt", "InvalidTokenError"]
+    for marker in required_markers:
+        if marker not in body:
+            failures.append(
+                f"services/federation_extension/service.py missing JWT signature "
+                f"verification marker: {marker!r}"
+            )
+
+
+def check_federation_ssrf_guard(failures: list[str]) -> None:
+    """FG-AUD-002: JWKS URL must be derived from config, never from token iss claim."""
+    body = _read("services/federation_extension/service.py")
+
+    if "urllib.request.urlopen(url, timeout=5)" in body:
+        failures.append(
+            "services/federation_extension/service.py: bare urllib.request.urlopen "
+            "without SSRF guard detected (FG-AUD-002)"
+        )
+
+    required_ssrf_markers = [
+        "_assert_safe_federation_url",
+        "_fetch_jwks_no_redirect",
+        "_NoRedirect",
+        "federation_ssrf_blocked",
+        "FG_FEDERATION_ISSUER",
+    ]
+    for marker in required_ssrf_markers:
+        if marker not in body:
+            failures.append(
+                f"services/federation_extension/service.py missing SSRF guard "
+                f"marker: {marker!r}"
+            )
+
+
+def check_oidc_follow_redirects_disabled(failures: list[str]) -> None:
+    """FG-AUD-005: All outbound OIDC/JWKS HTTP calls must set follow_redirects=False."""
+    import re
+
+    for path in ("admin_gateway/auth.py", "admin_gateway/auth/oidc.py"):
+        body = _read(path)
+        bare = re.findall(r"httpx\.AsyncClient\(\)", body)
+        if bare:
+            failures.append(
+                f"{path}: found {len(bare)} bare httpx.AsyncClient() without "
+                "follow_redirects=False (FG-AUD-005)"
+            )
+        if "follow_redirects=True" in body:
+            failures.append(
+                f"{path}: follow_redirects=True found — OIDC redirects must be disabled"
+            )
+
+
+def check_rate_limiter_not_hardcoded_fail_open(failures: list[str]) -> None:
+    """FG-AUD-007: RedisFirstLimiter must fail closed without explicit FG_RL_FAIL_OPEN=1."""
+    body = _read("agent/app/rate_limit/redis_limiter.py")
+
+    if "return self.fallback.allow" in body and "_fail_open_allowed" not in body:
+        failures.append(
+            "agent/app/rate_limit/redis_limiter.py: memory fallback without "
+            "_fail_open_allowed() guard — rate limiter can fail-open (FG-AUD-007)"
+        )
+
+    required_markers = ["_fail_open_allowed", "FG_RL_FAIL_OPEN", "fail-closed"]
+    for marker in required_markers:
+        if marker not in body:
+            failures.append(
+                f"agent/app/rate_limit/redis_limiter.py missing fail-closed "
+                f"guard marker: {marker!r}"
+            )
+
+
+def check_authgate_unmatched_not_fail_open(failures: list[str]) -> None:
+    """FG-AUD-006: AuthGateMiddleware must not pass unregistered routes without auth."""
+    body = _read("api/middleware/auth_gate.py")
+
+    if '"unmatched"' in body and "unmatched_authed" not in body:
+        failures.append(
+            'api/middleware/auth_gate.py: "unmatched" gate present without '
+            '"unmatched_authed" — unregistered routes bypass auth (FG-AUD-006)'
+        )
+
+    if "unmatched_authed" not in body:
+        failures.append(
+            'api/middleware/auth_gate.py: missing "unmatched_authed" gate stamp — '
+            "unregistered routes must require authentication (FG-AUD-006)"
+        )
+
+
+def check_oidc_parse_id_token_not_demo(failures: list[str]) -> None:
+    """FG-AUD-003: parse_id_token_claims must not be the insecure demo implementation.
+
+    The forbidden markers below specifically match code artefacts of the insecure
+    original implementation.  They are different from documentation that *describes*
+    the old broken behaviour (which is acceptable in comments/docstrings referencing
+    the fix).
+    """
+    body = _read("admin_gateway/auth/oidc.py")
+
+    tree = _parse("admin_gateway/auth/oidc.py")
+
+    # Find the parse_id_token_claims function body and check for the old insecure patterns.
+    insecure_code_patterns = [
+        # The exact comment that appeared in the original insecure implementation.
+        "Note: In production, you should verify the JWT signature using the JWKS.",
+        "This is a simplified implementation for demonstration.",
+        # Old implementation: return {} on any exception — swallows auth errors.
+        "return {}",
+    ]
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "parse_id_token_claims":
+            # Check the function source for insecure patterns by re-reading just those lines.
+            import linecache
+            func_lines = body.splitlines()[node.lineno - 1:node.end_lineno]
+            func_src = "\n".join(func_lines)
+            if "return {}" in func_src:
+                failures.append(
+                    "admin_gateway/auth/oidc.py: parse_id_token_claims returns empty dict {} "
+                    "on error — silently swallows auth failures (FG-AUD-003)"
+                )
+            if (
+                "base64.urlsafe_b64decode" in func_src
+                and "pyjwt" not in func_src.lower()
+                and "jwt.decode" not in func_src
+            ):
+                failures.append(
+                    "admin_gateway/auth/oidc.py: parse_id_token_claims decodes base64 "
+                    "without JWT signature verification (FG-AUD-003)"
+                )
+            break
+
+    required = ["verify_exp", "verify_iss", "verify_aud", "follow_redirects=False"]
+    for marker in required:
+        if marker not in body:
+            failures.append(
+                f"admin_gateway/auth/oidc.py parse_id_token_claims missing "
+                f"verification marker: {marker!r}"
+            )
+
+
 def main() -> int:
     failures: list[str] = []
     check_no_placeholder_security_tests(failures)
@@ -272,6 +430,13 @@ def main() -> int:
     check_no_unknown_tenant_fallback(failures)
     check_enterprise_extension_surfaces(failures)
     check_required_new_governance_assets(failures)
+    # FG-AUD-001/002/003/005/006/007 guards (added by security audit).
+    check_federation_jwt_signature_verification(failures)
+    check_federation_ssrf_guard(failures)
+    check_oidc_follow_redirects_disabled(failures)
+    check_rate_limiter_not_hardcoded_fail_open(failures)
+    check_authgate_unmatched_not_fail_open(failures)
+    check_oidc_parse_id_token_not_demo(failures)
 
     if failures:
         print("security regression gates: FAILED")

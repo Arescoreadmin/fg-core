@@ -197,7 +197,9 @@ async def _fetch_oidc_config(issuer: str) -> dict:
     if cached:
         return cached
     url = issuer.rstrip("/") + "/.well-known/openid-configuration"
-    async with httpx.AsyncClient(timeout=10) as client:
+    # FG-AUD-005: follow_redirects=False prevents redirect-based SSRF from a
+    # compromised or MITM'd OIDC provider returning a 3xx to an internal endpoint.
+    async with httpx.AsyncClient(follow_redirects=False, timeout=10) as client:
         response = await client.get(url)
         response.raise_for_status()
         data = response.json()
@@ -209,7 +211,8 @@ async def _fetch_jwks(jwks_uri: str) -> dict:
     cached = _JWKS_CACHE.get(jwks_uri)
     if cached:
         return cached
-    async with httpx.AsyncClient(timeout=10) as client:
+    # FG-AUD-005: follow_redirects=False prevents redirect-based SSRF.
+    async with httpx.AsyncClient(follow_redirects=False, timeout=10) as client:
         response = await client.get(jwks_uri)
         response.raise_for_status()
         data = response.json()
@@ -274,7 +277,8 @@ async def exchange_code_for_tokens(code: str) -> dict:
         "client_id": client_id,
         "client_secret": client_secret,
     }
-    async with httpx.AsyncClient(timeout=10) as client:
+    # FG-AUD-005: follow_redirects=False on all outbound OIDC calls.
+    async with httpx.AsyncClient(follow_redirects=False, timeout=10) as client:
         response = await client.post(token_endpoint, data=payload)
         response.raise_for_status()
         return response.json()

@@ -45,8 +45,9 @@ class OIDCProvider:
         """
         discovery_url = f"{issuer.rstrip('/')}/.well-known/openid-configuration"
 
-        async with httpx.AsyncClient() as client:
-            response = await client.get(discovery_url, timeout=10.0)
+        # FG-AUD-005: follow_redirects=False prevents redirect-based SSRF.
+        async with httpx.AsyncClient(follow_redirects=False, timeout=10.0) as client:
+            response = await client.get(discovery_url)
             response.raise_for_status()
             config = response.json()
 
@@ -221,7 +222,8 @@ class OIDCClient:
 
         provider = await self.get_provider()
 
-        async with httpx.AsyncClient() as client:
+        # FG-AUD-005: follow_redirects=False on all outbound OIDC calls.
+        async with httpx.AsyncClient(follow_redirects=False, timeout=10.0) as client:
             response = await client.post(
                 provider.token_endpoint,
                 data={
@@ -232,7 +234,6 @@ class OIDCClient:
                     "client_secret": self.config.oidc_client_secret,
                     "code_verifier": state_data["code_verifier"],
                 },
-                timeout=10.0,
             )
             response.raise_for_status()
             return response.json()
@@ -251,48 +252,110 @@ class OIDCClient:
         if not provider.userinfo_endpoint:
             raise ValueError("Provider does not have userinfo endpoint")
 
-        async with httpx.AsyncClient() as client:
+        # FG-AUD-005: follow_redirects=False on all outbound OIDC calls.
+        async with httpx.AsyncClient(follow_redirects=False, timeout=10.0) as client:
             response = await client.get(
                 provider.userinfo_endpoint,
                 headers={"Authorization": f"Bearer {access_token}"},
-                timeout=10.0,
             )
             response.raise_for_status()
             return response.json()
 
-    def parse_id_token_claims(self, id_token: str) -> dict[str, Any]:
-        """Parse claims from ID token (without signature verification).
+    async def parse_id_token_claims(self, id_token: str) -> dict[str, Any]:
+        """Parse and VERIFY claims from ID token using JWKS signature verification.
 
-        Note: In production, you should verify the JWT signature using the JWKS.
-        This is a simplified implementation for demonstration.
+        FG-AUD-003 patch: previous implementation decoded base64 payload only and
+        explicitly stated it was "a simplified implementation for demonstration"
+        with no signature verification.  This is not acceptable in production.
 
-        Args:
-            id_token: JWT ID token
+        Now:
+          1. Fetches JWKS from the OIDC provider (follow_redirects=False enforced).
+          2. Selects the JWK matching the JWT 'kid' header.
+          3. Cryptographically verifies the signature.
+          4. Validates 'exp', 'aud', and 'iss' claims.
 
-        Returns:
-            Token claims
+        Raises ValueError on any verification failure.  Never returns unverified claims.
         """
-        import base64
         import json
 
         try:
-            # JWT format: header.payload.signature
-            parts = id_token.split(".")
-            if len(parts) != 3:
-                raise ValueError("Invalid JWT format")
+            import jwt as pyjwt
+            from jwt import InvalidTokenError
+            from jwt import algorithms as jwt_algorithms
+        except ImportError as exc:
+            raise RuntimeError(
+                "PyJWT[cryptography] is required for ID token verification. "
+                "Add 'PyJWT[cryptography]' to requirements.txt."
+            ) from exc
 
-            # Decode payload (add padding)
-            payload = parts[1]
-            padding = 4 - len(payload) % 4
-            if padding != 4:
-                payload += "=" * padding
+        provider = await self.get_provider()
 
-            claims = json.loads(base64.urlsafe_b64decode(payload))
-            return claims
+        # FG-AUD-005: follow_redirects=False prevents redirect-based SSRF.
+        async with httpx.AsyncClient(follow_redirects=False, timeout=10.0) as client:
+            resp = await client.get(provider.jwks_uri)
+            resp.raise_for_status()
+            jwks = resp.json()
 
-        except Exception as e:
-            log.warning("Failed to parse ID token: %s", e)
-            return {}
+        try:
+            header = pyjwt.get_unverified_header(id_token)
+        except Exception as exc:
+            raise ValueError(f"Invalid ID token header: {exc}") from exc
+
+        kid = header.get("kid")
+        alg = header.get("alg", "RS256")
+        allowed_algs = {
+            "RS256", "RS384", "RS512",
+            "PS256", "PS384", "PS512",
+            "ES256", "ES384", "ES512",
+        }
+        if alg not in allowed_algs:
+            raise ValueError(f"Unsupported token algorithm: {alg!r}")
+
+        keys = jwks.get("keys", [])
+        candidate = None
+        for k in keys:
+            if kid and k.get("kid") == kid:
+                candidate = k
+                break
+        if candidate is None and not kid and keys:
+            for k in keys:
+                kty = k.get("kty", "")
+                if alg.startswith(("RS", "PS")) and kty == "RSA":
+                    candidate = k
+                    break
+                if alg.startswith("ES") and kty == "EC":
+                    candidate = k
+                    break
+        if candidate is None:
+            raise ValueError("No matching JWK found for token kid")
+
+        try:
+            if alg.startswith(("RS", "PS")):
+                public_key = jwt_algorithms.RSAAlgorithm.from_jwk(json.dumps(candidate))
+            else:
+                public_key = jwt_algorithms.ECAlgorithm.from_jwk(json.dumps(candidate))
+        except (ValueError, KeyError) as exc:
+            raise ValueError(f"Failed to parse JWK: {exc}") from exc
+
+        try:
+            claims = pyjwt.decode(
+                id_token,
+                public_key,
+                algorithms=[alg],
+                audience=self.config.oidc_client_id,
+                issuer=self.config.oidc_issuer,
+                options={
+                    "require": ["exp", "iss", "aud"],
+                    "verify_exp": True,
+                    "verify_iss": True,
+                    "verify_aud": True,
+                },
+            )
+        except InvalidTokenError as exc:
+            log.warning("ID token signature verification failed: %s", exc)
+            raise ValueError(f"Invalid ID token: {exc}") from exc
+
+        return claims
 
     def extract_scopes_from_claims(self, claims: dict[str, Any]) -> Set[str]:
         """Extract admin scopes from OIDC claims.
@@ -345,9 +408,9 @@ class OIDCClient:
         Returns:
             New Session object
         """
-        # Parse ID token claims
+        # Parse and VERIFY ID token claims (FG-AUD-003: now async + signature-verified).
         id_token = tokens.get("id_token", "")
-        claims = self.parse_id_token_claims(id_token) if id_token else {}
+        claims = await self.parse_id_token_claims(id_token) if id_token else {}
 
         # Try to get additional info from userinfo
         access_token = tokens.get("access_token")

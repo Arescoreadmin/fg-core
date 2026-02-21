@@ -121,8 +121,38 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
             return self._stamp(resp, request, "public")
 
         if not _route_is_registered(request):
+            # FG-AUD-006: Previously this passed unregistered routes through without
+            # authentication (fail-open).  FastAPI will return 404 for unknown paths,
+            # but if any middleware further down the stack intercepts the request the
+            # auth gate would have been bypassed.  Now we apply the same auth check
+            # for unregistered routes so the gate is always fail-closed.
+            # The 404 from FastAPI is still returned; we just ensure a valid key is
+            # presented first (prevents auth-bypass for misconfigured routers).
+            got = _extract_key(request, request.headers.get("X-API-Key"))
+            if not got:
+                return self._stamp(
+                    JSONResponse(
+                        status_code=401,
+                        content={"detail": "Invalid or missing API key"},
+                    ),
+                    request,
+                    "denied_missing_key_unmatched",
+                )
+            result = verify_api_key_detailed(raw=got, request=request)
+            if not result.valid:
+                return self._stamp(
+                    JSONResponse(
+                        status_code=401,
+                        content={"detail": "Invalid or missing API key"},
+                    ),
+                    request,
+                    "denied_invalid_key_unmatched",
+                )
+            request.state.auth = result
+            request.state.tenant_id = result.tenant_id
+            request.state.tenant_is_key_bound = bool(result.tenant_id)
             resp = await call_next(request)
-            return self._stamp(resp, request, "unmatched")
+            return self._stamp(resp, request, "unmatched_authed")
 
         got = _extract_key(request, request.headers.get("X-API-Key"))
         if not got:
