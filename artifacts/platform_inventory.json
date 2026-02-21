@@ -50,9 +50,7 @@
         "/admin/config/changes/{change_id}/revert",
         "/admin/connectors/policy",
         "/admin/connectors/status",
-        "/admin/connectors/{connector_id}/connect",
         "/admin/connectors/{connector_id}/revoke",
-        "/admin/connectors/{connector_id}/state",
         "/admin/devices",
         "/admin/devices/{device_id}/disable",
         "/admin/devices/{device_id}/enable",
@@ -195,7 +193,7 @@
       "type": "unexpected_route_prefixes"
     }
   ],
-  "git_sha": "8b455ad89c59cbe60b25db6f63b196b2d43bf1bb",
+  "git_sha": "8e5aa78a064a9e4b021dfda53f36d27d47720df4",
   "planes": [
     {
       "evidence": [
