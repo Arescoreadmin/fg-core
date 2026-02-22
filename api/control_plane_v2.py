@@ -499,6 +499,7 @@ def submit_receipt(
     Non-executors are rejected with 403.
     """
     actor = _actor_id(request)
+    _tenant_from_auth(request)  # tenant binding — receipt scoped to actor's tenant
     trace = _trace_id(request)
 
     _enforce_rate_limit(_rl_key(actor, "receipt"), *_RL_WRITE, error_code="CP_RECEIPT_RATE_LIMIT")
@@ -864,9 +865,11 @@ def list_stale_heartbeats(
 )
 def list_playbooks(request: Request) -> Dict[str, Any]:
     trace = _trace_id(request)
+    tenant_id = _tenant_from_auth(request)
     return {
         "playbooks": sorted(VALID_PLAYBOOKS),
         "total": len(VALID_PLAYBOOKS),
+        "tenant_scope": tenant_id or "global",
         "trace_id": trace,
     }
 
