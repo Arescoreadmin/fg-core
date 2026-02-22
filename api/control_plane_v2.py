@@ -65,6 +65,23 @@ from services.cp_playbooks import (
     ERR_INVALID_PLAYBOOK,
     get_playbook_service,
 )
+from services.cp_msp_delegation import (
+    ERR_DELEGATION_NOT_FOUND,
+    get_delegation_service,
+)
+from services.cp_terminal import (
+    TERMINAL_ALLOWLIST,
+    BREAKGLASS_SCOPE,
+    ERR_TERMINAL_UNKNOWN_CMD,
+    ERR_TERMINAL_BREAKGLASS_REQUIRED,
+    ERR_TERMINAL_REASON_REQUIRED,
+    ERR_TERMINAL_REASON_INVALID,
+    get_terminal_service,
+)
+from services.cp_ai_isolation import (
+    derive_tenant_namespace,
+    IsolationViolationError,
+)
 
 log = logging.getLogger("frostgate.cp_v2")
 
@@ -1186,3 +1203,370 @@ def get_evidence_bundle(
         "integrity": integrity.to_dict(),
         "trace_id": trace,
     }
+
+
+# ---------------------------------------------------------------------------
+# F. MSP Delegation (Phase 4)
+# ---------------------------------------------------------------------------
+
+
+class DelegationCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    delegatee_id: str = Field(..., min_length=1, max_length=256)
+    target_tenant: str = Field(..., min_length=1, max_length=128)
+    scope: str = Field(..., min_length=1, max_length=512)
+    ttl_hours: int = Field(24, ge=1, le=720)
+
+
+class DelegationRevokeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(..., min_length=4, max_length=512)
+
+
+@router.post(
+    "/control-plane/v2/delegation",
+    dependencies=[Depends(require_scopes("control-plane:msp:admin"))],
+    summary="Create MSP delegation record (Phase 4)",
+    status_code=201,
+)
+def create_delegation(
+    body: DelegationCreateRequest,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> Dict[str, Any]:
+    """
+    Create a delegation record granting another actor limited access to a tenant.
+
+    Requires control-plane:msp:admin scope.
+    target_tenant must be explicit (anti-enumeration).
+    All delegation operations emit ledger events at warning severity.
+    """
+    actor = _actor_id(request)
+    trace = _trace_id(request)
+
+    _enforce_rate_limit(
+        _rl_key(actor, "delegation_create"), *_RL_WRITE, error_code="CP_DELEGATION_RATE_LIMIT"
+    )
+
+    svc = get_delegation_service()
+    ledger = get_ledger()
+
+    try:
+        with db.begin():
+            rec = svc.create_delegation(
+                db_session=db,
+                ledger=ledger,
+                delegator_id=actor,
+                delegatee_id=body.delegatee_id,
+                target_tenant=body.target_tenant,
+                scope=body.scope,
+                ttl_hours=body.ttl_hours,
+                trace_id=trace,
+            )
+    except (ValueError, RuntimeError) as exc:
+        code = str(exc).split(":")[0].strip()
+        http_status = 400 if code.startswith("CP_DELEGATION") else 500
+        _error_response(http_status, code, str(exc), trace)
+
+    result = rec.to_dict()
+    result["trace_id"] = trace
+    result["actor_id"] = actor
+    return result
+
+
+@router.delete(
+    "/control-plane/v2/delegation/{delegation_id}",
+    dependencies=[Depends(require_scopes("control-plane:msp:admin"))],
+    summary="Revoke an MSP delegation record (Phase 4)",
+)
+def revoke_delegation(
+    delegation_id: str,
+    body: DelegationRevokeRequest,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> Dict[str, Any]:
+    """
+    Revoke a delegation record. Once revoked, it cannot be un-revoked.
+    Emits a ledger event at warning severity.
+    """
+    actor = _actor_id(request)
+    trace = _trace_id(request)
+
+    _enforce_rate_limit(
+        _rl_key(actor, "delegation_revoke"), *_RL_WRITE, error_code="CP_DELEGATION_RATE_LIMIT"
+    )
+
+    svc = get_delegation_service()
+    ledger = get_ledger()
+
+    try:
+        with db.begin():
+            rec = svc.revoke_delegation(
+                db_session=db,
+                ledger=ledger,
+                delegation_id=delegation_id,
+                actor_id=actor,
+                trace_id=trace,
+            )
+    except ValueError as exc:
+        code = str(exc).split(":")[0].strip()
+        if code == ERR_DELEGATION_NOT_FOUND:
+            _error_response(404, code, "Delegation not found", trace)
+        _handle_service_error(exc, trace)
+    except RuntimeError as exc:
+        _handle_service_error(exc, trace)
+
+    result = rec.to_dict()
+    result["trace_id"] = trace
+    return result
+
+
+@router.get(
+    "/control-plane/v2/delegation",
+    dependencies=[Depends(require_scopes("control-plane:msp:read"))],
+    summary="List MSP delegation records (Phase 4)",
+)
+def list_delegations(
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+    target_tenant: Optional[str] = Query(None, max_length=128),
+    include_expired: bool = Query(False),
+    limit: int = Query(100, ge=1, le=500),
+) -> Dict[str, Any]:
+    """
+    List delegation records. MSP scope required.
+    Returns 404 for unauthorized cross-tenant attempts (anti-enumeration).
+    """
+    actor = _actor_id(request)
+    trace = _trace_id(request)
+
+    _enforce_rate_limit(
+        _rl_key(actor, "delegation_list"), *_RL_READ, error_code="CP_DELEGATION_RATE_LIMIT"
+    )
+
+    svc = get_delegation_service()
+    records = svc.list_delegations(
+        db_session=db,
+        delegator_id=actor,
+        target_tenant=target_tenant,
+        include_expired=include_expired,
+        limit=limit,
+    )
+    return {
+        "delegations": records,
+        "total": len(records),
+        "actor_id": actor,
+        "trace_id": trace,
+    }
+
+
+# ---------------------------------------------------------------------------
+# G. AI Isolation Namespace (Phase 3)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/control-plane/v2/ai/namespace",
+    dependencies=[Depends(require_scopes("control-plane:read"))],
+    summary="Get tenant-scoped AI embedding namespace (Phase 3)",
+)
+def get_ai_namespace(
+    request: Request,
+) -> Dict[str, Any]:
+    """
+    Return the tenant's scoped AI embedding namespace.
+
+    The namespace is derived from the tenant_id using SHA-256.
+    This namespace is used to partition all AI embeddings, vectors,
+    and RAG retrievals to prevent cross-tenant AI drift.
+
+    Tenant isolation: namespace is derived from auth context only.
+    Cross-tenant drift is structurally impossible within this namespace.
+    """
+    tenant_id = _tenant_from_auth(request)
+    trace = _trace_id(request)
+
+    if not tenant_id:
+        _error_response(400, "CP_AI_TENANT_REQUIRED", "Tenant binding required for AI namespace", trace)
+
+    try:
+        namespace = derive_tenant_namespace(tenant_id)
+    except IsolationViolationError as exc:
+        _error_response(400, "CP_AI_ISOLATION_ERROR", str(exc), trace)
+
+    return {
+        "tenant_id": tenant_id,
+        "namespace": namespace,
+        "isolation": "tenant_scoped",
+        "algorithm": "sha256(ns:v1:<tenant_id>)[:32]",
+        "trace_id": trace,
+    }
+
+
+# ---------------------------------------------------------------------------
+# H. Sandboxed Terminal (Phase 6)
+# ---------------------------------------------------------------------------
+
+
+class TerminalExecuteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command: str = Field(..., min_length=1, max_length=256)
+    reason: str = Field(..., min_length=4, max_length=512)
+    breakglass_session_id: Optional[str] = Field(None, max_length=128)
+
+
+class TerminalBreakglassRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(..., min_length=4, max_length=512)
+    ttl_seconds: int = Field(3600, ge=60, le=3600)
+
+
+@router.get(
+    "/control-plane/v2/terminal/allowlist",
+    dependencies=[Depends(require_scopes("control-plane:read"))],
+    summary="List allowed sandboxed terminal commands (Phase 6)",
+)
+def list_terminal_allowlist(request: Request) -> Dict[str, Any]:
+    """Return the allowlisted terminal DSL commands."""
+    trace = _trace_id(request)
+    return {
+        "allowlist": sorted(TERMINAL_ALLOWLIST),
+        "breakglass_commands": sorted(
+            cmd for cmd in TERMINAL_ALLOWLIST
+            if cmd in {"force-inspect", "emergency-list"}
+        ),
+        "breakglass_scope_required": BREAKGLASS_SCOPE,
+        "trace_id": trace,
+    }
+
+
+@router.post(
+    "/control-plane/v2/terminal/breakglass",
+    dependencies=[Depends(require_scopes("control-plane:terminal:breakglass"))],
+    summary="Create break-glass terminal scope elevation session (Phase 6)",
+    status_code=201,
+)
+def create_breakglass_session(
+    body: TerminalBreakglassRequest,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> Dict[str, Any]:
+    """
+    Create a time-bounded break-glass scope elevation session.
+
+    Requires control-plane:terminal:breakglass scope.
+    TTL is capped at BREAKGLASS_MAX_TTL_SECONDS (3600s / 1 hour).
+    Mandatory reason required.
+    Emits ledger event at warning severity.
+    """
+    tenant_id = _tenant_from_auth(request)
+    actor = _actor_id(request)
+    trace = _trace_id(request)
+
+    if not tenant_id:
+        _error_response(400, "CP_TENANT_REQUIRED", "Tenant binding required", trace)
+
+    _enforce_rate_limit(
+        _rl_key(actor, "breakglass"), *_RL_WRITE, error_code="CP_BREAKGLASS_RATE_LIMIT"
+    )
+
+    svc = get_terminal_service()
+    ledger = get_ledger()
+
+    try:
+        with db.begin():
+            session = svc.create_breakglass_session(
+                tenant_id=tenant_id,
+                actor_id=actor,
+                reason=body.reason,
+                ttl_seconds=body.ttl_seconds,
+                ledger=ledger,
+                db_session=db,
+                trace_id=trace,
+            )
+    except (ValueError, RuntimeError) as exc:
+        _handle_service_error(exc, trace)
+
+    result = session.to_dict()
+    result["trace_id"] = trace
+    return result
+
+
+@router.post(
+    "/control-plane/v2/terminal/execute",
+    dependencies=[Depends(require_scopes("control-plane:read"))],
+    summary="Execute a sandboxed terminal DSL command (Phase 6)",
+    status_code=201,
+)
+def terminal_execute(
+    body: TerminalExecuteRequest,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> Dict[str, Any]:
+    """
+    Execute a sandboxed DSL command.
+
+    Security:
+      - Only allowlisted commands accepted.
+      - No subprocess, no shell, no arbitrary code execution.
+      - Mandatory reason required.
+      - Break-glass commands require control-plane:terminal:breakglass scope.
+      - All invocations emit ledger events (before returning output).
+      - Evidence bundle link included in every response.
+      - Tenant isolation enforced — tenant from auth context only.
+    """
+    tenant_id = _tenant_from_auth(request)
+    is_global = _is_global_admin(request)
+    actor = _actor_id(request)
+    role = _actor_role(request)
+    trace = _trace_id(request)
+
+    if not is_global and not tenant_id:
+        _error_response(400, "CP_TENANT_REQUIRED", "Tenant binding required", trace)
+
+    effective_tenant = tenant_id or "global"
+
+    _enforce_rate_limit(
+        _rl_key(effective_tenant, "terminal"), *_RL_WRITE, error_code="CP_TERMINAL_RATE_LIMIT"
+    )
+
+    # Get actor scopes for break-glass check
+    auth = _get_auth(request)
+    scopes = frozenset(getattr(auth, "scopes", set()) or set())
+
+    svc = get_terminal_service()
+    ledger = get_ledger()
+
+    try:
+        with db.begin():
+            result = svc.execute(
+                db_session=db,
+                ledger=ledger,
+                raw_command=body.command,
+                reason=body.reason,
+                tenant_id=effective_tenant,
+                actor_id=actor,
+                actor_role=role,
+                scopes=scopes,
+                breakglass_session_id=body.breakglass_session_id,
+                trace_id=trace,
+            )
+    except ValueError as exc:
+        code = str(exc).split(":")[0].strip()
+        if code == ERR_TERMINAL_UNKNOWN_CMD:
+            _error_response(400, code, str(exc), trace)
+        elif code == ERR_TERMINAL_BREAKGLASS_REQUIRED:
+            _error_response(403, code, str(exc), trace)
+        elif code in (ERR_TERMINAL_REASON_REQUIRED, ERR_TERMINAL_REASON_INVALID):
+            _error_response(400, code, str(exc), trace)
+        _handle_service_error(exc, trace)
+    except RuntimeError as exc:
+        _handle_service_error(exc, trace)
+
+    out = result.to_dict()
+    out["trace_id"] = trace
+    return out
