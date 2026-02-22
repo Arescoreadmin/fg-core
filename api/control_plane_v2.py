@@ -43,7 +43,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_scopes
-from api.deps import get_db
+from api.deps import tenant_db_session
 from api.ratelimit import MemoryRateLimiter
 from services.cp_commands import (
     VALID_CP_COMMANDS,
@@ -344,7 +344,7 @@ def _handle_service_error(exc: Exception, trace_id: str) -> None:
 def create_command(
     body: CommandRequest,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_session),
 ) -> Dict[str, Any]:
     tenant_id = _tenant_from_auth(request)
     is_global = _is_global_admin(request)
@@ -398,7 +398,7 @@ def create_command(
 )
 def list_commands(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_session),
     status: Optional[str] = Query(None, max_length=32),
     target_id: Optional[str] = Query(None, max_length=256),
     tenant_id_param: Optional[str] = Query(None, alias="tenant_id", max_length=128),
@@ -437,7 +437,7 @@ def cancel_command(
     command_id: str,
     body: CancelCommandRequest,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_session),
 ) -> Dict[str, Any]:
     tenant_id = _tenant_from_auth(request)
     is_global = _is_global_admin(request)
@@ -491,7 +491,7 @@ def submit_receipt(
     command_id: str,
     body: ReceiptRequest,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_session),
 ) -> Dict[str, Any]:
     """
     Receipt endpoint.
@@ -552,7 +552,7 @@ def submit_receipt(
 def get_receipts(
     command_id: str,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_session),
 ) -> Dict[str, Any]:
     tenant_id = _tenant_from_auth(request)
     is_global = _is_global_admin(request)
@@ -581,7 +581,7 @@ def get_receipts(
 )
 def query_ledger(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_session),
     since: Optional[str] = Query(None, description="ISO-8601 timestamp lower bound"),
     until: Optional[str] = Query(None, description="ISO-8601 timestamp upper bound"),
     event_type: Optional[str] = Query(None, max_length=64),
@@ -630,7 +630,7 @@ def query_ledger(
 )
 def verify_ledger(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_session),
     tenant_id_param: Optional[str] = Query(None, alias="tenant_id", max_length=128),
 ) -> Dict[str, Any]:
     """
@@ -704,7 +704,7 @@ def verify_ledger(
 )
 def export_ledger_anchor(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_session),
     tenant_id_param: Optional[str] = Query(None, alias="tenant_id", max_length=128),
 ) -> Dict[str, Any]:
     trace = _trace_id(request)
@@ -749,7 +749,7 @@ def export_ledger_anchor(
 def upsert_heartbeat(
     body: HeartbeatRequest,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_session),
 ) -> Dict[str, Any]:
     tenant_id = _tenant_from_auth(request)
     is_global = _is_global_admin(request)
@@ -794,7 +794,7 @@ def upsert_heartbeat(
 )
 def list_heartbeats(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_session),
     entity_type: Optional[str] = Query(None, max_length=64),
     tenant_id_param: Optional[str] = Query(None, alias="tenant_id", max_length=128),
     stale_only: bool = Query(False),
@@ -827,7 +827,7 @@ def list_heartbeats(
 )
 def list_stale_heartbeats(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_session),
     tenant_id_param: Optional[str] = Query(None, alias="tenant_id", max_length=128),
 ) -> Dict[str, Any]:
     trace = _trace_id(request)
@@ -884,7 +884,7 @@ def trigger_playbook(
     playbook_name: str,
     body: PlaybookTriggerRequest,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_session),
 ) -> Dict[str, Any]:
     tenant_id = _tenant_from_auth(request)
     is_global = _is_global_admin(request)
@@ -943,7 +943,7 @@ def trigger_playbook(
 )
 def get_evidence_bundle(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(tenant_db_session),
     tenant_id_param: Optional[str] = Query(None, alias="tenant_id", max_length=128),
     since: Optional[str] = Query(None, description="ISO-8601 lower bound"),
     until: Optional[str] = Query(None, description="ISO-8601 upper bound"),
