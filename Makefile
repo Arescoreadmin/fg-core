@@ -594,7 +594,7 @@ fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check \
 	@$(MAKE) -s test-dashboard-p0
 	@$(MAKE) -s sql-migration-percent-guard
 
-fg-fast-ci: fg-fast billing-ledger-verify billing-invoice-verify opa-check
+fg-fast-ci: fg-fast billing-ledger-verify billing-invoice-verify opa-check control-plane-check
 
 fg-fast-full: fg-fast-ci audit-chain-verify compliance-chain-verify canonicalization-guard \
 	audit-export-test audit-repro-test compliance-registry-test exam-export-test exam-reproduce-test
@@ -845,6 +845,17 @@ test-hardening-all: test-core-invariants test-decision-unified test-tenant-isola
 
 ci-hardening: venv test-hardening-all
 	@echo "✅ Hardening CI gate passed"
+
+# =============================================================================
+# Control Plane
+# =============================================================================
+
+.PHONY: control-plane-check
+
+control-plane-check: venv _require-pytest-venv
+	@echo "==> Running control-plane tests"
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/control_plane/
+	@echo "✅ control-plane-check: PASS"
 
 # =============================================================================
 # Admin Gateway

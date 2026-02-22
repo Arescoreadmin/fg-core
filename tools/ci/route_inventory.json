@@ -951,6 +951,246 @@
     "tenant_bound": true
   },
   {
+    "file": "api/control_plane.py",
+    "method": "GET",
+    "path": "/control-plane/audit",
+    "scoped": true,
+    "scopes": [
+      "control-plane:audit:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane.py",
+    "method": "GET",
+    "path": "/control-plane/dependency-matrix",
+    "scoped": true,
+    "scopes": [
+      "control-plane:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "GET",
+    "path": "/control-plane/evidence/bundle",
+    "scoped": true,
+    "scopes": [
+      "control-plane:audit:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane.py",
+    "method": "GET",
+    "path": "/control-plane/lockers",
+    "scoped": true,
+    "scopes": [
+      "control-plane:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane.py",
+    "method": "POST",
+    "path": "/control-plane/lockers/{locker_id}/pause",
+    "scoped": true,
+    "scopes": [
+      "control-plane:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane.py",
+    "method": "POST",
+    "path": "/control-plane/lockers/{locker_id}/quarantine",
+    "scoped": true,
+    "scopes": [
+      "control-plane:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane.py",
+    "method": "POST",
+    "path": "/control-plane/lockers/{locker_id}/restart",
+    "scoped": true,
+    "scopes": [
+      "control-plane:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane.py",
+    "method": "POST",
+    "path": "/control-plane/lockers/{locker_id}/resume",
+    "scoped": true,
+    "scopes": [
+      "control-plane:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane.py",
+    "method": "GET",
+    "path": "/control-plane/modules",
+    "scoped": true,
+    "scopes": [
+      "control-plane:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane.py",
+    "method": "GET",
+    "path": "/control-plane/modules/{module_id}/boot-trace",
+    "scoped": true,
+    "scopes": [
+      "control-plane:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane.py",
+    "method": "GET",
+    "path": "/control-plane/modules/{module_id}/dependencies",
+    "scoped": true,
+    "scopes": [
+      "control-plane:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "GET",
+    "path": "/control-plane/v2/commands",
+    "scoped": true,
+    "scopes": [
+      "control-plane:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "POST",
+    "path": "/control-plane/v2/commands",
+    "scoped": true,
+    "scopes": [
+      "control-plane:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "POST",
+    "path": "/control-plane/v2/commands/{command_id}/cancel",
+    "scoped": true,
+    "scopes": [
+      "control-plane:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "POST",
+    "path": "/control-plane/v2/commands/{command_id}/receipt",
+    "scoped": true,
+    "scopes": [
+      "control-plane:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "GET",
+    "path": "/control-plane/v2/commands/{command_id}/receipts",
+    "scoped": true,
+    "scopes": [
+      "control-plane:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "GET",
+    "path": "/control-plane/v2/heartbeats",
+    "scoped": true,
+    "scopes": [
+      "control-plane:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "POST",
+    "path": "/control-plane/v2/heartbeats",
+    "scoped": true,
+    "scopes": [
+      "control-plane:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "GET",
+    "path": "/control-plane/v2/heartbeats/stale",
+    "scoped": true,
+    "scopes": [
+      "control-plane:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "GET",
+    "path": "/control-plane/v2/ledger",
+    "scoped": true,
+    "scopes": [
+      "control-plane:audit:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "GET",
+    "path": "/control-plane/v2/ledger/anchor",
+    "scoped": true,
+    "scopes": [
+      "control-plane:audit:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "GET",
+    "path": "/control-plane/v2/ledger/verify",
+    "scoped": true,
+    "scopes": [
+      "control-plane:audit:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "GET",
+    "path": "/control-plane/v2/playbooks",
+    "scoped": true,
+    "scopes": [
+      "control-plane:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "POST",
+    "path": "/control-plane/v2/playbooks/{playbook_name}/trigger",
+    "scoped": true,
+    "scopes": [
+      "control-plane:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
     "file": "api/decisions.py",
     "method": "GET",
     "path": "/decisions",

@@ -138,6 +138,7 @@ def _ensure_models_imported() -> None:
     Import model module(s) so Base.metadata is populated.
     """
     importlib.import_module("api.db_models")
+    importlib.import_module("api.db_models_cp_v2")
 
 
 def _get_base():

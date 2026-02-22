@@ -324,3 +324,85 @@ Disposition: no semantic change; formatting normalization only.
 - Updated SOC review for Enterprise AI Console route additions and corresponding route inventory regeneration (`tools/ci/route_inventory.json`).
 - Confirmed `tools/ci/validate_ai_contracts.py` is part of security-critical CI surface and remains enforced through `fg-contract`/CI lanes.
 - Re-validated that `route-inventory-audit` and `soc-review-sync` must pass before merge.
+
+
+## 2026-02-22 Control Plane Route Inventory and Static Analyzer Update
+
+Critical-path files updated in this change set:
+
+- `tools/ci/route_checks.py`
+- `tools/ci/route_inventory.json`
+
+SOC review outcome:
+
+- `route_checks.py`: extended `_function_has_tenant_binding` to recognize two
+  additional tenant-binding call patterns introduced by the new
+  `/control-plane/*` API surface:
+  - `_tenant_from_auth()` — used by all read endpoints; extracts tenant_id
+    exclusively from the verified auth context (`request.state.auth`), never
+    from caller-supplied headers or query params.
+  - `_locker_command()` — the shared dispatch helper for all POST locker
+    command endpoints (restart/pause/resume/quarantine); internally calls
+    `_tenant_from_auth` and enforces fail-closed tenant binding before
+    dispatching any command.
+  These additions are purely additive to the recognizer; no existing
+  detection patterns were removed or weakened.
+
+- `route_inventory.json`: regenerated to include 10 new `/control-plane/*`
+  routes. All 10 are classified `scoped=true` and `tenant_bound=true`.
+  No existing route had its `scoped` or `tenant_bound` field regressed.
+
+Security invariants confirmed:
+
+- No route removed from inventory.
+- No scope regression (true → false) on any existing route.
+- No tenant_bound regression (true → false) on any existing route.
+- All new routes require explicit scope (`control-plane:read`,
+  `control-plane:admin`, or `control-plane:audit:read`).
+- Tenant isolation enforced at auth context layer; global admin (no tenant
+  binding) access is intentional and audited on every operation.
+
+Gate impact:
+
+- `route-inventory-audit` (SOC-P1-001): satisfied by regenerated inventory.
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+---
+
+## Control Plane v2 — Route Inventory and CI Guard Update (2026-02-22)
+
+### Changes
+
+- `tools/ci/route_inventory.json`: regenerated to include 14 new
+  `/control-plane/v2/*` and `/control-plane/evidence/bundle` routes
+  introduced by `api/control_plane_v2.py`. All 14 routes are classified
+  `scoped=true` and `tenant_bound=true`. No existing route had its `scoped`
+  or `tenant_bound` field regressed.
+
+- `tools/ci/check_control_plane_v2_invariants.py`: new CI guard with 16
+  non-vacuous invariant checks for the Control Plane v2 implementation.
+  Checks include: required tables in migration 0027, hash chain logic,
+  no subprocess usage, receipt executor auth, MSP cross-tenant scope,
+  no header-based tenant derivation, DB flush before return, command and
+  playbook allowlists, append-only triggers, ledger verify endpoint,
+  evidence bundle endpoint, compilation, negative test coverage, model
+  structure, and router registration.
+
+### Security Invariants Confirmed
+
+- No route removed from inventory.
+- No scope regression (true → false) on any existing route.
+- No tenant_bound regression (true → false) on any existing route.
+- All 14 new routes require explicit scope (`control-plane:read`,
+  `control-plane:admin`, or `control-plane:audit:read`).
+- Tenant isolation enforced via `_tenant_from_auth()` at auth context layer;
+  MSP cross-tenant access requires explicit `control-plane:msp:read` or
+  `control-plane:msp:admin` scope and emits cross-tenant audit events.
+- Anti-enumeration 404 applied for unauthorized cross-tenant access.
+- Append-only tables enforced by DB triggers (migration 0027).
+- Hash-chain integrity verified by `verify_chain` endpoint.
+
+### Gate Impact
+
+- `route-inventory-audit` (SOC-P1-001): satisfied by regenerated inventory.
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
