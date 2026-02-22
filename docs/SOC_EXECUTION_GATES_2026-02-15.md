@@ -324,3 +324,45 @@ Disposition: no semantic change; formatting normalization only.
 - Updated SOC review for Enterprise AI Console route additions and corresponding route inventory regeneration (`tools/ci/route_inventory.json`).
 - Confirmed `tools/ci/validate_ai_contracts.py` is part of security-critical CI surface and remains enforced through `fg-contract`/CI lanes.
 - Re-validated that `route-inventory-audit` and `soc-review-sync` must pass before merge.
+
+
+## 2026-02-22 Control Plane Route Inventory and Static Analyzer Update
+
+Critical-path files updated in this change set:
+
+- `tools/ci/route_checks.py`
+- `tools/ci/route_inventory.json`
+
+SOC review outcome:
+
+- `route_checks.py`: extended `_function_has_tenant_binding` to recognize two
+  additional tenant-binding call patterns introduced by the new
+  `/control-plane/*` API surface:
+  - `_tenant_from_auth()` — used by all read endpoints; extracts tenant_id
+    exclusively from the verified auth context (`request.state.auth`), never
+    from caller-supplied headers or query params.
+  - `_locker_command()` — the shared dispatch helper for all POST locker
+    command endpoints (restart/pause/resume/quarantine); internally calls
+    `_tenant_from_auth` and enforces fail-closed tenant binding before
+    dispatching any command.
+  These additions are purely additive to the recognizer; no existing
+  detection patterns were removed or weakened.
+
+- `route_inventory.json`: regenerated to include 10 new `/control-plane/*`
+  routes. All 10 are classified `scoped=true` and `tenant_bound=true`.
+  No existing route had its `scoped` or `tenant_bound` field regressed.
+
+Security invariants confirmed:
+
+- No route removed from inventory.
+- No scope regression (true → false) on any existing route.
+- No tenant_bound regression (true → false) on any existing route.
+- All new routes require explicit scope (`control-plane:read`,
+  `control-plane:admin`, or `control-plane:audit:read`).
+- Tenant isolation enforced at auth context layer; global admin (no tenant
+  binding) access is intentional and audited on every operation.
+
+Gate impact:
+
+- `route-inventory-audit` (SOC-P1-001): satisfied by regenerated inventory.
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
