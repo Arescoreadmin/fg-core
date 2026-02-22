@@ -385,6 +385,22 @@
         "title": "BreakglassSessionCreate",
         "type": "object"
       },
+      "CancelCommandRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 512,
+            "minLength": 4,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "CancelCommandRequest",
+        "type": "object"
+      },
       "CertEnrollRequest": {
         "additionalProperties": false,
         "properties": {
@@ -507,6 +523,50 @@
           "controller_id"
         ],
         "title": "CommandLeaseRequest",
+        "type": "object"
+      },
+      "CommandRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Command",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 512,
+            "minLength": 4,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_type": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Target Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_type",
+          "target_id",
+          "command",
+          "reason",
+          "idempotency_key"
+        ],
+        "title": "CommandRequest",
         "type": "object"
       },
       "ComplianceCPEvidenceIngestRequest": {
@@ -2191,6 +2251,72 @@
       "Health": {
         "$ref": "schemas/api/health.schema.json"
       },
+      "HeartbeatRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "breaker_state": {
+            "default": "closed",
+            "maxLength": 16,
+            "title": "Breaker State",
+            "type": "string"
+          },
+          "entity_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "entity_type": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "last_state": {
+            "default": "active",
+            "maxLength": 32,
+            "title": "Last State",
+            "type": "string"
+          },
+          "node_id": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Node Id",
+            "type": "string"
+          },
+          "queue_depth": {
+            "default": 0,
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Queue Depth",
+            "type": "integer"
+          },
+          "version": {
+            "default": "",
+            "maxLength": 64,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_type",
+          "entity_id"
+        ],
+        "title": "HeartbeatRequest",
+        "type": "object"
+      },
       "IngestPayload": {
         "additionalProperties": false,
         "properties": {
@@ -2931,6 +3057,52 @@
         "title": "ModuleRegistrationRequest",
         "type": "object"
       },
+      "PlaybookTriggerRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "idempotency_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params"
+          },
+          "reason": {
+            "maxLength": 512,
+            "minLength": 4,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_id",
+          "reason",
+          "idempotency_key"
+        ],
+        "title": "PlaybookTriggerRequest",
+        "type": "object"
+      },
       "PolicyApprovalRequest": {
         "description": "Request model for approving a policy change.",
         "properties": {
@@ -3222,6 +3394,70 @@
           }
         },
         "title": "ROEPolicy",
+        "type": "object"
+      },
+      "ReceiptRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "duration_ms": {
+            "anyOf": [
+              {
+                "maximum": 3600000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence"
+          },
+          "executor_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Executor Id",
+            "type": "string"
+          },
+          "executor_type": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Executor Type",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "executor_id",
+          "executor_type",
+          "ok"
+        ],
+        "title": "ReceiptRequest",
         "type": "object"
       },
       "ReproduceRequest": {
@@ -7674,6 +7910,132 @@
         ]
       }
     },
+    "/control-plane/evidence/bundle": {
+      "get": {
+        "description": "Compliance-grade evidence bundle.\n\nReturns:\n  - All ledger events in scope\n  - Commands in scope\n  - Receipts for each command (if include_receipts=True)\n  - Hash-chain integrity verification report\n  - Merkle root\n  - Deterministic JSON output suitable for external notarisation\n\nTenant isolation enforced. MSP cross-tenant requires msp scope + explicit tenant_id.",
+        "operationId": "get_evidence_bundle_control_plane_evidence_bundle_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "description": "ISO-8601 lower bound",
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO-8601 lower bound",
+              "title": "Since"
+            }
+          },
+          {
+            "description": "ISO-8601 upper bound",
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO-8601 upper bound",
+              "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_receipts",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Receipts",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 2000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Evidence Bundle Control Plane Evidence Bundle Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export audit-grade evidence bundle (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
     "/control-plane/lockers": {
       "get": {
         "operationId": "list_lockers_control_plane_lockers_get",
@@ -8165,6 +8527,1002 @@
         "summary": "Get dependency health matrix for a module",
         "tags": [
           "control-plane"
+        ]
+      }
+    },
+    "/control-plane/v2/commands": {
+      "get": {
+        "operationId": "list_commands_control_plane_v2_commands_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 32,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Commands Control Plane V2 Commands Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List operator commands (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      },
+      "post": {
+        "operationId": "create_command_control_plane_v2_commands_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Create Command Control Plane V2 Commands Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Queue an operator command (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/commands/{command_id}/cancel": {
+      "post": {
+        "operationId": "cancel_command_control_plane_v2_commands__command_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "command_id",
+            "required": true,
+            "schema": {
+              "title": "Command Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelCommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Cancel Command Control Plane V2 Commands  Command Id  Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel a queued command (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/commands/{command_id}/receipt": {
+      "post": {
+        "description": "Receipt endpoint.\nValidates that the submitter has executor-compatible identity.\nNon-executors are rejected with 403.",
+        "operationId": "submit_receipt_control_plane_v2_commands__command_id__receipt_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "command_id",
+            "required": true,
+            "schema": {
+              "title": "Command Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Submit Receipt Control Plane V2 Commands  Command Id  Receipt Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit executor receipt (CP v2) \u2014 executor identity required",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/commands/{command_id}/receipts": {
+      "get": {
+        "operationId": "get_receipts_control_plane_v2_commands__command_id__receipts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "command_id",
+            "required": true,
+            "schema": {
+              "title": "Command Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Receipts Control Plane V2 Commands  Command Id  Receipts Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get receipts for a command (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/heartbeats": {
+      "get": {
+        "operationId": "list_heartbeats_control_plane_v2_heartbeats_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "entity_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entity Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stale_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Stale Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Heartbeats Control Plane V2 Heartbeats Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List entity heartbeats (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      },
+      "post": {
+        "operationId": "upsert_heartbeat_control_plane_v2_heartbeats_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Upsert Heartbeat Control Plane V2 Heartbeats Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upsert entity heartbeat (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/heartbeats/stale": {
+      "get": {
+        "operationId": "list_stale_heartbeats_control_plane_v2_heartbeats_stale_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Stale Heartbeats Control Plane V2 Heartbeats Stale Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List stale entities (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/ledger": {
+      "get": {
+        "operationId": "query_ledger_control_plane_v2_ledger_get",
+        "parameters": [
+          {
+            "description": "ISO-8601 timestamp lower bound",
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO-8601 timestamp lower bound",
+              "title": "Since"
+            }
+          },
+          {
+            "description": "ISO-8601 timestamp upper bound",
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO-8601 timestamp upper bound",
+              "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "event_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Query Ledger Control Plane V2 Ledger Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Query control-plane v2 event ledger",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/ledger/anchor": {
+      "get": {
+        "operationId": "export_ledger_anchor_control_plane_v2_ledger_anchor_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Export Ledger Anchor Control Plane V2 Ledger Anchor Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export daily Merkle anchor for ledger chain (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/ledger/verify": {
+      "get": {
+        "description": "Full chain verification \u2014 recomputes every hash and verifies linkage.\nReturns deterministic integrity report.\nFails with 500 if tampering is detected (chain broken).",
+        "operationId": "verify_ledger_control_plane_v2_ledger_verify_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Verify Ledger Control Plane V2 Ledger Verify Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify full ledger chain integrity (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/playbooks": {
+      "get": {
+        "operationId": "list_playbooks_control_plane_v2_playbooks_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Playbooks Control Plane V2 Playbooks Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List available remediation playbooks (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/playbooks/{playbook_name}/trigger": {
+      "post": {
+        "operationId": "trigger_playbook_control_plane_v2_playbooks__playbook_name__trigger_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "playbook_name",
+            "required": true,
+            "schema": {
+              "title": "Playbook Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaybookTriggerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Trigger Playbook Control Plane V2 Playbooks  Playbook Name  Trigger Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trigger an allowlisted remediation playbook (CP v2)",
+        "tags": [
+          "control-plane-v2"
         ]
       }
     },
