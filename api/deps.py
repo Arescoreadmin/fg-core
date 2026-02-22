@@ -91,6 +91,33 @@ def tenant_db_session(
         db.close()
 
 
+def auth_ctx_db_session(request: Request) -> Iterator[Session]:
+    """
+    Tenant-aware DB session that resolves tenant from auth context only.
+
+    Use for routes that perform their own tenant resolution (e.g. via
+    _tenant_from_auth / _resolve_msp_tenant) and must not expose extra
+    query parameters in the OpenAPI schema.
+
+    No query parameters are injected — only Request is used.
+    """
+    SessionLocal = get_sessionmaker()
+    db = SessionLocal()
+
+    auth_ctx = getattr(getattr(request, "state", None), "auth", None)
+    tenant_id = getattr(getattr(request, "state", None), "tenant_id", None) or getattr(
+        auth_ctx, "tenant_id", None
+    )
+    if tenant_id:
+        set_tenant_context(db, str(tenant_id))
+
+    request.state.db_session = db
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 # Back-compat alias some modules import.
 # DO NOT use *args/**kwargs here, FastAPI will treat them as query params => 422.
 def tenant_db(
@@ -100,4 +127,4 @@ def tenant_db(
     yield from tenant_db_required(request=request, tenant_id=tenant_id)
 
 
-__all__ = ["get_db", "tenant_db_required", "tenant_db", "tenant_db_session"]
+__all__ = ["get_db", "tenant_db_required", "tenant_db", "tenant_db_session", "auth_ctx_db_session"]
