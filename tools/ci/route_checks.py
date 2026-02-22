@@ -340,6 +340,8 @@ def _function_has_tenant_binding(
                 or name.endswith("_require_known_tenant")
                 or name.endswith("tenant_db_required")
                 or name.endswith("tenant_db_optional")
+                or name.endswith("_tenant_from_auth")
+                or name.endswith("_locker_command")
             ):
                 return True
 
