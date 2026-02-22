@@ -57,7 +57,6 @@ from services.cp_commands import (
 from services.cp_heartbeats import HeartbeatService, HEARTBEAT_STALE_SECONDS
 from services.cp_playbooks import PlaybookService, VALID_PLAYBOOKS, ERR_INVALID_PLAYBOOK
 
-
 # ===========================================================================
 # Fixtures
 # ===========================================================================
@@ -118,7 +117,10 @@ def msp_read_key(_db_path):
 
 @pytest.fixture()
 def other_tenant_key(_db_path):
-    return _mint("control-plane:read,control-plane:admin,control-plane:audit:read", tenant_id="tenant-beta")
+    return _mint(
+        "control-plane:read,control-plane:admin,control-plane:audit:read",
+        tenant_id="tenant-beta",
+    )
 
 
 # Helper: make a request with API key header
@@ -144,10 +146,12 @@ def sqlite_session(tmp_path, monkeypatch):
     monkeypatch.setenv("FG_ENV", "test")
 
     from api.db import init_db, reset_engine_cache
+
     reset_engine_cache()
     init_db(sqlite_path=str(db_path))
 
     from api.db import get_sessionmaker
+
     Session = get_sessionmaker(sqlite_path=str(db_path))
     db = Session()
     try:
@@ -475,7 +479,11 @@ class TestCommandService:
         sqlite_session.commit()
 
         # Manually set to executing
-        row = sqlite_session.query(ControlPlaneCommand).filter_by(command_id=rec.command_id).first()
+        row = (
+            sqlite_session.query(ControlPlaneCommand)
+            .filter_by(command_id=rec.command_id)
+            .first()
+        )
         row.status = "executing"
         sqlite_session.commit()
 
@@ -670,7 +678,9 @@ class TestHeartbeatService:
         ledger = ControlPlaneLedger()
 
         # Insert a heartbeat with old last_seen_ts
-        old_ts = datetime.now(timezone.utc) - timedelta(seconds=HEARTBEAT_STALE_SECONDS + 60)
+        old_ts = datetime.now(timezone.utc) - timedelta(
+            seconds=HEARTBEAT_STALE_SECONDS + 60
+        )
         row = ControlPlaneHeartbeat(
             entity_type="locker",
             entity_id="stale-locker",
@@ -710,8 +720,12 @@ class TestHeartbeatService:
         )
         sqlite_session.commit()
 
-        hbs_a = svc.get_heartbeats(sqlite_session, tenant_id="tenant-a", is_global_admin=False)
-        hbs_b = svc.get_heartbeats(sqlite_session, tenant_id="tenant-b", is_global_admin=False)
+        hbs_a = svc.get_heartbeats(
+            sqlite_session, tenant_id="tenant-a", is_global_admin=False
+        )
+        hbs_b = svc.get_heartbeats(
+            sqlite_session, tenant_id="tenant-b", is_global_admin=False
+        )
 
         assert len(hbs_a) == 1
         assert hbs_a[0]["entity_id"] == "locker-a"
@@ -812,7 +826,11 @@ class TestPlaybookService:
         )
         sqlite_session.commit()
 
-        events = sqlite_session.query(ControlPlaneEventLedger).filter_by(tenant_id="t2").all()
+        events = (
+            sqlite_session.query(ControlPlaneEventLedger)
+            .filter_by(tenant_id="t2")
+            .all()
+        )
         event_types = {e.event_type for e in events}
         assert "cp_playbook_dry_run" in event_types
         assert "cp_playbook_completed" in event_types
@@ -913,8 +931,12 @@ class TestCommandsAPI:
             "reason": "Idempotency test operation",
             "idempotency_key": ikey,
         }
-        r1 = app_client.post("/control-plane/v2/commands", json=payload, headers=_headers(admin_key))
-        r2 = app_client.post("/control-plane/v2/commands", json=payload, headers=_headers(admin_key))
+        r1 = app_client.post(
+            "/control-plane/v2/commands", json=payload, headers=_headers(admin_key)
+        )
+        r2 = app_client.post(
+            "/control-plane/v2/commands", json=payload, headers=_headers(admin_key)
+        )
 
         assert r1.status_code == 201
         assert r2.status_code == 201
@@ -929,7 +951,9 @@ class TestCommandsAPI:
         assert resp.status_code == 200
         assert "commands" in resp.json()
 
-    def test_cross_tenant_command_returns_404(self, app_client, admin_key, other_tenant_key):
+    def test_cross_tenant_command_returns_404(
+        self, app_client, admin_key, other_tenant_key
+    ):
         """Tenant-beta cannot see tenant-alpha commands (anti-enumeration)."""
         # Create a command as tenant-alpha
         r = app_client.post(
@@ -1036,7 +1060,9 @@ class TestLedgerAPI:
         assert resp.status_code == 200
 
     def test_ledger_verify_empty_chain_is_ok(self, app_client, admin_key):
-        resp = app_client.get("/control-plane/v2/ledger/verify", headers=_headers(admin_key))
+        resp = app_client.get(
+            "/control-plane/v2/ledger/verify", headers=_headers(admin_key)
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert body["integrity"]["ok"]
@@ -1062,7 +1088,9 @@ class TestLedgerAPI:
         assert "trace_id" in body
 
     def test_ledger_anchor_export(self, app_client, admin_key):
-        resp = app_client.get("/control-plane/v2/ledger/anchor", headers=_headers(admin_key))
+        resp = app_client.get(
+            "/control-plane/v2/ledger/anchor", headers=_headers(admin_key)
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert body["anchor_type"] == "cp_ledger_daily_anchor"
@@ -1108,12 +1136,16 @@ class TestHeartbeatAPI:
         assert resp.status_code == 400
 
     def test_list_heartbeats(self, app_client, admin_key):
-        resp = app_client.get("/control-plane/v2/heartbeats", headers=_headers(admin_key))
+        resp = app_client.get(
+            "/control-plane/v2/heartbeats", headers=_headers(admin_key)
+        )
         assert resp.status_code == 200
         assert "heartbeats" in resp.json()
 
     def test_stale_heartbeats_endpoint(self, app_client, admin_key):
-        resp = app_client.get("/control-plane/v2/heartbeats/stale", headers=_headers(admin_key))
+        resp = app_client.get(
+            "/control-plane/v2/heartbeats/stale", headers=_headers(admin_key)
+        )
         assert resp.status_code == 200
         assert "stale_entities" in resp.json()
 
@@ -1176,7 +1208,9 @@ class TestEvidenceBundleAPI:
     """Integration tests for evidence bundle endpoint."""
 
     def test_evidence_bundle_requires_audit_scope(self, app_client, read_key):
-        resp = app_client.get("/control-plane/evidence/bundle", headers=_headers(read_key))
+        resp = app_client.get(
+            "/control-plane/evidence/bundle", headers=_headers(read_key)
+        )
         assert resp.status_code == 200  # read_key has audit:read
 
     def test_evidence_bundle_unauthenticated(self, app_client):
@@ -1184,7 +1218,9 @@ class TestEvidenceBundleAPI:
         assert resp.status_code in (401, 403)
 
     def test_evidence_bundle_structure(self, app_client, admin_key):
-        resp = app_client.get("/control-plane/evidence/bundle", headers=_headers(admin_key))
+        resp = app_client.get(
+            "/control-plane/evidence/bundle", headers=_headers(admin_key)
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert body["bundle_type"] == "control_plane_v2_evidence"
@@ -1207,7 +1243,9 @@ class TestEvidenceBundleAPI:
 class TestMSPIsolation:
     """Tests for MSP cross-tenant access controls."""
 
-    def test_tenant_cannot_query_another_tenant_ledger(self, app_client, admin_key, other_tenant_key):
+    def test_tenant_cannot_query_another_tenant_ledger(
+        self, app_client, admin_key, other_tenant_key
+    ):
         """tenant-beta querying tenant_id=tenant-alpha must get 404 (anti-enumeration)."""
         resp = app_client.get(
             "/control-plane/v2/ledger?tenant_id=tenant-alpha",
@@ -1225,7 +1263,9 @@ class TestMSPIsolation:
         assert resp.status_code == 200
 
     def test_global_admin_can_query_all_tenants(self, app_client, global_admin_key):
-        resp = app_client.get("/control-plane/v2/ledger", headers=_headers(global_admin_key))
+        resp = app_client.get(
+            "/control-plane/v2/ledger", headers=_headers(global_admin_key)
+        )
         assert resp.status_code == 200
 
     def test_tenant_actor_no_msp_scope_no_cross_tenant(self, app_client, admin_key):
@@ -1253,18 +1293,27 @@ class TestSecurityInvariants:
         """
         # CommandRequest model must NOT have a tenant_id field
         from api.control_plane_v2 import CommandRequest
-        assert not hasattr(CommandRequest.model_fields, "tenant_id"), (
-            "CommandRequest must NOT have a tenant_id field — tenant is auth-derived only"
-        )
+
+        assert not hasattr(
+            CommandRequest.model_fields, "tenant_id"
+        ), "CommandRequest must NOT have a tenant_id field — tenant is auth-derived only"
 
     def test_invariant_command_enum_allowlist(self):
         """
         Invariant 8: No arbitrary payload commands — only allowlisted enum.
         """
-        for dangerous in ("os.system", "subprocess", "exec", "eval", "__import__", "rm_rf", "DROP TABLE"):
-            assert dangerous not in VALID_CP_COMMANDS, (
-                f"Dangerous command {dangerous!r} found in VALID_CP_COMMANDS allowlist"
-            )
+        for dangerous in (
+            "os.system",
+            "subprocess",
+            "exec",
+            "eval",
+            "__import__",
+            "rm_rf",
+            "DROP TABLE",
+        ):
+            assert (
+                dangerous not in VALID_CP_COMMANDS
+            ), f"Dangerous command {dangerous!r} found in VALID_CP_COMMANDS allowlist"
 
     def test_invariant_no_subprocess(self):
         """
@@ -1291,13 +1340,13 @@ class TestSecurityInvariants:
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
                     for alias in node.names:
-                        assert alias.name != "subprocess", (
-                            f"{rel_path} imports subprocess — security violation"
-                        )
+                        assert (
+                            alias.name != "subprocess"
+                        ), f"{rel_path} imports subprocess — security violation"
                 if isinstance(node, ast.ImportFrom):
-                    assert node.module != "subprocess", (
-                        f"{rel_path} imports from subprocess — security violation"
-                    )
+                    assert (
+                        node.module != "subprocess"
+                    ), f"{rel_path} imports from subprocess — security violation"
 
     def test_invariant_append_only_tables_in_migration(self):
         """
@@ -1305,12 +1354,15 @@ class TestSecurityInvariants:
         Migration 0027 must define triggers blocking UPDATE/DELETE on ledger + receipts.
         """
         from pathlib import Path
+
         repo = Path(__file__).resolve().parents[2]
         migration = repo / "migrations/postgres/0027_control_plane_v2.sql"
         assert migration.exists(), "Migration 0027 not found"
         content = migration.read_text()
 
-        assert "fg_append_only_enforcer" in content, "append_only_enforcer not referenced in migration"
+        assert (
+            "fg_append_only_enforcer" in content
+        ), "append_only_enforcer not referenced in migration"
         assert "control_plane_event_ledger" in content
         assert "control_plane_command_receipts" in content
 
@@ -1381,10 +1433,19 @@ class TestSecurityInvariants:
         """
         Invariant 8 + Playbooks: Only the 4 named playbooks allowed; no dynamic dispatch.
         """
-        expected = {"stuck_boot_recover", "dependency_auto_pause", "breaker_auto_isolate", "safe_restart_sequence"}
-        assert VALID_PLAYBOOKS == expected, f"Playbook allowlist must be exactly {expected}"
+        expected = {
+            "stuck_boot_recover",
+            "dependency_auto_pause",
+            "breaker_auto_isolate",
+            "safe_restart_sequence",
+        }
+        assert (
+            VALID_PLAYBOOKS == expected
+        ), f"Playbook allowlist must be exactly {expected}"
 
-    def test_invariant_all_error_responses_have_stable_code(self, app_client, admin_key):
+    def test_invariant_all_error_responses_have_stable_code(
+        self, app_client, admin_key
+    ):
         """
         Invariant 9: Every externalized error contains stable error_code.
         """
@@ -1414,8 +1475,12 @@ class TestSecurityInvariants:
         ts = "2024-01-01T00:00:00Z"
         eid = str(uuid.uuid4())
 
-        h1 = compute_chain_hash(prev_hash="A" * 64, content_hash="B" * 64, ts=ts, event_id=eid)
-        h2 = compute_chain_hash(prev_hash="X" * 64, content_hash="B" * 64, ts=ts, event_id=eid)
+        h1 = compute_chain_hash(
+            prev_hash="A" * 64, content_hash="B" * 64, ts=ts, event_id=eid
+        )
+        h2 = compute_chain_hash(
+            prev_hash="X" * 64, content_hash="B" * 64, ts=ts, event_id=eid
+        )
         assert h1 != h2, "Different prev_hash must produce different chain_hash"
 
     def test_invariant_content_hash_covers_payload(self):

@@ -60,7 +60,11 @@ from services.cp_commands import (
 )
 from services.cp_heartbeats import VALID_ENTITY_TYPES, get_heartbeat_service
 from services.cp_ledger import get_ledger
-from services.cp_playbooks import VALID_PLAYBOOKS, ERR_INVALID_PLAYBOOK, get_playbook_service
+from services.cp_playbooks import (
+    VALID_PLAYBOOKS,
+    ERR_INVALID_PLAYBOOK,
+    get_playbook_service,
+)
 
 log = logging.getLogger("frostgate.cp_v2")
 
@@ -90,14 +94,25 @@ def _enforce_rate_limit(key: str, rate: float, burst: int, *, error_code: str) -
     if not ok:
         raise HTTPException(
             status_code=429,
-            detail={"error": {"code": error_code, "message": "Rate limit exceeded", "retry_after_seconds": reset}},
-            headers={"Retry-After": str(reset), "X-RateLimit-Limit": str(limit), "X-RateLimit-Remaining": str(remaining)},
+            detail={
+                "error": {
+                    "code": error_code,
+                    "message": "Rate limit exceeded",
+                    "retry_after_seconds": reset,
+                }
+            },
+            headers={
+                "Retry-After": str(reset),
+                "X-RateLimit-Limit": str(limit),
+                "X-RateLimit-Remaining": str(remaining),
+            },
         )
 
 
 # ---------------------------------------------------------------------------
 # Auth helpers — tenant_id ALWAYS from auth context
 # ---------------------------------------------------------------------------
+
 
 def _get_auth(request: Request) -> Any:
     return getattr(getattr(request, "state", None), "auth", None)
@@ -158,7 +173,13 @@ def _require_tenant(request: Request) -> str:
     if not tenant and not _is_global_admin(request):
         raise HTTPException(
             status_code=400,
-            detail={"error": {"code": "CP_TENANT_REQUIRED", "trace_id": _trace_id(request), "message": "Tenant binding required"}},
+            detail={
+                "error": {
+                    "code": "CP_TENANT_REQUIRED",
+                    "trace_id": _trace_id(request),
+                    "message": "Tenant binding required",
+                }
+            },
         )
     return tenant or ""  # global admin gets empty string — must supply explicit tenant
 
@@ -169,9 +190,7 @@ def _check_msp_scope(request: Request) -> bool:
     if not auth:
         return False
     scopes = getattr(auth, "scopes", set()) or set()
-    return bool(
-        scopes & {"control-plane:msp:read", "control-plane:msp:admin"}
-    )
+    return bool(scopes & {"control-plane:msp:read", "control-plane:msp:admin"})
 
 
 def _resolve_msp_tenant(
@@ -204,7 +223,13 @@ def _resolve_msp_tenant(
         if require_msp:
             raise HTTPException(
                 status_code=400,
-                detail={"error": {"code": "CP_MSP_TENANT_REQUIRED", "trace_id": _trace_id(request), "message": "MSP queries require explicit tenant_id parameter"}},
+                detail={
+                    "error": {
+                        "code": "CP_MSP_TENANT_REQUIRED",
+                        "trace_id": _trace_id(request),
+                        "message": "MSP queries require explicit tenant_id parameter",
+                    }
+                },
             )
         # MSP read: no tenant filter → returns all (paginated, caller must paginate)
         return None, True  # treat as global for query
@@ -214,7 +239,13 @@ def _resolve_msp_tenant(
         # Anti-enumeration: return 404
         raise HTTPException(
             status_code=404,
-            detail={"error": {"code": "CP_NOT_FOUND", "trace_id": _trace_id(request), "message": "Not found"}},
+            detail={
+                "error": {
+                    "code": "CP_NOT_FOUND",
+                    "trace_id": _trace_id(request),
+                    "message": "Not found",
+                }
+            },
         )
     return my_tenant, False
 
@@ -251,6 +282,7 @@ def _error_response(
 # ---------------------------------------------------------------------------
 # Pydantic request models
 # ---------------------------------------------------------------------------
+
 
 class CommandRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -323,7 +355,11 @@ _ERROR_STATUS_MAP = {
 
 def _handle_service_error(exc: Exception, trace_id: str) -> None:
     msg = str(exc)
-    code = msg.split(":")[0].strip() if ":" not in msg or msg.split(":")[0].isupper() else "CP_INTERNAL_ERROR"
+    code = (
+        msg.split(":")[0].strip()
+        if ":" not in msg or msg.split(":")[0].isupper()
+        else "CP_INTERNAL_ERROR"
+    )
     http_status = _ERROR_STATUS_MAP.get(code, 500)
     raise HTTPException(
         status_code=http_status,
@@ -334,6 +370,7 @@ def _handle_service_error(exc: Exception, trace_id: str) -> None:
 # ---------------------------------------------------------------------------
 # A. Commands
 # ---------------------------------------------------------------------------
+
 
 @router.post(
     "/control-plane/v2/commands",
@@ -358,10 +395,14 @@ def create_command(
 
     effective_tenant = tenant_id or "global"
 
-    _enforce_rate_limit(_rl_key(effective_tenant, "cmd"), *_RL_WRITE, error_code="CP_CMD_RATE_LIMIT")
+    _enforce_rate_limit(
+        _rl_key(effective_tenant, "cmd"), *_RL_WRITE, error_code="CP_CMD_RATE_LIMIT"
+    )
 
     if body.command not in VALID_CP_COMMANDS:
-        _error_response(400, "CP_CMD_INVALID_COMMAND", f"Unknown command: {body.command!r}", trace)
+        _error_response(
+            400, "CP_CMD_INVALID_COMMAND", f"Unknown command: {body.command!r}", trace
+        )
 
     ledger = get_ledger()
     svc = get_command_service()
@@ -408,7 +449,11 @@ def list_commands(
     trace = _trace_id(request)
     effective_tenant, is_global = _resolve_msp_tenant(request, tenant_id_param)
 
-    _enforce_rate_limit(_rl_key(effective_tenant, "cmd_list"), *_RL_READ, error_code="CP_CMD_LIST_RATE_LIMIT")
+    _enforce_rate_limit(
+        _rl_key(effective_tenant, "cmd_list"),
+        *_RL_READ,
+        error_code="CP_CMD_LIST_RATE_LIMIT",
+    )
 
     svc = get_command_service()
     commands = svc.get_commands(
@@ -450,7 +495,11 @@ def cancel_command(
 
     effective_tenant = tenant_id or "global"
 
-    _enforce_rate_limit(_rl_key(effective_tenant, "cmd_cancel"), *_RL_WRITE, error_code="CP_CANCEL_RATE_LIMIT")
+    _enforce_rate_limit(
+        _rl_key(effective_tenant, "cmd_cancel"),
+        *_RL_WRITE,
+        error_code="CP_CANCEL_RATE_LIMIT",
+    )
 
     ledger = get_ledger()
     svc = get_command_service()
@@ -471,7 +520,9 @@ def cancel_command(
         if code == ERR_UNKNOWN_COMMAND_ID:
             _error_response(404, code, "Command not found", trace)
         elif code == ERR_CANCEL_CONFLICT:
-            _error_response(409, code, "Command cannot be cancelled in current state", trace)
+            _error_response(
+                409, code, "Command cannot be cancelled in current state", trace
+            )
         _handle_service_error(exc, trace)
     except RuntimeError as exc:
         _handle_service_error(exc, trace)
@@ -502,10 +553,13 @@ def submit_receipt(
     _tenant_from_auth(request)  # tenant binding — receipt scoped to actor's tenant
     trace = _trace_id(request)
 
-    _enforce_rate_limit(_rl_key(actor, "receipt"), *_RL_WRITE, error_code="CP_RECEIPT_RATE_LIMIT")
+    _enforce_rate_limit(
+        _rl_key(actor, "receipt"), *_RL_WRITE, error_code="CP_RECEIPT_RATE_LIMIT"
+    )
 
     # Validate executor_type
     from services.cp_commands import VALID_EXECUTOR_TYPES
+
     if body.executor_type not in VALID_EXECUTOR_TYPES:
         _error_response(403, "CP_CMD_NOT_EXECUTOR", "Invalid executor_type", trace)
 
@@ -558,7 +612,9 @@ def get_receipts(
     is_global = _is_global_admin(request)
     trace = _trace_id(request)
 
-    _enforce_rate_limit(_rl_key(tenant_id, "receipts"), *_RL_READ, error_code="CP_RECEIPTS_RATE_LIMIT")
+    _enforce_rate_limit(
+        _rl_key(tenant_id, "receipts"), *_RL_READ, error_code="CP_RECEIPTS_RATE_LIMIT"
+    )
 
     svc = get_command_service()
     receipts = svc.get_receipts(
@@ -567,12 +623,18 @@ def get_receipts(
         tenant_id=tenant_id or "",
         is_global_admin=is_global,
     )
-    return {"receipts": receipts, "total": len(receipts), "command_id": command_id, "trace_id": trace}
+    return {
+        "receipts": receipts,
+        "total": len(receipts),
+        "command_id": command_id,
+        "trace_id": trace,
+    }
 
 
 # ---------------------------------------------------------------------------
 # B. Ledger
 # ---------------------------------------------------------------------------
+
 
 @router.get(
     "/control-plane/v2/ledger",
@@ -592,7 +654,11 @@ def query_ledger(
     trace = _trace_id(request)
     effective_tenant, is_global = _resolve_msp_tenant(request, tenant_id_param)
 
-    _enforce_rate_limit(_rl_key(effective_tenant, "ledger_query"), *_RL_LEDGER, error_code="CP_LEDGER_RATE_LIMIT")
+    _enforce_rate_limit(
+        _rl_key(effective_tenant, "ledger_query"),
+        *_RL_LEDGER,
+        error_code="CP_LEDGER_RATE_LIMIT",
+    )
 
     since_dt: Optional[datetime] = None
     until_dt: Optional[datetime] = None
@@ -602,7 +668,9 @@ def query_ledger(
         if until:
             until_dt = datetime.fromisoformat(until.replace("Z", "+00:00"))
     except ValueError:
-        _error_response(400, "CP_LEDGER_INVALID_TIME", "Invalid ISO-8601 timestamp", trace)
+        _error_response(
+            400, "CP_LEDGER_INVALID_TIME", "Invalid ISO-8601 timestamp", trace
+        )
 
     ledger = get_ledger()
     events = ledger.get_events(
@@ -641,7 +709,11 @@ def verify_ledger(
     trace = _trace_id(request)
     effective_tenant, is_global = _resolve_msp_tenant(request, tenant_id_param)
 
-    _enforce_rate_limit(_rl_key(effective_tenant, "ledger_verify"), *_RL_LEDGER, error_code="CP_VERIFY_RATE_LIMIT")
+    _enforce_rate_limit(
+        _rl_key(effective_tenant, "ledger_verify"),
+        *_RL_LEDGER,
+        error_code="CP_VERIFY_RATE_LIMIT",
+    )
 
     ledger = get_ledger()
     result = ledger.verify_chain(
@@ -710,7 +782,11 @@ def export_ledger_anchor(
     trace = _trace_id(request)
     effective_tenant, _is_global = _resolve_msp_tenant(request, tenant_id_param)
 
-    _enforce_rate_limit(_rl_key(effective_tenant, "anchor"), *_RL_EVIDENCE, error_code="CP_ANCHOR_RATE_LIMIT")
+    _enforce_rate_limit(
+        _rl_key(effective_tenant, "anchor"),
+        *_RL_EVIDENCE,
+        error_code="CP_ANCHOR_RATE_LIMIT",
+    )
 
     ledger = get_ledger()
     anchor = ledger.export_daily_anchor(db_session=db, tenant_id=effective_tenant)
@@ -726,7 +802,10 @@ def export_ledger_anchor(
                 actor_id=actor,
                 actor_role=_actor_role(request),
                 tenant_id=effective_tenant,
-                payload={"merkle_root": anchor.get("merkle_root"), "total_entries": anchor.get("total_entries")},
+                payload={
+                    "merkle_root": anchor.get("merkle_root"),
+                    "total_entries": anchor.get("total_entries"),
+                },
                 trace_id=trace,
                 severity="info",
                 source="api",
@@ -740,6 +819,7 @@ def export_ledger_anchor(
 # ---------------------------------------------------------------------------
 # C. Heartbeats
 # ---------------------------------------------------------------------------
+
 
 @router.post(
     "/control-plane/v2/heartbeats",
@@ -760,10 +840,19 @@ def upsert_heartbeat(
 
     effective_tenant = tenant_id or "global"
 
-    _enforce_rate_limit(_rl_key(effective_tenant, "heartbeat"), *_RL_HEARTBEAT, error_code="CP_HB_RATE_LIMIT")
+    _enforce_rate_limit(
+        _rl_key(effective_tenant, "heartbeat"),
+        *_RL_HEARTBEAT,
+        error_code="CP_HB_RATE_LIMIT",
+    )
 
     if body.entity_type not in VALID_ENTITY_TYPES:
-        _error_response(400, "CP_HB_INVALID_ENTITY_TYPE", f"Unknown entity_type: {body.entity_type!r}", trace)
+        _error_response(
+            400,
+            "CP_HB_INVALID_ENTITY_TYPE",
+            f"Unknown entity_type: {body.entity_type!r}",
+            trace,
+        )
 
     svc = get_heartbeat_service()
     try:
@@ -802,7 +891,11 @@ def list_heartbeats(
     trace = _trace_id(request)
     effective_tenant, is_global = _resolve_msp_tenant(request, tenant_id_param)
 
-    _enforce_rate_limit(_rl_key(effective_tenant, "hb_list"), *_RL_READ, error_code="CP_HB_LIST_RATE_LIMIT")
+    _enforce_rate_limit(
+        _rl_key(effective_tenant, "hb_list"),
+        *_RL_READ,
+        error_code="CP_HB_LIST_RATE_LIMIT",
+    )
 
     svc = get_heartbeat_service()
     heartbeats = svc.get_heartbeats(
@@ -833,7 +926,9 @@ def list_stale_heartbeats(
     trace = _trace_id(request)
     effective_tenant, is_global = _resolve_msp_tenant(request, tenant_id_param)
 
-    _enforce_rate_limit(_rl_key(effective_tenant, "stale"), *_RL_READ, error_code="CP_STALE_RATE_LIMIT")
+    _enforce_rate_limit(
+        _rl_key(effective_tenant, "stale"), *_RL_READ, error_code="CP_STALE_RATE_LIMIT"
+    )
 
     ledger = get_ledger()
     svc = get_heartbeat_service()
@@ -857,6 +952,7 @@ def list_stale_heartbeats(
 # ---------------------------------------------------------------------------
 # D. Playbooks
 # ---------------------------------------------------------------------------
+
 
 @router.get(
     "/control-plane/v2/playbooks",
@@ -893,14 +989,20 @@ def trigger_playbook(
     trace = _trace_id(request)
 
     if playbook_name not in VALID_PLAYBOOKS:
-        _error_response(400, "CP_PLAYBOOK_INVALID", f"Unknown playbook: {playbook_name!r}", trace)
+        _error_response(
+            400, "CP_PLAYBOOK_INVALID", f"Unknown playbook: {playbook_name!r}", trace
+        )
 
     if not is_global and not tenant_id:
         _error_response(400, "CP_TENANT_REQUIRED", "Tenant binding required", trace)
 
     effective_tenant = tenant_id or "global"
 
-    _enforce_rate_limit(_rl_key(effective_tenant, f"playbook_{playbook_name}"), *_RL_PLAYBOOK, error_code="CP_PLAYBOOK_RATE_LIMIT")
+    _enforce_rate_limit(
+        _rl_key(effective_tenant, f"playbook_{playbook_name}"),
+        *_RL_PLAYBOOK,
+        error_code="CP_PLAYBOOK_RATE_LIMIT",
+    )
 
     ledger = get_ledger()
     svc = get_playbook_service()
@@ -936,6 +1038,7 @@ def trigger_playbook(
 # E. Evidence Bundle
 # ---------------------------------------------------------------------------
 
+
 @router.get(
     "/control-plane/evidence/bundle",
     dependencies=[Depends(require_scopes("control-plane:audit:read"))],
@@ -967,7 +1070,11 @@ def get_evidence_bundle(
     actor = _actor_id(request)
     effective_tenant, is_global = _resolve_msp_tenant(request, tenant_id_param)
 
-    _enforce_rate_limit(_rl_key(effective_tenant, "evidence"), *_RL_EVIDENCE, error_code="CP_EVIDENCE_RATE_LIMIT")
+    _enforce_rate_limit(
+        _rl_key(effective_tenant, "evidence"),
+        *_RL_EVIDENCE,
+        error_code="CP_EVIDENCE_RATE_LIMIT",
+    )
 
     since_dt: Optional[datetime] = None
     until_dt: Optional[datetime] = None
@@ -977,7 +1084,9 @@ def get_evidence_bundle(
         if until:
             until_dt = datetime.fromisoformat(until.replace("Z", "+00:00"))
     except ValueError:
-        _error_response(400, "CP_EVIDENCE_INVALID_TIME", "Invalid ISO-8601 timestamp", trace)
+        _error_response(
+            400, "CP_EVIDENCE_INVALID_TIME", "Invalid ISO-8601 timestamp", trace
+        )
 
     ledger = get_ledger()
     cmd_svc = get_command_service()
@@ -1039,7 +1148,11 @@ def get_evidence_bundle(
         with db.begin():
             ledger.append_event(
                 db_session=db,
-                event_type="cp_msp_cross_tenant_access" if effective_tenant and is_global else "cp_ledger_verified",
+                event_type=(
+                    "cp_msp_cross_tenant_access"
+                    if effective_tenant and is_global
+                    else "cp_ledger_verified"
+                ),
                 actor_id=actor,
                 actor_role=_actor_role(request),
                 tenant_id=effective_tenant,

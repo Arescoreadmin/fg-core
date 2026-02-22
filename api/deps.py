@@ -127,4 +127,10 @@ def tenant_db(
     yield from tenant_db_required(request=request, tenant_id=tenant_id)
 
 
-__all__ = ["get_db", "tenant_db_required", "tenant_db", "tenant_db_session", "auth_ctx_db_session"]
+__all__ = [
+    "get_db",
+    "tenant_db_required",
+    "tenant_db",
+    "tenant_db_session",
+    "auth_ctx_db_session",
+]
