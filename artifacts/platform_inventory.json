@@ -113,6 +113,28 @@
         "/compliance/requirements/updates/available",
         "/compliance/requirements/updates/{update_id}/apply",
         "/config/versions",
+        "/control-plane/audit",
+        "/control-plane/dependency-matrix",
+        "/control-plane/evidence/bundle",
+        "/control-plane/lockers",
+        "/control-plane/lockers/{locker_id}/pause",
+        "/control-plane/lockers/{locker_id}/quarantine",
+        "/control-plane/lockers/{locker_id}/restart",
+        "/control-plane/lockers/{locker_id}/resume",
+        "/control-plane/modules",
+        "/control-plane/modules/{module_id}/boot-trace",
+        "/control-plane/modules/{module_id}/dependencies",
+        "/control-plane/v2/commands",
+        "/control-plane/v2/commands/{command_id}/cancel",
+        "/control-plane/v2/commands/{command_id}/receipt",
+        "/control-plane/v2/commands/{command_id}/receipts",
+        "/control-plane/v2/heartbeats",
+        "/control-plane/v2/heartbeats/stale",
+        "/control-plane/v2/ledger",
+        "/control-plane/v2/ledger/anchor",
+        "/control-plane/v2/ledger/verify",
+        "/control-plane/v2/playbooks",
+        "/control-plane/v2/playbooks/{playbook_name}/trigger",
         "/decisions",
         "/decisions/{decision_id}",
         "/defend",
@@ -193,7 +215,7 @@
       "type": "unexpected_route_prefixes"
     }
   ],
-  "git_sha": "8e5aa78a064a9e4b021dfda53f36d27d47720df4",
+  "git_sha": "e3d5a89f922345cba4f043d4916df0627f1142bd",
   "planes": [
     {
       "evidence": [
