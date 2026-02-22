@@ -1063,6 +1063,16 @@
   {
     "file": "api/control_plane_v2.py",
     "method": "GET",
+    "path": "/control-plane/v2/ai/namespace",
+    "scoped": true,
+    "scopes": [
+      "control-plane:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "GET",
     "path": "/control-plane/v2/commands",
     "scoped": true,
     "scopes": [
@@ -1109,6 +1119,36 @@
       "control-plane:read"
     ],
     "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "GET",
+    "path": "/control-plane/v2/delegation",
+    "scoped": true,
+    "scopes": [
+      "control-plane:msp:read"
+    ],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "POST",
+    "path": "/control-plane/v2/delegation",
+    "scoped": true,
+    "scopes": [
+      "control-plane:msp:admin"
+    ],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "DELETE",
+    "path": "/control-plane/v2/delegation/{delegation_id}",
+    "scoped": true,
+    "scopes": [
+      "control-plane:msp:admin"
+    ],
+    "tenant_bound": false
   },
   {
     "file": "api/control_plane_v2.py",
@@ -1187,6 +1227,76 @@
     "scoped": true,
     "scopes": [
       "control-plane:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "POST",
+    "path": "/control-plane/v2/policy/pin",
+    "scoped": true,
+    "scopes": [
+      "control-plane:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "GET",
+    "path": "/control-plane/v2/policy/pins",
+    "scoped": true,
+    "scopes": [
+      "control-plane:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "POST",
+    "path": "/control-plane/v2/policy/rollback",
+    "scoped": true,
+    "scopes": [
+      "control-plane:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "POST",
+    "path": "/control-plane/v2/policy/stage",
+    "scoped": true,
+    "scopes": [
+      "control-plane:admin"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "GET",
+    "path": "/control-plane/v2/terminal/allowlist",
+    "scoped": true,
+    "scopes": [
+      "control-plane:read"
+    ],
+    "tenant_bound": false
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "POST",
+    "path": "/control-plane/v2/terminal/breakglass",
+    "scoped": true,
+    "scopes": [
+      "control-plane:terminal:breakglass"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane_v2.py",
+    "method": "POST",
+    "path": "/control-plane/v2/terminal/execute",
+    "scoped": true,
+    "scopes": [
+      "control-plane:read"
     ],
     "tenant_bound": true
   },
