@@ -9,10 +9,8 @@ Covers:
 - Slow consumer disconnected
 - Event history filtered by tenant
 """
-from __future__ import annotations
 
-import asyncio
-import threading
+from __future__ import annotations
 
 import pytest
 
@@ -21,8 +19,6 @@ from services.event_stream import (
     ControlEvent,
     ControlEventBus,
     make_event,
-    _compute_content_hash,
-    _compute_instance_id,
 )
 
 
@@ -225,6 +221,7 @@ class TestSlowConsumer:
         The slow consumer must not block other subscribers.
         """
         from services.event_stream import SUBSCRIBER_QUEUE_DEPTH
+
         bus = _make_bus()
         # Create a subscriber and fill its queue to capacity
         slow_sub = bus.add_subscriber("tenant-slow")
@@ -263,9 +260,7 @@ class TestEventHistory:
         bus.publish(_make_event(tenant_id="tenant-x"))
         bus.publish(_make_event(tenant_id="tenant-y"))
 
-        history = bus.get_history(
-            tenant_id=None, is_global_admin=True, limit=100
-        )
+        history = bus.get_history(tenant_id=None, is_global_admin=True, limit=100)
         tenants = {e["tenant_id"] for e in history}
         assert "tenant-x" in tenants
         assert "tenant-y" in tenants
@@ -301,9 +296,7 @@ class TestEventHistory:
     def test_no_tenant_no_global_returns_empty_history(self):
         bus = _make_bus()
         bus.publish(_make_event(tenant_id="tenant-a"))
-        history = bus.get_history(
-            tenant_id=None, is_global_admin=False, limit=100
-        )
+        history = bus.get_history(tenant_id=None, is_global_admin=False, limit=100)
         assert history == []
 
     def test_history_limit_respected(self):
@@ -311,7 +304,5 @@ class TestEventHistory:
         for _ in range(20):
             bus.publish(_make_event(tenant_id="tenant-a"))
 
-        history = bus.get_history(
-            tenant_id=None, is_global_admin=True, limit=5
-        )
+        history = bus.get_history(tenant_id=None, is_global_admin=True, limit=5)
         assert len(history) <= 5

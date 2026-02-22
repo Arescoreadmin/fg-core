@@ -8,6 +8,7 @@ Covers:
 - Error detail sanitized (credentials, tokens, stack traces never leaked)
 - sanitize_error_detail strips all secret patterns
 """
+
 from __future__ import annotations
 
 import pytest
@@ -53,9 +54,7 @@ class TestStageOrdering:
         stages = trace.get_ordered_stages()
         names = [s.stage_name for s in stages]
         # All canonical stages before custom
-        last_canonical = max(
-            names.index(n) for n in BOOT_STAGE_ORDER if n in names
-        )
+        last_canonical = max(names.index(n) for n in BOOT_STAGE_ORDER if n in names)
         assert names.index("custom_stage_xyz") > last_canonical
 
 
@@ -87,7 +86,9 @@ class TestStageLifecycle:
     def test_complete_stage_computes_duration(self):
         trace = BootTraceStore("mod-dur")
         trace.start_stage("db_connected")
-        import time; time.sleep(0.01)
+        import time
+
+        time.sleep(0.01)
         trace.complete_stage("db_connected")
         stage = next(
             s for s in trace.get_ordered_stages() if s.stage_name == "db_connected"
@@ -165,16 +166,17 @@ class TestRedaction:
             detail=secret_input,
         )
         stage = next(
-            s
-            for s in trace.get_ordered_stages()
-            if s.stage_name == "db_connected"
+            s for s in trace.get_ordered_stages() if s.stage_name == "db_connected"
         )
         # The secret should not appear verbatim
         detail = stage.error_detail_redacted or ""
         # Check that the raw secret is not literally present
         # (some patterns replace with [REDACTED])
-        assert "[REDACTED]" in detail or len(detail) < len(secret_input) // 2 or \
-               "supersecretpassword" not in detail
+        assert (
+            "[REDACTED]" in detail
+            or len(detail) < len(secret_input) // 2
+            or "supersecretpassword" not in detail
+        )
 
     def test_sanitize_strips_credential_url(self):
         result = sanitize_error_detail(

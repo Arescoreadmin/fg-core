@@ -14,6 +14,7 @@ Covers (from spec):
 - locker not found returns deterministic error
 - command bus safe (no subprocess)
 """
+
 from __future__ import annotations
 
 import time
@@ -22,7 +23,6 @@ import pytest
 
 from services.locker_command_bus import (
     ERR_COOLDOWN_ACTIVE,
-    ERR_IDEMPOTENT_REPEAT,
     ERR_INVALID_COMMAND,
     ERR_QUARANTINE_LOCKED,
     ERR_REASON_INVALID_CHARS,
@@ -96,7 +96,6 @@ class TestLockerRegistration:
     def test_heartbeat_locker(self):
         bus = _make_bus()
         bus.register_locker("locker-hb", "tenant-a")
-        old_ts = bus.get_locker("locker-hb", "tenant-a").last_heartbeat_ts
         time.sleep(0.01)
         ok = bus.heartbeat_locker("locker-hb", "tenant-a", version="1.1")
         assert ok
@@ -187,9 +186,11 @@ class TestCommandDispatch:
         bus = _make_bus()
         _register(bus, "locker-binding", "tenant-a")
         result = _dispatch(
-            bus, "locker-binding", "restart",
+            bus,
+            "locker-binding",
+            "restart",
             tenant_id="tenant-b",
-            reason="cross-tenant attack"
+            reason="cross-tenant attack",
         )
         # Must return same error as not-found to prevent enumeration
         assert not result.ok
@@ -208,7 +209,9 @@ class TestCooldown:
 
         # First dispatch ok
         r1 = _dispatch(
-            bus, "locker-cooldown", "restart",
+            bus,
+            "locker-cooldown",
+            "restart",
             reason="first restart",
             idempotency_key="idem-c1",
             cooldown_sec=60,
@@ -217,7 +220,9 @@ class TestCooldown:
 
         # Second dispatch within cooldown window
         r2 = _dispatch(
-            bus, "locker-cooldown", "restart",
+            bus,
+            "locker-cooldown",
+            "restart",
             reason="second restart",
             idempotency_key="idem-c2",
             cooldown_sec=60,
@@ -229,13 +234,17 @@ class TestCooldown:
         bus = _make_bus()
         _register(bus, "locker-nocool", "tenant-a")
         _dispatch(
-            bus, "locker-nocool", "restart",
+            bus,
+            "locker-nocool",
+            "restart",
             reason="first",
             idempotency_key="idem-nc1",
             cooldown_sec=0,
         )
         r2 = _dispatch(
-            bus, "locker-nocool", "restart",
+            bus,
+            "locker-nocool",
+            "restart",
             reason="second",
             idempotency_key="idem-nc2",
             cooldown_sec=0,
@@ -254,7 +263,9 @@ class TestIdempotency:
         _register(bus, "locker-idem", "tenant-a")
 
         r1 = _dispatch(
-            bus, "locker-idem", "pause",
+            bus,
+            "locker-idem",
+            "pause",
             reason="test pause reason",
             idempotency_key="idem-unique-1",
             cooldown_sec=0,
@@ -263,7 +274,9 @@ class TestIdempotency:
 
         # Same command + same reason + same locker + same tenant → idempotent
         r2 = _dispatch(
-            bus, "locker-idem", "pause",
+            bus,
+            "locker-idem",
+            "pause",
             reason="test pause reason",
             idempotency_key="idem-unique-1",
             cooldown_sec=0,
@@ -282,14 +295,18 @@ class TestIdempotency:
         bus.register_locker("locker-B", "tenant-b")
 
         r_a = _dispatch(
-            bus, "locker-A", "pause",
+            bus,
+            "locker-A",
+            "pause",
             tenant_id="tenant-a",
             reason="test isolation",
             idempotency_key="shared-key-123",
             cooldown_sec=0,
         )
         r_b = _dispatch(
-            bus, "locker-B", "pause",
+            bus,
+            "locker-B",
+            "pause",
             tenant_id="tenant-b",
             reason="test isolation",
             idempotency_key="shared-key-123",
@@ -305,14 +322,18 @@ class TestIdempotency:
         _register(bus, "locker-idem2", "tenant-a")
 
         r1 = _dispatch(
-            bus, "locker-idem2", "pause",
+            bus,
+            "locker-idem2",
+            "pause",
             reason="reason one",
             idempotency_key="idem-diff",
             cooldown_sec=0,
         )
         # Different reason → different payload hash → not idempotent
         r2 = _dispatch(
-            bus, "locker-idem2", "pause",
+            bus,
+            "locker-idem2",
+            "pause",
             reason="reason two",
             idempotency_key="idem-diff",
             cooldown_sec=0,
@@ -333,27 +354,66 @@ class TestQuarantineEnforcement:
     def test_quarantined_locker_rejects_restart(self):
         bus = _make_bus()
         _register(bus, "locker-q", "tenant-a")
-        _dispatch(bus, "locker-q", "quarantine", reason="suspicious activity", idempotency_key="q1")
+        _dispatch(
+            bus,
+            "locker-q",
+            "quarantine",
+            reason="suspicious activity",
+            idempotency_key="q1",
+        )
 
-        result = _dispatch(bus, "locker-q", "restart", reason="restart attempt", idempotency_key="q2", cooldown_sec=0)
+        result = _dispatch(
+            bus,
+            "locker-q",
+            "restart",
+            reason="restart attempt",
+            idempotency_key="q2",
+            cooldown_sec=0,
+        )
         assert not result.ok
         assert result.error_code == ERR_QUARANTINE_LOCKED
 
     def test_quarantined_locker_rejects_pause(self):
         bus = _make_bus()
         _register(bus, "locker-q2", "tenant-a")
-        _dispatch(bus, "locker-q2", "quarantine", reason="suspicious activity", idempotency_key="q-p1")
+        _dispatch(
+            bus,
+            "locker-q2",
+            "quarantine",
+            reason="suspicious activity",
+            idempotency_key="q-p1",
+        )
 
-        result = _dispatch(bus, "locker-q2", "pause", reason="pause attempt", idempotency_key="q-p2", cooldown_sec=0)
+        result = _dispatch(
+            bus,
+            "locker-q2",
+            "pause",
+            reason="pause attempt",
+            idempotency_key="q-p2",
+            cooldown_sec=0,
+        )
         assert not result.ok
         assert result.error_code == ERR_QUARANTINE_LOCKED
 
     def test_quarantined_locker_accepts_resume(self):
         bus = _make_bus()
         _register(bus, "locker-q3", "tenant-a")
-        _dispatch(bus, "locker-q3", "quarantine", reason="suspicious activity", idempotency_key="qr1")
+        _dispatch(
+            bus,
+            "locker-q3",
+            "quarantine",
+            reason="suspicious activity",
+            idempotency_key="qr1",
+        )
 
-        result = _dispatch(bus, "locker-q3", "resume", reason="reviewed and cleared", idempotency_key="qr2", cooldown_sec=0)
+        result = _dispatch(
+            bus,
+            "locker-q3",
+            "resume",
+            reason="reviewed and cleared",
+            idempotency_key="qr2",
+            cooldown_sec=0,
+        )
         assert result.ok
         rec = bus.get_locker("locker-q3", "tenant-a")
         assert rec.state == "active"
@@ -371,12 +431,15 @@ class TestNoSubprocess:
         or os.system. This test verifies the module source contains no such calls.
         """
         import subprocess as _sp
-        import os as _os
 
         calls = []
 
-        monkeypatch.setattr(_sp, "run", lambda *a, **kw: calls.append("subprocess.run") or None)
-        monkeypatch.setattr(_sp, "Popen", lambda *a, **kw: calls.append("subprocess.Popen") or None)
+        monkeypatch.setattr(
+            _sp, "run", lambda *a, **kw: calls.append("subprocess.run") or None
+        )
+        monkeypatch.setattr(
+            _sp, "Popen", lambda *a, **kw: calls.append("subprocess.Popen") or None
+        )
 
         bus = _make_bus()
         _register(bus, "locker-nosub", "tenant-a")

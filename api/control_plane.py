@@ -33,33 +33,36 @@ import asyncio
 import json
 import logging
 import os
-import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.auth_scopes import (
     require_scopes,
-    redact_detail,
     is_prod_like_env,
 )
+from api.ratelimit import MemoryRateLimiter
 from services.boot_trace import get_trace, BOOT_STAGE_ORDER
 from services.event_stream import (
-    ControlEvent,
     get_event_bus,
     make_event,
-    VALID_EVENT_TYPES,
 )
 from services.locker_command_bus import (
     get_command_bus,
-    validate_reason,
     ERR_UNKNOWN_LOCKER,
     ERR_QUARANTINE_LOCKED,
     ERR_COOLDOWN_ACTIVE,
-    ERR_IDEMPOTENT_REPEAT,
     ERR_REASON_REQUIRED,
     ERR_REASON_TOO_LONG,
     ERR_REASON_INVALID_CHARS,
@@ -74,14 +77,12 @@ router = APIRouter(tags=["control-plane"])
 # Rate limiting (per-endpoint token bucket, in-memory)
 # ---------------------------------------------------------------------------
 
-from api.ratelimit import MemoryRateLimiter
-
 _rl = MemoryRateLimiter()
 
 # Rates: (rate_per_sec, burst_capacity)
-_RL_READ = (5.0, 30)   # module list / dependencies / boot trace
-_RL_CMD = (0.5, 5)     # locker commands (very conservative)
-_RL_WS = (2.0, 10)     # WS connect attempts
+_RL_READ = (5.0, 30)  # module list / dependencies / boot trace
+_RL_CMD = (0.5, 5)  # locker commands (very conservative)
+_RL_WS = (2.0, 10)  # WS connect attempts
 _RL_AUDIT = (2.0, 20)  # audit reads
 
 
@@ -193,7 +194,9 @@ def _emit_audit(
     try:
         bus = get_event_bus()
         ev = make_event(
-            "locker_state_changed" if "locker" in audit_type.lower() else "config_changed",
+            "locker_state_changed"
+            if "locker" in audit_type.lower()
+            else "config_changed",
             module_id=target_module,
             tenant_id=tenant_id or "global",
             payload=entry,
@@ -281,7 +284,9 @@ def get_module_dependencies(
     if rec is None:
         raise HTTPException(
             status_code=404,
-            detail={"error": {"code": "CP_MODULE_NOT_FOUND", "message": "Module not found"}},
+            detail={
+                "error": {"code": "CP_MODULE_NOT_FOUND", "message": "Module not found"}
+            },
         )
 
     # Tenant binding check
@@ -290,7 +295,12 @@ def get_module_dependencies(
             # Return same as not-found to prevent enumeration
             raise HTTPException(
                 status_code=404,
-                detail={"error": {"code": "CP_MODULE_NOT_FOUND", "message": "Module not found"}},
+                detail={
+                    "error": {
+                        "code": "CP_MODULE_NOT_FOUND",
+                        "message": "Module not found",
+                    }
+                },
             )
 
     deps = registry.get_dependencies(module_id) or {}
@@ -331,7 +341,12 @@ def get_boot_trace(
         if rec.tenant_id is not None and rec.tenant_id != tenant_id:
             raise HTTPException(
                 status_code=404,
-                detail={"error": {"code": "CP_MODULE_NOT_FOUND", "message": "Module not found"}},
+                detail={
+                    "error": {
+                        "code": "CP_MODULE_NOT_FOUND",
+                        "message": "Module not found",
+                    }
+                },
             )
 
     trace = get_trace(module_id)
@@ -530,7 +545,7 @@ def list_lockers(request: Request) -> Dict[str, Any]:
         lockers = []
 
     return {
-        "lockers": [l.to_dict() for l in lockers],
+        "lockers": [lk.to_dict() for lk in lockers],
         "total": len(lockers),
     }
 
@@ -588,8 +603,7 @@ async def _ws_authenticate(
     Returns the AuthResult or None if auth fails.
     Auth is NEVER weaker than HTTP.
     """
-    from api.auth_scopes import verify_api_key_detailed, _extract_key
-    import api.auth_scopes as auth_scopes
+    from api.auth_scopes import verify_api_key_detailed
 
     # Extract key from headers — same as HTTP
     raw_key = websocket.headers.get("x-api-key") or websocket.headers.get("X-API-Key")
@@ -602,7 +616,9 @@ async def _ws_authenticate(
         await websocket.close(code=4401, reason="Missing API key")
         return None
 
-    result = verify_api_key_detailed(raw=raw_key, required_scopes={"control-plane:events:subscribe"})
+    result = verify_api_key_detailed(
+        raw=raw_key, required_scopes={"control-plane:events:subscribe"}
+    )
     if not result.valid:
         await websocket.close(code=4403, reason="Unauthorized")
         return None
@@ -661,9 +677,7 @@ async def ws_events(websocket: WebSocket) -> None:
         while True:
             # Check for incoming messages (ping/disconnect detection)
             try:
-                raw = await asyncio.wait_for(
-                    websocket.receive_text(), timeout=0.05
-                )
+                raw = await asyncio.wait_for(websocket.receive_text(), timeout=0.05)
                 # Accept ping messages
                 if raw.strip() in {"ping", "PING"}:
                     await websocket.send_text('{"type":"pong"}')
@@ -714,7 +728,6 @@ async def ws_events(websocket: WebSocket) -> None:
 def dependency_matrix(request: Request) -> Dict[str, Any]:
     tenant_id = _tenant_from_auth(request)
     is_global = _is_global_admin(request)
-    redact = is_prod_like_env()
 
     _enforce_rate_limit(
         _rl_key(tenant_id, "depmatrix"),

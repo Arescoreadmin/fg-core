@@ -9,18 +9,15 @@ Covers:
 - Global admin snapshot
 - make_registration_hash determinism
 """
+
 from __future__ import annotations
 
 import time
 
-import pytest
-
 from services.module_registry import (
-    DependencyProbe,
     ModuleRecord,
     _RegistryStore,
     make_registration_hash,
-    register_module,
 )
 
 
@@ -31,6 +28,7 @@ from services.module_registry import (
 
 def _make_store() -> _RegistryStore:
     from services.module_registry import _RegistryStore
+
     return _RegistryStore()
 
 
@@ -249,14 +247,18 @@ class TestDependencyProbes:
     def test_dependency_latency_max_clamped(self):
         store = _make_store()
         store.register(_make_record("mod-lat2"))
-        store.update_dependency("mod-lat2", "nats", status="ok", latency_ms=999_999_999.0)
+        store.update_dependency(
+            "mod-lat2", "nats", status="ok", latency_ms=999_999_999.0
+        )
         deps = store.get_dependencies("mod-lat2")
         assert deps["nats"]._safe_latency() == 300_000.0
 
     def test_dependency_none_latency(self):
         store = _make_store()
         store.register(_make_record("mod-none-lat"))
-        store.update_dependency("mod-none-lat", "opa", status="unknown", latency_ms=None)
+        store.update_dependency(
+            "mod-none-lat", "opa", status="unknown", latency_ms=None
+        )
         deps = store.get_dependencies("mod-none-lat")
         assert deps["opa"]._safe_latency() is None
 

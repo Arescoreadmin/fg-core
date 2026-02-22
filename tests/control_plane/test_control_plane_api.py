@@ -13,9 +13,8 @@ Covers (from spec):
 - Tenant admin cannot access other tenant data
 - Global admin can see all tenants
 """
-from __future__ import annotations
 
-import os
+from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
@@ -100,7 +99,9 @@ class TestAuthorization:
         resp = app_client.get("/control-plane/modules")
         assert resp.status_code == 401
 
-    def test_modules_endpoint_wrong_scope_rejected(self, app_client, tmp_path, monkeypatch):
+    def test_modules_endpoint_wrong_scope_rejected(
+        self, app_client, tmp_path, monkeypatch
+    ):
         db_path = tmp_path / "cp_test.db"
         monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
         wrong_key = mint_key("audit:read", tenant_id="tenant-test")
@@ -194,7 +195,10 @@ class TestLockerCommands:
         bus = get_command_bus()
         bus.register_locker("test-locker-idem", "tenant-test")
 
-        payload = {"reason": "idempotency test request", "idempotency_key": "idem-same-123"}
+        payload = {
+            "reason": "idempotency test request",
+            "idempotency_key": "idem-same-123",
+        }
 
         r1 = app_client.post(
             "/control-plane/lockers/test-locker-idem/pause",
@@ -244,7 +248,10 @@ class TestLockerCommands:
         resp = app_client.post(
             "/control-plane/lockers/test-locker-q-resume/resume",
             headers=_headers(admin_key),
-            json={"reason": "incident resolved and reviewed", "idempotency_key": "qres-2"},
+            json={
+                "reason": "incident resolved and reviewed",
+                "idempotency_key": "qres-2",
+            },
         )
         assert resp.status_code == 200
         assert resp.json()["ok"] is True
@@ -326,7 +333,9 @@ class TestModuleListEndpoint:
         assert "total" in data
         assert isinstance(data["modules"], list)
 
-    def test_tenant_admin_sees_only_own_modules(self, app_client, read_key, tmp_path, monkeypatch):
+    def test_tenant_admin_sees_only_own_modules(
+        self, app_client, read_key, tmp_path, monkeypatch
+    ):
         registry = get_registry()
         registry.register(
             ModuleRecord(
@@ -420,15 +429,16 @@ class TestDependencyEndpoints:
 class TestAuditLog:
     def test_audit_emitted_on_control_action(self, app_client, admin_key, audit_key):
         """Every control action must emit an audit log entry (visible in event history)."""
-        from services.event_stream import get_event_bus
-
         bus = get_command_bus()
         bus.register_locker("audit-test-locker", "tenant-test")
 
         app_client.post(
             "/control-plane/lockers/audit-test-locker/pause",
             headers=_headers(admin_key),
-            json={"reason": "testing audit emission", "idempotency_key": "audit-idem-1"},
+            json={
+                "reason": "testing audit emission",
+                "idempotency_key": "audit-idem-1",
+            },
         )
 
         # The event should appear in audit history
@@ -440,7 +450,8 @@ class TestAuditLog:
         events = resp.json()["events"]
         # At least one event should reference our locker
         locker_events = [
-            e for e in events
+            e
+            for e in events
             if e.get("payload", {}).get("target_id") == "audit-test-locker"
             or e.get("payload", {}).get("locker_id") == "audit-test-locker"
         ]
