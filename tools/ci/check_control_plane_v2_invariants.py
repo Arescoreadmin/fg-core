@@ -604,6 +604,7 @@ def check_phase_test_coverage() -> None:
     phase_test_files = [
         "tests/control_plane/test_control_plane_phase3.py",
         "tests/control_plane/test_control_plane_phase4.py",
+        "tests/control_plane/test_control_plane_phase5.py",
         "tests/control_plane/test_control_plane_phase6.py",
         "tests/control_plane/test_control_plane_phase7.py",
     ]
@@ -623,6 +624,14 @@ def check_phase_test_coverage() -> None:
             "test_invariant_empty_target_tenant_rejected",
             "test_invariant_unknown_scope_rejected",
             "test_check_delegation_missing_raises_not_found",
+        ]),
+        ("test_control_plane_phase5.py", [
+            "test_invariant_invalid_version_hash_rejected",
+            "test_invariant_ttl_exceeds_max_rejected",
+            "test_invariant_rollback_without_previous_pin_raises",
+            "test_invariant_rollback_without_rollback_target_raises",
+            "test_invariant_no_subprocess_in_policy_lifecycle",
+            "test_invariant_ledger_written_for_pin",
         ]),
         ("test_control_plane_phase6.py", [
             "test_invariant_unknown_command_rejected",
@@ -645,6 +654,73 @@ def check_phase_test_coverage() -> None:
                 ok(f"Negative test: {test_name}")
             else:
                 fail(f"Missing negative test: {test_name} in {fname}")
+
+
+# ---------------------------------------------------------------------------
+# Check 23: Policy lifecycle service — Phase 5
+# ---------------------------------------------------------------------------
+def check_policy_lifecycle_service() -> None:
+    print("\n[23] Policy lifecycle: pin/stage/rollback model (Phase 5)")
+    content = _read("services/cp_policy_lifecycle.py")
+
+    markers = [
+        ("PolicyLifecycleService", "PolicyLifecycleService class defined"),
+        ("VALID_POLICY_OPERATIONS", "VALID_POLICY_OPERATIONS defined"),
+        ("POLICY_PIN_MAX_TTL_HOURS", "POLICY_PIN_MAX_TTL_HOURS defined"),
+        ("ERR_POLICY_NO_ROLLBACK_TARGET", "ERR_POLICY_NO_ROLLBACK_TARGET defined"),
+        ("ERR_POLICY_INVALID_HASH", "ERR_POLICY_INVALID_HASH defined"),
+        ("pin_version", "pin_version method defined"),
+        ("stage_version", "stage_version method defined"),
+        ("rollback", "rollback method defined"),
+        ("previous_hash", "previous_hash for rollback tracking present"),
+        ("severity=\"warning\"", "ledger events at warning severity"),
+        ("import subprocess" not in content and "subprocess.run" not in content,
+         "no subprocess in cp_policy_lifecycle.py"),
+        ("rollout_pct", "rollout_pct field present (canary support)"),
+    ]
+    for item in markers:
+        if isinstance(item, tuple) and isinstance(item[0], bool):
+            condition, description = item
+            if condition:
+                ok(description)
+            else:
+                fail(f"Policy lifecycle: {description}")
+        else:
+            marker, description = item
+            if marker in content:
+                ok(description)
+            else:
+                fail(f"Policy lifecycle: {description} — '{marker}' not found")
+
+    # Policy lifecycle endpoints in API
+    api_content = _read("api/control_plane_v2.py")
+    endpoint_markers = [
+        ("/control-plane/v2/policy/pin", "policy pin endpoint defined"),
+        ("/control-plane/v2/policy/stage", "policy stage endpoint defined"),
+        ("/control-plane/v2/policy/rollback", "policy rollback endpoint defined"),
+        ("/control-plane/v2/policy/pins", "policy pins list endpoint defined"),
+        ("get_policy_lifecycle_service", "policy lifecycle service imported in API"),
+    ]
+    for marker, description in endpoint_markers:
+        if marker in api_content:
+            ok(description)
+        else:
+            fail(f"Policy lifecycle API: {description} — '{marker}' not found in control_plane_v2.py")
+
+
+# ---------------------------------------------------------------------------
+# Check 24: Phase 5 compilation guard
+# ---------------------------------------------------------------------------
+def check_phase5_compilation() -> None:
+    print("\n[24] Phase 5 files compile without syntax errors")
+    phase5_files = [
+        "services/cp_policy_lifecycle.py",
+        "tests/control_plane/test_control_plane_phase5.py",
+    ]
+    for rel in phase5_files:
+        tree = _parse(rel)
+        if tree is not None:
+            ok(f"Compiles: {rel}")
 
 
 # ---------------------------------------------------------------------------
@@ -695,6 +771,9 @@ def main() -> int:
     check_cli_verifier_tool()
     check_phase_test_coverage()
     check_ai_isolation_endpoint()
+    # Phase 5 invariant checks
+    check_policy_lifecycle_service()
+    check_phase5_compilation()
 
     print("\n" + "=" * 60)
     if FAILURES:

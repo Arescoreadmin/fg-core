@@ -16,6 +16,10 @@ Endpoints:
   POST /control-plane/v2/playbooks/{name}/trigger      — trigger allowlisted playbook
   GET  /control-plane/v2/playbooks                     — list available playbooks
   GET  /control-plane/evidence/bundle                  — audit evidence bundle
+  POST /control-plane/v2/policy/pin                    — pin policy version hash (Phase 5)
+  POST /control-plane/v2/policy/stage                  — stage policy version for canary (Phase 5)
+  POST /control-plane/v2/policy/rollback               — rollback to previous pinned version (Phase 5)
+  GET  /control-plane/v2/policy/pins                   — list active policy pins for tenant (Phase 5)
 
 Global Security Invariants (all enforced, no bypass):
   - tenant_id ALWAYS from auth context; NEVER from request headers/body.
@@ -81,6 +85,17 @@ from services.cp_terminal import (
 from services.cp_ai_isolation import (
     derive_tenant_namespace,
     IsolationViolationError,
+)
+from services.cp_policy_lifecycle import (
+    POLICY_PIN_MAX_TTL_HOURS,
+    POLICY_PIN_DEFAULT_TTL_HOURS,
+    ERR_POLICY_NOT_FOUND,
+    ERR_POLICY_INVALID_HASH,
+    ERR_POLICY_INVALID_TTL,
+    ERR_POLICY_NO_ROLLBACK_TARGET,
+    ERR_POLICY_INVALID_ROLLOUT_PCT,
+    ERR_POLICY_INVALID_POLICY_ID,
+    get_policy_lifecycle_service,
 )
 
 log = logging.getLogger("frostgate.cp_v2")
@@ -1570,3 +1585,283 @@ def terminal_execute(
     out = result.to_dict()
     out["trace_id"] = trace
     return out
+
+
+# ---------------------------------------------------------------------------
+# I. Policy Lifecycle (Phase 5)
+# ---------------------------------------------------------------------------
+
+_RL_POLICY = (1.0, 10)
+
+
+class PolicyPinRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    policy_id: str = Field(..., min_length=1, max_length=128)
+    version_hash: str = Field(..., min_length=64, max_length=64)
+    ttl_hours: int = Field(POLICY_PIN_DEFAULT_TTL_HOURS, ge=1, le=POLICY_PIN_MAX_TTL_HOURS)
+
+
+class PolicyStageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    policy_id: str = Field(..., min_length=1, max_length=128)
+    version_hash: str = Field(..., min_length=64, max_length=64)
+    rollout_pct: int = Field(..., ge=0, le=100)
+    ttl_hours: int = Field(POLICY_PIN_DEFAULT_TTL_HOURS, ge=1, le=POLICY_PIN_MAX_TTL_HOURS)
+
+
+class PolicyRollbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    policy_id: str = Field(..., min_length=1, max_length=128)
+    reason: str = Field(..., min_length=4, max_length=512)
+
+
+@router.post(
+    "/control-plane/v2/policy/pin",
+    dependencies=[Depends(require_scopes("control-plane:admin"))],
+    summary="Pin a policy version hash for this tenant (Phase 5)",
+    status_code=201,
+)
+def pin_policy_version(
+    body: PolicyPinRequest,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> Dict[str, Any]:
+    """
+    Pin a specific policy version hash for the authenticated tenant.
+
+    Prevents policy drift: the policy engine will serve this exact version
+    until the pin expires or a rollback is performed.
+
+    Security invariants:
+      - tenant_id from auth context only.
+      - version_hash must be a 64-character SHA-256 hex string.
+      - ttl_hours bounded by POLICY_PIN_MAX_TTL_HOURS.
+      - Ledger event emitted at warning severity before returning.
+    """
+    tenant = _tenant_from_auth(request)
+    actor = _actor_id(request)
+    trace = _trace_id(request)
+
+    _enforce_rate_limit(
+        _rl_key(tenant, "policy_pin"),
+        *_RL_POLICY,
+        error_code="CP_POLICY_RATE_LIMIT",
+    )
+
+    svc = get_policy_lifecycle_service()
+    ledger = get_ledger()
+
+    try:
+        with db.begin():
+            rec = svc.pin_version(
+                db_session=db,
+                ledger=ledger,
+                tenant_id=tenant or "global",
+                policy_id=body.policy_id,
+                version_hash=body.version_hash,
+                ttl_hours=body.ttl_hours,
+                actor_id=actor,
+                trace_id=trace,
+            )
+    except ValueError as exc:
+        code = str(exc).split(":")[0].strip()
+        if code in (
+            ERR_POLICY_INVALID_HASH,
+            ERR_POLICY_INVALID_TTL,
+            ERR_POLICY_INVALID_POLICY_ID,
+        ):
+            _error_response(400, code, str(exc), trace)
+        _handle_service_error(exc, trace)
+    except RuntimeError as exc:
+        _handle_service_error(exc, trace)
+
+    out = rec.to_dict()
+    out["trace_id"] = trace
+    return out
+
+
+@router.post(
+    "/control-plane/v2/policy/stage",
+    dependencies=[Depends(require_scopes("control-plane:admin"))],
+    summary="Stage a policy version for canary rollout (Phase 5)",
+    status_code=201,
+)
+def stage_policy_version(
+    body: PolicyStageRequest,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> Dict[str, Any]:
+    """
+    Stage a policy version for gradual (canary) rollout to this tenant.
+
+    The staged version is served to `rollout_pct`% of traffic.
+    Use /policy/pin to promote to 100%.
+
+    Security invariants:
+      - tenant_id from auth context only.
+      - version_hash must be a 64-character SHA-256 hex string.
+      - rollout_pct must be 0–100.
+      - Ledger event emitted at warning severity before returning.
+    """
+    tenant = _tenant_from_auth(request)
+    actor = _actor_id(request)
+    trace = _trace_id(request)
+
+    _enforce_rate_limit(
+        _rl_key(tenant, "policy_stage"),
+        *_RL_POLICY,
+        error_code="CP_POLICY_RATE_LIMIT",
+    )
+
+    svc = get_policy_lifecycle_service()
+    ledger = get_ledger()
+
+    try:
+        with db.begin():
+            rec = svc.stage_version(
+                db_session=db,
+                ledger=ledger,
+                tenant_id=tenant or "global",
+                policy_id=body.policy_id,
+                version_hash=body.version_hash,
+                rollout_pct=body.rollout_pct,
+                ttl_hours=body.ttl_hours,
+                actor_id=actor,
+                trace_id=trace,
+            )
+    except ValueError as exc:
+        code = str(exc).split(":")[0].strip()
+        if code in (
+            ERR_POLICY_INVALID_HASH,
+            ERR_POLICY_INVALID_TTL,
+            ERR_POLICY_INVALID_ROLLOUT_PCT,
+            ERR_POLICY_INVALID_POLICY_ID,
+        ):
+            _error_response(400, code, str(exc), trace)
+        _handle_service_error(exc, trace)
+    except RuntimeError as exc:
+        _handle_service_error(exc, trace)
+
+    out = rec.to_dict()
+    out["trace_id"] = trace
+    return out
+
+
+@router.post(
+    "/control-plane/v2/policy/rollback",
+    dependencies=[Depends(require_scopes("control-plane:admin"))],
+    summary="Rollback policy to previous pinned version (Phase 5)",
+    status_code=200,
+)
+def rollback_policy(
+    body: PolicyRollbackRequest,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> Dict[str, Any]:
+    """
+    Rollback a policy to the version that was pinned before the current one.
+
+    Requires the current active pin to have a recorded previous_hash.
+
+    Security invariants:
+      - tenant_id from auth context only.
+      - Requires a prior pin with a non-None previous_hash.
+      - Raises 409 (no rollback target) if no prior pin exists.
+      - Ledger event emitted at warning severity before returning.
+    """
+    tenant = _tenant_from_auth(request)
+    actor = _actor_id(request)
+    trace = _trace_id(request)
+
+    _enforce_rate_limit(
+        _rl_key(tenant, "policy_rollback"),
+        *_RL_POLICY,
+        error_code="CP_POLICY_RATE_LIMIT",
+    )
+
+    svc = get_policy_lifecycle_service()
+    ledger = get_ledger()
+
+    try:
+        with db.begin():
+            rec = svc.rollback(
+                db_session=db,
+                ledger=ledger,
+                tenant_id=tenant or "global",
+                policy_id=body.policy_id,
+                actor_id=actor,
+                trace_id=trace,
+            )
+    except ValueError as exc:
+        code = str(exc).split(":")[0].strip()
+        if code == ERR_POLICY_NOT_FOUND:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": {
+                        "code": code,
+                        "message": "Policy pin not found",
+                        "trace_id": trace,
+                    }
+                },
+            )
+        if code == ERR_POLICY_NO_ROLLBACK_TARGET:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": {
+                        "code": code,
+                        "message": "No previous version to roll back to",
+                        "trace_id": trace,
+                    }
+                },
+            )
+        if code == ERR_POLICY_INVALID_POLICY_ID:
+            _error_response(400, code, str(exc), trace)
+        _handle_service_error(exc, trace)
+    except RuntimeError as exc:
+        _handle_service_error(exc, trace)
+
+    out = rec.to_dict()
+    out["trace_id"] = trace
+    return out
+
+
+@router.get(
+    "/control-plane/v2/policy/pins",
+    dependencies=[Depends(require_scopes("control-plane:admin"))],
+    summary="List active policy pins for the authenticated tenant (Phase 5)",
+)
+def list_policy_pins(
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> Dict[str, Any]:
+    """
+    List all active policy pins for the authenticated tenant.
+
+    Returns only pins for the current tenant (no cross-tenant enumeration).
+    """
+    tenant = _tenant_from_auth(request)
+    actor = _actor_id(request)
+    trace = _trace_id(request)
+
+    _enforce_rate_limit(
+        _rl_key(tenant, "policy_list"),
+        *_RL_READ,
+        error_code="CP_POLICY_RATE_LIMIT",
+    )
+
+    svc = get_policy_lifecycle_service()
+
+    pins = svc.list_pins(db_session=db, tenant_id=tenant or "global")
+
+    return {
+        "pins": [p.to_dict() for p in pins],
+        "count": len(pins),
+        "tenant_id": tenant or "global",
+        "actor_id": actor,
+        "trace_id": trace,
+    }
