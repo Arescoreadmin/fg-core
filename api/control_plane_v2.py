@@ -159,8 +159,7 @@ def _trace_id(request: Request) -> str:
 def _client_ip_hash(request: Request) -> Optional[str]:
     """Return SHA-256 of client IP — raw IP never stored."""
     ip = (
-        getattr(request, "client", None)
-        and request.client.host  # type: ignore[union-attr]
+        getattr(request, "client", None) and request.client.host  # type: ignore[union-attr]
     )
     if not ip:
         return None

@@ -1294,9 +1294,9 @@ class TestSecurityInvariants:
         # CommandRequest model must NOT have a tenant_id field
         from api.control_plane_v2 import CommandRequest
 
-        assert not hasattr(
-            CommandRequest.model_fields, "tenant_id"
-        ), "CommandRequest must NOT have a tenant_id field — tenant is auth-derived only"
+        assert not hasattr(CommandRequest.model_fields, "tenant_id"), (
+            "CommandRequest must NOT have a tenant_id field — tenant is auth-derived only"
+        )
 
     def test_invariant_command_enum_allowlist(self):
         """
@@ -1311,9 +1311,9 @@ class TestSecurityInvariants:
             "rm_rf",
             "DROP TABLE",
         ):
-            assert (
-                dangerous not in VALID_CP_COMMANDS
-            ), f"Dangerous command {dangerous!r} found in VALID_CP_COMMANDS allowlist"
+            assert dangerous not in VALID_CP_COMMANDS, (
+                f"Dangerous command {dangerous!r} found in VALID_CP_COMMANDS allowlist"
+            )
 
     def test_invariant_no_subprocess(self):
         """
@@ -1340,13 +1340,13 @@ class TestSecurityInvariants:
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
                     for alias in node.names:
-                        assert (
-                            alias.name != "subprocess"
-                        ), f"{rel_path} imports subprocess — security violation"
+                        assert alias.name != "subprocess", (
+                            f"{rel_path} imports subprocess — security violation"
+                        )
                 if isinstance(node, ast.ImportFrom):
-                    assert (
-                        node.module != "subprocess"
-                    ), f"{rel_path} imports from subprocess — security violation"
+                    assert node.module != "subprocess", (
+                        f"{rel_path} imports from subprocess — security violation"
+                    )
 
     def test_invariant_append_only_tables_in_migration(self):
         """
@@ -1360,9 +1360,9 @@ class TestSecurityInvariants:
         assert migration.exists(), "Migration 0027 not found"
         content = migration.read_text()
 
-        assert (
-            "fg_append_only_enforcer" in content
-        ), "append_only_enforcer not referenced in migration"
+        assert "fg_append_only_enforcer" in content, (
+            "append_only_enforcer not referenced in migration"
+        )
         assert "control_plane_event_ledger" in content
         assert "control_plane_command_receipts" in content
 
@@ -1439,9 +1439,9 @@ class TestSecurityInvariants:
             "breaker_auto_isolate",
             "safe_restart_sequence",
         }
-        assert (
-            VALID_PLAYBOOKS == expected
-        ), f"Playbook allowlist must be exactly {expected}"
+        assert VALID_PLAYBOOKS == expected, (
+            f"Playbook allowlist must be exactly {expected}"
+        )
 
     def test_invariant_all_error_responses_have_stable_code(
         self, app_client, admin_key
