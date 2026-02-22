@@ -1,300 +1,332 @@
 """
-services/boot_trace.py — Boot-stage tracing with ordered stages and redaction.
+FrostGate Control Plane - Boot Trace Service
 
-Records startup milestones in deterministic order.  Each stage captures:
-  - stage_name, started_at, completed_at, duration_ms, status, error_code,
-    error_detail_redacted (always scrubbed of secrets in prod)
+Ordered startup stage tracing with deterministic error codes.
+Records each stage with timing, status, and (redacted-in-prod) error details.
 
-Security guarantees:
-  - error_detail is sanitized to strip credentials, tokens, query params,
-    Authorization-like patterns, and stack frames.
-  - No silent failures: every stage must explicitly be marked complete or failed.
-  - Stage order is enforced: stages appear in BOOT_STAGE_ORDER even if
-    only partially completed.
-
-This module is thread-safe.
+No silent failures allowed. Every stage must be explicitly recorded.
+Fail-closed: missing/incomplete traces are surfaced, never hidden.
 """
-
 from __future__ import annotations
 
-import hashlib
 import logging
-import os
-import re
 import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Optional
+from enum import Enum
+from typing import Dict, List, Optional
 
-log = logging.getLogger("frostgate.boot_trace")
+log = logging.getLogger("frostgate.control_plane.boot_trace")
+
 
 # ---------------------------------------------------------------------------
-# Canonical stage order
+# Deterministic error codes
+# ---------------------------------------------------------------------------
+ERR_STAGE_ALREADY_STARTED = "CP-BOOT-001"
+ERR_STAGE_NOT_STARTED = "CP-BOOT-002"
+ERR_STAGE_UNKNOWN = "CP-BOOT-003"
+ERR_TRACE_ALREADY_EXISTS = "CP-BOOT-004"
+
+
+# ---------------------------------------------------------------------------
+# Canonical boot stage ordering
 # ---------------------------------------------------------------------------
 
-BOOT_STAGE_ORDER: List[str] = [
-    "config_loaded",
-    "tenant_binding_initialized",
-    "db_connected",
-    "migrations_completed",
-    "redis_connected",
-    "nats_connected",
-    "opa_validated",
-    "routes_registered",
-    "websocket_ready",
-    "ready_true",
+class BootStage(str, Enum):
+    CONFIG_LOADED = "config_loaded"
+    TENANT_BINDING_INITIALIZED = "tenant_binding_initialized"
+    DB_CONNECTED = "db_connected"
+    MIGRATIONS_COMPLETED = "migrations_completed"
+    REDIS_CONNECTED = "redis_connected"
+    NATS_CONNECTED = "nats_connected"
+    OPA_VALIDATED = "opa_validated"
+    ROUTES_REGISTERED = "routes_registered"
+    WEBSOCKET_READY = "websocket_ready"
+    READY_TRUE = "ready_true"
+
+
+BOOT_STAGE_ORDER: List[BootStage] = [
+    BootStage.CONFIG_LOADED,
+    BootStage.TENANT_BINDING_INITIALIZED,
+    BootStage.DB_CONNECTED,
+    BootStage.MIGRATIONS_COMPLETED,
+    BootStage.REDIS_CONNECTED,
+    BootStage.NATS_CONNECTED,
+    BootStage.OPA_VALIDATED,
+    BootStage.ROUTES_REGISTERED,
+    BootStage.WEBSOCKET_READY,
+    BootStage.READY_TRUE,
 ]
 
-StageStatus = Literal["pending", "in_progress", "ok", "failed", "skipped"]
 
-# ---------------------------------------------------------------------------
-# Secret / credential pattern sanitizer
-# ---------------------------------------------------------------------------
-
-_SECRET_PATTERNS: List[re.Pattern[str]] = [
-    # URLs with credentials: scheme://user:pass@host
-    re.compile(r"[a-zA-Z][a-zA-Z0-9+\-.]*://[^:@/\s]+:[^@/\s]+@", re.IGNORECASE),
-    # Authorization header values
-    re.compile(r"(?i)(authorization|bearer|basic)\s*[:\s][^\s,;]{4,}", re.IGNORECASE),
-    # JWT-shaped tokens (three base64url segments)
-    re.compile(r"ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),
-    # Generic tokens/secrets in query strings
-    re.compile(
-        r"(?i)(token|secret|password|passwd|apikey|api_key|access_key)"
-        r"[=:][^\s&;,\"']{4,}",
-        re.IGNORECASE,
-    ),
-    # Cookie-like patterns
-    re.compile(r"(?i)(set-cookie|cookie)[:\s][^\r\n]{4,}", re.IGNORECASE),
-    # Long hex secrets (>= 32 hex chars = 128-bit key)
-    re.compile(r"\b[0-9a-fA-F]{32,}\b"),
-    # Stack trace lines (file paths + line numbers)
-    re.compile(r'File "[^"]+", line \d+'),
-    re.compile(r"\s+at [a-zA-Z0-9_.]+\([^)]*\)"),
-]
-
-_REPLACEMENT = "[REDACTED]"
-
-
-def sanitize_error_detail(detail: str, *, is_production: bool) -> str:
-    """
-    Strip secrets from error detail strings.
-
-    In production: apply all patterns.
-    In dev/test: still redact credential URLs and JWT-shaped tokens.
-    Always returns a string.
-    """
-    if not isinstance(detail, str):
-        try:
-            detail = str(detail)
-        except Exception:
-            return "[DETAIL_REDACTED]"
-
-    # Truncate to prevent log-flooding
-    detail = detail[:2048]
-
-    patterns = _SECRET_PATTERNS if is_production else _SECRET_PATTERNS[:2]
-    for pat in patterns:
-        detail = pat.sub(_REPLACEMENT, detail)
-
-    return detail
-
-
-def _is_production() -> bool:
-    env = (os.getenv("FG_ENV") or "").strip().lower()
-    return env in {"prod", "production", "staging"}
+class StageStatus(str, Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    OK = "ok"
+    SKIPPED = "skipped"
+    FAILED = "failed"
 
 
 # ---------------------------------------------------------------------------
-# Data classes
+# Stage record
 # ---------------------------------------------------------------------------
-
 
 @dataclass
-class BootStage:
+class StageRecord:
     stage_name: str
-    status: StageStatus = "pending"
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
     duration_ms: Optional[float] = None
+    status: StageStatus = StageStatus.PENDING
     error_code: Optional[str] = None
-    error_detail_redacted: Optional[str] = None
+    error_detail_raw: Optional[str] = None  # never exposed in prod
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self, redact: bool = False) -> dict:
         return {
             "stage_name": self.stage_name,
-            "status": self.status,
             "started_at": self.started_at,
             "completed_at": self.completed_at,
             "duration_ms": self.duration_ms,
+            "status": self.status.value,
             "error_code": self.error_code,
-            "error_detail_redacted": self.error_detail_redacted,
+            "error_detail_redacted": None if redact else self.error_detail_raw,
         }
 
 
 # ---------------------------------------------------------------------------
-# Boot trace store (per module)
+# Boot trace for a single module
 # ---------------------------------------------------------------------------
 
+@dataclass
+class BootTrace:
+    module_id: str
+    created_at: str = field(default_factory=lambda: _utc_now_iso())
+    completed: bool = False
 
-class BootTraceStore:
+    _stages: Dict[str, StageRecord] = field(default_factory=dict, repr=False)
+    _lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
+
+    def __post_init__(self) -> None:
+        with self._lock:
+            for stage in BOOT_STAGE_ORDER:
+                self._stages[stage.value] = StageRecord(stage_name=stage.value)
+
+    def start_stage(self, stage: str) -> None:
+        with self._lock:
+            rec = self._stages.get(stage)
+            if rec is None:
+                log.warning(
+                    "boot_trace start_stage unknown stage=%s module=%s",
+                    stage,
+                    self.module_id,
+                )
+                # Still record it - no silent failures
+                rec = StageRecord(stage_name=stage)
+                self._stages[stage] = rec
+
+            if rec.status == StageStatus.IN_PROGRESS:
+                log.warning(
+                    "boot_trace stage already in progress stage=%s module=%s",
+                    stage,
+                    self.module_id,
+                )
+
+            rec.status = StageStatus.IN_PROGRESS
+            rec.started_at = _utc_now_iso()
+
+    def complete_stage(
+        self,
+        stage: str,
+        status: StageStatus = StageStatus.OK,
+        error_code: Optional[str] = None,
+        error_detail: Optional[str] = None,
+    ) -> None:
+        with self._lock:
+            rec = self._stages.get(stage)
+            if rec is None:
+                log.warning(
+                    "boot_trace complete_stage: stage not found stage=%s module=%s",
+                    stage,
+                    self.module_id,
+                )
+                rec = StageRecord(stage_name=stage)
+                self._stages[stage] = rec
+
+            now = _utc_now_iso()
+            rec.completed_at = now
+            rec.status = status
+            rec.error_code = error_code
+            rec.error_detail_raw = error_detail
+
+            # Calculate duration
+            if rec.started_at:
+                try:
+                    started = datetime.fromisoformat(
+                        rec.started_at.replace("Z", "+00:00")
+                    )
+                    completed = datetime.fromisoformat(now.replace("Z", "+00:00"))
+                    rec.duration_ms = round(
+                        (completed - started).total_seconds() * 1000, 2
+                    )
+                except Exception:
+                    rec.duration_ms = None
+            else:
+                # Stage completed without being started - warn but record
+                rec.started_at = now
+                rec.duration_ms = 0.0
+
+            if status == StageStatus.FAILED:
+                log.error(
+                    "boot_stage_failed stage=%s module=%s error_code=%s",
+                    stage,
+                    self.module_id,
+                    error_code,
+                )
+            else:
+                log.info(
+                    "boot_stage_ok stage=%s module=%s duration_ms=%.2f",
+                    stage,
+                    self.module_id,
+                    rec.duration_ms or 0,
+                )
+
+    def skip_stage(self, stage: str, reason: str = "") -> None:
+        self.complete_stage(stage, status=StageStatus.SKIPPED, error_detail=reason)
+
+    def mark_ready(self) -> None:
+        self.complete_stage(BootStage.READY_TRUE.value)
+        with self._lock:
+            self.completed = True
+
+    def to_dict(self, redact: bool = False) -> dict:
+        with self._lock:
+            # Return stages in canonical order, then any extras
+            ordered: list[dict] = []
+            seen: set[str] = set()
+
+            for stage in BOOT_STAGE_ORDER:
+                rec = self._stages.get(stage.value)
+                if rec:
+                    ordered.append(rec.to_dict(redact=redact))
+                    seen.add(stage.value)
+
+            # Any extra stages recorded that aren't in canonical order
+            for name, rec in self._stages.items():
+                if name not in seen:
+                    ordered.append(rec.to_dict(redact=redact))
+
+            failed = [s for s in ordered if s["status"] == "failed"]
+            return {
+                "module_id": self.module_id,
+                "created_at": self.created_at,
+                "completed": self.completed,
+                "stages": ordered,
+                "failed_stage_count": len(failed),
+                "failed_stages": [s["stage_name"] for s in failed],
+            }
+
+
+# ---------------------------------------------------------------------------
+# Boot Trace Registry singleton
+# ---------------------------------------------------------------------------
+
+class BootTraceRegistry:
     """
-    Records boot stages for a single module.  Thread-safe.
+    Singleton registry of boot traces for all modules.
+    Thread-safe. Fail-closed.
+    """
+
+    _instance: Optional["BootTraceRegistry"] = None
+    _init_lock: threading.Lock = threading.Lock()
+
+    def __new__(cls) -> "BootTraceRegistry":
+        if cls._instance is None:
+            with cls._init_lock:
+                if cls._instance is None:
+                    obj = super().__new__(cls)
+                    obj._traces: Dict[str, BootTrace] = {}
+                    obj._lock = threading.RLock()
+                    cls._instance = obj
+        return cls._instance
+
+    def create_trace(self, module_id: str) -> BootTrace:
+        with self._lock:
+            if module_id in self._traces:
+                log.warning(
+                    "boot_trace already exists for module_id=%s - overwriting",
+                    module_id,
+                )
+            trace = BootTrace(module_id=module_id)
+            self._traces[module_id] = trace
+            log.info("boot_trace_created module_id=%s", module_id)
+            return trace
+
+    def get_trace(self, module_id: str) -> Optional[BootTrace]:
+        with self._lock:
+            return self._traces.get(module_id)
+
+    def get_trace_dict(self, module_id: str, redact: bool = True) -> Optional[dict]:
+        trace = self.get_trace(module_id)
+        if trace is None:
+            return None
+        return trace.to_dict(redact=redact)
+
+    def list_traces(self, redact: bool = True) -> list[dict]:
+        with self._lock:
+            return [t.to_dict(redact=redact) for t in self._traces.values()]
+
+    def _reset(self) -> None:
+        """For testing only."""
+        with self._lock:
+            self._traces.clear()
+
+
+# ---------------------------------------------------------------------------
+# Context manager for stage tracing
+# ---------------------------------------------------------------------------
+
+class StageContext:
+    """
+    Context manager for safe stage recording.
 
     Usage:
-        trace = BootTraceStore("frostgate-core")
-        trace.start_stage("config_loaded")
-        ...
-        trace.complete_stage("config_loaded")
-        trace.fail_stage("db_connected", error_code="DB_CONNECT_FAILED", detail=str(e))
+        trace = BootTraceRegistry().get_trace("mymodule")
+        with StageContext(trace, "db_connected", error_code="CP-DB-001"):
+            db.connect()
     """
 
-    def __init__(self, module_id: str) -> None:
-        self.module_id = module_id
-        self._lock = threading.Lock()
-        # Pre-populate all known stages in order as "pending"
-        self._stages: Dict[str, BootStage] = {
-            name: BootStage(stage_name=name) for name in BOOT_STAGE_ORDER
-        }
-        self._extra_stages: Dict[str, BootStage] = {}
-
-    # ------------------------------------------------------------------
-    # Mutations
-    # ------------------------------------------------------------------
-
-    def start_stage(self, stage_name: str) -> None:
-        now = datetime.now(timezone.utc).isoformat()
-        with self._lock:
-            stage = self._get_or_create(stage_name)
-            stage.status = "in_progress"
-            stage.started_at = now
-            stage.completed_at = None
-            stage.duration_ms = None
-
-    def complete_stage(self, stage_name: str) -> None:
-        now_iso = datetime.now(timezone.utc).isoformat()
-        now_ts = time.monotonic()
-        with self._lock:
-            stage = self._get_or_create(stage_name)
-            stage.status = "ok"
-            stage.completed_at = now_iso
-            if stage.started_at:
-                try:
-                    start_ts = datetime.fromisoformat(stage.started_at)
-                    if start_ts.tzinfo is None:
-                        start_ts = start_ts.replace(tzinfo=timezone.utc)
-                    delta = (
-                        datetime.fromisoformat(now_iso.replace("Z", "+00:00"))
-                        - start_ts
-                    )
-                    stage.duration_ms = round(delta.total_seconds() * 1000, 3)
-                except Exception:
-                    stage.duration_ms = None
-
-    def fail_stage(
+    def __init__(
         self,
-        stage_name: str,
-        *,
-        error_code: str,
-        detail: Optional[str] = None,
+        trace: BootTrace,
+        stage: str,
+        error_code: str = "CP-BOOT-ERR",
     ) -> None:
-        now_iso = datetime.now(timezone.utc).isoformat()
-        is_prod = _is_production()
-        redacted = (
-            sanitize_error_detail(detail, is_production=is_prod)
-            if detail
-            else None
-        )
-        with self._lock:
-            stage = self._get_or_create(stage_name)
-            stage.status = "failed"
-            stage.completed_at = now_iso
-            stage.error_code = error_code
-            stage.error_detail_redacted = redacted
-            if stage.started_at:
-                try:
-                    start_ts = datetime.fromisoformat(stage.started_at)
-                    if start_ts.tzinfo is None:
-                        start_ts = start_ts.replace(tzinfo=timezone.utc)
-                    delta = (
-                        datetime.fromisoformat(now_iso.replace("Z", "+00:00"))
-                        - start_ts
-                    )
-                    stage.duration_ms = round(delta.total_seconds() * 1000, 3)
-                except Exception:
-                    stage.duration_ms = None
+        self._trace = trace
+        self._stage = stage
+        self._error_code = error_code
 
-    def skip_stage(self, stage_name: str) -> None:
-        with self._lock:
-            stage = self._get_or_create(stage_name)
-            stage.status = "skipped"
+    def __enter__(self) -> "StageContext":
+        self._trace.start_stage(self._stage)
+        return self
 
-    # ------------------------------------------------------------------
-    # Reads
-    # ------------------------------------------------------------------
-
-    def get_ordered_stages(self) -> List[BootStage]:
-        """Return stages in canonical order.  Unknown stages appended after."""
-        with self._lock:
-            ordered = [
-                self._stages[name]
-                for name in BOOT_STAGE_ORDER
-                if name in self._stages
-            ]
-            extras = list(self._extra_stages.values())
-            return ordered + extras
-
-    def to_dict_list(self) -> List[Dict[str, Any]]:
-        return [s.to_dict() for s in self.get_ordered_stages()]
-
-    def summary(self) -> Dict[str, Any]:
-        stages = self.get_ordered_stages()
-        total = len(stages)
-        completed = sum(1 for s in stages if s.status in {"ok", "skipped"})
-        failed = [s.stage_name for s in stages if s.status == "failed"]
-        is_ready = (
-            total > 0
-            and completed == total
-            and not failed
-        )
-        return {
-            "module_id": self.module_id,
-            "total_stages": total,
-            "completed_stages": completed,
-            "failed_stages": failed,
-            "is_ready": is_ready,
-        }
-
-    # ------------------------------------------------------------------
-    # Internals
-    # ------------------------------------------------------------------
-
-    def _get_or_create(self, stage_name: str) -> BootStage:
-        """Must be called under lock."""
-        if stage_name in self._stages:
-            return self._stages[stage_name]
-        if stage_name not in self._extra_stages:
-            self._extra_stages[stage_name] = BootStage(stage_name=stage_name)
-        return self._extra_stages[stage_name]
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        if exc_type is None:
+            self._trace.complete_stage(self._stage, status=StageStatus.OK)
+        else:
+            self._trace.complete_stage(
+                self._stage,
+                status=StageStatus.FAILED,
+                error_code=self._error_code,
+                error_detail=f"{exc_type.__name__}: {exc_val}",
+            )
+        # Never suppress exceptions
+        return False
 
 
 # ---------------------------------------------------------------------------
-# Global store keyed by module_id
+# Utilities
 # ---------------------------------------------------------------------------
 
-_traces: Dict[str, BootTraceStore] = {}
-_traces_lock = threading.Lock()
-
-
-def get_trace(module_id: str) -> BootTraceStore:
-    """Get or create a boot trace for the given module."""
-    with _traces_lock:
-        if module_id not in _traces:
-            _traces[module_id] = BootTraceStore(module_id)
-        return _traces[module_id]
-
-
-def list_module_ids() -> List[str]:
-    with _traces_lock:
-        return list(_traces.keys())
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

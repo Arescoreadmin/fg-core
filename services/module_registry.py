@@ -1,24 +1,20 @@
 """
-services/module_registry.py — Central runtime module registry.
+FrostGate Control Plane - Module Registry Service
 
-Every module self-registers at startup.  Heartbeats keep records live; missing
-heartbeats transition the module to "stale" automatically.
+Central in-process registry for all runtime modules.
+Thread-safe, fail-closed, tenant-safe, redaction-aware.
 
-Thread-safe: all mutations go through _RegistryStore which holds a single RLock.
-Tenant-safe: GET /control-plane/modules returns all modules for platform-admins
-and only tenant-scoped modules for tenant-admins.  Sensitive fields are never
-exposed in list payloads.
+Modules self-register at startup using register_module().
+The registry is observable via list_modules() and query_module().
 
-Dependency probes are stored alongside the module record and include:
-  status, latency_ms, last_check_ts, error_code, measured_at_ts, timeout_ms
-
-No subprocess. No shell execution. No fail-open.
+P2 Liveness: heartbeat TTL, stale detection, node_id conflict tracking,
+             last_seen_ts with monotonic uptime.
+P2 DependencyProbe: measured_at_ts, timeout_ms, negative latency guards.
+P1 Redaction: sanitize_error_detail() applied before any error is stored.
 """
-
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import os
 import threading
@@ -26,375 +22,574 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Optional
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
-log = logging.getLogger("frostgate.module_registry")
+from services.error_sanitizer import sanitize_error_detail
+
+log = logging.getLogger("frostgate.control_plane.module_registry")
 
 # ---------------------------------------------------------------------------
-# Typing helpers
+# Deterministic error codes
 # ---------------------------------------------------------------------------
-
-ModuleState = Literal["starting", "ready", "degraded", "failed", "stopped", "stale"]
-DepStatus = Literal["ok", "degraded", "failed", "unknown"]
-
-# How long (seconds) before a module without a heartbeat is marked stale.
-DEFAULT_HEARTBEAT_TTL: int = int(os.getenv("FG_CP_MODULE_HEARTBEAT_TTL", "60"))
-
-# Maximum dependency probe latency sanity cap (ms).
-_MAX_LATENCY_MS: int = 300_000
+ERR_MODULE_NOT_FOUND = "CP-MOD-001"
+ERR_MODULE_ALREADY_REGISTERED = "CP-MOD-002"
+ERR_INVALID_MODULE_STATE = "CP-MOD-003"
+ERR_NODE_ID_CONFLICT = "CP-MOD-004"
 
 
 # ---------------------------------------------------------------------------
-# Data classes
+# Heartbeat TTL (configurable)
 # ---------------------------------------------------------------------------
 
+def _heartbeat_ttl_s() -> int:
+    return int(os.getenv("FG_CP_MODULE_HEARTBEAT_TTL_S", "60"))
+
+
+# ---------------------------------------------------------------------------
+# Enumerations
+# ---------------------------------------------------------------------------
+
+class ModuleState(str, Enum):
+    STARTING = "starting"
+    READY = "ready"
+    DEGRADED = "degraded"
+    FAILED = "failed"
+    STOPPED = "stopped"
+    STALE = "stale"      # heartbeat TTL exceeded
+
+
+class DependencyStatus(str, Enum):
+    OK = "ok"
+    DEGRADED = "degraded"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
+
+
+class BreakerState(str, Enum):
+    CLOSED = "closed"        # normal operation
+    OPEN = "open"            # tripped, rejecting requests
+    HALF_OPEN = "half_open"  # testing recovery
+
+
+# ---------------------------------------------------------------------------
+# Data models
+# ---------------------------------------------------------------------------
 
 @dataclass
 class DependencyProbe:
-    name: str  # e.g. "db", "redis", "nats", "opa", "ai", "storage"
-    status: DepStatus = "unknown"
-    latency_ms: Optional[float] = None  # None until first probe
-    measured_at_ts: Optional[str] = None
-    last_check_ts: Optional[str] = None
-    timeout_ms: Optional[int] = None
-    error_code: Optional[str] = None
+    """
+    Live state of a single dependency.
 
-    def to_dict(self) -> Dict[str, Any]:
+    P2 correctness: measured_at_ts and timeout_ms are required for
+    meaningful SLO tracking. Negative/nonsense latency values are guarded.
+    P1 redaction: error_detail is sanitized via sanitize_error_detail()
+    before storage.
+    """
+    name: str
+    status: DependencyStatus = DependencyStatus.UNKNOWN
+    latency_ms: Optional[float] = None
+    last_check_ts: Optional[str] = None
+    measured_at_ts: Optional[str] = None   # when the probe measurement started
+    timeout_ms: Optional[float] = None     # probe timeout budget in ms
+    error_code: Optional[str] = None
+    error_detail: Optional[str] = None    # sanitized on store; never exposed in prod
+
+    def __post_init__(self) -> None:
+        # P2: Guard against negative or nonsense latency values
+        if self.latency_ms is not None:
+            if self.latency_ms < 0:
+                log.warning(
+                    "DependencyProbe latency_ms is negative (%.3f) for dep=%s — clamping to 0",
+                    self.latency_ms,
+                    self.name,
+                )
+                self.latency_ms = 0.0
+            elif self.latency_ms > 3_600_000:
+                # More than 1 hour is clearly a bug (clock skew, overflow, etc.)
+                log.warning(
+                    "DependencyProbe latency_ms is implausibly large (%.3f) for dep=%s — clamping to None",
+                    self.latency_ms,
+                    self.name,
+                )
+                self.latency_ms = None
+
+        # P2: Guard against non-positive timeout values
+        if self.timeout_ms is not None and self.timeout_ms <= 0:
+            log.warning(
+                "DependencyProbe timeout_ms is non-positive (%.3f) for dep=%s — clamping to None",
+                self.timeout_ms,
+                self.name,
+            )
+            self.timeout_ms = None
+
+        # P2: Set measured_at_ts to now if not provided
+        if self.measured_at_ts is None:
+            self.measured_at_ts = _utc_now_iso()
+
+        # P1: Sanitize error_detail before storage to strip secrets/stack traces
+        if self.error_detail is not None:
+            self.error_detail = sanitize_error_detail(self.error_detail)
+
+    def to_dict(self, redact: bool = False) -> dict:
         return {
             "name": self.name,
-            "status": self.status,
-            "latency_ms": self._safe_latency(),
-            "measured_at_ts": self.measured_at_ts,
+            "status": self.status.value,
+            "latency_ms": self.latency_ms,
             "last_check_ts": self.last_check_ts,
+            "measured_at_ts": self.measured_at_ts,
             "timeout_ms": self.timeout_ms,
             "error_code": self.error_code,
+            # Sanitizer already ran at init; redact flag controls whether to
+            # include even the sanitized version in responses.
+            "error_detail_redacted": None if redact else self.error_detail,
         }
-
-    def _safe_latency(self) -> Optional[float]:
-        """Prevent negative or nonsense latency values."""
-        if self.latency_ms is None:
-            return None
-        v = float(self.latency_ms)
-        if v < 0:
-            return 0.0
-        if v > _MAX_LATENCY_MS:
-            return float(_MAX_LATENCY_MS)
-        return round(v, 3)
 
 
 @dataclass
-class ModuleRecord:
+class ModuleRegistration:
+    """
+    Runtime metadata for a registered module.
+
+    P2 Liveness: last_seen_ts, is_stale(), heartbeat().
+    P0 Tenant scoping: tenant_id stored and exposed for filtering.
+    """
     module_id: str
     name: str
     version: str
     commit_hash: str
     build_timestamp: str
     node_id: str
+    registered_at: str
+    tenant_id: str = ""
 
-    # mutable runtime state
-    state: ModuleState = "starting"
-    last_state_change_ts: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    # Mutable state (guarded by lock)
+    state: ModuleState = ModuleState.STARTING
+    last_state_change_ts: str = ""
     health_summary: str = ""
     last_error_code: Optional[str] = None
-    breaker_state: Optional[str] = None  # "open"|"closed"|"half-open"|None
+    breaker_state: Optional[BreakerState] = None
     queue_depth: Optional[int] = None
+    last_seen_ts: Optional[str] = None  # updated by heartbeat()
 
-    # registration + liveness
-    registered_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
-    last_seen_ts: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
-    uptime_seconds: float = 0.0
-
-    # tenant scoping
-    tenant_id: Optional[str] = None  # None = platform-level module
-
-    # dependency probes
+    # Dependencies map: dep_name -> DependencyProbe
     dependencies: Dict[str, DependencyProbe] = field(default_factory=dict)
 
-    # monotonic uptime tracking
-    _started_at: float = field(default_factory=time.monotonic, repr=False)
+    # Internal
+    _lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
+
+    # ------------------------------------------------------------------
+    # Liveness
+    # ------------------------------------------------------------------
 
     def heartbeat(self) -> None:
-        """Touch liveness and recalculate uptime."""
-        now = datetime.now(timezone.utc).isoformat()
-        self.last_seen_ts = now
-        self.uptime_seconds = round(time.monotonic() - self._started_at, 3)
+        """Record that this module is still alive. Updates last_seen_ts."""
+        with self._lock:
+            self.last_seen_ts = _utc_now_iso()
 
-    def set_state(self, new_state: ModuleState, error_code: Optional[str] = None) -> None:
-        self.state = new_state
-        self.last_state_change_ts = datetime.now(timezone.utc).isoformat()
-        if error_code is not None:
-            self.last_error_code = error_code
-
-    def is_stale(self, ttl: int = DEFAULT_HEARTBEAT_TTL) -> bool:
+    def is_stale(self, ttl_s: Optional[int] = None) -> bool:
+        """
+        Returns True if this module has not sent a heartbeat within ttl_s seconds.
+        Returns False if heartbeat has never been set (freshly registered).
+        """
+        if self.last_seen_ts is None:
+            return False
+        ttl = ttl_s if ttl_s is not None else _heartbeat_ttl_s()
         try:
-            last = datetime.fromisoformat(self.last_seen_ts)
-            if last.tzinfo is None:
-                last = last.replace(tzinfo=timezone.utc)
-            delta = datetime.now(timezone.utc) - last
-            return delta.total_seconds() > ttl
+            last = datetime.fromisoformat(self.last_seen_ts.replace("Z", "+00:00"))
+            now = datetime.now(timezone.utc)
+            return (now - last).total_seconds() > ttl
         except Exception:
-            return True
+            return False
 
-    def to_dict(self, *, redact: bool = False) -> Dict[str, Any]:
-        state = self.state
-        if state != "stale" and self.is_stale():
-            state = "stale"
+    # ------------------------------------------------------------------
+    # State management
+    # ------------------------------------------------------------------
 
-        base: Dict[str, Any] = {
-            "module_id": self.module_id,
-            "name": self.name,
-            "version": self.version,
-            "commit_hash": self.commit_hash if not redact else self.commit_hash[:8] + "...",
-            "build_timestamp": self.build_timestamp,
-            "node_id": self.node_id if not redact else "redacted",
-            "state": state,
-            "last_state_change_ts": self.last_state_change_ts,
-            "health_summary": self.health_summary,
-            "last_error_code": self.last_error_code,
-            "breaker_state": self.breaker_state,
-            "queue_depth": self.queue_depth,
-            "registered_at": self.registered_at,
-            "last_seen_ts": self.last_seen_ts,
-            "uptime_seconds": self.uptime_seconds,
-            "tenant_id": self.tenant_id,
-            "dependency_summary": {
-                name: dep.status for name, dep in self.dependencies.items()
-            },
-        }
-        return base
+    def update_state(
+        self,
+        state: ModuleState,
+        health_summary: str = "",
+        last_error_code: Optional[str] = None,
+    ) -> None:
+        with self._lock:
+            self.state = state
+            self.last_state_change_ts = _utc_now_iso()
+            self.health_summary = health_summary
+            if last_error_code is not None:
+                self.last_error_code = last_error_code
+
+    def update_dependency(self, probe: DependencyProbe) -> None:
+        with self._lock:
+            self.dependencies[probe.name] = probe
+
+    def uptime_seconds(self) -> float:
+        try:
+            registered = datetime.fromisoformat(
+                self.registered_at.replace("Z", "+00:00")
+            )
+            now = datetime.now(timezone.utc)
+            return (now - registered).total_seconds()
+        except Exception:
+            return 0.0
+
+    def to_dict(self, redact: bool = False) -> dict:
+        with self._lock:
+            stale = self.is_stale()
+            # Effective state: if stale and not already terminal, surface STALE
+            effective_state = self.state.value
+            if stale and self.state not in (
+                ModuleState.STOPPED,
+                ModuleState.FAILED,
+                ModuleState.STALE,
+            ):
+                effective_state = ModuleState.STALE.value
+
+            return {
+                "module_id": self.module_id,
+                "name": self.name,
+                "version": self.version,
+                "commit_hash": self.commit_hash,
+                "build_timestamp": self.build_timestamp,
+                "node_id": self.node_id,
+                "tenant_id": self.tenant_id if not redact else None,
+                "registered_at": self.registered_at,
+                "uptime_seconds": round(self.uptime_seconds(), 1),
+                "state": effective_state,
+                "stale": stale,
+                "last_seen_ts": self.last_seen_ts,
+                "last_state_change_ts": self.last_state_change_ts,
+                "health_summary": self.health_summary,
+                "last_error_code": self.last_error_code,
+                "breaker_state": self.breaker_state.value
+                if self.breaker_state
+                else None,
+                "queue_depth": self.queue_depth,
+                "dependency_count": len(self.dependencies),
+                "dependency_statuses": {
+                    name: probe.status.value
+                    for name, probe in self.dependencies.items()
+                },
+            }
+
+    def dependency_list(self, redact: bool = False) -> list[dict]:
+        with self._lock:
+            return [probe.to_dict(redact=redact) for probe in self.dependencies.values()]
 
 
 # ---------------------------------------------------------------------------
-# Registry store
+# Registry singleton
 # ---------------------------------------------------------------------------
 
+class ModuleRegistry:
+    """
+    Thread-safe singleton registry for all runtime modules.
 
-class _RegistryStore:
-    """Thread-safe, in-memory module registry with TTL enforcement."""
+    Fail-closed: reads return empty/error rather than leaking internal state.
+    No subprocess. No shell execution. Pure in-process state.
 
-    def __init__(self) -> None:
-        self._lock = threading.RLock()
-        self._modules: Dict[str, ModuleRecord] = {}
+    P0: tenant_id stored per module; list_modules() filters by tenant.
+    P2: node_id uniqueness tracked; warns on conflict.
+    """
+
+    _instance: Optional["ModuleRegistry"] = None
+    _init_lock: threading.Lock = threading.Lock()
+
+    def __new__(cls) -> "ModuleRegistry":
+        if cls._instance is None:
+            with cls._init_lock:
+                if cls._instance is None:
+                    obj = super().__new__(cls)
+                    obj._modules: Dict[str, ModuleRegistration] = {}
+                    obj._lock = threading.RLock()
+                    # node_id → set[module_id] for conflict detection (P2)
+                    obj._node_registry: Dict[str, set] = {}
+                    cls._instance = obj
+        return cls._instance
 
     # ------------------------------------------------------------------
-    # Write operations
+    # Registration
     # ------------------------------------------------------------------
 
-    def register(self, record: ModuleRecord) -> None:
-        """Register or re-register a module.  Idempotent on module_id."""
+    def register(
+        self,
+        *,
+        module_id: str,
+        name: str,
+        version: str,
+        commit_hash: str = "unknown",
+        build_timestamp: str = "",
+        node_id: str = "",
+        tenant_id: str = "",
+        initial_state: ModuleState = ModuleState.STARTING,
+    ) -> ModuleRegistration:
+        """Register a module at startup. Returns the registration object."""
+        if not module_id or not name:
+            raise ValueError("module_id and name are required")
+
+        resolved_node_id = node_id or _node_id()
+
         with self._lock:
-            existing = self._modules.get(record.module_id)
-            if existing is not None:
-                # Preserve runtime state, update metadata
-                existing.version = record.version
-                existing.commit_hash = record.commit_hash
-                existing.build_timestamp = record.build_timestamp
-                existing.node_id = record.node_id
-                existing.tenant_id = record.tenant_id
-                existing.heartbeat()
-                log.info(
-                    "module_registry.re_registered module_id=%s version=%s",
-                    record.module_id,
-                    record.version,
-                )
-            else:
-                self._modules[record.module_id] = record
-                log.info(
-                    "module_registry.registered module_id=%s version=%s",
-                    record.module_id,
-                    record.version,
+            if module_id in self._modules:
+                log.warning(
+                    "module_already_registered module_id=%s — overwriting",
+                    module_id,
                 )
 
-    def heartbeat(self, module_id: str) -> bool:
-        """Update last_seen_ts. Returns False if module not found."""
+            # P2: node_id uniqueness enforcement
+            existing_modules_for_node = self._node_registry.get(resolved_node_id, set())
+            if existing_modules_for_node and module_id not in existing_modules_for_node:
+                log.warning(
+                    "node_id_conflict node_id=%s already used by modules=%s; "
+                    "new registration module_id=%s — possible duplicate deployment",
+                    resolved_node_id,
+                    existing_modules_for_node,
+                    module_id,
+                )
+            existing_modules_for_node.add(module_id)
+            self._node_registry[resolved_node_id] = existing_modules_for_node
+
+            now = _utc_now_iso()
+            reg = ModuleRegistration(
+                module_id=module_id,
+                name=name,
+                version=version,
+                commit_hash=commit_hash,
+                build_timestamp=build_timestamp or now,
+                node_id=resolved_node_id,
+                registered_at=now,
+                tenant_id=tenant_id,
+                state=initial_state,
+                last_state_change_ts=now,
+                last_seen_ts=now,  # freshly registered = freshly seen
+            )
+            self._modules[module_id] = reg
+            log.info(
+                "module_registered module_id=%s name=%s version=%s tenant=%s state=%s",
+                module_id,
+                name,
+                version,
+                tenant_id or "(none)",
+                initial_state.value,
+            )
+            return reg
+
+    def deregister(self, module_id: str) -> None:
         with self._lock:
-            rec = self._modules.get(module_id)
-            if rec is None:
-                return False
-            rec.heartbeat()
-            return True
+            reg = self._modules.pop(module_id, None)
+            if reg:
+                node_mods = self._node_registry.get(reg.node_id)
+                if node_mods:
+                    node_mods.discard(module_id)
+
+    # ------------------------------------------------------------------
+    # State updates (called by modules themselves)
+    # ------------------------------------------------------------------
 
     def set_state(
         self,
         module_id: str,
         state: ModuleState,
-        *,
-        error_code: Optional[str] = None,
         health_summary: str = "",
-    ) -> bool:
-        with self._lock:
-            rec = self._modules.get(module_id)
-            if rec is None:
-                return False
-            rec.set_state(state, error_code=error_code)
-            if health_summary:
-                rec.health_summary = health_summary
-            return True
+        last_error_code: Optional[str] = None,
+    ) -> None:
+        reg = self._get(module_id)
+        if reg is None:
+            log.warning("set_state: unknown module_id=%s", module_id)
+            return
+        reg.update_state(state, health_summary, last_error_code)
+        log.info(
+            "module_state_changed module_id=%s state=%s error_code=%s",
+            module_id,
+            state.value,
+            last_error_code,
+        )
 
-    def update_dependency(
-        self,
-        module_id: str,
-        dep_name: str,
-        *,
-        status: DepStatus,
-        latency_ms: Optional[float],
-        error_code: Optional[str] = None,
-        timeout_ms: Optional[int] = None,
-    ) -> bool:
-        now_ts = datetime.now(timezone.utc).isoformat()
-        with self._lock:
-            rec = self._modules.get(module_id)
-            if rec is None:
-                return False
-            probe = rec.dependencies.get(dep_name)
-            if probe is None:
-                probe = DependencyProbe(name=dep_name)
-                rec.dependencies[dep_name] = probe
-            probe.status = status
-            probe.latency_ms = latency_ms
-            probe.measured_at_ts = now_ts
-            probe.last_check_ts = now_ts
-            probe.timeout_ms = timeout_ms
-            probe.error_code = error_code
-            return True
+    def set_dependency(self, module_id: str, probe: DependencyProbe) -> None:
+        reg = self._get(module_id)
+        if reg is None:
+            log.warning("set_dependency: unknown module_id=%s", module_id)
+            return
+        reg.update_dependency(probe)
 
     def set_breaker_state(
-        self, module_id: str, breaker_state: Optional[str]
-    ) -> bool:
-        with self._lock:
-            rec = self._modules.get(module_id)
-            if rec is None:
-                return False
-            rec.breaker_state = breaker_state
-            return True
+        self, module_id: str, breaker_state: BreakerState
+    ) -> None:
+        reg = self._get(module_id)
+        if reg is None:
+            return
+        with reg._lock:
+            reg.breaker_state = breaker_state
 
-    def set_queue_depth(self, module_id: str, depth: int) -> bool:
-        with self._lock:
-            rec = self._modules.get(module_id)
-            if rec is None:
-                return False
-            rec.queue_depth = max(0, int(depth))
-            return True
+    def set_queue_depth(self, module_id: str, depth: int) -> None:
+        reg = self._get(module_id)
+        if reg is None:
+            return
+        with reg._lock:
+            reg.queue_depth = depth
+
+    def heartbeat(self, module_id: str) -> None:
+        """Record heartbeat for a module. Updates last_seen_ts."""
+        reg = self._get(module_id)
+        if reg is not None:
+            reg.heartbeat()
 
     # ------------------------------------------------------------------
-    # Read operations
+    # Queries
     # ------------------------------------------------------------------
 
-    def get(self, module_id: str) -> Optional[ModuleRecord]:
+    def list_modules(
+        self,
+        redact: bool = True,
+        tenant_id: Optional[str] = None,
+    ) -> List[dict]:
+        """
+        List registered modules.
+
+        P0 Tenant scoping: if tenant_id is provided, only return modules
+        belonging to that tenant. If tenant_id is None (global admin), return all.
+        """
+        with self._lock:
+            regs = list(self._modules.values())
+
+        if tenant_id:
+            regs = [r for r in regs if r.tenant_id == tenant_id]
+
+        return [reg.to_dict(redact=redact) for reg in regs]
+
+    def get_module(
+        self,
+        module_id: str,
+        redact: bool = True,
+        tenant_id: Optional[str] = None,
+    ) -> Optional[dict]:
+        """
+        Get a single module.
+
+        P0 Tenant scoping: if tenant_id is provided and module belongs to a
+        different tenant, return None (treated as not found — no cross-tenant
+        information disclosure).
+        """
+        reg = self._get(module_id)
+        if reg is None:
+            return None
+        if tenant_id and reg.tenant_id and reg.tenant_id != tenant_id:
+            # Cross-tenant access denied — return None (not found semantics)
+            log.warning(
+                "cross_tenant_module_access denied module_id=%s module_tenant=%s "
+                "requesting_tenant=%s",
+                module_id,
+                reg.tenant_id,
+                tenant_id,
+            )
+            return None
+        return reg.to_dict(redact=redact)
+
+    def get_dependencies(
+        self,
+        module_id: str,
+        redact: bool = True,
+        tenant_id: Optional[str] = None,
+    ) -> Optional[List[dict]]:
+        """
+        Get dependency probes for a module.
+
+        P0 Tenant scoping: same cross-tenant guard as get_module().
+        """
+        reg = self._get(module_id)
+        if reg is None:
+            return None
+        if tenant_id and reg.tenant_id and reg.tenant_id != tenant_id:
+            log.warning(
+                "cross_tenant_dep_access denied module_id=%s requesting_tenant=%s",
+                module_id,
+                tenant_id,
+            )
+            return None
+        return reg.dependency_list(redact=redact)
+
+    def module_exists(self, module_id: str) -> bool:
+        with self._lock:
+            return module_id in self._modules
+
+    def get_registration(self, module_id: str) -> Optional[ModuleRegistration]:
+        return self._get(module_id)
+
+    # ------------------------------------------------------------------
+    # Internal
+    # ------------------------------------------------------------------
+
+    def _get(self, module_id: str) -> Optional[ModuleRegistration]:
         with self._lock:
             return self._modules.get(module_id)
 
-    def list_all(self) -> List[ModuleRecord]:
+    def _reset(self) -> None:
+        """For testing only."""
         with self._lock:
-            return list(self._modules.values())
-
-    def list_for_tenant(self, tenant_id: str) -> List[ModuleRecord]:
-        """Return modules owned by this tenant OR platform-level modules."""
-        with self._lock:
-            return [
-                r
-                for r in self._modules.values()
-                if r.tenant_id is None or r.tenant_id == tenant_id
-            ]
-
-    def get_dependencies(
-        self, module_id: str
-    ) -> Optional[Dict[str, DependencyProbe]]:
-        with self._lock:
-            rec = self._modules.get(module_id)
-            if rec is None:
-                return None
-            return dict(rec.dependencies)
-
-    def snapshot_for_api(
-        self,
-        *,
-        tenant_id: Optional[str],
-        is_global_admin: bool,
-        redact: bool,
-    ) -> List[Dict[str, Any]]:
-        """Tenant-safe snapshot.  Global admins see all; tenant admins see their scope."""
-        with self._lock:
-            if is_global_admin:
-                records = list(self._modules.values())
-            elif tenant_id:
-                records = [
-                    r
-                    for r in self._modules.values()
-                    if r.tenant_id is None or r.tenant_id == tenant_id
-                ]
-            else:
-                records = []
-            return [r.to_dict(redact=redact) for r in records]
+            self._modules.clear()
+            self._node_registry.clear()
 
 
 # ---------------------------------------------------------------------------
-# Module-level singleton
+# Module-local convenience helper for self-registration
 # ---------------------------------------------------------------------------
-
-_store: Optional[_RegistryStore] = None
-_store_lock = threading.Lock()
-
-
-def get_registry() -> _RegistryStore:
-    global _store
-    if _store is None:
-        with _store_lock:
-            if _store is None:
-                _store = _RegistryStore()
-    return _store
-
-
-# ---------------------------------------------------------------------------
-# Helper: canonical registration ID (deterministic from module_id + version + node_id)
-# ---------------------------------------------------------------------------
-
-
-def make_registration_hash(module_id: str, version: str, node_id: str) -> str:
-    payload = {"module_id": module_id, "version": version, "node_id": node_id}
-    raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()
-
-
-# ---------------------------------------------------------------------------
-# Self-registration helper for modules
-# ---------------------------------------------------------------------------
-
 
 def register_module(
     *,
     module_id: str,
     name: str,
     version: str,
-    commit_hash: str,
-    build_timestamp: str,
-    node_id: Optional[str] = None,
-    tenant_id: Optional[str] = None,
-    initial_state: ModuleState = "starting",
-) -> ModuleRecord:
+    commit_hash: str = "unknown",
+    build_timestamp: str = "",
+    node_id: str = "",
+    tenant_id: str = "",
+    initial_state: ModuleState = ModuleState.STARTING,
+) -> ModuleRegistration:
     """
-    Convenience helper for modules to self-register.
+    Convenience wrapper for modules to self-register at startup.
 
-    Call this at startup before serving traffic.
+    Usage:
+        from services.module_registry import register_module, ModuleState
+        reg = register_module(
+            module_id="audit_engine",
+            name="Audit Engine",
+            version="1.0.0",
+            tenant_id="tenant-abc",
+        )
+        reg.update_state(ModuleState.READY)
     """
-    if node_id is None:
-        node_id = os.getenv("FG_NODE_ID", f"node-{uuid.uuid4().hex[:8]}")
-
-    record = ModuleRecord(
+    return ModuleRegistry().register(
         module_id=module_id,
         name=name,
         version=version,
         commit_hash=commit_hash,
         build_timestamp=build_timestamp,
         node_id=node_id,
-        state=initial_state,
         tenant_id=tenant_id,
+        initial_state=initial_state,
     )
-    get_registry().register(record)
-    return record
+
+
+# ---------------------------------------------------------------------------
+# Utilities
+# ---------------------------------------------------------------------------
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _node_id() -> str:
+    raw = os.getenv("FG_NODE_ID", "").strip()
+    if raw:
+        return raw
+    import socket
+    try:
+        return socket.gethostname()
+    except Exception:
+        return "unknown"
+
+
+def _is_prod_like() -> bool:
+    return (os.getenv("FG_ENV") or "").strip().lower() in {
+        "prod", "production", "staging"
+    }
