@@ -47,6 +47,10 @@ ERR_MAX_SUBSCRIBERS = "CP-EVT-003"
 # Limits (configurable via env)
 # ---------------------------------------------------------------------------
 
+MAX_SUBSCRIBERS_PER_TENANT: int = int(os.getenv("FG_CP_MAX_SUBSCRIBERS_PER_TENANT", "10"))
+SUBSCRIBER_QUEUE_DEPTH: int = int(os.getenv("FG_CP_SUBSCRIBER_QUEUE_DEPTH", "100"))
+
+
 def _max_subscribers_per_tenant() -> int:
     return int(os.getenv("FG_CP_MAX_SUBSCRIBERS_PER_TENANT", "10"))
 
@@ -129,37 +133,51 @@ class ControlEvent:
     An immutable control plane event.
 
     P0 Dual identity:
-      - event_id (content_hash):  SHA-256 of {type}:{module}:{tenant}:{ts}
+      - content_hash (event_id):  SHA-256 of {type}:{module}:{tenant}:{ts}:{payload}
                                   Deterministic; use for deduplication.
       - event_instance_id:        Unique per publish (ts + seq + content prefix).
                                   Use for anti-replay and downstream ingestion.
+
+    Accepts event_type as a ControlEventType enum or as a plain string value.
+    When timestamp is provided it is used for the content hash (deterministic tests);
+    when omitted a fresh UTC timestamp is generated.
     """
     event_type: ControlEventType
     module_id: str
     tenant_id: str
-    payload: Dict[str, Any]
+    payload: Dict[str, Any] = field(default_factory=dict)
 
     # Computed in __post_init__ — frozen so we use object.__setattr__
     event_id: str = field(default="")          # content_hash (deterministic)
     event_instance_id: str = field(default="") # unique per publish (anti-replay)
     timestamp: str = field(default="")
+    content_hash: str = field(default="")      # alias for event_id
 
     def __post_init__(self) -> None:
-        ts = _utc_now_iso()
-        content_hash = _deterministic_event_id(
+        # Coerce string event_type to enum
+        if isinstance(self.event_type, str):
+            object.__setattr__(self, "event_type", ControlEventType(self.event_type))
+
+        # Use provided timestamp if non-empty, otherwise generate
+        ts = self.timestamp if self.timestamp else _utc_now_iso()
+        payload_str = json.dumps(self.payload, sort_keys=True, separators=(",", ":"))
+        ch = _deterministic_event_id(
             event_type=self.event_type.value,
             module_id=self.module_id,
             tenant_id=self.tenant_id,
             timestamp=ts,
+            payload_str=payload_str,
         )
-        instance_id = _generate_instance_id(content_hash)
+        instance_id = _generate_instance_id(ch)
         object.__setattr__(self, "timestamp", ts)
-        object.__setattr__(self, "event_id", content_hash)
+        object.__setattr__(self, "event_id", ch)
+        object.__setattr__(self, "content_hash", ch)
         object.__setattr__(self, "event_instance_id", instance_id)
 
     def to_dict(self, redact_tenant: bool = False) -> dict:
         return {
             "event_id": self.event_id,               # content hash (dedupe)
+            "content_hash": self.content_hash,        # same as event_id
             "event_instance_id": self.event_instance_id,  # unique per publish
             "event_type": self.event_type.value,
             "module_id": self.module_id,
@@ -182,12 +200,14 @@ def _deterministic_event_id(
     module_id: str,
     tenant_id: str,
     timestamp: str,
+    payload_str: str = "",
 ) -> str:
     """
     Compute deterministic content-addressed event ID (SHA-256).
     Use for deduplication; NOT for uniqueness (two identical events share this hash).
+    Includes payload in the hash so different payloads produce different hashes.
     """
-    raw = f"{event_type}:{module_id}:{tenant_id}:{timestamp}"
+    raw = f"{event_type}:{module_id}:{tenant_id}:{timestamp}:{payload_str}"
     return "evt-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
 
@@ -609,3 +629,147 @@ def emit_policy_violation(
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+# ---------------------------------------------------------------------------
+# Simplified public API: make_event factory + ControlEventBus
+# ---------------------------------------------------------------------------
+
+import queue as _queue_module  # stdlib queue for ControlEventBus subscribers
+
+
+def make_event(
+    event_type: str,
+    *,
+    module_id: str,
+    tenant_id: str,
+    payload: Optional[Dict[str, Any]] = None,
+) -> ControlEvent:
+    """
+    Factory for creating ControlEvent objects by event type name.
+    Raises ValueError for unknown event types.
+    """
+    try:
+        et = ControlEventType(event_type)
+    except ValueError:
+        raise ValueError(
+            f"Unknown event type: {event_type!r}. "
+            f"Valid types: {[e.value for e in ControlEventType]}"
+        )
+    return ControlEvent(
+        event_type=et,
+        module_id=module_id,
+        tenant_id=tenant_id,
+        payload=payload or {},
+    )
+
+
+class _ControlSubscriber:
+    """
+    A single subscriber in a ControlEventBus.
+    Receives events via a thread-safe queue.
+    """
+
+    def __init__(self, subscriber_id: str, tenant_id: Optional[str], is_global_admin: bool) -> None:
+        self.subscriber_id = subscriber_id
+        self.tenant_id = tenant_id
+        self.is_global_admin = is_global_admin
+        self.queue: _queue_module.Queue = _queue_module.Queue(maxsize=SUBSCRIBER_QUEUE_DEPTH)
+        self._closed = False
+
+    def matches(self, event: ControlEvent) -> bool:
+        if self.is_global_admin:
+            return True
+        return self.tenant_id == event.tenant_id
+
+    def is_closed(self) -> bool:
+        return self._closed
+
+    def close(self) -> None:
+        self._closed = True
+
+
+class ControlEventBus:
+    """
+    Non-singleton, test-friendly in-process event bus.
+
+    Each ControlEventBus() creates a fresh instance (not a singleton).
+    Provides subscribe/publish/history with tenant isolation.
+    """
+
+    def __init__(self) -> None:
+        self._subscribers: Dict[str, _ControlSubscriber] = {}
+        self._history: List[ControlEvent] = []
+        self._lock = threading.RLock()
+
+    def add_subscriber(
+        self,
+        tenant_id: Optional[str],
+        is_global_admin: bool = False,
+    ) -> _ControlSubscriber:
+        """Add a subscriber for events. Raises ValueError if per-tenant cap exceeded."""
+        with self._lock:
+            # Count non-global subscribers for this tenant
+            if not is_global_admin and tenant_id is not None:
+                tenant_count = sum(
+                    1 for s in self._subscribers.values()
+                    if not s.is_closed() and s.tenant_id == tenant_id and not s.is_global_admin
+                )
+                if tenant_count >= MAX_SUBSCRIBERS_PER_TENANT:
+                    raise ValueError(
+                        f"TENANT_SUBSCRIBER_LIMIT: per-tenant subscriber cap "
+                        f"({MAX_SUBSCRIBERS_PER_TENANT}) exceeded for tenant {tenant_id!r}"
+                    )
+            sub_id = str(uuid.uuid4())
+            sub = _ControlSubscriber(sub_id, tenant_id, is_global_admin)
+            self._subscribers[sub_id] = sub
+            return sub
+
+    def remove_subscriber(self, subscriber_id: str) -> None:
+        with self._lock:
+            sub = self._subscribers.pop(subscriber_id, None)
+            if sub:
+                sub.close()
+
+    def publish(self, event: ControlEvent) -> int:
+        """Publish event to all matching subscribers. Returns count delivered."""
+        with self._lock:
+            self._history.append(event)
+            delivered = 0
+            to_remove: List[str] = []
+            for sub_id, sub in self._subscribers.items():
+                if sub.is_closed():
+                    to_remove.append(sub_id)
+                    continue
+                if not sub.matches(event):
+                    continue
+                try:
+                    sub.queue.put_nowait(event.to_dict())
+                    delivered += 1
+                except _queue_module.Full:
+                    sub.close()
+                    to_remove.append(sub_id)
+            for sub_id in to_remove:
+                self._subscribers.pop(sub_id, None)
+            return delivered
+
+    def subscriber_count(self) -> int:
+        with self._lock:
+            return sum(1 for s in self._subscribers.values() if not s.is_closed())
+
+    def get_history(
+        self,
+        tenant_id: Optional[str] = None,
+        is_global_admin: bool = False,
+        limit: int = 100,
+        since: Optional[str] = None,
+    ) -> List[dict]:
+        with self._lock:
+            events = list(self._history)
+        if not is_global_admin and tenant_id is not None:
+            events = [e for e in events if e.tenant_id == tenant_id]
+        elif not is_global_admin and tenant_id is None:
+            events = []
+        if since:
+            events = [e for e in events if e.timestamp >= since]
+        return [e.to_dict() for e in events[-limit:]]

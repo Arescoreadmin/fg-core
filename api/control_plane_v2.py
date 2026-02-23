@@ -16,6 +16,10 @@ Endpoints:
   POST /control-plane/v2/playbooks/{name}/trigger      — trigger allowlisted playbook
   GET  /control-plane/v2/playbooks                     — list available playbooks
   GET  /control-plane/evidence/bundle                  — audit evidence bundle
+  POST /control-plane/v2/policy/pin                    — pin policy version hash (Phase 5)
+  POST /control-plane/v2/policy/stage                  — stage policy version for canary (Phase 5)
+  POST /control-plane/v2/policy/rollback               — rollback to previous pinned version (Phase 5)
+  GET  /control-plane/v2/policy/pins                   — list active policy pins for tenant (Phase 5)
 
 Global Security Invariants (all enforced, no bypass):
   - tenant_id ALWAYS from auth context; NEVER from request headers/body.
@@ -64,6 +68,34 @@ from services.cp_playbooks import (
     VALID_PLAYBOOKS,
     ERR_INVALID_PLAYBOOK,
     get_playbook_service,
+)
+from services.cp_msp_delegation import (
+    ERR_DELEGATION_NOT_FOUND,
+    get_delegation_service,
+)
+from services.cp_terminal import (
+    TERMINAL_ALLOWLIST,
+    BREAKGLASS_SCOPE,
+    ERR_TERMINAL_UNKNOWN_CMD,
+    ERR_TERMINAL_BREAKGLASS_REQUIRED,
+    ERR_TERMINAL_REASON_REQUIRED,
+    ERR_TERMINAL_REASON_INVALID,
+    get_terminal_service,
+)
+from services.cp_ai_isolation import (
+    derive_tenant_namespace,
+    IsolationViolationError,
+)
+from services.cp_policy_lifecycle import (
+    POLICY_PIN_MAX_TTL_HOURS,
+    POLICY_PIN_DEFAULT_TTL_HOURS,
+    ERR_POLICY_NOT_FOUND,
+    ERR_POLICY_INVALID_HASH,
+    ERR_POLICY_INVALID_TTL,
+    ERR_POLICY_NO_ROLLBACK_TARGET,
+    ERR_POLICY_INVALID_ROLLOUT_PCT,
+    ERR_POLICY_INVALID_POLICY_ID,
+    get_policy_lifecycle_service,
 )
 
 log = logging.getLogger("frostgate.cp_v2")
@@ -1184,5 +1216,670 @@ def get_evidence_bundle(
         "commands": commands,
         "receipts_by_command": receipts_by_command,
         "integrity": integrity.to_dict(),
+        "trace_id": trace,
+    }
+
+
+# ---------------------------------------------------------------------------
+# F. MSP Delegation (Phase 4)
+# ---------------------------------------------------------------------------
+
+
+class DelegationCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    delegatee_id: str = Field(..., min_length=1, max_length=256)
+    target_tenant: str = Field(..., min_length=1, max_length=128)
+    scope: str = Field(..., min_length=1, max_length=512)
+    ttl_hours: int = Field(24, ge=1, le=720)
+
+
+class DelegationRevokeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(..., min_length=4, max_length=512)
+
+
+@router.post(
+    "/control-plane/v2/delegation",
+    dependencies=[Depends(require_scopes("control-plane:msp:admin"))],
+    summary="Create MSP delegation record (Phase 4)",
+    status_code=201,
+)
+def create_delegation(
+    body: DelegationCreateRequest,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> Dict[str, Any]:
+    """
+    Create a delegation record granting another actor limited access to a tenant.
+
+    Requires control-plane:msp:admin scope.
+    target_tenant must be explicit (anti-enumeration).
+    All delegation operations emit ledger events at warning severity.
+    """
+    actor = _actor_id(request)
+    trace = _trace_id(request)
+
+    _enforce_rate_limit(
+        _rl_key(actor, "delegation_create"),
+        *_RL_WRITE,
+        error_code="CP_DELEGATION_RATE_LIMIT",
+    )
+
+    svc = get_delegation_service()
+    ledger = get_ledger()
+
+    try:
+        with db.begin():
+            rec = svc.create_delegation(
+                db_session=db,
+                ledger=ledger,
+                delegator_id=actor,
+                delegatee_id=body.delegatee_id,
+                target_tenant=body.target_tenant,
+                scope=body.scope,
+                ttl_hours=body.ttl_hours,
+                trace_id=trace,
+            )
+    except (ValueError, RuntimeError) as exc:
+        code = str(exc).split(":")[0].strip()
+        http_status = 400 if code.startswith("CP_DELEGATION") else 500
+        _error_response(http_status, code, str(exc), trace)
+
+    result = rec.to_dict()
+    result["trace_id"] = trace
+    result["actor_id"] = actor
+    return result
+
+
+@router.delete(
+    "/control-plane/v2/delegation/{delegation_id}",
+    dependencies=[Depends(require_scopes("control-plane:msp:admin"))],
+    summary="Revoke an MSP delegation record (Phase 4)",
+)
+def revoke_delegation(
+    delegation_id: str,
+    body: DelegationRevokeRequest,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> Dict[str, Any]:
+    """
+    Revoke a delegation record. Once revoked, it cannot be un-revoked.
+    Emits a ledger event at warning severity.
+    """
+    actor = _actor_id(request)
+    trace = _trace_id(request)
+
+    _enforce_rate_limit(
+        _rl_key(actor, "delegation_revoke"),
+        *_RL_WRITE,
+        error_code="CP_DELEGATION_RATE_LIMIT",
+    )
+
+    svc = get_delegation_service()
+    ledger = get_ledger()
+
+    try:
+        with db.begin():
+            rec = svc.revoke_delegation(
+                db_session=db,
+                ledger=ledger,
+                delegation_id=delegation_id,
+                actor_id=actor,
+                trace_id=trace,
+            )
+    except ValueError as exc:
+        code = str(exc).split(":")[0].strip()
+        if code == ERR_DELEGATION_NOT_FOUND:
+            _error_response(404, code, "Delegation not found", trace)
+        _handle_service_error(exc, trace)
+    except RuntimeError as exc:
+        _handle_service_error(exc, trace)
+
+    result = rec.to_dict()
+    result["trace_id"] = trace
+    return result
+
+
+@router.get(
+    "/control-plane/v2/delegation",
+    dependencies=[Depends(require_scopes("control-plane:msp:read"))],
+    summary="List MSP delegation records (Phase 4)",
+)
+def list_delegations(
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+    target_tenant: Optional[str] = Query(None, max_length=128),
+    include_expired: bool = Query(False),
+    limit: int = Query(100, ge=1, le=500),
+) -> Dict[str, Any]:
+    """
+    List delegation records. MSP scope required.
+    Returns 404 for unauthorized cross-tenant attempts (anti-enumeration).
+    """
+    actor = _actor_id(request)
+    trace = _trace_id(request)
+
+    _enforce_rate_limit(
+        _rl_key(actor, "delegation_list"),
+        *_RL_READ,
+        error_code="CP_DELEGATION_RATE_LIMIT",
+    )
+
+    svc = get_delegation_service()
+    records = svc.list_delegations(
+        db_session=db,
+        delegator_id=actor,
+        target_tenant=target_tenant,
+        include_expired=include_expired,
+        limit=limit,
+    )
+    return {
+        "delegations": records,
+        "total": len(records),
+        "actor_id": actor,
+        "trace_id": trace,
+    }
+
+
+# ---------------------------------------------------------------------------
+# G. AI Isolation Namespace (Phase 3)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/control-plane/v2/ai/namespace",
+    dependencies=[Depends(require_scopes("control-plane:read"))],
+    summary="Get tenant-scoped AI embedding namespace (Phase 3)",
+)
+def get_ai_namespace(
+    request: Request,
+) -> Dict[str, Any]:
+    """
+    Return the tenant's scoped AI embedding namespace.
+
+    The namespace is derived from the tenant_id using SHA-256.
+    This namespace is used to partition all AI embeddings, vectors,
+    and RAG retrievals to prevent cross-tenant AI drift.
+
+    Tenant isolation: namespace is derived from auth context only.
+    Cross-tenant drift is structurally impossible within this namespace.
+    """
+    tenant_id = _tenant_from_auth(request)
+    trace = _trace_id(request)
+
+    if not tenant_id:
+        _error_response(
+            400,
+            "CP_AI_TENANT_REQUIRED",
+            "Tenant binding required for AI namespace",
+            trace,
+        )
+
+    try:
+        namespace = derive_tenant_namespace(tenant_id)
+    except IsolationViolationError as exc:
+        _error_response(400, "CP_AI_ISOLATION_ERROR", str(exc), trace)
+
+    return {
+        "tenant_id": tenant_id,
+        "namespace": namespace,
+        "isolation": "tenant_scoped",
+        "algorithm": "sha256(ns:v1:<tenant_id>)[:32]",
+        "trace_id": trace,
+    }
+
+
+# ---------------------------------------------------------------------------
+# H. Sandboxed Terminal (Phase 6)
+# ---------------------------------------------------------------------------
+
+
+class TerminalExecuteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command: str = Field(..., min_length=1, max_length=256)
+    reason: str = Field(..., min_length=4, max_length=512)
+    breakglass_session_id: Optional[str] = Field(None, max_length=128)
+
+
+class TerminalBreakglassRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(..., min_length=4, max_length=512)
+    ttl_seconds: int = Field(3600, ge=60, le=3600)
+
+
+@router.get(
+    "/control-plane/v2/terminal/allowlist",
+    dependencies=[Depends(require_scopes("control-plane:read"))],
+    summary="List allowed sandboxed terminal commands (Phase 6)",
+)
+def list_terminal_allowlist(request: Request) -> Dict[str, Any]:
+    """Return the allowlisted terminal DSL commands."""
+    trace = _trace_id(request)
+    return {
+        "allowlist": sorted(TERMINAL_ALLOWLIST),
+        "breakglass_commands": sorted(
+            cmd
+            for cmd in TERMINAL_ALLOWLIST
+            if cmd in {"force-inspect", "emergency-list"}
+        ),
+        "breakglass_scope_required": BREAKGLASS_SCOPE,
+        "trace_id": trace,
+    }
+
+
+@router.post(
+    "/control-plane/v2/terminal/breakglass",
+    dependencies=[Depends(require_scopes("control-plane:terminal:breakglass"))],
+    summary="Create break-glass terminal scope elevation session (Phase 6)",
+    status_code=201,
+)
+def create_breakglass_session(
+    body: TerminalBreakglassRequest,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> Dict[str, Any]:
+    """
+    Create a time-bounded break-glass scope elevation session.
+
+    Requires control-plane:terminal:breakglass scope.
+    TTL is capped at BREAKGLASS_MAX_TTL_SECONDS (3600s / 1 hour).
+    Mandatory reason required.
+    Emits ledger event at warning severity.
+    """
+    tenant_id = _tenant_from_auth(request)
+    actor = _actor_id(request)
+    trace = _trace_id(request)
+
+    if not tenant_id:
+        _error_response(400, "CP_TENANT_REQUIRED", "Tenant binding required", trace)
+
+    _enforce_rate_limit(
+        _rl_key(actor, "breakglass"), *_RL_WRITE, error_code="CP_BREAKGLASS_RATE_LIMIT"
+    )
+
+    svc = get_terminal_service()
+    ledger = get_ledger()
+
+    try:
+        with db.begin():
+            session = svc.create_breakglass_session(
+                tenant_id=tenant_id,
+                actor_id=actor,
+                reason=body.reason,
+                ttl_seconds=body.ttl_seconds,
+                ledger=ledger,
+                db_session=db,
+                trace_id=trace,
+            )
+    except (ValueError, RuntimeError) as exc:
+        _handle_service_error(exc, trace)
+
+    result = session.to_dict()
+    result["trace_id"] = trace
+    return result
+
+
+@router.post(
+    "/control-plane/v2/terminal/execute",
+    dependencies=[Depends(require_scopes("control-plane:read"))],
+    summary="Execute a sandboxed terminal DSL command (Phase 6)",
+    status_code=201,
+)
+def terminal_execute(
+    body: TerminalExecuteRequest,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> Dict[str, Any]:
+    """
+    Execute a sandboxed DSL command.
+
+    Security:
+      - Only allowlisted commands accepted.
+      - No subprocess, no shell, no arbitrary code execution.
+      - Mandatory reason required.
+      - Break-glass commands require control-plane:terminal:breakglass scope.
+      - All invocations emit ledger events (before returning output).
+      - Evidence bundle link included in every response.
+      - Tenant isolation enforced — tenant from auth context only.
+    """
+    tenant_id = _tenant_from_auth(request)
+    is_global = _is_global_admin(request)
+    actor = _actor_id(request)
+    role = _actor_role(request)
+    trace = _trace_id(request)
+
+    if not is_global and not tenant_id:
+        _error_response(400, "CP_TENANT_REQUIRED", "Tenant binding required", trace)
+
+    effective_tenant = tenant_id or "global"
+
+    _enforce_rate_limit(
+        _rl_key(effective_tenant, "terminal"),
+        *_RL_WRITE,
+        error_code="CP_TERMINAL_RATE_LIMIT",
+    )
+
+    # Get actor scopes for break-glass check
+    auth = _get_auth(request)
+    scopes = frozenset(getattr(auth, "scopes", set()) or set())
+
+    svc = get_terminal_service()
+    ledger = get_ledger()
+
+    try:
+        with db.begin():
+            result = svc.execute(
+                db_session=db,
+                ledger=ledger,
+                raw_command=body.command,
+                reason=body.reason,
+                tenant_id=effective_tenant,
+                actor_id=actor,
+                actor_role=role,
+                scopes=scopes,
+                breakglass_session_id=body.breakglass_session_id,
+                trace_id=trace,
+            )
+    except ValueError as exc:
+        code = str(exc).split(":")[0].strip()
+        if code == ERR_TERMINAL_UNKNOWN_CMD:
+            _error_response(400, code, str(exc), trace)
+        elif code == ERR_TERMINAL_BREAKGLASS_REQUIRED:
+            _error_response(403, code, str(exc), trace)
+        elif code in (ERR_TERMINAL_REASON_REQUIRED, ERR_TERMINAL_REASON_INVALID):
+            _error_response(400, code, str(exc), trace)
+        _handle_service_error(exc, trace)
+    except RuntimeError as exc:
+        _handle_service_error(exc, trace)
+
+    out = result.to_dict()
+    out["trace_id"] = trace
+    return out
+
+
+# ---------------------------------------------------------------------------
+# I. Policy Lifecycle (Phase 5)
+# ---------------------------------------------------------------------------
+
+_RL_POLICY = (1.0, 10)
+
+
+class PolicyPinRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    policy_id: str = Field(..., min_length=1, max_length=128)
+    version_hash: str = Field(..., min_length=64, max_length=64)
+    ttl_hours: int = Field(
+        POLICY_PIN_DEFAULT_TTL_HOURS, ge=1, le=POLICY_PIN_MAX_TTL_HOURS
+    )
+
+
+class PolicyStageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    policy_id: str = Field(..., min_length=1, max_length=128)
+    version_hash: str = Field(..., min_length=64, max_length=64)
+    rollout_pct: int = Field(..., ge=0, le=100)
+    ttl_hours: int = Field(
+        POLICY_PIN_DEFAULT_TTL_HOURS, ge=1, le=POLICY_PIN_MAX_TTL_HOURS
+    )
+
+
+class PolicyRollbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    policy_id: str = Field(..., min_length=1, max_length=128)
+    reason: str = Field(..., min_length=4, max_length=512)
+
+
+@router.post(
+    "/control-plane/v2/policy/pin",
+    dependencies=[Depends(require_scopes("control-plane:admin"))],
+    summary="Pin a policy version hash for this tenant (Phase 5)",
+    status_code=201,
+)
+def pin_policy_version(
+    body: PolicyPinRequest,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> Dict[str, Any]:
+    """
+    Pin a specific policy version hash for the authenticated tenant.
+
+    Prevents policy drift: the policy engine will serve this exact version
+    until the pin expires or a rollback is performed.
+
+    Security invariants:
+      - tenant_id from auth context only.
+      - version_hash must be a 64-character SHA-256 hex string.
+      - ttl_hours bounded by POLICY_PIN_MAX_TTL_HOURS.
+      - Ledger event emitted at warning severity before returning.
+    """
+    tenant = _tenant_from_auth(request)
+    actor = _actor_id(request)
+    trace = _trace_id(request)
+
+    _enforce_rate_limit(
+        _rl_key(tenant, "policy_pin"),
+        *_RL_POLICY,
+        error_code="CP_POLICY_RATE_LIMIT",
+    )
+
+    svc = get_policy_lifecycle_service()
+    ledger = get_ledger()
+
+    try:
+        with db.begin():
+            rec = svc.pin_version(
+                db_session=db,
+                ledger=ledger,
+                tenant_id=tenant or "global",
+                policy_id=body.policy_id,
+                version_hash=body.version_hash,
+                ttl_hours=body.ttl_hours,
+                actor_id=actor,
+                trace_id=trace,
+            )
+    except ValueError as exc:
+        code = str(exc).split(":")[0].strip()
+        if code in (
+            ERR_POLICY_INVALID_HASH,
+            ERR_POLICY_INVALID_TTL,
+            ERR_POLICY_INVALID_POLICY_ID,
+        ):
+            _error_response(400, code, str(exc), trace)
+        _handle_service_error(exc, trace)
+    except RuntimeError as exc:
+        _handle_service_error(exc, trace)
+
+    out = rec.to_dict()
+    out["trace_id"] = trace
+    return out
+
+
+@router.post(
+    "/control-plane/v2/policy/stage",
+    dependencies=[Depends(require_scopes("control-plane:admin"))],
+    summary="Stage a policy version for canary rollout (Phase 5)",
+    status_code=201,
+)
+def stage_policy_version(
+    body: PolicyStageRequest,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> Dict[str, Any]:
+    """
+    Stage a policy version for gradual (canary) rollout to this tenant.
+
+    The staged version is served to `rollout_pct`% of traffic.
+    Use /policy/pin to promote to 100%.
+
+    Security invariants:
+      - tenant_id from auth context only.
+      - version_hash must be a 64-character SHA-256 hex string.
+      - rollout_pct must be 0–100.
+      - Ledger event emitted at warning severity before returning.
+    """
+    tenant = _tenant_from_auth(request)
+    actor = _actor_id(request)
+    trace = _trace_id(request)
+
+    _enforce_rate_limit(
+        _rl_key(tenant, "policy_stage"),
+        *_RL_POLICY,
+        error_code="CP_POLICY_RATE_LIMIT",
+    )
+
+    svc = get_policy_lifecycle_service()
+    ledger = get_ledger()
+
+    try:
+        with db.begin():
+            rec = svc.stage_version(
+                db_session=db,
+                ledger=ledger,
+                tenant_id=tenant or "global",
+                policy_id=body.policy_id,
+                version_hash=body.version_hash,
+                rollout_pct=body.rollout_pct,
+                ttl_hours=body.ttl_hours,
+                actor_id=actor,
+                trace_id=trace,
+            )
+    except ValueError as exc:
+        code = str(exc).split(":")[0].strip()
+        if code in (
+            ERR_POLICY_INVALID_HASH,
+            ERR_POLICY_INVALID_TTL,
+            ERR_POLICY_INVALID_ROLLOUT_PCT,
+            ERR_POLICY_INVALID_POLICY_ID,
+        ):
+            _error_response(400, code, str(exc), trace)
+        _handle_service_error(exc, trace)
+    except RuntimeError as exc:
+        _handle_service_error(exc, trace)
+
+    out = rec.to_dict()
+    out["trace_id"] = trace
+    return out
+
+
+@router.post(
+    "/control-plane/v2/policy/rollback",
+    dependencies=[Depends(require_scopes("control-plane:admin"))],
+    summary="Rollback policy to previous pinned version (Phase 5)",
+    status_code=200,
+)
+def rollback_policy(
+    body: PolicyRollbackRequest,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> Dict[str, Any]:
+    """
+    Rollback a policy to the version that was pinned before the current one.
+
+    Requires the current active pin to have a recorded previous_hash.
+
+    Security invariants:
+      - tenant_id from auth context only.
+      - Requires a prior pin with a non-None previous_hash.
+      - Raises 409 (no rollback target) if no prior pin exists.
+      - Ledger event emitted at warning severity before returning.
+    """
+    tenant = _tenant_from_auth(request)
+    actor = _actor_id(request)
+    trace = _trace_id(request)
+
+    _enforce_rate_limit(
+        _rl_key(tenant, "policy_rollback"),
+        *_RL_POLICY,
+        error_code="CP_POLICY_RATE_LIMIT",
+    )
+
+    svc = get_policy_lifecycle_service()
+    ledger = get_ledger()
+
+    try:
+        with db.begin():
+            rec = svc.rollback(
+                db_session=db,
+                ledger=ledger,
+                tenant_id=tenant or "global",
+                policy_id=body.policy_id,
+                actor_id=actor,
+                trace_id=trace,
+            )
+    except ValueError as exc:
+        code = str(exc).split(":")[0].strip()
+        if code == ERR_POLICY_NOT_FOUND:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": {
+                        "code": code,
+                        "message": "Policy pin not found",
+                        "trace_id": trace,
+                    }
+                },
+            )
+        if code == ERR_POLICY_NO_ROLLBACK_TARGET:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": {
+                        "code": code,
+                        "message": "No previous version to roll back to",
+                        "trace_id": trace,
+                    }
+                },
+            )
+        if code == ERR_POLICY_INVALID_POLICY_ID:
+            _error_response(400, code, str(exc), trace)
+        _handle_service_error(exc, trace)
+    except RuntimeError as exc:
+        _handle_service_error(exc, trace)
+
+    out = rec.to_dict()
+    out["trace_id"] = trace
+    return out
+
+
+@router.get(
+    "/control-plane/v2/policy/pins",
+    dependencies=[Depends(require_scopes("control-plane:admin"))],
+    summary="List active policy pins for the authenticated tenant (Phase 5)",
+)
+def list_policy_pins(
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> Dict[str, Any]:
+    """
+    List all active policy pins for the authenticated tenant.
+
+    Returns only pins for the current tenant (no cross-tenant enumeration).
+    """
+    tenant = _tenant_from_auth(request)
+    actor = _actor_id(request)
+    trace = _trace_id(request)
+
+    _enforce_rate_limit(
+        _rl_key(tenant, "policy_list"),
+        *_RL_READ,
+        error_code="CP_POLICY_RATE_LIMIT",
+    )
+
+    svc = get_policy_lifecycle_service()
+
+    pins = svc.list_pins(db_session=db, tenant_id=tenant or "global")
+
+    return {
+        "pins": [p.to_dict() for p in pins],
+        "count": len(pins),
+        "tenant_id": tenant or "global",
+        "actor_id": actor,
         "trace_id": trace,
     }

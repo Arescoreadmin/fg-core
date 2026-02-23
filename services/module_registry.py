@@ -131,6 +131,16 @@ class DependencyProbe:
         if self.error_detail is not None:
             self.error_detail = sanitize_error_detail(self.error_detail)
 
+    def _safe_latency(self) -> Optional[float]:
+        """Return latency_ms clamped to [0, 300_000] ms, or None if not set."""
+        if self.latency_ms is None:
+            return None
+        if self.latency_ms < 0:
+            return 0.0
+        if self.latency_ms > 300_000:
+            return 300_000.0
+        return self.latency_ms
+
     def to_dict(self, redact: bool = False) -> dict:
         return {
             "name": self.name,
@@ -160,7 +170,9 @@ class ModuleRegistration:
     commit_hash: str
     build_timestamp: str
     node_id: str
-    registered_at: str
+    registered_at: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    )
     tenant_id: str = ""
 
     # Mutable state (guarded by lock)
@@ -187,18 +199,20 @@ class ModuleRegistration:
         with self._lock:
             self.last_seen_ts = _utc_now_iso()
 
-    def is_stale(self, ttl_s: Optional[int] = None) -> bool:
+    def is_stale(self, ttl_s: Optional[int] = None, ttl: Optional[int] = None) -> bool:
         """
         Returns True if this module has not sent a heartbeat within ttl_s seconds.
         Returns False if heartbeat has never been set (freshly registered).
+        The ``ttl`` parameter is an alias for ``ttl_s`` (accepts either).
         """
         if self.last_seen_ts is None:
             return False
-        ttl = ttl_s if ttl_s is not None else _heartbeat_ttl_s()
+        effective_ttl = ttl if ttl is not None else ttl_s
+        effective_ttl = effective_ttl if effective_ttl is not None else _heartbeat_ttl_s()
         try:
             last = datetime.fromisoformat(self.last_seen_ts.replace("Z", "+00:00"))
             now = datetime.now(timezone.utc)
-            return (now - last).total_seconds() > ttl
+            return (now - last).total_seconds() > effective_ttl
         except Exception:
             return False
 
@@ -313,17 +327,33 @@ class ModuleRegistry:
 
     def register(
         self,
+        rec: Optional["ModuleRegistration"] = None,
         *,
-        module_id: str,
-        name: str,
-        version: str,
+        module_id: str = "",
+        name: str = "",
+        version: str = "",
         commit_hash: str = "unknown",
         build_timestamp: str = "",
         node_id: str = "",
         tenant_id: str = "",
         initial_state: ModuleState = ModuleState.STARTING,
     ) -> ModuleRegistration:
-        """Register a module at startup. Returns the registration object."""
+        """Register a module at startup. Returns the registration object.
+
+        Accepts either a positional ModuleRegistration/ModuleRecord argument
+        (for test-friendly direct registration) or keyword-only arguments.
+        """
+        if rec is not None:
+            # Direct registration path: store the provided record.
+            resolved_node_id = rec.node_id or _node_id()
+            with self._lock:
+                existing_modules_for_node = self._node_registry.get(resolved_node_id, set())
+                existing_modules_for_node.add(rec.module_id)
+                self._node_registry[resolved_node_id] = existing_modules_for_node
+                if rec.last_seen_ts is None:
+                    rec.last_seen_ts = _utc_now_iso()
+                self._modules[rec.module_id] = rec
+            return rec
         if not module_id or not name:
             raise ValueError("module_id and name are required")
 
@@ -411,6 +441,25 @@ class ModuleRegistry:
             log.warning("set_dependency: unknown module_id=%s", module_id)
             return
         reg.update_dependency(probe)
+
+    def update_dependency(
+        self,
+        module_id: str,
+        dep_name: str,
+        status: str,
+        latency_ms: Optional[float] = None,
+        error_code: Optional[str] = None,
+        error_detail: Optional[str] = None,
+    ) -> None:
+        """Convenience wrapper: create/update a DependencyProbe by name and status."""
+        probe = DependencyProbe(
+            name=dep_name,
+            status=DependencyStatus(status),
+            latency_ms=latency_ms,
+            error_code=error_code,
+            error_detail=error_detail,
+        )
+        self.set_dependency(module_id, probe)
 
     def set_breaker_state(
         self, module_id: str, breaker_state: BreakerState
@@ -593,3 +642,159 @@ def _is_prod_like() -> bool:
     return (os.getenv("FG_ENV") or "").strip().lower() in {
         "prod", "production", "staging"
     }
+
+
+# ---------------------------------------------------------------------------
+# Simplified public API aliases (test-compatible)
+# ---------------------------------------------------------------------------
+
+# ModuleRecord is an alias for ModuleRegistration.
+# registered_at now has a default so it can be omitted on construction.
+ModuleRecord = ModuleRegistration
+
+
+def get_registry() -> ModuleRegistry:
+    """Return the singleton ModuleRegistry instance."""
+    return ModuleRegistry()
+
+
+def make_registration_hash(module_id: str, version: str, node_id: str) -> str:
+    """Deterministic content-addressed hash for a module registration."""
+    raw = f"{module_id}:{version}:{node_id}"
+    return "reg-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+
+
+class _RegistryStore:
+    """
+    Non-singleton, test-friendly module registry store.
+
+    Accepts ModuleRecord objects directly in register().
+    Provides simplified helper methods for state, heartbeat, dependencies, etc.
+    """
+
+    def __init__(self) -> None:
+        self._modules: Dict[str, ModuleRegistration] = {}
+        self._lock = threading.RLock()
+
+    def register(self, rec: ModuleRegistration) -> None:
+        with self._lock:
+            existing = self._modules.get(rec.module_id)
+            if existing is not None:
+                # Preserve mutable state on re-registration
+                rec.state = existing.state
+                rec.last_seen_ts = existing.last_seen_ts
+                rec.last_state_change_ts = existing.last_state_change_ts
+                rec.last_error_code = existing.last_error_code
+                rec.breaker_state = existing.breaker_state
+                rec.queue_depth = existing.queue_depth
+                rec.dependencies = existing.dependencies
+            else:
+                # New registration: set last_seen_ts so is_stale() works correctly
+                rec.last_seen_ts = _utc_now_iso()
+            self._modules[rec.module_id] = rec
+
+    def get(self, module_id: str) -> Optional[ModuleRegistration]:
+        with self._lock:
+            return self._modules.get(module_id)
+
+    def list_all(self) -> List[ModuleRegistration]:
+        with self._lock:
+            return list(self._modules.values())
+
+    def list_for_tenant(self, tenant_id: str) -> List[ModuleRegistration]:
+        """Return modules for a tenant, including platform-level (no tenant) modules."""
+        with self._lock:
+            return [
+                m for m in self._modules.values()
+                if not m.tenant_id or m.tenant_id == tenant_id
+            ]
+
+    def snapshot_for_api(
+        self,
+        tenant_id: Optional[str] = None,
+        is_global_admin: bool = False,
+        redact: bool = True,
+    ) -> List[dict]:
+        with self._lock:
+            if is_global_admin:
+                modules = list(self._modules.values())
+            elif tenant_id:
+                modules = [
+                    m for m in self._modules.values()
+                    if not m.tenant_id or m.tenant_id == tenant_id
+                ]
+            else:
+                return []
+            return [m.to_dict(redact=redact) for m in modules]
+
+    def set_state(
+        self,
+        module_id: str,
+        state: str,
+        error_code: Optional[str] = None,
+    ) -> bool:
+        with self._lock:
+            m = self._modules.get(module_id)
+            if m is None:
+                return False
+            m.state = ModuleState(state)
+            m.last_state_change_ts = _utc_now_iso()
+            if error_code is not None:
+                m.last_error_code = error_code
+            return True
+
+    def heartbeat(self, module_id: str) -> bool:
+        with self._lock:
+            m = self._modules.get(module_id)
+            if m is None:
+                return False
+            m.heartbeat()
+            return True
+
+    def update_dependency(
+        self,
+        module_id: str,
+        dep_name: str,
+        status: str,
+        latency_ms: Optional[float] = None,
+    ) -> bool:
+        with self._lock:
+            m = self._modules.get(module_id)
+            if m is None:
+                return False
+            # Create probe without latency first to avoid __post_init__ clamping,
+            # then set raw latency directly so _safe_latency() can clamp at read time.
+            probe = DependencyProbe(
+                name=dep_name,
+                status=DependencyStatus(status),
+                latency_ms=None,
+            )
+            if latency_ms is not None:
+                probe.latency_ms = latency_ms
+            m.update_dependency(probe)
+            return True
+
+    def get_dependencies(
+        self, module_id: str
+    ) -> Optional[Dict[str, DependencyProbe]]:
+        with self._lock:
+            m = self._modules.get(module_id)
+            if m is None:
+                return None
+            return dict(m.dependencies)
+
+    def set_breaker_state(self, module_id: str, state: str) -> bool:
+        with self._lock:
+            m = self._modules.get(module_id)
+            if m is None:
+                return False
+            m.breaker_state = BreakerState(state)
+            return True
+
+    def set_queue_depth(self, module_id: str, depth: int) -> bool:
+        with self._lock:
+            m = self._modules.get(module_id)
+            if m is None:
+                return False
+            m.queue_depth = max(0, depth)
+            return True

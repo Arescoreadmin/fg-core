@@ -442,6 +442,307 @@ def check_router_registered() -> None:
 # Main
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Check 17: AI isolation service enforces tenant-scoped namespace
+# ---------------------------------------------------------------------------
+def check_ai_isolation_namespace() -> None:
+    print("\n[17] AI isolation: tenant-scoped namespace enforcement")
+    content = _read("services/cp_ai_isolation.py")
+
+    required = [
+        ("derive_tenant_namespace", "derive_tenant_namespace function defined"),
+        ("IsolationViolationError", "IsolationViolationError defined"),
+        ("TenantScopedRetriever", "TenantScopedRetriever class defined"),
+        ("NAMESPACE_VERSION", "NAMESPACE_VERSION constant defined"),
+        ("AI_CROSS_TENANT_RETRIEVAL", "cross-tenant retrieval error code defined"),
+        ("AI_TENANT_REQUIRED", "empty tenant rejection defined"),
+    ]
+    for marker, description in required:
+        if marker in content:
+            ok(description)
+        else:
+            fail(f"AI isolation: {description} — '{marker}' not found in cp_ai_isolation.py")
+
+    # Verify no subprocess
+    tree = _parse("services/cp_ai_isolation.py")
+    if tree:
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "subprocess":
+                        fail("subprocess usage found in cp_ai_isolation.py")
+        ok("No subprocess in cp_ai_isolation.py")
+
+
+# ---------------------------------------------------------------------------
+# Check 18: MSP delegation model present and enforces expiry
+# ---------------------------------------------------------------------------
+def check_msp_delegation_model() -> None:
+    print("\n[18] MSP delegation model present with expiry + scope control")
+    content = _read("services/cp_msp_delegation.py")
+
+    required = [
+        ("MSPDelegationService", "MSPDelegationService class defined"),
+        ("VALID_DELEGATION_SCOPES", "VALID_DELEGATION_SCOPES defined"),
+        ("DELEGATION_MAX_TTL_HOURS", "DELEGATION_MAX_TTL_HOURS defined"),
+        ("ERR_DELEGATION_NOT_FOUND", "NOT_FOUND error code (anti-enumeration)"),
+        ("is_valid", "is_valid() expiry check defined"),
+        ("grants_scope", "grants_scope() scope check defined"),
+        ("revoked", "revocation flag present"),
+        ("expires_at", "expiry timestamp present"),
+    ]
+    for marker, description in required:
+        if marker in content:
+            ok(description)
+        else:
+            fail(f"Delegation: {description} — '{marker}' not found in cp_msp_delegation.py")
+
+    # Check delegation endpoints in API
+    api_content = _read("api/control_plane_v2.py")
+    api_markers = [
+        ("/control-plane/v2/delegation", "delegation endpoints defined in API"),
+        ("msp:admin", "delegation requires msp:admin scope"),
+        ("ERR_DELEGATION_NOT_FOUND", "anti-enumeration NOT_FOUND used"),
+    ]
+    for marker, description in api_markers:
+        if marker in api_content:
+            ok(description)
+        else:
+            fail(f"Delegation API: {description} — '{marker}' not found in control_plane_v2.py")
+
+
+# ---------------------------------------------------------------------------
+# Check 19: Sandboxed terminal interface enforces DSL allowlist
+# ---------------------------------------------------------------------------
+def check_sandboxed_terminal() -> None:
+    print("\n[19] Sandboxed terminal: DSL allowlist enforced, no subprocess")
+    content = _read("services/cp_terminal.py")
+
+    required = [
+        ("TERMINAL_ALLOWLIST", "TERMINAL_ALLOWLIST defined"),
+        ("TERMINAL_BREAKGLASS_COMMANDS", "TERMINAL_BREAKGLASS_COMMANDS defined"),
+        ("BREAKGLASS_SCOPE", "BREAKGLASS_SCOPE constant defined"),
+        ("ERR_TERMINAL_UNKNOWN_CMD", "unknown command error code defined"),
+        ("ERR_TERMINAL_BREAKGLASS_REQUIRED", "break-glass scope requirement defined"),
+        ("_COMMAND_HANDLERS", "dispatch table defined (no dynamic exec)"),
+        ("ERR_TERMINAL_REASON_REQUIRED", "mandatory reason enforced"),
+        ("shell metacharacters", "shell metacharacter rejection defined"),
+    ]
+    for marker, description in required:
+        if marker in content:
+            ok(description)
+        else:
+            fail(f"Terminal: {description} — '{marker}' not found in cp_terminal.py")
+
+    # Verify no subprocess in terminal
+    tree = _parse("services/cp_terminal.py")
+    if tree:
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "subprocess":
+                        fail("subprocess usage found in cp_terminal.py — FORBIDDEN")
+        ok("No subprocess in cp_terminal.py")
+
+    # Verify terminal endpoints in API
+    api_content = _read("api/control_plane_v2.py")
+    api_markers = [
+        ("/control-plane/v2/terminal/execute", "terminal execute endpoint defined"),
+        ("/control-plane/v2/terminal/allowlist", "terminal allowlist endpoint defined"),
+        ("/control-plane/v2/terminal/breakglass", "terminal breakglass endpoint defined"),
+        ("BREAKGLASS_SCOPE", "breakglass scope enforced in API"),
+    ]
+    for marker, description in api_markers:
+        if marker in api_content:
+            ok(description)
+        else:
+            fail(f"Terminal API: {description} — '{marker}' not found")
+
+
+# ---------------------------------------------------------------------------
+# Check 20: CLI verifier tool exists and is functional
+# ---------------------------------------------------------------------------
+def check_cli_verifier_tool() -> None:
+    print("\n[20] CLI verifier tool exists (tools/verify_bundle.py)")
+    content = _read("tools/verify_bundle.py")
+
+    required = [
+        ("BundleVerifier", "BundleVerifier class defined"),
+        ("AnchorVerifier", "AnchorVerifier class defined"),
+        ("GENESIS_HASH", "GENESIS_HASH constant defined"),
+        ("_recompute_content_hash", "content hash recomputation defined"),
+        ("_recompute_chain_hash", "chain hash recomputation defined"),
+        ("_recompute_merkle", "merkle root recomputation defined"),
+        ("def main(", "CLI main() entrypoint defined"),
+        ("exit code", "exit code documentation present"),
+    ]
+    for marker, description in required:
+        if marker in content or "exit" in content.lower():
+            if marker == "exit code":
+                if "exit code" in content or "Exit code" in content:
+                    ok(description)
+                else:
+                    fail(f"Verifier: {description} — 'exit code' not found in verify_bundle.py")
+            elif marker in content:
+                ok(description)
+            else:
+                fail(f"Verifier: {description} — '{marker}' not found in verify_bundle.py")
+        else:
+            fail(f"Verifier: {description} — '{marker}' not found in verify_bundle.py")
+
+    # Verify CLI is executable Python
+    tree = _parse("tools/verify_bundle.py")
+    if tree:
+        ok("tools/verify_bundle.py compiles without syntax errors")
+
+
+# ---------------------------------------------------------------------------
+# Check 21: Phase 3-7 test files exist and compile
+# ---------------------------------------------------------------------------
+def check_phase_test_coverage() -> None:
+    print("\n[21] Phase 3-7 test files present and compilable")
+    phase_test_files = [
+        "tests/control_plane/test_control_plane_phase3.py",
+        "tests/control_plane/test_control_plane_phase4.py",
+        "tests/control_plane/test_control_plane_phase5.py",
+        "tests/control_plane/test_control_plane_phase6.py",
+        "tests/control_plane/test_control_plane_phase7.py",
+    ]
+    for rel in phase_test_files:
+        result = _parse(rel)
+        if result is not None:
+            ok(f"Compiles: {rel}")
+
+    # Verify each test file has negative tests
+    negative_markers = [
+        ("test_control_plane_phase3.py", [
+            "test_invariant_ai_cross_tenant_retrieval_blocked",
+            "test_invariant_ai_namespace_requires_tenant",
+            "test_invariant_namespaces_structurally_isolated",
+        ]),
+        ("test_control_plane_phase4.py", [
+            "test_invariant_empty_target_tenant_rejected",
+            "test_invariant_unknown_scope_rejected",
+            "test_check_delegation_missing_raises_not_found",
+        ]),
+        ("test_control_plane_phase5.py", [
+            "test_invariant_invalid_version_hash_rejected",
+            "test_invariant_ttl_exceeds_max_rejected",
+            "test_invariant_rollback_without_previous_pin_raises",
+            "test_invariant_rollback_without_rollback_target_raises",
+            "test_invariant_no_subprocess_in_policy_lifecycle",
+            "test_invariant_ledger_written_for_pin",
+        ]),
+        ("test_control_plane_phase6.py", [
+            "test_invariant_unknown_command_rejected",
+            "test_invariant_shell_injection_rejected",
+            "test_invariant_breakglass_cmd_without_scope_rejected",
+            "test_invariant_no_subprocess_in_terminal",
+            "test_invariant_ledger_written_before_return",
+        ]),
+        ("test_control_plane_phase7.py", [
+            "test_tampered_payload_detected",
+            "test_tampered_chain_hash_detected",
+            "test_tampered_merkle_root_detected",
+            "test_foreign_tenant_events_detected",
+        ]),
+    ]
+    for fname, tests in negative_markers:
+        content = _read(f"tests/control_plane/{fname}")
+        for test_name in tests:
+            if test_name in content:
+                ok(f"Negative test: {test_name}")
+            else:
+                fail(f"Missing negative test: {test_name} in {fname}")
+
+
+# ---------------------------------------------------------------------------
+# Check 23: Policy lifecycle service — Phase 5
+# ---------------------------------------------------------------------------
+def check_policy_lifecycle_service() -> None:
+    print("\n[23] Policy lifecycle: pin/stage/rollback model (Phase 5)")
+    content = _read("services/cp_policy_lifecycle.py")
+
+    markers = [
+        ("PolicyLifecycleService", "PolicyLifecycleService class defined"),
+        ("VALID_POLICY_OPERATIONS", "VALID_POLICY_OPERATIONS defined"),
+        ("POLICY_PIN_MAX_TTL_HOURS", "POLICY_PIN_MAX_TTL_HOURS defined"),
+        ("ERR_POLICY_NO_ROLLBACK_TARGET", "ERR_POLICY_NO_ROLLBACK_TARGET defined"),
+        ("ERR_POLICY_INVALID_HASH", "ERR_POLICY_INVALID_HASH defined"),
+        ("pin_version", "pin_version method defined"),
+        ("stage_version", "stage_version method defined"),
+        ("rollback", "rollback method defined"),
+        ("previous_hash", "previous_hash for rollback tracking present"),
+        ("severity=\"warning\"", "ledger events at warning severity"),
+        ("import subprocess" not in content and "subprocess.run" not in content,
+         "no subprocess in cp_policy_lifecycle.py"),
+        ("rollout_pct", "rollout_pct field present (canary support)"),
+    ]
+    for item in markers:
+        if isinstance(item, tuple) and isinstance(item[0], bool):
+            condition, description = item
+            if condition:
+                ok(description)
+            else:
+                fail(f"Policy lifecycle: {description}")
+        else:
+            marker, description = item
+            if marker in content:
+                ok(description)
+            else:
+                fail(f"Policy lifecycle: {description} — '{marker}' not found")
+
+    # Policy lifecycle endpoints in API
+    api_content = _read("api/control_plane_v2.py")
+    endpoint_markers = [
+        ("/control-plane/v2/policy/pin", "policy pin endpoint defined"),
+        ("/control-plane/v2/policy/stage", "policy stage endpoint defined"),
+        ("/control-plane/v2/policy/rollback", "policy rollback endpoint defined"),
+        ("/control-plane/v2/policy/pins", "policy pins list endpoint defined"),
+        ("get_policy_lifecycle_service", "policy lifecycle service imported in API"),
+    ]
+    for marker, description in endpoint_markers:
+        if marker in api_content:
+            ok(description)
+        else:
+            fail(f"Policy lifecycle API: {description} — '{marker}' not found in control_plane_v2.py")
+
+
+# ---------------------------------------------------------------------------
+# Check 24: Phase 5 compilation guard
+# ---------------------------------------------------------------------------
+def check_phase5_compilation() -> None:
+    print("\n[24] Phase 5 files compile without syntax errors")
+    phase5_files = [
+        "services/cp_policy_lifecycle.py",
+        "tests/control_plane/test_control_plane_phase5.py",
+    ]
+    for rel in phase5_files:
+        tree = _parse(rel)
+        if tree is not None:
+            ok(f"Compiles: {rel}")
+
+
+# ---------------------------------------------------------------------------
+# Check 22: AI isolation endpoint in control_plane_v2
+# ---------------------------------------------------------------------------
+def check_ai_isolation_endpoint() -> None:
+    print("\n[22] AI isolation namespace endpoint defined")
+    content = _read("api/control_plane_v2.py")
+
+    markers = [
+        ("/control-plane/v2/ai/namespace", "AI namespace endpoint defined"),
+        ("derive_tenant_namespace", "derive_tenant_namespace used in API"),
+        ("IsolationViolationError", "IsolationViolationError handled"),
+        ("CP_AI_TENANT_REQUIRED", "AI tenant required error code"),
+    ]
+    for marker, description in markers:
+        if marker in content:
+            ok(description)
+        else:
+            fail(f"AI endpoint: {description} — '{marker}' not found")
+
+
 def main() -> int:
     print("=" * 60)
     print("FrostGate Control Plane v2 — CI Invariant Guard")
@@ -463,6 +764,16 @@ def main() -> int:
     check_negative_test_coverage()
     check_models_structure()
     check_router_registered()
+    # Phase 3-7 new invariant checks
+    check_ai_isolation_namespace()
+    check_msp_delegation_model()
+    check_sandboxed_terminal()
+    check_cli_verifier_tool()
+    check_phase_test_coverage()
+    check_ai_isolation_endpoint()
+    # Phase 5 invariant checks
+    check_policy_lifecycle_service()
+    check_phase5_compilation()
 
     print("\n" + "=" * 60)
     if FAILURES:

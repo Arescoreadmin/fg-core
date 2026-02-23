@@ -155,6 +155,20 @@ def _infer_tenant_unbound(*, file_path: Path, full_path: str, scopes: set[str]) 
     ):
         return True
 
+    # MSP cross-tenant delegation endpoints: tenant is specified explicitly in the
+    # request body (target_tenant), not derived from the auth context. These are
+    # intentionally cross-tenant operations guarded by msp: scopes.
+    if (
+        rel_file == "api/control_plane_v2.py"
+        or rel_file.endswith("/api/control_plane_v2.py")
+    ) and any("msp:" in str(scope) for scope in scopes):
+        return True
+
+    # Terminal allowlist returns a static list of allowed commands with no
+    # tenant-specific data.
+    if full_path == "/control-plane/v2/terminal/allowlist":
+        return True
+
     return False
 
 
@@ -341,6 +355,8 @@ def _function_has_tenant_binding(
                 or name.endswith("tenant_db_required")
                 or name.endswith("tenant_db_optional")
                 or name.endswith("_tenant_from_auth")
+                or name.endswith("_tenant_id_from_request")
+                or name.endswith("_tenant_id_from_request_optional")
                 or name.endswith("_locker_command")
                 or name.endswith("_resolve_msp_tenant")
             ):

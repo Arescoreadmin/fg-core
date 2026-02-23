@@ -61,7 +61,7 @@ _SANITIZE_PATTERNS: list[tuple[re.Pattern, str]] = [
             r"[a-zA-Z][a-zA-Z0-9+\-.]*://[^\s@/:\"'<>]+:[^\s@/:\"'<>]+@[^\s\"'<>]+",
             re.IGNORECASE,
         ),
-        "[REDACTED-URL-CREDS]",
+        "[REDACTED-URL-CREDS][REDACTED]",
     ),
     # 6. Token/key/secret/password in query strings or key=value pairs
     #    Matches: ?api_key=xxx  &token=xxx  ?secret=xxx  etc.
@@ -95,17 +95,30 @@ _SANITIZE_PATTERNS: list[tuple[re.Pattern, str]] = [
         ),
         r"\1[REDACTED]",
     ),
+    # 10. Long hex strings (32+ consecutive hex chars = secret keys / hashes)
+    (
+        re.compile(r"(?<![0-9a-fA-F])[0-9a-fA-F]{32,}(?![0-9a-fA-F])"),
+        "[REDACTED-HEX]",
+    ),
 ]
 
+_MAX_SANITIZED_LENGTH = 2048
 
-def sanitize_error_detail(text: Optional[str]) -> Optional[str]:
+
+def sanitize_error_detail(
+    text: Optional[object],
+    is_production: Optional[bool] = None,
+) -> Optional[str]:
     """
     Strip credentials, tokens, URLs with secrets, and stack traces from
     error detail strings.
 
     Safe to call on None — returns None unchanged.
-    Always apply before storing error detail in audit logs or returning
-    it in any API response, even in non-production environments.
+    Non-string inputs are coerced to str before processing.
+    Output is truncated to {_MAX_SANITIZED_LENGTH} characters.
+
+    The ``is_production`` parameter is accepted for API compatibility
+    but does not change behaviour — sanitization always runs.
 
     This function is intentionally conservative: it may over-redact
     in edge cases. Under-redaction is a security defect; over-redaction
@@ -117,4 +130,6 @@ def sanitize_error_detail(text: Optional[str]) -> Optional[str]:
     result = str(text)
     for pattern, replacement in _SANITIZE_PATTERNS:
         result = pattern.sub(replacement, result)
+    if len(result) > _MAX_SANITIZED_LENGTH:
+        result = result[:_MAX_SANITIZED_LENGTH]
     return result

@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, List, Optional
 
+from services.error_sanitizer import sanitize_error_detail  # noqa: F401 (re-exported)
+
 log = logging.getLogger("frostgate.control_plane.boot_trace")
 
 
@@ -82,6 +84,11 @@ class StageRecord:
     error_code: Optional[str] = None
     error_detail_raw: Optional[str] = None  # never exposed in prod
 
+    @property
+    def error_detail_redacted(self) -> Optional[str]:
+        """Sanitized version of error_detail_raw (safe for external access)."""
+        return sanitize_error_detail(self.error_detail_raw)
+
     def to_dict(self, redact: bool = False) -> dict:
         return {
             "stage_name": self.stage_name,
@@ -90,7 +97,7 @@ class StageRecord:
             "duration_ms": self.duration_ms,
             "status": self.status.value,
             "error_code": self.error_code,
-            "error_detail_redacted": None if redact else self.error_detail_raw,
+            "error_detail_redacted": None if redact else self.error_detail_redacted,
         }
 
 
@@ -194,10 +201,67 @@ class BootTrace:
     def skip_stage(self, stage: str, reason: str = "") -> None:
         self.complete_stage(stage, status=StageStatus.SKIPPED, error_detail=reason)
 
+    def fail_stage(
+        self,
+        stage: str,
+        error_code: Optional[str] = None,
+        detail: Optional[str] = None,
+    ) -> None:
+        """Convenience wrapper: complete a stage with FAILED status."""
+        self.complete_stage(
+            stage,
+            status=StageStatus.FAILED,
+            error_code=error_code,
+            error_detail=detail,
+        )
+
+    def summary(self) -> dict:
+        """Return a high-level summary of the boot trace."""
+        with self._lock:
+            stages = list(self._stages.values())
+        failed = [s.stage_name for s in stages if s.status == StageStatus.FAILED]
+        completed = sum(
+            1 for s in stages
+            if s.status in (StageStatus.OK, StageStatus.SKIPPED)
+        )
+        total = len(BOOT_STAGE_ORDER)
+        ready_rec = self._stages.get(BootStage.READY_TRUE.value)
+        is_ready = (
+            len(failed) == 0
+            and ready_rec is not None
+            and ready_rec.status == StageStatus.OK
+        )
+        return {
+            "module_id": self.module_id,
+            "is_ready": is_ready,
+            "failed_stages": failed,
+            "completed_stages": completed,
+            "total_stages": total,
+        }
+
+    def to_dict_list(self, redact: bool = False) -> List[dict]:
+        """Return all stage records as a list of dicts."""
+        return [rec.to_dict(redact=redact) for rec in self.get_ordered_stages()]
+
     def mark_ready(self) -> None:
         self.complete_stage(BootStage.READY_TRUE.value)
         with self._lock:
             self.completed = True
+
+    def get_ordered_stages(self) -> List[StageRecord]:
+        """Return stage records in canonical order (then extras)."""
+        with self._lock:
+            ordered: List[StageRecord] = []
+            seen: set[str] = set()
+            for stage in BOOT_STAGE_ORDER:
+                rec = self._stages.get(stage.value)
+                if rec:
+                    ordered.append(rec)
+                    seen.add(stage.value)
+            for name, rec in self._stages.items():
+                if name not in seen:
+                    ordered.append(rec)
+            return ordered
 
     def to_dict(self, redact: bool = False) -> dict:
         with self._lock:
@@ -330,3 +394,21 @@ class StageContext:
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+# ---------------------------------------------------------------------------
+# Simplified public API (aliases for test compatibility)
+# ---------------------------------------------------------------------------
+
+# BootTraceStore is a test-friendly alias for BootTrace.
+# Usage: trace = BootTraceStore("my-module")
+BootTraceStore = BootTrace
+
+
+def get_trace(module_id: str) -> BootTrace:
+    """Get the boot trace for a module from the registry, creating it if needed."""
+    registry = BootTraceRegistry()
+    trace = registry.get_trace(module_id)
+    if trace is None:
+        trace = registry.create_trace(module_id)
+    return trace

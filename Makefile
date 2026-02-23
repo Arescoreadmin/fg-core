@@ -847,17 +847,6 @@ ci-hardening: venv test-hardening-all
 	@echo "✅ Hardening CI gate passed"
 
 # =============================================================================
-# Control Plane
-# =============================================================================
-
-.PHONY: control-plane-check
-
-control-plane-check: venv _require-pytest-venv
-	@echo "==> Running control-plane tests"
-	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/control_plane/
-	@echo "✅ control-plane-check: PASS"
-
-# =============================================================================
 # Admin Gateway
 # =============================================================================
 

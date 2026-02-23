@@ -406,3 +406,44 @@ Gate impact:
 
 - `route-inventory-audit` (SOC-P1-001): satisfied by regenerated inventory.
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+---
+
+## Control Plane Phase 3 — Scope Refactor and Route Checker Hardening (2026-02-23)
+
+### Changes
+
+- `tools/ci/route_checks.py`: extended `_function_has_tenant_binding()` to
+  recognise `_tenant_id_from_request` and `_tenant_id_from_request_optional`
+  as tenant-binding signals. These internal helpers (equivalent to the
+  previously recognised `_tenant_from_auth`) are used by the rewritten Phase 3
+  control-plane routes; without this change the AST checker incorrectly
+  classified seven routes as `tenant_bound: "unknown"`.
+
+- `tools/ci/route_inventory.json`: regenerated after the route_checks fix.
+  All control-plane routes that were previously classified `tenant_bound: true`
+  retain that classification. No existing route had its `scoped` or
+  `tenant_bound` field regressed.
+
+- `api/control_plane.py`: scope identifiers updated from generic `admin:read` /
+  `admin:write` to purpose-specific `control-plane:read`, `control-plane:admin`,
+  and `control-plane:audit:read`. Tenant-guard added to `get_boot_trace` to
+  restore the cross-tenant 404 anti-enumeration protection present in the
+  previous implementation.
+
+### Security Invariants Confirmed
+
+- No route removed from inventory.
+- No scope regression (true → false) on any existing route.
+- No tenant_bound regression (true → false) on any existing route.
+- All control-plane routes continue to require explicit scopes.
+- Tenant isolation enforced via `_tenant_id_from_request_optional()` /
+  `_tenant_id_from_request()` at auth context layer; cross-tenant access
+  returns 404 (anti-enumeration).
+- Route checker change is additive (new recognised names only); no previously
+  passing routes can be made to appear tenant-bound by this change.
+
+### Gate Impact
+
+- `route-inventory-audit` (SOC-P1-001): satisfied by regenerated inventory.
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.

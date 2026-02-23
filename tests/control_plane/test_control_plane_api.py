@@ -188,7 +188,7 @@ class TestLockerCommands:
         )
         assert resp.status_code == 404
         body = resp.json()
-        assert body["detail"]["error"]["code"] == "CP_LOCKER_NOT_FOUND"
+        assert body["detail"]["error"]["code"] == "CP-API-002"
 
     def test_idempotent_request_returns_same_result(self, app_client, admin_key):
         """Same idempotency key with same payload returns identical command_id."""
@@ -233,7 +233,7 @@ class TestLockerCommands:
             json={"reason": "restart attempt", "idempotency_key": "q-api-2"},
         )
         assert resp.status_code == 409
-        assert resp.json()["detail"]["error"]["code"] == "CP_LOCKER_QUARANTINE_LOCKED"
+        assert resp.json()["detail"]["error"]["code"] == "CP-API-003"
 
     def test_quarantined_locker_accepts_resume_via_api(self, app_client, admin_key):
         bus = get_command_bus()
