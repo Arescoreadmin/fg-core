@@ -626,7 +626,7 @@ class TestEventStream:
         assert len(events_t2) == 3
 
     def test_unsubscribe_removes_subscriber(self):
-        from services.event_stream import ControlEvent, ControlEventType, EventStreamBus
+        from services.event_stream import EventStreamBus
 
         bus = EventStreamBus()
         sub = bus.subscribe(tenant_id="t1")
@@ -911,8 +911,6 @@ class TestControlPlaneAuth:
     def _get_authed_client(self, tmp_path, monkeypatch):
         from api.main import build_app
         from api.db import reset_engine_cache, init_db
-        from api.auth_scopes import mint_key
-
         db_path = str(tmp_path / "cp-auth.db")
         monkeypatch.setenv("FG_ENV", "test")
         monkeypatch.setenv("FG_SQLITE_PATH", db_path)
@@ -1409,7 +1407,7 @@ class TestCommandBusSafetyHardening:
         LockerCommandBus()._reset()
 
     def _register_locker(self, locker_id="locker-h1", tenant_id="tenant-h1"):
-        from services.locker_command_bus import LockerCommandBus, LockerState
+        from services.locker_command_bus import LockerCommandBus
         return LockerCommandBus().register_locker(
             locker_id=locker_id,
             name="Hardening Locker",
@@ -1648,7 +1646,6 @@ class TestRegistryLiveness:
 
     def test_node_id_conflict_detected(self):
         """Two different module_ids registering with same node_id logs a warning."""
-        import logging
         from services.module_registry import ModuleRegistry
 
         reg = ModuleRegistry()
