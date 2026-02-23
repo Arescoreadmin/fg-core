@@ -716,8 +716,10 @@ class TestPolicyNegative:
         """
         import pathlib
 
-        src = pathlib.Path(
-            "/home/user/fg-core/services/cp_policy_lifecycle.py"
+        src = (
+            pathlib.Path(__file__).parent.parent.parent
+            / "services"
+            / "cp_policy_lifecycle.py"
         ).read_text()
         assert "import subprocess" not in src
         assert "subprocess.run" not in src
