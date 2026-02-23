@@ -799,7 +799,6 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(agent_phase2_router)
     app.include_router(connectors_control_plane_router)
     app.include_router(control_plane_router)
-    app.include_router(control_plane_v2_router)
     if _should_mount_admin_routes():
         app.include_router(agent_phase2_admin_router)
     if mission_router is not None:

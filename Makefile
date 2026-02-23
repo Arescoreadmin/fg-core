@@ -847,17 +847,6 @@ ci-hardening: venv test-hardening-all
 	@echo "✅ Hardening CI gate passed"
 
 # =============================================================================
-# Control Plane
-# =============================================================================
-
-.PHONY: control-plane-check
-
-control-plane-check: venv _require-pytest-venv
-	@echo "==> Running control-plane tests"
-	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/control_plane/
-	@echo "✅ control-plane-check: PASS"
-
-# =============================================================================
 # Admin Gateway
 # =============================================================================
 
@@ -1203,6 +1192,23 @@ nuclear-full: venv
 	@$(MAKE) platform-inventory
 	@$(MAKE) openapi-summary
 	@$(MAKE) enterprise-smoke
+
+
+# =============================================================================
+# Control Plane CI gate
+# =============================================================================
+
+.PHONY: control-plane-check control-plane-spot
+
+control-plane-spot: venv _require-pytest-venv
+	@echo "==> control-plane: running tests"
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/control_plane/
+	@echo "✅ control-plane tests passed"
+
+control-plane-check: venv control-plane-spot
+	@echo "==> control-plane: verifying security invariants"
+	@$(PY) tools/ci/check_control_plane_invariants.py
+	@echo "✅ control-plane check passed"
 
 
 .PHONY: pr-merge-smoke

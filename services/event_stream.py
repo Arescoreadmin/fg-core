@@ -1,342 +1,641 @@
 """
-services/event_stream.py — Real-time control-plane event bus.
+FrostGate Control Plane - Event Stream Service
 
-Events are broadcast over WebSocket to authenticated subscribers.
+Real-time event streaming for control plane observability.
 
-Security properties:
-  - WS auth enforced identically to HTTP auth (no weaker path).
-  - Tenant scoping: tenant-admins only receive events for their tenant.
-  - Global admins receive all events; payloads include tenant_id.
-  - Per-tenant subscriber cap (prevents fan-out amplifier abuse).
-  - Slow consumers are dropped (backpressure = disconnect).
-  - Event IDs:
-      content_hash  — SHA-256 of canonical event content (dedup / integrity).
-      event_instance_id — deterministic HMAC(key, content_hash|ts_bucket|seq)
-                          for uniqueness + anti-replay even for identical events.
+Provides:
+- In-process pub/sub event bus
+- WebSocket fan-out to subscribed clients
+- Dual event identity: content_hash (dedupe) + event_instance_id (anti-replay)
+- Tenant-safe: clients only receive events for their tenant
+- Typed event catalog with structured payloads
+- No fail-open: closed connections are cleaned up immediately
 
-Event types:
-  module_state_changed, dependency_state_changed, locker_state_changed,
-  restart_started, restart_completed, breaker_opened, breaker_closed,
-  config_changed, policy_violation_detected.
+P0: event_instance_id (unique per publish, ULID-style) for anti-replay.
+    content_hash (deterministic SHA-256) for deduplication. Both kept.
+P1: Max subscribers per tenant enforced. Backpressure: consecutive queue-full
+    events trigger slow-consumer disconnect.
 """
-
 from __future__ import annotations
 
 import asyncio
 import hashlib
-import hmac
 import json
 import logging
 import os
+import secrets
 import threading
 import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Optional, Set
+from enum import Enum
+from typing import Any, Dict, List, Optional, Set
 
-log = logging.getLogger("frostgate.event_stream")
+log = logging.getLogger("frostgate.control_plane.event_stream")
+
 
 # ---------------------------------------------------------------------------
-# Constants
+# Deterministic error codes
 # ---------------------------------------------------------------------------
+ERR_EVENT_QUEUE_FULL = "CP-EVT-001"
+ERR_SUBSCRIBER_CLOSED = "CP-EVT-002"
+ERR_MAX_SUBSCRIBERS = "CP-EVT-003"
 
-VALID_EVENT_TYPES = frozenset(
-    {
-        "module_state_changed",
-        "dependency_state_changed",
-        "locker_state_changed",
-        "restart_started",
-        "restart_completed",
-        "breaker_opened",
-        "breaker_closed",
-        "config_changed",
-        "policy_violation_detected",
-    }
-)
-
-# Per-tenant subscriber cap
-MAX_SUBSCRIBERS_PER_TENANT: int = int(
-    os.getenv("FG_CP_MAX_WS_SUBSCRIBERS_PER_TENANT", "20")
-)
-
-# Global subscriber cap
-MAX_GLOBAL_SUBSCRIBERS: int = int(
-    os.getenv("FG_CP_MAX_WS_SUBSCRIBERS_GLOBAL", "200")
-)
-
-# Per-subscriber queue depth (older events dropped when exceeded)
-SUBSCRIBER_QUEUE_DEPTH: int = int(
-    os.getenv("FG_CP_WS_QUEUE_DEPTH", "100")
-)
-
-# HMAC key for event instance IDs; derived from FG_KEY_PEPPER or random per-process
-_HMAC_KEY: bytes = (os.getenv("FG_KEY_PEPPER") or uuid.uuid4().hex).encode("utf-8")
-
-# Event history limit for GET /control-plane/audit (in-memory)
-EVENT_HISTORY_LIMIT: int = int(
-    os.getenv("FG_CP_EVENT_HISTORY_LIMIT", "1000")
-)
 
 # ---------------------------------------------------------------------------
-# Event models
+# Limits (configurable via env)
 # ---------------------------------------------------------------------------
 
+MAX_SUBSCRIBERS_PER_TENANT: int = int(os.getenv("FG_CP_MAX_SUBSCRIBERS_PER_TENANT", "10"))
+SUBSCRIBER_QUEUE_DEPTH: int = int(os.getenv("FG_CP_SUBSCRIBER_QUEUE_DEPTH", "100"))
 
-@dataclass
+
+def _max_subscribers_per_tenant() -> int:
+    return int(os.getenv("FG_CP_MAX_SUBSCRIBERS_PER_TENANT", "10"))
+
+
+def _slow_consumer_drop_threshold() -> int:
+    """Number of consecutive queue-full drops before disconnecting subscriber."""
+    return int(os.getenv("FG_CP_SLOW_CONSUMER_DROP_THRESHOLD", "5"))
+
+
+# ---------------------------------------------------------------------------
+# Event types
+# ---------------------------------------------------------------------------
+
+class ControlEventType(str, Enum):
+    MODULE_STATE_CHANGED = "module_state_changed"
+    DEPENDENCY_STATE_CHANGED = "dependency_state_changed"
+    LOCKER_STATE_CHANGED = "locker_state_changed"
+    RESTART_STARTED = "restart_started"
+    RESTART_COMPLETED = "restart_completed"
+    BREAKER_OPENED = "breaker_opened"
+    BREAKER_CLOSED = "breaker_closed"
+    CONFIG_CHANGED = "config_changed"
+    POLICY_VIOLATION_DETECTED = "policy_violation_detected"
+    BOOT_STAGE_COMPLETED = "boot_stage_completed"
+    COMMAND_DISPATCHED = "command_dispatched"
+    HEARTBEAT = "heartbeat"
+
+
+# ---------------------------------------------------------------------------
+# Exception for subscriber cap exceeded
+# ---------------------------------------------------------------------------
+
+class MaxSubscribersExceededError(Exception):
+    """
+    Raised by EventStreamBus.subscribe() when a tenant has reached the
+    maximum concurrent subscriber limit (FG_CP_MAX_SUBSCRIBERS_PER_TENANT).
+    """
+    pass
+
+
+# ---------------------------------------------------------------------------
+# Instance ID generation (P0: unique per publish, anti-replay)
+# ---------------------------------------------------------------------------
+
+_seq_lock = threading.Lock()
+_seq_counter: int = 0
+
+
+def _next_seq() -> int:
+    global _seq_counter
+    with _seq_lock:
+        _seq_counter += 1
+        return _seq_counter
+
+
+def _generate_instance_id(content_hash: str) -> str:
+    """
+    Generate a unique-per-publish event instance ID.
+
+    Structure: evti-{ts_ms_hex}-{seq_hex}-{content_prefix}
+      - ts_ms_hex: millisecond timestamp (13 hex chars, sortable)
+      - seq_hex:   monotonic in-process sequence (6 hex chars, unique within ms)
+      - content_prefix: first 8 chars of content_hash (links to content for debug)
+
+    This is NOT a HMAC (no shared secret required at this layer). The content_hash
+    field provides integrity; the instance_id provides uniqueness and anti-replay.
+    """
+    ts_ms = int(time.time() * 1000)
+    seq = _next_seq()
+    return f"evti-{ts_ms:013x}-{seq:06x}-{content_hash[:8]}"
+
+
+# ---------------------------------------------------------------------------
+# Event structure
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
 class ControlEvent:
-    event_type: str
+    """
+    An immutable control plane event.
+
+    P0 Dual identity:
+      - content_hash (event_id):  SHA-256 of {type}:{module}:{tenant}:{ts}:{payload}
+                                  Deterministic; use for deduplication.
+      - event_instance_id:        Unique per publish (ts + seq + content prefix).
+                                  Use for anti-replay and downstream ingestion.
+
+    Accepts event_type as a ControlEventType enum or as a plain string value.
+    When timestamp is provided it is used for the content hash (deterministic tests);
+    when omitted a fresh UTC timestamp is generated.
+    """
+    event_type: ControlEventType
     module_id: str
     tenant_id: str
-    payload: Dict[str, Any]
+    payload: Dict[str, Any] = field(default_factory=dict)
 
-    # Computed on creation
-    content_hash: str = field(init=False)
-    event_instance_id: str = field(init=False)
-    timestamp: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
-    # Sequence number (global monotonic, helps with ordering)
-    seq: int = field(default=0)
+    # Computed in __post_init__ — frozen so we use object.__setattr__
+    event_id: str = field(default="")          # content_hash (deterministic)
+    event_instance_id: str = field(default="") # unique per publish (anti-replay)
+    timestamp: str = field(default="")
+    content_hash: str = field(default="")      # alias for event_id
 
     def __post_init__(self) -> None:
-        self.content_hash = _compute_content_hash(self)
-        self.event_instance_id = _compute_instance_id(
-            self.content_hash, self.timestamp
-        )
+        # Coerce string event_type to enum
+        if isinstance(self.event_type, str):
+            object.__setattr__(self, "event_type", ControlEventType(self.event_type))
 
-    def to_dict(self) -> Dict[str, Any]:
+        # Use provided timestamp if non-empty, otherwise generate
+        ts = self.timestamp if self.timestamp else _utc_now_iso()
+        payload_str = json.dumps(self.payload, sort_keys=True, separators=(",", ":"))
+        ch = _deterministic_event_id(
+            event_type=self.event_type.value,
+            module_id=self.module_id,
+            tenant_id=self.tenant_id,
+            timestamp=ts,
+            payload_str=payload_str,
+        )
+        instance_id = _generate_instance_id(ch)
+        object.__setattr__(self, "timestamp", ts)
+        object.__setattr__(self, "event_id", ch)
+        object.__setattr__(self, "content_hash", ch)
+        object.__setattr__(self, "event_instance_id", instance_id)
+
+    def to_dict(self, redact_tenant: bool = False) -> dict:
         return {
-            "event_instance_id": self.event_instance_id,
-            "content_hash": self.content_hash,
-            "event_type": self.event_type,
+            "event_id": self.event_id,               # content hash (dedupe)
+            "content_hash": self.content_hash,        # same as event_id
+            "event_instance_id": self.event_instance_id,  # unique per publish
+            "event_type": self.event_type.value,
             "module_id": self.module_id,
-            "tenant_id": self.tenant_id,
+            "tenant_id": None if redact_tenant else self.tenant_id,
             "timestamp": self.timestamp,
-            "seq": self.seq,
             "payload": self.payload,
         }
 
-
-def _compute_content_hash(event: ControlEvent) -> str:
-    """SHA-256 of canonical event content for integrity / dedup."""
-    payload = {
-        "event_type": event.event_type,
-        "module_id": event.module_id,
-        "tenant_id": event.tenant_id,
-        "timestamp": event.timestamp,
-        "payload": event.payload,
-    }
-    raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()
+    def to_json(self, redact_tenant: bool = False) -> str:
+        return json.dumps(
+            self.to_dict(redact_tenant=redact_tenant),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
 
 
-def _compute_instance_id(content_hash: str, timestamp: str) -> str:
+def _deterministic_event_id(
+    *,
+    event_type: str,
+    module_id: str,
+    tenant_id: str,
+    timestamp: str,
+    payload_str: str = "",
+) -> str:
     """
-    HMAC(key, content_hash|ts_bucket) for uniqueness and anti-replay.
-
-    Includes a random nonce so two events with identical content at the same
-    second get distinct instance IDs.
+    Compute deterministic content-addressed event ID (SHA-256).
+    Use for deduplication; NOT for uniqueness (two identical events share this hash).
+    Includes payload in the hash so different payloads produce different hashes.
     """
-    # ts_bucket: round to nearest second to cluster near-simultaneous events
-    try:
-        ts_bucket = timestamp[:19]  # "YYYY-MM-DDTHH:MM:SS"
-    except Exception:
-        ts_bucket = ""
-    nonce = uuid.uuid4().hex[:8]
-    msg = f"{content_hash}|{ts_bucket}|{nonce}".encode("utf-8")
-    return hmac.new(_HMAC_KEY, msg, hashlib.sha256).hexdigest()
+    raw = f"{event_type}:{module_id}:{tenant_id}:{timestamp}:{payload_str}"
+    return "evt-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
 
 # ---------------------------------------------------------------------------
 # Subscriber
 # ---------------------------------------------------------------------------
 
-
-@dataclass
 class EventSubscriber:
-    subscriber_id: str
-    tenant_id: Optional[str]  # None = global admin (sees all)
-    is_global_admin: bool = False
-    queue: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=SUBSCRIBER_QUEUE_DEPTH))
-    connected_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    """
+    A single WebSocket subscriber.
+    Receives events via asyncio.Queue, filtered by tenant_id.
 
-    def should_receive(self, event: ControlEvent) -> bool:
-        """Tenant-scoped filtering.  Global admins see all."""
-        if self.is_global_admin:
-            return True
-        if self.tenant_id is None:
+    P1 Backpressure: tracks consecutive queue-full drops. After
+    FG_CP_SLOW_CONSUMER_DROP_THRESHOLD consecutive drops, the subscriber
+    is automatically closed (slow consumer disconnect).
+    """
+
+    def __init__(
+        self,
+        subscriber_id: str,
+        tenant_id: str,
+        event_types: Optional[Set[str]] = None,
+        queue_size: int = 256,
+    ) -> None:
+        self.subscriber_id = subscriber_id
+        self.tenant_id = tenant_id
+        self.event_types = event_types  # None = all types
+        self._queue: asyncio.Queue = asyncio.Queue(maxsize=queue_size)
+        self._closed = threading.Event()
+        self.connected_at = _utc_now_iso()
+        self._consecutive_drops: int = 0  # P1 backpressure counter
+
+    def is_closed(self) -> bool:
+        return self._closed.is_set()
+
+    def close(self) -> None:
+        self._closed.set()
+
+    def matches(self, event: ControlEvent) -> bool:
+        """Check if subscriber should receive this event."""
+        if self.is_closed():
             return False
-        return event.tenant_id == self.tenant_id
+        # P0 Tenant binding: only receive own-tenant events (or global)
+        if event.tenant_id not in (self.tenant_id, "global"):
+            return False
+        # Event type filter
+        if self.event_types and event.event_type.value not in self.event_types:
+            return False
+        return True
 
-
-# ---------------------------------------------------------------------------
-# Event bus
-# ---------------------------------------------------------------------------
-
-
-class ControlEventBus:
-    """
-    Thread-safe event broadcaster with tenant-scoped subscriptions.
-
-    Maintains an in-memory event history for audit queries.
-    """
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._subscribers: Dict[str, EventSubscriber] = {}
-        self._tenant_subscriber_counts: Dict[str, int] = {}
-        self._global_subscriber_count: int = 0
-        self._seq: int = 0
-        self._history: List[ControlEvent] = []
-
-    # ------------------------------------------------------------------
-    # Publish
-    # ------------------------------------------------------------------
-
-    def publish(self, event: ControlEvent) -> int:
+    def try_put(self, event: ControlEvent) -> bool:
         """
-        Broadcast event to all matching subscribers.
+        Non-blocking put. Returns False if queue full or closed.
 
-        Returns number of subscribers that received the event.
-        Slow consumers whose queues are full are disconnected.
+        P1 Backpressure: after _slow_consumer_drop_threshold() consecutive
+        queue-full failures, marks this subscriber as closed (disconnect).
+        """
+        if self.is_closed():
+            return False
+        try:
+            self._queue.put_nowait(event)
+            self._consecutive_drops = 0  # reset on success
+            return True
+        except asyncio.QueueFull:
+            self._consecutive_drops += 1
+            threshold = _slow_consumer_drop_threshold()
+            if self._consecutive_drops >= threshold:
+                log.warning(
+                    "slow_consumer_disconnect sub=%s tenant=%s "
+                    "consecutive_drops=%d >= threshold=%d",
+                    self.subscriber_id,
+                    self.tenant_id,
+                    self._consecutive_drops,
+                    threshold,
+                )
+                self.close()
+            else:
+                log.warning(
+                    "event_queue_full sub=%s tenant=%s drop=%d/%d event=%s",
+                    self.subscriber_id,
+                    self.tenant_id,
+                    self._consecutive_drops,
+                    threshold,
+                    event.event_instance_id,
+                )
+            return False
+
+    async def get(self, timeout: float = 30.0) -> Optional[ControlEvent]:
+        """Wait for next event with timeout."""
+        try:
+            return await asyncio.wait_for(self._queue.get(), timeout=timeout)
+        except asyncio.TimeoutError:
+            return None
+        except asyncio.CancelledError:
+            return None
+
+
+# ---------------------------------------------------------------------------
+# Event Stream Bus
+# ---------------------------------------------------------------------------
+
+class EventStreamBus:
+    """
+    Singleton in-process event bus.
+
+    Thread-safe publisher, asyncio-compatible subscriber fan-out.
+    All events are tenant-scoped. No cross-tenant leakage.
+
+    P0: Both content_hash (event_id) and event_instance_id are set on publish.
+    P1: Per-tenant subscriber cap enforced. Slow consumers disconnected.
+    """
+
+    _instance: Optional["EventStreamBus"] = None
+    _init_lock: threading.Lock = threading.Lock()
+
+    def __new__(cls) -> "EventStreamBus":
+        if cls._instance is None:
+            with cls._init_lock:
+                if cls._instance is None:
+                    obj = super().__new__(cls)
+                    obj._subscribers: Dict[str, EventSubscriber] = {}
+                    obj._lock = threading.RLock()
+                    obj._event_history: list[ControlEvent] = []
+                    obj._history_max = int(
+                        os.getenv("FG_CP_EVENT_HISTORY_MAX", "500")
+                    )
+                    cls._instance = obj
+        return cls._instance
+
+    # ------------------------------------------------------------------
+    # Publishing
+    # ------------------------------------------------------------------
+
+    def publish(self, event: ControlEvent) -> None:
+        """
+        Publish an event to all matching subscribers.
+        Called from any thread; uses asyncio-safe put_nowait.
         """
         with self._lock:
-            self._seq += 1
-            event.seq = self._seq
-            # Keep history
-            self._history.append(event)
-            if len(self._history) > EVENT_HISTORY_LIMIT:
-                self._history = self._history[-EVENT_HISTORY_LIMIT:]
-            subs = list(self._subscribers.values())
+            # Keep rolling history
+            self._event_history.append(event)
+            if len(self._event_history) > self._history_max:
+                self._event_history = self._event_history[-self._history_max:]
 
-        dispatched = 0
-        slow_consumers: List[str] = []
+            # Fan-out to matching subscribers
+            closed: list[str] = []
+            for sub_id, subscriber in self._subscribers.items():
+                if subscriber.is_closed():
+                    closed.append(sub_id)
+                    continue
+                if subscriber.matches(event):
+                    subscriber.try_put(event)
+                    if subscriber.is_closed():
+                        # Slow consumer disconnect triggered by try_put
+                        closed.append(sub_id)
 
-        for sub in subs:
-            if not sub.should_receive(event):
-                continue
-            try:
-                sub.queue.put_nowait(event.to_dict())
-                dispatched += 1
-            except asyncio.QueueFull:
-                log.warning(
-                    "event_stream.slow_consumer subscriber_id=%s; disconnecting",
-                    sub.subscriber_id,
-                )
-                slow_consumers.append(sub.subscriber_id)
+            # Clean up closed subscribers
+            for sub_id in closed:
+                sub = self._subscribers.pop(sub_id, None)
+                if sub:
+                    sub.close()
 
-        # Disconnect slow consumers outside the main lock
-        for sid in slow_consumers:
-            self.remove_subscriber(sid)
-
-        return dispatched
+        log.debug(
+            "event_published type=%s module=%s tenant=%s id=%s instance=%s",
+            event.event_type.value,
+            event.module_id,
+            event.tenant_id,
+            event.event_id,
+            event.event_instance_id,
+        )
 
     # ------------------------------------------------------------------
     # Subscription management
     # ------------------------------------------------------------------
 
-    def add_subscriber(
+    def subscribe(
         self,
-        tenant_id: Optional[str],
-        *,
-        is_global_admin: bool = False,
+        tenant_id: str,
+        event_types: Optional[Set[str]] = None,
+        queue_size: int = 256,
     ) -> EventSubscriber:
         """
-        Register a new subscriber.
+        Create a new subscriber for the given tenant.
 
-        Raises ValueError with deterministic error code if limits are exceeded.
+        P1: Raises MaxSubscribersExceededError if tenant has reached
+        FG_CP_MAX_SUBSCRIBERS_PER_TENANT concurrent subscribers.
+        Caller (WS endpoint) must close the connection with 4029.
         """
         with self._lock:
-            # Global cap
-            if self._global_subscriber_count >= MAX_GLOBAL_SUBSCRIBERS:
-                raise ValueError("CP_WS_GLOBAL_SUBSCRIBER_LIMIT")
-
-            # Per-tenant cap (applies to non-global-admin only)
-            if not is_global_admin and tenant_id:
-                tenant_count = self._tenant_subscriber_counts.get(tenant_id, 0)
-                if tenant_count >= MAX_SUBSCRIBERS_PER_TENANT:
-                    raise ValueError("CP_WS_TENANT_SUBSCRIBER_LIMIT")
-
-            sid = str(uuid.uuid4())
-            sub = EventSubscriber(
-                subscriber_id=sid,
-                tenant_id=tenant_id,
-                is_global_admin=is_global_admin,
+            # P1: Per-tenant subscriber cap
+            tenant_count = sum(
+                1
+                for s in self._subscribers.values()
+                if s.tenant_id == tenant_id and not s.is_closed()
             )
-            self._subscribers[sid] = sub
-            self._global_subscriber_count += 1
-            if tenant_id:
-                self._tenant_subscriber_counts[tenant_id] = (
-                    self._tenant_subscriber_counts.get(tenant_id, 0) + 1
+            max_subs = _max_subscribers_per_tenant()
+            if tenant_count >= max_subs:
+                log.warning(
+                    "max_subscribers_exceeded tenant=%s count=%d limit=%d",
+                    tenant_id,
+                    tenant_count,
+                    max_subs,
                 )
-            log.info(
-                "event_stream.subscriber_added sid=%s tenant_id=%s global_admin=%s",
-                sid,
-                tenant_id,
-                is_global_admin,
-            )
-            return sub
+                raise MaxSubscribersExceededError(
+                    f"tenant {tenant_id!r} has reached the max of {max_subs} "
+                    "concurrent event subscribers"
+                )
 
-    def remove_subscriber(self, subscriber_id: str) -> None:
+            sub = EventSubscriber(
+                subscriber_id=str(uuid.uuid4()),
+                tenant_id=tenant_id,
+                event_types=event_types,
+                queue_size=queue_size,
+            )
+            self._subscribers[sub.subscriber_id] = sub
+
+        log.info(
+            "event_subscriber_added sub_id=%s tenant=%s total_for_tenant=%d",
+            sub.subscriber_id,
+            tenant_id,
+            tenant_count + 1,
+        )
+        return sub
+
+    def unsubscribe(self, subscriber_id: str) -> None:
         with self._lock:
             sub = self._subscribers.pop(subscriber_id, None)
-            if sub is None:
-                return
-            self._global_subscriber_count = max(0, self._global_subscriber_count - 1)
-            if sub.tenant_id:
-                old = self._tenant_subscriber_counts.get(sub.tenant_id, 0)
-                self._tenant_subscriber_counts[sub.tenant_id] = max(0, old - 1)
-            log.info(
-                "event_stream.subscriber_removed sid=%s",
-                subscriber_id,
-            )
+            if sub:
+                sub.close()
+        log.info("event_subscriber_removed sub_id=%s", subscriber_id)
+
+    def subscriber_count(self, tenant_id: Optional[str] = None) -> int:
+        with self._lock:
+            if tenant_id:
+                return sum(
+                    1
+                    for s in self._subscribers.values()
+                    if s.tenant_id == tenant_id and not s.is_closed()
+                )
+            return sum(1 for s in self._subscribers.values() if not s.is_closed())
 
     # ------------------------------------------------------------------
-    # History / audit
+    # History
     # ------------------------------------------------------------------
 
-    def get_history(
+    def recent_events(
         self,
-        *,
-        since: Optional[str] = None,
-        tenant_id: Optional[str],
-        is_global_admin: bool,
+        tenant_id: str,
         limit: int = 100,
-    ) -> List[Dict[str, Any]]:
-        """
-        Return event history filtered by tenant scope and optionally since a timestamp.
-
-        Global admin sees all events; tenant admin sees only their events.
-        """
+        event_type: Optional[str] = None,
+    ) -> List[dict]:
         with self._lock:
-            events = list(self._history)
-
-        if not is_global_admin and tenant_id:
-            events = [e for e in events if e.tenant_id == tenant_id]
-        elif not is_global_admin:
-            events = []
-
-        if since:
-            try:
-                events = [e for e in events if e.timestamp >= since]
-            except Exception:
-                pass  # invalid since param: return all
-
-        # Most recent first, capped at limit
+            events = [
+                e
+                for e in self._event_history
+                if e.tenant_id in (tenant_id, "global")
+                and (event_type is None or e.event_type.value == event_type)
+            ]
         events = events[-limit:]
-        return [e.to_dict() for e in reversed(events)]
+        return [e.to_dict() for e in events]
 
-    def subscriber_count(self) -> int:
+    def _reset(self) -> None:
+        """For testing only."""
         with self._lock:
-            return self._global_subscriber_count
+            self._subscribers.clear()
+            self._event_history.clear()
 
 
 # ---------------------------------------------------------------------------
-# Convenience factory functions
+# Convenience publishers (called by other services)
 # ---------------------------------------------------------------------------
+
+def _bus() -> EventStreamBus:
+    return EventStreamBus()
+
+
+def emit_module_state_changed(
+    *,
+    module_id: str,
+    tenant_id: str,
+    old_state: str,
+    new_state: str,
+    reason: str = "",
+) -> None:
+    _bus().publish(ControlEvent(
+        event_type=ControlEventType.MODULE_STATE_CHANGED,
+        module_id=module_id,
+        tenant_id=tenant_id,
+        payload={
+            "old_state": old_state,
+            "new_state": new_state,
+            "reason": reason,
+        },
+    ))
+
+
+def emit_dependency_state_changed(
+    *,
+    module_id: str,
+    tenant_id: str,
+    dependency_name: str,
+    old_status: str,
+    new_status: str,
+    error_code: Optional[str] = None,
+) -> None:
+    _bus().publish(ControlEvent(
+        event_type=ControlEventType.DEPENDENCY_STATE_CHANGED,
+        module_id=module_id,
+        tenant_id=tenant_id,
+        payload={
+            "dependency_name": dependency_name,
+            "old_status": old_status,
+            "new_status": new_status,
+            "error_code": error_code,
+        },
+    ))
+
+
+def emit_locker_state_changed(
+    *,
+    locker_id: str,
+    tenant_id: str,
+    old_state: str,
+    new_state: str,
+    command: Optional[str] = None,
+    actor: Optional[str] = None,
+) -> None:
+    _bus().publish(ControlEvent(
+        event_type=ControlEventType.LOCKER_STATE_CHANGED,
+        module_id=locker_id,
+        tenant_id=tenant_id,
+        payload={
+            "locker_id": locker_id,
+            "old_state": old_state,
+            "new_state": new_state,
+            "command": command,
+            "actor": actor,
+        },
+    ))
+
+
+def emit_restart_started(
+    *, module_id: str, tenant_id: str, actor: str, reason: str
+) -> None:
+    _bus().publish(ControlEvent(
+        event_type=ControlEventType.RESTART_STARTED,
+        module_id=module_id,
+        tenant_id=tenant_id,
+        payload={"actor": actor, "reason": reason},
+    ))
+
+
+def emit_restart_completed(
+    *,
+    module_id: str,
+    tenant_id: str,
+    success: bool,
+    error_code: Optional[str] = None,
+) -> None:
+    _bus().publish(ControlEvent(
+        event_type=ControlEventType.RESTART_COMPLETED,
+        module_id=module_id,
+        tenant_id=tenant_id,
+        payload={"success": success, "error_code": error_code},
+    ))
+
+
+def emit_breaker_opened(*, module_id: str, tenant_id: str, reason: str = "") -> None:
+    _bus().publish(ControlEvent(
+        event_type=ControlEventType.BREAKER_OPENED,
+        module_id=module_id,
+        tenant_id=tenant_id,
+        payload={"reason": reason},
+    ))
+
+
+def emit_breaker_closed(*, module_id: str, tenant_id: str) -> None:
+    _bus().publish(ControlEvent(
+        event_type=ControlEventType.BREAKER_CLOSED,
+        module_id=module_id,
+        tenant_id=tenant_id,
+        payload={},
+    ))
+
+
+def emit_config_changed(
+    *,
+    module_id: str,
+    tenant_id: str,
+    config_hash: str,
+    actor: str = "system",
+) -> None:
+    _bus().publish(ControlEvent(
+        event_type=ControlEventType.CONFIG_CHANGED,
+        module_id=module_id,
+        tenant_id=tenant_id,
+        payload={"config_hash": config_hash, "actor": actor},
+    ))
+
+
+def emit_policy_violation(
+    *,
+    module_id: str,
+    tenant_id: str,
+    policy_id: str,
+    details: str = "",
+) -> None:
+    _bus().publish(ControlEvent(
+        event_type=ControlEventType.POLICY_VIOLATION_DETECTED,
+        module_id=module_id,
+        tenant_id=tenant_id,
+        payload={"policy_id": policy_id, "details": details},
+    ))
+
+
+# ---------------------------------------------------------------------------
+# Utilities
+# ---------------------------------------------------------------------------
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+# ---------------------------------------------------------------------------
+# Simplified public API: make_event factory + ControlEventBus
+# ---------------------------------------------------------------------------
+
+import queue as _queue_module  # stdlib queue for ControlEventBus subscribers
 
 
 def make_event(
@@ -346,28 +645,131 @@ def make_event(
     tenant_id: str,
     payload: Optional[Dict[str, Any]] = None,
 ) -> ControlEvent:
-    if event_type not in VALID_EVENT_TYPES:
-        raise ValueError(f"Invalid event type: {event_type}")
+    """
+    Factory for creating ControlEvent objects by event type name.
+    Raises ValueError for unknown event types.
+    """
+    try:
+        et = ControlEventType(event_type)
+    except ValueError:
+        raise ValueError(
+            f"Unknown event type: {event_type!r}. "
+            f"Valid types: {[e.value for e in ControlEventType]}"
+        )
     return ControlEvent(
-        event_type=event_type,
+        event_type=et,
         module_id=module_id,
         tenant_id=tenant_id,
         payload=payload or {},
     )
 
 
-# ---------------------------------------------------------------------------
-# Module-level singleton
-# ---------------------------------------------------------------------------
+class _ControlSubscriber:
+    """
+    A single subscriber in a ControlEventBus.
+    Receives events via a thread-safe queue.
+    """
 
-_bus: Optional[ControlEventBus] = None
-_bus_lock = threading.Lock()
+    def __init__(self, subscriber_id: str, tenant_id: Optional[str], is_global_admin: bool) -> None:
+        self.subscriber_id = subscriber_id
+        self.tenant_id = tenant_id
+        self.is_global_admin = is_global_admin
+        self.queue: _queue_module.Queue = _queue_module.Queue(maxsize=SUBSCRIBER_QUEUE_DEPTH)
+        self._closed = False
+
+    def matches(self, event: ControlEvent) -> bool:
+        if self.is_global_admin:
+            return True
+        return self.tenant_id == event.tenant_id
+
+    def is_closed(self) -> bool:
+        return self._closed
+
+    def close(self) -> None:
+        self._closed = True
 
 
-def get_event_bus() -> ControlEventBus:
-    global _bus
-    if _bus is None:
-        with _bus_lock:
-            if _bus is None:
-                _bus = ControlEventBus()
-    return _bus
+class ControlEventBus:
+    """
+    Non-singleton, test-friendly in-process event bus.
+
+    Each ControlEventBus() creates a fresh instance (not a singleton).
+    Provides subscribe/publish/history with tenant isolation.
+    """
+
+    def __init__(self) -> None:
+        self._subscribers: Dict[str, _ControlSubscriber] = {}
+        self._history: List[ControlEvent] = []
+        self._lock = threading.RLock()
+
+    def add_subscriber(
+        self,
+        tenant_id: Optional[str],
+        is_global_admin: bool = False,
+    ) -> _ControlSubscriber:
+        """Add a subscriber for events. Raises ValueError if per-tenant cap exceeded."""
+        with self._lock:
+            # Count non-global subscribers for this tenant
+            if not is_global_admin and tenant_id is not None:
+                tenant_count = sum(
+                    1 for s in self._subscribers.values()
+                    if not s.is_closed() and s.tenant_id == tenant_id and not s.is_global_admin
+                )
+                if tenant_count >= MAX_SUBSCRIBERS_PER_TENANT:
+                    raise ValueError(
+                        f"TENANT_SUBSCRIBER_LIMIT: per-tenant subscriber cap "
+                        f"({MAX_SUBSCRIBERS_PER_TENANT}) exceeded for tenant {tenant_id!r}"
+                    )
+            sub_id = str(uuid.uuid4())
+            sub = _ControlSubscriber(sub_id, tenant_id, is_global_admin)
+            self._subscribers[sub_id] = sub
+            return sub
+
+    def remove_subscriber(self, subscriber_id: str) -> None:
+        with self._lock:
+            sub = self._subscribers.pop(subscriber_id, None)
+            if sub:
+                sub.close()
+
+    def publish(self, event: ControlEvent) -> int:
+        """Publish event to all matching subscribers. Returns count delivered."""
+        with self._lock:
+            self._history.append(event)
+            delivered = 0
+            to_remove: List[str] = []
+            for sub_id, sub in self._subscribers.items():
+                if sub.is_closed():
+                    to_remove.append(sub_id)
+                    continue
+                if not sub.matches(event):
+                    continue
+                try:
+                    sub.queue.put_nowait(event.to_dict())
+                    delivered += 1
+                except _queue_module.Full:
+                    sub.close()
+                    to_remove.append(sub_id)
+            for sub_id in to_remove:
+                self._subscribers.pop(sub_id, None)
+            return delivered
+
+    def subscriber_count(self) -> int:
+        with self._lock:
+            return sum(1 for s in self._subscribers.values() if not s.is_closed())
+
+    def get_history(
+        self,
+        tenant_id: Optional[str] = None,
+        is_global_admin: bool = False,
+        limit: int = 100,
+        since: Optional[str] = None,
+    ) -> List[dict]:
+        with self._lock:
+            events = list(self._history)
+        if not is_global_admin and tenant_id is not None:
+            events = [e for e in events if e.tenant_id == tenant_id]
+        elif not is_global_admin and tenant_id is None:
+            events = []
+        if since:
+            events = [e for e in events if e.timestamp >= since]
+        return [e.to_dict() for e in events[-limit:]]

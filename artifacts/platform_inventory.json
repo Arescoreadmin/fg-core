@@ -124,10 +124,13 @@
         "/control-plane/modules",
         "/control-plane/modules/{module_id}/boot-trace",
         "/control-plane/modules/{module_id}/dependencies",
+        "/control-plane/v2/ai/namespace",
         "/control-plane/v2/commands",
         "/control-plane/v2/commands/{command_id}/cancel",
         "/control-plane/v2/commands/{command_id}/receipt",
         "/control-plane/v2/commands/{command_id}/receipts",
+        "/control-plane/v2/delegation",
+        "/control-plane/v2/delegation/{delegation_id}",
         "/control-plane/v2/heartbeats",
         "/control-plane/v2/heartbeats/stale",
         "/control-plane/v2/ledger",
@@ -135,6 +138,13 @@
         "/control-plane/v2/ledger/verify",
         "/control-plane/v2/playbooks",
         "/control-plane/v2/playbooks/{playbook_name}/trigger",
+        "/control-plane/v2/policy/pin",
+        "/control-plane/v2/policy/pins",
+        "/control-plane/v2/policy/rollback",
+        "/control-plane/v2/policy/stage",
+        "/control-plane/v2/terminal/allowlist",
+        "/control-plane/v2/terminal/breakglass",
+        "/control-plane/v2/terminal/execute",
         "/decisions",
         "/decisions/{decision_id}",
         "/defend",
@@ -215,7 +225,7 @@
       "type": "unexpected_route_prefixes"
     }
   ],
-  "git_sha": "e3d5a89f922345cba4f043d4916df0627f1142bd",
+  "git_sha": "9897948c99238b9b2972528114e672421b3a231a",
   "planes": [
     {
       "evidence": [
