@@ -122,6 +122,7 @@
         "/control-plane/lockers/{locker_id}/restart",
         "/control-plane/lockers/{locker_id}/resume",
         "/control-plane/modules",
+        "/control-plane/modules/{module_id}",
         "/control-plane/modules/{module_id}/boot-trace",
         "/control-plane/modules/{module_id}/dependencies",
         "/control-plane/v2/ai/namespace",
@@ -225,7 +226,7 @@
       "type": "unexpected_route_prefixes"
     }
   ],
-  "git_sha": "9897948c99238b9b2972528114e672421b3a231a",
+  "git_sha": "3be979da4e9246beff996587a345422eabc17c9d",
   "planes": [
     {
       "evidence": [

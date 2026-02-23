@@ -97,7 +97,7 @@ class StageRecord:
             "duration_ms": self.duration_ms,
             "status": self.status.value,
             "error_code": self.error_code,
-            "error_detail_redacted": None if redact else self.error_detail_raw,
+            "error_detail_redacted": None if redact else self.error_detail_redacted,
         }
 
 

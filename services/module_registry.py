@@ -327,17 +327,33 @@ class ModuleRegistry:
 
     def register(
         self,
+        rec: Optional["ModuleRegistration"] = None,
         *,
-        module_id: str,
-        name: str,
-        version: str,
+        module_id: str = "",
+        name: str = "",
+        version: str = "",
         commit_hash: str = "unknown",
         build_timestamp: str = "",
         node_id: str = "",
         tenant_id: str = "",
         initial_state: ModuleState = ModuleState.STARTING,
     ) -> ModuleRegistration:
-        """Register a module at startup. Returns the registration object."""
+        """Register a module at startup. Returns the registration object.
+
+        Accepts either a positional ModuleRegistration/ModuleRecord argument
+        (for test-friendly direct registration) or keyword-only arguments.
+        """
+        if rec is not None:
+            # Direct registration path: store the provided record.
+            resolved_node_id = rec.node_id or _node_id()
+            with self._lock:
+                existing_modules_for_node = self._node_registry.get(resolved_node_id, set())
+                existing_modules_for_node.add(rec.module_id)
+                self._node_registry[resolved_node_id] = existing_modules_for_node
+                if rec.last_seen_ts is None:
+                    rec.last_seen_ts = _utc_now_iso()
+                self._modules[rec.module_id] = rec
+            return rec
         if not module_id or not name:
             raise ValueError("module_id and name are required")
 
@@ -425,6 +441,25 @@ class ModuleRegistry:
             log.warning("set_dependency: unknown module_id=%s", module_id)
             return
         reg.update_dependency(probe)
+
+    def update_dependency(
+        self,
+        module_id: str,
+        dep_name: str,
+        status: str,
+        latency_ms: Optional[float] = None,
+        error_code: Optional[str] = None,
+        error_detail: Optional[str] = None,
+    ) -> None:
+        """Convenience wrapper: create/update a DependencyProbe by name and status."""
+        probe = DependencyProbe(
+            name=dep_name,
+            status=DependencyStatus(status),
+            latency_ms=latency_ms,
+            error_code=error_code,
+            error_detail=error_detail,
+        )
+        self.set_dependency(module_id, probe)
 
     def set_breaker_state(
         self, module_id: str, breaker_state: BreakerState

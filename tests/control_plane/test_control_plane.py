@@ -756,7 +756,7 @@ class TestControlPlaneAPI:
         )
         assert resp.status_code == 404
         data = resp.json()
-        assert data["detail"]["code"] == "CP-API-001"
+        assert data["detail"]["code"] == "CP_MODULE_NOT_FOUND"
 
     def test_dependencies_not_found_returns_404(self, tmp_path, monkeypatch):
         from services.module_registry import ModuleRegistry
@@ -768,9 +768,10 @@ class TestControlPlaneAPI:
             headers=_CI_HEADERS,
         )
         assert resp.status_code == 404
-        assert resp.json()["detail"]["code"] == "CP-API-001"
+        assert resp.json()["detail"]["code"] == "CP_MODULE_NOT_FOUND"
 
-    def test_boot_trace_not_found_returns_404(self, tmp_path, monkeypatch):
+    def test_boot_trace_not_found_returns_200_empty(self, tmp_path, monkeypatch):
+        """Boot trace endpoint auto-creates an empty trace for unknown modules."""
         from services.boot_trace import BootTraceRegistry
         BootTraceRegistry()._reset()
 
@@ -779,8 +780,11 @@ class TestControlPlaneAPI:
             "/control-plane/modules/ghost_module/boot-trace",
             headers=_CI_HEADERS,
         )
-        assert resp.status_code == 404
-        assert resp.json()["detail"]["code"] == "CP-API-008"
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert "stages" in data
+        assert "summary" in data
 
     def test_boot_trace_returned_for_registered_module(self, tmp_path, monkeypatch):
         from services.boot_trace import BootTraceRegistry, StageStatus
@@ -800,8 +804,10 @@ class TestControlPlaneAPI:
         assert resp.status_code == 200
         data = resp.json()
         assert data["ok"] is True
-        assert data["boot_trace"]["module_id"] == "traced_module"
-        assert data["boot_trace"]["completed"] is True
+        assert data["module_id"] == "traced_module"
+        assert "stages" in data
+        assert "summary" in data
+        assert data["summary"]["is_ready"] is True
 
     def test_locker_not_found_returns_404(self, tmp_path, monkeypatch):
         from services.locker_command_bus import LockerCommandBus

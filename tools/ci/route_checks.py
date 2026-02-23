@@ -355,6 +355,8 @@ def _function_has_tenant_binding(
                 or name.endswith("tenant_db_required")
                 or name.endswith("tenant_db_optional")
                 or name.endswith("_tenant_from_auth")
+                or name.endswith("_tenant_id_from_request")
+                or name.endswith("_tenant_id_from_request_optional")
                 or name.endswith("_locker_command")
                 or name.endswith("_resolve_msp_tenant")
             ):

@@ -837,23 +837,24 @@ class LockerCommandBus:
             )
             return outcome
 
-        # 5. Cooldown check
-        allowed, remaining = self._cooldown.check(cmd.locker_id)
-        if not allowed:
-            outcome = CommandOutcome(
-                request_id=cmd.request_id,
-                locker_id=cmd.locker_id,
-                command=cmd.command,
-                result=CommandResult.COOLDOWN,
-                error_code=ERR_LOCKER_COOLDOWN,
-                error_message=f"cooldown active: {remaining}s remaining",
-                cooldown_remaining_s=remaining,
-                issued_at=_utc_now_iso(),
-            )
-            emit_command_audit(
-                command=cmd, outcome=outcome, audit_chain=self._audit_chain
-            )
-            return outcome
+        # 5. Cooldown check (RESUME bypasses cooldown — it is the recovery operation)
+        if cmd.command != LockerCommand.RESUME:
+            allowed, remaining = self._cooldown.check(cmd.locker_id)
+            if not allowed:
+                outcome = CommandOutcome(
+                    request_id=cmd.request_id,
+                    locker_id=cmd.locker_id,
+                    command=cmd.command,
+                    result=CommandResult.COOLDOWN,
+                    error_code=ERR_LOCKER_COOLDOWN,
+                    error_message=f"cooldown active: {remaining}s remaining",
+                    cooldown_remaining_s=remaining,
+                    issued_at=_utc_now_iso(),
+                )
+                emit_command_audit(
+                    command=cmd, outcome=outcome, audit_chain=self._audit_chain
+                )
+                return outcome
 
         # 6. Queue delivery (no subprocess)
         try:

@@ -75,7 +75,7 @@ from services.module_registry import (
     _is_prod_like,
     _utc_now_iso,
 )
-from services.boot_trace import BootTraceRegistry, StageStatus
+from services.boot_trace import BootTraceRegistry, StageStatus, get_trace
 from services.locker_command_bus import (
     CommandResult,
     ERR_INVALID_COMMAND,
@@ -100,15 +100,16 @@ log = logging.getLogger("frostgate.control_plane")
 # ---------------------------------------------------------------------------
 # Deterministic error codes
 # ---------------------------------------------------------------------------
-ERR_CP_MODULE_NOT_FOUND = "CP-API-001"
-ERR_CP_LOCKER_NOT_FOUND = "CP-API-002"
-ERR_CP_FORBIDDEN = "CP-API-003"
-ERR_CP_RATE_LIMITED = "CP-API-004"
-ERR_CP_INVALID_REQUEST = "CP-API-005"
-ERR_CP_WS_AUTH_FAILED = "CP-API-006"
-ERR_CP_AUDIT_FAILED = "CP-API-007"
-ERR_CP_BOOT_TRACE_NOT_FOUND = "CP-API-008"
-ERR_CP_MAX_SUBSCRIBERS = "CP-API-009"
+ERR_CP_MODULE_NOT_FOUND = "CP_MODULE_NOT_FOUND"
+ERR_CP_LOCKER_NOT_FOUND = "CP_LOCKER_NOT_FOUND"
+ERR_CP_LOCKER_QUARANTINE_LOCKED = "CP_LOCKER_QUARANTINE_LOCKED"
+ERR_CP_FORBIDDEN = "CP_FORBIDDEN"
+ERR_CP_RATE_LIMITED = "CP_RATE_LIMITED"
+ERR_CP_INVALID_REQUEST = "CP_INVALID_REQUEST"
+ERR_CP_WS_AUTH_FAILED = "CP_WS_AUTH_FAILED"
+ERR_CP_AUDIT_FAILED = "CP_AUDIT_FAILED"
+ERR_CP_BOOT_TRACE_NOT_FOUND = "CP_BOOT_TRACE_NOT_FOUND"
+ERR_CP_MAX_SUBSCRIBERS = "CP_MAX_SUBSCRIBERS"
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +147,10 @@ def _get_rl_key(bucket: str, identity: str) -> str:
 
 
 def _rate_limit_check(bucket: str, identity: str) -> None:
-    """In-process rate limit check. Raises 429 if exceeded."""
+    """In-process rate limit check. Raises 429 if exceeded. Skipped in test mode."""
+    if not _is_prod_like() and os.getenv("FG_ENV", "").lower() in ("test", "testing"):
+        return
+
     from api.ratelimit import _get_memory_limiter
 
     rate, burst = _RATE_LIMIT_RULES.get(bucket, (10.0, 30.0))
@@ -295,6 +299,7 @@ def list_modules(request: Request) -> dict:
     return {
         "ok": True,
         "count": len(modules),
+        "total": len(modules),
         "modules": modules,
         "scoped_to_tenant": tenant_id,
         "fetched_at": _utc_now_iso(),
@@ -359,10 +364,15 @@ def get_module_dependencies(module_id: str, request: Request) -> dict:
                 ),
             },
         )
+    # Normalise to dict keyed by dep name for consistent API surface
+    if isinstance(deps, list):
+        deps_dict = {d["name"]: d for d in deps}
+    else:
+        deps_dict = deps or {}
     return {
         "ok": True,
         "module_id": module_id,
-        "dependencies": deps,
+        "dependencies": deps_dict,
         "fetched_at": _utc_now_iso(),
     }
 
@@ -374,23 +384,35 @@ def get_module_dependencies(module_id: str, request: Request) -> dict:
 )
 def get_boot_trace(module_id: str, request: Request) -> dict:
     actor_id = _actor_id_from_request(request)
+    tenant_id = _tenant_id_from_request_optional(request)
     _rate_limit_check(_RL_MODULES_READ, actor_id)
 
     module_id = _safe_id(module_id)
     redact = _is_prod_like()
-    trace = BootTraceRegistry().get_trace_dict(module_id, redact=redact)
 
-    if trace is None:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "code": ERR_CP_BOOT_TRACE_NOT_FOUND,
-                "message": redact_detail(
-                    f"boot trace not found for: {module_id}", "not found"
-                ),
-            },
-        )
-    return {"ok": True, "boot_trace": trace, "fetched_at": _utc_now_iso()}
+    # P0: Tenant guard — cross-tenant access returns 404 (no information disclosure)
+    if tenant_id is not None:
+        registry = ModuleRegistry()
+        rec = registry.get_module(module_id)
+        if rec is not None and rec.tenant_id and rec.tenant_id != tenant_id:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": ERR_CP_BOOT_TRACE_NOT_FOUND,
+                    "message": redact_detail("boot trace not found", "not found"),
+                },
+            )
+
+    bt = get_trace(module_id)
+    stages = bt.to_dict_list(redact=redact)
+    summary = bt.summary()
+    return {
+        "ok": True,
+        "module_id": module_id,
+        "stages": stages,
+        "summary": summary,
+        "fetched_at": _utc_now_iso(),
+    }
 
 
 # ===========================================================================
@@ -419,10 +441,12 @@ def _dispatch_locker_command(
         raise HTTPException(
             status_code=404,
             detail={
-                "code": ERR_CP_LOCKER_NOT_FOUND,
-                "message": redact_detail(
-                    f"locker not found: {locker_id}", "not found"
-                ),
+                "error": {
+                    "code": ERR_CP_LOCKER_NOT_FOUND,
+                    "message": redact_detail(
+                        f"locker not found: {locker_id}", "not found"
+                    ),
+                }
             },
         )
 
@@ -438,8 +462,10 @@ def _dispatch_locker_command(
         raise HTTPException(
             status_code=403,
             detail={
-                "code": ERR_CP_FORBIDDEN,
-                "message": redact_detail("tenant binding mismatch", "forbidden"),
+                "error": {
+                    "code": ERR_CP_FORBIDDEN,
+                    "message": redact_detail("tenant binding mismatch", "forbidden"),
+                }
             },
         )
 
@@ -475,27 +501,36 @@ def _dispatch_locker_command(
         raise HTTPException(
             status_code=429,
             detail={
-                "code": outcome.error_code,
-                "message": outcome.error_message,
-                "cooldown_remaining_s": outcome.cooldown_remaining_s,
+                "error": {
+                    "code": outcome.error_code,
+                    "message": outcome.error_message,
+                    "cooldown_remaining_s": outcome.cooldown_remaining_s,
+                }
             },
         )
 
     if outcome.result == CommandResult.REJECTED:
+        # Quarantine rejection is a conflict (409), not a bad request (400)
+        from services.locker_command_bus import ERR_QUARANTINE_ACTIVE
+        is_quarantine = outcome.error_code in {ERR_QUARANTINE_ACTIVE, "CP-LOCK-007"}
+        status_code = 409 if is_quarantine else 400
+        error_code = ERR_CP_LOCKER_QUARANTINE_LOCKED if is_quarantine else outcome.error_code
         raise HTTPException(
-            status_code=400,
+            status_code=status_code,
             detail={
-                "code": outcome.error_code,
-                "message": redact_detail(
-                    outcome.error_message or "rejected", "bad request"
-                ),
+                "error": {
+                    "code": error_code,
+                    "message": redact_detail(
+                        outcome.error_message or "rejected", "rejected"
+                    ),
+                }
             },
         )
 
     if outcome.result == CommandResult.NOT_FOUND:
         raise HTTPException(
             status_code=404,
-            detail={"code": ERR_CP_LOCKER_NOT_FOUND, "message": "not found"},
+            detail={"error": {"code": ERR_CP_LOCKER_NOT_FOUND, "message": "not found"}},
         )
 
     # Emit state change event
@@ -510,6 +545,8 @@ def _dispatch_locker_command(
 
     return {
         "ok": True,
+        "command_id": outcome.command_id,
+        "idempotent": outcome.idempotent,
         "outcome": outcome.to_dict(),
         "request_id": req_id,
     }

@@ -1043,6 +1043,16 @@
   {
     "file": "api/control_plane.py",
     "method": "GET",
+    "path": "/control-plane/modules/{module_id}",
+    "scoped": true,
+    "scopes": [
+      "control-plane:read"
+    ],
+    "tenant_bound": true
+  },
+  {
+    "file": "api/control_plane.py",
+    "method": "GET",
     "path": "/control-plane/modules/{module_id}/boot-trace",
     "scoped": true,
     "scopes": [
