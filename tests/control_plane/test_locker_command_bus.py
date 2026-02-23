@@ -57,7 +57,7 @@ def _dispatch(
     idempotency_key: str = "idem-1",
     cooldown_sec: int = 0,
 ):
-    return bus.dispatch_command(
+    return bus.submit_command(
         locker_id=locker_id,
         command=command,
         reason=reason,

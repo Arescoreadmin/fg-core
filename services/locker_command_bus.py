@@ -581,7 +581,7 @@ class LockerCommandBus:
             return runtime
         return runtime.to_dict()
 
-    def dispatch_command(
+    def submit_command(
         self,
         locker_id: str,
         command: str,

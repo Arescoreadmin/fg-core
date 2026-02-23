@@ -766,7 +766,7 @@ class TestControlPlaneAPI:
         )
         assert resp.status_code == 404
         data = resp.json()
-        assert data["detail"]["code"] == "CP_MODULE_NOT_FOUND"
+        assert data["detail"]["code"] == "CP-API-001"
 
     def test_dependencies_not_found_returns_404(self, tmp_path, monkeypatch):
         from services.module_registry import ModuleRegistry
@@ -779,7 +779,7 @@ class TestControlPlaneAPI:
             headers=_CI_HEADERS,
         )
         assert resp.status_code == 404
-        assert resp.json()["detail"]["code"] == "CP_MODULE_NOT_FOUND"
+        assert resp.json()["detail"]["code"] == "CP-API-001"
 
     def test_boot_trace_not_found_returns_200_empty(self, tmp_path, monkeypatch):
         """Boot trace endpoint auto-creates an empty trace for unknown modules."""
