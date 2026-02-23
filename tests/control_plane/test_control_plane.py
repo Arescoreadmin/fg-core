@@ -14,14 +14,10 @@ No placeholder tests. All assertions are deterministic.
 """
 from __future__ import annotations
 
-import asyncio
 import os
-import queue
-import threading
 import time
 import uuid
-from typing import Optional
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -52,7 +48,7 @@ class TestModuleRegistry:
         assert registration.state == ModuleState.STARTING
 
     def test_list_modules(self):
-        from services.module_registry import ModuleRegistry, ModuleState
+        from services.module_registry import ModuleRegistry
 
         reg = ModuleRegistry()
         reg.register(module_id="mod_a", name="Module A", version="1.0.0")
@@ -209,7 +205,6 @@ class TestBootTrace:
         from services.boot_trace import (
             BOOT_STAGE_ORDER,
             BootTraceRegistry,
-            StageStatus,
         )
 
         registry = BootTraceRegistry()

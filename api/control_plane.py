@@ -42,10 +42,9 @@ import json
 import logging
 import os
 import re
-import time
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Optional
 
 from fastapi import (
     APIRouter,
@@ -57,36 +56,25 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.auth_scopes import (
     redact_detail,
-    require_api_key_always,
-    require_bound_tenant,
     require_scopes,
 )
-from api.security_audit import audit_admin_action, AuditPersistenceError
 from services.module_registry import (
-    DependencyProbe,
-    DependencyStatus,
     ModuleRegistry,
-    ModuleState,
     _is_prod_like,
     _utc_now_iso,
 )
-from services.boot_trace import BootTraceRegistry, StageStatus, get_trace
+from services.boot_trace import get_trace
 from services.locker_command_bus import (
     CommandResult,
-    ERR_INVALID_COMMAND,
-    ERR_LOCKER_COOLDOWN,
-    ERR_LOCKER_NOT_FOUND,
     LockerCommand,
     LockerCommandBus,
     LockerCommandRequest,
 )
 from services.event_stream import (
-    ControlEventType,
     EventStreamBus,
     MaxSubscribersExceededError,
     emit_locker_state_changed,
