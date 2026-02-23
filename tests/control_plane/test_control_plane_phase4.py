@@ -193,8 +193,15 @@ class TestDelegationCreation:
         )
         d = rec.to_dict()
         required_fields = [
-            "delegation_id", "delegator_id", "delegatee_id", "target_tenant",
-            "scope", "expires_at", "revoked", "trace_id", "created_at",
+            "delegation_id",
+            "delegator_id",
+            "delegatee_id",
+            "target_tenant",
+            "scope",
+            "expires_at",
+            "revoked",
+            "trace_id",
+            "created_at",
         ]
         for f in required_fields:
             assert f in d, f"Missing field: {f}"

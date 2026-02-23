@@ -40,6 +40,7 @@ from tools.verify_bundle import (
 # Bundle builder helpers
 # ---------------------------------------------------------------------------
 
+
 def _ts() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -57,21 +58,23 @@ def _make_event(
     eid = event_id or str(uuid.uuid4())
     ts = _ts()
     pj = payload or {}
-    content_hash = _recompute_content_hash({
-        "id": eid,
-        "ts": ts,
-        "tenant_id": tenant_id,
-        "actor_id": actor_id,
-        "actor_role": "operator",
-        "event_type": event_type,
-        "payload_json": pj,
-        "content_hash": "",
-        "prev_hash": prev_hash,
-        "chain_hash": "",
-        "trace_id": "",
-        "severity": "info",
-        "source": "api",
-    })
+    content_hash = _recompute_content_hash(
+        {
+            "id": eid,
+            "ts": ts,
+            "tenant_id": tenant_id,
+            "actor_id": actor_id,
+            "actor_role": "operator",
+            "event_type": event_type,
+            "payload_json": pj,
+            "content_hash": "",
+            "prev_hash": prev_hash,
+            "chain_hash": "",
+            "trace_id": "",
+            "severity": "info",
+            "source": "api",
+        }
+    )
     chain_hash = _recompute_chain_hash(prev_hash, content_hash, ts, eid)
     return {
         "id": eid,
@@ -142,6 +145,7 @@ def _make_bundle(
 # ---------------------------------------------------------------------------
 # Test classes
 # ---------------------------------------------------------------------------
+
 
 class TestBundleSchemaCheck:
     """Test schema completeness enforcement."""
@@ -239,8 +243,10 @@ class TestChainIntegrity:
         verifier = BundleVerifier()
         report = verifier.verify(bundle)
         assert report.ok is False
-        assert any("prev_hash mismatch" in f or "content_hash mismatch" in f
-                   for f in report.failures)
+        assert any(
+            "prev_hash mismatch" in f or "content_hash mismatch" in f
+            for f in report.failures
+        )
 
 
 class TestMerkleVerification:
@@ -286,14 +292,18 @@ class TestTenantIsolation:
         """
         events = _build_chain(2, tenant_id="tenant-alpha")
         # Inject a foreign-tenant event
-        foreign_event = _make_event(tenant_id="tenant-beta", prev_hash=events[-1]["chain_hash"])
+        foreign_event = _make_event(
+            tenant_id="tenant-beta", prev_hash=events[-1]["chain_hash"]
+        )
         events.append(foreign_event)
         bundle = _make_bundle(events, tenant_scope="tenant-alpha")
         verifier = BundleVerifier()
         report = verifier.verify(bundle)
         assert report.ok is False
-        assert any("tenant_isolation" in f or "foreign tenant" in f.lower()
-                   for f in report.failures)
+        assert any(
+            "tenant_isolation" in f or "foreign tenant" in f.lower()
+            for f in report.failures
+        )
 
     def test_global_bundle_skips_isolation_check(self):
         """Global bundle (tenant_scope=global) skips isolation check."""
@@ -420,6 +430,7 @@ class TestCLIMainExitCodes:
     def test_main_file_not_found_returns_2(self, tmp_path):
         """Non-existent file returns exit code 2."""
         from tools.verify_bundle import main
+
         rc = main(["--bundle", str(tmp_path / "nonexistent.json")])
         assert rc == 2
 
@@ -428,6 +439,7 @@ class TestCLIMainExitCodes:
         bad_file = tmp_path / "bad.json"
         bad_file.write_text("not json at all {{{")
         from tools.verify_bundle import main
+
         rc = main(["--bundle", str(bad_file)])
         assert rc == 2
 
@@ -438,6 +450,7 @@ class TestCLIMainExitCodes:
         bundle_file = tmp_path / "bundle.json"
         bundle_file.write_text(json.dumps(bundle))
         from tools.verify_bundle import main
+
         rc = main(["--bundle", str(bundle_file)])
         assert rc == 0
 
@@ -449,6 +462,7 @@ class TestCLIMainExitCodes:
         bundle_file = tmp_path / "bad_bundle.json"
         bundle_file.write_text(json.dumps(bundle))
         from tools.verify_bundle import main
+
         rc = main(["--bundle", str(bundle_file)])
         assert rc == 1
 
@@ -456,11 +470,13 @@ class TestCLIMainExitCodes:
         """--json flag produces JSON output."""
         import io
         import sys
+
         events = _build_chain(2)
         bundle = _make_bundle(events)
         bundle_file = tmp_path / "bundle.json"
         bundle_file.write_text(json.dumps(bundle))
         from tools.verify_bundle import main
+
         # Capture stdout
         captured = io.StringIO()
         old_stdout = sys.stdout

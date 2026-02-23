@@ -35,6 +35,7 @@ HTTP Endpoints:
   GET  /control-plane/dependency-matrix
   WS   /control-plane/events
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -119,14 +120,14 @@ _RL_TENANT_WS_SUBSCRIBE = "cp:tenant:ws:subscribe"
 
 _RATE_LIMIT_RULES: dict[str, tuple[float, float]] = {
     # key -> (rate_per_sec, burst)
-    _RL_MODULES_READ:         (10.0, 30.0),
-    _RL_LOCKER_CMD:           (0.5, 3.0),    # per-actor: 1 cmd per 2s, burst of 3
-    _RL_AUDIT_READ:           (5.0, 20.0),
-    _RL_WS_CONNECT:           (2.0, 5.0),
+    _RL_MODULES_READ: (10.0, 30.0),
+    _RL_LOCKER_CMD: (0.5, 3.0),  # per-actor: 1 cmd per 2s, burst of 3
+    _RL_AUDIT_READ: (5.0, 20.0),
+    _RL_WS_CONNECT: (2.0, 5.0),
     # Per-tenant limits
-    _RL_TENANT_DEP_MATRIX:    (2.0, 5.0),   # dep-matrix is compute-heavy
-    _RL_TENANT_LOCKER_CMD:    (1.0, 5.0),   # cross-locker command rate per tenant
-    _RL_TENANT_WS_SUBSCRIBE:  (1.0, 3.0),   # WS subscribe rate per tenant
+    _RL_TENANT_DEP_MATRIX: (2.0, 5.0),  # dep-matrix is compute-heavy
+    _RL_TENANT_LOCKER_CMD: (1.0, 5.0),  # cross-locker command rate per tenant
+    _RL_TENANT_WS_SUBSCRIBE: (1.0, 3.0),  # WS subscribe rate per tenant
 }
 
 
@@ -167,6 +168,7 @@ def _rate_limit_check(bucket: str, identity: str) -> None:
 # ---------------------------------------------------------------------------
 # Auth helpers — all resolve from verified auth context, NEVER from headers
 # ---------------------------------------------------------------------------
+
 
 def _actor_id_from_request(request: Request) -> str:
     """Extract actor ID from verified auth state."""
@@ -217,6 +219,7 @@ def _request_id(request: Request) -> str:
 # Pydantic models
 # ---------------------------------------------------------------------------
 
+
 class LockerCommandBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -263,6 +266,7 @@ router = APIRouter(
 # ===========================================================================
 # A. Module Registry Endpoints
 # ===========================================================================
+
 
 @router.get(
     "/modules",
@@ -318,9 +322,7 @@ def get_module(module_id: str, request: Request) -> dict:
             status_code=404,
             detail={
                 "code": ERR_CP_MODULE_NOT_FOUND,
-                "message": redact_detail(
-                    f"module not found: {module_id}", "not found"
-                ),
+                "message": redact_detail(f"module not found: {module_id}", "not found"),
             },
         )
     return {"ok": True, "module": mod, "fetched_at": _utc_now_iso()}
@@ -347,9 +349,7 @@ def get_module_dependencies(module_id: str, request: Request) -> dict:
             status_code=404,
             detail={
                 "code": ERR_CP_MODULE_NOT_FOUND,
-                "message": redact_detail(
-                    f"module not found: {module_id}", "not found"
-                ),
+                "message": redact_detail(f"module not found: {module_id}", "not found"),
             },
         )
     # Normalise to dict keyed by dep name for consistent API surface
@@ -406,6 +406,7 @@ def get_boot_trace(module_id: str, request: Request) -> dict:
 # ===========================================================================
 # B. Locker Control Endpoints
 # ===========================================================================
+
 
 def _dispatch_locker_command(
     locker_id: str,
@@ -500,9 +501,12 @@ def _dispatch_locker_command(
     if outcome.result == CommandResult.REJECTED:
         # Quarantine rejection is a conflict (409), not a bad request (400)
         from services.locker_command_bus import ERR_QUARANTINE_ACTIVE
+
         is_quarantine = outcome.error_code in {ERR_QUARANTINE_ACTIVE, "CP-LOCK-007"}
         status_code = 409 if is_quarantine else 400
-        error_code = ERR_CP_LOCKER_QUARANTINE_LOCKED if is_quarantine else outcome.error_code
+        error_code = (
+            ERR_CP_LOCKER_QUARANTINE_LOCKED if is_quarantine else outcome.error_code
+        )
         raise HTTPException(
             status_code=status_code,
             detail={
@@ -618,6 +622,7 @@ def list_lockers(request: Request) -> dict:
 # C. Audit Endpoint
 # ===========================================================================
 
+
 @router.get(
     "/audit",
     dependencies=[Depends(require_scopes("control-plane:audit:read"))],
@@ -625,7 +630,9 @@ def list_lockers(request: Request) -> dict:
 )
 def get_control_plane_audit(
     request: Request,
-    since: Optional[str] = Query(default=None, description="ISO8601 timestamp lower bound"),
+    since: Optional[str] = Query(
+        default=None, description="ISO8601 timestamp lower bound"
+    ),
     limit: int = Query(default=50, ge=1, le=500),
     event_type: Optional[str] = Query(default=None),
 ) -> dict:
@@ -649,9 +656,8 @@ def get_control_plane_audit(
             events = [
                 e
                 for e in events
-                if datetime.fromisoformat(
-                    e["timestamp"].replace("Z", "+00:00")
-                ) >= since_dt
+                if datetime.fromisoformat(e["timestamp"].replace("Z", "+00:00"))
+                >= since_dt
             ]
         except (ValueError, KeyError):
             pass  # Invalid since param: return all
@@ -668,6 +674,7 @@ def get_control_plane_audit(
 # ===========================================================================
 # D. Real-Time Event Stream (WebSocket)
 # ===========================================================================
+
 
 @router.websocket("/events")
 async def control_plane_events(
@@ -699,7 +706,9 @@ async def control_plane_events(
 
     from api.auth_scopes import verify_api_key_detailed
 
-    auth_result = verify_api_key_detailed(raw=api_key, required_scopes={"control-plane:read"})
+    auth_result = verify_api_key_detailed(
+        raw=api_key, required_scopes={"control-plane:read"}
+    )
 
     if not auth_result.valid:
         await websocket.close(code=4001, reason="authentication failed")
@@ -722,6 +731,7 @@ async def control_plane_events(
 
     # P1: Per-actor WS connect rate limit
     from api.ratelimit import _get_memory_limiter
+
     limiter = _get_memory_limiter()
 
     rate, burst = _RATE_LIMIT_RULES[_RL_WS_CONNECT]
@@ -750,9 +760,7 @@ async def control_plane_events(
     try:
         subscriber = bus.subscribe(tenant_id=tenant_id)
     except MaxSubscribersExceededError:
-        await websocket.close(
-            code=4029, reason="max subscribers exceeded for tenant"
-        )
+        await websocket.close(code=4029, reason="max subscribers exceeded for tenant")
         log.warning(
             "ws_max_subscribers_exceeded tenant=%s actor=%s", tenant_id, actor_id
         )
@@ -769,12 +777,14 @@ async def control_plane_events(
     try:
         # Send connected ack (includes tenant context for audit trail)
         await websocket.send_text(
-            json.dumps({
-                "type": "connected",
-                "subscriber_id": subscriber.subscriber_id,
-                "tenant_id": tenant_id,
-                "timestamp": _utc_now_iso(),
-            })
+            json.dumps(
+                {
+                    "type": "connected",
+                    "subscriber_id": subscriber.subscriber_id,
+                    "tenant_id": tenant_id,
+                    "timestamp": _utc_now_iso(),
+                }
+            )
         )
 
         # Stream events (P0: tenant filter already enforced in EventSubscriber.matches())
@@ -783,17 +793,22 @@ async def control_plane_events(
             if subscriber.is_closed():
                 try:
                     await websocket.send_text(
-                        json.dumps({
-                            "type": "disconnect",
-                            "reason": "slow_consumer",
-                            "timestamp": _utc_now_iso(),
-                        })
+                        json.dumps(
+                            {
+                                "type": "disconnect",
+                                "reason": "slow_consumer",
+                                "timestamp": _utc_now_iso(),
+                            }
+                        )
                     )
                 except WebSocketDisconnect:
                     pass
                 except OSError as send_err:
-                    log.debug("ws_disconnect_notify_failed sub=%s err=%s",
-                              subscriber.subscriber_id, send_err)
+                    log.debug(
+                        "ws_disconnect_notify_failed sub=%s err=%s",
+                        subscriber.subscriber_id,
+                        send_err,
+                    )
                 break
 
             event = await subscriber.get(timeout=25.0)
@@ -802,10 +817,12 @@ async def control_plane_events(
                 # Send heartbeat to keep connection alive
                 try:
                     await websocket.send_text(
-                        json.dumps({
-                            "type": "heartbeat",
-                            "timestamp": _utc_now_iso(),
-                        })
+                        json.dumps(
+                            {
+                                "type": "heartbeat",
+                                "timestamp": _utc_now_iso(),
+                            }
+                        )
                     )
                 except (WebSocketDisconnect, OSError):
                     break
@@ -838,6 +855,7 @@ async def control_plane_events(
 # E. Dependency Matrix
 # ===========================================================================
 
+
 @router.get(
     "/dependency-matrix",
     dependencies=[Depends(require_scopes("control-plane:read"))],
@@ -865,12 +883,11 @@ def dependency_matrix(request: Request) -> dict:
     matrix: dict[str, dict[str, str]] = {}
     for mod in modules:
         module_id = mod["module_id"]
-        deps = registry.get_dependencies(
-            module_id, redact=redact, tenant_id=tenant_id
-        ) or []
-        matrix[module_id] = {
-            dep["name"]: dep["status"] for dep in deps
-        }
+        deps = (
+            registry.get_dependencies(module_id, redact=redact, tenant_id=tenant_id)
+            or []
+        )
+        matrix[module_id] = {dep["name"]: dep["status"] for dep in deps}
 
     return {
         "ok": True,
@@ -883,6 +900,7 @@ def dependency_matrix(request: Request) -> dict:
 # ===========================================================================
 # Utilities
 # ===========================================================================
+
 
 def _safe_id(value: str, max_len: int = 128) -> str:
     """Sanitize path parameters to prevent injection."""

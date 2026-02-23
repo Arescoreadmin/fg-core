@@ -47,6 +47,7 @@ from services.cp_terminal import (
 
 class _MockLedger:
     """Minimal ledger stub."""
+
     def __init__(self):
         self.events = []
 
@@ -63,8 +64,12 @@ class _MockLedger:
 
 class _MockDB:
     """Minimal DB session stub."""
-    def __enter__(self): return self
-    def __exit__(self, *a): pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        pass
 
 
 @pytest.fixture(autouse=True)
@@ -100,8 +105,13 @@ class TestCommandAllowlist:
     def test_allowlist_contains_expected_commands(self):
         """Terminal allowlist contains all expected commands."""
         expected_read = {
-            "status", "list", "inspect", "check-health",
-            "show-ledger", "show-commands", "show-receipts",
+            "status",
+            "list",
+            "inspect",
+            "check-health",
+            "show-ledger",
+            "show-commands",
+            "show-receipts",
         }
         expected_bg = {"force-inspect", "emergency-list"}
         assert expected_read == TERMINAL_READ_COMMANDS
@@ -315,6 +325,7 @@ class TestBreakglassSession:
     def test_breakglass_session_expired_invalid(self, svc):
         """Expired break-glass session is invalid."""
         from services.cp_terminal import BreakglassSession
+
         now = datetime.now(timezone.utc)
         session = BreakglassSession(
             session_id=str(uuid.uuid4()),
@@ -425,9 +436,19 @@ class TestTerminalResultStructure:
         )
         d = result.to_dict()
         required = [
-            "invocation_id", "command", "args", "tenant_id", "actor_id",
-            "reason", "ok", "output", "error_code", "breakglass",
-            "ledger_event_id", "evidence_bundle_link", "ts",
+            "invocation_id",
+            "command",
+            "args",
+            "tenant_id",
+            "actor_id",
+            "reason",
+            "ok",
+            "output",
+            "error_code",
+            "breakglass",
+            "ledger_event_id",
+            "evidence_bundle_link",
+            "ts",
         ]
         for f in required:
             assert f in d, f"Missing field: {f}"
@@ -442,7 +463,10 @@ class TestNoSubprocessInTerminal:
         This test parses the AST to verify no subprocess usage.
         """
         from pathlib import Path
-        src = (Path(__file__).parent.parent.parent / "services" / "cp_terminal.py").read_text()
+
+        src = (
+            Path(__file__).parent.parent.parent / "services" / "cp_terminal.py"
+        ).read_text()
         tree = ast.parse(src, filename="cp_terminal.py")
 
         for node in ast.walk(tree):
@@ -461,6 +485,7 @@ class TestNoSubprocessInTerminal:
         Terminal must use _COMMAND_HANDLERS dispatch table, not dynamic dispatch.
         """
         from services.cp_terminal import _COMMAND_HANDLERS
+
         assert isinstance(_COMMAND_HANDLERS, dict)
         # All allowlist commands must be in the dispatch table
         for cmd in TERMINAL_ALLOWLIST:

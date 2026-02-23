@@ -12,6 +12,7 @@ Covers:
 
 No placeholder tests. All assertions are deterministic.
 """
+
 from __future__ import annotations
 
 import os
@@ -30,6 +31,7 @@ from fastapi.testclient import TestClient
 class TestModuleRegistry:
     def setup_method(self):
         from services.module_registry import ModuleRegistry
+
         ModuleRegistry()._reset()
 
     def test_register_and_retrieve(self):
@@ -199,6 +201,7 @@ class TestModuleRegistry:
 class TestBootTrace:
     def setup_method(self):
         from services.boot_trace import BootTraceRegistry
+
         BootTraceRegistry()._reset()
 
     def test_boot_trace_returns_ordered_stages(self):
@@ -350,10 +353,12 @@ class TestBootTrace:
 class TestLockerCommandBus:
     def setup_method(self):
         from services.locker_command_bus import LockerCommandBus
+
         LockerCommandBus()._reset()
 
     def _register_locker(self, locker_id="test_locker", tenant_id="t1"):
         from services.locker_command_bus import LockerCommandBus, LockerState
+
         bus = LockerCommandBus()
         return bus.register_locker(
             locker_id=locker_id,
@@ -372,6 +377,7 @@ class TestLockerCommandBus:
         tenant_id="t1",
     ):
         from services.locker_command_bus import LockerCommand, LockerCommandRequest
+
         return LockerCommandRequest(
             locker_id=locker_id,
             command=command or LockerCommand.RESTART,
@@ -388,6 +394,7 @@ class TestLockerCommandBus:
             LockerCommandBus,
             LockerCommandRequest,
         )
+
         self._register_locker()
         bus = LockerCommandBus()
 
@@ -537,6 +544,7 @@ class TestLockerCommandBus:
 class TestEventStream:
     def setup_method(self):
         from services.event_stream import EventStreamBus
+
         EventStreamBus()._reset()
 
     def test_subscribe_receives_own_tenant_events(self):
@@ -599,20 +607,24 @@ class TestEventStream:
         bus = EventStreamBus()
 
         for i in range(5):
-            bus.publish(ControlEvent(
-                event_type=ControlEventType.MODULE_STATE_CHANGED,
-                module_id=f"mod{i}",
-                tenant_id="t1",
-                payload={},
-            ))
+            bus.publish(
+                ControlEvent(
+                    event_type=ControlEventType.MODULE_STATE_CHANGED,
+                    module_id=f"mod{i}",
+                    tenant_id="t1",
+                    payload={},
+                )
+            )
 
         for i in range(3):
-            bus.publish(ControlEvent(
-                event_type=ControlEventType.MODULE_STATE_CHANGED,
-                module_id=f"mod{i}",
-                tenant_id="t2",
-                payload={},
-            ))
+            bus.publish(
+                ControlEvent(
+                    event_type=ControlEventType.MODULE_STATE_CHANGED,
+                    module_id=f"mod{i}",
+                    tenant_id="t2",
+                    payload={},
+                )
+            )
 
         events_t1 = bus.recent_events(tenant_id="t1")
         events_t2 = bus.recent_events(tenant_id="t2")
@@ -710,6 +722,7 @@ class TestControlPlaneAPI:
 
     def test_modules_endpoint_returns_list(self, tmp_path, monkeypatch):
         from services.module_registry import ModuleRegistry
+
         ModuleRegistry()._reset()
 
         client = self._get_client(tmp_path, monkeypatch)
@@ -722,6 +735,7 @@ class TestControlPlaneAPI:
 
     def test_modules_with_registered_module(self, tmp_path, monkeypatch):
         from services.module_registry import ModuleRegistry, ModuleState
+
         ModuleRegistry()._reset()
 
         reg = ModuleRegistry()
@@ -742,6 +756,7 @@ class TestControlPlaneAPI:
 
     def test_module_not_found_returns_404(self, tmp_path, monkeypatch):
         from services.module_registry import ModuleRegistry
+
         ModuleRegistry()._reset()
 
         client = self._get_client(tmp_path, monkeypatch)
@@ -755,6 +770,7 @@ class TestControlPlaneAPI:
 
     def test_dependencies_not_found_returns_404(self, tmp_path, monkeypatch):
         from services.module_registry import ModuleRegistry
+
         ModuleRegistry()._reset()
 
         client = self._get_client(tmp_path, monkeypatch)
@@ -768,6 +784,7 @@ class TestControlPlaneAPI:
     def test_boot_trace_not_found_returns_200_empty(self, tmp_path, monkeypatch):
         """Boot trace endpoint auto-creates an empty trace for unknown modules."""
         from services.boot_trace import BootTraceRegistry
+
         BootTraceRegistry()._reset()
 
         client = self._get_client(tmp_path, monkeypatch)
@@ -783,6 +800,7 @@ class TestControlPlaneAPI:
 
     def test_boot_trace_returned_for_registered_module(self, tmp_path, monkeypatch):
         from services.boot_trace import BootTraceRegistry, StageStatus
+
         BootTraceRegistry()._reset()
 
         registry = BootTraceRegistry()
@@ -806,6 +824,7 @@ class TestControlPlaneAPI:
 
     def test_locker_not_found_returns_404(self, tmp_path, monkeypatch):
         from services.locker_command_bus import LockerCommandBus
+
         LockerCommandBus()._reset()
 
         client = self._get_client(tmp_path, monkeypatch)
@@ -820,6 +839,7 @@ class TestControlPlaneAPI:
     def test_locker_restart_requires_reason(self, tmp_path, monkeypatch):
         """Restart endpoint rejects empty reason at Pydantic level."""
         from services.locker_command_bus import LockerCommandBus, LockerState
+
         LockerCommandBus()._reset()
 
         bus = LockerCommandBus()
@@ -843,6 +863,7 @@ class TestControlPlaneAPI:
 
     def test_locker_restart_accepted(self, tmp_path, monkeypatch):
         from services.locker_command_bus import LockerCommandBus, LockerState
+
         LockerCommandBus()._reset()
 
         bus = LockerCommandBus()
@@ -859,7 +880,10 @@ class TestControlPlaneAPI:
         with patch("services.locker_command_bus.emit_command_audit"):
             resp = client.post(
                 "/control-plane/lockers/cmd_locker/restart",
-                json={"reason": "maintenance restart", "idempotency_key": str(uuid.uuid4())},
+                json={
+                    "reason": "maintenance restart",
+                    "idempotency_key": str(uuid.uuid4()),
+                },
                 headers=_CI_HEADERS,
             )
 
@@ -869,6 +893,7 @@ class TestControlPlaneAPI:
 
     def test_dependency_matrix_endpoint(self, tmp_path, monkeypatch):
         from services.module_registry import ModuleRegistry
+
         ModuleRegistry()._reset()
 
         client = self._get_client(tmp_path, monkeypatch)
@@ -880,6 +905,7 @@ class TestControlPlaneAPI:
 
     def test_audit_endpoint_returns_events(self, tmp_path, monkeypatch):
         from services.event_stream import EventStreamBus
+
         EventStreamBus()._reset()
 
         client = self._get_client(tmp_path, monkeypatch)
@@ -889,6 +915,7 @@ class TestControlPlaneAPI:
 
     def test_lockers_list_endpoint(self, tmp_path, monkeypatch):
         from services.locker_command_bus import LockerCommandBus
+
         LockerCommandBus()._reset()
 
         client = self._get_client(tmp_path, monkeypatch)
@@ -906,6 +933,7 @@ class TestControlPlaneAuth:
     def _get_authed_client(self, tmp_path, monkeypatch):
         from api.main import build_app
         from api.db import reset_engine_cache, init_db
+
         db_path = str(tmp_path / "cp-auth.db")
         monkeypatch.setenv("FG_ENV", "test")
         monkeypatch.setenv("FG_SQLITE_PATH", db_path)
@@ -1049,6 +1077,7 @@ class TestErrorSanitizer:
 
     def _sanitize(self, text):
         from services.error_sanitizer import sanitize_error_detail
+
         return sanitize_error_detail(text)
 
     def test_none_returns_none(self):
@@ -1132,6 +1161,7 @@ class TestTenantScopingHardening:
     def setup_method(self):
         from services.event_stream import EventStreamBus
         from services.module_registry import ModuleRegistry
+
         EventStreamBus()._reset()
         ModuleRegistry()._reset()
 
@@ -1147,12 +1177,14 @@ class TestTenantScopingHardening:
         sub_t2 = bus.subscribe(tenant_id="tenant-beta")
 
         # Publish event for tenant-alpha
-        bus.publish(ControlEvent(
-            event_type=ControlEventType.MODULE_STATE_CHANGED,
-            module_id="mod-alpha",
-            tenant_id="tenant-alpha",
-            payload={"state": "ready"},
-        ))
+        bus.publish(
+            ControlEvent(
+                event_type=ControlEventType.MODULE_STATE_CHANGED,
+                module_id="mod-alpha",
+                tenant_id="tenant-alpha",
+                payload={"state": "ready"},
+            )
+        )
 
         # tenant-alpha subscriber receives it
         assert not sub_t1._queue.empty()
@@ -1170,12 +1202,14 @@ class TestTenantScopingHardening:
         sub_t1 = bus.subscribe(tenant_id="tenant-alpha")
         sub_t2 = bus.subscribe(tenant_id="tenant-beta")
 
-        bus.publish(ControlEvent(
-            event_type=ControlEventType.HEARTBEAT,
-            module_id="system",
-            tenant_id="global",
-            payload={"seq": 1},
-        ))
+        bus.publish(
+            ControlEvent(
+                event_type=ControlEventType.HEARTBEAT,
+                module_id="system",
+                tenant_id="global",
+                payload={"seq": 1},
+            )
+        )
 
         # Both subscribers receive the global event
         assert not sub_t1._queue.empty()
@@ -1209,7 +1243,9 @@ class TestTenantScopingHardening:
         reg = ModuleRegistry()
         reg.register(module_id="m-alpha", name="A", version="1.0", tenant_id="t-alpha")
         reg.register(module_id="m-beta", name="B", version="1.0", tenant_id="t-beta")
-        reg.register(module_id="m-alpha2", name="A2", version="1.0", tenant_id="t-alpha")
+        reg.register(
+            module_id="m-alpha2", name="A2", version="1.0", tenant_id="t-alpha"
+        )
 
         alpha_mods = reg.list_modules(redact=False, tenant_id="t-alpha")
         assert len(alpha_mods) == 2
@@ -1240,12 +1276,14 @@ class TestTenantScopingHardening:
 
         bus = EventStreamBus()
         for i in range(3):
-            bus.publish(ControlEvent(
-                event_type=ControlEventType.MODULE_STATE_CHANGED,
-                module_id=f"mod-{i}",
-                tenant_id="secret-tenant",
-                payload={},
-            ))
+            bus.publish(
+                ControlEvent(
+                    event_type=ControlEventType.MODULE_STATE_CHANGED,
+                    module_id=f"mod-{i}",
+                    tenant_id="secret-tenant",
+                    payload={},
+                )
+            )
 
         events = bus.recent_events(tenant_id="attacker-tenant")
         assert len(events) == 0, "attacker must not see secret-tenant events"
@@ -1259,6 +1297,7 @@ class TestTenantScopingHardening:
 class TestEventStreamHardening:
     def setup_method(self):
         from services.event_stream import EventStreamBus
+
         EventStreamBus()._reset()
 
     def test_event_has_both_event_id_and_instance_id(self):
@@ -1272,7 +1311,9 @@ class TestEventStreamHardening:
             payload={},
         )
         assert ev.event_id.startswith("evt-"), "event_id must be content hash"
-        assert ev.event_instance_id.startswith("evti-"), "event_instance_id must be unique"
+        assert ev.event_instance_id.startswith("evti-"), (
+            "event_instance_id must be unique"
+        )
 
     def test_content_hash_is_deterministic_same_inputs(self):
         """event_id (content hash) is deterministic for identical inputs."""
@@ -1374,7 +1415,9 @@ class TestEventStreamHardening:
             sub.try_put(ev)
 
         # After threshold consecutive drops, subscriber must be closed
-        assert sub.is_closed(), "slow consumer must be disconnected after threshold drops"
+        assert sub.is_closed(), (
+            "slow consumer must be disconnected after threshold drops"
+        )
 
     def test_unsubscribed_tenant_count_decremented(self):
         from services.event_stream import EventStreamBus
@@ -1399,10 +1442,12 @@ class TestCommandBusSafetyHardening:
 
     def setup_method(self):
         from services.locker_command_bus import LockerCommandBus
+
         LockerCommandBus()._reset()
 
     def _register_locker(self, locker_id="locker-h1", tenant_id="tenant-h1"):
         from services.locker_command_bus import LockerCommandBus
+
         return LockerCommandBus().register_locker(
             locker_id=locker_id,
             name="Hardening Locker",
@@ -1419,6 +1464,7 @@ class TestCommandBusSafetyHardening:
         command=None,
     ):
         from services.locker_command_bus import LockerCommand, LockerCommandRequest
+
         return LockerCommandRequest(
             locker_id=locker_id,
             command=command or LockerCommand.RESTART,
@@ -1574,6 +1620,7 @@ class TestCommandBusSafetyHardening:
 class TestRegistryLiveness:
     def setup_method(self):
         from services.module_registry import ModuleRegistry
+
         ModuleRegistry()._reset()
 
     def test_heartbeat_updates_last_seen_ts(self):
@@ -1653,9 +1700,7 @@ class TestRegistryLiveness:
                 module_id="mod-node-2", name="M2", version="1.0", node_id="node-xyz"
             )
             # Second registration with same node_id should trigger warning
-            warning_calls = [
-                str(call) for call in mock_log.warning.call_args_list
-            ]
+            warning_calls = [str(call) for call in mock_log.warning.call_args_list]
             assert any("node_id_conflict" in c for c in warning_calls), (
                 "node_id conflict should generate a warning log"
             )
@@ -1681,7 +1726,9 @@ class TestDependencyProbeHardening:
         from services.module_registry import DependencyProbe, DependencyStatus
 
         probe = DependencyProbe(name="redis", status=DependencyStatus.OK)
-        assert probe.measured_at_ts is not None, "measured_at_ts must be set automatically"
+        assert probe.measured_at_ts is not None, (
+            "measured_at_ts must be set automatically"
+        )
 
     def test_timeout_ms_stored(self):
         from services.module_registry import DependencyProbe, DependencyStatus

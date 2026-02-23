@@ -1262,7 +1262,9 @@ def create_delegation(
     trace = _trace_id(request)
 
     _enforce_rate_limit(
-        _rl_key(actor, "delegation_create"), *_RL_WRITE, error_code="CP_DELEGATION_RATE_LIMIT"
+        _rl_key(actor, "delegation_create"),
+        *_RL_WRITE,
+        error_code="CP_DELEGATION_RATE_LIMIT",
     )
 
     svc = get_delegation_service()
@@ -1310,7 +1312,9 @@ def revoke_delegation(
     trace = _trace_id(request)
 
     _enforce_rate_limit(
-        _rl_key(actor, "delegation_revoke"), *_RL_WRITE, error_code="CP_DELEGATION_RATE_LIMIT"
+        _rl_key(actor, "delegation_revoke"),
+        *_RL_WRITE,
+        error_code="CP_DELEGATION_RATE_LIMIT",
     )
 
     svc = get_delegation_service()
@@ -1358,7 +1362,9 @@ def list_delegations(
     trace = _trace_id(request)
 
     _enforce_rate_limit(
-        _rl_key(actor, "delegation_list"), *_RL_READ, error_code="CP_DELEGATION_RATE_LIMIT"
+        _rl_key(actor, "delegation_list"),
+        *_RL_READ,
+        error_code="CP_DELEGATION_RATE_LIMIT",
     )
 
     svc = get_delegation_service()
@@ -1404,7 +1410,12 @@ def get_ai_namespace(
     trace = _trace_id(request)
 
     if not tenant_id:
-        _error_response(400, "CP_AI_TENANT_REQUIRED", "Tenant binding required for AI namespace", trace)
+        _error_response(
+            400,
+            "CP_AI_TENANT_REQUIRED",
+            "Tenant binding required for AI namespace",
+            trace,
+        )
 
     try:
         namespace = derive_tenant_namespace(tenant_id)
@@ -1451,7 +1462,8 @@ def list_terminal_allowlist(request: Request) -> Dict[str, Any]:
     return {
         "allowlist": sorted(TERMINAL_ALLOWLIST),
         "breakglass_commands": sorted(
-            cmd for cmd in TERMINAL_ALLOWLIST
+            cmd
+            for cmd in TERMINAL_ALLOWLIST
             if cmd in {"force-inspect", "emergency-list"}
         ),
         "breakglass_scope_required": BREAKGLASS_SCOPE,
@@ -1546,7 +1558,9 @@ def terminal_execute(
     effective_tenant = tenant_id or "global"
 
     _enforce_rate_limit(
-        _rl_key(effective_tenant, "terminal"), *_RL_WRITE, error_code="CP_TERMINAL_RATE_LIMIT"
+        _rl_key(effective_tenant, "terminal"),
+        *_RL_WRITE,
+        error_code="CP_TERMINAL_RATE_LIMIT",
     )
 
     # Get actor scopes for break-glass check
@@ -1599,7 +1613,9 @@ class PolicyPinRequest(BaseModel):
 
     policy_id: str = Field(..., min_length=1, max_length=128)
     version_hash: str = Field(..., min_length=64, max_length=64)
-    ttl_hours: int = Field(POLICY_PIN_DEFAULT_TTL_HOURS, ge=1, le=POLICY_PIN_MAX_TTL_HOURS)
+    ttl_hours: int = Field(
+        POLICY_PIN_DEFAULT_TTL_HOURS, ge=1, le=POLICY_PIN_MAX_TTL_HOURS
+    )
 
 
 class PolicyStageRequest(BaseModel):
@@ -1608,7 +1624,9 @@ class PolicyStageRequest(BaseModel):
     policy_id: str = Field(..., min_length=1, max_length=128)
     version_hash: str = Field(..., min_length=64, max_length=64)
     rollout_pct: int = Field(..., ge=0, le=100)
-    ttl_hours: int = Field(POLICY_PIN_DEFAULT_TTL_HOURS, ge=1, le=POLICY_PIN_MAX_TTL_HOURS)
+    ttl_hours: int = Field(
+        POLICY_PIN_DEFAULT_TTL_HOURS, ge=1, le=POLICY_PIN_MAX_TTL_HOURS
+    )
 
 
 class PolicyRollbackRequest(BaseModel):

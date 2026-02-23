@@ -264,7 +264,9 @@ class TestPolicyPinning:
             actor_id="admin-001",
             trace_id="t2",
         )
-        active = svc.get_pin(db_session=db, tenant_id="tenant-alpha", policy_id="opa-core")
+        active = svc.get_pin(
+            db_session=db, tenant_id="tenant-alpha", policy_id="opa-core"
+        )
         assert active is not None
         assert active.version_hash == _VALID_HASH_B
 
