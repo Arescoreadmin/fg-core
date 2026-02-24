@@ -11594,6 +11594,46 @@
               }
             },
             "description": "Validation Error"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error_code": {
+                      "title": "Error Code",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error_code"
+                  ],
+                  "title": "ErrorDetail",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error_code": {
+                      "title": "Error Code",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error_code"
+                  ],
+                  "title": "ErrorDetail",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Forbidden"
           }
         },
         "summary": "Get Planes",
