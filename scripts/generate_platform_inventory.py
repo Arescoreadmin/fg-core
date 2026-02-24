@@ -57,9 +57,8 @@ def main() -> int:
             }
         )
         by_plane_routes[pid] = routes
-        missing_targets = sorted(
-            [t for t in p.required_make_targets if t not in make_targets]
-        )
+        required_targets = list(getattr(p, "required_make_targets", ()) or ())
+        missing_targets = sorted([t for t in required_targets if t not in make_targets])
         if missing_targets:
             gaps.append(
                 {
@@ -69,14 +68,15 @@ def main() -> int:
                     "suggested_fix": "Add missing make targets declared by plane registry.",
                 }
             )
+        evidence_items = list(getattr(p, "evidence", ()) or ())
         missing_evidence = []
-        for e in p.evidence:
-            sp = REPO / e.schema_path
-            gp = REPO / e.generator_script
+        for e in evidence_items:
+            schema_path = getattr(e, "schema_path", "")
+            generator_script = getattr(e, "generator_script", "")
+            sp = REPO / schema_path
+            gp = REPO / generator_script
             if not sp.exists() or not gp.exists():
-                missing_evidence.append(
-                    {"schema": e.schema_path, "generator": e.generator_script}
-                )
+                missing_evidence.append({"schema": schema_path, "generator": generator_script})
         if missing_evidence:
             gaps.append(
                 {
@@ -100,12 +100,15 @@ def main() -> int:
             {
                 "plane_id": pid,
                 "route_prefixes": sorted(p.route_prefixes),
-                "mount_flag": p.mount_flag,
-                "required_make_targets": sorted(p.required_make_targets),
+                "mount_flag": getattr(p, "mount_flag", "n/a"),
+                "required_make_targets": sorted(required_targets),
                 "evidence": sorted(
                     [
-                        {"schema": e.schema_path, "generator": e.generator_script}
-                        for e in p.evidence
+                        {
+                            "schema": getattr(e, "schema_path", ""),
+                            "generator": getattr(e, "generator_script", ""),
+                        }
+                        for e in evidence_items
                     ],
                     key=lambda x: (x["schema"], x["generator"]),
                 ),
