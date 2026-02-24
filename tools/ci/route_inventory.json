@@ -1,2168 +1,3501 @@
 [
   {
+    "dependency_categories": [],
     "file": "api/main.py",
     "method": "GET",
     "path": "/_debug/routes",
+    "plane_id": "control",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/ui_feed.py",
     "method": "GET",
     "path": "/_legacy/ui_feed/_disabled",
+    "plane_id": "control",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/agent_phase2.py",
     "method": "POST",
     "path": "/admin/agent/commands/issue",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "keys:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/agent_tokens.py",
     "method": "GET",
     "path": "/admin/agent/devices",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "keys:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/agent_tokens.py",
     "method": "POST",
     "path": "/admin/agent/devices/{device_id}/revoke",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "keys:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/agent_tokens.py",
     "method": "POST",
     "path": "/admin/agent/enrollment-tokens",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "keys:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/agent_phase2.py",
     "method": "GET",
     "path": "/admin/agent/evidence/export/{device_id}",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "keys:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/agent_phase2.py",
     "method": "POST",
     "path": "/admin/agent/policy/publish",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "keys:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/agent_phase2.py",
     "method": "POST",
     "path": "/admin/agent/policy/revoke/{policy_hash}",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "keys:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/agent_phase2.py",
     "method": "POST",
     "path": "/admin/agent/quarantine/{device_id}",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "keys:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/agent_phase2.py",
     "method": "POST",
     "path": "/admin/agent/unquarantine/{device_id}",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "keys:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/agent_phase2.py",
     "method": "POST",
     "path": "/admin/agent/update/rollout",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "keys:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/admin.py",
     "method": "POST",
     "path": "/admin/audit/export",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "audit:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/admin.py",
     "method": "GET",
     "path": "/admin/audit/search",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "audit:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/admin.py",
     "method": "POST",
     "path": "/admin/config/changes/{change_id}/revert",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/connectors_policy.py",
     "method": "GET",
     "path": "/admin/connectors/policy",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/connectors_policy.py",
     "method": "POST",
     "path": "/admin/connectors/policy",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/connectors_status.py",
     "method": "GET",
     "path": "/admin/connectors/status",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/connectors_admin.py",
     "method": "POST",
     "path": "/admin/connectors/{connector_id}/revoke",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_ai_console.py",
     "method": "GET",
     "path": "/admin/devices",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_ai_console.py",
     "method": "POST",
     "path": "/admin/devices/{device_id}/disable",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_ai_console.py",
     "method": "POST",
     "path": "/admin/devices/{device_id}/enable",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/admin.py",
     "method": "GET",
     "path": "/admin/keys",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "keys:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/admin.py",
     "method": "POST",
     "path": "/admin/keys",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "keys:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/admin.py",
     "method": "GET",
     "path": "/admin/keys/needing-rotation",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/admin.py",
     "method": "POST",
     "path": "/admin/keys/{key_prefix}/revoke",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "keys:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/admin.py",
     "method": "POST",
     "path": "/admin/keys/{key_prefix}/rotate",
+    "plane_id": "control",
+    "scoped": true,
+    "scopes": [
+      "keys:write"
+    ],
+    "source": "runtime-ast",
+    "tenant_bound": true
+  },
+  {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
+    "file": "api/admin.py",
+    "method": "POST",
+    "path": "/admin/keys/{key_prefix}/rotate",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
-    "file": "api/admin.py",
-    "method": "POST",
-    "path": "/admin/keys/{key_prefix}/rotate",
-    "scoped": true,
-    "scopes": [
-      "keys:write"
+    "dependency_categories": [
+      "auth",
+      "rate"
     ],
-    "tenant_bound": true
-  },
-  {
     "file": "api/admin.py",
     "method": "GET",
     "path": "/admin/keys/{key_prefix}/rotation-status",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/admin.py",
     "method": "GET",
     "path": "/admin/system/health",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/admin.py",
     "method": "POST",
     "path": "/admin/tenants/{tenant_id}/activate",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/admin.py",
     "method": "PUT",
     "path": "/admin/tenants/{tenant_id}/quota",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/admin.py",
     "method": "POST",
     "path": "/admin/tenants/{tenant_id}/suspend",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/admin.py",
     "method": "PUT",
     "path": "/admin/tenants/{tenant_id}/tier",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/admin.py",
     "method": "GET",
     "path": "/admin/tenants/{tenant_id}/usage",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/admin.py",
     "method": "GET",
     "path": "/admin/usage/all",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/agent_phase2.py",
     "method": "POST",
     "path": "/agent/cert/enroll",
+    "plane_id": "agent",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/agent_phase2.py",
     "method": "POST",
     "path": "/agent/cert/renew",
+    "plane_id": "agent",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/agent_phase2.py",
     "method": "GET",
     "path": "/agent/cert/status",
+    "plane_id": "agent",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/agent_phase2.py",
     "method": "POST",
     "path": "/agent/commands/ack",
+    "plane_id": "agent",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/agent_phase2.py",
     "method": "POST",
     "path": "/agent/commands/poll",
+    "plane_id": "agent",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/agent_enrollment.py",
     "method": "POST",
     "path": "/agent/enroll",
+    "plane_id": "agent",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/agent_enrollment.py",
     "method": "POST",
     "path": "/agent/heartbeat",
+    "plane_id": "agent",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/agent_enrollment.py",
     "method": "POST",
     "path": "/agent/key/rotate",
+    "plane_id": "agent",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/agent_phase2.py",
     "method": "POST",
     "path": "/agent/log/anchor",
+    "plane_id": "agent",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/agent_phase2.py",
     "method": "GET",
     "path": "/agent/policy/fetch",
+    "plane_id": "agent",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/agent_phase2.py",
     "method": "GET",
     "path": "/agent/update/manifest",
+    "plane_id": "agent",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/agent_phase2.py",
     "method": "POST",
     "path": "/agent/update/manifest",
+    "plane_id": "agent",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/agent_phase2.py",
     "method": "POST",
     "path": "/agent/update/report",
+    "plane_id": "agent",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/ai_plane_extension.py",
     "method": "GET",
     "path": "/ai-plane/inference",
+    "plane_id": "ai",
     "scoped": true,
     "scopes": [
       "compliance:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/ai_plane_extension.py",
     "method": "GET",
     "path": "/ai-plane/policies",
+    "plane_id": "ai",
     "scoped": true,
     "scopes": [
       "compliance:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/ai_plane_extension.py",
     "method": "POST",
     "path": "/ai-plane/policies",
+    "plane_id": "ai",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/ai_plane_extension.py",
     "method": "POST",
     "path": "/ai/infer",
+    "plane_id": "ai",
     "scoped": true,
     "scopes": [
       "compliance:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/attestation.py",
     "method": "POST",
     "path": "/approvals",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "attestation:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/attestation.py",
     "method": "POST",
     "path": "/approvals/verify",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "attestation:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/attestation.py",
     "method": "GET",
     "path": "/approvals/{subject_type}/{subject_id}",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "attestation:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/audit.py",
     "method": "GET",
     "path": "/audit/exam-snapshot",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "audit:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/audit.py",
     "method": "GET",
     "path": "/audit/exams",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "audit:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/audit.py",
     "method": "POST",
     "path": "/audit/exams/run",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "audit:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/audit.py",
     "method": "GET",
     "path": "/audit/exams/{exam_id}/export",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "audit:export"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/audit.py",
     "method": "POST",
     "path": "/audit/exams/{exam_id}/reproduce",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "audit:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/audit.py",
     "method": "GET",
     "path": "/audit/export",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "audit:export"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/audit.py",
     "method": "POST",
     "path": "/audit/reproduce",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "audit:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/audit.py",
     "method": "GET",
     "path": "/audit/sessions",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "audit:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/auth_federation.py",
     "method": "POST",
     "path": "/auth/federation/validate",
+    "plane_id": "security",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "POST",
     "path": "/billing/coverage/change",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "POST",
     "path": "/billing/credits/{credit_note_id}/evidence",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "POST",
     "path": "/billing/daily-counts/sync",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "GET",
     "path": "/billing/devices",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "POST",
     "path": "/billing/devices/activity",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "POST",
     "path": "/billing/devices/enroll",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "POST",
     "path": "/billing/devices/upsert",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "GET",
     "path": "/billing/devices/{device_id}/coverage-timeline",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "GET",
     "path": "/billing/identity/disputes",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "POST",
     "path": "/billing/identity/disputes/{claim_id}/resolve",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "GET",
     "path": "/billing/invoices",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "POST",
     "path": "/billing/invoices",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "GET",
     "path": "/billing/invoices/{invoice_id}",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "GET",
     "path": "/billing/invoices/{invoice_id}/credits",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "POST",
     "path": "/billing/invoices/{invoice_id}/credits",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "GET",
     "path": "/billing/invoices/{invoice_id}/evidence",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "POST",
     "path": "/billing/invoices/{invoice_id}/evidence",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "POST",
     "path": "/billing/invoices/{invoice_id}/finalize",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "POST",
     "path": "/billing/invoices/{invoice_id}/reproduce",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "GET",
     "path": "/billing/runs",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/billing.py",
     "method": "POST",
     "path": "/billing/runs",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "breakglass",
+      "tenant"
+    ],
     "file": "api/exception_breakglass.py",
     "method": "POST",
     "path": "/breakglass/sessions",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "governance:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/compliance_cp_extension.py",
     "method": "GET",
     "path": "/compliance-cp/controls",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "compliance:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/compliance_cp_extension.py",
     "method": "POST",
     "path": "/compliance-cp/evidence/ingest",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write",
       "compliance:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/compliance_cp_extension.py",
     "method": "GET",
     "path": "/compliance-cp/portfolio",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "compliance:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/compliance_cp_extension.py",
     "method": "GET",
     "path": "/compliance-cp/summary",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "compliance:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/compliance.py",
     "method": "POST",
     "path": "/compliance/findings/import",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/compliance.py",
     "method": "GET",
     "path": "/compliance/requirements/diff",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "compliance:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/compliance.py",
     "method": "POST",
     "path": "/compliance/requirements/import",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/compliance.py",
     "method": "GET",
     "path": "/compliance/requirements/updates",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "compliance:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/compliance.py",
     "method": "POST",
     "path": "/compliance/requirements/updates/available",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/compliance.py",
     "method": "POST",
     "path": "/compliance/requirements/updates/{update_id}/apply",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/config_control.py",
     "method": "POST",
     "path": "/config/versions",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane.py",
     "method": "GET",
     "path": "/control-plane/audit",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:audit:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane.py",
     "method": "GET",
     "path": "/control-plane/dependency-matrix",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "GET",
     "path": "/control-plane/evidence/bundle",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:audit:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane.py",
     "method": "GET",
     "path": "/control-plane/lockers",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane.py",
     "method": "POST",
     "path": "/control-plane/lockers/{locker_id}/pause",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane.py",
     "method": "POST",
     "path": "/control-plane/lockers/{locker_id}/quarantine",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane.py",
     "method": "POST",
     "path": "/control-plane/lockers/{locker_id}/restart",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane.py",
     "method": "POST",
     "path": "/control-plane/lockers/{locker_id}/resume",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane.py",
     "method": "GET",
     "path": "/control-plane/modules",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane.py",
     "method": "GET",
     "path": "/control-plane/modules/{module_id}",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane.py",
     "method": "GET",
     "path": "/control-plane/modules/{module_id}/boot-trace",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane.py",
     "method": "GET",
     "path": "/control-plane/modules/{module_id}/dependencies",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "GET",
     "path": "/control-plane/v2/ai/namespace",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "GET",
     "path": "/control-plane/v2/commands",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "POST",
     "path": "/control-plane/v2/commands",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "POST",
     "path": "/control-plane/v2/commands/{command_id}/cancel",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "POST",
     "path": "/control-plane/v2/commands/{command_id}/receipt",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "GET",
     "path": "/control-plane/v2/commands/{command_id}/receipts",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "GET",
     "path": "/control-plane/v2/delegation",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:msp:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "POST",
     "path": "/control-plane/v2/delegation",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:msp:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "DELETE",
     "path": "/control-plane/v2/delegation/{delegation_id}",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:msp:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "GET",
     "path": "/control-plane/v2/heartbeats",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "POST",
     "path": "/control-plane/v2/heartbeats",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "GET",
     "path": "/control-plane/v2/heartbeats/stale",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "GET",
     "path": "/control-plane/v2/ledger",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:audit:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "GET",
     "path": "/control-plane/v2/ledger/anchor",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:audit:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "GET",
     "path": "/control-plane/v2/ledger/verify",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:audit:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "GET",
     "path": "/control-plane/v2/playbooks",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "POST",
     "path": "/control-plane/v2/playbooks/{playbook_name}/trigger",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "POST",
     "path": "/control-plane/v2/policy/pin",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "GET",
     "path": "/control-plane/v2/policy/pins",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "POST",
     "path": "/control-plane/v2/policy/rollback",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "POST",
     "path": "/control-plane/v2/policy/stage",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "GET",
     "path": "/control-plane/v2/terminal/allowlist",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "POST",
     "path": "/control-plane/v2/terminal/breakglass",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:terminal:breakglass"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/control_plane_v2.py",
     "method": "POST",
     "path": "/control-plane/v2/terminal/execute",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "control-plane:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/decisions.py",
     "method": "GET",
     "path": "/decisions",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "decisions:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/decisions.py",
     "method": "GET",
     "path": "/decisions/{decision_id}",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "decisions:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/defend.py",
     "method": "POST",
     "path": "/defend",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "defend:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/dev_events.py",
     "method": "POST",
     "path": "/dev/emit",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "dev:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/dev_events.py",
     "method": "POST",
     "path": "/dev/seed",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "dev:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/enterprise_controls.py",
     "method": "GET",
     "path": "/enterprise-controls/catalog",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "compliance:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/enterprise_controls.py",
     "method": "GET",
     "path": "/enterprise-controls/crosswalk",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "compliance:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/enterprise_controls.py",
     "method": "GET",
     "path": "/enterprise-controls/frameworks",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "compliance:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/enterprise_controls.py",
     "method": "POST",
     "path": "/enterprise-controls/tenant-state",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write",
       "compliance:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/evidence_anchors.py",
     "method": "GET",
     "path": "/evidence/anchors",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "compliance:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/evidence_anchors.py",
     "method": "POST",
     "path": "/evidence/anchors",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "compliance:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/attestation.py",
     "method": "POST",
     "path": "/evidence/bundles",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "attestation:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/attestation.py",
     "method": "GET",
     "path": "/evidence/bundles/{bundle_id}",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "attestation:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/evidence_index.py",
     "method": "GET",
     "path": "/evidence/runs",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "compliance:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/evidence_index.py",
     "method": "POST",
     "path": "/evidence/runs/register",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/evidence_index.py",
     "method": "GET",
     "path": "/evidence/runs/{run_id}",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "compliance:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/attestation.py",
     "method": "POST",
     "path": "/evidence/verify",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "attestation:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "breakglass",
+      "tenant"
+    ],
     "file": "api/exception_breakglass.py",
     "method": "POST",
     "path": "/exceptions/requests",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "governance:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "breakglass",
+      "tenant"
+    ],
     "file": "api/exception_breakglass.py",
     "method": "POST",
     "path": "/exceptions/requests/{request_id}/approve",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "governance:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/feed.py",
     "method": "GET",
     "path": "/feed/live",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "feed:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/feed.py",
     "method": "GET",
     "path": "/feed/stream",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "feed:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/feed.py",
     "method": "HEAD",
     "path": "/feed/stream",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "feed:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/forensics.py",
     "method": "GET",
     "path": "/forensics/audit_trail/{event_id}",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "forensics:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/forensics.py",
     "method": "GET",
     "path": "/forensics/chain/verify",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "forensics:verify"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/forensics.py",
     "method": "GET",
     "path": "/forensics/snapshot/{event_id}",
+    "plane_id": "evidence",
     "scoped": true,
     "scopes": [
       "forensics:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/governance.py",
     "method": "GET",
     "path": "/governance/changes",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "governance:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/governance.py",
     "method": "POST",
     "path": "/governance/changes",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "governance:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/governance.py",
     "method": "POST",
     "path": "/governance/changes/{change_id}/approve",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "governance:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [],
     "file": "api/main.py",
     "method": "GET",
     "path": "/health",
+    "plane_id": "control",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/main.py",
     "method": "GET",
     "path": "/health",
+    "plane_id": "control",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/main.py",
     "method": "GET",
     "path": "/health/detailed",
+    "plane_id": "control",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/main.py",
     "method": "GET",
     "path": "/health/live",
+    "plane_id": "control",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/main.py",
     "method": "GET",
     "path": "/health/live",
+    "plane_id": "control",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/main.py",
     "method": "GET",
     "path": "/health/ready",
+    "plane_id": "control",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/main.py",
     "method": "GET",
     "path": "/health/ready",
+    "plane_id": "control",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/ingest.py",
     "method": "POST",
     "path": "/ingest",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "ingest:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/connectors_internal.py",
     "method": "POST",
     "path": "/internal/connectors/{connector_id}/ingest",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/keys.py",
     "method": "GET",
     "path": "/keys",
+    "plane_id": "security",
     "scoped": true,
     "scopes": [
       "keys:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/keys.py",
     "method": "POST",
     "path": "/keys",
+    "plane_id": "security",
     "scoped": true,
     "scopes": [
       "keys:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/keys.py",
     "method": "POST",
     "path": "/keys/revoke",
+    "plane_id": "security",
     "scoped": true,
     "scopes": [
       "keys:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/keys.py",
     "method": "POST",
     "path": "/keys/rotate",
+    "plane_id": "security",
     "scoped": true,
     "scopes": [
       "keys:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/keys.py",
     "method": "DELETE",
     "path": "/keys/{prefix}",
+    "plane_id": "security",
     "scoped": true,
     "scopes": [
       "keys:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [],
     "file": "api/mission_envelope.py",
     "method": "GET",
     "path": "/missions",
+    "plane_id": "connector",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/mission_envelope.py",
     "method": "GET",
     "path": "/missions/{mission_id}",
+    "plane_id": "connector",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/mission_envelope.py",
     "method": "GET",
     "path": "/missions/{mission_id}/status",
+    "plane_id": "connector",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth"
+    ],
     "file": "api/attestation.py",
     "method": "GET",
     "path": "/modules",
+    "plane_id": "connector",
     "scoped": true,
     "scopes": [
       "attestation:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth"
+    ],
     "file": "api/attestation.py",
     "method": "GET",
     "path": "/modules/enforce/{module_id}",
+    "plane_id": "connector",
     "scoped": true,
     "scopes": [
       "attestation:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth"
+    ],
     "file": "api/attestation.py",
     "method": "POST",
     "path": "/modules/register",
+    "plane_id": "connector",
     "scoped": true,
     "scopes": [
       "attestation:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth"
+    ],
     "file": "api/attestation.py",
     "method": "GET",
     "path": "/modules/{module_id}",
+    "plane_id": "connector",
     "scoped": true,
     "scopes": [
       "attestation:admin"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/planes.py",
     "method": "GET",
     "path": "/planes",
+    "plane_id": "control",
     "scoped": true,
     "scopes": [
       "admin:write"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [],
     "file": "api/ring_router.py",
     "method": "GET",
     "path": "/rings/isolation",
+    "plane_id": "connector",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/ring_router.py",
     "method": "GET",
     "path": "/rings/policies",
+    "plane_id": "connector",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/ring_router.py",
     "method": "POST",
     "path": "/rings/route",
+    "plane_id": "connector",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/roe_engine.py",
     "method": "POST",
     "path": "/roe/evaluate",
+    "plane_id": "connector",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/roe_engine.py",
     "method": "GET",
     "path": "/roe/policy",
+    "plane_id": "connector",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/stats.py",
     "method": "GET",
     "path": "/stats",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "stats:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [],
     "file": "api/main.py",
     "method": "GET",
     "path": "/stats/debug",
+    "plane_id": "data",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "tenant"
+    ],
     "file": "api/stats.py",
     "method": "GET",
     "path": "/stats/summary",
+    "plane_id": "data",
     "scoped": true,
     "scopes": [
       "stats:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [],
     "file": "api/main.py",
     "method": "GET",
     "path": "/status",
+    "plane_id": "control",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/ui_ai_console.py",
     "method": "GET",
     "path": "/ui/ai",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_ai_console.py",
     "method": "POST",
     "path": "/ui/ai/chat",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ai:chat",
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_ai_console.py",
     "method": "GET",
     "path": "/ui/ai/experience",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_ai_console.py",
     "method": "GET",
     "path": "/ui/ai/usage",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ai:chat",
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_audit_dashboard.py",
     "method": "GET",
     "path": "/ui/audit/chain-integrity",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_audit_dashboard.py",
     "method": "GET",
     "path": "/ui/audit/export-link",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_audit_dashboard.py",
     "method": "GET",
     "path": "/ui/audit/overview",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/ui_dashboards.py",
     "method": "POST",
     "path": "/ui/audit/packet",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "audit:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/ui_dashboards.py",
     "method": "GET",
     "path": "/ui/audit/packet/{packet_id}/download",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "audit:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_audit_dashboard.py",
     "method": "GET",
     "path": "/ui/audit/status",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_compliance_dashboard.py",
     "method": "GET",
     "path": "/ui/compliance/exam-readiness",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_compliance_dashboard.py",
     "method": "GET",
     "path": "/ui/compliance/findings",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_compliance_dashboard.py",
     "method": "GET",
     "path": "/ui/compliance/overview",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_compliance_dashboard.py",
     "method": "GET",
     "path": "/ui/compliance/requirements/status",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/ui_dashboards.py",
     "method": "GET",
     "path": "/ui/controls",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "controls:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/ui_dashboards.py",
     "method": "GET",
     "path": "/ui/controls/{inv_id}",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "controls:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "rate"
+    ],
     "file": "api/ui_dashboards.py",
     "method": "GET",
     "path": "/ui/csrf",
+    "plane_id": "ui",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/ui.py",
     "method": "GET",
     "path": "/ui/dash/controls",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/ui.py",
     "method": "GET",
     "path": "/ui/dash/forensics",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/ui.py",
     "method": "GET",
     "path": "/ui/dash/posture",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_dashboards.py",
     "method": "GET",
     "path": "/ui/decision/{decision_id}",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_dashboards.py",
     "method": "GET",
     "path": "/ui/decisions",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_ai_console.py",
     "method": "POST",
     "path": "/ui/devices/{device_id}/disable",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "admin:write",
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_ai_console.py",
     "method": "POST",
     "path": "/ui/devices/{device_id}/enable",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "admin:write",
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/ui.py",
     "method": "GET",
     "path": "/ui/feed",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_dashboards.py",
     "method": "GET",
     "path": "/ui/forensics/chain/verify",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "forensics:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate",
+      "tenant"
+    ],
     "file": "api/ui_dashboards.py",
     "method": "GET",
     "path": "/ui/posture",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": true
   },
   {
+    "dependency_categories": [
+      "rate"
+    ],
     "file": "api/ui_dashboards.py",
     "method": "GET",
     "path": "/ui/scopes",
+    "plane_id": "ui",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [
+      "auth",
+      "rate"
+    ],
     "file": "api/ui.py",
     "method": "GET",
     "path": "/ui/token",
+    "plane_id": "ui",
     "scoped": true,
     "scopes": [
       "ui:read"
     ],
+    "source": "runtime-ast",
     "tenant_bound": false
   },
   {
+    "dependency_categories": [],
     "file": "api/main.py",
     "method": "GET",
     "path": "/v1/status",
+    "plane_id": "connector",
     "scoped": false,
     "scopes": [],
+    "source": "runtime-ast",
     "tenant_bound": false
   }
 ]

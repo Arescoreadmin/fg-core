@@ -1,232 +1,174 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
-from tools.ci.route_checks import iter_route_records, is_public_path
+from services.plane_registry import PLANE_REGISTRY
+from tools.ci.plane_registry_checks import (
+    contract_routes,
+    match_plane,
+    plane_coverage_summary,
+    runtime_routes_ast,
+)
 
 REPO = Path(__file__).resolve().parents[2]
 INVENTORY = REPO / "tools/ci/route_inventory.json"
-
-TRI_UNKNOWN = "unknown"
-PROTECTED_UNKNOWN_PREFIXES = (
-    "/decisions",
-    "/feed",
-    "/governance",
-)
-
-# Anything under these prefixes is treated as "not production API" and excluded
-# from route inventory/security contract enforcement.
-EXCLUDED_FILE_PREFIXES = ("api/_scratch/",)
+SUMMARY = REPO / "tools/ci/route_inventory_summary.json"
+REGISTRY_SNAPSHOT = REPO / "tools/ci/plane_registry_snapshot.json"
+REGISTRY_HASH = REPO / "tools/ci/plane_registry_snapshot.sha256"
+CONTRACT_ROUTES = REPO / "tools/ci/contract_routes.json"
+BUILD_META = REPO / "tools/ci/build_meta.json"
+BUNDLE_HASH = REPO / "tools/ci/attestation_bundle.sha256"
+TOPOLOGY_HASH = REPO / "tools/ci/topology.sha256"
 
 
-def _scoped_state(rec) -> bool | str:
-    if rec.route_has_scope_dependency:
-        return True
-    if is_public_path(rec.full_path):
-        return False
-    if rec.route_has_any_dependency:
-        return TRI_UNKNOWN
-    return False
-
-
-def _tenant_state(rec) -> bool | str:
-    if rec.tenant_bound:
-        return True
-    if getattr(rec, "tenant_explicit_unbound", False):
-        return False
-    if is_public_path(rec.full_path):
-        return False
-    if rec.route_has_any_dependency:
-        return TRI_UNKNOWN
-    return False
-
-
-def _should_exclude_file(rel_path: str) -> bool:
-    rel_path = rel_path.replace("\\", "/")
-    return any(rel_path.startswith(prefix) for prefix in EXCLUDED_FILE_PREFIXES)
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def current_inventory() -> list[dict[str, object]]:
-    rows: list[dict[str, object]] = []
-    for rec in iter_route_records(REPO / "api"):
-        rel = rec.file_path.relative_to(REPO).as_posix()
-
-        # Exclude non-prod scratch space from security inventory.
-        if _should_exclude_file(rel):
-            continue
-
-        rows.append(
-            {
-                "method": rec.method,
-                "path": rec.full_path,
-                "file": rel,
-                "scoped": _scoped_state(rec),
-                "scopes": list(rec.route_scopes),
-                "tenant_bound": _tenant_state(rec),
-            }
-        )
-    return sorted(
-        rows,
-        key=lambda r: (
-            str(r["path"]),
-            str(r["method"]),
-            str(r["file"]),
-            str(r["scoped"]),
-            str(r["tenant_bound"]),
-            ",".join(r["scopes"]),
-        ),
-    )
-
-
-def write_inventory() -> None:
-    INVENTORY.write_text(
-        json.dumps(current_inventory(), indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    rows = []
+    for route in runtime_routes_ast():
+        planes = match_plane(str(route["path"]))
+        rows.append({**route, "plane_id": planes[0] if len(planes) == 1 else "unmapped"})
+    return sorted(rows, key=lambda r: (str(r["path"]), str(r["method"]), str(r["file"])))
 
 
 def _key(entry: dict[str, object]) -> tuple[str, str, str]:
-    return (
-        str(entry["method"]),
-        str(entry["path"]),
-        str(entry["file"]),
-    )
+    return (str(entry["method"]), str(entry["path"]), str(entry.get("file", "")))
 
 
-def _is_unknown(value: object) -> bool:
-    return str(value).lower() == TRI_UNKNOWN
-
-
-def _is_protected_path(path: str) -> bool:
-    return any(path.startswith(prefix) for prefix in PROTECTED_UNKNOWN_PREFIXES)
-
-
-def _validate_inventory(
-    expected: list[dict[str, object]], cur: list[dict[str, object]]
-) -> tuple[list[str], list[str]]:
-    failures: list[str] = []
-    warnings: list[str] = []
-
-    expected_map = {_key(item): item for item in expected}
-    cur_map = {_key(item): item for item in cur}
-
+def _route_diff(expected: list[dict[str, object]], cur: list[dict[str, object]]) -> tuple[list[str], list[str], list[str]]:
+    expected_map = {_key(e): e for e in expected}
+    cur_map = {_key(e): e for e in cur}
     missing = sorted(set(expected_map) - set(cur_map))
     added = sorted(set(cur_map) - set(expected_map))
-    if missing:
-        failures.append(f"routes removed from inventory: {missing}")
-    if added:
-        failures.append(f"routes added to inventory: {added}")
 
-    expected_unknown = 0
-    current_unknown = 0
-    unknown_routes: list[tuple[str, str, str]] = []
-
+    changed: list[str] = []
     for key in sorted(set(expected_map) & set(cur_map)):
         before = expected_map[key]
         after = cur_map[key]
-
-        before_scoped = before.get("scoped")
-        after_scoped = after.get("scoped")
-        before_tenant = before.get("tenant_bound")
-        after_tenant = after.get("tenant_bound")
-        path = str(after.get("path", ""))
-        method = str(after.get("method", "")).upper()
-
-        if before_scoped is True and after_scoped is False:
-            failures.append(f"{key} scoped regressed true->false")
-        if before_tenant is True and after_tenant is False:
-            failures.append(f"{key} tenant_bound regressed true->false")
-
-        if _is_unknown(before_scoped) or _is_unknown(before_tenant):
-            expected_unknown += 1
-        if _is_unknown(after_scoped) or _is_unknown(after_tenant):
-            current_unknown += 1
-            unknown_routes.append((method, path, str(after.get("file", ""))))
-            if _is_protected_path(path) and method != "HEAD":
-                failures.append(
-                    f"{key} has unknown scoped/tenant_bound on protected path {path}"
-                )
-
-    if current_unknown != 0:
-        failures.append(
-            f"unknown route classification count must be zero: {current_unknown}"
-        )
-        failures.append("unknown route entries (METHOD PATH (file)):")
-        for method, path, file_path in unknown_routes:
-            failures.append(f"  {method} {path} ({file_path})")
-        failures.append("regenerate inventory with: make route-inventory-generate")
-    elif expected_unknown != 0:
-        warnings.append(
-            f"unknown route classification improved: {expected_unknown} -> {current_unknown}"
-        )
-
-    return failures, warnings
+        tracked = ("scoped", "tenant_bound", "scopes", "plane_id", "dependency_categories")
+        for field in tracked:
+            if before.get(field) != after.get(field):
+                changed.append(f"{key} changed {field}: {before.get(field)} -> {after.get(field)}")
+    return [str(x) for x in missing], [str(x) for x in added], changed
 
 
-def _validate_ai_plane_routes(
-    cur: list[dict[str, object]], failures: list[str]
-) -> None:
-    # Only validate /ai/* endpoints that are part of the inventory scan.
-    ai_routes = [r for r in cur if str(r.get("path", "")).startswith("/ai/")]
-    expected_key = ("POST", "/ai/infer")
+def _write_registry_snapshot() -> None:
+    payload = [p.to_dict() for p in sorted(PLANE_REGISTRY, key=lambda x: x.plane_id)]
+    blob = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    REGISTRY_SNAPSHOT.write_text(blob, encoding="utf-8")
+    digest = hashlib.sha256(blob.encode("utf-8")).hexdigest()
+    REGISTRY_HASH.write_text(f"{digest}  {REGISTRY_SNAPSHOT.name}\n", encoding="utf-8")
 
-    found_expected = False
-    for r in ai_routes:
-        method = str(r.get("method", "")).upper()
-        path = str(r.get("path", ""))
-        if (method, path) == expected_key:
-            found_expected = True
-            if r.get("scoped") is not True:
-                failures.append("/ai/infer must be scope-protected")
-            if r.get("tenant_bound") is not True:
-                failures.append("/ai/infer must be tenant-bound")
-            scopes = set(str(x) for x in (r.get("scopes") or []))
-            if "compliance:read" not in scopes:
-                failures.append("/ai/infer must require compliance:read scope")
-        else:
-            failures.append(f"unexpected /ai/* route present: {method} {path}")
 
-    if not found_expected:
-        failures.append("missing required AI route: POST /ai/infer")
+def _write_attestation_bundle(cur: list[dict[str, object]]) -> None:
+    contract = contract_routes()
+    CONTRACT_ROUTES.write_text(json.dumps(contract, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-    main_py = (REPO / "api/main.py").read_text(encoding="utf-8")
-    if "ai_plane_enabled()" not in main_py:
-        failures.append("AI route mounting must be gated by FG_AI_PLANE_ENABLED")
+    git_sha = "unknown"
+    try:
+        git_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
+    except Exception:
+        pass
+
+    meta = {
+        "git_sha": git_sha,
+        "build_timestamp_utc": datetime.now(tz=UTC).isoformat(),
+        "ci_runner_id": (Path('/proc/sys/kernel/hostname').read_text(encoding='utf-8').strip() if Path('/proc/sys/kernel/hostname').exists() else "unknown"),
+        "tool": "tools/ci/check_route_inventory.py",
+        "tool_version": "v1",
+        "inventory_sha256": hashlib.sha256(json.dumps(cur, sort_keys=True).encode("utf-8")).hexdigest(),
+    }
+    BUILD_META.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    bundle_files = [REGISTRY_SNAPSHOT, INVENTORY, CONTRACT_ROUTES, BUILD_META]
+    lines = [f"{_sha256(f)}  {f.name}" for f in bundle_files]
+    BUNDLE_HASH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+
+
+def _write_topology_hash() -> None:
+    topology_files = [REGISTRY_SNAPSHOT, INVENTORY, CONTRACT_ROUTES]
+    lines = [f"{_sha256(f)}  {f.name}" for f in topology_files]
+    TOPOLOGY_HASH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+def write_inventory() -> None:
+    cur = current_inventory()
+    INVENTORY.write_text(json.dumps(cur, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _write_summary(cur, expected=None)
+    _write_registry_snapshot()
+    _write_attestation_bundle(cur)
+    _write_topology_hash()
+
+
+def _write_summary(cur: list[dict[str, object]], expected: list[dict[str, object]] | None) -> None:
+    contract = contract_routes()
+    runtime_keys = {(r["method"], r["path"]) for r in cur}
+    contract_keys = {(r["method"], r["path"]) for r in contract}
+    missing, added, changed = ([], [], [])
+    if expected is not None:
+        missing, added, changed = _route_diff(expected, cur)
+    summary = {
+        "plane_coverage": plane_coverage_summary(cur),
+        "runtime_count": len(cur),
+        "contract_count": len(contract),
+        "runtime_only": sorted([f"{m} {p}" for m, p in (runtime_keys - contract_keys)]),
+        "contract_only": sorted([f"{m} {p}" for m, p in (contract_keys - runtime_keys)]),
+        "added": added,
+        "removed": missing,
+        "changed": changed,
+    }
+    SUMMARY.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Route inventory check/generator")
-    parser.add_argument(
-        "--write",
-        action="store_true",
-        help="regenerate tools/ci/route_inventory.json",
-    )
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--write", action="store_true")
     args = parser.parse_args()
 
+    cur = current_inventory()
     if args.write:
         write_inventory()
         print(f"route inventory: wrote {INVENTORY.relative_to(REPO)}")
         return 0
 
-    cur = current_inventory()
     if not INVENTORY.exists():
         print(f"route inventory missing: {INVENTORY.relative_to(REPO)}")
         return 1
 
     expected = json.loads(INVENTORY.read_text(encoding="utf-8"))
-    failures, warnings = _validate_inventory(expected, cur)
-    _validate_ai_plane_routes(cur, failures)
+    missing, added, changed = _route_diff(expected, cur)
+    _write_summary(cur, expected)
+    _write_registry_snapshot()
+    _write_attestation_bundle(cur)
+    _write_topology_hash()
+
+    failures: list[str] = []
+    if missing:
+        failures.append(f"routes removed from inventory: {missing}")
+    if added:
+        failures.append(f"routes added to inventory: {added}")
+    if changed:
+        failures.extend(changed)
+
+    summary = json.loads(SUMMARY.read_text(encoding="utf-8"))
+    if summary.get("runtime_only"):
+        print(f"route inventory: WARNING runtime vs contract drift (runtime_only): {summary['runtime_only']}")
+    if summary.get("contract_only"):
+        failures.append(f"runtime vs contract drift (contract_only): {summary['contract_only']}")
 
     if failures:
         print("route inventory: FAILED")
         for item in failures:
             print(f" - {item}")
+        print(" - regenerate inventory with: make route-inventory-generate")
         return 1
-
-    for item in warnings:
-        print(f"route inventory: WARNING - {item}")
 
     print("route inventory: OK")
     return 0

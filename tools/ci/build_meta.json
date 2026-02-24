@@ -1,0 +1,8 @@
+{
+  "build_timestamp_utc": "2026-02-24T22:48:11.141250+00:00",
+  "ci_runner_id": "cdb7d369adf6",
+  "git_sha": "e4c92250ac7a3ae1058ab48d1817d17077ef7473",
+  "inventory_sha256": "9b0161c22c699ac5952bced8d8da4e2694e029766bd53b55307a3670b3c92db9",
+  "tool": "tools/ci/check_route_inventory.py",
+  "tool_version": "v1"
+}
