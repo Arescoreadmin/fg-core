@@ -447,3 +447,48 @@ Gate impact:
 
 - `route-inventory-audit` (SOC-P1-001): satisfied by regenerated inventory.
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+---
+
+## 8-Plane Governance / Attestation Controls Hardening (2026-02-24)
+
+### Changes
+
+- `tools/ci/check_plane_registry.py`: tightened governance checks with explicit
+  `/admin` ownership policy (`control_only`), non-permanent exception lifecycle
+  enforcement (`expires_at` required, expiry format checks, warn <=30 days,
+  fail expired and >90-day horizon), and CI runtime-app mode hard-fail when
+  dependencies are missing unless explicit local override is set.
+
+- `tools/ci/check_route_inventory.py`: preserved per-build attestation bundle
+  output and added deterministic topology hashing (`topology.sha256`) over
+  stable governance topology artifacts.
+
+- `tools/ci/plane_registry_checks.py`: continued central route extraction and
+  ownership matching path used by both inventory and plane registry gates.
+
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`,
+  `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`,
+  `tools/ci/plane_registry_snapshot.sha256`, `tools/ci/attestation_bundle.sha256`,
+  `tools/ci/build_meta.json`, `tools/ci/topology.sha256`: regenerated via the
+  hardened inventory pipeline as governance evidence artifacts.
+
+### Security Invariants Confirmed
+
+- `/admin*` route ownership is deterministic and explicitly modeled as
+  control-plane owned.
+- Temporary exceptions cannot become indefinite backlog entries without explicit
+  permanence flag and justification metadata.
+- Runtime-app verification is enforced in CI mode (fail-closed without
+  dependency override).
+- Deterministic topology hash and per-build attestation hash are separated,
+  avoiding policy ambiguity between reproducible governance topology and
+  chain-of-custody build evidence.
+
+### Gate Impact
+
+- `check_plane_registry`: strengthened (ownership, exception lifecycle,
+  runtime-app CI behavior).
+- `route-inventory-audit`: strengthened (deterministic topology hash +
+  attestation bundle output).
+- `soc-review-sync`: satisfied by this SOC execution gates update.
