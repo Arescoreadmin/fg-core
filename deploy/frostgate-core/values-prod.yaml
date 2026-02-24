@@ -1,0 +1,8 @@
+env:
+  FROSTGATE_ENV: "prod"
+  FG_ENV: "prod"
+
+  FROSTGATE_ENFORCEMENT_MODE: "enforce"
+  FG_AUTH_ALLOW_FALLBACK: "false"
+  FG_RL_FAIL_OPEN: "false"
+  FG_DB_URL: "postgresql+psycopg://fg_app:real_password@postgres:5432/frostgate"

@@ -8,6 +8,10 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 data:
-  {{- range $k, $v := .Values.config }}
-  {{ $k }}: "{{ $v }}"
+  {{- $env := default (dict) .Values.env -}}
+  {{- if not (kindIs "map" $env) }}
+  {{- fail "Values.env must be a map of string:string" }}
+  {{- end }}
+  {{- range $k, $v := $env }}
+  {{ $k }}: {{ $v | quote }}
   {{- end }}

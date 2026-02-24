@@ -1,93 +1,97 @@
 replicaCount: 2
 
 image:
-  repository: ghcr.io/your-org-or-user/frostgate-core
-  tag: "v0.8.0"
+  repository: "ghcr.io/your-org-or-user/frostgate-core"
+  tag: "dev"
   pullPolicy: IfNotPresent
 
 sidecarImage:
-  repository: ghcr.io/your-org-or-user/frostgate-supervisor-sidecar
+  repository: "ghcr.io/your-org-or-user/frostgate-supervisor-sidecar"
   tag: "v0.8.0"
   pullPolicy: IfNotPresent
 
-imagePullSecrets: []
-  # - name: regcred
-
-serviceAccount:
-  create: true
-  name: ""
-  annotations: {}
-
-podAnnotations: {}
-podLabels: {}
+rollingUpdate:
+  maxSurge: "25%"
+  maxUnavailable: "25%"
 
 service:
   type: ClusterIP
   port: 80
   targetPort: 8080
 
-ingress:
-  enabled: false
-  className: ""
-  annotations: {}
-  hosts:
-    - host: frostgate.local
-      paths:
-        - path: /
-          pathType: Prefix
-  tls: []
-  # - hosts:
-  #     - frostgate.local
-  #   secretName: frostgate-tls
+probes:
+  liveness:
+    path: /health
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 1
+    failureThreshold: 3
+    successThreshold: 1
+  readiness:
+    path: /health
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 1
+    failureThreshold: 3
+    successThreshold: 1
+  startup:
+    enabled: false
 
 resources:
   core:
     requests:
-      cpu: "100m"
-      memory: "256Mi"
+      cpu: 100m
+      memory: 256Mi
     limits:
-      cpu: "500m"
-      memory: "512Mi"
+      cpu: 500m
+      memory: 512Mi
   sidecar:
     requests:
-      cpu: "50m"
-      memory: "128Mi"
+      cpu: 50m
+      memory: 128Mi
     limits:
-      cpu: "200m"
-      memory: "256Mi"
-
-nodeSelector: {}
-tolerations: []
-affinity: {}
+      cpu: 200m
+      memory: 256Mi
 
 env:
-  # Non-sensitive config pushed via ConfigMap
-  FG_ENV: "prod"
-  FROSTGATE_ENFORCEMENT_MODE: "enforce"  # or "observe"
+  # Canonical env flag (new)
+  FROSTGATE_ENV: "dev"         # dev | staging | prod
+
+  # Back-compat env flag (if code still reads FG_ENV)
+  FG_ENV: "dev"
+
   FROSTGATE_LOG_LEVEL: "INFO"
-  FG_DB_URL: "postgresql+psycopg://fg_app:change_me@postgres:5432/frostgate"
+  FROSTGATE_ENFORCEMENT_MODE: "observe"
+
+  # dev-safe behavior
   FG_AUTH_ALLOW_FALLBACK: "false"
   FG_RL_FAIL_OPEN: "false"
-  FG_WEBHOOK_SECRET: "change_me_set_via_secret_ref"
 
-  # Add any other non-secret settings here as needed
-  # EXAMPLE_EXTRA_CONFIG: "value"
+  # dev DB optional (unless your app hard-requires it)
+  FG_DB_URL: ""
+
+  # do not set real secrets in values
+  FG_WEBHOOK_SECRET: ""
+
+  # dev-safe defaults (prevents prod invariants)
+  FROSTGATE_ENV: "dev"
+  FG_ENV: "dev"
+  FROSTGATE_LOG_LEVEL: "INFO"
+  FROSTGATE_ENFORCEMENT_MODE: "observe"
+  FG_DB_URL: "postgresql+psycopg://fg_app:dev_password_change_me@postgres.frostgate-dev.svc.cluster.local:5432/frostgate"
+  FG_AUTH_ALLOW_FALLBACK: "false"
+  FG_RL_FAIL_OPEN: "false"
+  FG_WEBHOOK_SECRET: ""
 
 secrets:
-  # Option 1: raw value (local/dev). Do NOT use this in real prod.
   frostgateApiKey: ""
-  # Option 2: reference existing secret (e.g., created via SealedSecret)
   existingSecret:
     name: ""
     key: "frostgate-api-key"
 
-tenantRegistry:
-  # If the app ever reads a tenants registry path / config, wire it here
-  enabled: false
-  configPath: "/data/tenants/registry.json"
-
-serviceMonitor:
-  enabled: false
+podSecurityContext:
+  seccompProfile:
+    type: RuntimeDefault
 
 securityContext:
   core:
@@ -95,8 +99,30 @@ securityContext:
     runAsUser: 1000
     runAsGroup: 1000
     readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
   sidecar:
     runAsNonRoot: true
     runAsUser: 1001
     runAsGroup: 1001
     readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+
+serviceAccount:
+  create: true
+  name: ""
+
+imagePullSecrets: []
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podLabels: {}
+podAnnotations: {}
+topologySpreadConstraints: []
+terminationGracePeriodSeconds: 30
+revisionHistoryLimit: 10
+progressDeadlineSeconds: 600
+

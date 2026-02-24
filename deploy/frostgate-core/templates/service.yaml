@@ -1,3 +1,4 @@
+{{- $svc := default (dict) .Values.service -}}
 apiVersion: v1
 kind: Service
 metadata:
@@ -8,12 +9,12 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 spec:
-  type: {{ .Values.service.type }}
+  type: {{ default "ClusterIP" (get $svc "type") | quote }}
+  ports:
+    - name: http
+      port: {{ default 80 (get $svc "port") }}
+      targetPort: {{ default 8080 (get $svc "targetPort") }}
+      protocol: TCP
   selector:
     app.kubernetes.io/name: {{ include "frostgate-core.name" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}
-  ports:
-    - name: http
-      port: {{ .Values.service.port }}
-      targetPort: {{ .Values.service.targetPort }}
-      protocol: TCP

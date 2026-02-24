@@ -18,6 +18,7 @@ class Migration:
 
 
 def _repo_root() -> Path:
+    # /app/api/db_migrations.py -> /app
     return Path(__file__).resolve().parents[1]
 
 
@@ -29,8 +30,10 @@ def _load_migrations() -> list[Migration]:
     mig_dir = _migrations_dir()
     if not mig_dir.exists():
         raise RuntimeError(f"Missing migrations directory: {mig_dir}")
+
     migrations: list[Migration] = []
     seen_versions: set[str] = set()
+
     for path in sorted(mig_dir.glob("*.sql")):
         if path.name.endswith(".rollback.sql"):
             continue
@@ -39,15 +42,17 @@ def _load_migrations() -> list[Migration]:
             raise RuntimeError(f"Duplicate migration version detected: {version}")
         seen_versions.add(version)
         migrations.append(Migration(version=version, path=path))
+
     if not migrations:
         raise RuntimeError("No postgres migrations found.")
     return migrations
 
 
 def _ensure_schema_migrations(conn) -> None:
+    # Be explicit about schema to avoid search_path surprises.
     conn.exec_driver_sql(
         """
-        CREATE TABLE IF NOT EXISTS schema_migrations (
+        CREATE TABLE IF NOT EXISTS public.schema_migrations (
             version TEXT PRIMARY KEY,
             applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )
@@ -57,12 +62,16 @@ def _ensure_schema_migrations(conn) -> None:
 
 def _applied_versions(conn) -> set[str]:
     _ensure_schema_migrations(conn)
-    rows = conn.exec_driver_sql("SELECT version FROM schema_migrations").fetchall()
+    rows = conn.exec_driver_sql(
+        "SELECT version FROM public.schema_migrations"
+    ).fetchall()
     return {row[0] for row in rows}
 
 
 def _apply_sql(conn, sql: str) -> None:
-    statements = [stmt.strip() for stmt in sqlparse.split(sql) if stmt.strip()]
+    # Split into executable statements, preserving order.
+    # sqlparse.split is generally safe for Postgres, including DO $$ blocks.
+    statements = [stmt.strip() for stmt in sqlparse.split(sql) if stmt and stmt.strip()]
     for statement in statements:
         conn.exec_driver_sql(statement)
 
@@ -70,18 +79,23 @@ def _apply_sql(conn, sql: str) -> None:
 def apply_migrations(engine: Engine) -> list[str]:
     applied: list[str] = []
     migrations = _load_migrations()
+
     with engine.begin() as conn:
         applied_versions = _applied_versions(conn)
+
         for migration in migrations:
             if migration.version in applied_versions:
                 continue
             sql = migration.path.read_text(encoding="utf-8")
             _apply_sql(conn, sql)
             conn.execute(
-                text("INSERT INTO schema_migrations (version) VALUES (:version)"),
+                text(
+                    "INSERT INTO public.schema_migrations (version) VALUES (:version)"
+                ),
                 {"version": migration.version},
             )
             applied.append(migration.version)
+
     return applied
 
 
@@ -95,7 +109,26 @@ def assert_migrations_applied(engine: Engine) -> None:
             raise RuntimeError(f"Missing migrations: {', '.join(missing)}")
 
 
+def _existing_tables(conn, tables: set[str]) -> set[str]:
+    rows = conn.execute(
+        text(
+            """
+            SELECT c.relname
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relkind = 'r'
+              AND c.relname IN :tables
+            """
+        ).bindparams(bindparam("tables", expanding=True)),
+        {"tables": sorted(tables)},
+    ).fetchall()
+    return {r[0] for r in rows}
+
+
 def assert_append_only_triggers(engine: Engine) -> None:
+    # These are expected to be append-only and must be enforced by BEFORE UPDATE/DELETE
+    # triggers calling public.fg_append_only_enforcer().
     expected_tables = {
         "decisions",
         "decision_evidence_artifacts",
@@ -119,22 +152,74 @@ def assert_append_only_triggers(engine: Engine) -> None:
         "ai_token_usage",
         "ai_quota_daily",
     }
+
     with engine.begin() as conn:
+        existing = _existing_tables(conn, expected_tables)
+        missing_tables = sorted(expected_tables - existing)
+        if missing_tables:
+            raise RuntimeError(
+                "Append-only expected tables missing (migrations/DDL drift): "
+                + ", ".join(missing_tables)
+            )
+
         rows = conn.exec_driver_sql(
             """
-            SELECT c.relname, t.tgname
+            SELECT
+              c.relname AS table_name,
+              t.tgname  AS trigger_name,
+              pg_get_triggerdef(t.oid, true) AS trigger_def,
+              p.proname AS func_name,
+              n.nspname AS func_schema
             FROM pg_trigger t
             JOIN pg_class c ON c.oid = t.tgrelid
+            JOIN pg_proc  p ON p.oid = t.tgfoid
+            JOIN pg_namespace n ON n.oid = p.pronamespace
             WHERE NOT t.tgisinternal
             """
         ).fetchall()
-        found = {(row[0], row[1]) for row in rows}
 
-    for table in expected_tables:
+        # Map: table -> trigger_name -> (def, func_schema, func_name)
+        found: dict[str, dict[str, tuple[str, str, str]]] = {}
+        for table_name, trig_name, trig_def, func_name, func_schema in rows:
+            found.setdefault(table_name, {})[trig_name] = (
+                trig_def,
+                func_schema,
+                func_name,
+            )
+
+    for table in sorted(expected_tables):
         update_trigger = f"{table}_append_only_update"
         delete_trigger = f"{table}_append_only_delete"
-        if (table, update_trigger) not in found or (table, delete_trigger) not in found:
+
+        table_trigs = found.get(table, {})
+        if update_trigger not in table_trigs or delete_trigger not in table_trigs:
             raise RuntimeError(f"Append-only triggers missing for {table}")
+
+        # Verify correct function + BEFORE semantics (belt-and-suspenders, because humans).
+        for trig_name, expected_event in (
+            (update_trigger, "UPDATE"),
+            (delete_trigger, "DELETE"),
+        ):
+            trig_def, func_schema, func_name = table_trigs[trig_name]
+
+            ALLOWED_APPEND_ONLY_FUNCTIONS = {
+                ("public", "fg_append_only_enforcer"),
+                ("public", "audit_ledger_append_only_guard"),
+            }
+
+            if (func_schema, func_name) not in ALLOWED_APPEND_ONLY_FUNCTIONS:
+                raise RuntimeError(
+                    f"Append-only trigger {trig_name} on {table} calls "
+                    f"{func_schema}.{func_name} (expected one of {ALLOWED_APPEND_ONLY_FUNCTIONS})"
+                )
+
+            # The trigger def string is like:
+            # CREATE TRIGGER ... BEFORE UPDATE ON public.table FOR EACH ROW EXECUTE FUNCTION public.fg_append_only_enforcer()
+            up = trig_def.upper()
+            if "BEFORE" not in up or expected_event not in up:
+                raise RuntimeError(
+                    f"Append-only trigger {trig_name} on {table} is not BEFORE {expected_event}: {trig_def}"
+                )
 
 
 def assert_tenant_rls(engine: Engine) -> None:
@@ -169,16 +254,27 @@ def assert_tenant_rls(engine: Engine) -> None:
         "ai_token_usage",
         "ai_quota_daily",
     }
+
     with engine.begin() as conn:
+        existing = _existing_tables(conn, expected_tables)
+        missing_tables = sorted(expected_tables - existing)
+        if missing_tables:
+            raise RuntimeError(
+                "RLS expected tables missing (migrations/DDL drift): "
+                + ", ".join(missing_tables)
+            )
+
         rows = conn.execute(
             text(
                 """
                 SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
                 FROM pg_class c
-                WHERE c.relname IN :tables
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'public'
+                  AND c.relname IN :tables
                 """
             ).bindparams(bindparam("tables", expanding=True)),
-            {"tables": list(expected_tables)},
+            {"tables": sorted(expected_tables)},
         ).fetchall()
         rls_status = {row[0]: (row[1], row[2]) for row in rows}
 
@@ -187,14 +283,15 @@ def assert_tenant_rls(engine: Engine) -> None:
                 """
                 SELECT tablename, policyname
                 FROM pg_policies
-                WHERE tablename IN :tables
+                WHERE schemaname = 'public'
+                  AND tablename IN :tables
                 """
             ).bindparams(bindparam("tables", expanding=True)),
-            {"tables": list(expected_tables)},
+            {"tables": sorted(expected_tables)},
         ).fetchall()
         policy_names = {(row[0], row[1]) for row in policies}
 
-    for table in expected_tables:
+    for table in sorted(expected_tables):
         relsecurity = rls_status.get(table)
         if relsecurity is None or not relsecurity[0] or not relsecurity[1]:
             raise RuntimeError(f"RLS not enforced on {table}")
@@ -214,6 +311,7 @@ def assert_db_role_safe(engine: Engine) -> None:
                 """
             )
         ).one()
+
     role_name, is_super, has_bypass = row[0], row[1], row[2]
     if is_super or has_bypass:
         raise RuntimeError(
@@ -227,7 +325,8 @@ def migration_status(engine: Engine) -> list[str]:
     migrations = _load_migrations()
     with engine.begin() as conn:
         applied_versions = _applied_versions(conn)
-    statuses = []
+
+    statuses: list[str] = []
     for migration in migrations:
         marker = "applied" if migration.version in applied_versions else "pending"
         statuses.append(f"{migration.version} {marker} {migration.path.name}")

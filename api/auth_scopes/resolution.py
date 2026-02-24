@@ -7,13 +7,14 @@ import os
 import re
 import sqlite3
 import time
-from typing import Callable, Optional, Set
+from contextlib import contextmanager
+from typing import Callable, Optional, Set, Tuple, Dict, Any
 
 from fastapi import Depends, Header, HTTPException, Request
 
 from api.db import set_tenant_context
 
-from .definitions import AuthResult, ERR_INVALID
+from .definitions import AuthResult
 from .helpers import (
     _constant_time_compare,
     _decode_token_payload,
@@ -36,13 +37,34 @@ log = logging.getLogger("frostgate")
 _security_log = logging.getLogger("frostgate.security")
 
 
+# -------------------------
+# Error contract helpers
+# -------------------------
 def is_prod_like_env() -> bool:
     env = (os.getenv("FG_ENV") or "").strip().lower()
     return env in {"prod", "production", "staging"}
 
 
 def redact_detail(detail: str, generic: str = "forbidden") -> str:
+    # In prod-like, do not leak decision details to clients.
     return generic if is_prod_like_env() else detail
+
+
+def http_error(
+    status_code: int,
+    *,
+    error_code: str,
+    message: str,
+    generic: str = "forbidden",
+) -> HTTPException:
+    """
+    Single source of truth for client-facing error payloads.
+    Always returns: {"detail": {"error_code": "...", "message": "..."}}
+    """
+    msg = redact_detail(message, generic=generic)
+    return HTTPException(
+        status_code=status_code, detail={"error_code": error_code, "message": msg}
+    )
 
 
 def _request_id(request: Optional[Request]) -> Optional[str]:
@@ -65,27 +87,28 @@ def _normalize_field(value: Optional[str], *, max_len: int = 128) -> Optional[st
     return text[:max_len]
 
 
-def _tenant_hash(value: Optional[str]) -> Optional[str]:
+def _hash16(value: Optional[str]) -> Optional[str]:
     norm = _normalize_field(value, max_len=256)
     if not norm:
         return None
     return hashlib.sha256(norm.encode("utf-8")).hexdigest()[:16]
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on", "y"}
+
+
 def _trust_proxy_headers(request: Optional[Request]) -> bool:
     """
     Trust X-Forwarded-For style headers only when explicitly enabled.
-    Default is fail-closed (socket client IP only) to avoid log poisoning.
+    Default is fail-closed (socket client IP only) to reduce log poisoning.
     """
     if request is None:
         return False
-    return (os.getenv("FG_TRUST_PROXY_HEADERS") or "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-        "y",
-    }
+    return _env_bool("FG_TRUST_PROXY_HEADERS", False)
 
 
 def _remote_ip_value(request: Optional[Request]) -> Optional[str]:
@@ -104,14 +127,57 @@ def _remote_ip_value(request: Optional[Request]) -> Optional[str]:
 
 
 def _safe_remote_ip_for_logs(request: Optional[Request]) -> Optional[str]:
-    remote_ip = _remote_ip_value(request)
-    if not remote_ip:
+    ip = _remote_ip_value(request)
+    if not ip:
         return None
-    if is_prod_like_env():
-        return _tenant_hash(remote_ip)
-    return remote_ip
+    return _hash16(ip) if is_prod_like_env() else ip
 
 
+# -------------------------
+# SQLite helpers
+# -------------------------
+def _sqlite_timeout_s() -> float:
+    # Keep it short. This is an auth check; we should fail closed, not hang.
+    try:
+        return float((os.getenv("FG_AUTH_SQLITE_TIMEOUT_S") or "1.0").strip())
+    except Exception:
+        return 1.0
+
+
+def _sqlite_readonly() -> bool:
+    # Optional: allow forcing read-only mode (except when upgrading hashes/usage)
+    return _env_bool("FG_AUTH_SQLITE_READONLY", False)
+
+
+@contextmanager
+def _sqlite_connect(sqlite_path: str, *, writable: bool) -> sqlite3.Connection:
+    """
+    Opens SQLite with conservative defaults.
+    If readonly is forced, writable=False even if caller requests writable.
+    """
+    timeout = _sqlite_timeout_s()
+
+    readonly_forced = _sqlite_readonly()
+    if readonly_forced:
+        writable = False
+
+    # If writable=False, try URI readonly mode to avoid accidental writes.
+    if not writable:
+        uri = f"file:{sqlite_path}?mode=ro"
+        con = sqlite3.connect(uri, uri=True, timeout=timeout)
+    else:
+        con = sqlite3.connect(sqlite_path, timeout=timeout)
+
+    try:
+        con.row_factory = sqlite3.Row
+        yield con
+    finally:
+        con.close()
+
+
+# -------------------------
+# Security Logging
+# -------------------------
 def log_tenant_denial_event(
     *,
     request: Optional[Request],
@@ -124,6 +190,8 @@ def log_tenant_denial_event(
     method = _normalize_field(request.method, max_len=16) if request else None
     request_id = _normalize_field(_request_id(request), max_len=128)
 
+    tenant_hash = _hash16(tenant_supplied or tenant_from_key)
+
     _security_log.warning(
         "tenant_denial",
         extra={
@@ -134,8 +202,9 @@ def log_tenant_denial_event(
             "method": method,
             "request_id": request_id,
             "remote_ip": _safe_remote_ip_for_logs(request),
-            "tenant_id_hash": _tenant_hash(tenant_supplied or tenant_from_key),
+            "tenant_id_hash": tenant_hash,
             "key_id": _normalize_field(key_id, max_len=32),
+            "ts": int(time.time()),
         },
     )
 
@@ -150,6 +219,7 @@ def _tenant_denial_log(
     key_prefix: Optional[str],
     scopes: Optional[Set[str]],
 ) -> None:
+    # Keep signature stable for call sites; event/scopes are intentionally not exposed.
     _ = event
     _ = scopes
     log_tenant_denial_event(
@@ -170,16 +240,22 @@ def _log_auth_event(
     request_path: Optional[str] = None,
     client_ip: Optional[str] = None,
 ) -> None:
-    """Log security-relevant authentication events."""
+    """
+    Log security-relevant authentication events.
+    In prod-like, avoid logging raw tenant_id/client_ip.
+    """
+    tenant_for_log = _hash16(tenant_id) if is_prod_like_env() else tenant_id
+    ip_for_log = _hash16(client_ip) if (is_prod_like_env() and client_ip) else client_ip
+
     log_data = {
         "event": event_type,
-        "success": success,
-        "key_prefix": key_prefix[:8] if key_prefix else None,
-        "tenant_id": tenant_id,
+        "success": bool(success),
+        "key_prefix": (key_prefix[:8] if key_prefix else None),
+        "tenant_id": tenant_for_log,
         "reason": reason,
         "path": request_path,
-        "client_ip": client_ip,
-        "timestamp": int(time.time()),
+        "client_ip": ip_for_log,
+        "ts": int(time.time()),
     }
 
     if success:
@@ -188,15 +264,18 @@ def _log_auth_event(
         _security_log.warning("auth_event", extra=log_data)
 
 
+# -------------------------
+# Key Extraction
+# -------------------------
 def _extract_key(request: Request, x_api_key: Optional[str]) -> Optional[str]:
     """
     Extract API key from request.
 
-    Security: Keys are ONLY accepted from:
-      1. X-API-Key header (preferred)
-      2. Cookie (for UI sessions)
+    Keys are accepted ONLY from:
+      1) X-API-Key header (preferred)
+      2) Cookie (for UI sessions)
 
-    Query parameters are NOT supported.
+    Query params are not supported.
     """
     if x_api_key and str(x_api_key).strip():
         return str(x_api_key).strip()
@@ -211,6 +290,9 @@ def _extract_key(request: Request, x_api_key: Optional[str]) -> Optional[str]:
     return None
 
 
+# -------------------------
+# Verification (raw + detailed)
+# -------------------------
 def verify_api_key_raw(
     raw: Optional[str] = None,
     required_scopes=None,
@@ -228,7 +310,7 @@ def verify_api_key_raw(
         check_expiration=check_expiration,
         request=request,
     )
-    return result.valid
+    return bool(result.valid)
 
 
 def verify_api_key_detailed(
@@ -240,21 +322,16 @@ def verify_api_key_detailed(
     request: Optional[Request] = None,
     **_ignored,
 ) -> AuthResult:
-    request_path = None
-    client_ip = None
+    request_path: Optional[str] = None
+    client_ip: Optional[str] = None
     if request:
         request_path = str(request.url.path) if request.url else None
-        for header in ("x-forwarded-for", "x-real-ip", "cf-connecting-ip"):
-            value = request.headers.get(header) if hasattr(request, "headers") else None
-            if value:
-                client_ip = value.split(",")[0].strip()
-                break
-        if not client_ip and hasattr(request, "client") and request.client:
-            client_ip = request.client.host
+        client_ip = _remote_ip_value(request)
 
     raw = (raw or raw_key or "").strip()
 
     # 1) global key bypass (constant-time comparison)
+    # NOTE: Valid auth result but with NO tenant binding. Must bind via bind_tenant_id().
     global_key = (os.getenv("FG_API_KEY") or "").strip()
     if raw and global_key and _constant_time_compare(raw, global_key):
         if _is_production_env():
@@ -286,7 +363,7 @@ def verify_api_key_detailed(
             request_path=request_path,
             client_ip=client_ip,
         )
-        return AuthResult(valid=False, reason="no_key_provided")
+        return AuthResult(valid=False, reason="no_key_provided", is_missing_key=True)
 
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
     if not sqlite_path:
@@ -299,12 +376,14 @@ def verify_api_key_detailed(
         )
         return AuthResult(valid=False, reason="no_db_configured")
 
-    def _row_for(prefix: str, lookup_hash: Optional[str], legacy_hash: Optional[str]):
-        con = sqlite3.connect(sqlite_path)
+    def _row_for(
+        prefix: str, lookup_hash: Optional[str], legacy_hash: Optional[str]
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str], Set[str]]:
         try:
-            try:
+            with _sqlite_connect(sqlite_path, writable=False) as con:
                 cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
                 col_names = {r[1] for r in cols}
+
                 base_cols = ["id", "scopes_csv", "enabled", "tenant_id", "key_hash"]
                 select_cols = [c for c in base_cols if c in col_names]
                 if "hash_alg" in col_names:
@@ -322,7 +401,7 @@ def verify_api_key_detailed(
                         (prefix, lookup_hash),
                     ).fetchone()
                     if row:
-                        return dict(zip(select_cols, row)), "key_lookup", col_names
+                        return dict(row), "key_lookup", col_names
 
                 if legacy_hash:
                     row = con.execute(
@@ -330,25 +409,24 @@ def verify_api_key_detailed(
                         (prefix, legacy_hash),
                     ).fetchone()
                     if row:
-                        return dict(zip(select_cols, row)), "key_hash", col_names
+                        return dict(row), "key_hash", col_names
 
                 return None, None, col_names
-            except sqlite3.OperationalError:
-                return None, None, set()
-        finally:
-            con.close()
+        except sqlite3.OperationalError:
+            return None, None, set()
 
-    scopes_csv = None
-    enabled = None
-    tenant_id = None
+    scopes_csv: Optional[str] = None
+    enabled: Optional[int] = None
+    tenant_id: Optional[str] = None
     token_payload = None
-    key_prefix = None
-    key_hash = None
-    key_lookup = None
-    hash_alg = None
-    identifier_col = None
+    key_prefix: Optional[str] = None
+    key_hash: Optional[str] = None
+    key_lookup: Optional[str] = None
+    hash_alg: Optional[str] = None
+    identifier_col: Optional[str] = None
     col_names: Set[str] = set()
     secret_for_verify: Optional[str] = None
+    row: Optional[Dict[str, Any]] = None
 
     parts = raw.split(".")
     if len(parts) >= 3:
@@ -356,10 +434,12 @@ def verify_api_key_detailed(
         token = parts[1] if len(parts) > 1 else ""
         secret_val = parts[-1]
         secret_for_verify = secret_val
+
         try:
             key_lookup = _key_lookup_hash(secret_val, _get_key_pepper())
         except Exception:
             key_lookup = None
+
         key_hash = _sha256_hex(secret_val)
 
         try:
@@ -405,6 +485,7 @@ def verify_api_key_detailed(
             key_lookup = row.get("key_lookup") or key_lookup
     else:
         key_prefix = raw[:16]
+        secret_for_verify = raw
 
         try:
             from api.tripwires import check_canary_key
@@ -424,7 +505,6 @@ def verify_api_key_detailed(
         except ImportError:
             pass
 
-        secret_for_verify = raw
         try:
             from api.db_models import hash_api_key as _hash_api_key
 
@@ -492,6 +572,7 @@ def verify_api_key_detailed(
 
     have = _parse_scopes_csv(scopes_csv)
 
+    # Verify secret against stored hash
     if key_hash and secret_for_verify:
         if not verify_key(secret_for_verify, key_hash, hash_alg):
             _log_auth_event(
@@ -511,18 +592,19 @@ def verify_api_key_detailed(
                 scopes=have,
             )
 
+        # Upgrade legacy hash to argon2id if schema supports it and sqlite writable is allowed.
         if hash_alg != "argon2id":
             if (
                 "hash_alg" in col_names
                 and "hash_params" in col_names
                 and "key_lookup" in col_names
+                and row is not None
             ):
                 try:
                     new_hash, new_alg, new_params, new_lookup = hash_key(
                         secret_for_verify
                     )
-                    con = sqlite3.connect(sqlite_path)
-                    try:
+                    with _sqlite_connect(sqlite_path, writable=True) as con:
                         con.execute(
                             "UPDATE api_keys SET key_hash=?, hash_alg=?, hash_params=?, key_lookup=? WHERE id=?",
                             (
@@ -536,47 +618,51 @@ def verify_api_key_detailed(
                             ),
                         )
                         con.commit()
-                        key_hash = new_hash
-                        key_lookup = new_lookup
-                        identifier_col = "key_lookup"
-                    finally:
-                        con.close()
+                    key_hash = new_hash
+                    key_lookup = new_lookup
+                    identifier_col = "key_lookup"
                 except Exception:
                     log.exception("Failed to upgrade legacy key hash")
 
+    # Scope enforcement
     if required_scopes is not None:
         needed = (
             set(required_scopes)
             if isinstance(required_scopes, (set, list, tuple))
             else {str(required_scopes)}
         )
-        needed = {s.strip() for s in needed if str(s).strip()}
+        needed = {str(s).strip() for s in needed if str(s).strip()}
 
         if needed and "*" not in have and not needed.issubset(have):
+            missing = needed - have
             _log_auth_event(
                 "auth_attempt",
                 success=False,
                 key_prefix=key_prefix,
                 tenant_id=tenant_id,
-                reason=f"missing_scopes:{','.join(needed - have)}",
+                reason=f"missing_scopes:{','.join(sorted(missing))}",
                 request_path=request_path,
                 client_ip=client_ip,
             )
             return AuthResult(
                 valid=False,
-                reason=f"missing_scopes:{','.join(needed - have)}",
+                reason=f"missing_scopes:{','.join(sorted(missing))}",
                 key_prefix=key_prefix,
                 tenant_id=tenant_id,
                 scopes=have,
             )
 
+    # Usage accounting (best effort; do not break auth if this fails)
     if identifier_col and (key_lookup or key_hash):
-        _update_key_usage(
-            sqlite_path,
-            key_prefix,
-            identifier_col,
-            key_lookup if identifier_col == "key_lookup" else key_hash,
-        )
+        try:
+            _update_key_usage(
+                sqlite_path,
+                key_prefix,
+                identifier_col,
+                key_lookup if identifier_col == "key_lookup" else key_hash,
+            )
+        except Exception:
+            log.exception("Failed to update key usage")
 
     _log_auth_event(
         "auth_attempt",
@@ -595,6 +681,9 @@ def verify_api_key_detailed(
     )
 
 
+# -------------------------
+# FastAPI Dependencies
+# -------------------------
 def require_api_key_always(
     request: Request,
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
@@ -602,7 +691,13 @@ def require_api_key_always(
 ) -> str:
     got = _extract_key(request, x_api_key)
     if not got:
-        raise HTTPException(status_code=401, detail=ERR_INVALID)
+        # Contract: error_code required.
+        raise http_error(
+            401,
+            error_code="auth_missing_key",
+            message="missing api key",
+            generic="unauthorized",
+        )
 
     result = verify_api_key_detailed(
         raw=got, required_scopes=required_scopes, request=request
@@ -612,11 +707,30 @@ def require_api_key_always(
         request.state.auth = result
         return got
 
-    if result.is_missing_key:
-        raise HTTPException(status_code=401, detail=ERR_INVALID)
-    if result.reason.startswith("missing_scopes:"):
-        raise HTTPException(status_code=403, detail=ERR_INVALID)
-    raise HTTPException(status_code=401, detail=ERR_INVALID)
+    # Keep client contract stable (no internal reason leakage).
+    if getattr(result, "is_missing_key", False):
+        raise http_error(
+            401,
+            error_code="auth_missing_key",
+            message="missing api key",
+            generic="unauthorized",
+        )
+
+    if str(getattr(result, "reason", "")).startswith("missing_scopes:"):
+        raise http_error(
+            403,
+            error_code="auth_missing_scopes",
+            message="missing required scopes",
+            generic="forbidden",
+        )
+
+    # Default invalid key.
+    raise http_error(
+        401,
+        error_code="auth_invalid_key",
+        message="invalid api key",
+        generic="unauthorized",
+    )
 
 
 def verify_api_key(
@@ -626,6 +740,9 @@ def verify_api_key(
     return require_api_key_always(request, x_api_key, required_scopes=None)
 
 
+# -------------------------
+# Tenant Binding
+# -------------------------
 def _auth_tenant_from_request(request: Request) -> Optional[str]:
     auth = getattr(getattr(request, "state", None), "auth", None)
     tenant = getattr(auth, "tenant_id", None)
@@ -641,44 +758,62 @@ def bind_tenant_id(
     require_explicit_for_unscoped: bool = False,
     default_unscoped: Optional[str] = None,
 ) -> str:
+    """
+    Bind tenant id for the request.
+
+    Cases:
+      - Key-bound tenant (scoped key): tenant comes from auth context, header must match if supplied.
+      - Unscoped/global key (e.g., FG_API_KEY): tenant MUST be explicitly provided (if require_explicit_for_unscoped),
+        or optionally defaulted (default_unscoped).
+
+    This sets:
+      request.state.tenant_id
+      request.state.tenant_is_key_bound = True
+    and applies tenant context to db_session if present + enabled.
+    """
     requested = (str(requested_tenant).strip() if requested_tenant else "") or None
 
     cached_tenant_raw = getattr(getattr(request, "state", None), "tenant_id", None)
-    cached_tenant = None
-    if isinstance(cached_tenant_raw, str):
-        cached_tenant = cached_tenant_raw.strip() or None
+    cached_tenant = (
+        cached_tenant_raw.strip() if isinstance(cached_tenant_raw, str) else None
+    )
+    cached_tenant = cached_tenant or None
 
     key_bound_flag = bool(
         getattr(getattr(request, "state", None), "tenant_is_key_bound", False)
     )
     if key_bound_flag and not cached_tenant:
-        # Partial state is not trusted; force re-resolution from auth context.
+        # Partial state is not trusted; force re-resolution.
         request.state.tenant_is_key_bound = False
+        key_bound_flag = False
 
+    # If already bound, ensure requested doesn't conflict.
     if cached_tenant and key_bound_flag:
-        cached = cached_tenant
-        if requested and requested != cached:
+        if requested and requested != cached_tenant:
             auth = getattr(getattr(request, "state", None), "auth", None)
             _tenant_denial_log(
                 request=request,
                 event="tenant_mismatch_denied",
                 reason="cached_tenant_mismatch",
-                tenant_from_key=cached,
+                tenant_from_key=cached_tenant,
                 tenant_supplied=requested,
                 key_prefix=getattr(auth, "key_prefix", None),
                 scopes=getattr(auth, "scopes", set()),
             )
-            raise HTTPException(
-                status_code=403,
-                detail=redact_detail("tenant mismatch", generic="forbidden"),
+            raise http_error(
+                403,
+                error_code="tenant_mismatch",
+                message="tenant mismatch",
+                generic="forbidden",
             )
-        return cached
+        return cached_tenant
 
     auth = getattr(getattr(request, "state", None), "auth", None)
     auth_tenant = _auth_tenant_from_request(request)
     key_prefix = getattr(auth, "key_prefix", None)
     scopes = getattr(auth, "scopes", set())
 
+    # Key-bound tenant: enforce match if requested supplied.
     if auth_tenant:
         if requested and requested != auth_tenant:
             _tenant_denial_log(
@@ -690,22 +825,44 @@ def bind_tenant_id(
                 key_prefix=key_prefix,
                 scopes=scopes,
             )
-            raise HTTPException(
-                status_code=403,
-                detail=redact_detail("tenant mismatch", generic="forbidden"),
+            raise http_error(
+                403,
+                error_code="tenant_mismatch",
+                message="tenant mismatch",
+                generic="forbidden",
             )
+
         request.state.tenant_id = auth_tenant
         request.state.tenant_is_key_bound = True
         _apply_tenant_context(request, auth_tenant)
         return auth_tenant
 
+    # Unscoped/global key path: validate requested tenant if present.
     if requested:
         valid, _error = _validate_tenant_id(requested)
         if not valid:
-            raise HTTPException(
-                status_code=400,
-                detail=redact_detail("invalid tenant_id", generic="invalid request"),
+            raise http_error(
+                400,
+                error_code="tenant_invalid",
+                message="invalid tenant_id",
+                generic="invalid request",
             )
+
+        # Explicit tenant binding for unscoped keys.
+        if require_explicit_for_unscoped:
+            request.state.tenant_id = requested
+            request.state.tenant_is_key_bound = True
+            _apply_tenant_context(request, requested)
+            return requested
+
+    # Optional default for unscoped keys (only if no explicit tenant supplied)
+    if (not requested) and default_unscoped:
+        valid, _error = _validate_tenant_id(default_unscoped)
+        if valid:
+            request.state.tenant_id = default_unscoped
+            request.state.tenant_is_key_bound = True
+            _apply_tenant_context(request, default_unscoped)
+            return default_unscoped
 
     _tenant_denial_log(
         request=request,
@@ -716,13 +873,11 @@ def bind_tenant_id(
         key_prefix=key_prefix,
         scopes=scopes,
     )
-    _ = require_explicit_for_unscoped
-    _ = default_unscoped
-    raise HTTPException(
-        status_code=400,
-        detail=redact_detail(
-            "tenant_id required for unscoped keys", generic="invalid request"
-        ),
+    raise http_error(
+        400,
+        error_code="tenant_required",
+        message="tenant_id required for unscoped keys",
+        generic="invalid request",
     )
 
 
@@ -732,15 +887,23 @@ def require_bound_tenant(request: Request) -> str:
         getattr(getattr(request, "state", None), "tenant_is_key_bound", False)
     ):
         return str(tenant_id)
-    raise HTTPException(
-        status_code=400,
-        detail=redact_detail(
-            "tenant_id required for unscoped keys", generic="invalid request"
-        ),
+
+    raise http_error(
+        400,
+        error_code="tenant_required",
+        message="tenant_id required for unscoped keys",
+        generic="invalid request",
     )
 
 
 def _apply_tenant_context(request: Request, tenant_id: Optional[str]) -> None:
+    """
+    Apply tenant context to the DB session, if present and enabled.
+
+    Mode:
+      FG_TENANT_CONTEXT_MODE=db_session (default) -> set tenant context on session
+      else -> do nothing
+    """
     if not tenant_id:
         return
     mode = (os.getenv("FG_TENANT_CONTEXT_MODE") or "db_session").strip().lower()
@@ -752,6 +915,7 @@ def _apply_tenant_context(request: Request, tenant_id: Optional[str]) -> None:
     try:
         set_tenant_context(db_session, tenant_id)
     except Exception:
+        # Fail closed in production; degrade in dev.
         if _is_production_env():
             raise
 

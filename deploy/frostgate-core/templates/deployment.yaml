@@ -8,14 +8,15 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: {{ default 2 .Values.replicaCount }}
   revisionHistoryLimit: {{ default 10 .Values.revisionHistoryLimit }}
   progressDeadlineSeconds: {{ default 600 .Values.progressDeadlineSeconds }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxSurge: {{ default "25%" .Values.rollingUpdate.maxSurge | quote }}
-      maxUnavailable: {{ default "25%" .Values.rollingUpdate.maxUnavailable | quote }}
+      {{- $ru := default (dict) .Values.rollingUpdate }}
+      maxSurge: {{ default "25%" (get $ru "maxSurge") | quote }}
+      maxUnavailable: {{ default "25%" (get $ru "maxUnavailable") | quote }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ include "frostgate-core.name" . }}
@@ -26,141 +27,169 @@ spec:
         app.kubernetes.io/name: {{ include "frostgate-core.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
         {{- with .Values.podLabels }}
-          {{- toYaml . | nindent 8 }}
+{{ toYaml . | nindent 8 }}
         {{- end }}
-      {{- with .Values.podAnnotations }}
       annotations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- with .Values.podAnnotations }}
+{{ toYaml . | nindent 8 }}
+        {{- end }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
     spec:
       terminationGracePeriodSeconds: {{ default 30 .Values.terminationGracePeriodSeconds }}
-      {{- if .Values.imagePullSecrets }}
+
+      {{- with .Values.imagePullSecrets }}
+      {{- if (kindIs "slice" .) }}
       imagePullSecrets:
-        {{- range .Values.imagePullSecrets }}
+        {{- range . }}
         - name: {{ . }}
         {{- end }}
       {{- end }}
-      serviceAccountName: {{ if .Values.serviceAccount.create }}{{ default (include "frostgate-core.fullname" .) .Values.serviceAccount.name }}{{ else }}{{ .Values.serviceAccount.name | default "default" }}{{ end }}
+      {{- end }}
+
+      {{- $sa := default (dict) .Values.serviceAccount }}
+      serviceAccountName: {{ if (default true (get $sa "create")) }}{{ default (include "frostgate-core.fullname" .) (get $sa "name") }}{{ else }}{{ default "default" (get $sa "name") }}{{ end }}
+
       securityContext:
         {{- with .Values.podSecurityContext }}
-        {{- toYaml . | nindent 8 }}
+{{ toYaml . | nindent 8 }}
         {{- else }}
         seccompProfile:
           type: RuntimeDefault
         {{- end }}
-      {{- if .Values.topologySpreadConstraints }}
+
+      {{- with .Values.topologySpreadConstraints }}
+      {{- if (kindIs "slice" .) }}
       topologySpreadConstraints:
-        {{- toYaml .Values.topologySpreadConstraints | nindent 8 }}
+{{ toYaml . | nindent 8 }}
       {{- end }}
+      {{- end }}
+
       containers:
         - name: frostgate-core
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- $img := default (dict) .Values.image }}
+          image: "{{ default "ghcr.io/your-org-or-user/frostgate-core" (get $img "repository") }}:{{ default "dev" (get $img "tag") }}"
+          imagePullPolicy: {{ default "IfNotPresent" (get $img "pullPolicy") }}
           ports:
             - name: http
               containerPort: 8080
               protocol: TCP
-          # Keep envFrom for bulk config, but ALSO support explicit env overrides.
+
           envFrom:
             - configMapRef:
                 name: {{ include "frostgate-core.fullname" . }}-config
+
           env:
-            # Required secret
             - name: FROSTGATE_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ default (printf "%s-secret" (include "frostgate-core.fullname" .)) .Values.secrets.existingSecret.name }}
                   key: {{ default "frostgate-api-key" .Values.secrets.existingSecret.key }}
-            # --- PATCH: render values.yaml env map as explicit env vars ---
+
             {{- with .Values.env }}
+            {{- if (kindIs "map" .) }}
             {{- range $k, $v := . }}
             - name: {{ $k | quote }}
               value: {{ $v | quote }}
             {{- end }}
             {{- end }}
-          # Make shutdown deterministic (avoid "killed mid-flight")
+            {{- end }}
+
           lifecycle:
             preStop:
               exec:
-                command:
-                  - "/bin/sh"
-                  - "-lc"
-                  - "sleep 2"
+                command: ["/bin/sh","-lc","sleep 2"]
+
+          {{- $probes := default (dict) .Values.probes }}
+          {{- $l := default (dict) (get $probes "liveness") }}
+          {{- $r := default (dict) (get $probes "readiness") }}
+          {{- $s := default (dict) (get $probes "startup") }}
+
+          {{- if (default false (get $s "enabled")) }}
+          startupProbe:
+            httpGet:
+              path: {{ default "/health" (get $s "path") | quote }}
+              port: http
+            initialDelaySeconds: {{ default 0 (get $s "initialDelaySeconds") }}
+            periodSeconds: {{ default 5 (get $s "periodSeconds") }}
+            timeoutSeconds: {{ default 1 (get $s "timeoutSeconds") }}
+            failureThreshold: {{ default 30 (get $s "failureThreshold") }}
+            successThreshold: {{ default 1 (get $s "successThreshold") }}
+          {{- end }}
+
           livenessProbe:
             httpGet:
-              path: {{ default "/health" .Values.probes.liveness.path | quote }}
+              path: {{ default "/health" (get $l "path") | quote }}
               port: http
-            initialDelaySeconds: {{ default 10 .Values.probes.liveness.initialDelaySeconds }}
-            periodSeconds: {{ default 15 .Values.probes.liveness.periodSeconds }}
-            timeoutSeconds: {{ default 1 .Values.probes.liveness.timeoutSeconds }}
-            failureThreshold: {{ default 3 .Values.probes.liveness.failureThreshold }}
-            successThreshold: {{ default 1 .Values.probes.liveness.successThreshold }}
+            initialDelaySeconds: {{ default 10 (get $l "initialDelaySeconds") }}
+            periodSeconds: {{ default 15 (get $l "periodSeconds") }}
+            timeoutSeconds: {{ default 1 (get $l "timeoutSeconds") }}
+            failureThreshold: {{ default 3 (get $l "failureThreshold") }}
+            successThreshold: {{ default 1 (get $l "successThreshold") }}
+
           readinessProbe:
             httpGet:
-              path: {{ default "/health" .Values.probes.readiness.path | quote }}
+              path: {{ default "/health" (get $r "path") | quote }}
               port: http
-            initialDelaySeconds: {{ default 5 .Values.probes.readiness.initialDelaySeconds }}
-            periodSeconds: {{ default 10 .Values.probes.readiness.periodSeconds }}
-            timeoutSeconds: {{ default 1 .Values.probes.readiness.timeoutSeconds }}
-            failureThreshold: {{ default 3 .Values.probes.readiness.failureThreshold }}
-            successThreshold: {{ default 1 .Values.probes.readiness.successThreshold }}
+            initialDelaySeconds: {{ default 5 (get $r "initialDelaySeconds") }}
+            periodSeconds: {{ default 10 (get $r "periodSeconds") }}
+            timeoutSeconds: {{ default 1 (get $r "timeoutSeconds") }}
+            failureThreshold: {{ default 3 (get $r "failureThreshold") }}
+            successThreshold: {{ default 1 (get $r "successThreshold") }}
+
+          {{- $res := default (dict) .Values.resources }}
+          {{- $coreRes := default (dict) (get $res "core") }}
           resources:
-            {{- toYaml .Values.resources.core | nindent 12 }}
+{{ toYaml $coreRes | nindent 12 }}
+
+          {{- $coreSC := default (dict) .Values.securityContext.core }}
           securityContext:
-            {{- if .Values.securityContext.core }}
-            {{- toYaml .Values.securityContext.core | nindent 12 }}
-            {{- else }}
-            readOnlyRootFilesystem: true
-            runAsNonRoot: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-            {{- end }}
+{{ toYaml $coreSC | nindent 12 }}
 
         - name: supervisor-sidecar
-          image: "{{ .Values.sidecarImage.repository }}:{{ .Values.sidecarImage.tag }}"
-          imagePullPolicy: {{ .Values.sidecarImage.pullPolicy }}
+          {{- $simg := default (dict) .Values.sidecarImage }}
+          image: "{{ default "ghcr.io/your-org-or-user/frostgate-supervisor-sidecar" (get $simg "repository") }}:{{ default "v0.8.0" (get $simg "tag") }}"
+          imagePullPolicy: {{ default "IfNotPresent" (get $simg "pullPolicy") }}
+
           envFrom:
             - configMapRef:
                 name: {{ include "frostgate-core.fullname" . }}-config
-          # Optional explicit env for sidecar too (if you ever need it)
+
           {{- with .Values.sidecarEnv }}
+          {{- if (kindIs "map" .) }}
           env:
             {{- range $k, $v := . }}
             - name: {{ $k | quote }}
               value: {{ $v | quote }}
             {{- end }}
           {{- end }}
+          {{- end }}
+
+          {{- $sidecarRes := default (dict) (get $res "sidecar") }}
           resources:
-            {{- toYaml .Values.resources.sidecar | nindent 12 }}
+{{ toYaml $sidecarRes | nindent 12 }}
+
+          {{- $sidecarSC := default (dict) .Values.securityContext.sidecar }}
           securityContext:
-            {{- if .Values.securityContext.sidecar }}
-            {{- toYaml .Values.securityContext.sidecar | nindent 12 }}
-            {{- else }}
-            readOnlyRootFilesystem: true
-            runAsNonRoot: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-            {{- end }}
+{{ toYaml $sidecarSC | nindent 12 }}
 
       {{- with .Values.nodeSelector }}
       {{- if (kindIs "map" .) }}
       nodeSelector:
-        {{- toYaml . | nindent 8 }}
+{{ toYaml . | nindent 8 }}
       {{- end }}
       {{- end }}
+
       {{- with .Values.tolerations }}
       {{- if (kindIs "slice" .) }}
       tolerations:
-        {{- toYaml . | nindent 8 }}
+{{ toYaml . | nindent 8 }}
       {{- end }}
       {{- end }}
+
       {{- with .Values.affinity }}
       {{- if (kindIs "map" .) }}
       affinity:
-        {{- toYaml . | nindent 8 }}
+{{ toYaml . | nindent 8 }}
       {{- end }}
       {{- end }}

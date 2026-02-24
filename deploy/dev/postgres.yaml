@@ -1,0 +1,180 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: frostgate-dev
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: frostgate-postgres-secret
+  namespace: frostgate-dev
+type: Opaque
+stringData:
+  # Real bootstrap superuser (official postgres image)
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: dev_postgres_password_change_me
+
+  # App role (non-superuser) that FrostGate should use
+  FG_APP_USER: fg_app
+  FG_APP_PASSWORD: dev_password_change_me
+
+  # Optional dev admin (can be superuser if you want, but you don’t need it)
+  FG_ADMIN_USER: fg_admin
+  FG_ADMIN_PASSWORD: dev_admin_password_change_me
+
+  POSTGRES_DB: postgres
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frostgate-postgres-init
+  namespace: frostgate-dev
+data:
+  001_create_roles.sql: |
+    -- Create fg_app as a NON-superuser (this is what your assertions expect)
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = current_setting('app.fg_app_user', true)) THEN
+        EXECUTE format(
+          'CREATE ROLE %I WITH LOGIN PASSWORD %L NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB INHERIT',
+          current_setting('app.fg_app_user', true),
+          current_setting('app.fg_app_password', true)
+        );
+      END IF;
+    END
+    $$;
+
+    -- Optional dev admin (if you want a real admin role)
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = current_setting('app.fg_admin_user', true)) THEN
+        EXECUTE format(
+          'CREATE ROLE %I WITH LOGIN PASSWORD %L SUPERUSER',
+          current_setting('app.fg_admin_user', true),
+          current_setting('app.fg_admin_password', true)
+        );
+      END IF;
+    END
+    $$;
+
+    -- Create frostgate DB owned by fg_app
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'frostgate') THEN
+        EXECUTE format('CREATE DATABASE %I OWNER %I', 'frostgate', current_setting('app.fg_app_user', true));
+      END IF;
+    END
+    $$;
+
+    GRANT ALL PRIVILEGES ON DATABASE frostgate TO fg_app;
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: frostgate-postgres-pvc
+  namespace: frostgate-dev
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frostgate-postgres
+  namespace: frostgate-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frostgate-postgres
+  template:
+    metadata:
+      labels:
+        app: frostgate-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: frostgate-postgres-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: frostgate-postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: frostgate-postgres-secret
+                  key: POSTGRES_DB
+
+            # Pass fg_app/fg_admin creds to init script via GUCs (avoids hardcoding secrets in ConfigMap)
+            - name: POSTGRES_INITDB_ARGS
+              value: "--data-checksums"
+            - name: PGOPTIONS
+              value: "-c app.fg_app_user=$(FG_APP_USER) -c app.fg_app_password=$(FG_APP_PASSWORD) -c app.fg_admin_user=$(FG_ADMIN_USER) -c app.fg_admin_password=$(FG_ADMIN_PASSWORD)"
+            - name: FG_APP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: frostgate-postgres-secret
+                  key: FG_APP_USER
+            - name: FG_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: frostgate-postgres-secret
+                  key: FG_APP_PASSWORD
+            - name: FG_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: frostgate-postgres-secret
+                  key: FG_ADMIN_USER
+            - name: FG_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: frostgate-postgres-secret
+                  key: FG_ADMIN_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+          readinessProbe:
+            exec:
+              command: ["sh", "-lc", "pg_isready -U postgres"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-lc", "pg_isready -U postgres"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: frostgate-postgres-pvc
+        - name: init
+          configMap:
+            name: frostgate-postgres-init
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: frostgate-dev
+spec:
+  type: ClusterIP
+  selector:
+    app: frostgate-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
