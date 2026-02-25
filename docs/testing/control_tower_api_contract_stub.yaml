@@ -1,0 +1,29 @@
+openapi: 3.1.0
+info:
+  title: FrostGate Testing Control Tower Stub
+  version: 0.1.0-stub
+paths:
+  /v1/testing/lanes:
+    get:
+      summary: List lanes (stub)
+      responses:
+        '501':
+          description: Not implemented
+  /v1/testing/runs:
+    post:
+      summary: Start lane run (stub)
+      responses:
+        '200':
+          description: Stub accepted
+  /v1/testing/runs/{run_id}/artifacts:
+    get:
+      summary: List artifact metadata (stub)
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '501':
+          description: Not implemented

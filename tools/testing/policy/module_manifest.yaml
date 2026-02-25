@@ -1,0 +1,25 @@
+version: 1
+modules:
+  - module_id: control_plane
+    plane: control
+    route_prefixes:
+      - /v2/control-plane
+    required_scopes:
+      - control_plane.read
+      - control_plane.write
+    required_test_category:
+      - unit
+      - contract
+      - security
+  - module_id: testing_module
+    plane: security
+    route_prefixes:
+      - /v1/testing
+    required_scopes:
+      - testing.runs.read
+      - testing.runs.execute
+    required_test_category:
+      - unit
+      - contract
+      - security
+      - integration

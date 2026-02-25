@@ -1,0 +1,162 @@
+name: testing-module
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: testing-module-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  fg-fast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: setup python + cache pip
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            constraints.txt
+            pyproject.toml
+      - name: cache venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt', 'constraints.txt') }}
+      - name: create venv
+        run: python -m venv .venv
+      - name: install deps (pinned)
+        run: make venv
+      - name: run tests
+        run: make fg-fast
+      - name: required-tests gate
+        run: make required-tests-gate
+      - name: lane runner metadata
+        run: .venv/bin/python tools/testing/harness/lane_runner.py --lane fg-fast --out-dir artifacts/testing
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fg-fast-artifacts
+          path: artifacts/testing
+
+  fg-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: setup python + cache pip
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            constraints.txt
+            pyproject.toml
+      - name: cache venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt', 'constraints.txt') }}
+      - name: create venv
+        run: python -m venv .venv
+      - name: install deps (pinned)
+        run: make venv
+      - name: run tests
+        run: |
+          make fg-contract
+          .venv/bin/python tools/testing/contracts/check_contract_drift.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fg-contract-artifacts
+          path: artifacts/testing
+
+  fg-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: setup python + cache pip
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            constraints.txt
+            pyproject.toml
+      - name: cache venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt', 'constraints.txt') }}
+      - name: create venv
+        run: python -m venv .venv
+      - name: install deps (pinned)
+        run: make venv
+      - name: run tests
+        run: make fg-security
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fg-security-artifacts
+          path: artifacts/testing
+
+  fg-full:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [fg-fast, fg-contract, fg-security]
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: setup python + cache pip
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            constraints.txt
+            pyproject.toml
+      - name: cache venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt', 'constraints.txt') }}
+      - name: create venv
+        run: python -m venv .venv
+      - name: install deps (pinned)
+        run: make venv
+      - name: run tests
+        run: make fg-full
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fg-full-artifacts
+          path: artifacts/testing

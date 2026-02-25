@@ -58,6 +58,8 @@ from api.agent_phase2 import router as agent_phase2_router
 from api.connectors_control_plane import router as connectors_control_plane_router
 from api.control_plane import router as control_plane_router
 from api.control_plane_v2 import router as control_plane_v2_router
+from api.testing_control_tower import router as testing_control_tower_router
+from api.ui_testing_control_tower import router as ui_testing_control_tower_router
 from services.ai_plane_extension import ai_external_provider_enabled, ai_plane_enabled
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
@@ -126,6 +128,10 @@ def _should_mount_admin_routes() -> bool:
     if is_production_env():
         return _admin_enabled_flag()
     return True
+
+
+def _testing_control_tower_enabled() -> bool:
+    return _env_bool("FG_TESTING_CONTROL_TOWER_ENABLED", default=False)
 
 
 def _resolve_auth_enabled_from_env() -> bool:
@@ -524,6 +530,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         app.include_router(ui_compliance_dashboard_router)
         app.include_router(ui_ai_router)
         app.include_router(ui_ai_admin_router)
+        if _testing_control_tower_enabled():
+            app.include_router(ui_testing_control_tower_router)
 
     app.include_router(keys_router)
     app.include_router(forensics_router)
@@ -533,6 +541,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(connectors_control_plane_router)
     app.include_router(control_plane_router)
     app.include_router(control_plane_v2_router)
+    if _testing_control_tower_enabled():
+        app.include_router(testing_control_tower_router)
     if _should_mount_admin_routes():
         app.include_router(agent_phase2_admin_router)
 
@@ -799,6 +809,8 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(agent_phase2_router)
     app.include_router(connectors_control_plane_router)
     app.include_router(control_plane_router)
+    if _testing_control_tower_enabled():
+        app.include_router(testing_control_tower_router)
     if _should_mount_admin_routes():
         app.include_router(agent_phase2_admin_router)
     if mission_router is not None:

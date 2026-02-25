@@ -1,0 +1,25 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends
+from fastapi.responses import HTMLResponse
+
+from api.auth_scopes import require_scopes
+from api.ui_guard import ui_enabled_guard
+
+router = APIRouter(
+    prefix="/ui/dash",
+    tags=["ui-testing-control-tower"],
+    dependencies=[Depends(ui_enabled_guard), Depends(require_scopes("testing.runs.read"))],
+)
+
+
+@router.get("/testing-control-tower", response_class=HTMLResponse)
+def testing_control_tower_ui() -> str:
+    return """
+<!doctype html>
+<html><head><title>Testing Control Tower (Preview)</title></head>
+<body>
+  <h1>Testing Control Tower</h1>
+  <p>Feature flag enabled, implementation pending (Phase 3+).</p>
+</body></html>
+"""
