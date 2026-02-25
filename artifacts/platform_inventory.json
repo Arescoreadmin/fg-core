@@ -26,9 +26,138 @@
       "type": "missing_soc_gate_reference"
     }
   ],
-  "git_sha": "c96a6ae676d6d463d296e1f07843decb386d6654",
+  "git_sha": "21dcf69f78474ceb7de7a2c0023b19a8f2d15dd1",
+  "governance": {
+    "attestation_sha256": "da70371ee62e821e98632b97b025e7dba5f46ede184206fadf98e2f220503d7f  plane_registry_snapshot.json\na01c085e83b387a34e1f76ec8c4957c4cb6caae38f34c3f1bafacaa17ce6e5d7  route_inventory.json\n2c7fd2eb5f77a080a574e991b180f4ec84e970cb77e1bfc0aa08ee5a0118337c  contract_routes.json\na34fae0da024d61960d739be7f9ac16d92a05645f17429267c865950a2e5e02f  build_meta.json",
+    "build_meta": {
+      "build_timestamp_utc": "2026-02-24T23:40:32.776870+00:00",
+      "ci_runner_id": "076c54c371d3",
+      "git_sha": "a5626ea285efe3d00d959fc2caf1210fb4a2568c",
+      "inventory_sha256": "9b0161c22c699ac5952bced8d8da4e2694e029766bd53b55307a3670b3c92db9",
+      "tool": "tools/ci/check_route_inventory.py",
+      "tool_version": "v1"
+    },
+    "contract_count": 120,
+    "contract_only": [],
+    "runtime_count": 223,
+    "runtime_only": [
+      "DELETE /control-plane/v2/delegation/{delegation_id}",
+      "GET /_debug/routes",
+      "GET /_legacy/ui_feed/_disabled",
+      "GET /admin/agent/devices",
+      "GET /admin/agent/evidence/export/{device_id}",
+      "GET /admin/audit/search",
+      "GET /admin/connectors/policy",
+      "GET /admin/connectors/status",
+      "GET /admin/devices",
+      "GET /admin/keys",
+      "GET /admin/keys/needing-rotation",
+      "GET /admin/keys/{key_prefix}/rotation-status",
+      "GET /admin/system/health",
+      "GET /admin/tenants/{tenant_id}/usage",
+      "GET /admin/usage/all",
+      "GET /ai-plane/inference",
+      "GET /ai-plane/policies",
+      "GET /control-plane/evidence/bundle",
+      "GET /control-plane/v2/ai/namespace",
+      "GET /control-plane/v2/commands",
+      "GET /control-plane/v2/commands/{command_id}/receipts",
+      "GET /control-plane/v2/delegation",
+      "GET /control-plane/v2/heartbeats",
+      "GET /control-plane/v2/heartbeats/stale",
+      "GET /control-plane/v2/ledger",
+      "GET /control-plane/v2/ledger/anchor",
+      "GET /control-plane/v2/ledger/verify",
+      "GET /control-plane/v2/playbooks",
+      "GET /control-plane/v2/policy/pins",
+      "GET /control-plane/v2/terminal/allowlist",
+      "GET /health/detailed",
+      "GET /stats/debug",
+      "GET /status",
+      "GET /ui/ai",
+      "GET /ui/ai/experience",
+      "GET /ui/ai/usage",
+      "GET /ui/audit/chain-integrity",
+      "GET /ui/audit/export-link",
+      "GET /ui/audit/overview",
+      "GET /ui/audit/packet/{packet_id}/download",
+      "GET /ui/audit/status",
+      "GET /ui/compliance/exam-readiness",
+      "GET /ui/compliance/findings",
+      "GET /ui/compliance/overview",
+      "GET /ui/compliance/requirements/status",
+      "GET /ui/controls",
+      "GET /ui/controls/{inv_id}",
+      "GET /ui/csrf",
+      "GET /ui/dash/controls",
+      "GET /ui/dash/forensics",
+      "GET /ui/dash/posture",
+      "GET /ui/decision/{decision_id}",
+      "GET /ui/decisions",
+      "GET /ui/feed",
+      "GET /ui/forensics/chain/verify",
+      "GET /ui/posture",
+      "GET /ui/scopes",
+      "GET /ui/token",
+      "GET /v1/status",
+      "POST /admin/agent/commands/issue",
+      "POST /admin/agent/devices/{device_id}/revoke",
+      "POST /admin/agent/enrollment-tokens",
+      "POST /admin/agent/policy/publish",
+      "POST /admin/agent/policy/revoke/{policy_hash}",
+      "POST /admin/agent/quarantine/{device_id}",
+      "POST /admin/agent/unquarantine/{device_id}",
+      "POST /admin/agent/update/rollout",
+      "POST /admin/audit/export",
+      "POST /admin/config/changes/{change_id}/revert",
+      "POST /admin/connectors/policy",
+      "POST /admin/connectors/{connector_id}/revoke",
+      "POST /admin/devices/{device_id}/disable",
+      "POST /admin/devices/{device_id}/enable",
+      "POST /admin/keys",
+      "POST /admin/keys/{key_prefix}/revoke",
+      "POST /admin/keys/{key_prefix}/rotate",
+      "POST /admin/tenants/{tenant_id}/activate",
+      "POST /admin/tenants/{tenant_id}/suspend",
+      "POST /ai-plane/policies",
+      "POST /ai/infer",
+      "POST /control-plane/v2/commands",
+      "POST /control-plane/v2/commands/{command_id}/cancel",
+      "POST /control-plane/v2/commands/{command_id}/receipt",
+      "POST /control-plane/v2/delegation",
+      "POST /control-plane/v2/heartbeats",
+      "POST /control-plane/v2/playbooks/{playbook_name}/trigger",
+      "POST /control-plane/v2/policy/pin",
+      "POST /control-plane/v2/policy/rollback",
+      "POST /control-plane/v2/policy/stage",
+      "POST /control-plane/v2/terminal/breakglass",
+      "POST /control-plane/v2/terminal/execute",
+      "POST /dev/emit",
+      "POST /dev/seed",
+      "POST /ui/ai/chat",
+      "POST /ui/audit/packet",
+      "POST /ui/devices/{device_id}/disable",
+      "POST /ui/devices/{device_id}/enable",
+      "PUT /admin/tenants/{tenant_id}/quota",
+      "PUT /admin/tenants/{tenant_id}/tier"
+    ],
+    "schema_unknown_key_warnings": [],
+    "schema_versions": {
+      "build_meta": "legacy-v0",
+      "contract_routes": "legacy-v0",
+      "plane_registry": "legacy-v0",
+      "route_inventory": "legacy-v0"
+    },
+    "topology_sha256": "da70371ee62e821e98632b97b025e7dba5f46ede184206fadf98e2f220503d7f  plane_registry_snapshot.json\na01c085e83b387a34e1f76ec8c4957c4cb6caae38f34c3f1bafacaa17ce6e5d7  route_inventory.json\n2c7fd2eb5f77a080a574e991b180f4ec84e970cb77e1bfc0aa08ee5a0118337c  contract_routes.json",
+    "topology_sha256_note": "Content hashes of plane_registry_snapshot.json, route_inventory.json, contract_routes.json."
+  },
   "planes": [
     {
+      "compat": {
+        "deprecated_evidence": [],
+        "deprecated_mount_flag": "n/a",
+        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+      },
       "evidence": [],
       "mount_flag": "n/a",
       "plane_id": "agent",
@@ -40,6 +169,11 @@
       ]
     },
     {
+      "compat": {
+        "deprecated_evidence": [],
+        "deprecated_mount_flag": "n/a",
+        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+      },
       "evidence": [],
       "mount_flag": "n/a",
       "plane_id": "ai",
@@ -52,6 +186,11 @@
       ]
     },
     {
+      "compat": {
+        "deprecated_evidence": [],
+        "deprecated_mount_flag": "n/a",
+        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+      },
       "evidence": [],
       "mount_flag": "n/a",
       "plane_id": "connector",
@@ -67,6 +206,11 @@
       ]
     },
     {
+      "compat": {
+        "deprecated_evidence": [],
+        "deprecated_mount_flag": "n/a",
+        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+      },
       "evidence": [],
       "mount_flag": "n/a",
       "plane_id": "control",
@@ -94,6 +238,11 @@
       ]
     },
     {
+      "compat": {
+        "deprecated_evidence": [],
+        "deprecated_mount_flag": "n/a",
+        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+      },
       "evidence": [],
       "mount_flag": "n/a",
       "plane_id": "data",
@@ -110,6 +259,11 @@
       ]
     },
     {
+      "compat": {
+        "deprecated_evidence": [],
+        "deprecated_mount_flag": "n/a",
+        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+      },
       "evidence": [],
       "mount_flag": "n/a",
       "plane_id": "evidence",
@@ -125,6 +279,11 @@
       ]
     },
     {
+      "compat": {
+        "deprecated_evidence": [],
+        "deprecated_mount_flag": "n/a",
+        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+      },
       "evidence": [],
       "mount_flag": "n/a",
       "plane_id": "security",
@@ -137,6 +296,11 @@
       ]
     },
     {
+      "compat": {
+        "deprecated_evidence": [],
+        "deprecated_mount_flag": "n/a",
+        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+      },
       "evidence": [],
       "mount_flag": "n/a",
       "plane_id": "ui",
