@@ -6,6 +6,7 @@ import json
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from services.plane_registry import PLANE_REGISTRY
 from tools.ci.plane_registry_checks import (
@@ -24,6 +25,7 @@ CONTRACT_ROUTES = REPO / "tools/ci/contract_routes.json"
 BUILD_META = REPO / "tools/ci/build_meta.json"
 BUNDLE_HASH = REPO / "tools/ci/attestation_bundle.sha256"
 TOPOLOGY_HASH = REPO / "tools/ci/topology.sha256"
+SCHEMA_VERSION = "v1"
 
 
 def _sha256(path: Path) -> str:
@@ -86,7 +88,7 @@ def _route_diff(expected: list[dict[str, object]], cur: list[dict[str, object]])
 
 def _write_registry_snapshot() -> None:
     payload = [p.to_dict() for p in sorted(PLANE_REGISTRY, key=lambda x: x.plane_id)]
-    blob = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    blob = _dump_json(_wrap(payload))
     REGISTRY_SNAPSHOT.write_text(blob, encoding="utf-8")
     digest = hashlib.sha256(blob.encode("utf-8")).hexdigest()
     REGISTRY_HASH.write_text(f"{digest}  {REGISTRY_SNAPSHOT.name}\n", encoding="utf-8")
@@ -94,7 +96,7 @@ def _write_registry_snapshot() -> None:
 
 def _write_attestation_bundle(cur: list[dict[str, object]]) -> None:
     contract = contract_routes()
-    CONTRACT_ROUTES.write_text(json.dumps(contract, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    CONTRACT_ROUTES.write_text(_dump_json(_wrap(contract)), encoding="utf-8")
 
     git_sha = "unknown"
     try:
@@ -105,12 +107,16 @@ def _write_attestation_bundle(cur: list[dict[str, object]]) -> None:
     meta = {
         "git_sha": git_sha,
         "build_timestamp_utc": datetime.now(tz=UTC).isoformat(),
-        "ci_runner_id": (Path('/proc/sys/kernel/hostname').read_text(encoding='utf-8').strip() if Path('/proc/sys/kernel/hostname').exists() else "unknown"),
+        "ci_runner_id": (
+            Path("/proc/sys/kernel/hostname").read_text(encoding="utf-8").strip()
+            if Path("/proc/sys/kernel/hostname").exists()
+            else "unknown"
+        ),
         "tool": "tools/ci/check_route_inventory.py",
-        "tool_version": "v1",
+        "tool_version": SCHEMA_VERSION,
         "inventory_sha256": hashlib.sha256(json.dumps(cur, sort_keys=True).encode("utf-8")).hexdigest(),
     }
-    BUILD_META.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    BUILD_META.write_text(_dump_json(_wrap([meta])), encoding="utf-8")
 
     bundle_files = [REGISTRY_SNAPSHOT, INVENTORY, CONTRACT_ROUTES, BUILD_META]
     lines = [f"{_sha256(f)}  {f.name}" for f in bundle_files]
@@ -149,7 +155,7 @@ def _write_summary(cur: list[dict[str, object]], expected: list[dict[str, object
         "removed": missing,
         "changed": changed,
     }
-    SUMMARY.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    SUMMARY.write_text(_dump_json(_wrap([summary])), encoding="utf-8")
 
 
 def main() -> int:
@@ -183,7 +189,8 @@ def main() -> int:
     if changed:
         failures.extend(changed)
 
-    summary = json.loads(SUMMARY.read_text(encoding="utf-8"))
+    summary_payload = _read_data(SUMMARY, label="route_inventory_summary")
+    summary = summary_payload[0] if summary_payload else {}
     if summary.get("runtime_only"):
         print(f"route inventory: WARNING runtime vs contract drift (runtime_only): {summary['runtime_only']}")
     if summary.get("contract_only"):

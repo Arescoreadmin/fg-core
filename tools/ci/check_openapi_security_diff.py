@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_TARGET = REPO / "contracts/core/openapi.json"
@@ -30,7 +31,22 @@ def _load(path: Path) -> dict[str, object]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _normalize(obj):
+def _load_route_inventory(path: Path) -> list[dict[str, object]]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(payload, list):
+        # legacy input shape accepted for local tests/fixtures
+        if not all(isinstance(item, dict) for item in payload):
+            raise ValueError("route inventory legacy format must be list[object]")
+        return payload
+    if not isinstance(payload, dict):
+        raise ValueError("route inventory must be object or legacy list")
+    data = payload.get("data")
+    if not isinstance(data, list) or not all(isinstance(item, dict) for item in data):
+        raise ValueError("route inventory v1 format requires data: list[object]")
+    return data
+
+
+def _normalize(obj: Any) -> Any:
     if isinstance(obj, dict):
         out = {}
         for k, v in sorted(obj.items()):
