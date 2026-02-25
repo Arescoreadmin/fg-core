@@ -41,3 +41,23 @@
 
 - EG-ART-001: artifact policy gate (`check_artifact_policy.py`) must pass.
 - EG-INV-001: platform inventory gate (`make platform-inventory`) must produce deterministic outputs.
+## Governance Update – 8 Plane Registry Completion
+Date: 2026-02-25
+Change ID: 1bf735ede0eb785e0bbc236dc9d7ef7e176a0be0
+Scope:
+- tools/ci/plane_registry_snapshot.json
+- tools/ci/route_inventory.json
+- tools/ci/contract_routes.json
+- tools/ci/topology.sha256
+- tools/ci/attestation_bundle.sha256
+- tools/ci/build_meta.json
+
+Impact:
+- Canonical 8-plane registry finalized
+- Deterministic platform inventory split implemented
+- Governance artifact regeneration and hash chain refresh
+
+Risk:
+- Governance artifacts/CI enforcement only; no runtime auth or enforcement path changes intended
+
+Reviewer: self
