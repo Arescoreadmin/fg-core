@@ -76,7 +76,9 @@ def main() -> int:
             sp = REPO / schema_path
             gp = REPO / generator_script
             if not sp.exists() or not gp.exists():
-                missing_evidence.append({"schema": schema_path, "generator": generator_script})
+                missing_evidence.append(
+                    {"schema": schema_path, "generator": generator_script}
+                )
         if missing_evidence:
             gaps.append(
                 {
