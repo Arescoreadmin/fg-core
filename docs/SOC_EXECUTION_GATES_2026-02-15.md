@@ -492,3 +492,44 @@ Gate impact:
 - `route-inventory-audit`: strengthened (deterministic topology hash +
   attestation bundle output).
 - `soc-review-sync`: satisfied by this SOC execution gates update.
+
+---
+
+## Governance Artifact v1 Envelope Rollout + Consumer Alignment (2026-02-25)
+
+### Changes
+
+- `tools/ci/check_route_inventory.py`: governance artifact producers were
+  moved to a strict wrapped schema (`schema_version: "v1"`,
+  `generated_at`, `data`) for route inventory, registry snapshot, contract
+  routes, route summary, and build metadata.
+
+- `tools/ci/route_inventory.json`, `tools/ci/contract_routes.json`,
+  `tools/ci/plane_registry_snapshot.json`,
+  `tools/ci/route_inventory_summary.json`, `tools/ci/build_meta.json`:
+  regenerated in v1 wrapper format and used as canonical governance inputs.
+
+- `tools/ci/topology.sha256`, `tools/ci/attestation_bundle.sha256`,
+  `tools/ci/plane_registry_snapshot.sha256`: regenerated from the v1 artifact
+  payloads.
+
+- `tools/ci/check_openapi_security_diff.py` and
+  `tools/ci/check_governance_invariants.py`: updated consumers to read wrapped
+  route inventory (`data`) while keeping legacy list fallback for local
+  fixtures.
+
+### Security Invariants Confirmed
+
+- Governance producers and consumers now agree on one canonical on-disk
+  envelope format for CI artifacts.
+- Security/openapi and governance invariant gates continue to evaluate route
+  metadata correctly after schema migration.
+- Topology and attestation hashes remain content-based evidence of generated
+  governance artifacts.
+
+### Gate Impact
+
+- `security-regression-gates`: restored to green by consuming wrapped route
+  inventory instead of treating top-level envelope keys as route rows.
+- `soc-review-sync`: satisfied by this SOC execution gates documentation update
+  for all critical `tools/ci/*` changes listed above.
