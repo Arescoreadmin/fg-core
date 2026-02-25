@@ -468,6 +468,12 @@ route-inventory-generate: venv
 route-inventory-audit: venv
 	@PYTHONPATH=. $(PY) tools/ci/check_route_inventory.py
 
+check_plane_registry: venv
+	@PYTHONPATH=. $(PY) tools/ci/check_plane_registry.py
+
+check_plane_registry_runtime_app: venv
+	@CI=1 PYTHONPATH=. $(PY) tools/ci/check_plane_registry.py --use-runtime-app
+
 test-quality-gate: venv
 	@$(PY) tools/ci/check_test_quality.py
 
@@ -1164,7 +1170,7 @@ openapi-security-diff: venv
 .PHONY: plane-registry-spot evidence-index-spot resilience-smoke nuclear-full governance-invariants
 
 plane-registry-spot: venv
-	@$(PY) tools/ci/check_plane_registry.py
+	@$(MAKE) -s check_plane_registry
 	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_plane_registry.py
 
 evidence-index-spot: venv _require-pytest-venv
