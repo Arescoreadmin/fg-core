@@ -442,6 +442,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Allow legacy unversioned governance artifact formats.",
     )
     parser.add_argument(
+        "--require-versioned-schema",
+        action="store_true",
+        help="Fail when governance artifacts are in legacy unversioned format.",
+    )
+    parser.add_argument(
         "--reject-unknown-keys",
         action="store_true",
         help="Fail when governance artifacts include unknown keys.",
@@ -451,6 +456,10 @@ def main(argv: list[str] | None = None) -> int:
     # Source-of-truth note:
     # Platform inventory intentionally reads deterministic governance artifacts written by
     # tools/ci/check_route_inventory.py and does not import PlaneDef internals.
+    require_versioned_schema = args.require_versioned_schema or (
+        os.getenv("FG_REQUIRE_VERSIONED_GOVERNANCE_SCHEMA") == "1"
+    )
+
     (
         plane_snapshot,
         route_inventory,
@@ -461,8 +470,11 @@ def main(argv: list[str] | None = None) -> int:
         schema_versions,
         unknown_warnings,
     ) = _load_governance_inputs(
-        allow_legacy_schema=args.allow_legacy_schema
-        or os.getenv("FG_ALLOW_LEGACY_GOVERNANCE_SCHEMA") == "1",
+        # Backward-compatible default for current CI artifacts while preserving
+        # an explicit strict mode gate for enforcing versioned schema wrappers.
+        allow_legacy_schema=(not require_versioned_schema)
+        or args.allow_legacy_schema
+        or (os.getenv("FG_ALLOW_LEGACY_GOVERNANCE_SCHEMA") == "1"),
         reject_unknown_keys=args.reject_unknown_keys
         or os.getenv("FG_REJECT_UNKNOWN_GOVERNANCE_KEYS") == "1",
     )

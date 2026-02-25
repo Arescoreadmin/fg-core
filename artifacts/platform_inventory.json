@@ -26,7 +26,7 @@
       "type": "missing_soc_gate_reference"
     }
   ],
-  "git_sha": "21dcf69f78474ceb7de7a2c0023b19a8f2d15dd1",
+  "git_sha": "3c6c0d90f450ab6837f73978671d4586825904b7",
   "governance": {
     "attestation_sha256": "da70371ee62e821e98632b97b025e7dba5f46ede184206fadf98e2f220503d7f  plane_registry_snapshot.json\na01c085e83b387a34e1f76ec8c4957c4cb6caae38f34c3f1bafacaa17ce6e5d7  route_inventory.json\n2c7fd2eb5f77a080a574e991b180f4ec84e970cb77e1bfc0aa08ee5a0118337c  contract_routes.json\na34fae0da024d61960d739be7f9ac16d92a05645f17429267c865950a2e5e02f  build_meta.json",
     "build_meta": {
