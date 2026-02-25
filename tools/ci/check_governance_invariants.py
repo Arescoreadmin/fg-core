@@ -7,9 +7,23 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 
 
+def _load_inventory() -> list[dict[str, object]]:
+    payload = json.loads((REPO / "tools/ci/route_inventory.json").read_text(encoding="utf-8"))
+    if isinstance(payload, list):
+        if not all(isinstance(item, dict) for item in payload):
+            raise ValueError("route inventory legacy format must be list[object]")
+        return payload
+    if not isinstance(payload, dict):
+        raise ValueError("route inventory must be object or legacy list")
+    data = payload.get("data")
+    if not isinstance(data, list) or not all(isinstance(item, dict) for item in data):
+        raise ValueError("route inventory v1 format requires data: list[object]")
+    return data
+
+
 def main() -> int:
     failures: list[str] = []
-    inv = json.loads((REPO / "tools/ci/route_inventory.json").read_text(encoding="utf-8"))
+    inv = _load_inventory()
 
     required = {
         ("POST", "/breakglass/sessions"),
