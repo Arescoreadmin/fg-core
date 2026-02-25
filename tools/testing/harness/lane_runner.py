@@ -10,7 +10,6 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Sequence
 
 TOOL_VERSION = "1.0.0"
 ARTIFACT_ROOT = "artifacts/testing"

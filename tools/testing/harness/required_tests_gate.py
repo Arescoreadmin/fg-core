@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import argparse
-import fnmatch
 import json
 import os
 import subprocess
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
@@ -112,7 +111,8 @@ def _changed_files(base_ref: str | None) -> list[ChangedFile]:
 
 
 def _match_any(path: str, patterns: list[str]) -> bool:
-    return any(fnmatch.fnmatch(path, pattern) for pattern in patterns)
+    posix = PurePosixPath(path)
+    return any(posix.match(pattern) for pattern in patterns)
 
 
 def _category_input_paths(changed: list[ChangedFile]) -> list[str]:
