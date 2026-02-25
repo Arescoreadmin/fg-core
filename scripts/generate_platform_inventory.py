@@ -32,13 +32,16 @@ SHA_LINE_RE = re.compile(r"^[0-9a-f]{64}\s{2}[^\s].+$")
 
 
 def _dump_json(payload: Any) -> str:
-    return json.dumps(
-        payload,
-        indent=2,
-        sort_keys=True,
-        ensure_ascii=False,
-        separators=(",", ": "),
-    ) + "\n"
+    return (
+        json.dumps(
+            payload,
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ": "),
+        )
+        + "\n"
+    )
 
 
 def require_file(path: Path) -> None:
@@ -56,7 +59,11 @@ def load_json(path: Path) -> Any:
 
 def read_sha256(path: Path) -> str:
     require_file(path)
-    lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    lines = [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
     if not lines:
         raise ValueError(f"empty sha256 file: {path.relative_to(REPO)}")
     bad = [line for line in lines if not SHA_LINE_RE.match(line)]
@@ -93,9 +100,13 @@ def _require_list_of_strings(value: Any, context: str) -> list[str]:
     return value
 
 
-def _extract_v1_data(raw: Any, *, artifact_name: str) -> tuple[list[dict[str, Any]], str]:
+def _extract_v1_data(
+    raw: Any, *, artifact_name: str
+) -> tuple[list[dict[str, Any]], str]:
     if not isinstance(raw, dict):
-        raise ValueError(f"{artifact_name} must be an object with schema_version/generated_at/data")
+        raise ValueError(
+            f"{artifact_name} must be an object with schema_version/generated_at/data"
+        )
     _require_keys(raw, {"schema_version", "generated_at", "data"}, artifact_name)
     schema_version = raw["schema_version"]
     if schema_version != SCHEMA_EXPECTED[artifact_name]:
@@ -112,7 +123,9 @@ def _extract_v1_data(raw: Any, *, artifact_name: str) -> tuple[list[dict[str, An
     return data, schema_version
 
 
-def _validate_plane_snapshot(records: list[dict[str, Any]], *, unknown_warnings: list[str], reject_unknown: bool) -> None:
+def _validate_plane_snapshot(
+    records: list[dict[str, Any]], *, unknown_warnings: list[str], reject_unknown: bool
+) -> None:
     plane_allowed = {
         "allowed_dependency_categories",
         "auth_class",
@@ -130,22 +143,45 @@ def _validate_plane_snapshot(records: list[dict[str, Any]], *, unknown_warnings:
         "mount_flag",
         "evidence",
     }
-    route_allowed = {"class_name", "expires_at", "justification", "method", "path", "permanent"}
+    route_allowed = {
+        "class_name",
+        "expires_at",
+        "justification",
+        "method",
+        "path",
+        "permanent",
+    }
 
     for idx, plane in enumerate(records):
         context = f"plane_registry[{idx}]"
-        _require_keys(plane, {"plane_id", "route_prefixes", "required_make_targets"}, context)
-        _validate_unknown_keys(plane, plane_allowed, context, unknown_warnings, reject_unknown)
+        _require_keys(
+            plane, {"plane_id", "route_prefixes", "required_make_targets"}, context
+        )
+        _validate_unknown_keys(
+            plane, plane_allowed, context, unknown_warnings, reject_unknown
+        )
         if not isinstance(plane["plane_id"], str) or not plane["plane_id"].strip():
             raise ValueError(f"{context}.plane_id must be non-empty string")
         _require_list_of_strings(plane["route_prefixes"], f"{context}.route_prefixes")
-        _require_list_of_strings(plane["required_make_targets"], f"{context}.required_make_targets")
+        _require_list_of_strings(
+            plane["required_make_targets"], f"{context}.required_make_targets"
+        )
 
-        for k in ("allowed_dependency_categories", "required_ci_gates", "required_route_invariants"):
+        for k in (
+            "allowed_dependency_categories",
+            "required_ci_gates",
+            "required_route_invariants",
+        ):
             if k in plane:
                 _require_list_of_strings(plane[k], f"{context}.{k}")
 
-        for route_key in ("auth_exempt_routes", "bootstrap_routes", "docs_routes", "global_routes", "public_routes"):
+        for route_key in (
+            "auth_exempt_routes",
+            "bootstrap_routes",
+            "docs_routes",
+            "global_routes",
+            "public_routes",
+        ):
             if route_key not in plane:
                 continue
             routes = plane[route_key]
@@ -154,11 +190,21 @@ def _validate_plane_snapshot(records: list[dict[str, Any]], *, unknown_warnings:
             for r_idx, route in enumerate(routes):
                 if not isinstance(route, dict):
                     raise ValueError(f"{context}.{route_key}[{r_idx}] must be object")
-                _require_keys(route, {"method", "path"}, f"{context}.{route_key}[{r_idx}]")
-                _validate_unknown_keys(route, route_allowed, f"{context}.{route_key}[{r_idx}]", unknown_warnings, reject_unknown)
+                _require_keys(
+                    route, {"method", "path"}, f"{context}.{route_key}[{r_idx}]"
+                )
+                _validate_unknown_keys(
+                    route,
+                    route_allowed,
+                    f"{context}.{route_key}[{r_idx}]",
+                    unknown_warnings,
+                    reject_unknown,
+                )
 
 
-def _validate_route_inventory(records: list[dict[str, Any]], *, unknown_warnings: list[str], reject_unknown: bool) -> None:
+def _validate_route_inventory(
+    records: list[dict[str, Any]], *, unknown_warnings: list[str], reject_unknown: bool
+) -> None:
     allowed = {
         "dependency_categories",
         "file",
@@ -173,21 +219,44 @@ def _validate_route_inventory(records: list[dict[str, Any]], *, unknown_warnings
     for idx, route in enumerate(records):
         context = f"route_inventory[{idx}]"
         _require_keys(route, {"method", "path", "plane_id", "file"}, context)
-        _validate_unknown_keys(route, allowed, context, unknown_warnings, reject_unknown)
+        _validate_unknown_keys(
+            route, allowed, context, unknown_warnings, reject_unknown
+        )
 
 
-def _validate_contract_routes(records: list[dict[str, Any]], *, unknown_warnings: list[str], reject_unknown: bool) -> None:
+def _validate_contract_routes(
+    records: list[dict[str, Any]], *, unknown_warnings: list[str], reject_unknown: bool
+) -> None:
     allowed = {"method", "path", "scopes", "source", "plane_id"}
     for idx, route in enumerate(records):
         context = f"contract_routes[{idx}]"
         _require_keys(route, {"method", "path", "scopes"}, context)
-        _validate_unknown_keys(route, allowed, context, unknown_warnings, reject_unknown)
+        _validate_unknown_keys(
+            route, allowed, context, unknown_warnings, reject_unknown
+        )
 
 
-def _load_governance_inputs(*, reject_unknown_keys: bool) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], str, str | None, dict[str, Any] | None, dict[str, str], list[str]]:
-    missing = [str(path.relative_to(REPO)) for path in GOVERNANCE_INPUTS.values() if not path.exists()]
+def _load_governance_inputs(
+    *, reject_unknown_keys: bool
+) -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    str,
+    str | None,
+    dict[str, Any] | None,
+    dict[str, str],
+    list[str],
+]:
+    missing = [
+        str(path.relative_to(REPO))
+        for path in GOVERNANCE_INPUTS.values()
+        if not path.exists()
+    ]
     if missing:
-        print("platform inventory: missing required governance inputs:", file=sys.stderr)
+        print(
+            "platform inventory: missing required governance inputs:", file=sys.stderr
+        )
         for rel in sorted(missing):
             print(f" - {rel}", file=sys.stderr)
         raise SystemExit(2)
@@ -197,13 +266,31 @@ def _load_governance_inputs(*, reject_unknown_keys: bool) -> tuple[list[dict[str
     raw_runtime = load_json(GOVERNANCE_INPUTS["route_inventory"])
     raw_contract = load_json(GOVERNANCE_INPUTS["contract_routes"])
 
-    plane_snapshot, plane_schema = _extract_v1_data(raw_plane, artifact_name="plane_registry")
-    route_inventory, runtime_schema = _extract_v1_data(raw_runtime, artifact_name="route_inventory")
-    contract_routes, contract_schema = _extract_v1_data(raw_contract, artifact_name="contract_routes")
+    plane_snapshot, plane_schema = _extract_v1_data(
+        raw_plane, artifact_name="plane_registry"
+    )
+    route_inventory, runtime_schema = _extract_v1_data(
+        raw_runtime, artifact_name="route_inventory"
+    )
+    contract_routes, contract_schema = _extract_v1_data(
+        raw_contract, artifact_name="contract_routes"
+    )
 
-    _validate_plane_snapshot(plane_snapshot, unknown_warnings=unknown_warnings, reject_unknown=reject_unknown_keys)
-    _validate_route_inventory(route_inventory, unknown_warnings=unknown_warnings, reject_unknown=reject_unknown_keys)
-    _validate_contract_routes(contract_routes, unknown_warnings=unknown_warnings, reject_unknown=reject_unknown_keys)
+    _validate_plane_snapshot(
+        plane_snapshot,
+        unknown_warnings=unknown_warnings,
+        reject_unknown=reject_unknown_keys,
+    )
+    _validate_route_inventory(
+        route_inventory,
+        unknown_warnings=unknown_warnings,
+        reject_unknown=reject_unknown_keys,
+    )
+    _validate_contract_routes(
+        contract_routes,
+        unknown_warnings=unknown_warnings,
+        reject_unknown=reject_unknown_keys,
+    )
 
     topology_sha = read_sha256(GOVERNANCE_INPUTS["topology_hash"])
     attestation_sha = None
@@ -214,11 +301,15 @@ def _load_governance_inputs(*, reject_unknown_keys: bool) -> tuple[list[dict[str
     build_meta_schema = "absent"
     if OPTIONAL_INPUTS["build_meta"].exists():
         raw_build_meta = load_json(OPTIONAL_INPUTS["build_meta"])
-        build_meta_data, build_meta_schema = _extract_v1_data(raw_build_meta, artifact_name="build_meta")
+        build_meta_data, build_meta_schema = _extract_v1_data(
+            raw_build_meta, artifact_name="build_meta"
+        )
         build_meta = build_meta_data[0] if build_meta_data else None
 
     if not route_inventory and os.getenv("FG_ALLOW_EMPTY_ROUTE_INVENTORY") != "1":
-        raise ValueError("tools/ci/route_inventory.json is empty; set FG_ALLOW_EMPTY_ROUTE_INVENTORY=1 to override")
+        raise ValueError(
+            "tools/ci/route_inventory.json is empty; set FG_ALLOW_EMPTY_ROUTE_INVENTORY=1 to override"
+        )
 
     return (
         plane_snapshot,
@@ -238,7 +329,13 @@ def _load_governance_inputs(*, reject_unknown_keys: bool) -> tuple[list[dict[str
 
 
 def _make_targets() -> set[str]:
-    proc = subprocess.run(["make", "-qpRr", "__mkdb__"], cwd=REPO, check=True, text=True, capture_output=True)
+    proc = subprocess.run(
+        ["make", "-qpRr", "__mkdb__"],
+        cwd=REPO,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
     out = set()
     for line in proc.stdout.splitlines():
         if ":" in line and not line.startswith("\t") and not line.startswith("#"):
@@ -258,8 +355,16 @@ def _sorted_route_signatures(routes: list[dict[str, Any]]) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--allow-gaps", action="store_true", help="Allow unmapped runtime routes and empty-plane gaps (local debugging only).")
-    parser.add_argument("--reject-unknown-keys", action="store_true", help="Fail when governance artifacts include unknown keys.")
+    parser.add_argument(
+        "--allow-gaps",
+        action="store_true",
+        help="Allow unmapped runtime routes and empty-plane gaps (local debugging only).",
+    )
+    parser.add_argument(
+        "--reject-unknown-keys",
+        action="store_true",
+        help="Fail when governance artifacts include unknown keys.",
+    )
     args = parser.parse_args(argv)
 
     (
@@ -272,11 +377,15 @@ def main(argv: list[str] | None = None) -> int:
         schema_versions,
         unknown_warnings,
     ) = _load_governance_inputs(
-        reject_unknown_keys=args.reject_unknown_keys or os.getenv("FG_REJECT_UNKNOWN_GOVERNANCE_KEYS") == "1"
+        reject_unknown_keys=args.reject_unknown_keys
+        or os.getenv("FG_REJECT_UNKNOWN_GOVERNANCE_KEYS") == "1"
     )
 
     make_targets = _make_targets()
-    artifact_schemas = sorted(p.as_posix().replace(str(REPO) + "/", "") for p in (REPO / "contracts/artifacts").glob("*.schema.json"))
+    artifact_schemas = sorted(
+        p.as_posix().replace(str(REPO) + "/", "")
+        for p in (REPO / "contracts/artifacts").glob("*.schema.json")
+    )
     soc_text = (REPO / "artifacts/SOC_AUDIT_GATES.md").read_text(encoding="utf-8")
 
     planes = []
@@ -288,33 +397,60 @@ def main(argv: list[str] | None = None) -> int:
 
     for plane in sorted(plane_snapshot, key=lambda p: str(p["plane_id"])):
         pid = str(plane["plane_id"]).strip()
-        route_prefixes = sorted(str(prefix) for prefix in (plane.get("route_prefixes") or []))
+        route_prefixes = sorted(
+            str(prefix) for prefix in (plane.get("route_prefixes") or [])
+        )
         owned_prefixes.extend(route_prefixes)
-        required_targets = sorted(str(t) for t in (plane.get("required_make_targets") or []))
+        required_targets = sorted(
+            str(t) for t in (plane.get("required_make_targets") or [])
+        )
         missing_targets = sorted([t for t in required_targets if t not in make_targets])
         if missing_targets:
-            gaps.append({"type": "missing_make_targets", "plane": pid, "details": missing_targets, "suggested_fix": "Add missing make targets declared by plane registry."})
+            gaps.append(
+                {
+                    "type": "missing_make_targets",
+                    "plane": pid,
+                    "details": missing_targets,
+                    "suggested_fix": "Add missing make targets declared by plane registry.",
+                }
+            )
         if pid not in soc_text:
-            gaps.append({"type": "missing_soc_gate_reference", "plane": pid, "details": "plane id not referenced in SOC gate artifact", "suggested_fix": "Add SOC gate mapping entry for plane."})
+            gaps.append(
+                {
+                    "type": "missing_soc_gate_reference",
+                    "plane": pid,
+                    "details": "plane id not referenced in SOC gate artifact",
+                    "suggested_fix": "Add SOC gate mapping entry for plane.",
+                }
+            )
 
-        evidence = sorted([
-            {"schema": str(item.get("schema_path", "")), "generator": str(item.get("generator_script", ""))}
-            for item in (plane.get("evidence") or []) if isinstance(item, dict)
-        ], key=lambda x: (x["schema"], x["generator"]))
+        evidence = sorted(
+            [
+                {
+                    "schema": str(item.get("schema_path", "")),
+                    "generator": str(item.get("generator_script", "")),
+                }
+                for item in (plane.get("evidence") or [])
+                if isinstance(item, dict)
+            ],
+            key=lambda x: (x["schema"], x["generator"]),
+        )
         compat = {
             "deprecated_mount_flag": str(plane.get("mount_flag", "n/a")),
             "deprecated_evidence": evidence,
             "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth",
         }
         route_records_by_plane[pid] = []
-        planes.append({
-            "plane_id": pid,
-            "route_prefixes": route_prefixes,
-            "mount_flag": compat["deprecated_mount_flag"],
-            "required_make_targets": required_targets,
-            "evidence": compat["deprecated_evidence"],
-            "compat": compat,
-        })
+        planes.append(
+            {
+                "plane_id": pid,
+                "route_prefixes": route_prefixes,
+                "mount_flag": compat["deprecated_mount_flag"],
+                "required_make_targets": required_targets,
+                "evidence": compat["deprecated_evidence"],
+                "compat": compat,
+            }
+        )
 
     for route in sorted(route_inventory, key=_route_sort_key):
         pid = str(route.get("plane_id", "")).strip()
@@ -337,36 +473,77 @@ def main(argv: list[str] | None = None) -> int:
         if not by_plane_routes[pid]:
             failures.append(f"plane has zero runtime routes: {pid}")
 
-    unexpected = sorted({
-        str(r.get("path", ""))
-        for r in route_inventory
-        if str(r.get("path", "")).startswith("/") and not any(str(r.get("path", "")).startswith(prefix) for prefix in owned_prefixes)
-    })
+    unexpected = sorted(
+        {
+            str(r.get("path", ""))
+            for r in route_inventory
+            if str(r.get("path", "")).startswith("/")
+            and not any(
+                str(r.get("path", "")).startswith(prefix) for prefix in owned_prefixes
+            )
+        }
+    )
     if unexpected:
-        gaps.append({"type": "unexpected_route_prefixes", "details": unexpected, "suggested_fix": "Map route prefixes to a plane or explicitly exempt in inventory governance."})
+        gaps.append(
+            {
+                "type": "unexpected_route_prefixes",
+                "details": unexpected,
+                "suggested_fix": "Map route prefixes to a plane or explicitly exempt in inventory governance.",
+            }
+        )
         for path in unexpected:
             failures.append(f"unexpected runtime route prefix: {path}")
 
-    runtime_keys = {(str(r.get("method", "")), str(r.get("path", ""))) for r in route_inventory}
-    contract_keys = {(str(r.get("method", "")), str(r.get("path", ""))) for r in contract_routes}
+    runtime_keys = {
+        (str(r.get("method", "")), str(r.get("path", ""))) for r in route_inventory
+    }
+    contract_keys = {
+        (str(r.get("method", "")), str(r.get("path", ""))) for r in contract_routes
+    }
 
     readiness = {
-        "tenant_binding_coverage": all(bool(r.get("tenant_bound")) or str(r.get("path", "")).startswith("/health") for r in route_inventory),
-        "rls_sensitive_tables_present": (REPO / "migrations/postgres/0018_nuclear_hardening_extensions.sql").exists(),
+        "tenant_binding_coverage": all(
+            bool(r.get("tenant_bound")) or str(r.get("path", "")).startswith("/health")
+            for r in route_inventory
+        ),
+        "rls_sensitive_tables_present": (
+            REPO / "migrations/postgres/0018_nuclear_hardening_extensions.sql"
+        ).exists(),
         "route_inventory_enforced": True,
-        "openapi_security_diff_enforced": (REPO / "tools/ci/check_openapi_security_diff.py").exists(),
-        "artifact_policy_enforced": (REPO / "tools/ci/check_artifact_policy.py").exists(),
-        "resilience_guard_present": (REPO / "api/middleware/resilience_guard.py").exists(),
-        "self_heal_bounded_off_by_default": (REPO / "services/self_heal/watchdog.py").exists(),
+        "openapi_security_diff_enforced": (
+            REPO / "tools/ci/check_openapi_security_diff.py"
+        ).exists(),
+        "artifact_policy_enforced": (
+            REPO / "tools/ci/check_artifact_policy.py"
+        ).exists(),
+        "resilience_guard_present": (
+            REPO / "api/middleware/resilience_guard.py"
+        ).exists(),
+        "self_heal_bounded_off_by_default": (
+            REPO / "services/self_heal/watchdog.py"
+        ).exists(),
     }
 
     payload: dict[str, Any] = {
-        "git_sha": subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, check=True, capture_output=True, text=True).stdout.strip(),
+        "git_sha": subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=REPO,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip(),
         "planes": sorted(planes, key=lambda x: x["plane_id"]),
         "routes_by_plane": {k: by_plane_routes[k] for k in sorted(by_plane_routes)},
         "artifact_schemas": artifact_schemas,
         "readiness": readiness,
-        "gaps": sorted(gaps, key=lambda x: (x.get("type", ""), x.get("plane", ""), json.dumps(x.get("details", ""), sort_keys=True))),
+        "gaps": sorted(
+            gaps,
+            key=lambda x: (
+                x.get("type", ""),
+                x.get("plane", ""),
+                json.dumps(x.get("details", ""), sort_keys=True),
+            ),
+        ),
         "governance": {
             "schema_versions": schema_versions,
             "schema_unknown_key_warnings": sorted(unknown_warnings),
@@ -376,8 +553,12 @@ def main(argv: list[str] | None = None) -> int:
             "build_meta": build_meta,
             "runtime_count": len(route_inventory),
             "contract_count": len(contract_routes),
-            "runtime_only": sorted([f"{m} {p}" for m, p in (runtime_keys - contract_keys)]),
-            "contract_only": sorted([f"{m} {p}" for m, p in (contract_keys - runtime_keys)]),
+            "runtime_only": sorted(
+                [f"{m} {p}" for m, p in (runtime_keys - contract_keys)]
+            ),
+            "contract_only": sorted(
+                [f"{m} {p}" for m, p in (contract_keys - runtime_keys)]
+            ),
         },
     }
 
@@ -387,21 +568,29 @@ def main(argv: list[str] | None = None) -> int:
 
     inv_md = ["# Platform Inventory", "", "## Planes"]
     for plane in payload["planes"]:
-        inv_md.append(f"- `{plane['plane_id']}` flags=`{plane['mount_flag']}` targets={', '.join(plane['required_make_targets'])}")
+        inv_md.append(
+            f"- `{plane['plane_id']}` flags=`{plane['mount_flag']}` targets={', '.join(plane['required_make_targets'])}"
+        )
     inv_md += ["", "## Enterprise readiness checklist status"]
     for k, v in sorted(readiness.items()):
         inv_md.append(f"- {k}: {'PASS' if v else 'FAIL'}")
-    (art / "PLATFORM_INVENTORY.md").write_text("\n".join(inv_md) + "\n", encoding="utf-8")
+    (art / "PLATFORM_INVENTORY.md").write_text(
+        "\n".join(inv_md) + "\n", encoding="utf-8"
+    )
 
     gap_md = ["# Platform Gaps", ""]
     if payload["gaps"]:
         for gap in payload["gaps"]:
-            gap_md.append(f"- [{gap['type']}] {gap.get('plane', 'global')}: {gap['details']} | fix: {gap['suggested_fix']}")
+            gap_md.append(
+                f"- [{gap['type']}] {gap.get('plane', 'global')}: {gap['details']} | fix: {gap['suggested_fix']}"
+            )
     else:
         gap_md.append("- none")
     (art / "PLATFORM_GAPS.md").write_text("\n".join(gap_md) + "\n", encoding="utf-8")
 
-    if failures and not (args.allow_gaps or os.getenv("FG_PLATFORM_INVENTORY_ALLOW_GAPS") == "1"):
+    if failures and not (
+        args.allow_gaps or os.getenv("FG_PLATFORM_INVENTORY_ALLOW_GAPS") == "1"
+    ):
         print("platform inventory: FAILED semantic integrity checks", file=sys.stderr)
         for failure in sorted(set(failures)):
             print(f" - {failure}", file=sys.stderr)
