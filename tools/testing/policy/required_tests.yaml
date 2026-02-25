@@ -10,18 +10,21 @@ categories:
     - tools/ci/check_openapi_security_diff.py
     - tools/testing/contracts/**/*.py
     - tests/tools/**/*.py
+    - tests/tools/*.py
   security:
     required_test_globs:
     - tests/security/**/*.py
     - tools/ci/check_*security*.py
     - tools/testing/security/**/*.py
     - tests/tools/**/*.py
+    - tests/tools/*.py
   integration:
     required_test_globs:
     - tests/test_e2e_http_local.py
     - tests/control_plane/**/*.py
     - tools/testing/integration/**/*.py
     - tests/tools/**/*.py
+    - tests/tools/*.py
 module_registration:
   registry_files:
   - tools/testing/policy/ownership_map.yaml

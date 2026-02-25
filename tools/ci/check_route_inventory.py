@@ -200,7 +200,7 @@ def main() -> int:
         failures.extend(changed)
 
     summary_payload = _read_data(SUMMARY, label="route_inventory_summary")
-    summary = summary_payload[0] if summary_payload else {}
+    summary = summary_payload if summary_payload else {}
     if summary.get("runtime_only"):
         print(f"route inventory: WARNING runtime vs contract drift (runtime_only): {summary['runtime_only']}")
     if summary.get("contract_only"):

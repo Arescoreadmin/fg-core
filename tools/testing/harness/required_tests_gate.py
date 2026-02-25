@@ -163,7 +163,7 @@ def _verify_required_tests_changed(changed_paths: list[str], required: set[str],
                 GateFailure(
                     category=category,
                     reason=f"missing test updates for category={category}",
-                    next_command=f"git diff --name-status --find-renames | sort && make fg-{category if category != 'unit' else 'fast'}",
+                    next_command=f"git diff --name-status --find-renames | sort && make {('fg-fast' if category == 'unit' else 'fg-full' if category == 'integration' else f'fg-{category}')}",
                 )
             )
     return failures
