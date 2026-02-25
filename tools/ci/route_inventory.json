@@ -11,17 +11,6 @@
     "tenant_bound": false
   },
   {
-    "dependency_categories": [],
-    "file": "api/ui_feed.py",
-    "method": "GET",
-    "path": "/_legacy/ui_feed/_disabled",
-    "plane_id": "control",
-    "scoped": false,
-    "scopes": [],
-    "source": "runtime-ast",
-    "tenant_bound": false
-  },
-  {
     "dependency_categories": [
       "auth",
       "rate",

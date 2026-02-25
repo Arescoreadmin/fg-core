@@ -492,3 +492,32 @@ Gate impact:
 - `route-inventory-audit`: strengthened (deterministic topology hash +
   attestation bundle output).
 - `soc-review-sync`: satisfied by this SOC execution gates update.
+
+---
+
+## 2026-02-25 Legacy Disabled UI Route Removal + Inventory Sync
+
+### Critical-path files reviewed (SOC-HIGH-002)
+
+- `tools/ci/route_inventory.json`
+- `tools/ci/route_inventory_summary.json`
+
+### Change summary
+
+- Confirmed removal of legacy disabled route exposure from runtime surface
+  (`GET /_legacy/ui_feed/_disabled` no longer appears in inventory).
+- Confirmed inventory snapshot and summary were intentionally regenerated and
+  route counts adjusted by exactly one route.
+- Added regression test coverage to guard both inventory and source-level
+  reintroduction of forbidden legacy disabled route paths.
+
+### Security impact assessment
+
+- No auth/scope/tenant weakening introduced.
+- Change reduces exposed route surface and exception burden in plane governance.
+
+### Gate impact
+
+- `route-inventory-audit` (SOC-P1-001): satisfied by intentional snapshot update.
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
