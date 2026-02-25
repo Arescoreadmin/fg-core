@@ -6,6 +6,7 @@ import json
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from services.plane_registry import PLANE_REGISTRY
 from tools.ci.plane_registry_checks import (
@@ -24,6 +25,7 @@ CONTRACT_ROUTES = REPO / "tools/ci/contract_routes.json"
 BUILD_META = REPO / "tools/ci/build_meta.json"
 BUNDLE_HASH = REPO / "tools/ci/attestation_bundle.sha256"
 TOPOLOGY_HASH = REPO / "tools/ci/topology.sha256"
+SCHEMA_VERSION = "v1"
 
 
 def _sha256(path: Path) -> str:
@@ -115,9 +117,13 @@ def _write_attestation_bundle(cur: list[dict[str, object]]) -> None:
     meta = {
         "git_sha": git_sha,
         "build_timestamp_utc": datetime.now(tz=UTC).isoformat(),
-        "ci_runner_id": (Path('/proc/sys/kernel/hostname').read_text(encoding='utf-8').strip() if Path('/proc/sys/kernel/hostname').exists() else "unknown"),
+        "ci_runner_id": (
+            Path("/proc/sys/kernel/hostname").read_text(encoding="utf-8").strip()
+            if Path("/proc/sys/kernel/hostname").exists()
+            else "unknown"
+        ),
         "tool": "tools/ci/check_route_inventory.py",
-        "tool_version": "v1",
+        "tool_version": SCHEMA_VERSION,
         "inventory_sha256": hashlib.sha256(json.dumps(cur, sort_keys=True).encode("utf-8")).hexdigest(),
     }
     BUILD_META.write_text(_dump_json(meta), encoding="utf-8")
@@ -193,7 +199,8 @@ def main() -> int:
     if changed:
         failures.extend(changed)
 
-    summary = json.loads(SUMMARY.read_text(encoding="utf-8"))
+    summary_payload = _read_data(SUMMARY, label="route_inventory_summary")
+    summary = summary_payload[0] if summary_payload else {}
     if summary.get("runtime_only"):
         print(f"route inventory: WARNING runtime vs contract drift (runtime_only): {summary['runtime_only']}")
     if summary.get("contract_only"):
