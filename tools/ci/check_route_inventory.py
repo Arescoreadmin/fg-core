@@ -30,6 +30,31 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _read_data(path: Path, *, label: str) -> dict[str, object]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{label} must be an object")
+    return data
+
+
+def _inventory_from_data(data: dict[str, object]) -> list[dict[str, object]]:
+    routes = data.get("routes")
+    if not isinstance(routes, list):
+        raise ValueError("route_inventory.routes must be an array")
+    for idx, item in enumerate(routes):
+        if not isinstance(item, dict):
+            raise ValueError(f"route_inventory.routes[{idx}] must be an object")
+    return routes
+
+
+def _inventory_payload(routes: list[dict[str, object]]) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "generated_by": "tools/ci/check_route_inventory.py",
+        "routes": routes,
+    }
+
+
 def current_inventory() -> list[dict[str, object]]:
     rows = []
     for route in runtime_routes_ast():
@@ -92,15 +117,15 @@ def _write_attestation_bundle(cur: list[dict[str, object]]) -> None:
     BUNDLE_HASH.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-
-
 def _write_topology_hash() -> None:
     topology_files = [REGISTRY_SNAPSHOT, INVENTORY, CONTRACT_ROUTES]
     lines = [f"{_sha256(f)}  {f.name}" for f in topology_files]
     TOPOLOGY_HASH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def write_inventory() -> None:
     cur = current_inventory()
-    INVENTORY.write_text(json.dumps(cur, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    INVENTORY.write_text(json.dumps(_inventory_payload(cur), indent=2, sort_keys=True) + "\n", encoding="utf-8")
     _write_summary(cur, expected=None)
     _write_registry_snapshot()
     _write_attestation_bundle(cur)
@@ -142,7 +167,8 @@ def main() -> int:
         print(f"route inventory missing: {INVENTORY.relative_to(REPO)}")
         return 1
 
-    expected = json.loads(INVENTORY.read_text(encoding="utf-8"))
+    expected_data = _read_data(INVENTORY, label="route_inventory")
+    expected = _inventory_from_data(expected_data)
     missing, added, changed = _route_diff(expected, cur)
     _write_summary(cur, expected)
     _write_registry_snapshot()

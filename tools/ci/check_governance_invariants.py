@@ -9,7 +9,8 @@ REPO = Path(__file__).resolve().parents[2]
 
 def main() -> int:
     failures: list[str] = []
-    inv = json.loads((REPO / "tools/ci/route_inventory.json").read_text(encoding="utf-8"))
+    inv_doc = json.loads((REPO / "tools/ci/route_inventory.json").read_text(encoding="utf-8"))
+    inv = inv_doc.get("routes", []) if isinstance(inv_doc, dict) else []
 
     required = {
         ("POST", "/breakglass/sessions"),

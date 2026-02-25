@@ -492,3 +492,64 @@ Gate impact:
 - `route-inventory-audit`: strengthened (deterministic topology hash +
   attestation bundle output).
 - `soc-review-sync`: satisfied by this SOC execution gates update.
+
+---
+
+## 2026-02-25 Legacy Disabled UI Route Removal + Inventory Sync
+
+### Critical-path files reviewed (SOC-HIGH-002)
+
+- `tools/ci/route_inventory.json`
+- `tools/ci/route_inventory_summary.json`
+
+### Change summary
+
+- Confirmed removal of legacy disabled route exposure from runtime surface
+  (`GET /_legacy/ui_feed/_disabled` no longer appears in inventory).
+- Confirmed inventory snapshot and summary were intentionally regenerated and
+  route counts adjusted by exactly one route.
+- Added regression test coverage to guard both inventory and source-level
+  reintroduction of forbidden legacy disabled route paths.
+
+### Security impact assessment
+
+- No auth/scope/tenant weakening introduced.
+- Change reduces exposed route surface and exception burden in plane governance.
+
+### Gate impact
+
+- `route-inventory-audit` (SOC-P1-001): satisfied by intentional snapshot update.
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+---
+
+## 2026-02-25 Route Inventory Schema Normalization (Object Payload)
+
+### Critical-path files reviewed (SOC-HIGH-002)
+
+- `tools/ci/check_route_inventory.py`
+- `tools/ci/check_openapi_security_diff.py`
+- `tools/ci/check_governance_invariants.py`
+- `tools/ci/route_inventory.json`
+
+### Change summary
+
+- Normalized `tools/ci/route_inventory.json` to an object payload with metadata
+  and a `routes` array so strict schema readers no longer fail with
+  `route_inventory must be an object`.
+- Updated route-inventory consumers in CI/security tooling to read from
+  `route_inventory.routes`.
+- Kept route-diff semantics unchanged (method/path/file keying + scoped /
+  tenant-bound regression checks).
+
+### Security impact assessment
+
+- No route authz or tenant-binding controls were relaxed.
+- This is a format hardening / compatibility fix to restore deterministic
+  route-inventory gate behavior.
+
+### Gate impact
+
+- `route-inventory-audit` (SOC-P1-001): restored by object-schema payload.
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+

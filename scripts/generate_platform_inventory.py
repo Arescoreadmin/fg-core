@@ -33,7 +33,8 @@ def _make_targets() -> set[str]:
 def main() -> int:
     from services.plane_registry import PLANE_REGISTRY
 
-    route_inventory = _load_json(REPO / "tools/ci/route_inventory.json")
+    route_inventory_doc = _load_json(REPO / "tools/ci/route_inventory.json")
+    route_inventory = route_inventory_doc.get("routes", []) if isinstance(route_inventory_doc, dict) else []
     make_targets = _make_targets()
     artifact_schemas = sorted(
         p.as_posix().replace(str(REPO) + "/", "")
