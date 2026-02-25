@@ -32,32 +32,39 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _dump_json(payload: Any) -> str:
-    return json.dumps(payload, indent=2, sort_keys=True) + "\n"
+def _dump_json(data: object) -> str:
+    return json.dumps(data, indent=2, sort_keys=True) + "\n"
 
 
-def _wrap(data: list[dict[str, object]]) -> dict[str, object]:
+def _wrap(routes: list[dict[str, object]]) -> dict[str, object]:
     return {
-        "schema_version": SCHEMA_VERSION,
-        "generated_at": datetime.now(tz=UTC).isoformat(),
-        "data": data,
+        "schema_version": 1,
+        "generated_by": "tools/ci/check_route_inventory.py",
+        "routes": routes,
     }
 
 
-def _read_data(path: Path, *, label: str) -> list[dict[str, object]]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
+def _read_data(path: Path, *, label: str) -> dict[str, object]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
         raise ValueError(f"{label} must be an object")
-    if payload.get("schema_version") != SCHEMA_VERSION:
-        raise ValueError(
-            f"{label}.schema_version expected {SCHEMA_VERSION}, got {payload.get('schema_version')}"
-        )
-    data = payload.get("data")
-    if not isinstance(data, list):
-        raise ValueError(f"{label}.data must be a list")
-    if not all(isinstance(item, dict) for item in data):
-        raise ValueError(f"{label}.data entries must be objects")
     return data
+
+
+def _inventory_from_data(data: dict[str, object]) -> list[dict[str, object]]:
+    routes = data.get("routes")
+    if routes is None and isinstance(data.get("items"), list):
+        routes = data.get("items")
+    if not isinstance(routes, list):
+        raise ValueError("route_inventory.routes must be an array")
+    for idx, item in enumerate(routes):
+        if not isinstance(item, dict):
+            raise ValueError(f"route_inventory.routes[{idx}] must be an object")
+    return routes
+
+
+def _inventory_payload(routes: list[dict[str, object]]) -> dict[str, object]:
+    return _wrap(routes)
 
 
 def current_inventory() -> list[dict[str, object]]:
@@ -91,7 +98,7 @@ def _route_diff(expected: list[dict[str, object]], cur: list[dict[str, object]])
 
 def _write_registry_snapshot() -> None:
     payload = [p.to_dict() for p in sorted(PLANE_REGISTRY, key=lambda x: x.plane_id)]
-    blob = _dump_json(_wrap(payload))
+    blob = _dump_json(payload)
     REGISTRY_SNAPSHOT.write_text(blob, encoding="utf-8")
     digest = hashlib.sha256(blob.encode("utf-8")).hexdigest()
     REGISTRY_HASH.write_text(f"{digest}  {REGISTRY_SNAPSHOT.name}\n", encoding="utf-8")
@@ -99,7 +106,7 @@ def _write_registry_snapshot() -> None:
 
 def _write_attestation_bundle(cur: list[dict[str, object]]) -> None:
     contract = contract_routes()
-    CONTRACT_ROUTES.write_text(_dump_json(_wrap(contract)), encoding="utf-8")
+    CONTRACT_ROUTES.write_text(_dump_json(contract), encoding="utf-8")
 
     git_sha = "unknown"
     try:
@@ -119,7 +126,7 @@ def _write_attestation_bundle(cur: list[dict[str, object]]) -> None:
         "tool_version": SCHEMA_VERSION,
         "inventory_sha256": hashlib.sha256(json.dumps(cur, sort_keys=True).encode("utf-8")).hexdigest(),
     }
-    BUILD_META.write_text(_dump_json(_wrap([meta])), encoding="utf-8")
+    BUILD_META.write_text(_dump_json(meta), encoding="utf-8")
 
     bundle_files = [REGISTRY_SNAPSHOT, INVENTORY, CONTRACT_ROUTES, BUILD_META]
     lines = [f"{_sha256(f)}  {f.name}" for f in bundle_files]
@@ -134,7 +141,7 @@ def _write_topology_hash() -> None:
 
 def write_inventory() -> None:
     cur = current_inventory()
-    INVENTORY.write_text(_dump_json(_wrap(cur)), encoding="utf-8")
+    INVENTORY.write_text(_dump_json(_inventory_payload(cur)), encoding="utf-8")
     _write_summary(cur, expected=None)
     _write_registry_snapshot()
     _write_attestation_bundle(cur)
@@ -158,7 +165,7 @@ def _write_summary(cur: list[dict[str, object]], expected: list[dict[str, object
         "removed": missing,
         "changed": changed,
     }
-    SUMMARY.write_text(_dump_json(_wrap([summary])), encoding="utf-8")
+    SUMMARY.write_text(_dump_json(summary), encoding="utf-8")
 
 
 def main() -> int:
@@ -176,7 +183,8 @@ def main() -> int:
         print(f"route inventory missing: {INVENTORY.relative_to(REPO)}")
         return 1
 
-    expected = _read_data(INVENTORY, label="route_inventory")
+    expected_data = _read_data(INVENTORY, label="route_inventory")
+    expected = _inventory_from_data(expected_data)
     missing, added, changed = _route_diff(expected, cur)
     _write_summary(cur, expected)
     _write_registry_snapshot()

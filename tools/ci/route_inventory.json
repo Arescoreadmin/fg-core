@@ -1,21 +1,11 @@
 {
-  "data": [
+  "generated_by": "tools/ci/check_route_inventory.py",
+  "routes": [
     {
       "dependency_categories": [],
       "file": "api/main.py",
       "method": "GET",
       "path": "/_debug/routes",
-      "plane_id": "control",
-      "scoped": false,
-      "scopes": [],
-      "source": "runtime-ast",
-      "tenant_bound": false
-    },
-    {
-      "dependency_categories": [],
-      "file": "api/ui_feed.py",
-      "method": "GET",
-      "path": "/_legacy/ui_feed/_disabled",
       "plane_id": "control",
       "scoped": false,
       "scopes": [],
@@ -3500,6 +3490,5 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-02-25T00:58:46.543605+00:00",
-  "schema_version": "v1"
+  "schema_version": 1
 }

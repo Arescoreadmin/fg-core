@@ -23,7 +23,8 @@ def _load_inventory() -> list[dict[str, object]]:
 
 def main() -> int:
     failures: list[str] = []
-    inv = _load_inventory()
+    inv_doc = json.loads((REPO / "tools/ci/route_inventory.json").read_text(encoding="utf-8"))
+    inv = inv_doc.get("routes", []) if isinstance(inv_doc, dict) else []
 
     required = {
         ("POST", "/breakglass/sessions"),

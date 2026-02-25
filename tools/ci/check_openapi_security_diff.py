@@ -99,7 +99,8 @@ def main() -> int:
     baseline = _load(baseline_path)
     target = _load(target_path)
     allow = _load(allowlist_path)
-    inv = _load_route_inventory(route_inventory_path)
+    inv_doc = _load(route_inventory_path)
+    inv = inv_doc.get("routes", []) if isinstance(inv_doc, dict) else []
 
     protected_prefixes = tuple(allow.get("protected_prefixes", []))
     waived = dict(allow.get("waived_401_403", {}))

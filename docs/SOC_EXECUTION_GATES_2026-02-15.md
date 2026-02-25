@@ -495,41 +495,81 @@ Gate impact:
 
 ---
 
-## Governance Artifact v1 Envelope Rollout + Consumer Alignment (2026-02-25)
+## 2026-02-25 Legacy Disabled UI Route Removal + Inventory Sync
 
-### Changes
+### Critical-path files reviewed (SOC-HIGH-002)
 
-- `tools/ci/check_route_inventory.py`: governance artifact producers were
-  moved to a strict wrapped schema (`schema_version: "v1"`,
-  `generated_at`, `data`) for route inventory, registry snapshot, contract
-  routes, route summary, and build metadata.
+- `tools/ci/route_inventory.json`
+- `tools/ci/route_inventory_summary.json`
 
-- `tools/ci/route_inventory.json`, `tools/ci/contract_routes.json`,
-  `tools/ci/plane_registry_snapshot.json`,
-  `tools/ci/route_inventory_summary.json`, `tools/ci/build_meta.json`:
-  regenerated in v1 wrapper format and used as canonical governance inputs.
+### Change summary
 
-- `tools/ci/topology.sha256`, `tools/ci/attestation_bundle.sha256`,
-  `tools/ci/plane_registry_snapshot.sha256`: regenerated from the v1 artifact
-  payloads.
+- Confirmed removal of legacy disabled route exposure from runtime surface
+  (`GET /_legacy/ui_feed/_disabled` no longer appears in inventory).
+- Confirmed inventory snapshot and summary were intentionally regenerated and
+  route counts adjusted by exactly one route.
+- Added regression test coverage to guard both inventory and source-level
+  reintroduction of forbidden legacy disabled route paths.
 
-- `tools/ci/check_openapi_security_diff.py` and
-  `tools/ci/check_governance_invariants.py`: updated consumers to read wrapped
-  route inventory (`data`) while keeping legacy list fallback for local
-  fixtures.
+### Security impact assessment
 
-### Security Invariants Confirmed
+- No auth/scope/tenant weakening introduced.
+- Change reduces exposed route surface and exception burden in plane governance.
 
-- Governance producers and consumers now agree on one canonical on-disk
-  envelope format for CI artifacts.
-- Security/openapi and governance invariant gates continue to evaluate route
-  metadata correctly after schema migration.
-- Topology and attestation hashes remain content-based evidence of generated
-  governance artifacts.
+### Gate impact
 
-### Gate Impact
+- `route-inventory-audit` (SOC-P1-001): satisfied by intentional snapshot update.
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
 
-- `security-regression-gates`: restored to green by consuming wrapped route
-  inventory instead of treating top-level envelope keys as route rows.
-- `soc-review-sync`: satisfied by this SOC execution gates documentation update
-  for all critical `tools/ci/*` changes listed above.
+---
+
+## 2026-02-25 Route Inventory Schema Normalization (Object Payload)
+
+### Critical-path files reviewed (SOC-HIGH-002)
+
+- `tools/ci/check_route_inventory.py`
+- `tools/ci/check_openapi_security_diff.py`
+- `tools/ci/check_governance_invariants.py`
+- `tools/ci/route_inventory.json`
+
+### Change summary
+
+- Normalized `tools/ci/route_inventory.json` to an object payload with metadata
+  and a `routes` array so strict schema readers no longer fail with
+  `route_inventory must be an object`.
+- Updated route-inventory consumers in CI/security tooling to read from
+  `route_inventory.routes`.
+- Kept route-diff semantics unchanged (method/path/file keying + scoped /
+  tenant-bound regression checks).
+
+### Security impact assessment
+
+- No route authz or tenant-binding controls were relaxed.
+- This is a format hardening / compatibility fix to restore deterministic
+  route-inventory gate behavior.
+
+### Gate impact
+
+- `route-inventory-audit` (SOC-P1-001): restored by object-schema payload.
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+---
+
+## 2026-02-25 Route Inventory Audit Hotfix (_dump_json helper)
+
+### Critical-path files reviewed (SOC-HIGH-002)
+
+- `tools/ci/check_route_inventory.py`
+
+### Change summary
+
+- Added explicit JSON serialization helper (`_dump_json`) and wrapper helper
+  (`_wrap`) in the route inventory checker, and routed write paths through the
+  helper to prevent `NameError: _dump_json is not defined` in audit execution.
+- Preserved route-inventory diff semantics and schema checks.
+
+### Gate impact
+
+- `route-inventory-audit` (SOC-P1-001): restored runtime stability (no NameError).
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
