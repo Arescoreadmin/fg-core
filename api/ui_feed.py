@@ -10,8 +10,3 @@ from fastapi import APIRouter
 router = APIRouter(
     prefix="/_legacy/ui_feed", tags=["legacy-ui"], include_in_schema=False
 )
-
-
-@router.get("/_disabled", include_in_schema=False)
-def _disabled():
-    return {"status": "disabled", "reason": "use /ui/feed (api/ui.py)"}
