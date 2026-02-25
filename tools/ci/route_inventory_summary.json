@@ -6,15 +6,15 @@
   "plane_coverage": {
     "agent": 13,
     "ai": 4,
-    "connector": 13,
+    "connector": 16,
     "control": 104,
     "data": 31,
     "evidence": 22,
     "security": 6,
-    "ui": 29
+    "ui": 30
   },
   "removed": [],
-  "runtime_count": 222,
+  "runtime_count": 226,
   "runtime_only": [
     "DELETE /control-plane/v2/delegation/{delegation_id}",
     "GET /_debug/routes",
@@ -66,6 +66,7 @@
     "GET /ui/dash/controls",
     "GET /ui/dash/forensics",
     "GET /ui/dash/posture",
+    "GET /ui/dash/testing-control-tower",
     "GET /ui/decision/{decision_id}",
     "GET /ui/decisions",
     "GET /ui/feed",
@@ -74,6 +75,8 @@
     "GET /ui/scopes",
     "GET /ui/token",
     "GET /v1/status",
+    "GET /v1/testing/lanes",
+    "GET /v1/testing/runs/{run_id}/artifacts",
     "POST /admin/agent/commands/issue",
     "POST /admin/agent/devices/{device_id}/revoke",
     "POST /admin/agent/enrollment-tokens",
@@ -112,6 +115,7 @@
     "POST /ui/audit/packet",
     "POST /ui/devices/{device_id}/disable",
     "POST /ui/devices/{device_id}/enable",
+    "POST /v1/testing/runs",
     "PUT /admin/tenants/{tenant_id}/quota",
     "PUT /admin/tenants/{tenant_id}/tier"
   ]

@@ -1,864 +1,860 @@
-{
-  "data": [
-    {
-      "allowed_dependency_categories": [
-        "auth",
-        "tenant",
-        "db",
-        "rate"
-      ],
-      "auth_class": {
-        "allow_unscoped_keys": false,
-        "require_any_scope": false,
-        "required_scope_prefixes": [],
-        "tenant_binding_required": true
-      },
-      "auth_exempt_routes": [
-        {
-          "class_name": "auth_exempt",
-          "expires_at": "",
-          "justification": "Bootstrap enrollment before scoped key issuance.",
-          "method": "POST",
-          "path": "/agent/enroll",
-          "permanent": true
-        },
-        {
-          "class_name": "auth_exempt",
-          "expires_at": "",
-          "justification": "Bootstrap cert enrollment before scoped key issuance.",
-          "method": "POST",
-          "path": "/agent/cert/enroll",
-          "permanent": true
-        }
-      ],
-      "bootstrap_routes": [],
-      "docs_routes": [],
-      "global_routes": [
-        {
-          "class_name": "bootstrap",
-          "expires_at": "",
-          "justification": "Device cert flow binds identity, not tenant.",
-          "method": "POST",
-          "path": "/agent/cert/renew",
-          "permanent": true
-        },
-        {
-          "class_name": "bootstrap",
-          "expires_at": "",
-          "justification": "Cert status is device-level bootstrap metadata.",
-          "method": "GET",
-          "path": "/agent/cert/status",
-          "permanent": true
-        },
-        {
-          "class_name": "bootstrap",
-          "expires_at": "",
-          "justification": "Ack uses device identity channel.",
-          "method": "POST",
-          "path": "/agent/commands/ack",
-          "permanent": true
-        },
-        {
-          "class_name": "bootstrap",
-          "expires_at": "",
-          "justification": "Poll uses device identity channel.",
-          "method": "POST",
-          "path": "/agent/commands/poll",
-          "permanent": true
-        },
-        {
-          "class_name": "bootstrap",
-          "expires_at": "",
-          "justification": "Heartbeat is device channel metadata.",
-          "method": "POST",
-          "path": "/agent/heartbeat",
-          "permanent": true
-        },
-        {
-          "class_name": "bootstrap",
-          "expires_at": "",
-          "justification": "Key rotate uses device channel metadata.",
-          "method": "POST",
-          "path": "/agent/key/rotate",
-          "permanent": true
-        },
-        {
-          "class_name": "bootstrap",
-          "expires_at": "",
-          "justification": "Anchor log uses device channel metadata.",
-          "method": "POST",
-          "path": "/agent/log/anchor",
-          "permanent": true
-        },
-        {
-          "class_name": "bootstrap",
-          "expires_at": "",
-          "justification": "Policy fetch uses device channel metadata.",
-          "method": "GET",
-          "path": "/agent/policy/fetch",
-          "permanent": true
-        },
-        {
-          "class_name": "bootstrap",
-          "expires_at": "",
-          "justification": "Update manifest lookup is device channel metadata.",
-          "method": "GET",
-          "path": "/agent/update/manifest",
-          "permanent": true
-        },
-        {
-          "class_name": "bootstrap",
-          "expires_at": "",
-          "justification": "Update manifest ack is device channel metadata.",
-          "method": "POST",
-          "path": "/agent/update/manifest",
-          "permanent": true
-        },
-        {
-          "class_name": "bootstrap",
-          "expires_at": "",
-          "justification": "Update report uses device channel metadata.",
-          "method": "POST",
-          "path": "/agent/update/report",
-          "permanent": true
-        }
-      ],
-      "maturity_tag": "tester-ready",
-      "plane_id": "agent",
-      "public_routes": [],
-      "required_ci_gates": [
-        "check_plane_registry",
-        "route-inventory-audit"
-      ],
-      "required_make_targets": [
-        "agent-unit"
-      ],
-      "required_route_invariants": [
-        "auth",
-        "tenant_bound"
-      ],
-      "route_prefixes": [
-        "/agent"
-      ]
+[
+  {
+    "allowed_dependency_categories": [
+      "auth",
+      "tenant",
+      "db",
+      "rate"
+    ],
+    "auth_class": {
+      "allow_unscoped_keys": false,
+      "require_any_scope": false,
+      "required_scope_prefixes": [],
+      "tenant_binding_required": true
     },
-    {
-      "allowed_dependency_categories": [
-        "auth",
-        "tenant",
-        "db",
-        "rate"
-      ],
-      "auth_class": {
-        "allow_unscoped_keys": false,
-        "require_any_scope": true,
-        "required_scope_prefixes": [
-          "compliance:",
-          "ai:",
-          "admin:"
-        ],
-        "tenant_binding_required": true
+    "auth_exempt_routes": [
+      {
+        "class_name": "auth_exempt",
+        "expires_at": "",
+        "justification": "Bootstrap enrollment before scoped key issuance.",
+        "method": "POST",
+        "path": "/agent/enroll",
+        "permanent": true
       },
-      "auth_exempt_routes": [],
-      "bootstrap_routes": [],
-      "docs_routes": [],
-      "global_routes": [],
-      "maturity_tag": "tester-ready",
-      "plane_id": "ai",
-      "public_routes": [],
-      "required_ci_gates": [
-        "check_plane_registry",
-        "route-inventory-audit"
+      {
+        "class_name": "auth_exempt",
+        "expires_at": "",
+        "justification": "Bootstrap cert enrollment before scoped key issuance.",
+        "method": "POST",
+        "path": "/agent/cert/enroll",
+        "permanent": true
+      }
+    ],
+    "bootstrap_routes": [],
+    "docs_routes": [],
+    "global_routes": [
+      {
+        "class_name": "bootstrap",
+        "expires_at": "",
+        "justification": "Device cert flow binds identity, not tenant.",
+        "method": "POST",
+        "path": "/agent/cert/renew",
+        "permanent": true
+      },
+      {
+        "class_name": "bootstrap",
+        "expires_at": "",
+        "justification": "Cert status is device-level bootstrap metadata.",
+        "method": "GET",
+        "path": "/agent/cert/status",
+        "permanent": true
+      },
+      {
+        "class_name": "bootstrap",
+        "expires_at": "",
+        "justification": "Ack uses device identity channel.",
+        "method": "POST",
+        "path": "/agent/commands/ack",
+        "permanent": true
+      },
+      {
+        "class_name": "bootstrap",
+        "expires_at": "",
+        "justification": "Poll uses device identity channel.",
+        "method": "POST",
+        "path": "/agent/commands/poll",
+        "permanent": true
+      },
+      {
+        "class_name": "bootstrap",
+        "expires_at": "",
+        "justification": "Heartbeat is device channel metadata.",
+        "method": "POST",
+        "path": "/agent/heartbeat",
+        "permanent": true
+      },
+      {
+        "class_name": "bootstrap",
+        "expires_at": "",
+        "justification": "Key rotate uses device channel metadata.",
+        "method": "POST",
+        "path": "/agent/key/rotate",
+        "permanent": true
+      },
+      {
+        "class_name": "bootstrap",
+        "expires_at": "",
+        "justification": "Anchor log uses device channel metadata.",
+        "method": "POST",
+        "path": "/agent/log/anchor",
+        "permanent": true
+      },
+      {
+        "class_name": "bootstrap",
+        "expires_at": "",
+        "justification": "Policy fetch uses device channel metadata.",
+        "method": "GET",
+        "path": "/agent/policy/fetch",
+        "permanent": true
+      },
+      {
+        "class_name": "bootstrap",
+        "expires_at": "",
+        "justification": "Update manifest lookup is device channel metadata.",
+        "method": "GET",
+        "path": "/agent/update/manifest",
+        "permanent": true
+      },
+      {
+        "class_name": "bootstrap",
+        "expires_at": "",
+        "justification": "Update manifest ack is device channel metadata.",
+        "method": "POST",
+        "path": "/agent/update/manifest",
+        "permanent": true
+      },
+      {
+        "class_name": "bootstrap",
+        "expires_at": "",
+        "justification": "Update report uses device channel metadata.",
+        "method": "POST",
+        "path": "/agent/update/report",
+        "permanent": true
+      }
+    ],
+    "maturity_tag": "tester-ready",
+    "plane_id": "agent",
+    "public_routes": [],
+    "required_ci_gates": [
+      "check_plane_registry",
+      "route-inventory-audit"
+    ],
+    "required_make_targets": [
+      "agent-unit"
+    ],
+    "required_route_invariants": [
+      "auth",
+      "tenant_bound"
+    ],
+    "route_prefixes": [
+      "/agent"
+    ]
+  },
+  {
+    "allowed_dependency_categories": [
+      "auth",
+      "tenant",
+      "db",
+      "rate"
+    ],
+    "auth_class": {
+      "allow_unscoped_keys": false,
+      "require_any_scope": true,
+      "required_scope_prefixes": [
+        "compliance:",
+        "ai:",
+        "admin:"
       ],
-      "required_make_targets": [
-        "ai-plane-spot"
-      ],
-      "required_route_invariants": [
-        "auth",
-        "tenant_bound",
-        "scoped"
-      ],
-      "route_prefixes": [
-        "/ai",
-        "/ai-plane"
-      ]
+      "tenant_binding_required": true
     },
-    {
-      "allowed_dependency_categories": [
-        "auth",
-        "tenant",
-        "db",
-        "rate"
+    "auth_exempt_routes": [],
+    "bootstrap_routes": [],
+    "docs_routes": [],
+    "global_routes": [],
+    "maturity_tag": "tester-ready",
+    "plane_id": "ai",
+    "public_routes": [],
+    "required_ci_gates": [
+      "check_plane_registry",
+      "route-inventory-audit"
+    ],
+    "required_make_targets": [
+      "ai-plane-spot"
+    ],
+    "required_route_invariants": [
+      "auth",
+      "tenant_bound",
+      "scoped"
+    ],
+    "route_prefixes": [
+      "/ai",
+      "/ai-plane"
+    ]
+  },
+  {
+    "allowed_dependency_categories": [
+      "auth",
+      "tenant",
+      "db",
+      "rate"
+    ],
+    "auth_class": {
+      "allow_unscoped_keys": true,
+      "require_any_scope": false,
+      "required_scope_prefixes": [
+        "attestation:"
       ],
-      "auth_class": {
-        "allow_unscoped_keys": true,
-        "require_any_scope": false,
-        "required_scope_prefixes": [
-          "attestation:"
-        ],
-        "tenant_binding_required": true
-      },
-      "auth_exempt_routes": [],
-      "bootstrap_routes": [],
-      "docs_routes": [],
-      "global_routes": [
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Global module index.",
-          "method": "GET",
-          "path": "/modules",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Global module metadata.",
-          "method": "GET",
-          "path": "/modules/{module_id}",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Global module enforcement preview.",
-          "method": "GET",
-          "path": "/modules/enforce/{module_id}",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Global module registration.",
-          "method": "POST",
-          "path": "/modules/register",
-          "permanent": true
-        }
-      ],
-      "maturity_tag": "experimental",
-      "plane_id": "connector",
-      "public_routes": [
-        {
-          "class_name": "public",
-          "expires_at": "",
-          "justification": "Legacy connector status endpoint.",
-          "method": "GET",
-          "path": "/v1/status",
-          "permanent": true
-        },
-        {
-          "class_name": "public",
-          "expires_at": "",
-          "justification": "Mission catalog is public in current design.",
-          "method": "GET",
-          "path": "/missions",
-          "permanent": true
-        },
-        {
-          "class_name": "public",
-          "expires_at": "",
-          "justification": "Mission metadata endpoint is public in current design.",
-          "method": "GET",
-          "path": "/missions/{mission_id}",
-          "permanent": true
-        },
-        {
-          "class_name": "public",
-          "expires_at": "",
-          "justification": "Mission status endpoint is public in current design.",
-          "method": "GET",
-          "path": "/missions/{mission_id}/status",
-          "permanent": true
-        },
-        {
-          "class_name": "public",
-          "expires_at": "",
-          "justification": "Ring isolation matrix is public in current design.",
-          "method": "GET",
-          "path": "/rings/isolation",
-          "permanent": true
-        },
-        {
-          "class_name": "public",
-          "expires_at": "",
-          "justification": "Ring policies are public in current design.",
-          "method": "GET",
-          "path": "/rings/policies",
-          "permanent": true
-        },
-        {
-          "class_name": "public",
-          "expires_at": "",
-          "justification": "Ring router is public in current design.",
-          "method": "POST",
-          "path": "/rings/route",
-          "permanent": true
-        },
-        {
-          "class_name": "public",
-          "expires_at": "",
-          "justification": "ROE evaluate is public in current design.",
-          "method": "POST",
-          "path": "/roe/evaluate",
-          "permanent": true
-        },
-        {
-          "class_name": "public",
-          "expires_at": "",
-          "justification": "ROE policy is public in current design.",
-          "method": "GET",
-          "path": "/roe/policy",
-          "permanent": true
-        }
-      ],
-      "required_ci_gates": [
-        "check_plane_registry",
-        "route-inventory-audit"
-      ],
-      "required_make_targets": [
-        "check-connectors-rls"
-      ],
-      "required_route_invariants": [
-        "auth",
-        "tenant_bound"
-      ],
-      "route_prefixes": [
-        "/modules",
-        "/missions",
-        "/rings",
-        "/roe",
-        "/v1"
-      ]
+      "tenant_binding_required": true
     },
-    {
-      "allowed_dependency_categories": [
-        "auth",
-        "tenant",
-        "db",
-        "rate",
-        "breakglass"
-      ],
-      "auth_class": {
-        "allow_unscoped_keys": false,
-        "require_any_scope": true,
-        "required_scope_prefixes": [
-          "control-plane:",
-          "governance:",
-          "admin:",
-          "compliance:",
-          "audit:",
-          "keys:",
-          "dev:"
-        ],
-        "tenant_binding_required": true
+    "auth_exempt_routes": [],
+    "bootstrap_routes": [],
+    "docs_routes": [],
+    "global_routes": [
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Global module index.",
+        "method": "GET",
+        "path": "/modules",
+        "permanent": true
       },
-      "auth_exempt_routes": [],
-      "bootstrap_routes": [],
-      "docs_routes": [],
-      "global_routes": [
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Global operator health view.",
-          "method": "GET",
-          "path": "/admin/system/health",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Global operator key rotation report.",
-          "method": "GET",
-          "path": "/admin/keys/needing-rotation",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Global operator key rotation state.",
-          "method": "GET",
-          "path": "/admin/keys/{key_prefix}/rotation-status",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Global operator key rotate action.",
-          "method": "POST",
-          "path": "/admin/keys/{key_prefix}/rotate",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Global usage summary.",
-          "method": "GET",
-          "path": "/admin/usage/all",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Delegation listing is global governance metadata.",
-          "method": "GET",
-          "path": "/control-plane/v2/delegation",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Delegation create is global governance metadata.",
-          "method": "POST",
-          "path": "/control-plane/v2/delegation",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Delegation revoke is global governance metadata.",
-          "method": "DELETE",
-          "path": "/control-plane/v2/delegation/{delegation_id}",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Allowlist is global governance metadata.",
-          "method": "GET",
-          "path": "/control-plane/v2/terminal/allowlist",
-          "permanent": true
-        },
-        {
-          "class_name": "bootstrap",
-          "expires_at": "",
-          "justification": "Debug route catalog; blocked in prod-like mode.",
-          "method": "GET",
-          "path": "/_debug/routes",
-          "permanent": true
-        },
-        {
-          "class_name": "bootstrap",
-          "expires_at": "",
-          "justification": "Legacy disabled route; blocked in prod-like mode.",
-          "method": "GET",
-          "path": "/_legacy/ui_feed/_disabled",
-          "permanent": true
-        }
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Global module metadata.",
+        "method": "GET",
+        "path": "/modules/{module_id}",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Global module enforcement preview.",
+        "method": "GET",
+        "path": "/modules/enforce/{module_id}",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Global module registration.",
+        "method": "POST",
+        "path": "/modules/register",
+        "permanent": true
+      }
+    ],
+    "maturity_tag": "experimental",
+    "plane_id": "connector",
+    "public_routes": [
+      {
+        "class_name": "public",
+        "expires_at": "",
+        "justification": "Legacy connector status endpoint.",
+        "method": "GET",
+        "path": "/v1/status",
+        "permanent": true
+      },
+      {
+        "class_name": "public",
+        "expires_at": "",
+        "justification": "Mission catalog is public in current design.",
+        "method": "GET",
+        "path": "/missions",
+        "permanent": true
+      },
+      {
+        "class_name": "public",
+        "expires_at": "",
+        "justification": "Mission metadata endpoint is public in current design.",
+        "method": "GET",
+        "path": "/missions/{mission_id}",
+        "permanent": true
+      },
+      {
+        "class_name": "public",
+        "expires_at": "",
+        "justification": "Mission status endpoint is public in current design.",
+        "method": "GET",
+        "path": "/missions/{mission_id}/status",
+        "permanent": true
+      },
+      {
+        "class_name": "public",
+        "expires_at": "",
+        "justification": "Ring isolation matrix is public in current design.",
+        "method": "GET",
+        "path": "/rings/isolation",
+        "permanent": true
+      },
+      {
+        "class_name": "public",
+        "expires_at": "",
+        "justification": "Ring policies are public in current design.",
+        "method": "GET",
+        "path": "/rings/policies",
+        "permanent": true
+      },
+      {
+        "class_name": "public",
+        "expires_at": "",
+        "justification": "Ring router is public in current design.",
+        "method": "POST",
+        "path": "/rings/route",
+        "permanent": true
+      },
+      {
+        "class_name": "public",
+        "expires_at": "",
+        "justification": "ROE evaluate is public in current design.",
+        "method": "POST",
+        "path": "/roe/evaluate",
+        "permanent": true
+      },
+      {
+        "class_name": "public",
+        "expires_at": "",
+        "justification": "ROE policy is public in current design.",
+        "method": "GET",
+        "path": "/roe/policy",
+        "permanent": true
+      }
+    ],
+    "required_ci_gates": [
+      "check_plane_registry",
+      "route-inventory-audit"
+    ],
+    "required_make_targets": [
+      "check-connectors-rls"
+    ],
+    "required_route_invariants": [
+      "auth",
+      "tenant_bound"
+    ],
+    "route_prefixes": [
+      "/modules",
+      "/missions",
+      "/rings",
+      "/roe",
+      "/v1"
+    ]
+  },
+  {
+    "allowed_dependency_categories": [
+      "auth",
+      "tenant",
+      "db",
+      "rate",
+      "breakglass"
+    ],
+    "auth_class": {
+      "allow_unscoped_keys": false,
+      "require_any_scope": true,
+      "required_scope_prefixes": [
+        "control-plane:",
+        "governance:",
+        "admin:",
+        "compliance:",
+        "audit:",
+        "keys:",
+        "dev:"
       ],
-      "maturity_tag": "production-grade",
-      "plane_id": "control",
-      "public_routes": [
-        {
-          "class_name": "public",
-          "expires_at": "",
-          "justification": "Unauthenticated health probe.",
-          "method": "GET",
-          "path": "/health",
-          "permanent": true
-        },
-        {
-          "class_name": "public",
-          "expires_at": "",
-          "justification": "Kubernetes liveness probe.",
-          "method": "GET",
-          "path": "/health/live",
-          "permanent": true
-        },
-        {
-          "class_name": "public",
-          "expires_at": "",
-          "justification": "Kubernetes readiness probe.",
-          "method": "GET",
-          "path": "/health/ready",
-          "permanent": true
-        },
-        {
-          "class_name": "public",
-          "expires_at": "",
-          "justification": "Detailed health probe endpoint.",
-          "method": "GET",
-          "path": "/health/detailed",
-          "permanent": true
-        },
-        {
-          "class_name": "public",
-          "expires_at": "",
-          "justification": "Legacy status endpoint.",
-          "method": "GET",
-          "path": "/status",
-          "permanent": true
-        },
-        {
-          "class_name": "public",
-          "expires_at": "",
-          "justification": "Legacy v1 status endpoint.",
-          "method": "GET",
-          "path": "/v1/status",
-          "permanent": true
-        }
-      ],
-      "required_ci_gates": [
-        "check_plane_registry",
-        "route-inventory-audit"
-      ],
-      "required_make_targets": [
-        "control-plane-check",
-        "plane-registry-spot"
-      ],
-      "required_route_invariants": [
-        "auth",
-        "scoped",
-        "tenant_bound",
-        "admin_prefix:control_only"
-      ],
-      "route_prefixes": [
-        "/control-plane",
-        "/compliance",
-        "/compliance-cp",
-        "/enterprise-controls",
-        "/exceptions",
-        "/breakglass",
-        "/governance",
-        "/config",
-        "/planes",
-        "/health",
-        "/status",
-        "/internal",
-        "/admin",
-        "/_debug",
-        "/_legacy",
-        "/dev"
-      ]
+      "tenant_binding_required": true
     },
-    {
-      "allowed_dependency_categories": [
-        "auth",
-        "tenant",
-        "db",
-        "rate"
-      ],
-      "auth_class": {
-        "allow_unscoped_keys": false,
-        "require_any_scope": true,
-        "required_scope_prefixes": [
-          "ingest:",
-          "feed:",
-          "decisions:",
-          "defend:",
-          "stats:",
-          "admin:"
-        ],
-        "tenant_binding_required": true
+    "auth_exempt_routes": [],
+    "bootstrap_routes": [],
+    "docs_routes": [],
+    "global_routes": [
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Global operator health view.",
+        "method": "GET",
+        "path": "/admin/system/health",
+        "permanent": true
       },
-      "auth_exempt_routes": [],
-      "bootstrap_routes": [],
-      "docs_routes": [],
-      "global_routes": [
-        {
-          "class_name": "bootstrap",
-          "expires_at": "",
-          "justification": "Debug stats endpoint is operational bootstrap path.",
-          "method": "GET",
-          "path": "/stats/debug",
-          "permanent": true
-        }
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Global operator key rotation report.",
+        "method": "GET",
+        "path": "/admin/keys/needing-rotation",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Global operator key rotation state.",
+        "method": "GET",
+        "path": "/admin/keys/{key_prefix}/rotation-status",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Global operator key rotate action.",
+        "method": "POST",
+        "path": "/admin/keys/{key_prefix}/rotate",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Global usage summary.",
+        "method": "GET",
+        "path": "/admin/usage/all",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Delegation listing is global governance metadata.",
+        "method": "GET",
+        "path": "/control-plane/v2/delegation",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Delegation create is global governance metadata.",
+        "method": "POST",
+        "path": "/control-plane/v2/delegation",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Delegation revoke is global governance metadata.",
+        "method": "DELETE",
+        "path": "/control-plane/v2/delegation/{delegation_id}",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Allowlist is global governance metadata.",
+        "method": "GET",
+        "path": "/control-plane/v2/terminal/allowlist",
+        "permanent": true
+      },
+      {
+        "class_name": "bootstrap",
+        "expires_at": "",
+        "justification": "Debug route catalog; blocked in prod-like mode.",
+        "method": "GET",
+        "path": "/_debug/routes",
+        "permanent": true
+      },
+      {
+        "class_name": "bootstrap",
+        "expires_at": "",
+        "justification": "Legacy disabled route; blocked in prod-like mode.",
+        "method": "GET",
+        "path": "/_legacy/ui_feed/_disabled",
+        "permanent": true
+      }
+    ],
+    "maturity_tag": "production-grade",
+    "plane_id": "control",
+    "public_routes": [
+      {
+        "class_name": "public",
+        "expires_at": "",
+        "justification": "Unauthenticated health probe.",
+        "method": "GET",
+        "path": "/health",
+        "permanent": true
+      },
+      {
+        "class_name": "public",
+        "expires_at": "",
+        "justification": "Kubernetes liveness probe.",
+        "method": "GET",
+        "path": "/health/live",
+        "permanent": true
+      },
+      {
+        "class_name": "public",
+        "expires_at": "",
+        "justification": "Kubernetes readiness probe.",
+        "method": "GET",
+        "path": "/health/ready",
+        "permanent": true
+      },
+      {
+        "class_name": "public",
+        "expires_at": "",
+        "justification": "Detailed health probe endpoint.",
+        "method": "GET",
+        "path": "/health/detailed",
+        "permanent": true
+      },
+      {
+        "class_name": "public",
+        "expires_at": "",
+        "justification": "Legacy status endpoint.",
+        "method": "GET",
+        "path": "/status",
+        "permanent": true
+      },
+      {
+        "class_name": "public",
+        "expires_at": "",
+        "justification": "Legacy v1 status endpoint.",
+        "method": "GET",
+        "path": "/v1/status",
+        "permanent": true
+      }
+    ],
+    "required_ci_gates": [
+      "check_plane_registry",
+      "route-inventory-audit"
+    ],
+    "required_make_targets": [
+      "control-plane-check",
+      "plane-registry-spot"
+    ],
+    "required_route_invariants": [
+      "auth",
+      "scoped",
+      "tenant_bound",
+      "admin_prefix:control_only"
+    ],
+    "route_prefixes": [
+      "/control-plane",
+      "/compliance",
+      "/compliance-cp",
+      "/enterprise-controls",
+      "/exceptions",
+      "/breakglass",
+      "/governance",
+      "/config",
+      "/planes",
+      "/health",
+      "/status",
+      "/internal",
+      "/admin",
+      "/_debug",
+      "/_legacy",
+      "/dev"
+    ]
+  },
+  {
+    "allowed_dependency_categories": [
+      "auth",
+      "tenant",
+      "db",
+      "rate"
+    ],
+    "auth_class": {
+      "allow_unscoped_keys": false,
+      "require_any_scope": true,
+      "required_scope_prefixes": [
+        "ingest:",
+        "feed:",
+        "decisions:",
+        "defend:",
+        "stats:",
+        "admin:"
       ],
-      "maturity_tag": "production-grade",
-      "plane_id": "data",
-      "public_routes": [],
-      "required_ci_gates": [
-        "check_plane_registry",
-        "route-inventory-audit"
-      ],
-      "required_make_targets": [
-        "soc-invariants"
-      ],
-      "required_route_invariants": [
-        "auth",
-        "tenant_bound"
-      ],
-      "route_prefixes": [
-        "/ingest",
-        "/feed",
-        "/decisions",
-        "/defend",
-        "/stats",
-        "/billing"
-      ]
+      "tenant_binding_required": true
     },
-    {
-      "allowed_dependency_categories": [
-        "auth",
-        "tenant",
-        "db",
-        "rate"
+    "auth_exempt_routes": [],
+    "bootstrap_routes": [],
+    "docs_routes": [],
+    "global_routes": [
+      {
+        "class_name": "bootstrap",
+        "expires_at": "",
+        "justification": "Debug stats endpoint is operational bootstrap path.",
+        "method": "GET",
+        "path": "/stats/debug",
+        "permanent": true
+      }
+    ],
+    "maturity_tag": "production-grade",
+    "plane_id": "data",
+    "public_routes": [],
+    "required_ci_gates": [
+      "check_plane_registry",
+      "route-inventory-audit"
+    ],
+    "required_make_targets": [
+      "soc-invariants"
+    ],
+    "required_route_invariants": [
+      "auth",
+      "tenant_bound"
+    ],
+    "route_prefixes": [
+      "/ingest",
+      "/feed",
+      "/decisions",
+      "/defend",
+      "/stats",
+      "/billing"
+    ]
+  },
+  {
+    "allowed_dependency_categories": [
+      "auth",
+      "tenant",
+      "db",
+      "rate"
+    ],
+    "auth_class": {
+      "allow_unscoped_keys": false,
+      "require_any_scope": true,
+      "required_scope_prefixes": [
+        "audit:",
+        "attestation:",
+        "forensics:",
+        "admin:",
+        "compliance:"
       ],
-      "auth_class": {
-        "allow_unscoped_keys": false,
-        "require_any_scope": true,
-        "required_scope_prefixes": [
-          "audit:",
-          "attestation:",
-          "forensics:",
-          "admin:",
-          "compliance:"
-        ],
-        "tenant_binding_required": true
-      },
-      "auth_exempt_routes": [],
-      "bootstrap_routes": [],
-      "docs_routes": [],
-      "global_routes": [
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Approval creation operates at platform governance scope.",
-          "method": "POST",
-          "path": "/approvals",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Approval verification operates at platform governance scope.",
-          "method": "POST",
-          "path": "/approvals/verify",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Approval lookup operates at platform governance scope.",
-          "method": "GET",
-          "path": "/approvals/{subject_type}/{subject_id}",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Evidence bundles can be globally exported.",
-          "method": "POST",
-          "path": "/evidence/bundles",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Evidence bundle retrieval can be global.",
-          "method": "GET",
-          "path": "/evidence/bundles/{bundle_id}",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Evidence verification can be global.",
-          "method": "POST",
-          "path": "/evidence/verify",
-          "permanent": true
-        }
-      ],
-      "maturity_tag": "production-grade",
-      "plane_id": "evidence",
-      "public_routes": [],
-      "required_ci_gates": [
-        "check_plane_registry",
-        "route-inventory-audit"
-      ],
-      "required_make_targets": [
-        "audit-chain-verify"
-      ],
-      "required_route_invariants": [
-        "auth",
-        "tenant_bound",
-        "scoped"
-      ],
-      "route_prefixes": [
-        "/audit",
-        "/evidence",
-        "/approvals",
-        "/attestation",
-        "/forensics"
-      ]
+      "tenant_binding_required": true
     },
-    {
-      "allowed_dependency_categories": [
-        "auth",
-        "tenant",
-        "db",
-        "rate",
-        "breakglass"
-      ],
-      "auth_class": {
-        "allow_unscoped_keys": false,
-        "require_any_scope": true,
-        "required_scope_prefixes": [
-          "admin:",
-          "keys:"
-        ],
-        "tenant_binding_required": true
+    "auth_exempt_routes": [],
+    "bootstrap_routes": [],
+    "docs_routes": [],
+    "global_routes": [
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Approval creation operates at platform governance scope.",
+        "method": "POST",
+        "path": "/approvals",
+        "permanent": true
       },
-      "auth_exempt_routes": [],
-      "bootstrap_routes": [],
-      "docs_routes": [],
-      "global_routes": [],
-      "maturity_tag": "production-grade",
-      "plane_id": "security",
-      "public_routes": [],
-      "required_ci_gates": [
-        "check_plane_registry",
-        "route-inventory-audit"
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Approval verification operates at platform governance scope.",
+        "method": "POST",
+        "path": "/approvals/verify",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Approval lookup operates at platform governance scope.",
+        "method": "GET",
+        "path": "/approvals/{subject_type}/{subject_id}",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Evidence bundles can be globally exported.",
+        "method": "POST",
+        "path": "/evidence/bundles",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Evidence bundle retrieval can be global.",
+        "method": "GET",
+        "path": "/evidence/bundles/{bundle_id}",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Evidence verification can be global.",
+        "method": "POST",
+        "path": "/evidence/verify",
+        "permanent": true
+      }
+    ],
+    "maturity_tag": "production-grade",
+    "plane_id": "evidence",
+    "public_routes": [],
+    "required_ci_gates": [
+      "check_plane_registry",
+      "route-inventory-audit"
+    ],
+    "required_make_targets": [
+      "audit-chain-verify"
+    ],
+    "required_route_invariants": [
+      "auth",
+      "tenant_bound",
+      "scoped"
+    ],
+    "route_prefixes": [
+      "/audit",
+      "/evidence",
+      "/approvals",
+      "/attestation",
+      "/forensics"
+    ]
+  },
+  {
+    "allowed_dependency_categories": [
+      "auth",
+      "tenant",
+      "db",
+      "rate",
+      "breakglass"
+    ],
+    "auth_class": {
+      "allow_unscoped_keys": false,
+      "require_any_scope": true,
+      "required_scope_prefixes": [
+        "admin:",
+        "keys:"
       ],
-      "required_make_targets": [
-        "security-regression-gates"
-      ],
-      "required_route_invariants": [
-        "auth",
-        "tenant_bound"
-      ],
-      "route_prefixes": [
-        "/auth",
-        "/keys"
-      ]
+      "tenant_binding_required": true
     },
-    {
-      "allowed_dependency_categories": [
-        "auth",
-        "tenant",
-        "rate"
+    "auth_exempt_routes": [],
+    "bootstrap_routes": [],
+    "docs_routes": [],
+    "global_routes": [],
+    "maturity_tag": "production-grade",
+    "plane_id": "security",
+    "public_routes": [],
+    "required_ci_gates": [
+      "check_plane_registry",
+      "route-inventory-audit"
+    ],
+    "required_make_targets": [
+      "security-regression-gates"
+    ],
+    "required_route_invariants": [
+      "auth",
+      "tenant_bound"
+    ],
+    "route_prefixes": [
+      "/auth",
+      "/keys"
+    ]
+  },
+  {
+    "allowed_dependency_categories": [
+      "auth",
+      "tenant",
+      "rate"
+    ],
+    "auth_class": {
+      "allow_unscoped_keys": false,
+      "require_any_scope": true,
+      "required_scope_prefixes": [
+        "ui:",
+        "admin:",
+        "audit:",
+        "controls:",
+        "forensics:"
       ],
-      "auth_class": {
-        "allow_unscoped_keys": false,
-        "require_any_scope": true,
-        "required_scope_prefixes": [
-          "ui:",
-          "admin:",
-          "audit:",
-          "controls:",
-          "forensics:"
-        ],
-        "tenant_binding_required": true
+      "tenant_binding_required": true
+    },
+    "auth_exempt_routes": [],
+    "bootstrap_routes": [
+      {
+        "class_name": "bootstrap",
+        "expires_at": "",
+        "justification": "CSRF bootstrap endpoint before tenant-bound session materializes.",
+        "method": "GET",
+        "path": "/ui/csrf",
+        "permanent": true
       },
-      "auth_exempt_routes": [],
-      "bootstrap_routes": [
-        {
-          "class_name": "bootstrap",
-          "expires_at": "",
-          "justification": "CSRF bootstrap endpoint before tenant-bound session materializes.",
-          "method": "GET",
-          "path": "/ui/csrf",
-          "permanent": true
-        },
-        {
-          "class_name": "bootstrap",
-          "expires_at": "",
-          "justification": "Scope introspection endpoint before tenant-bound flow.",
-          "method": "GET",
-          "path": "/ui/scopes",
-          "permanent": true
-        },
-        {
-          "class_name": "bootstrap",
-          "expires_at": "",
-          "justification": "Token bootstrap endpoint before tenant-bound flow.",
-          "method": "GET",
-          "path": "/ui/token",
-          "permanent": true
-        }
-      ],
-      "docs_routes": [],
-      "global_routes": [
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Global AI dashboard overview.",
-          "method": "GET",
-          "path": "/ui/ai",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Global controls dashboard overview.",
-          "method": "GET",
-          "path": "/ui/controls",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Global control detail view.",
-          "method": "GET",
-          "path": "/ui/controls/{inv_id}",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Global controls dashboard rollup.",
-          "method": "GET",
-          "path": "/ui/dash/controls",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Global forensics dashboard rollup.",
-          "method": "GET",
-          "path": "/ui/dash/forensics",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Global posture dashboard rollup.",
-          "method": "GET",
-          "path": "/ui/dash/posture",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Global UI feed endpoint.",
-          "method": "GET",
-          "path": "/ui/feed",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Global audit packet creation.",
-          "method": "POST",
-          "path": "/ui/audit/packet",
-          "permanent": true
-        },
-        {
-          "class_name": "global_admin",
-          "expires_at": "",
-          "justification": "Global audit packet download.",
-          "method": "GET",
-          "path": "/ui/audit/packet/{packet_id}/download",
-          "permanent": true
-        }
-      ],
-      "maturity_tag": "production-grade",
-      "plane_id": "ui",
-      "public_routes": [],
-      "required_ci_gates": [
-        "check_plane_registry",
-        "route-inventory-audit"
-      ],
-      "required_make_targets": [
-        "test-quality-gate"
-      ],
-      "required_route_invariants": [
-        "auth",
-        "tenant_bound"
-      ],
-      "route_prefixes": [
-        "/ui"
-      ]
-    }
-  ],
-  "generated_at": "2026-02-25T00:59:20.768988+00:00",
-  "schema_version": "v1"
-}
+      {
+        "class_name": "bootstrap",
+        "expires_at": "",
+        "justification": "Scope introspection endpoint before tenant-bound flow.",
+        "method": "GET",
+        "path": "/ui/scopes",
+        "permanent": true
+      },
+      {
+        "class_name": "bootstrap",
+        "expires_at": "",
+        "justification": "Token bootstrap endpoint before tenant-bound flow.",
+        "method": "GET",
+        "path": "/ui/token",
+        "permanent": true
+      }
+    ],
+    "docs_routes": [],
+    "global_routes": [
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Global AI dashboard overview.",
+        "method": "GET",
+        "path": "/ui/ai",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Global controls dashboard overview.",
+        "method": "GET",
+        "path": "/ui/controls",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Global control detail view.",
+        "method": "GET",
+        "path": "/ui/controls/{inv_id}",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Global controls dashboard rollup.",
+        "method": "GET",
+        "path": "/ui/dash/controls",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Global forensics dashboard rollup.",
+        "method": "GET",
+        "path": "/ui/dash/forensics",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Global posture dashboard rollup.",
+        "method": "GET",
+        "path": "/ui/dash/posture",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Global UI feed endpoint.",
+        "method": "GET",
+        "path": "/ui/feed",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Global audit packet creation.",
+        "method": "POST",
+        "path": "/ui/audit/packet",
+        "permanent": true
+      },
+      {
+        "class_name": "global_admin",
+        "expires_at": "",
+        "justification": "Global audit packet download.",
+        "method": "GET",
+        "path": "/ui/audit/packet/{packet_id}/download",
+        "permanent": true
+      }
+    ],
+    "maturity_tag": "production-grade",
+    "plane_id": "ui",
+    "public_routes": [],
+    "required_ci_gates": [
+      "check_plane_registry",
+      "route-inventory-audit"
+    ],
+    "required_make_targets": [
+      "test-quality-gate"
+    ],
+    "required_route_invariants": [
+      "auth",
+      "tenant_bound"
+    ],
+    "route_prefixes": [
+      "/ui"
+    ]
+  }
+]
