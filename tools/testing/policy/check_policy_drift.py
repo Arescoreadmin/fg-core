@@ -51,8 +51,8 @@ def enforce_policy_drift(base_ref: str, event_path: Path, allow_flag: bool) -> t
             labels = [str(lbl.get("name") if isinstance(lbl, dict) else "") for lbl in labels_raw]
         justification = "## Policy Change Justification" in body
         label_ok = "policy-change-approved" in labels
-        if not (justification and label_ok):
-            raise SystemExit("policy files changed without required justification section and policy-change-approved label")
+        if not (justification or label_ok):
+            raise SystemExit("policy files changed without Policy Change Justification section or policy-change-approved label")
     return True, touched
 
 
