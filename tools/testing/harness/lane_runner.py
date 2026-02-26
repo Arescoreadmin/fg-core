@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from tools.testing.harness.quarantine_policy import pytest_addopts_for_lane
+
 TOOL_VERSION = "1.0.0"
 ARTIFACT_ROOT = "artifacts/testing"
 COMMAND_TIMEOUT_SECONDS = 300
@@ -63,6 +65,14 @@ def _safe_env() -> dict[str, str]:
     return env
 
 
+def _command_env(lane: str) -> dict[str, str]:
+    env = _safe_env()
+    addopts = pytest_addopts_for_lane(lane)
+    if addopts:
+        existing = env.get("PYTEST_ADDOPTS", "").strip()
+        env["PYTEST_ADDOPTS"] = f"{existing} {addopts}".strip()
+    return env
+
 def _json_dumps(obj: object) -> str:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
@@ -79,14 +89,14 @@ def _sanitize_log(text: str) -> str:
     return "\n".join(lines)
 
 
-def _run_command(command: CommandSpec, cwd: Path, log_file: Path) -> int:
+def _run_command(command: CommandSpec, cwd: Path, log_file: Path, lane: str = "") -> int:
     proc = subprocess.run(
         list(command.argv),
         cwd=cwd,
         check=False,
         text=True,
         capture_output=True,
-        env=_safe_env(),
+        env=_command_env(lane),
         shell=False,
         timeout=command.timeout_seconds,
     )
@@ -139,7 +149,7 @@ def main() -> int:
     status = "passed"
     for command in ALLOWED_LANES[args.lane]:
         try:
-            code = _run_command(command, cwd=repo_root, log_file=log_file)
+            code = _run_command(command, cwd=repo_root, log_file=log_file, lane=args.lane)
         except subprocess.TimeoutExpired:
             status = "failed"
             with log_file.open("a", encoding="utf-8") as handle:

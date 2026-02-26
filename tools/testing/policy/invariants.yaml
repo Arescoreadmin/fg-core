@@ -1,0 +1,14 @@
+- id: "INV-TENANT-001"
+  severity: "critical"
+  description: "No cross-tenant reads from control/testing endpoints"
+  owner: "security-platform"
+  enforced_by:
+    - test_nodeid: "tests/security/test_testing_runs_rls.py::test_tenant_cannot_read_other_tenant_runs"
+      lane: "fg-security"
+- id: "INV-RLS-001"
+  severity: "critical"
+  description: "RLS is active and tenant-bound for testing run records"
+  owner: "security-platform"
+  enforced_by:
+    - test_nodeid: "tests/security/test_testing_runs_rls.py::test_rls_policy_rejects_unbound_reads"
+      lane: "fg-security"

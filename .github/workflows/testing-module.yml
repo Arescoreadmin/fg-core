@@ -2,6 +2,11 @@ name: testing-module
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "tools/testing/policy/**"
+  schedule:
+    - cron: "15 3 * * *"
 
 concurrency:
   group: testing-module-${{ github.ref }}
@@ -42,6 +47,12 @@ jobs:
         run: make fg-fast
       - name: required-tests gate
         run: make required-tests-gate
+      - name: policy drift guard
+        run: .venv/bin/python tools/testing/policy/check_policy_drift.py --base-ref "${{ github.base_ref || 'main' }}" --event-path "${{ github.event_path }}"
+      - name: runtime budget enforcement
+        run: .venv/bin/python -c "from pathlib import Path; from tools.testing.harness.runtime_budgets import load_runtime_budgets,enforce_lane_budget; d=load_runtime_budgets(Path('tools/testing/policy/runtime_budgets.yaml')); ok,msg=enforce_lane_budget('fg-fast',180,d,150); print(msg); raise SystemExit(0 if ok else 1)"
+      - name: invariant coverage enforcement
+        run: .venv/bin/python tools/testing/security/check_invariant_coverage.py
       - name: lane runner metadata
         run: .venv/bin/python tools/testing/harness/lane_runner.py --lane fg-fast --out-dir artifacts/testing
       - uses: actions/upload-artifact@v4
@@ -123,7 +134,7 @@ jobs:
           path: artifacts/testing
 
   fg-full:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [fg-fast, fg-contract, fg-security]
@@ -157,4 +168,31 @@ jobs:
         if: always()
         with:
           name: fg-full-artifacts
+          path: artifacts/testing
+
+      - name: update runtime baseline (main only)
+        if: github.ref_name == 'main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        run: .venv/bin/python tools/testing/harness/runtime_baseline.py --lane fg-full --duration 1200 --branch ${{ github.ref_name }} --event ${{ github.event_name }}
+
+
+  fg-flake-detect:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'pull_request' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [fg-full]
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: setup python + cache pip
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install deps (pinned)
+        run: make venv
+      - name: run flake detection
+        run: .venv/bin/python tools/testing/harness/flake_detect.py --junit artifacts/testing/junit.xml --out artifacts/testing/flake-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fg-flake-artifacts
           path: artifacts/testing
