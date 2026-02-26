@@ -89,6 +89,18 @@ def _canonical_payload(body: dict[str, Any], tenant_id: str) -> dict[str, Any]:
     return canonical
 
 
+def _derive_policy_change_event() -> bool:
+    artifact_path = os.getenv("FG_POLICY_DRIFT_ARTIFACT", "artifacts/testing/policy-drift.json")
+    try:
+        with open(artifact_path, "r", encoding="utf-8") as handle:
+            payload = json.loads(handle.read())
+    except FileNotFoundError:
+        return False
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid_policy_drift_artifact")
+    return bool(payload.get("policy_changed", False))
+
+
 def _verify_signature(request: Request, canonical: dict[str, Any]) -> None:
     secret = (os.getenv("FG_CONTROL_TOWER_SIGNING_SECRET") or "").encode("utf-8")
     if not secret:
@@ -109,11 +121,15 @@ def register_run_summary(request: Request, body: dict[str, Any]) -> dict[str, st
     _internal_guard(request)
     tenant_id = bind_tenant_id(request, None)
     canonical = _canonical_payload(body, tenant_id)
+    requested_policy_event = bool(body.get("policy_change_event", False))
+    derived_policy_event = _derive_policy_change_event()
+    if requested_policy_event and not derived_policy_event:
+        raise HTTPException(status_code=403, detail="policy_change_event_unverified")
+    canonical["policy_change_event"] = derived_policy_event
     _verify_signature(request, canonical)
 
     actor = str(getattr(getattr(request, "state", None), "auth", None).key_prefix or "ci")
-    policy_change_event = bool(body.get("policy_change_event", False))
-    register_run(canonical, actor=actor, policy_change_event=policy_change_event)
+    register_run(canonical, actor=actor, policy_change_event=derived_policy_event)
     return {"status": "registered", "run_id": str(canonical["run_id"])}
 
 

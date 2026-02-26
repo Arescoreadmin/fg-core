@@ -41,7 +41,7 @@ def _payload() -> dict[str, object]:
         "artifact_hashes": {"lane.log": "a" * 64},
         "artifact_paths": ["artifacts/testing/lane.log"],
         "summary_md": "ok",
-        "policy_change_event": True,
+        "policy_change_event": False,
     }
 
 
@@ -97,6 +97,52 @@ def test_register_and_list_runs(build_app, monkeypatch) -> None:
     health = client.get("/control/testing/health", headers={"X-API-Key": key})
     assert health.status_code == 200
     assert health.json()["snapshots"]
+
+
+
+def test_register_rejects_unverified_policy_change_event(build_app, monkeypatch) -> None:
+    client = _client(build_app, monkeypatch)
+    key = mint_key("control-plane:admin", tenant_id="tenant-a")
+    payload = _payload()
+    payload["policy_change_event"] = True
+    canonical = _canonical_for_signing({**payload, "policy_change_event": False}, "tenant-a")
+    r = client.post(
+        "/control/testing/runs/register",
+        json=payload,
+        headers={
+            "X-API-Key": key,
+            "x-fg-internal-token": "internal-test-token",
+            "x-github-run-id": "999",
+            "x-fg-signature": _sign(canonical, "ct-secret"),
+        },
+    )
+    assert r.status_code == 403
+
+
+def test_register_derives_policy_change_event_from_artifact(build_app, monkeypatch, tmp_path) -> None:
+    artifact = tmp_path / "policy-drift.json"
+    artifact.write_text(json.dumps({"policy_changed": True}), encoding="utf-8")
+    monkeypatch.setenv("FG_POLICY_DRIFT_ARTIFACT", str(artifact))
+    client = _client(build_app, monkeypatch)
+    key = mint_key("control-plane:admin", "control-plane:read", tenant_id="tenant-a")
+    payload = _payload()
+    payload["policy_change_event"] = False
+    canonical = _canonical_for_signing({**payload, "policy_change_event": True}, "tenant-a")
+
+    r = client.post(
+        "/control/testing/runs/register",
+        json=payload,
+        headers={
+            "X-API-Key": key,
+            "x-fg-internal-token": "internal-test-token",
+            "x-github-run-id": "999",
+            "x-fg-signature": _sign(canonical, "ct-secret"),
+        },
+    )
+    assert r.status_code == 200
+    run_id = r.json()["run_id"]
+    detail = client.get(f"/control/testing/runs/{run_id}", headers={"X-API-Key": key})
+    assert detail.status_code == 200
 
 
 def test_register_rejects_bad_signature(build_app, monkeypatch) -> None:
