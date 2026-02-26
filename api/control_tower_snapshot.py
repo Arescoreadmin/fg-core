@@ -37,7 +37,7 @@ def _canonical_payload(payload: dict[str, Any]) -> str:
 def control_tower_snapshot_v1(request: Request, db: Session = Depends(tenant_db_required)) -> Response:
     tenant_id = str(getattr(request.state, "tenant_id", "unknown"))
     request_id = request.headers.get("x-request-id") or ""
-    requested_tenant = request.query_params.get("tenant_id")
+    requested_tenant = request.query_params.get("requested_tenant_id")
 
     decision = (
         db.query(DecisionRecord)

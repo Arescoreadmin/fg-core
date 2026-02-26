@@ -47,7 +47,7 @@ def test_control_tower_tenant_clamp_and_override_policy(build_app):
     client = TestClient(app)
     key = mint_key("admin:read", tenant_id="tenant-a")
 
-    response = client.get("/control-tower/snapshot?tenant_id=tenant-b", headers={"X-API-Key": key})
+    response = client.get("/control-tower/snapshot?requested_tenant_id=tenant-b", headers={"X-API-Key": key})
     assert response.status_code == 200
     payload = response.json()
     assert payload["tenant"]["tenant_id"] == "tenant-a"

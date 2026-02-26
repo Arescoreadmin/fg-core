@@ -32,6 +32,7 @@ PLANE_REGISTRY: list[PlaneDef] = [
         route_prefixes=(
             "/control-plane",
             "/control/testing",
+            "/control-tower",
             "/compliance",
             "/compliance-cp",
             "/enterprise-controls",

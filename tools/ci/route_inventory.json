@@ -2138,7 +2138,7 @@
       "file": "api/control_tower_snapshot.py",
       "method": "GET",
       "path": "/control-tower/snapshot",
-      "plane_id": "unmapped",
+      "plane_id": "control",
       "scoped": true,
       "scopes": [
         "admin:read"
@@ -3586,6 +3586,6 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-02-26T18:05:32.148133+00:00",
+  "generated_at": "2026-02-26T19:13:14.131068+00:00",
   "schema_version": "v1"
 }
