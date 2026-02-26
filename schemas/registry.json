@@ -39,6 +39,21 @@
       "id": "api.health.schema.v1",
       "type": "jsonschema",
       "path": "schemas/api/health.schema.json"
+    },
+    {
+      "id": "jsonschema.testing.control_tower_run.v1.0.0",
+      "type": "jsonschema",
+      "path": "schemas/testing/control_tower_run.schema.json"
+    },
+    {
+      "id": "jsonschema.testing.control_tower_run_list_response.v1.0.0",
+      "type": "jsonschema",
+      "path": "schemas/testing/control_tower_run_list_response.schema.json"
+    },
+    {
+      "id": "jsonschema.testing.control_tower_run_trigger_request.v1.0.0",
+      "type": "jsonschema",
+      "path": "schemas/testing/control_tower_run_trigger_request.schema.json"
     }
   ]
 }

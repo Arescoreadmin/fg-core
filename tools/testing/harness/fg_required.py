@@ -18,6 +18,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from tools.testing.harness.triage_report import _classify
+from tools.testing.harness.quarantine_policy import pytest_addopts_for_lane
 
 ARTIFACT_ROOT = REPO_ROOT / "artifacts/testing"
 GLOBAL_BUDGET_SECONDS = 480
@@ -210,10 +211,15 @@ def _run_lane(lane: str, lane_timeout: int, remaining_budget: int, secrets: list
             triage_path = _write_lane_triage(lane_dir, log_file)
             return LaneResult(lane=lane, status="failed", duration_seconds=int(time.monotonic() - started), timeout=True, error="global_budget_exhausted", artifact_paths={"lane_log": str(log_file), "lane_triage": str(triage_path)})
         try:
+            env = _safe_env()
+            addopts = pytest_addopts_for_lane(lane)
+            if addopts:
+                existing = env.get("PYTEST_ADDOPTS", "").strip()
+                env["PYTEST_ADDOPTS"] = f"{existing} {addopts}".strip()
             proc = subprocess.run(
                 list(command),
                 cwd=REPO_ROOT,
-                env=_safe_env(),
+                env=env,
                 check=False,
                 shell=False,
                 text=True,

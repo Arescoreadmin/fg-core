@@ -1254,7 +1254,7 @@ agent-phase2-gate: venv _require-pytest-venv
 # =============================================================================
 
 
-.PHONY: required-tests-gate policy-validate fg-security fg-full fg-triage
+.PHONY: required-tests-gate policy-validate fg-security fg-full fg-triage fg-flake-detect runtime-budget-check invariant-coverage-check runtime-baseline-update quarantine-policy-check policy-drift-check
 
 policy-validate: venv
 	@$(PY) tools/testing/policy/validate_policy.py
@@ -1270,6 +1270,29 @@ fg-full: venv fg-fast fg-security
 	@$(PY) tools/testing/integration/smoke_suite.py
 	@$(MAKE) -s fg-fast-full
 
+
+runtime-budget-check: venv
+	@$(PY) -c "from pathlib import Path; from tools.testing.harness.runtime_budgets import load_runtime_budgets,enforce_lane_budget; d=load_runtime_budgets(Path('tools/testing/policy/runtime_budgets.yaml')); ok,msg=enforce_lane_budget('fg-fast',180,d,150); print(msg); raise SystemExit(0 if ok else 1)"
+
+invariant-coverage-check: venv
+	@$(PY) tools/testing/security/check_invariant_coverage.py
+
+fg-flake-detect: venv
+	@test -f artifacts/testing/junit.xml || (echo "artifacts/testing/junit.xml missing" && exit 1)
+	@$(PY) tools/testing/harness/flake_detect.py --junit artifacts/testing/junit.xml --out artifacts/testing/flake-report.json
+
 fg-triage: venv
 	@test -n "$(LOG)" || (echo "LOG=<path> is required" && exit 1)
 	@$(PY) tools/testing/harness/triage_report.py --log "$(LOG)" --out "$(ARTIFACTS_DIR)/triage.json"
+
+quarantine-policy-check: venv
+	@test -f artifacts/testing/flake-report.json || (echo "artifacts/testing/flake-report.json missing" && exit 1)
+	@$(PY) -c "from pathlib import Path; from tools.testing.harness.quarantine_policy import ensure_new_suspects_have_policy_entries; ensure_new_suspects_have_policy_entries(Path('artifacts/testing/flake-report.json'))"
+
+runtime-baseline-update: venv
+	@test -n "$(LANE)" || (echo "LANE=<lane> required" && exit 1)
+	@test -n "$(DURATION)" || (echo "DURATION=<seconds> required" && exit 1)
+	@$(PY) tools/testing/harness/runtime_baseline.py --lane "$(LANE)" --duration "$(DURATION)" --branch "$${GITHUB_REF_NAME:-local}" --event "$${GITHUB_EVENT_NAME:-manual}"
+
+policy-drift-check: venv
+	@$(PY) tools/testing/policy/check_policy_drift.py --base-ref "$${GITHUB_BASE_REF:-main}" --event-path "$${GITHUB_EVENT_PATH:-}"

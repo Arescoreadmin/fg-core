@@ -1,0 +1,5 @@
+- nodeid: "tests/example/test_flaky.py::TestSample::test_eventual"
+  owner: "platform-testing"
+  reason: "Known nondeterminism under external clock skew"
+  created_at: "2026-02-26"
+  sla_days: 14

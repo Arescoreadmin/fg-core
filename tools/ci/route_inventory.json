@@ -2133,12 +2133,11 @@
     {
       "dependency_categories": [
         "auth",
-        "rate",
         "tenant"
       ],
       "file": "api/testing_control_tower.py",
       "method": "GET",
-      "path": "/control-plane/v2/testing/lanes",
+      "path": "/control/testing/health",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2150,12 +2149,27 @@
     {
       "dependency_categories": [
         "auth",
-        "rate",
+        "tenant"
+      ],
+      "file": "api/testing_control_tower.py",
+      "method": "GET",
+      "path": "/control/testing/runs",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
         "tenant"
       ],
       "file": "api/testing_control_tower.py",
       "method": "POST",
-      "path": "/control-plane/v2/testing/runs",
+      "path": "/control/testing/runs/register",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2167,12 +2181,11 @@
     {
       "dependency_categories": [
         "auth",
-        "rate",
         "tenant"
       ],
       "file": "api/testing_control_tower.py",
       "method": "GET",
-      "path": "/control-plane/v2/testing/runs/{run_id}/artifacts",
+      "path": "/control/testing/runs/{run_id}",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -3557,6 +3570,6 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-02-26T00:35:53.127551+00:00",
+  "generated_at": "2026-02-26T12:50:24.042749+00:00",
   "schema_version": "v1"
 }

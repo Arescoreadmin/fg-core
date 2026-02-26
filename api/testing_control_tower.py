@@ -1,51 +1,183 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import hashlib
+import hmac
+import json
+import os
+import uuid
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
-from api.auth_scopes import require_bound_tenant, require_scopes
+from api.auth_scopes import bind_tenant_id, require_scopes
+from services.testing_control_tower_store import (
+    get_run,
+    latest_health,
+    list_runs,
+    register_run,
+)
 
-router = APIRouter(prefix="/control-plane/v2/testing", tags=["testing-control-tower"])
+router = APIRouter(prefix="/control/testing", tags=["testing-control-tower"])
+
+_ALLOWLISTED_LANES = {
+    "fg-fast",
+    "fg-contract",
+    "fg-security",
+    "fg-full",
+    "fg-flake-detect",
+}
+_ALLOWED_STATUS = {"passed", "failed", "running", "queued", "canceled", "flaky"}
+_REQUIRED_FIELDS = {
+    "lane",
+    "status",
+    "started_at",
+    "finished_at",
+    "duration_ms",
+    "commit_sha",
+    "ref",
+    "triggered_by",
+    "triage_schema_version",
+    "triage_category_counts",
+    "artifact_hashes",
+    "artifact_paths",
+    "summary_md",
+    "policy_change_event",
+}
 
 
-@router.get("/lanes", dependencies=[Depends(require_scopes("control-plane:read"))])
-def list_lanes(request: Request) -> dict[str, object]:
-    _ = require_bound_tenant(request)
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail={
-            "error": {
-                "code": "FG-TESTING-501",
-                "message": "Testing Control Tower backend not implemented yet",
-            }
-        },
-    )
+def _internal_guard(request: Request) -> None:
+    expected = (os.getenv("FG_INTERNAL_TOKEN") or "").strip()
+    provided = (request.headers.get("x-fg-internal-token") or "").strip()
+    if not expected or provided != expected:
+        raise HTTPException(status_code=403, detail="forbidden")
+
+    if (os.getenv("GITHUB_ACTIONS") or "").strip().lower() != "true":
+        raise HTTPException(status_code=403, detail="ci_context_required")
+
+    expected_run_id = (os.getenv("GITHUB_RUN_ID") or "").strip()
+    if expected_run_id:
+        supplied_run_id = (request.headers.get("x-github-run-id") or "").strip()
+        if supplied_run_id != expected_run_id:
+            raise HTTPException(status_code=403, detail="ci_attestation_mismatch")
 
 
-@router.post("/runs", dependencies=[Depends(require_scopes("control-plane:admin"))])
-def start_run(request: Request) -> dict[str, object]:
-    _ = require_bound_tenant(request)
-    trace_id = request.headers.get("x-request-id") or ""
-    return {
-        "status": "not_implemented",
-        "trace_id": trace_id,
-        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+def _canonical_payload(body: dict[str, Any], tenant_id: str) -> dict[str, Any]:
+    optional_fields = {"policy_change_event"}
+    unknown = sorted(set(body) - _REQUIRED_FIELDS)
+    missing = sorted((_REQUIRED_FIELDS - optional_fields) - set(body))
+    if unknown or missing:
+        raise HTTPException(
+            status_code=400, detail={"missing": missing, "unknown": unknown}
+        )
+
+    lane = str(body["lane"])
+    if lane not in _ALLOWLISTED_LANES:
+        raise HTTPException(status_code=400, detail="lane_not_allowlisted")
+
+    status_val = str(body["status"]).lower()
+    if status_val not in _ALLOWED_STATUS:
+        raise HTTPException(status_code=400, detail="invalid_status")
+
+    expected_sha = (os.getenv("GITHUB_SHA") or "").strip().lower()
+    provided_sha = str(body["commit_sha"]).strip().lower()
+    if expected_sha and provided_sha != expected_sha:
+        raise HTTPException(status_code=400, detail="commit_sha_mismatch")
+
+    canonical = dict(body)
+    canonical.setdefault("policy_change_event", False)
+    canonical["tenant_id"] = tenant_id
+    canonical["status"] = status_val
+
+    # server-side deterministic run id (client-supplied run_id ignored)
+    seed = {
+        "tenant_id": tenant_id,
+        "lane": canonical["lane"],
+        "commit_sha": canonical["commit_sha"],
+        "started_at": canonical["started_at"],
+        "artifact_hashes": canonical["artifact_hashes"],
     }
+    canonical_hash = hashlib.sha256(
+        json.dumps(seed, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    canonical["canonical_payload_hash"] = canonical_hash
+    canonical["run_id"] = str(uuid.uuid5(uuid.NAMESPACE_URL, canonical_hash))
+    return canonical
+
+
+def _derive_policy_change_event() -> bool:
+    artifact_path = os.getenv(
+        "FG_POLICY_DRIFT_ARTIFACT", "artifacts/testing/policy-drift.json"
+    )
+    try:
+        with open(artifact_path, "r", encoding="utf-8") as handle:
+            payload = json.loads(handle.read())
+    except FileNotFoundError:
+        return False
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid_policy_drift_artifact")
+    return bool(payload.get("policy_changed", False))
+
+
+def _verify_signature(request: Request, canonical: dict[str, Any]) -> None:
+    secret = (os.getenv("FG_CONTROL_TOWER_SIGNING_SECRET") or "").encode("utf-8")
+    if not secret:
+        raise HTTPException(status_code=503, detail="signing_not_configured")
+
+    provided = (request.headers.get("x-fg-signature") or "").strip().lower()
+    if not provided.startswith("sha256="):
+        raise HTTPException(status_code=403, detail="signature_missing")
+
+    payload = json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    expected = "sha256=" + hmac.new(secret, payload, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(provided, expected):
+        raise HTTPException(status_code=403, detail="signature_invalid")
+
+
+@router.post(
+    "/runs/register", dependencies=[Depends(require_scopes("control-plane:admin"))]
+)
+def register_run_summary(request: Request, body: dict[str, Any]) -> dict[str, str]:
+    _internal_guard(request)
+    tenant_id = bind_tenant_id(request, None)
+    canonical = _canonical_payload(body, tenant_id)
+    requested_policy_event = bool(body.get("policy_change_event", False))
+    derived_policy_event = _derive_policy_change_event()
+    if requested_policy_event and not derived_policy_event:
+        raise HTTPException(status_code=403, detail="policy_change_event_unverified")
+    canonical["policy_change_event"] = derived_policy_event
+    _verify_signature(request, canonical)
+
+    actor = str(
+        getattr(getattr(request, "state", None), "auth", None).key_prefix or "ci"
+    )
+    register_run(canonical, actor=actor, policy_change_event=derived_policy_event)
+    return {"status": "registered", "run_id": str(canonical["run_id"])}
+
+
+@router.get("/runs", dependencies=[Depends(require_scopes("control-plane:read"))])
+def get_runs(
+    request: Request, limit: int = Query(default=50, ge=1, le=50)
+) -> dict[str, object]:
+    tenant_id = bind_tenant_id(request, None)
+    return {"runs": list_runs(tenant_id, limit=limit)}
 
 
 @router.get(
-    "/runs/{run_id}/artifacts",
-    dependencies=[Depends(require_scopes("control-plane:read"))],
+    "/runs/{run_id}", dependencies=[Depends(require_scopes("control-plane:read"))]
 )
-def run_artifacts(run_id: str, request: Request) -> dict[str, object]:
-    _ = require_bound_tenant(request)
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail={
-            "error": {
-                "code": "FG-TESTING-502",
-                "message": f"Artifacts for run {run_id} not implemented",
-            }
-        },
-    )
+def get_run_detail(run_id: str, request: Request) -> dict[str, object]:
+    tenant_id = bind_tenant_id(request, None)
+    run = get_run(tenant_id, run_id)
+    if not run:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
+    return run
+
+
+@router.get("/health", dependencies=[Depends(require_scopes("control-plane:read"))])
+def get_health(
+    request: Request, lane: str | None = Query(default=None)
+) -> dict[str, object]:
+    tenant_id = bind_tenant_id(request, None)
+    return {"snapshots": latest_health(tenant_id, lane=lane)}

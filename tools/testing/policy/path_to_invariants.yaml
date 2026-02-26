@@ -1,0 +1,8 @@
+auth/:
+  - "INV-TENANT-001"
+api/control_plane.py:
+  - "INV-TENANT-001"
+migrations/:
+  - "INV-RLS-001"
+security/:
+  - "INV-RLS-001"

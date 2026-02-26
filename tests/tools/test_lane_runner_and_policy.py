@@ -42,12 +42,12 @@ def test_lane_runner_shell_false_and_list_args_only(
 
 def test_triage_bucketing_contract_drift() -> None:
     report = triage_report._classify(["error: openapi contract mismatch"])
-    assert report["bucket"] == "contract drift"
+    assert report["category"] == "CONTRACT_DRIFT"
 
 
 def test_triage_bucketing_rls_missing() -> None:
     report = triage_report._classify(["RLS policy missing for table x"])
-    assert report["bucket"] == "RLS missing"
+    assert report["category"] == "RLS_MISSING_OR_WEAK"
 
 
 def test_policy_validation_unknown_key_fails(tmp_path: Path) -> None:
