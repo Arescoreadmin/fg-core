@@ -100,6 +100,7 @@ ERR_TERMINAL_BREAKGLASS_EXPIRED = "CP_TERMINAL_BREAKGLASS_EXPIRED"
 # Break-glass session tracking
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class BreakglassSession:
     session_id: str
@@ -136,6 +137,7 @@ _breakglass_sessions: Dict[str, BreakglassSession] = {}
 # ---------------------------------------------------------------------------
 # Terminal command result
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class TerminalResult:
@@ -174,6 +176,7 @@ class TerminalResult:
 # ---------------------------------------------------------------------------
 # Input validation
 # ---------------------------------------------------------------------------
+
 
 def _validate_reason(reason: Optional[str]) -> str:
     if not reason:
@@ -214,6 +217,7 @@ def _parse_command(raw: str) -> Tuple[str, List[str]]:
 # Command handlers (all deterministic, no I/O side effects in DSL layer)
 # ---------------------------------------------------------------------------
 
+
 def _handle_status(args: List[str], tenant_id: str) -> Dict[str, Any]:
     if not args:
         raise ValueError(f"{ERR_TERMINAL_ARG_INVALID}: status requires <entity_id>")
@@ -228,9 +232,7 @@ def _handle_status(args: List[str], tenant_id: str) -> Dict[str, Any]:
 
 def _handle_list(args: List[str], tenant_id: str) -> Dict[str, Any]:
     if not args:
-        raise ValueError(
-            f"{ERR_TERMINAL_ARG_INVALID}: list requires <entity_type>"
-        )
+        raise ValueError(f"{ERR_TERMINAL_ARG_INVALID}: list requires <entity_type>")
     entity_type = args[0].lower()
     if entity_type not in VALID_ENTITY_TYPES_TERMINAL:
         raise ValueError(
@@ -363,6 +365,7 @@ _COMMAND_HANDLERS = {
 # ---------------------------------------------------------------------------
 # Terminal service
 # ---------------------------------------------------------------------------
+
 
 class SandboxedTerminalService:
     """

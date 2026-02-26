@@ -30,9 +30,7 @@ log = logging.getLogger("frostgate.cp_heartbeats")
 # Configuration
 # ---------------------------------------------------------------------------
 
-HEARTBEAT_STALE_SECONDS: int = int(
-    os.getenv("FG_CP_HEARTBEAT_STALE_SECONDS", "120")
-)
+HEARTBEAT_STALE_SECONDS: int = int(os.getenv("FG_CP_HEARTBEAT_STALE_SECONDS", "120"))
 HEARTBEAT_CRITICAL_SECONDS: int = int(
     os.getenv("FG_CP_HEARTBEAT_CRITICAL_SECONDS", "300")
 )
@@ -50,6 +48,7 @@ VALID_LAST_STATES = frozenset(
 # ---------------------------------------------------------------------------
 # Heartbeat service
 # ---------------------------------------------------------------------------
+
 
 class HeartbeatService:
     """
@@ -166,15 +165,14 @@ class HeartbeatService:
         stale_entities = []
         for row in stale_rows:
             age_seconds = (
-                datetime.now(timezone.utc) - row.last_seen_ts.replace(tzinfo=timezone.utc)
+                datetime.now(timezone.utc)
+                - row.last_seen_ts.replace(tzinfo=timezone.utc)
                 if row.last_seen_ts.tzinfo is None
                 else datetime.now(timezone.utc) - row.last_seen_ts
             ).total_seconds()
 
             severity = (
-                "critical"
-                if age_seconds >= HEARTBEAT_CRITICAL_SECONDS
-                else "warning"
+                "critical" if age_seconds >= HEARTBEAT_CRITICAL_SECONDS else "warning"
             )
 
             entity_dict = self._row_to_dict(row)
@@ -232,7 +230,9 @@ class HeartbeatService:
         if entity_type:
             q = q.filter(ControlPlaneHeartbeat.entity_type == entity_type)
         if stale_only:
-            cutoff = datetime.now(timezone.utc) - timedelta(seconds=HEARTBEAT_STALE_SECONDS)
+            cutoff = datetime.now(timezone.utc) - timedelta(
+                seconds=HEARTBEAT_STALE_SECONDS
+            )
             q = q.filter(ControlPlaneHeartbeat.last_seen_ts < cutoff)
 
         rows = q.order_by(ControlPlaneHeartbeat.last_seen_ts.desc()).all()

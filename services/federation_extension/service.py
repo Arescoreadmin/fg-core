@@ -28,7 +28,9 @@ class JWKSCache:
 
         normalized_url, _ = validate_target(url)
         opener = urllib.request.build_opener(_NoRedirect())
-        req = urllib.request.Request(normalized_url, headers={"Accept": "application/json"})
+        req = urllib.request.Request(
+            normalized_url, headers={"Accept": "application/json"}
+        )
         try:
             with opener.open(req, timeout=5) as resp:
                 status = int(getattr(resp, "status", 200))

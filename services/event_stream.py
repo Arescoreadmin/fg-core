@@ -16,6 +16,7 @@ P0: event_instance_id (unique per publish, ULID-style) for anti-replay.
 P1: Max subscribers per tenant enforced. Backpressure: consecutive queue-full
     events trigger slow-consumer disconnect.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -23,7 +24,6 @@ import hashlib
 import json
 import logging
 import os
-import secrets
 import threading
 import time
 import uuid
@@ -31,6 +31,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
+
+import queue as _queue_module  # stdlib queue for ControlEventBus subscribers
 
 log = logging.getLogger("frostgate.control_plane.event_stream")
 
@@ -47,7 +49,9 @@ ERR_MAX_SUBSCRIBERS = "CP-EVT-003"
 # Limits (configurable via env)
 # ---------------------------------------------------------------------------
 
-MAX_SUBSCRIBERS_PER_TENANT: int = int(os.getenv("FG_CP_MAX_SUBSCRIBERS_PER_TENANT", "10"))
+MAX_SUBSCRIBERS_PER_TENANT: int = int(
+    os.getenv("FG_CP_MAX_SUBSCRIBERS_PER_TENANT", "10")
+)
 SUBSCRIBER_QUEUE_DEPTH: int = int(os.getenv("FG_CP_SUBSCRIBER_QUEUE_DEPTH", "100"))
 
 
@@ -63,6 +67,7 @@ def _slow_consumer_drop_threshold() -> int:
 # ---------------------------------------------------------------------------
 # Event types
 # ---------------------------------------------------------------------------
+
 
 class ControlEventType(str, Enum):
     MODULE_STATE_CHANGED = "module_state_changed"
@@ -83,11 +88,13 @@ class ControlEventType(str, Enum):
 # Exception for subscriber cap exceeded
 # ---------------------------------------------------------------------------
 
+
 class MaxSubscribersExceededError(Exception):
     """
     Raised by EventStreamBus.subscribe() when a tenant has reached the
     maximum concurrent subscriber limit (FG_CP_MAX_SUBSCRIBERS_PER_TENANT).
     """
+
     pass
 
 
@@ -127,6 +134,7 @@ def _generate_instance_id(content_hash: str) -> str:
 # Event structure
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class ControlEvent:
     """
@@ -142,16 +150,17 @@ class ControlEvent:
     When timestamp is provided it is used for the content hash (deterministic tests);
     when omitted a fresh UTC timestamp is generated.
     """
+
     event_type: ControlEventType
     module_id: str
     tenant_id: str
     payload: Dict[str, Any] = field(default_factory=dict)
 
     # Computed in __post_init__ — frozen so we use object.__setattr__
-    event_id: str = field(default="")          # content_hash (deterministic)
-    event_instance_id: str = field(default="") # unique per publish (anti-replay)
+    event_id: str = field(default="")  # content_hash (deterministic)
+    event_instance_id: str = field(default="")  # unique per publish (anti-replay)
     timestamp: str = field(default="")
-    content_hash: str = field(default="")      # alias for event_id
+    content_hash: str = field(default="")  # alias for event_id
 
     def __post_init__(self) -> None:
         # Coerce string event_type to enum
@@ -176,8 +185,8 @@ class ControlEvent:
 
     def to_dict(self, redact_tenant: bool = False) -> dict:
         return {
-            "event_id": self.event_id,               # content hash (dedupe)
-            "content_hash": self.content_hash,        # same as event_id
+            "event_id": self.event_id,  # content hash (dedupe)
+            "content_hash": self.content_hash,  # same as event_id
             "event_instance_id": self.event_instance_id,  # unique per publish
             "event_type": self.event_type.value,
             "module_id": self.module_id,
@@ -214,6 +223,7 @@ def _deterministic_event_id(
 # ---------------------------------------------------------------------------
 # Subscriber
 # ---------------------------------------------------------------------------
+
 
 class EventSubscriber:
     """
@@ -309,6 +319,7 @@ class EventSubscriber:
 # Event Stream Bus
 # ---------------------------------------------------------------------------
 
+
 class EventStreamBus:
     """
     Singleton in-process event bus.
@@ -331,9 +342,7 @@ class EventStreamBus:
                     obj._subscribers: Dict[str, EventSubscriber] = {}
                     obj._lock = threading.RLock()
                     obj._event_history: list[ControlEvent] = []
-                    obj._history_max = int(
-                        os.getenv("FG_CP_EVENT_HISTORY_MAX", "500")
-                    )
+                    obj._history_max = int(os.getenv("FG_CP_EVENT_HISTORY_MAX", "500"))
                     cls._instance = obj
         return cls._instance
 
@@ -350,7 +359,7 @@ class EventStreamBus:
             # Keep rolling history
             self._event_history.append(event)
             if len(self._event_history) > self._history_max:
-                self._event_history = self._event_history[-self._history_max:]
+                self._event_history = self._event_history[-self._history_max :]
 
             # Fan-out to matching subscribers
             closed: list[str] = []
@@ -480,6 +489,7 @@ class EventStreamBus:
 # Convenience publishers (called by other services)
 # ---------------------------------------------------------------------------
 
+
 def _bus() -> EventStreamBus:
     return EventStreamBus()
 
@@ -492,16 +502,18 @@ def emit_module_state_changed(
     new_state: str,
     reason: str = "",
 ) -> None:
-    _bus().publish(ControlEvent(
-        event_type=ControlEventType.MODULE_STATE_CHANGED,
-        module_id=module_id,
-        tenant_id=tenant_id,
-        payload={
-            "old_state": old_state,
-            "new_state": new_state,
-            "reason": reason,
-        },
-    ))
+    _bus().publish(
+        ControlEvent(
+            event_type=ControlEventType.MODULE_STATE_CHANGED,
+            module_id=module_id,
+            tenant_id=tenant_id,
+            payload={
+                "old_state": old_state,
+                "new_state": new_state,
+                "reason": reason,
+            },
+        )
+    )
 
 
 def emit_dependency_state_changed(
@@ -513,17 +525,19 @@ def emit_dependency_state_changed(
     new_status: str,
     error_code: Optional[str] = None,
 ) -> None:
-    _bus().publish(ControlEvent(
-        event_type=ControlEventType.DEPENDENCY_STATE_CHANGED,
-        module_id=module_id,
-        tenant_id=tenant_id,
-        payload={
-            "dependency_name": dependency_name,
-            "old_status": old_status,
-            "new_status": new_status,
-            "error_code": error_code,
-        },
-    ))
+    _bus().publish(
+        ControlEvent(
+            event_type=ControlEventType.DEPENDENCY_STATE_CHANGED,
+            module_id=module_id,
+            tenant_id=tenant_id,
+            payload={
+                "dependency_name": dependency_name,
+                "old_status": old_status,
+                "new_status": new_status,
+                "error_code": error_code,
+            },
+        )
+    )
 
 
 def emit_locker_state_changed(
@@ -535,29 +549,33 @@ def emit_locker_state_changed(
     command: Optional[str] = None,
     actor: Optional[str] = None,
 ) -> None:
-    _bus().publish(ControlEvent(
-        event_type=ControlEventType.LOCKER_STATE_CHANGED,
-        module_id=locker_id,
-        tenant_id=tenant_id,
-        payload={
-            "locker_id": locker_id,
-            "old_state": old_state,
-            "new_state": new_state,
-            "command": command,
-            "actor": actor,
-        },
-    ))
+    _bus().publish(
+        ControlEvent(
+            event_type=ControlEventType.LOCKER_STATE_CHANGED,
+            module_id=locker_id,
+            tenant_id=tenant_id,
+            payload={
+                "locker_id": locker_id,
+                "old_state": old_state,
+                "new_state": new_state,
+                "command": command,
+                "actor": actor,
+            },
+        )
+    )
 
 
 def emit_restart_started(
     *, module_id: str, tenant_id: str, actor: str, reason: str
 ) -> None:
-    _bus().publish(ControlEvent(
-        event_type=ControlEventType.RESTART_STARTED,
-        module_id=module_id,
-        tenant_id=tenant_id,
-        payload={"actor": actor, "reason": reason},
-    ))
+    _bus().publish(
+        ControlEvent(
+            event_type=ControlEventType.RESTART_STARTED,
+            module_id=module_id,
+            tenant_id=tenant_id,
+            payload={"actor": actor, "reason": reason},
+        )
+    )
 
 
 def emit_restart_completed(
@@ -567,30 +585,36 @@ def emit_restart_completed(
     success: bool,
     error_code: Optional[str] = None,
 ) -> None:
-    _bus().publish(ControlEvent(
-        event_type=ControlEventType.RESTART_COMPLETED,
-        module_id=module_id,
-        tenant_id=tenant_id,
-        payload={"success": success, "error_code": error_code},
-    ))
+    _bus().publish(
+        ControlEvent(
+            event_type=ControlEventType.RESTART_COMPLETED,
+            module_id=module_id,
+            tenant_id=tenant_id,
+            payload={"success": success, "error_code": error_code},
+        )
+    )
 
 
 def emit_breaker_opened(*, module_id: str, tenant_id: str, reason: str = "") -> None:
-    _bus().publish(ControlEvent(
-        event_type=ControlEventType.BREAKER_OPENED,
-        module_id=module_id,
-        tenant_id=tenant_id,
-        payload={"reason": reason},
-    ))
+    _bus().publish(
+        ControlEvent(
+            event_type=ControlEventType.BREAKER_OPENED,
+            module_id=module_id,
+            tenant_id=tenant_id,
+            payload={"reason": reason},
+        )
+    )
 
 
 def emit_breaker_closed(*, module_id: str, tenant_id: str) -> None:
-    _bus().publish(ControlEvent(
-        event_type=ControlEventType.BREAKER_CLOSED,
-        module_id=module_id,
-        tenant_id=tenant_id,
-        payload={},
-    ))
+    _bus().publish(
+        ControlEvent(
+            event_type=ControlEventType.BREAKER_CLOSED,
+            module_id=module_id,
+            tenant_id=tenant_id,
+            payload={},
+        )
+    )
 
 
 def emit_config_changed(
@@ -600,12 +624,14 @@ def emit_config_changed(
     config_hash: str,
     actor: str = "system",
 ) -> None:
-    _bus().publish(ControlEvent(
-        event_type=ControlEventType.CONFIG_CHANGED,
-        module_id=module_id,
-        tenant_id=tenant_id,
-        payload={"config_hash": config_hash, "actor": actor},
-    ))
+    _bus().publish(
+        ControlEvent(
+            event_type=ControlEventType.CONFIG_CHANGED,
+            module_id=module_id,
+            tenant_id=tenant_id,
+            payload={"config_hash": config_hash, "actor": actor},
+        )
+    )
 
 
 def emit_policy_violation(
@@ -615,17 +641,20 @@ def emit_policy_violation(
     policy_id: str,
     details: str = "",
 ) -> None:
-    _bus().publish(ControlEvent(
-        event_type=ControlEventType.POLICY_VIOLATION_DETECTED,
-        module_id=module_id,
-        tenant_id=tenant_id,
-        payload={"policy_id": policy_id, "details": details},
-    ))
+    _bus().publish(
+        ControlEvent(
+            event_type=ControlEventType.POLICY_VIOLATION_DETECTED,
+            module_id=module_id,
+            tenant_id=tenant_id,
+            payload={"policy_id": policy_id, "details": details},
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
 # Utilities
 # ---------------------------------------------------------------------------
+
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -634,8 +663,6 @@ def _utc_now_iso() -> str:
 # ---------------------------------------------------------------------------
 # Simplified public API: make_event factory + ControlEventBus
 # ---------------------------------------------------------------------------
-
-import queue as _queue_module  # stdlib queue for ControlEventBus subscribers
 
 
 def make_event(
@@ -670,11 +697,15 @@ class _ControlSubscriber:
     Receives events via a thread-safe queue.
     """
 
-    def __init__(self, subscriber_id: str, tenant_id: Optional[str], is_global_admin: bool) -> None:
+    def __init__(
+        self, subscriber_id: str, tenant_id: Optional[str], is_global_admin: bool
+    ) -> None:
         self.subscriber_id = subscriber_id
         self.tenant_id = tenant_id
         self.is_global_admin = is_global_admin
-        self.queue: _queue_module.Queue = _queue_module.Queue(maxsize=SUBSCRIBER_QUEUE_DEPTH)
+        self.queue: _queue_module.Queue = _queue_module.Queue(
+            maxsize=SUBSCRIBER_QUEUE_DEPTH
+        )
         self._closed = False
 
     def matches(self, event: ControlEvent) -> bool:
@@ -712,8 +743,11 @@ class ControlEventBus:
             # Count non-global subscribers for this tenant
             if not is_global_admin and tenant_id is not None:
                 tenant_count = sum(
-                    1 for s in self._subscribers.values()
-                    if not s.is_closed() and s.tenant_id == tenant_id and not s.is_global_admin
+                    1
+                    for s in self._subscribers.values()
+                    if not s.is_closed()
+                    and s.tenant_id == tenant_id
+                    and not s.is_global_admin
                 )
                 if tenant_count >= MAX_SUBSCRIBERS_PER_TENANT:
                     raise ValueError(

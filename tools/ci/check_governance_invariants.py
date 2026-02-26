@@ -8,7 +8,9 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 def _load_inventory() -> list[dict[str, object]]:
-    payload = json.loads((REPO / "tools/ci/route_inventory.json").read_text(encoding="utf-8"))
+    payload = json.loads(
+        (REPO / "tools/ci/route_inventory.json").read_text(encoding="utf-8")
+    )
     if isinstance(payload, list):
         if not all(isinstance(item, dict) for item in payload):
             raise ValueError("route inventory legacy format must be list[object]")
@@ -23,7 +25,9 @@ def _load_inventory() -> list[dict[str, object]]:
 
 def main() -> int:
     failures: list[str] = []
-    inv_doc = json.loads((REPO / "tools/ci/route_inventory.json").read_text(encoding="utf-8"))
+    inv_doc = json.loads(
+        (REPO / "tools/ci/route_inventory.json").read_text(encoding="utf-8")
+    )
     inv = inv_doc.get("routes", []) if isinstance(inv_doc, dict) else []
 
     required = {
@@ -38,8 +42,12 @@ def main() -> int:
 
     # immutable retention footgun guard: no delete endpoints for evidence anchors/runs
     for method, path in seen:
-        if method == "DELETE" and (path.startswith("/evidence/anchors") or path.startswith("/evidence/runs")):
-            failures.append("immutable retention footgun: delete endpoint exposed for evidence artifacts")
+        if method == "DELETE" and (
+            path.startswith("/evidence/anchors") or path.startswith("/evidence/runs")
+        ):
+            failures.append(
+                "immutable retention footgun: delete endpoint exposed for evidence artifacts"
+            )
 
     # deterministic deny codes in routers
     ex_router = (REPO / "api/exception_breakglass.py").read_text(encoding="utf-8")

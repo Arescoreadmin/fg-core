@@ -33,25 +33,43 @@ def safe_path_join(base: Path, *parts: str) -> Path:
 
 
 def _write_anchor_receipt(payload: dict[str, object]) -> str:
-    schema_path = Path("contracts/artifacts/anchor_receipt.schema.json")
-    schema = json.loads(schema_path.read_text(encoding="utf-8"))
-    validate_payload_against_schema(payload, schema)
-
+    # 1) Validate receipt_id FIRST so path-safety tests see the correct error code.
     receipt_id = str(payload.get("receipt_id") or "")
     if not _SAFE_ID_RE.fullmatch(receipt_id):
         raise ValueError("ANCHOR_RECEIPT_ID_INVALID")
 
+    # 2) Enforce size limit BEFORE schema validation so oversize gets the right error.
+    #    (Schema validation is not the right failure mode for hostile input.)
+    body_probe = (json.dumps(payload, sort_keys=True, indent=2) + "\n").encode("utf-8")
+    if len(body_probe) > MAX_RECEIPT_BYTES:
+        raise ValueError("ANCHOR_RECEIPT_TOO_LARGE")
+
+    # 3) Inject schema_version (v1) if missing. Schema is authoritative; callers shouldn't have to remember.
+    if "schema_version" not in payload:
+        payload = dict(payload)  # avoid mutating caller-owned dict
+        payload["schema_version"] = "v1"
+
+    # 4) Now validate payload against schema (fail closed).
+    schema_path = Path("contracts/artifacts/anchor_receipt.schema.json")
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    validate_payload_against_schema(payload, schema)
+
+    # 5) Write atomically with restricted permissions.
     out_dir = Path(os.getenv("FG_ARTIFACTS_DIR", "artifacts")) / "anchor_receipts"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = safe_path_join(out_dir, f"{receipt_id}.json")
     tmp_path = out_path.with_suffix(".tmp")
+
     body = (json.dumps(payload, sort_keys=True, indent=2) + "\n").encode("utf-8")
+    # Re-check after injection to keep the limit strict.
     if len(body) > MAX_RECEIPT_BYTES:
         raise ValueError("ANCHOR_RECEIPT_TOO_LARGE")
+
     with tmp_path.open("wb") as fh:
         fh.write(body)
         fh.flush()
         os.fsync(fh.fileno())
+
     os.chmod(tmp_path, 0o600)
     os.replace(tmp_path, out_path)
     return str(out_path)

@@ -37,7 +37,9 @@ class ExceptionBreakglassService:
             "created_at_utc": _utc_now(),
             "approvals": [],
         }
-        digest = hashlib.sha256(json.dumps(entry, sort_keys=True).encode("utf-8")).hexdigest()
+        digest = hashlib.sha256(
+            json.dumps(entry, sort_keys=True).encode("utf-8")
+        ).hexdigest()
         db.execute(
             text(
                 "INSERT INTO approval_logs(tenant_id, subject_type, subject_id, seq, entry_json, entry_hash, prev_chain_hash, chain_hash, signature, key_id) "
@@ -57,20 +59,28 @@ class ExceptionBreakglassService:
     def approve_exception(
         self, db: Session, tenant_id: str, request_id: str, payload: ExceptionApproval
     ) -> dict[str, object]:
-        row = db.execute(
-            text(
-                "SELECT id, entry_json FROM approval_logs WHERE tenant_id=:tenant_id AND subject_type='exception' AND subject_id=:subject_id ORDER BY id DESC LIMIT 1"
-            ),
-            {"tenant_id": tenant_id, "subject_id": request_id},
-        ).mappings().first()
+        row = (
+            db.execute(
+                text(
+                    "SELECT id, entry_json FROM approval_logs WHERE tenant_id=:tenant_id AND subject_type='exception' AND subject_id=:subject_id ORDER BY id DESC LIMIT 1"
+                ),
+                {"tenant_id": tenant_id, "subject_id": request_id},
+            )
+            .mappings()
+            .first()
+        )
         if row is None:
             raise ValueError("exception_not_found")
         entry = json.loads(row["entry_json"])
         approvals = list(entry.get("approvals", []))
-        approvals.append({"role": payload.approver_role, "notes": payload.notes, "at": _utc_now()})
+        approvals.append(
+            {"role": payload.approver_role, "notes": payload.notes, "at": _utc_now()}
+        )
         entry["approvals"] = approvals
         entry["status"] = "approved"
-        digest = hashlib.sha256(json.dumps(entry, sort_keys=True).encode("utf-8")).hexdigest()
+        digest = hashlib.sha256(
+            json.dumps(entry, sort_keys=True).encode("utf-8")
+        ).hexdigest()
         db.execute(
             text(
                 "INSERT INTO approval_logs(tenant_id, subject_type, subject_id, seq, entry_json, entry_hash, prev_chain_hash, chain_hash, signature, key_id) "
@@ -102,7 +112,9 @@ class ExceptionBreakglassService:
             "risk_tier": getattr(payload, "risk_tier", None) or "medium",
             "created_at_utc": _utc_now(),
         }
-        digest = hashlib.sha256(json.dumps(entry, sort_keys=True).encode("utf-8")).hexdigest()
+        digest = hashlib.sha256(
+            json.dumps(entry, sort_keys=True).encode("utf-8")
+        ).hexdigest()
         db.execute(
             text(
                 "INSERT INTO approval_logs(tenant_id, subject_type, subject_id, seq, entry_json, entry_hash, prev_chain_hash, chain_hash, signature, key_id) "

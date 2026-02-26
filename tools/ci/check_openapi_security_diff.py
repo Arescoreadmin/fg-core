@@ -68,7 +68,15 @@ def _ops(spec: dict[str, object]) -> dict[tuple[str, str], dict[str, object]]:
             continue
         for m, op in body.items():
             mm = str(m).lower()
-            if mm in {"get", "post", "put", "patch", "delete", "head", "options"} and isinstance(op, dict):
+            if mm in {
+                "get",
+                "post",
+                "put",
+                "patch",
+                "delete",
+                "head",
+                "options",
+            } and isinstance(op, dict):
                 out[(mm, str(p))] = op
     return out
 
@@ -93,8 +101,12 @@ def _is_extension_route(path: str) -> bool:
 def main() -> int:
     baseline_path = Path(os.getenv("OPENAPI_BASELINE_PATH", str(DEFAULT_BASELINE)))
     target_path = Path(os.getenv("OPENAPI_TARGET_PATH", str(DEFAULT_TARGET)))
-    allowlist_path = Path(os.getenv("OPENAPI_PROTECTED_ALLOWLIST_PATH", str(DEFAULT_ALLOWLIST)))
-    route_inventory_path = Path(os.getenv("OPENAPI_ROUTE_INVENTORY_PATH", str(DEFAULT_ROUTE_INVENTORY)))
+    allowlist_path = Path(
+        os.getenv("OPENAPI_PROTECTED_ALLOWLIST_PATH", str(DEFAULT_ALLOWLIST))
+    )
+    route_inventory_path = Path(
+        os.getenv("OPENAPI_ROUTE_INVENTORY_PATH", str(DEFAULT_ROUTE_INVENTORY))
+    )
 
     baseline = _load(baseline_path)
     target = _load(target_path)
@@ -104,7 +116,9 @@ def main() -> int:
 
     protected_prefixes = tuple(allow.get("protected_prefixes", []))
     waived = dict(allow.get("waived_401_403", {}))
-    route_map = {(str(r.get("method", "")).lower(), str(r.get("path", ""))): r for r in inv}
+    route_map = {
+        (str(r.get("method", "")).lower(), str(r.get("path", ""))): r for r in inv
+    }
 
     base_ops = _ops(baseline)
     tgt_ops = _ops(target)

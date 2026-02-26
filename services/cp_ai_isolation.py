@@ -93,8 +93,7 @@ def validate_namespace_binding(
     expected = derive_tenant_namespace(tenant_id)
     if requested_namespace != expected:
         log.error(
-            "cp_ai_isolation.namespace_mismatch "
-            "tenant=%s expected_ns=%s got_ns=%s",
+            "cp_ai_isolation.namespace_mismatch tenant=%s expected_ns=%s got_ns=%s",
             tenant_id,
             expected,
             requested_namespace,
@@ -233,7 +232,10 @@ def assert_no_cross_tenant_retrieval(
     log.info(
         "cp_ai_isolation.cross_tenant_check_passed "
         "tenant_a=%s ns_a=%s tenant_b=%s ns_b=%s",
-        tenant_a_id, ns_a, tenant_b_id, ns_b,
+        tenant_a_id,
+        ns_a,
+        tenant_b_id,
+        ns_b,
     )
 
 

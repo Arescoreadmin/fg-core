@@ -102,7 +102,9 @@ def check_hash_chain_logic() -> None:
         if marker in content or marker.lower() in content.lower():
             ok(description)
         else:
-            fail(f"Hash chain: {description} — marker '{marker}' not found in cp_ledger.py")
+            fail(
+                f"Hash chain: {description} — marker '{marker}' not found in cp_ledger.py"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -200,7 +202,9 @@ def check_no_header_tenant() -> None:
     for pat in forbidden_patterns:
         if pat in content:
             found_header_tenant = True
-            fail(f"Header-based tenant derivation found: '{pat}' in control_plane_v2.py")
+            fail(
+                f"Header-based tenant derivation found: '{pat}' in control_plane_v2.py"
+            )
 
     if not found_header_tenant:
         ok("No header-based tenant derivation found")
@@ -227,7 +231,9 @@ def check_event_written_before_streaming() -> None:
         if marker in content:
             ok(description)
         else:
-            fail(f"Persistence-first: {description} — '{marker}' not found in cp_ledger.py")
+            fail(
+                f"Persistence-first: {description} — '{marker}' not found in cp_ledger.py"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +251,9 @@ def check_command_allowlist() -> None:
     if "not in VALID_CP_COMMANDS" in content:
         ok("Command validated against VALID_CP_COMMANDS allowlist")
     else:
-        fail("Command not validated against allowlist — no 'not in VALID_CP_COMMANDS' check")
+        fail(
+            "Command not validated against allowlist — no 'not in VALID_CP_COMMANDS' check"
+        )
 
     # Verify no dynamic dispatch
     tree = _parse("services/cp_commands.py")
@@ -253,7 +261,11 @@ def check_command_allowlist() -> None:
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
                 func = node.func
-                if isinstance(func, ast.Name) and func.id in ("eval", "exec", "__import__"):
+                if isinstance(func, ast.Name) and func.id in (
+                    "eval",
+                    "exec",
+                    "__import__",
+                ):
                     fail(f"Dynamic dispatch '{func.id}()' found in cp_commands.py")
         ok("No dynamic dispatch (eval/exec) in cp_commands.py")
 
@@ -377,16 +389,37 @@ def check_negative_test_coverage() -> None:
     test_content = _read("tests/control_plane/test_control_plane_v2.py")
 
     required_negative_tests = [
-        ("test_invariant_no_tenant_from_request_body", "invariant: no tenant from body"),
+        (
+            "test_invariant_no_tenant_from_request_body",
+            "invariant: no tenant from body",
+        ),
         ("test_invariant_command_enum_allowlist", "invariant: command allowlist"),
         ("test_invariant_no_subprocess", "invariant: no subprocess"),
-        ("test_invariant_append_only_tables_in_migration", "invariant: append-only migration"),
-        ("test_invariant_receipt_endpoint_enforces_executor_type", "invariant: receipt executor auth"),
+        (
+            "test_invariant_append_only_tables_in_migration",
+            "invariant: append-only migration",
+        ),
+        (
+            "test_invariant_receipt_endpoint_enforces_executor_type",
+            "invariant: receipt executor auth",
+        ),
         ("test_invariant_msp_cross_tenant_requires_msp_scope", "invariant: msp scope"),
-        ("test_invariant_event_written_before_streaming", "invariant: event before stream"),
-        ("test_invariant_playbook_allowlist_is_closed", "invariant: playbook allowlist"),
-        ("test_invariant_hash_chain_requires_prev_hash", "invariant: hash chain linkage"),
-        ("test_invariant_content_hash_covers_payload", "invariant: content hash tamper"),
+        (
+            "test_invariant_event_written_before_streaming",
+            "invariant: event before stream",
+        ),
+        (
+            "test_invariant_playbook_allowlist_is_closed",
+            "invariant: playbook allowlist",
+        ),
+        (
+            "test_invariant_hash_chain_requires_prev_hash",
+            "invariant: hash chain linkage",
+        ),
+        (
+            "test_invariant_content_hash_covers_payload",
+            "invariant: content hash tamper",
+        ),
     ]
     for test_name, description in required_negative_tests:
         if test_name in test_content:
@@ -442,6 +475,7 @@ def check_router_registered() -> None:
 # Main
 # ---------------------------------------------------------------------------
 
+
 # ---------------------------------------------------------------------------
 # Check 17: AI isolation service enforces tenant-scoped namespace
 # ---------------------------------------------------------------------------
@@ -461,7 +495,9 @@ def check_ai_isolation_namespace() -> None:
         if marker in content:
             ok(description)
         else:
-            fail(f"AI isolation: {description} — '{marker}' not found in cp_ai_isolation.py")
+            fail(
+                f"AI isolation: {description} — '{marker}' not found in cp_ai_isolation.py"
+            )
 
     # Verify no subprocess
     tree = _parse("services/cp_ai_isolation.py")
@@ -495,7 +531,9 @@ def check_msp_delegation_model() -> None:
         if marker in content:
             ok(description)
         else:
-            fail(f"Delegation: {description} — '{marker}' not found in cp_msp_delegation.py")
+            fail(
+                f"Delegation: {description} — '{marker}' not found in cp_msp_delegation.py"
+            )
 
     # Check delegation endpoints in API
     api_content = _read("api/control_plane_v2.py")
@@ -508,7 +546,9 @@ def check_msp_delegation_model() -> None:
         if marker in api_content:
             ok(description)
         else:
-            fail(f"Delegation API: {description} — '{marker}' not found in control_plane_v2.py")
+            fail(
+                f"Delegation API: {description} — '{marker}' not found in control_plane_v2.py"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -549,7 +589,10 @@ def check_sandboxed_terminal() -> None:
     api_markers = [
         ("/control-plane/v2/terminal/execute", "terminal execute endpoint defined"),
         ("/control-plane/v2/terminal/allowlist", "terminal allowlist endpoint defined"),
-        ("/control-plane/v2/terminal/breakglass", "terminal breakglass endpoint defined"),
+        (
+            "/control-plane/v2/terminal/breakglass",
+            "terminal breakglass endpoint defined",
+        ),
         ("BREAKGLASS_SCOPE", "breakglass scope enforced in API"),
     ]
     for marker, description in api_markers:
@@ -582,11 +625,15 @@ def check_cli_verifier_tool() -> None:
                 if "exit code" in content or "Exit code" in content:
                     ok(description)
                 else:
-                    fail(f"Verifier: {description} — 'exit code' not found in verify_bundle.py")
+                    fail(
+                        f"Verifier: {description} — 'exit code' not found in verify_bundle.py"
+                    )
             elif marker in content:
                 ok(description)
             else:
-                fail(f"Verifier: {description} — '{marker}' not found in verify_bundle.py")
+                fail(
+                    f"Verifier: {description} — '{marker}' not found in verify_bundle.py"
+                )
         else:
             fail(f"Verifier: {description} — '{marker}' not found in verify_bundle.py")
 
@@ -615,37 +662,52 @@ def check_phase_test_coverage() -> None:
 
     # Verify each test file has negative tests
     negative_markers = [
-        ("test_control_plane_phase3.py", [
-            "test_invariant_ai_cross_tenant_retrieval_blocked",
-            "test_invariant_ai_namespace_requires_tenant",
-            "test_invariant_namespaces_structurally_isolated",
-        ]),
-        ("test_control_plane_phase4.py", [
-            "test_invariant_empty_target_tenant_rejected",
-            "test_invariant_unknown_scope_rejected",
-            "test_check_delegation_missing_raises_not_found",
-        ]),
-        ("test_control_plane_phase5.py", [
-            "test_invariant_invalid_version_hash_rejected",
-            "test_invariant_ttl_exceeds_max_rejected",
-            "test_invariant_rollback_without_previous_pin_raises",
-            "test_invariant_rollback_without_rollback_target_raises",
-            "test_invariant_no_subprocess_in_policy_lifecycle",
-            "test_invariant_ledger_written_for_pin",
-        ]),
-        ("test_control_plane_phase6.py", [
-            "test_invariant_unknown_command_rejected",
-            "test_invariant_shell_injection_rejected",
-            "test_invariant_breakglass_cmd_without_scope_rejected",
-            "test_invariant_no_subprocess_in_terminal",
-            "test_invariant_ledger_written_before_return",
-        ]),
-        ("test_control_plane_phase7.py", [
-            "test_tampered_payload_detected",
-            "test_tampered_chain_hash_detected",
-            "test_tampered_merkle_root_detected",
-            "test_foreign_tenant_events_detected",
-        ]),
+        (
+            "test_control_plane_phase3.py",
+            [
+                "test_invariant_ai_cross_tenant_retrieval_blocked",
+                "test_invariant_ai_namespace_requires_tenant",
+                "test_invariant_namespaces_structurally_isolated",
+            ],
+        ),
+        (
+            "test_control_plane_phase4.py",
+            [
+                "test_invariant_empty_target_tenant_rejected",
+                "test_invariant_unknown_scope_rejected",
+                "test_check_delegation_missing_raises_not_found",
+            ],
+        ),
+        (
+            "test_control_plane_phase5.py",
+            [
+                "test_invariant_invalid_version_hash_rejected",
+                "test_invariant_ttl_exceeds_max_rejected",
+                "test_invariant_rollback_without_previous_pin_raises",
+                "test_invariant_rollback_without_rollback_target_raises",
+                "test_invariant_no_subprocess_in_policy_lifecycle",
+                "test_invariant_ledger_written_for_pin",
+            ],
+        ),
+        (
+            "test_control_plane_phase6.py",
+            [
+                "test_invariant_unknown_command_rejected",
+                "test_invariant_shell_injection_rejected",
+                "test_invariant_breakglass_cmd_without_scope_rejected",
+                "test_invariant_no_subprocess_in_terminal",
+                "test_invariant_ledger_written_before_return",
+            ],
+        ),
+        (
+            "test_control_plane_phase7.py",
+            [
+                "test_tampered_payload_detected",
+                "test_tampered_chain_hash_detected",
+                "test_tampered_merkle_root_detected",
+                "test_foreign_tenant_events_detected",
+            ],
+        ),
     ]
     for fname, tests in negative_markers:
         content = _read(f"tests/control_plane/{fname}")
@@ -673,9 +735,11 @@ def check_policy_lifecycle_service() -> None:
         ("stage_version", "stage_version method defined"),
         ("rollback", "rollback method defined"),
         ("previous_hash", "previous_hash for rollback tracking present"),
-        ("severity=\"warning\"", "ledger events at warning severity"),
-        ("import subprocess" not in content and "subprocess.run" not in content,
-         "no subprocess in cp_policy_lifecycle.py"),
+        ('severity="warning"', "ledger events at warning severity"),
+        (
+            "import subprocess" not in content and "subprocess.run" not in content,
+            "no subprocess in cp_policy_lifecycle.py",
+        ),
         ("rollout_pct", "rollout_pct field present (canary support)"),
     ]
     for item in markers:
@@ -705,7 +769,9 @@ def check_policy_lifecycle_service() -> None:
         if marker in api_content:
             ok(description)
         else:
-            fail(f"Policy lifecycle API: {description} — '{marker}' not found in control_plane_v2.py")
+            fail(
+                f"Policy lifecycle API: {description} — '{marker}' not found in control_plane_v2.py"
+            )
 
 
 # ---------------------------------------------------------------------------

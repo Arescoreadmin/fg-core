@@ -1,4 +1,8 @@
-from services.ai_plane_extension.models import AIInferRequest, AIInferResponse, AIPolicyUpsertRequest
+from services.ai_plane_extension.models import (
+    AIInferRequest,
+    AIInferResponse,
+    AIPolicyUpsertRequest,
+)
 from services.ai_plane_extension.service import (
     AIPlaneService,
     ai_external_provider_enabled,

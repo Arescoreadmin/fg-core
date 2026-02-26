@@ -43,8 +43,10 @@ from typing import Any, Dict, List, Optional
 # Canonical JSON (must match services/cp_ledger.py exactly)
 # ---------------------------------------------------------------------------
 
+
 def _canonical_json(obj: Any) -> bytes:
     """Deterministic JSON serialisation (mirrors cp_ledger._canonical_json)."""
+
     def _norm(v: Any) -> Any:
         if isinstance(v, dict):
             return {str(k): _norm(val) for k, val in sorted(v.items())}
@@ -70,6 +72,7 @@ def _sha256(data: bytes) -> str:
 # ---------------------------------------------------------------------------
 # Hash recomputation (mirrors cp_ledger.py exactly)
 # ---------------------------------------------------------------------------
+
 
 def _recompute_content_hash(event: Dict[str, Any]) -> str:
     envelope = {
@@ -120,6 +123,7 @@ GENESIS_HASH = "0" * 64
 # Verification result
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class VerificationReport:
     ok: bool
@@ -157,6 +161,7 @@ class VerificationReport:
 # ---------------------------------------------------------------------------
 # Bundle verifier
 # ---------------------------------------------------------------------------
+
 
 class BundleVerifier:
     """Deterministic evidence bundle verifier."""
@@ -204,9 +209,7 @@ class BundleVerifier:
         )
         return report
 
-    def _check_schema(
-        self, bundle: Dict[str, Any], report: VerificationReport
-    ) -> None:
+    def _check_schema(self, bundle: Dict[str, Any], report: VerificationReport) -> None:
         required = [
             "bundle_type",
             "generated_at",
@@ -217,9 +220,7 @@ class BundleVerifier:
         ]
         for field_name in required:
             if field_name not in bundle:
-                report.failures.append(
-                    f"schema: missing required field '{field_name}'"
-                )
+                report.failures.append(f"schema: missing required field '{field_name}'")
                 report.checks_failed += 1
             else:
                 report.checks_passed += 1
@@ -347,9 +348,7 @@ class BundleVerifier:
     ) -> None:
         """Verify receipts reference known command_ids."""
         known_ids = {c.get("command_id") for c in commands}
-        orphan_receipts = [
-            cid for cid in receipts_map.keys() if cid not in known_ids
-        ]
+        orphan_receipts = [cid for cid in receipts_map.keys() if cid not in known_ids]
         if orphan_receipts:
             report.failures.append(
                 f"receipt_binding: {len(orphan_receipts)} receipt group(s) reference "
@@ -372,9 +371,7 @@ class BundleVerifier:
                 )
                 report.checks_failed += 1
             else:
-                report.warnings.append(
-                    "self_report: bundle reports integrity.ok=false"
-                )
+                report.warnings.append("self_report: bundle reports integrity.ok=false")
                 report.checks_passed += 1
         else:
             report.checks_passed += 1
@@ -383,6 +380,7 @@ class BundleVerifier:
 # ---------------------------------------------------------------------------
 # Anchor verifier
 # ---------------------------------------------------------------------------
+
 
 class AnchorVerifier:
     """Verifies a daily Merkle anchor artifact."""
@@ -402,9 +400,7 @@ class AnchorVerifier:
         ]
         for field_name in required:
             if field_name not in anchor:
-                report.failures.append(
-                    f"anchor_schema: missing field '{field_name}'"
-                )
+                report.failures.append(f"anchor_schema: missing field '{field_name}'")
                 report.checks_failed += 1
             else:
                 report.checks_passed += 1
@@ -428,6 +424,7 @@ class AnchorVerifier:
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
+
 
 def _print_report(report: VerificationReport, output_json: bool = False) -> None:
     if output_json:

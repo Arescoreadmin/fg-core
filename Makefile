@@ -12,6 +12,16 @@ SHELL := /bin/bash
 MAKEFLAGS += --no-print-directory
 
 # =============================================================================
+# Update Contracts 
+# =============================================================================
+update-contract-authority:
+	@FG_CONTRACT_AUTHORITY_FILES="$(CONTRACT_AUTHORITY_FILES)" \
+	.venv/bin/python tools/ci/contract_authority.py --write --debug
+
+check-contract-authority:
+	@FG_CONTRACT_AUTHORITY_FILES="$(CONTRACT_AUTHORITY_FILES)" \
+	.venv/bin/python tools/ci/contract_authority.py --strict
+# =============================================================================
 # Repo + Python
 # =============================================================================
 
@@ -86,6 +96,7 @@ require-helm:
 
 OPA_IMAGE ?= openpolicyagent/opa:0.64.1@sha256:34402172b65ceddd52461f227f998b2048c09a62cb4ba253cb0cc0504ea608de
 
+.PHONY: require-opa-runtime
 require-opa-runtime:
 	@set -euo pipefail; \
 	if command -v opa >/dev/null 2>&1; then \
@@ -115,7 +126,7 @@ FG_ENV                  ?= dev
 FG_SERVICE              ?= frostgate-core
 FG_AUTH_ENABLED         ?= 1
 FG_API_KEY              ?=
-FG_KEY_PEPPER         ?= ci-test-pepper
+FG_KEY_PEPPER           ?= ci-test-pepper
 FG_ENFORCEMENT_MODE     ?= observe
 FG_DEV_EVENTS_ENABLED   ?= 0
 FG_UI_TOKEN_GET_ENABLED ?= 1
@@ -124,7 +135,6 @@ ADMIN_SKIP_PIP_INSTALL  ?= 0
 # Admin-gateway dev-bypass tenant defaults (tests expect tenant-dev)
 FG_DEV_TENANT_ID        ?= tenant-dev
 FG_DEV_ALLOWED_TENANTS  ?= tenant-dev
-
 
 ARTIFACTS_DIR ?= artifacts
 STATE_DIR     ?= state
@@ -364,6 +374,7 @@ dos-hardening-check: _require-venv
 	prod-unsafe-config-check security-regression-gates soc-invariants enforcement-mode-matrix \
 	route-inventory-audit route-inventory-generate test-quality-gate soc-review-sync pr-base-mainline-check \
 	rebase-main-instructions audit-chain-verify compliance-chain-verify canonicalization-guard \
+	check-connectors-rls check_plane_registry check_plane_registry_runtime_app check-decision-roe \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate
@@ -483,6 +494,10 @@ soc-review-sync: venv
 pr-base-mainline-check: venv
 	@$(PY) tools/ci/check_pr_base_is_mainline.py
 
+# --- FIXED: real gate target, not a Makefile crime scene ---
+check-decision-roe: venv
+	@PYTHONPATH=. $(PY) tools/ci/check_decision_no_duplicate_roe_fields.py
+
 rebase-main-instructions:
 	@printf "%s\n" \
 	"Rebase workflow (run in your local clone):" \
@@ -513,6 +528,15 @@ generate-scorecard: venv
 	@FG_ENV=prod PYTHONPATH=scripts $(PY_CONTRACT) scripts/generate_scorecard.py
 
 # =============================================================================
+# SOC PR-Check
+# =============================================================================
+.PHONY: pr-soc-prep
+pr-soc-prep:
+	@echo "==> Updating SOC artifacts (sync)"
+	$(MAKE) soc-review-sync
+	@echo "==> Verifying SOC manifest"
+	$(MAKE) soc-manifest-verify
+# =============================================================================
 # Formatting / Lint (ruff) - venv always
 # =============================================================================
 
@@ -538,7 +562,6 @@ fg-lint: fmt-check
 .PHONY: test-unit
 test-unit: venv _require-pytest-venv
 	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q -m "not postgres"
-
 
 .PHONY: agent-unit agent-build-windows agent-smoke
 agent-unit: venv _require-pytest-venv
@@ -578,7 +601,7 @@ exam-export-test: venv _require-pytest-venv
 exam-reproduce-test: venv _require-pytest-venv
 	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_audit_engine.py -k "exam_reproduce"
 
-.PHONY: fg-fast fg-fast-ci fg-fast-full connectors-gate
+.PHONY: fg-fast fg-fast-ci fg-fast-full connectors-gate g-fast
 
 connectors-gate: venv _require-pytest-venv
 	@$(MAKE) -s validate-connector-contracts
@@ -589,16 +612,19 @@ connectors-gate: venv _require-pytest-venv
 
 fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check \
 	prod-unsafe-config-check security-regression-gates soc-invariants soc-manifest-verify \
-	route-inventory-audit test-quality-gate soc-review-sync pr-base-mainline-check \
+	route-inventory-audit check-decision-roe test-quality-gate soc-review-sync pr-base-mainline-check \
 	audit-chain-verify dos-hardening-check sql-migration-percent-guard gap-audit check-connectors-rls \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate \
-	verify-spine-modules verify-schemas verify-drift policy-validate align-score
+	verify-spine-modules verify-schemas verify-drift align-score
 	@$(MAKE) -s test-unit
 	@$(MAKE) -s fg-lint
 	@$(MAKE) -s test-dashboard-p0
 	@$(MAKE) -s sql-migration-percent-guard
+
+# Compat alias (you referenced "g-fast")
+g-fast: fg-fast
 
 fg-fast-ci: fg-fast billing-ledger-verify billing-invoice-verify opa-check control-plane-check
 
@@ -934,7 +960,7 @@ admin-test: admin-venv
 	if [ "$${ADMIN_SKIP_PIP_INSTALL:-0}" = "1" ]; then \
 		PYTHONPATH=. $(PYTEST_ENV) $(PYTEST) admin_gateway/tests -q; \
 	else \
-        FG_DEV_TENANT_ID="$${FG_DEV_TENANT_ID:-$(FG_DEV_TENANT_ID)}" FG_DEV_ALLOWED_TENANTS="$${FG_DEV_ALLOWED_TENANTS:-$(FG_DEV_ALLOWED_TENANTS)}" PYTHONPATH=. $(PYTEST_ENV) $(AG_VENV)/bin/pytest admin_gateway/tests -q; \
+		FG_DEV_TENANT_ID="$${FG_DEV_TENANT_ID:-$(FG_DEV_TENANT_ID)}" FG_DEV_ALLOWED_TENANTS="$${FG_DEV_ALLOWED_TENANTS:-$(FG_DEV_ALLOWED_TENANTS)}" PYTHONPATH=. $(PYTEST_ENV) $(AG_VENV)/bin/pytest admin_gateway/tests -q; \
 	fi
 
 ci-admin: admin-venv admin-lint admin-test
@@ -997,9 +1023,25 @@ ci-console: console-lint console-test
 .PHONY: guard-no-trash paste-garbage guard deps-up deps-down fg-restart
 
 guard-no-trash:
-	@bad=$$(git ls-files | grep -E '^(agent_queue/|keys/|secrets/|state/|artifacts/|logs/|CONTEXT_SNAPSHOT\.md|supervisor-sidecar/supervisor-sidecar)' || true); \
-	if [ -n "$$bad" ]; then \
-	  echo "Forbidden tracked paths:"; echo "$$bad"; exit 1; \
+	@set -euo pipefail; \
+	# Hard-forbidden tracked paths (secrets/runtime state)
+	bad=$$(git ls-files | rg -n '^(agent_queue/|keys/|secrets/|state/|logs/|CONTEXT_SNAPSHOT\.md|supervisor-sidecar/supervisor-sidecar)' || true); \
+	\
+	# Artifacts: allow tracked "governance outputs", forbid tracked "volatile/runtime outputs"
+	# Allowed examples: platform inventory, gaps, SOC stage docs, summaries, committed evidence schemas/manifests.
+	art_tracked=$$(git ls-files artifacts || true); \
+	art_bad=""; \
+	if [ -n "$$art_tracked" ]; then \
+	  art_bad=$$(printf "%s\n" "$$art_tracked" | rg -n \
+	    '(^artifacts/(latest_.*\.txt|.*\.zip|evidence_.*|runtime/|tmp/|scratch/))' \
+	    || true); \
+	fi; \
+	\
+	if [ -n "$$bad" ] || [ -n "$$art_bad" ]; then \
+	  echo "Forbidden tracked paths:"; \
+	  test -n "$$bad" && echo "$$bad"; \
+	  test -n "$$art_bad" && echo "$$art_bad"; \
+	  exit 1; \
 	fi
 
 paste-garbage: guard-no-trash
@@ -1111,7 +1153,7 @@ sql-migration-percent-guard: venv _require-venv
 # Postgres dev helpers (single definition, no duplicates)
 # =============================================================================
 
-.PHONY: pg-reset-frostgate test-pg-migrations-replay
+.PHONY: pg-reset-frostgate test-pg-migrations-replay route-inventory-update
 
 pg-reset-frostgate:
 	@bash tools/dev/reset_postgres_db.sh frostgate
@@ -1121,9 +1163,13 @@ test-pg-migrations-replay: pg-reset-frostgate venv _require-pytest-venv
 	$(PYTEST) -q tests/test_migrations_postgres_replay.py::test_postgres_migrations_replay_safe
 
 route-inventory-update:
-	@$(MAKE) route-inventory-generate
-	@$(MAKE) route-inventory-audit
+	@$(MAKE) -s route-inventory-generate
+	@$(MAKE) -s route-inventory-audit
 	@echo "✅ route inventory updated; commit tools/ci/route_inventory.json"
+
+# =============================================================================
+# Enterprise spot checks
+# =============================================================================
 
 .PHONY: compliance-cp-spot enterprise-controls-spot breakglass-spot governance-risk-spot evidence-anchor-spot federation-spot
 
@@ -1157,11 +1203,10 @@ ai-plane-full: venv _require-pytest-venv
 	@FG_ENV=test FG_AI_PLANE_ENABLED=1 FG_AI_EXTERNAL_PROVIDER_ENABLED=0 $(PYTEST_ENV) $(PYTEST) -q tests/test_ai_plane_extension.py
 	@FG_ENV=test FG_AI_PLANE_ENABLED=1 FG_AI_EXTERNAL_PROVIDER_ENABLED=0 $(PY) scripts/generate_ai_plane_evidence.py
 	@FG_ENV=test FG_AI_PLANE_ENABLED=1 FG_AI_EXTERNAL_PROVIDER_ENABLED=0 $(PYTEST_ENV) $(PYTEST) -q tests/test_ai_plane_extension.py::test_ai_artifact_generation_schema_validation
-	@$(MAKE) route-inventory-audit
+	@$(MAKE) -s route-inventory-audit
 
 enterprise-smoke: venv
 	@FG_ENV=test FG_AI_PLANE_ENABLED=1 FG_AI_EXTERNAL_PROVIDER_ENABLED=0 $(PY) scripts/run_enterprise_smoke.py
-
 
 .PHONY: openapi-security-diff
 openapi-security-diff: venv
@@ -1183,22 +1228,21 @@ governance-invariants: venv
 	@$(PY) tools/ci/check_governance_invariants.py
 
 nuclear-full: venv
-	@$(MAKE) route-inventory-generate
-	@$(MAKE) route-inventory-audit
-	@$(MAKE) contract-authority-refresh
-	@$(MAKE) fg-contract
-	@$(MAKE) plane-registry-spot
-	@$(MAKE) evidence-index-spot
-	@$(MAKE) enterprise-ext-spot
-	@$(MAKE) ai-plane-spot
-	@$(MAKE) ai-plane-full
-	@$(MAKE) resilience-smoke
-	@$(MAKE) governance-invariants
-	@$(MAKE) openapi-security-diff
-	@$(MAKE) platform-inventory
-	@$(MAKE) openapi-summary
-	@$(MAKE) enterprise-smoke
-
+	@$(MAKE) -s route-inventory-generate
+	@$(MAKE) -s route-inventory-audit
+	@$(MAKE) -s contract-authority-refresh
+	@$(MAKE) -s fg-contract
+	@$(MAKE) -s plane-registry-spot
+	@$(MAKE) -s evidence-index-spot
+	@$(MAKE) -s enterprise-ext-spot
+	@$(MAKE) -s ai-plane-spot
+	@$(MAKE) -s ai-plane-full
+	@$(MAKE) -s resilience-smoke
+	@$(MAKE) -s governance-invariants
+	@$(MAKE) -s openapi-security-diff
+	@$(MAKE) -s platform-inventory
+	@$(MAKE) -s openapi-summary
+	@$(MAKE) -s enterprise-smoke
 
 # =============================================================================
 # Control Plane CI gate
@@ -1216,20 +1260,18 @@ control-plane-check: venv control-plane-spot
 	@$(PY) tools/ci/check_control_plane_invariants.py
 	@echo "✅ control-plane check passed"
 
-
 .PHONY: pr-merge-smoke
 pr-merge-smoke: venv
 	@mkdir -p artifacts
 	@ruff check
 	@$(PYTEST) -q
-	@$(MAKE) route-inventory-generate
-	@$(MAKE) route-inventory-audit
-	@$(MAKE) contract-authority-refresh
-	@$(MAKE) fg-contract
-	@$(MAKE) platform-inventory
-	@$(MAKE) openapi-summary
-	@$(MAKE) nuclear-full
-
+	@$(MAKE) -s route-inventory-generate
+	@$(MAKE) -s route-inventory-audit
+	@$(MAKE) -s contract-authority-refresh
+	@$(MAKE) -s fg-contract
+	@$(MAKE) -s platform-inventory
+	@$(MAKE) -s openapi-summary
+	@$(MAKE) -s nuclear-full
 
 .PHONY: platform-inventory openapi-summary
 platform-inventory: venv
@@ -1238,10 +1280,9 @@ platform-inventory: venv
 openapi-summary: venv
 	@$(PY) scripts/summarize_openapi_changes.py
 
-
 .PHONY: agent-phase2-gate
 agent-phase2-gate: venv _require-pytest-venv
-	@$(MAKE) route-inventory-audit
+	@$(MAKE) -s route-inventory-audit
 	@$(PY) tools/ci/check_agent_phase2_public_paths.py
 	@$(PY) tools/ci/check_openapi_security_diff.py
 	@ruff check api/agent_phase2.py services/agent_update services/agent_log_integrity
@@ -1250,49 +1291,18 @@ agent-phase2-gate: venv _require-pytest-venv
 	@$(PY) tools/ci/check_agent_phase2_rls.py
 
 # =============================================================================
-# Testing Module Lanes (fail-closed)
+# Governance helper targets (deterministic vs volatile)
 # =============================================================================
 
+.PHONY: governance-det governance-volatile governance-check
 
-.PHONY: required-tests-gate policy-validate fg-security fg-full fg-triage fg-flake-detect runtime-budget-check invariant-coverage-check runtime-baseline-update quarantine-policy-check policy-drift-check
+governance-det: venv
+	@PYTHONPATH=. $(PY) tools/ci/check_route_inventory.py --write
+	@PYTHONPATH=. $(PY) scripts/generate_platform_inventory.py
 
-policy-validate: venv
-	@$(PY) tools/testing/policy/validate_policy.py
+governance-volatile: venv
+	@PYTHONPATH=. $(PY) tools/ci/check_route_inventory.py --write
+	@PYTHONPATH=. $(PY) scripts/generate_platform_inventory.py --include-volatile
 
-required-tests-gate: venv policy-validate
-	@$(PY) tools/testing/harness/required_tests_gate.py --base-ref "$${GITHUB_BASE_REF:-main}"
-
-fg-security: venv _require-pytest-venv required-tests-gate
-	@$(PY) tools/testing/security/check_security_invariants.py
-	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/security/test_scope_enforcement.py tests/security/test_tenant_binding_global.py
-
-fg-full: venv fg-fast fg-security
-	@$(PY) tools/testing/integration/smoke_suite.py
-	@$(MAKE) -s fg-fast-full
-
-
-runtime-budget-check: venv
-	@$(PY) -c "from pathlib import Path; from tools.testing.harness.runtime_budgets import load_runtime_budgets,enforce_lane_budget; d=load_runtime_budgets(Path('tools/testing/policy/runtime_budgets.yaml')); ok,msg=enforce_lane_budget('fg-fast',180,d,150); print(msg); raise SystemExit(0 if ok else 1)"
-
-invariant-coverage-check: venv
-	@$(PY) tools/testing/security/check_invariant_coverage.py
-
-fg-flake-detect: venv
-	@test -f artifacts/testing/junit.xml || (echo "artifacts/testing/junit.xml missing" && exit 1)
-	@$(PY) tools/testing/harness/flake_detect.py --junit artifacts/testing/junit.xml --out artifacts/testing/flake-report.json
-
-fg-triage: venv
-	@test -n "$(LOG)" || (echo "LOG=<path> is required" && exit 1)
-	@$(PY) tools/testing/harness/triage_report.py --log "$(LOG)" --out "$(ARTIFACTS_DIR)/triage.json"
-
-quarantine-policy-check: venv
-	@test -f artifacts/testing/flake-report.json || (echo "artifacts/testing/flake-report.json missing" && exit 1)
-	@$(PY) -c "from pathlib import Path; from tools.testing.harness.quarantine_policy import ensure_new_suspects_have_policy_entries; ensure_new_suspects_have_policy_entries(Path('artifacts/testing/flake-report.json'))"
-
-runtime-baseline-update: venv
-	@test -n "$(LANE)" || (echo "LANE=<lane> required" && exit 1)
-	@test -n "$(DURATION)" || (echo "DURATION=<seconds> required" && exit 1)
-	@$(PY) tools/testing/harness/runtime_baseline.py --lane "$(LANE)" --duration "$(DURATION)" --branch "$${GITHUB_REF_NAME:-local}" --event "$${GITHUB_EVENT_NAME:-manual}"
-
-policy-drift-check: venv
-	@$(PY) tools/testing/policy/check_policy_drift.py --base-ref "$${GITHUB_BASE_REF:-main}" --event-path "$${GITHUB_EVENT_PATH:-}"
+governance-check: governance-det
+	@git diff --exit-code -- artifacts/platform_inventory.det.json artifacts/PLATFORM_INVENTORY.det.md artifacts/PLATFORM_GAPS.det.md

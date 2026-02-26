@@ -34,7 +34,9 @@ class ComplianceControlPlaneService:
 
     def controls(self, tenant_id: str) -> list[dict[str, object]]:
         try:
-            diff = self.registry.requirements_diff(tenant_id, since="1970-01-01T00:00:00Z")
+            diff = self.registry.requirements_diff(
+                tenant_id, since="1970-01-01T00:00:00Z"
+            )
         except Exception:
             diff = []
         return [

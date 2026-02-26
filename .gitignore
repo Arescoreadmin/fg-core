@@ -160,11 +160,20 @@ keys/
 # ---- Built binaries (never commit; build in CI) ----
 supervisor-sidecar/supervisor-sidecar
 
-# ---- Contracted artifacts (versioned schemas) ----
-!contracts/artifacts/
-!contracts/artifacts/*.json
-!schemas/artifacts/
-!schemas/artifacts/*.json
+# --- Evidence / volatile outputs (never tracked) ---
+tools/ci/*.json
+tools/ci/*.sha256
+artifacts/platform_inventory.json
+# Artifacts are generally not committed
+artifacts/
+
+# But deterministic governance baselines ARE committed
+!artifacts/platform_inventory.det.json
+!artifacts/PLATFORM_INVENTORY.det.md
+!artifacts/PLATFORM_GAPS.det.md
+
+# Keep volatile evidence ignored
+artifacts/platform_inventory.json
 # Local caches (Codex / CI / dev)
 .cache/
 
@@ -173,3 +182,11 @@ scratch.sh
 # local env
 env.*.local
 tools/dev/
+
+# CI-generated snapshots (non-deterministic; never commit)
+tools/ci/attestation_bundle.sha256
+tools/ci/build_meta.json
+tools/ci/contract_routes.json
+tools/ci/plane_registry_snapshot.json
+tools/ci/plane_registry_snapshot.sha256
+tools/ci/topology.sha256

@@ -6,6 +6,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "schema_version",
     "threat_level",
     "mitigations",
     "rules_triggered",
@@ -21,132 +22,92 @@
     "config_hash"
   ],
   "properties": {
+    "schema_version": { "type": "string", "const": "v1" },
+
     "threat_level": {
       "type": "string",
-      "enum": [
-        "none",
-        "low",
-        "medium",
-        "high",
-        "critical"
-      ]
+      "enum": ["none", "low", "medium", "high", "critical"]
     },
+
     "mitigations": {
       "type": "array",
-      "items": {
-        "$ref": "#/$defs/mitigationAction"
-      }
+      "items": { "$ref": "#/$defs/mitigationAction" }
     },
+
     "rules_triggered": {
       "type": "array",
-      "items": {
-        "type": "string"
-      }
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1
     },
-    "score": {
-      "type": "integer"
-    },
-    "anomaly_score": {
-      "type": "number"
-    },
-    "ai_adversarial_score": {
-      "type": "number"
-    },
-    "tie_d": {
-      "$ref": "#/$defs/tieD"
-    },
+
+    "score": { "type": "integer", "minimum": 0 },
+
+    "anomaly_score": { "type": "number", "minimum": 0.0 },
+
+    "ai_adversarial_score": { "type": "number", "minimum": 0.0 },
+
+    "tie_d": { "$ref": "#/$defs/tieD" },
+
     "event_id": {
-      "type": "string"
-    },
-    "clock_drift_ms": {
-      "type": "integer"
-    },
-    "explanation_brief": {
-      "type": "string"
-    },
-    "policy_hash": {
       "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
+      "minLength": 8,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$"
     },
+
+    "clock_drift_ms": {
+      "type": "integer",
+      "minimum": -600000,
+      "maximum": 600000
+    },
+
+    "explanation_brief": { "type": "string", "minLength": 1 },
+
+    "policy_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+
     "policy": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "allow",
-        "reasons"
-      ],
+      "required": ["allow", "reasons"],
       "properties": {
-        "allow": {
-          "type": "boolean"
-        },
+        "allow": { "type": "boolean" },
         "reasons": {
           "type": "array",
-          "items": {
-            "type": "string"
-          }
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
         }
       }
     },
-    "roe_applied": {
-      "type": "boolean"
-    },
-    "disruption_limited": {
-      "type": "boolean"
-    },
-    "ao_required": {
-      "type": "boolean"
-    },
-    "summary": {
-      "type": "string"
-    },
-    "rules": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "pq_fallback": {
-      "type": "boolean"
-    },
+
+    "pq_fallback": { "type": "boolean" },
+
     "config_hash": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$|^legacy_config_hash$"
+    },
+
+    "summary": { "type": "string" },
+
+    "rules": {
+      "type": "array",
+      "items": { "type": "string" }
     }
   },
+
   "$defs": {
     "mitigationAction": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "action",
-        "reason",
-        "confidence"
-      ],
+      "required": ["action", "reason", "confidence"],
       "properties": {
-        "action": {
-          "type": "string"
-        },
-        "target": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "reason": {
-          "type": "string"
-        },
-        "confidence": {
-          "type": "number"
-        },
-        "meta": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": true
-        }
+        "action": { "type": "string", "minLength": 1 },
+        "target": { "type": ["string", "null"] },
+        "reason": { "type": "string", "minLength": 1 },
+        "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "meta": { "type": ["object", "null"], "additionalProperties": true }
       }
     },
+
     "tieD": {
       "type": "object",
       "additionalProperties": false,
@@ -163,52 +124,24 @@
         "policy_hash"
       ],
       "properties": {
-        "roe_applied": {
-          "type": "boolean"
-        },
-        "disruption_limited": {
-          "type": "boolean"
-        },
-        "ao_required": {
-          "type": "boolean"
-        },
-        "persona": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "classification": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "service_impact": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 1.0
-        },
-        "user_impact": {
-          "type": "number",
-          "minimum": 0.0,
-          "maximum": 1.0
-        },
+        "roe_applied": { "type": "boolean" },
+        "disruption_limited": { "type": "boolean" },
+        "ao_required": { "type": "boolean" },
+
+        "persona": { "type": ["string", "null"] },
+        "classification": { "type": ["string", "null"] },
+
+        "service_impact": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "user_impact": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+
         "gating_decision": {
           "type": "string",
-          "enum": [
-            "allow",
-            "require_approval",
-            "reject"
-          ]
+          "enum": ["allow", "require_approval", "reject"]
         },
-        "policy_version": {
-          "type": "string"
-        },
-        "policy_hash": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        }
+
+        "policy_version": { "type": "string", "minLength": 1 },
+
+        "policy_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
       }
     }
   }

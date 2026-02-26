@@ -16,7 +16,9 @@ class AnchorCadenceState:
     queued_events: int = 0
     last_anchor_at: datetime | None = None
 
-    def should_anchor(self, policy: AnchorCadencePolicy, now: datetime | None = None) -> bool:
+    def should_anchor(
+        self, policy: AnchorCadencePolicy, now: datetime | None = None
+    ) -> bool:
         now = now or datetime.now(UTC)
         if self.queued_events >= policy.max_unanchored_events:
             return True

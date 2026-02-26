@@ -41,13 +41,17 @@ def list_runs(db: Session, tenant_id: str) -> list[dict[str, object]]:
 
 def get_run(db: Session, tenant_id: str, run_id: str) -> dict[str, object] | None:
     _require_tenant_id(tenant_id)
-    row = db.execute(
-        text(
-            "SELECT id, tenant_id, plane_id, artifact_type, artifact_path, artifact_sha256, schema_version, git_sha, created_at, status, summary_json, retention_class, anchor_status "
-            "FROM evidence_runs WHERE tenant_id=:tenant_id AND id=:id"
-        ),
-        {"tenant_id": tenant_id, "id": run_id},
-    ).mappings().first()
+    row = (
+        db.execute(
+            text(
+                "SELECT id, tenant_id, plane_id, artifact_type, artifact_path, artifact_sha256, schema_version, git_sha, created_at, status, summary_json, retention_class, anchor_status "
+                "FROM evidence_runs WHERE tenant_id=:tenant_id AND id=:id"
+            ),
+            {"tenant_id": tenant_id, "id": run_id},
+        )
+        .mappings()
+        .first()
+    )
     return dict(row) if row else None
 
 

@@ -95,6 +95,7 @@ ERR_DB_WRITE = "CP_CMD_DB_WRITE_FAILED"
 # Result types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class CommandRecord:
     command_id: str
@@ -157,6 +158,7 @@ class ReceiptRecord:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _sha256(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
@@ -188,6 +190,7 @@ def _validate_reason(reason: Optional[str]) -> str:
 # ---------------------------------------------------------------------------
 # Command service
 # ---------------------------------------------------------------------------
+
 
 class ControlPlaneCommandService:
     """
@@ -291,8 +294,12 @@ class ControlPlaneCommandService:
                 source="api",
             )
         except Exception as exc:
-            log.error("cp_commands.ledger_emit_failed command_id=%s error=%s", command_id, exc)
-            raise RuntimeError(f"Ledger write failed after command insert: {exc}") from exc
+            log.error(
+                "cp_commands.ledger_emit_failed command_id=%s error=%s", command_id, exc
+            )
+            raise RuntimeError(
+                f"Ledger write failed after command insert: {exc}"
+            ) from exc
 
         ts_iso = ts_now.isoformat().replace("+00:00", "Z")
         return CommandRecord(
@@ -359,7 +366,11 @@ class ControlPlaneCommandService:
                 source="api",
             )
         except Exception as exc:
-            log.error("cp_commands.cancel_ledger_failed command_id=%s error=%s", command_id, exc)
+            log.error(
+                "cp_commands.cancel_ledger_failed command_id=%s error=%s",
+                command_id,
+                exc,
+            )
             raise RuntimeError(f"Ledger write failed after cancel: {exc}") from exc
 
         return self._row_to_record(row)
@@ -433,7 +444,11 @@ class ControlPlaneCommandService:
             db_session.add(receipt_row)
             db_session.flush()
         except Exception as exc:
-            log.error("cp_commands.receipt_write_failed command_id=%s error=%s", command_id, exc)
+            log.error(
+                "cp_commands.receipt_write_failed command_id=%s error=%s",
+                command_id,
+                exc,
+            )
             raise RuntimeError(f"{ERR_DB_WRITE}: {exc}") from exc
 
         tenant_id = row.tenant_id
@@ -457,7 +472,11 @@ class ControlPlaneCommandService:
                 source="agent" if executor_type == "agent" else "system",
             )
         except Exception as exc:
-            log.error("cp_commands.receipt_ledger_failed command_id=%s error=%s", command_id, exc)
+            log.error(
+                "cp_commands.receipt_ledger_failed command_id=%s error=%s",
+                command_id,
+                exc,
+            )
             raise RuntimeError(f"Ledger write failed after receipt: {exc}") from exc
 
         ts_iso = ts_now.isoformat().replace("+00:00", "Z")
@@ -495,10 +514,7 @@ class ControlPlaneCommandService:
             q = q.filter(ControlPlaneCommand.target_id == target_id)
 
         rows = (
-            q.order_by(ControlPlaneCommand.ts.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
+            q.order_by(ControlPlaneCommand.ts.desc()).offset(offset).limit(limit).all()
         )
         return [self._row_to_record(r).to_dict() for r in rows]
 
@@ -513,7 +529,11 @@ class ControlPlaneCommandService:
         from api.db_models_cp_v2 import ControlPlaneCommand, ControlPlaneCommandReceipt
 
         # Verify command belongs to tenant
-        cmd = db_session.query(ControlPlaneCommand).filter_by(command_id=command_id).first()
+        cmd = (
+            db_session.query(ControlPlaneCommand)
+            .filter_by(command_id=command_id)
+            .first()
+        )
         if not cmd:
             return []
         if not is_global_admin and cmd.tenant_id != tenant_id:

@@ -57,6 +57,7 @@ ERR_UNKNOWN_TARGET = "CP_PLAYBOOK_UNKNOWN_TARGET"
 # Result types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PlaybookResult:
     playbook: str
@@ -89,6 +90,7 @@ class PlaybookResult:
 # Individual playbook implementations
 # ---------------------------------------------------------------------------
 
+
 def _playbook_stuck_boot_recover(
     *,
     target_id: str,
@@ -116,6 +118,7 @@ def _playbook_stuck_boot_recover(
     # Actual execution: validate target exists in registry
     try:
         from services.module_registry import get_registry
+
         registry = get_registry()
         rec = registry.get(target_id)
         taken = [f"verified module={target_id} accessible"]
@@ -125,8 +128,15 @@ def _playbook_stuck_boot_recover(
         taken.append("safe restart command queued")
         return {"ok": True, "actions_taken": taken, "actions_planned": planned}
     except Exception as exc:
-        log.error("playbook.stuck_boot_recover failed target=%s error=%s", target_id, exc)
-        return {"ok": False, "actions_taken": [], "actions_planned": planned, "error": str(exc)}
+        log.error(
+            "playbook.stuck_boot_recover failed target=%s error=%s", target_id, exc
+        )
+        return {
+            "ok": False,
+            "actions_taken": [],
+            "actions_planned": planned,
+            "error": str(exc),
+        }
 
 
 def _playbook_dependency_auto_pause(
@@ -244,6 +254,7 @@ _PLAYBOOK_HANDLERS = {
 # Playbook service
 # ---------------------------------------------------------------------------
 
+
 class PlaybookService:
     """Executes allowlisted remediation playbooks with full auditability."""
 
@@ -315,7 +326,9 @@ class PlaybookService:
                 source="api",
             )
         except Exception as exc:
-            raise RuntimeError(f"Ledger write failed before playbook execution: {exc}") from exc
+            raise RuntimeError(
+                f"Ledger write failed before playbook execution: {exc}"
+            ) from exc
 
         # Execute playbook
         try:

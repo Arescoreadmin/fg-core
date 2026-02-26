@@ -8,3 +8,11 @@ state/*.json
 .env
 agent/.env
 **/.env
+
+# Volatile artifacts must never be tracked
+artifacts/latest_*.txt
+artifacts/*.zip
+artifacts/evidence_*/
+artifacts/runtime/
+artifacts/tmp/
+artifacts/scratch/

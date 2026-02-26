@@ -7,11 +7,11 @@ Records each stage with timing, status, and (redacted-in-prod) error details.
 No silent failures allowed. Every stage must be explicitly recorded.
 Fail-closed: missing/incomplete traces are surfaced, never hidden.
 """
+
 from __future__ import annotations
 
 import logging
 import threading
-import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -34,6 +34,7 @@ ERR_TRACE_ALREADY_EXISTS = "CP-BOOT-004"
 # ---------------------------------------------------------------------------
 # Canonical boot stage ordering
 # ---------------------------------------------------------------------------
+
 
 class BootStage(str, Enum):
     CONFIG_LOADED = "config_loaded"
@@ -74,6 +75,7 @@ class StageStatus(str, Enum):
 # Stage record
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class StageRecord:
     stage_name: str
@@ -104,6 +106,7 @@ class StageRecord:
 # ---------------------------------------------------------------------------
 # Boot trace for a single module
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class BootTrace:
@@ -221,8 +224,7 @@ class BootTrace:
             stages = list(self._stages.values())
         failed = [s.stage_name for s in stages if s.status == StageStatus.FAILED]
         completed = sum(
-            1 for s in stages
-            if s.status in (StageStatus.OK, StageStatus.SKIPPED)
+            1 for s in stages if s.status in (StageStatus.OK, StageStatus.SKIPPED)
         )
         total = len(BOOT_STAGE_ORDER)
         ready_rec = self._stages.get(BootStage.READY_TRUE.value)
@@ -295,6 +297,7 @@ class BootTrace:
 # Boot Trace Registry singleton
 # ---------------------------------------------------------------------------
 
+
 class BootTraceRegistry:
     """
     Singleton registry of boot traces for all modules.
@@ -350,6 +353,7 @@ class BootTraceRegistry:
 # Context manager for stage tracing
 # ---------------------------------------------------------------------------
 
+
 class StageContext:
     """
     Context manager for safe stage recording.
@@ -391,6 +395,7 @@ class StageContext:
 # ---------------------------------------------------------------------------
 # Utilities
 # ---------------------------------------------------------------------------
+
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

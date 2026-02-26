@@ -16,6 +16,7 @@ Covers:
   - Python traceback frames and blocks
   - PEM private key blocks
 """
+
 from __future__ import annotations
 
 import re
@@ -50,9 +51,7 @@ _SANITIZE_PATTERNS: list[tuple[re.Pattern, str]] = [
     ),
     # 4. JWT-shaped tokens (three base64url segments, min 10 chars each)
     (
-        re.compile(
-            r"ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"
-        ),
+        re.compile(r"ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),
         "[REDACTED-JWT]",
     ),
     # 5. URLs with embedded credentials: scheme://user:password@host/...

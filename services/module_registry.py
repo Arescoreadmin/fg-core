@@ -12,18 +12,17 @@ P2 Liveness: heartbeat TTL, stale detection, node_id conflict tracking,
 P2 DependencyProbe: measured_at_ts, timeout_ms, negative latency guards.
 P1 Redaction: sanitize_error_detail() applied before any error is stored.
 """
+
 from __future__ import annotations
 
 import hashlib
 import logging
 import os
 import threading
-import time
-import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from services.error_sanitizer import sanitize_error_detail
 
@@ -42,6 +41,7 @@ ERR_NODE_ID_CONFLICT = "CP-MOD-004"
 # Heartbeat TTL (configurable)
 # ---------------------------------------------------------------------------
 
+
 def _heartbeat_ttl_s() -> int:
     return int(os.getenv("FG_CP_MODULE_HEARTBEAT_TTL_S", "60"))
 
@@ -50,13 +50,14 @@ def _heartbeat_ttl_s() -> int:
 # Enumerations
 # ---------------------------------------------------------------------------
 
+
 class ModuleState(str, Enum):
     STARTING = "starting"
     READY = "ready"
     DEGRADED = "degraded"
     FAILED = "failed"
     STOPPED = "stopped"
-    STALE = "stale"      # heartbeat TTL exceeded
+    STALE = "stale"  # heartbeat TTL exceeded
 
 
 class DependencyStatus(str, Enum):
@@ -67,14 +68,15 @@ class DependencyStatus(str, Enum):
 
 
 class BreakerState(str, Enum):
-    CLOSED = "closed"        # normal operation
-    OPEN = "open"            # tripped, rejecting requests
+    CLOSED = "closed"  # normal operation
+    OPEN = "open"  # tripped, rejecting requests
     HALF_OPEN = "half_open"  # testing recovery
 
 
 # ---------------------------------------------------------------------------
 # Data models
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class DependencyProbe:
@@ -86,14 +88,15 @@ class DependencyProbe:
     P1 redaction: error_detail is sanitized via sanitize_error_detail()
     before storage.
     """
+
     name: str
     status: DependencyStatus = DependencyStatus.UNKNOWN
     latency_ms: Optional[float] = None
     last_check_ts: Optional[str] = None
-    measured_at_ts: Optional[str] = None   # when the probe measurement started
-    timeout_ms: Optional[float] = None     # probe timeout budget in ms
+    measured_at_ts: Optional[str] = None  # when the probe measurement started
+    timeout_ms: Optional[float] = None  # probe timeout budget in ms
     error_code: Optional[str] = None
-    error_detail: Optional[str] = None    # sanitized on store; never exposed in prod
+    error_detail: Optional[str] = None  # sanitized on store; never exposed in prod
 
     def __post_init__(self) -> None:
         # P2: Guard against negative or nonsense latency values
@@ -164,6 +167,7 @@ class ModuleRegistration:
     P2 Liveness: last_seen_ts, is_stale(), heartbeat().
     P0 Tenant scoping: tenant_id stored and exposed for filtering.
     """
+
     module_id: str
     name: str
     version: str
@@ -171,7 +175,9 @@ class ModuleRegistration:
     build_timestamp: str
     node_id: str
     registered_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        default_factory=lambda: (
+            datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        )
     )
     tenant_id: str = ""
 
@@ -208,7 +214,9 @@ class ModuleRegistration:
         if self.last_seen_ts is None:
             return False
         effective_ttl = ttl if ttl is not None else ttl_s
-        effective_ttl = effective_ttl if effective_ttl is not None else _heartbeat_ttl_s()
+        effective_ttl = (
+            effective_ttl if effective_ttl is not None else _heartbeat_ttl_s()
+        )
         try:
             last = datetime.fromisoformat(self.last_seen_ts.replace("Z", "+00:00"))
             now = datetime.now(timezone.utc)
@@ -288,12 +296,15 @@ class ModuleRegistration:
 
     def dependency_list(self, redact: bool = False) -> list[dict]:
         with self._lock:
-            return [probe.to_dict(redact=redact) for probe in self.dependencies.values()]
+            return [
+                probe.to_dict(redact=redact) for probe in self.dependencies.values()
+            ]
 
 
 # ---------------------------------------------------------------------------
 # Registry singleton
 # ---------------------------------------------------------------------------
+
 
 class ModuleRegistry:
     """
@@ -347,7 +358,9 @@ class ModuleRegistry:
             # Direct registration path: store the provided record.
             resolved_node_id = rec.node_id or _node_id()
             with self._lock:
-                existing_modules_for_node = self._node_registry.get(resolved_node_id, set())
+                existing_modules_for_node = self._node_registry.get(
+                    resolved_node_id, set()
+                )
                 existing_modules_for_node.add(rec.module_id)
                 self._node_registry[resolved_node_id] = existing_modules_for_node
                 if rec.last_seen_ts is None:
@@ -461,9 +474,7 @@ class ModuleRegistry:
         )
         self.set_dependency(module_id, probe)
 
-    def set_breaker_state(
-        self, module_id: str, breaker_state: BreakerState
-    ) -> None:
+    def set_breaker_state(self, module_id: str, breaker_state: BreakerState) -> None:
         reg = self._get(module_id)
         if reg is None:
             return
@@ -583,6 +594,7 @@ class ModuleRegistry:
 # Module-local convenience helper for self-registration
 # ---------------------------------------------------------------------------
 
+
 def register_module(
     *,
     module_id: str,
@@ -623,6 +635,7 @@ def register_module(
 # Utilities
 # ---------------------------------------------------------------------------
 
+
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -632,6 +645,7 @@ def _node_id() -> str:
     if raw:
         return raw
     import socket
+
     try:
         return socket.gethostname()
     except Exception:
@@ -640,7 +654,9 @@ def _node_id() -> str:
 
 def _is_prod_like() -> bool:
     return (os.getenv("FG_ENV") or "").strip().lower() in {
-        "prod", "production", "staging"
+        "prod",
+        "production",
+        "staging",
     }
 
 
@@ -705,7 +721,8 @@ class _RegistryStore:
         """Return modules for a tenant, including platform-level (no tenant) modules."""
         with self._lock:
             return [
-                m for m in self._modules.values()
+                m
+                for m in self._modules.values()
                 if not m.tenant_id or m.tenant_id == tenant_id
             ]
 
@@ -720,7 +737,8 @@ class _RegistryStore:
                 modules = list(self._modules.values())
             elif tenant_id:
                 modules = [
-                    m for m in self._modules.values()
+                    m
+                    for m in self._modules.values()
                     if not m.tenant_id or m.tenant_id == tenant_id
                 ]
             else:
@@ -774,9 +792,7 @@ class _RegistryStore:
             m.update_dependency(probe)
             return True
 
-    def get_dependencies(
-        self, module_id: str
-    ) -> Optional[Dict[str, DependencyProbe]]:
+    def get_dependencies(self, module_id: str) -> Optional[Dict[str, DependencyProbe]]:
         with self._lock:
             m = self._modules.get(module_id)
             if m is None:

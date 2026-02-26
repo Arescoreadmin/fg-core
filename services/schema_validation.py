@@ -9,7 +9,9 @@ def _matches_type(value: Any, expected: str) -> bool:
     if expected == "integer":
         return isinstance(value, int) and not isinstance(value, bool)
     if expected == "number":
-        return (isinstance(value, int) or isinstance(value, float)) and not isinstance(value, bool)
+        return (isinstance(value, int) or isinstance(value, float)) and not isinstance(
+            value, bool
+        )
     if expected == "boolean":
         return isinstance(value, bool)
     if expected == "object":
@@ -21,13 +23,17 @@ def _matches_type(value: Any, expected: str) -> bool:
     return True
 
 
-def validate_payload_against_schema(payload: dict[str, Any], schema: dict[str, Any]) -> None:
+def validate_payload_against_schema(
+    payload: dict[str, Any], schema: dict[str, Any]
+) -> None:
     required = schema.get("required") or []
     for key in required:
         if key not in payload:
             raise ValueError(f"SCHEMA_REQUIRED_FIELD_MISSING:{key}")
 
-    properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
+    properties = (
+        schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
+    )
     additional = bool(schema.get("additionalProperties", True))
 
     if not additional:

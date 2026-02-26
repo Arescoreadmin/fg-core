@@ -25,68 +25,118 @@ CONTRACT_ROUTES = REPO / "tools/ci/contract_routes.json"
 BUILD_META = REPO / "tools/ci/build_meta.json"
 BUNDLE_HASH = REPO / "tools/ci/attestation_bundle.sha256"
 TOPOLOGY_HASH = REPO / "tools/ci/topology.sha256"
+
 SCHEMA_VERSION = "v1"
+TOOL_NAME = "tools/ci/check_route_inventory.py"
+
+
+# -----------------------------
+# small, boring, correct utils
+# -----------------------------
+def _now_iso() -> str:
+    return datetime.now(tz=UTC).isoformat()
 
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _dump_json(data: object) -> str:
-    return json.dumps(data, indent=2, sort_keys=True) + "\n"
+def _stable_json_bytes(obj: object) -> bytes:
+    # Deterministic bytes (for hashing), independent of pretty formatting
+    return json.dumps(
+        obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
 
 
-def _wrap(data: list[dict[str, object]]) -> dict[str, object]:
-    return {
+def _dump_json(obj: object) -> str:
+    return json.dumps(obj, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+
+
+def _v1_wrap(data: object, *, generated_by: str | None = None) -> dict[str, Any]:
+    """
+    Canonical wrapper expected by generate_platform_inventory.py:
+
+      {
         "schema_version": "v1",
-        "generated_at": datetime.now(tz=UTC).isoformat(),
+        "generated_at": "...",
+        "data": <payload>,
+        "generated_by": "..."
+      }
+    """
+    out: dict[str, Any] = {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": _now_iso(),
         "data": data,
     }
+    if generated_by:
+        out["generated_by"] = generated_by
+    return out
 
 
-def _read_data(path: Path, *, label: str) -> dict[str, object]:
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError(f"{label} must be an object")
-    return data
+def _read_json(path: Path, *, label: str) -> object:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise ValueError(f"{label} must be valid JSON: {e}") from e
 
 
-def _inventory_from_data(data: dict[str, object]) -> list[dict[str, object]]:
-    routes = data.get("data")
-    if routes is None:
-        routes = data.get("routes")
-    if routes is None and isinstance(data.get("items"), list):
-        routes = data.get("items")
-    if not isinstance(routes, list):
-        raise ValueError("route_inventory.routes must be an array")
-    for idx, item in enumerate(routes):
-        if not isinstance(item, dict):
-            raise ValueError(f"route_inventory.routes[{idx}] must be an object")
-    return routes
-
-
-def _inventory_payload(routes: list[dict[str, object]]) -> dict[str, object]:
-    return _wrap(routes)
-
-
-def current_inventory() -> list[dict[str, object]]:
-    rows = []
-    for route in runtime_routes_ast():
-        planes = match_plane(str(route["path"]))
-        rows.append(
-            {**route, "plane_id": planes[0] if len(planes) == 1 else "unmapped"}
-        )
-    return sorted(
-        rows, key=lambda r: (str(r["path"]), str(r["method"]), str(r["file"]))
+def _is_v1_wrapper(obj: object) -> bool:
+    return (
+        isinstance(obj, dict)
+        and {"schema_version", "generated_at", "data"} <= set(obj.keys())
+        and isinstance(obj.get("schema_version"), str)
+        and bool(obj.get("schema_version"))
     )
 
 
-def _key(entry: dict[str, object]) -> tuple[str, str, str]:
-    return (str(entry["method"]), str(entry["path"]), str(entry.get("file", "")))
+def _unwrap_v1(obj: object) -> object:
+    return obj["data"] if _is_v1_wrapper(obj) else obj
+
+
+def _require_list_of_dicts(value: object, *, label: str) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        raise ValueError(f"{label}.data must be a list")
+    out: list[dict[str, Any]] = []
+    for i, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise ValueError(f"{label}.data[{i}] must be an object")
+        out.append(item)
+    return out
+
+
+def _inventory_from_doc(doc: object) -> list[dict[str, Any]]:
+    """
+    Accepts:
+      - v1 wrapper: {schema_version, generated_at, data:[{...}]}
+      - legacy: {routes:[{...}]}
+      - legacy: {items:[{...}]}
+      - legacy: [{...}]
+    """
+    if isinstance(doc, dict) and "routes" in doc:
+        return _require_list_of_dicts(doc.get("routes"), label="route_inventory")
+    if isinstance(doc, dict) and "items" in doc:
+        return _require_list_of_dicts(doc.get("items"), label="route_inventory")
+
+    payload = _unwrap_v1(doc)
+
+    if isinstance(payload, dict) and "routes" in payload:
+        return _require_list_of_dicts(payload.get("routes"), label="route_inventory")
+    if isinstance(payload, dict) and "items" in payload:
+        return _require_list_of_dicts(payload.get("items"), label="route_inventory")
+
+    return _require_list_of_dicts(payload, label="route_inventory")
+
+
+def _key(entry: dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        str(entry.get("method", "")),
+        str(entry.get("path", "")),
+        str(entry.get("file", "")),
+    )
 
 
 def _route_diff(
-    expected: list[dict[str, object]], cur: list[dict[str, object]]
+    expected: list[dict[str, Any]], cur: list[dict[str, Any]]
 ) -> tuple[list[str], list[str], list[str]]:
     expected_map = {_key(e): e for e in expected}
     cur_map = {_key(e): e for e in cur}
@@ -94,36 +144,92 @@ def _route_diff(
     added = sorted(set(cur_map) - set(expected_map))
 
     changed: list[str] = []
-    for key in sorted(set(expected_map) & set(cur_map)):
-        before = expected_map[key]
-        after = cur_map[key]
-        tracked = (
-            "scoped",
-            "tenant_bound",
-            "scopes",
-            "plane_id",
-            "dependency_categories",
-        )
+    tracked = (
+        "scoped",
+        "tenant_bound",
+        "scopes",
+        "plane_id",
+        "plane",
+        "dependency_categories",
+    )
+    for k in sorted(set(expected_map) & set(cur_map)):
+        before = expected_map[k]
+        after = cur_map[k]
         for field in tracked:
             if before.get(field) != after.get(field):
                 changed.append(
-                    f"{key} changed {field}: {before.get(field)} -> {after.get(field)}"
+                    f"{k} changed {field}: {before.get(field)} -> {after.get(field)}"
                 )
     return [str(x) for x in missing], [str(x) for x in added], changed
 
 
+def _as_list_of_dicts(value: object, *, label: str) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        raise ValueError(f"{label} must be a list")
+    out: list[dict[str, Any]] = []
+    for i, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise ValueError(f"{label}[{i}] must be an object")
+        out.append(item)
+    return out
+
+
+# -----------------------------
+# inventory building
+# -----------------------------
+def current_inventory() -> list[dict[str, Any]]:
+    """
+    IMPORTANT:
+    - Emit BOTH `plane_id` (canonical) and `plane` (compat alias).
+    - The platform inventory generator must be able to trust `plane_id` stamps.
+    """
+    rows: list[dict[str, Any]] = []
+    for route in runtime_routes_ast():
+        path = str(route.get("path", ""))
+        planes = match_plane(path)
+
+        plane_id = "unmapped"
+        if isinstance(planes, list) and len(planes) == 1:
+            try:
+                plane_id = str(planes[0])
+            except Exception:
+                plane_id = "unmapped"
+
+        rows.append({**route, "plane_id": plane_id, "plane": plane_id})
+
+    return sorted(
+        rows,
+        key=lambda r: (
+            str(r.get("path", "")),
+            str(r.get("method", "")),
+            str(r.get("file", "")),
+        ),
+    )
+
+
+# -----------------------------
+# artifact writers
+# -----------------------------
 def _write_registry_snapshot() -> None:
-    payload = [p.to_dict() for p in sorted(PLANE_REGISTRY, key=lambda x: x.plane_id)]
-    blob = _dump_json(_wrap(payload))
+    planes = [p.to_dict() for p in sorted(PLANE_REGISTRY, key=lambda x: x.plane_id)]
+    # data MUST be a list (of plane dicts)
+    blob = _dump_json(_v1_wrap(planes, generated_by=TOOL_NAME))
     REGISTRY_SNAPSHOT.write_text(blob, encoding="utf-8")
+
     digest = hashlib.sha256(blob.encode("utf-8")).hexdigest()
     REGISTRY_HASH.write_text(f"{digest}  {REGISTRY_SNAPSHOT.name}\n", encoding="utf-8")
 
 
-def _write_attestation_bundle(cur: list[dict[str, object]]) -> None:
-    contract = contract_routes()
-    CONTRACT_ROUTES.write_text(_dump_json(_wrap(contract)), encoding="utf-8")
+def _write_contract_routes() -> list[dict[str, Any]]:
+    cr = contract_routes()
+    cr_list = _as_list_of_dicts(cr, label="contract_routes()")
+    CONTRACT_ROUTES.write_text(
+        _dump_json(_v1_wrap(cr_list, generated_by=TOOL_NAME)), encoding="utf-8"
+    )
+    return cr_list
 
+
+def _write_build_meta(cur: list[dict[str, Any]]) -> None:
     git_sha = "unknown"
     try:
         git_sha = subprocess.check_output(
@@ -132,21 +238,34 @@ def _write_attestation_bundle(cur: list[dict[str, object]]) -> None:
     except Exception:
         pass
 
+    runner = "unknown"
+    hn = Path("/proc/sys/kernel/hostname")
+    if hn.exists():
+        try:
+            runner = hn.read_text(encoding="utf-8").strip()
+        except Exception:
+            pass
+
     meta = {
         "git_sha": git_sha,
-        "build_timestamp_utc": datetime.now(tz=UTC).isoformat(),
-        "ci_runner_id": (
-            Path("/proc/sys/kernel/hostname").read_text(encoding="utf-8").strip()
-            if Path("/proc/sys/kernel/hostname").exists()
-            else "unknown"
-        ),
-        "tool": "tools/ci/check_route_inventory.py",
+        "build_timestamp_utc": _now_iso(),
+        "ci_runner_id": runner,
+        "tool": TOOL_NAME,
         "tool_version": SCHEMA_VERSION,
-        "inventory_sha256": hashlib.sha256(
-            _dump_json(_wrap(cur)).encode("utf-8")
-        ).hexdigest(),
+        # Deterministic hash for the inventory payload list
+        "inventory_sha256": hashlib.sha256(_stable_json_bytes(cur)).hexdigest(),
     }
-    BUILD_META.write_text(_dump_json(_wrap([meta])), encoding="utf-8")
+
+    # build_meta MUST be v1 wrapper with data: [meta]
+    BUILD_META.write_text(
+        _dump_json(_v1_wrap([meta], generated_by=TOOL_NAME)), encoding="utf-8"
+    )
+
+
+def _write_attestation_bundle(cur: list[dict[str, Any]]) -> None:
+    # Ensure dependent artifacts exist and are current
+    _write_contract_routes()
+    _write_build_meta(cur)
 
     bundle_files = [REGISTRY_SNAPSHOT, INVENTORY, CONTRACT_ROUTES, BUILD_META]
     lines = [f"{_sha256(f)}  {f.name}" for f in bundle_files]
@@ -159,50 +278,69 @@ def _write_topology_hash() -> None:
     TOPOLOGY_HASH.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _write_summary(
+    cur: list[dict[str, Any]], expected: list[dict[str, Any]] | None
+) -> None:
+    contract = contract_routes()
+    contract_list = _as_list_of_dicts(contract, label="contract_routes()")
+
+    runtime_keys = {(str(r.get("method")), str(r.get("path"))) for r in cur}
+    contract_keys = {(str(r.get("method")), str(r.get("path"))) for r in contract_list}
+
+    removed: list[str] = []
+    added: list[str] = []
+    changed: list[str] = []
+    if expected is not None:
+        removed, added, changed = _route_diff(expected, cur)
+
+    summary = {
+        "plane_coverage": plane_coverage_summary(cur),
+        "runtime_count": len(cur),
+        "contract_count": len(contract_list),
+        "runtime_only": sorted(
+            [f"{m} {p}" for (m, p) in (runtime_keys - contract_keys)]
+        ),
+        "contract_only": sorted(
+            [f"{m} {p}" for (m, p) in (contract_keys - runtime_keys)]
+        ),
+        "added": added,
+        "removed": removed,
+        "changed": changed,
+    }
+
+    # NOTE: summary is consumed by this tool and humans; platform inventory currently
+    # only requires v1 wrappers for inventory/plane_registry/contract_routes/build_meta.
+    SUMMARY.write_text(_dump_json(summary), encoding="utf-8")
+
+
 def write_inventory() -> None:
     cur = current_inventory()
-    INVENTORY.write_text(_dump_json(_inventory_payload(cur)), encoding="utf-8")
+
+    # Inventory MUST be v1 wrapper with data as a LIST of route objects
+    INVENTORY.write_text(
+        _dump_json(_v1_wrap(cur, generated_by=TOOL_NAME)), encoding="utf-8"
+    )
+
     _write_summary(cur, expected=None)
     _write_registry_snapshot()
     _write_attestation_bundle(cur)
     _write_topology_hash()
 
 
-def _summary_payload(
-    cur: list[dict[str, object]], expected: list[dict[str, object]] | None
-) -> dict[str, object]:
-    contract = contract_routes()
-    runtime_keys = {(r["method"], r["path"]) for r in cur}
-    contract_keys = {(r["method"], r["path"]) for r in contract}
-    missing, added, changed = ([], [], [])
-    if expected is not None:
-        missing, added, changed = _route_diff(expected, cur)
-    return {
-        "plane_coverage": plane_coverage_summary(cur),
-        "runtime_count": len(cur),
-        "contract_count": len(contract),
-        "runtime_only": sorted([f"{m} {p}" for m, p in (runtime_keys - contract_keys)]),
-        "contract_only": sorted(
-            [f"{m} {p}" for m, p in (contract_keys - runtime_keys)]
-        ),
-        "added": added,
-        "removed": missing,
-        "changed": changed,
-    }
-
-
-def _write_summary(
-    cur: list[dict[str, object]], expected: list[dict[str, object]] | None
-) -> None:
-    SUMMARY.write_text(_dump_json(_summary_payload(cur, expected)), encoding="utf-8")
-
-
+# -----------------------------
+# main
+# -----------------------------
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--write", action="store_true")
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Write route_inventory + governance snapshots",
+    )
     args = parser.parse_args()
 
     cur = current_inventory()
+
     if args.write:
         write_inventory()
         print(f"route inventory: wrote {INVENTORY.relative_to(REPO)}")
@@ -212,19 +350,27 @@ def main() -> int:
         print(f"route inventory missing: {INVENTORY.relative_to(REPO)}")
         return 1
 
-    expected_data = _read_data(INVENTORY, label="route_inventory")
-    expected = _inventory_from_data(expected_data)
-    missing, added, changed = _route_diff(expected, cur)
+    expected_doc = _read_json(INVENTORY, label="route_inventory")
+    expected = _inventory_from_doc(expected_doc)
+
+    removed, added, changed = _route_diff(expected, cur)
+
+    _write_summary(cur, expected)
+    _write_registry_snapshot()
+    _write_attestation_bundle(cur)
+    _write_topology_hash()
 
     failures: list[str] = []
-    if missing:
-        failures.append(f"routes removed from inventory: {missing}")
+    if removed:
+        failures.append(f"routes removed from inventory: {removed}")
     if added:
         failures.append(f"routes added to inventory: {added}")
     if changed:
         failures.extend(changed)
 
-    summary = _summary_payload(cur, expected)
+    summary_payload = _read_json(SUMMARY, label="route_inventory_summary")
+    summary = summary_payload if isinstance(summary_payload, dict) else {}
+
     if summary.get("runtime_only"):
         print(
             f"route inventory: WARNING runtime vs contract drift (runtime_only): {summary['runtime_only']}"

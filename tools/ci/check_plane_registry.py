@@ -13,7 +13,9 @@ sys.path.insert(0, str(REPO))
 ADMIN_PREFIX_POLICY = "control_only"
 
 
-def _exception_health(route_ex, *, plane_id: str, pool_name: str, warnings: list[str], failures: list[str]) -> None:
+def _exception_health(
+    route_ex, *, plane_id: str, pool_name: str, warnings: list[str], failures: list[str]
+) -> None:
     if not route_ex.justification.strip():
         failures.append(
             f"plane {plane_id} has unjustified exception in {pool_name}: {route_ex.method} {route_ex.path}"
@@ -29,7 +31,9 @@ def _exception_health(route_ex, *, plane_id: str, pool_name: str, warnings: list
         return
 
     try:
-        expires = datetime.strptime(route_ex.expires_at.strip(), "%Y-%m-%d").replace(tzinfo=UTC)
+        expires = datetime.strptime(route_ex.expires_at.strip(), "%Y-%m-%d").replace(
+            tzinfo=UTC
+        )
     except ValueError:
         failures.append(
             f"plane {plane_id} exception has invalid expires_at (YYYY-MM-DD required) in {pool_name}: {route_ex.method} {route_ex.path} -> {route_ex.expires_at}"
@@ -86,7 +90,13 @@ def main() -> int:
             "docs_routes",
         ):
             for route_ex in getattr(plane, pool_name):
-                _exception_health(route_ex, plane_id=plane.plane_id, pool_name=pool_name, warnings=warnings, failures=failures)
+                _exception_health(
+                    route_ex,
+                    plane_id=plane.plane_id,
+                    pool_name=pool_name,
+                    warnings=warnings,
+                    failures=failures,
+                )
 
     runtime_keys = {(r["method"], r["path"]) for r in runtime}
     contract_keys = {(r["method"], r["path"]) for r in contract}
@@ -134,15 +144,21 @@ def main() -> int:
         ):
             failures.append(f"{method} {path} plane={plane_id} missing scoped auth")
 
-        if plane.auth_class.tenant_binding_required and not route.get("tenant_bound") and not has_exception:
+        if (
+            plane.auth_class.tenant_binding_required
+            and not route.get("tenant_bound")
+            and not has_exception
+        ):
             failures.append(
                 f"{method} {path} plane={plane_id} missing tenant binding without exact exception"
             )
 
         scopes = set(str(s) for s in (route.get("scopes") or []))
         prefixes = tuple(plane.auth_class.required_scope_prefixes)
-        if prefixes and scopes and not any(
-            any(scope.startswith(p) for p in prefixes) for scope in scopes
+        if (
+            prefixes
+            and scopes
+            and not any(any(scope.startswith(p) for p in prefixes) for scope in scopes)
         ):
             failures.append(
                 f"{method} {path} plane={plane_id} scopes violate policy: {sorted(scopes)}"
@@ -165,7 +181,9 @@ def main() -> int:
                     "runtime app route extraction unavailable in CI (set ALLOW_RUNTIME_APP_DEPS_MISSING=1 only for dev override)"
                 )
             else:
-                warnings.append("runtime app route extraction unavailable (dependency/import issue)")
+                warnings.append(
+                    "runtime app route extraction unavailable (dependency/import issue)"
+                )
         else:
             app_keys = {(r["method"], r["path"]) for r in runtime_app}
             ast_only = sorted(runtime_keys - app_keys)

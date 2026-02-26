@@ -244,7 +244,6 @@ def check_enterprise_extension_surfaces(failures: list[str]) -> None:
             failures.append(f"Makefile missing enterprise target marker: {marker}")
 
 
-
 def check_required_new_governance_assets(failures: list[str]) -> None:
     required_files = [
         "tools/ci/check_openapi_security_diff.py",
@@ -258,6 +257,7 @@ def check_required_new_governance_assets(failures: list[str]) -> None:
     for rel in required_files:
         if not (REPO / rel).exists():
             failures.append(f"missing required governance asset: {rel}")
+
 
 def main() -> int:
     failures: list[str] = []

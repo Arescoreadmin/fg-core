@@ -67,6 +67,7 @@ def _next_seq() -> int:
         _seq_last = candidate
         return candidate
 
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -118,6 +119,7 @@ VALID_EVENT_TYPES = frozenset(
 # Canonical JSON (deterministic, no floats/NaN)
 # ---------------------------------------------------------------------------
 
+
 def _canonical_json(obj: Any) -> bytes:
     """Deterministic JSON serialisation used for all hash inputs."""
     import json
@@ -153,6 +155,7 @@ def _sha256(data: bytes) -> str:
 # ---------------------------------------------------------------------------
 # Hash chain helpers
 # ---------------------------------------------------------------------------
+
 
 def compute_content_hash(
     *,
@@ -197,6 +200,7 @@ def compute_chain_hash(
 # ---------------------------------------------------------------------------
 # Ledger result types
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class LedgerEntry:
@@ -245,6 +249,7 @@ class ChainVerificationResult:
 # Merkle tree
 # ---------------------------------------------------------------------------
 
+
 def _merkle_root(leaves: List[str]) -> Optional[str]:
     """
     Binary Merkle tree over SHA-256 leaf hashes.
@@ -273,6 +278,7 @@ def compute_merkle_root(entries: List[LedgerEntry]) -> Optional[str]:
 # ---------------------------------------------------------------------------
 # Core ledger service
 # ---------------------------------------------------------------------------
+
 
 class ControlPlaneLedger:
     """
@@ -471,13 +477,21 @@ class ControlPlaneLedger:
             else:
                 # String from SQLite — normalize space→T separator
                 ts_str = str(row.ts).strip().replace(" ", "T")
-                if not ts_str.endswith("Z") and "+" not in ts_str[10:] and "-" not in ts_str[10:]:
+                if (
+                    not ts_str.endswith("Z")
+                    and "+" not in ts_str[10:]
+                    and "-" not in ts_str[10:]
+                ):
                     ts_str += "+00:00"
                 try:
                     parsed = datetime.fromisoformat(ts_str)
                     if parsed.tzinfo is None:
                         parsed = parsed.replace(tzinfo=timezone.utc)
-                    ts_iso = parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+                    ts_iso = (
+                        parsed.astimezone(timezone.utc)
+                        .isoformat()
+                        .replace("+00:00", "Z")
+                    )
                 except ValueError:
                     ts_iso = ts_str
             expected_content_hash = compute_content_hash(
@@ -626,7 +640,9 @@ class ControlPlaneLedger:
             "total_entries": result.total_entries,
             "merkle_root": result.merkle_root,
             "integrity_ok": result.ok,
-            "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "generated_at": datetime.now(timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z"),
         }
         log.info(
             "cp_ledger.anchor_exported tenant=%s merkle_root=%s entries=%s",

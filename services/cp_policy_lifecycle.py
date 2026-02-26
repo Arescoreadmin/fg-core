@@ -37,7 +37,7 @@ log = logging.getLogger("frostgate.cp_policy_lifecycle")
 
 VALID_POLICY_OPERATIONS = frozenset({"pin", "stage", "rollback"})
 
-POLICY_PIN_MAX_TTL_HOURS = 720   # 30 days max
+POLICY_PIN_MAX_TTL_HOURS = 720  # 30 days max
 POLICY_PIN_DEFAULT_TTL_HOURS = 168  # 7 days default
 
 # SHA-256 produces a 64-character hex string
@@ -75,14 +75,14 @@ class PolicyPinRecord:
     pin_id: str
     tenant_id: str
     policy_id: str
-    version_hash: str        # SHA-256 hex of the policy content
-    rollout_pct: int         # 0–100; 100 = fully rolled out
-    staged: bool             # True if this is a canary/staged deployment
-    expires_at: str          # ISO-8601 UTC
-    created_at: str          # ISO-8601 UTC
+    version_hash: str  # SHA-256 hex of the policy content
+    rollout_pct: int  # 0–100; 100 = fully rolled out
+    staged: bool  # True if this is a canary/staged deployment
+    expires_at: str  # ISO-8601 UTC
+    created_at: str  # ISO-8601 UTC
     previous_hash: Optional[str]  # Hash that was pinned before this record
     trace_id: str
-    active: bool             # False after rollback or superseded
+    active: bool  # False after rollback or superseded
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -149,9 +149,7 @@ def _validate_ttl(ttl_hours: int) -> None:
 
 def _validate_rollout_pct(rollout_pct: int) -> None:
     if rollout_pct < MIN_ROLLOUT_PCT or rollout_pct > MAX_ROLLOUT_PCT:
-        raise ValueError(
-            f"{ERR_POLICY_INVALID_ROLLOUT_PCT}: rollout_pct must be 0–100"
-        )
+        raise ValueError(f"{ERR_POLICY_INVALID_ROLLOUT_PCT}: rollout_pct must be 0–100")
 
 
 # ---------------------------------------------------------------------------
@@ -181,9 +179,7 @@ class PolicyLifecycleService:
         key = self._store_key(tenant_id, policy_id)
         return list(_in_memory_store.get(key, []))
 
-    def _save_record(
-        self, db_session: Any, rec: PolicyPinRecord
-    ) -> None:
+    def _save_record(self, db_session: Any, rec: PolicyPinRecord) -> None:
         key = self._store_key(rec.tenant_id, rec.policy_id)
         if key not in _in_memory_store:
             _in_memory_store[key] = []
@@ -203,9 +199,7 @@ class PolicyLifecycleService:
         active = [r for r in records if r.active]
         return active[-1] if active else None
 
-    def _deactivate_all(
-        self, db_session: Any, tenant_id: str, policy_id: str
-    ) -> None:
+    def _deactivate_all(self, db_session: Any, tenant_id: str, policy_id: str) -> None:
         key = self._store_key(tenant_id, policy_id)
         for rec in _in_memory_store.get(key, []):
             rec.active = False

@@ -4,8 +4,14 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-TARGETS = [ROOT / "api" / "security_alerts.py", ROOT / "api" / "tripwires.py", ROOT / "api" / "security"]
-PATTERN = re.compile(r"except\s+Exception(?:\s+as\s+\w+)?:\s*\n\s*(pass|continue)\b", re.MULTILINE)
+TARGETS = [
+    ROOT / "api" / "security_alerts.py",
+    ROOT / "api" / "tripwires.py",
+    ROOT / "api" / "security",
+]
+PATTERN = re.compile(
+    r"except\s+Exception(?:\s+as\s+\w+)?:\s*\n\s*(pass|continue)\b", re.MULTILINE
+)
 
 
 def _files() -> list[Path]:

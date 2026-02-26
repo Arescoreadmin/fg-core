@@ -1,15 +1,65 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://frostgate/contracts/artifacts/anchor_receipt.schema.json",
+  "title": "Anchor Receipt Artifact",
   "type": "object",
   "additionalProperties": false,
-  "required": ["receipt_id", "tenant_id", "artifact_sha256", "provider", "created_at"],
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "tenant_id",
+    "artifact_sha256",
+    "provider",
+    "created_at"
+  ],
   "properties": {
-    "receipt_id": {"type": "string", "minLength": 1},
-    "tenant_id": {"type": "string", "minLength": 1},
-    "artifact_sha256": {"type": "string", "minLength": 64, "maxLength": 64},
-    "provider": {"type": "string"},
-    "anchor_ref": {"type": ["string", "null"]},
-    "created_at": {"type": "string", "minLength": 1}
+    "schema_version": {
+      "type": "string",
+      "const": "v1"
+    },
+
+    "receipt_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9._:-]{8,128}$"
+    },
+
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+
+    "artifact_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+
+    "provider": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+
+    "anchor_ref": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+
+    "status": {
+      "type": "string",
+      "enum": ["pending", "anchored", "failed"]
+    },
+
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+
+    "metadata": {
+      "type": "object",
+      "additionalProperties": {
+        "type": ["string", "number", "boolean", "null"]
+      }
+    }
   }
 }

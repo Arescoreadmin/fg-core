@@ -24,10 +24,14 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 
 def _known_connector_ids() -> set[str]:
-    return {str(item.get("id")) for item in list_connector_manifests() if item.get("id")}
+    return {
+        str(item.get("id")) for item in list_connector_manifests() if item.get("id")
+    }
 
 
-def policy_changed_fields(old_policy: dict[str, Any], new_policy: dict[str, Any]) -> list[str]:
+def policy_changed_fields(
+    old_policy: dict[str, Any], new_policy: dict[str, Any]
+) -> list[str]:
     keys = sorted(set(old_policy.keys()) | set(new_policy.keys()))
     changed: list[str] = []
     for key in keys:

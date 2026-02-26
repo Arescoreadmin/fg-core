@@ -28,7 +28,9 @@ class EvidenceIndexService:
     ) -> dict[str, object]:
         p = Path(artifact_path)
         artifact_sha256 = (
-            hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() and p.is_file() else "missing"
+            hashlib.sha256(p.read_bytes()).hexdigest()
+            if p.exists() and p.is_file()
+            else "missing"
         )
         payload = {
             "id": str(uuid.uuid4()),
@@ -51,5 +53,7 @@ class EvidenceIndexService:
     def list_runs(self, db: Session, tenant_id: str) -> list[dict[str, object]]:
         return storage.list_runs(db, tenant_id)
 
-    def get_run(self, db: Session, tenant_id: str, run_id: str) -> dict[str, object] | None:
+    def get_run(
+        self, db: Session, tenant_id: str, run_id: str
+    ) -> dict[str, object] | None:
         return storage.get_run(db, tenant_id, run_id)

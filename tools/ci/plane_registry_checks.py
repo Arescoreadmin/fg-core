@@ -19,9 +19,22 @@ def dependency_categories_for_record(rec) -> list[str]:
         categories.append("tenant")
     if rec.route_has_db_dependency:
         categories.append("db")
-    if rec.full_path.startswith(("/exceptions", "/breakglass", "/control-plane/terminal")):
+    if rec.full_path.startswith(
+        ("/exceptions", "/breakglass", "/control-plane/terminal")
+    ):
         categories.append("breakglass")
-    if rec.full_path.startswith(("/admin", "/control-plane", "/ui", "/auth", "/keys", "/evidence", "/approvals", "/audit")):
+    if rec.full_path.startswith(
+        (
+            "/admin",
+            "/control-plane",
+            "/ui",
+            "/auth",
+            "/keys",
+            "/evidence",
+            "/approvals",
+            "/audit",
+        )
+    ):
         categories.append("rate")
     return sorted(set(categories))
 
@@ -41,7 +54,9 @@ def runtime_routes_ast() -> list[dict[str, object]]:
                 "dependency_categories": dependency_categories_for_record(rec),
             }
         )
-    return sorted(rows, key=lambda r: (str(r["path"]), str(r["method"]), str(r["file"])))
+    return sorted(
+        rows, key=lambda r: (str(r["path"]), str(r["method"]), str(r["file"]))
+    )
 
 
 def runtime_routes_app() -> list[dict[str, object]] | None:
@@ -52,7 +67,11 @@ def runtime_routes_app() -> list[dict[str, object]] | None:
     app = build_runtime_app(auth_enabled=True)
     rows: list[dict[str, object]] = []
     for r in app.routes:
-        methods = sorted(m for m in (getattr(r, "methods", set()) or set()) if m not in {"HEAD", "OPTIONS"})
+        methods = sorted(
+            m
+            for m in (getattr(r, "methods", set()) or set())
+            if m not in {"HEAD", "OPTIONS"}
+        )
         path = getattr(r, "path", None)
         if not methods or not path:
             continue
@@ -81,7 +100,14 @@ def contract_routes() -> list[dict[str, object]]:
                         for _, vals in entry.items():
                             if isinstance(vals, list):
                                 scopes.extend(str(v) for v in vals)
-            rows.append({"source": "contract", "method": m, "path": str(path), "scopes": sorted(set(scopes))})
+            rows.append(
+                {
+                    "source": "contract",
+                    "method": m,
+                    "path": str(path),
+                    "scopes": sorted(set(scopes)),
+                }
+            )
     return rows
 
 
@@ -108,7 +134,13 @@ def route_exception_classes(plane_id: str, method: str, path: str) -> set[str]:
         return set()
     key = _route_tuple(method, path)
     classes: set[str] = set()
-    for pool in (plane.global_routes, plane.public_routes, plane.bootstrap_routes, plane.auth_exempt_routes, plane.docs_routes):
+    for pool in (
+        plane.global_routes,
+        plane.public_routes,
+        plane.bootstrap_routes,
+        plane.auth_exempt_routes,
+        plane.docs_routes,
+    ):
         for e in pool:
             if _route_tuple(e.method, e.path) == key:
                 classes.add(e.class_name)

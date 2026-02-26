@@ -40,7 +40,9 @@ def audit_connector_action(
     db.flush()
 
 
-def _load_state(db: Session, tenant_id: str, connector_id: str) -> ConnectorTenantState | None:
+def _load_state(
+    db: Session, tenant_id: str, connector_id: str
+) -> ConnectorTenantState | None:
     return db.execute(
         select(ConnectorTenantState).where(
             ConnectorTenantState.tenant_id == tenant_id,
@@ -56,7 +58,9 @@ def _enforce_rate_budget(
     connector_id: str,
     policy: dict[str, Any],
 ) -> None:
-    limits = policy.get("rate_limits") if isinstance(policy.get("rate_limits"), dict) else {}
+    limits = (
+        policy.get("rate_limits") if isinstance(policy.get("rate_limits"), dict) else {}
+    )
     tenant_budget = int(limits.get("tenant_dispatch_per_minute", 60))
     connector_budget = int(limits.get("connector_dispatch_per_minute", 30))
     cutoff = datetime.now(UTC) - timedelta(minutes=1)
@@ -89,8 +93,12 @@ def _enforce_rate_budget(
         raise HTTPException(status_code=429, detail="CONNECTOR_RATE_BUDGET_EXCEEDED")
 
 
-def _enforce_cooldown(db: Session, *, tenant_id: str, connector_id: str, policy: dict[str, Any]) -> None:
-    limits = policy.get("rate_limits") if isinstance(policy.get("rate_limits"), dict) else {}
+def _enforce_cooldown(
+    db: Session, *, tenant_id: str, connector_id: str, policy: dict[str, Any]
+) -> None:
+    limits = (
+        policy.get("rate_limits") if isinstance(policy.get("rate_limits"), dict) else {}
+    )
     max_failures = int(limits.get("failure_cooldown_threshold", 3))
     cooldown_seconds = int(limits.get("failure_cooldown_seconds", 120))
     state = _load_state(db, tenant_id, connector_id)
@@ -120,13 +128,19 @@ def dispatch_ingest(
 ) -> dict[str, Any]:
     try:
         policy = enforce_connector_allowed(db, tenant_id, connector_id)
-        _enforce_rate_budget(db, tenant_id=tenant_id, connector_id=connector_id, policy=policy)
-        _enforce_cooldown(db, tenant_id=tenant_id, connector_id=connector_id, policy=policy)
+        _enforce_rate_budget(
+            db, tenant_id=tenant_id, connector_id=connector_id, policy=policy
+        )
+        _enforce_cooldown(
+            db, tenant_id=tenant_id, connector_id=connector_id, policy=policy
+        )
         allowed_collections = set(policy.get("allowed_collections") or [])
         if collection_id not in allowed_collections:
             raise HTTPException(status_code=403, detail="CONNECTOR_COLLECTION_DENY")
 
-        allowed_resources = set((policy.get("allowed_resources") or {}).get(connector_id, []))
+        allowed_resources = set(
+            (policy.get("allowed_resources") or {}).get(connector_id, [])
+        )
         requested_resources = set(payload.get("resource_ids") or [])
         if requested_resources and not requested_resources.issubset(allowed_resources):
             raise HTTPException(status_code=403, detail="CONNECTOR_RESOURCE_DENY")

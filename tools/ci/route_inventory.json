@@ -5,6 +5,7 @@
       "file": "api/main.py",
       "method": "GET",
       "path": "/_debug/routes",
+      "plane": "control",
       "plane_id": "control",
       "scoped": false,
       "scopes": [],
@@ -20,6 +21,7 @@
       "file": "api/agent_phase2.py",
       "method": "POST",
       "path": "/admin/agent/commands/issue",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -37,6 +39,7 @@
       "file": "api/agent_tokens.py",
       "method": "GET",
       "path": "/admin/agent/devices",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -54,6 +57,7 @@
       "file": "api/agent_tokens.py",
       "method": "POST",
       "path": "/admin/agent/devices/{device_id}/revoke",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -71,6 +75,7 @@
       "file": "api/agent_tokens.py",
       "method": "POST",
       "path": "/admin/agent/enrollment-tokens",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -88,6 +93,7 @@
       "file": "api/agent_phase2.py",
       "method": "GET",
       "path": "/admin/agent/evidence/export/{device_id}",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -105,6 +111,7 @@
       "file": "api/agent_phase2.py",
       "method": "POST",
       "path": "/admin/agent/policy/publish",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -122,6 +129,7 @@
       "file": "api/agent_phase2.py",
       "method": "POST",
       "path": "/admin/agent/policy/revoke/{policy_hash}",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -139,6 +147,7 @@
       "file": "api/agent_phase2.py",
       "method": "POST",
       "path": "/admin/agent/quarantine/{device_id}",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -156,6 +165,7 @@
       "file": "api/agent_phase2.py",
       "method": "POST",
       "path": "/admin/agent/unquarantine/{device_id}",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -173,6 +183,7 @@
       "file": "api/agent_phase2.py",
       "method": "POST",
       "path": "/admin/agent/update/rollout",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -190,6 +201,7 @@
       "file": "api/admin.py",
       "method": "POST",
       "path": "/admin/audit/export",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -207,6 +219,7 @@
       "file": "api/admin.py",
       "method": "GET",
       "path": "/admin/audit/search",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -224,6 +237,7 @@
       "file": "api/admin.py",
       "method": "POST",
       "path": "/admin/config/changes/{change_id}/revert",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -241,6 +255,7 @@
       "file": "api/connectors_policy.py",
       "method": "GET",
       "path": "/admin/connectors/policy",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -258,6 +273,7 @@
       "file": "api/connectors_policy.py",
       "method": "POST",
       "path": "/admin/connectors/policy",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -275,6 +291,7 @@
       "file": "api/connectors_status.py",
       "method": "GET",
       "path": "/admin/connectors/status",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -292,6 +309,7 @@
       "file": "api/connectors_admin.py",
       "method": "POST",
       "path": "/admin/connectors/{connector_id}/revoke",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -309,6 +327,7 @@
       "file": "api/ui_ai_console.py",
       "method": "GET",
       "path": "/admin/devices",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -326,6 +345,7 @@
       "file": "api/ui_ai_console.py",
       "method": "POST",
       "path": "/admin/devices/{device_id}/disable",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -343,6 +363,7 @@
       "file": "api/ui_ai_console.py",
       "method": "POST",
       "path": "/admin/devices/{device_id}/enable",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -360,6 +381,7 @@
       "file": "api/admin.py",
       "method": "GET",
       "path": "/admin/keys",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -377,6 +399,7 @@
       "file": "api/admin.py",
       "method": "POST",
       "path": "/admin/keys",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -393,6 +416,7 @@
       "file": "api/admin.py",
       "method": "GET",
       "path": "/admin/keys/needing-rotation",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -410,6 +434,7 @@
       "file": "api/admin.py",
       "method": "POST",
       "path": "/admin/keys/{key_prefix}/revoke",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -427,6 +452,7 @@
       "file": "api/admin.py",
       "method": "POST",
       "path": "/admin/keys/{key_prefix}/rotate",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -443,6 +469,7 @@
       "file": "api/admin.py",
       "method": "POST",
       "path": "/admin/keys/{key_prefix}/rotate",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -459,6 +486,7 @@
       "file": "api/admin.py",
       "method": "GET",
       "path": "/admin/keys/{key_prefix}/rotation-status",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -475,6 +503,7 @@
       "file": "api/admin.py",
       "method": "GET",
       "path": "/admin/system/health",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -492,6 +521,7 @@
       "file": "api/admin.py",
       "method": "POST",
       "path": "/admin/tenants/{tenant_id}/activate",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -509,6 +539,7 @@
       "file": "api/admin.py",
       "method": "PUT",
       "path": "/admin/tenants/{tenant_id}/quota",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -526,6 +557,7 @@
       "file": "api/admin.py",
       "method": "POST",
       "path": "/admin/tenants/{tenant_id}/suspend",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -543,6 +575,7 @@
       "file": "api/admin.py",
       "method": "PUT",
       "path": "/admin/tenants/{tenant_id}/tier",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -560,6 +593,7 @@
       "file": "api/admin.py",
       "method": "GET",
       "path": "/admin/tenants/{tenant_id}/usage",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -576,6 +610,7 @@
       "file": "api/admin.py",
       "method": "GET",
       "path": "/admin/usage/all",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -589,6 +624,7 @@
       "file": "api/agent_phase2.py",
       "method": "POST",
       "path": "/agent/cert/enroll",
+      "plane": "agent",
       "plane_id": "agent",
       "scoped": false,
       "scopes": [],
@@ -600,6 +636,7 @@
       "file": "api/agent_phase2.py",
       "method": "POST",
       "path": "/agent/cert/renew",
+      "plane": "agent",
       "plane_id": "agent",
       "scoped": false,
       "scopes": [],
@@ -611,6 +648,7 @@
       "file": "api/agent_phase2.py",
       "method": "GET",
       "path": "/agent/cert/status",
+      "plane": "agent",
       "plane_id": "agent",
       "scoped": false,
       "scopes": [],
@@ -622,6 +660,7 @@
       "file": "api/agent_phase2.py",
       "method": "POST",
       "path": "/agent/commands/ack",
+      "plane": "agent",
       "plane_id": "agent",
       "scoped": false,
       "scopes": [],
@@ -633,6 +672,7 @@
       "file": "api/agent_phase2.py",
       "method": "POST",
       "path": "/agent/commands/poll",
+      "plane": "agent",
       "plane_id": "agent",
       "scoped": false,
       "scopes": [],
@@ -644,6 +684,7 @@
       "file": "api/agent_enrollment.py",
       "method": "POST",
       "path": "/agent/enroll",
+      "plane": "agent",
       "plane_id": "agent",
       "scoped": false,
       "scopes": [],
@@ -655,6 +696,7 @@
       "file": "api/agent_enrollment.py",
       "method": "POST",
       "path": "/agent/heartbeat",
+      "plane": "agent",
       "plane_id": "agent",
       "scoped": false,
       "scopes": [],
@@ -666,6 +708,7 @@
       "file": "api/agent_enrollment.py",
       "method": "POST",
       "path": "/agent/key/rotate",
+      "plane": "agent",
       "plane_id": "agent",
       "scoped": false,
       "scopes": [],
@@ -677,6 +720,7 @@
       "file": "api/agent_phase2.py",
       "method": "POST",
       "path": "/agent/log/anchor",
+      "plane": "agent",
       "plane_id": "agent",
       "scoped": false,
       "scopes": [],
@@ -688,6 +732,7 @@
       "file": "api/agent_phase2.py",
       "method": "GET",
       "path": "/agent/policy/fetch",
+      "plane": "agent",
       "plane_id": "agent",
       "scoped": false,
       "scopes": [],
@@ -699,6 +744,7 @@
       "file": "api/agent_phase2.py",
       "method": "GET",
       "path": "/agent/update/manifest",
+      "plane": "agent",
       "plane_id": "agent",
       "scoped": false,
       "scopes": [],
@@ -710,6 +756,7 @@
       "file": "api/agent_phase2.py",
       "method": "POST",
       "path": "/agent/update/manifest",
+      "plane": "agent",
       "plane_id": "agent",
       "scoped": false,
       "scopes": [],
@@ -721,6 +768,7 @@
       "file": "api/agent_phase2.py",
       "method": "POST",
       "path": "/agent/update/report",
+      "plane": "agent",
       "plane_id": "agent",
       "scoped": false,
       "scopes": [],
@@ -735,6 +783,7 @@
       "file": "api/ai_plane_extension.py",
       "method": "GET",
       "path": "/ai-plane/inference",
+      "plane": "ai",
       "plane_id": "ai",
       "scoped": true,
       "scopes": [
@@ -751,6 +800,7 @@
       "file": "api/ai_plane_extension.py",
       "method": "GET",
       "path": "/ai-plane/policies",
+      "plane": "ai",
       "plane_id": "ai",
       "scoped": true,
       "scopes": [
@@ -767,6 +817,7 @@
       "file": "api/ai_plane_extension.py",
       "method": "POST",
       "path": "/ai-plane/policies",
+      "plane": "ai",
       "plane_id": "ai",
       "scoped": true,
       "scopes": [
@@ -783,6 +834,7 @@
       "file": "api/ai_plane_extension.py",
       "method": "POST",
       "path": "/ai/infer",
+      "plane": "ai",
       "plane_id": "ai",
       "scoped": true,
       "scopes": [
@@ -799,6 +851,7 @@
       "file": "api/attestation.py",
       "method": "POST",
       "path": "/approvals",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -815,6 +868,7 @@
       "file": "api/attestation.py",
       "method": "POST",
       "path": "/approvals/verify",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -831,6 +885,7 @@
       "file": "api/attestation.py",
       "method": "GET",
       "path": "/approvals/{subject_type}/{subject_id}",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -848,6 +903,7 @@
       "file": "api/audit.py",
       "method": "GET",
       "path": "/audit/exam-snapshot",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -865,6 +921,7 @@
       "file": "api/audit.py",
       "method": "GET",
       "path": "/audit/exams",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -882,6 +939,7 @@
       "file": "api/audit.py",
       "method": "POST",
       "path": "/audit/exams/run",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -899,6 +957,7 @@
       "file": "api/audit.py",
       "method": "GET",
       "path": "/audit/exams/{exam_id}/export",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -916,6 +975,7 @@
       "file": "api/audit.py",
       "method": "POST",
       "path": "/audit/exams/{exam_id}/reproduce",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -933,6 +993,7 @@
       "file": "api/audit.py",
       "method": "GET",
       "path": "/audit/export",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -950,6 +1011,7 @@
       "file": "api/audit.py",
       "method": "POST",
       "path": "/audit/reproduce",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -967,6 +1029,7 @@
       "file": "api/audit.py",
       "method": "GET",
       "path": "/audit/sessions",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -984,6 +1047,7 @@
       "file": "api/auth_federation.py",
       "method": "POST",
       "path": "/auth/federation/validate",
+      "plane": "security",
       "plane_id": "security",
       "scoped": true,
       "scopes": [
@@ -1000,6 +1064,7 @@
       "file": "api/billing.py",
       "method": "POST",
       "path": "/billing/coverage/change",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1016,6 +1081,7 @@
       "file": "api/billing.py",
       "method": "POST",
       "path": "/billing/credits/{credit_note_id}/evidence",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1032,6 +1098,7 @@
       "file": "api/billing.py",
       "method": "POST",
       "path": "/billing/daily-counts/sync",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1048,6 +1115,7 @@
       "file": "api/billing.py",
       "method": "GET",
       "path": "/billing/devices",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1064,6 +1132,7 @@
       "file": "api/billing.py",
       "method": "POST",
       "path": "/billing/devices/activity",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1080,6 +1149,7 @@
       "file": "api/billing.py",
       "method": "POST",
       "path": "/billing/devices/enroll",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1096,6 +1166,7 @@
       "file": "api/billing.py",
       "method": "POST",
       "path": "/billing/devices/upsert",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1112,6 +1183,7 @@
       "file": "api/billing.py",
       "method": "GET",
       "path": "/billing/devices/{device_id}/coverage-timeline",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1128,6 +1200,7 @@
       "file": "api/billing.py",
       "method": "GET",
       "path": "/billing/identity/disputes",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1144,6 +1217,7 @@
       "file": "api/billing.py",
       "method": "POST",
       "path": "/billing/identity/disputes/{claim_id}/resolve",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1160,6 +1234,7 @@
       "file": "api/billing.py",
       "method": "GET",
       "path": "/billing/invoices",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1176,6 +1251,7 @@
       "file": "api/billing.py",
       "method": "POST",
       "path": "/billing/invoices",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1192,6 +1268,7 @@
       "file": "api/billing.py",
       "method": "GET",
       "path": "/billing/invoices/{invoice_id}",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1208,6 +1285,7 @@
       "file": "api/billing.py",
       "method": "GET",
       "path": "/billing/invoices/{invoice_id}/credits",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1224,6 +1302,7 @@
       "file": "api/billing.py",
       "method": "POST",
       "path": "/billing/invoices/{invoice_id}/credits",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1240,6 +1319,7 @@
       "file": "api/billing.py",
       "method": "GET",
       "path": "/billing/invoices/{invoice_id}/evidence",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1256,6 +1336,7 @@
       "file": "api/billing.py",
       "method": "POST",
       "path": "/billing/invoices/{invoice_id}/evidence",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1272,6 +1353,7 @@
       "file": "api/billing.py",
       "method": "POST",
       "path": "/billing/invoices/{invoice_id}/finalize",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1288,6 +1370,7 @@
       "file": "api/billing.py",
       "method": "POST",
       "path": "/billing/invoices/{invoice_id}/reproduce",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1304,6 +1387,7 @@
       "file": "api/billing.py",
       "method": "GET",
       "path": "/billing/runs",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1320,6 +1404,7 @@
       "file": "api/billing.py",
       "method": "POST",
       "path": "/billing/runs",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -1337,6 +1422,7 @@
       "file": "api/exception_breakglass.py",
       "method": "POST",
       "path": "/breakglass/sessions",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1353,6 +1439,7 @@
       "file": "api/compliance_cp_extension.py",
       "method": "GET",
       "path": "/compliance-cp/controls",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1369,6 +1456,7 @@
       "file": "api/compliance_cp_extension.py",
       "method": "POST",
       "path": "/compliance-cp/evidence/ingest",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1386,6 +1474,7 @@
       "file": "api/compliance_cp_extension.py",
       "method": "GET",
       "path": "/compliance-cp/portfolio",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1402,6 +1491,7 @@
       "file": "api/compliance_cp_extension.py",
       "method": "GET",
       "path": "/compliance-cp/summary",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1418,6 +1508,7 @@
       "file": "api/compliance.py",
       "method": "POST",
       "path": "/compliance/findings/import",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1434,6 +1525,7 @@
       "file": "api/compliance.py",
       "method": "GET",
       "path": "/compliance/requirements/diff",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1450,6 +1542,7 @@
       "file": "api/compliance.py",
       "method": "POST",
       "path": "/compliance/requirements/import",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1466,6 +1559,7 @@
       "file": "api/compliance.py",
       "method": "GET",
       "path": "/compliance/requirements/updates",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1482,6 +1576,7 @@
       "file": "api/compliance.py",
       "method": "POST",
       "path": "/compliance/requirements/updates/available",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1498,6 +1593,7 @@
       "file": "api/compliance.py",
       "method": "POST",
       "path": "/compliance/requirements/updates/{update_id}/apply",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1514,6 +1610,7 @@
       "file": "api/config_control.py",
       "method": "POST",
       "path": "/config/versions",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1531,6 +1628,7 @@
       "file": "api/control_plane.py",
       "method": "GET",
       "path": "/control-plane/audit",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1548,6 +1646,7 @@
       "file": "api/control_plane.py",
       "method": "GET",
       "path": "/control-plane/dependency-matrix",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1565,6 +1664,7 @@
       "file": "api/control_plane_v2.py",
       "method": "GET",
       "path": "/control-plane/evidence/bundle",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1582,6 +1682,7 @@
       "file": "api/control_plane.py",
       "method": "GET",
       "path": "/control-plane/lockers",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1599,6 +1700,7 @@
       "file": "api/control_plane.py",
       "method": "POST",
       "path": "/control-plane/lockers/{locker_id}/pause",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1616,6 +1718,7 @@
       "file": "api/control_plane.py",
       "method": "POST",
       "path": "/control-plane/lockers/{locker_id}/quarantine",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1633,6 +1736,7 @@
       "file": "api/control_plane.py",
       "method": "POST",
       "path": "/control-plane/lockers/{locker_id}/restart",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1650,6 +1754,7 @@
       "file": "api/control_plane.py",
       "method": "POST",
       "path": "/control-plane/lockers/{locker_id}/resume",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1667,6 +1772,7 @@
       "file": "api/control_plane.py",
       "method": "GET",
       "path": "/control-plane/modules",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1684,6 +1790,7 @@
       "file": "api/control_plane.py",
       "method": "GET",
       "path": "/control-plane/modules/{module_id}",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1701,6 +1808,7 @@
       "file": "api/control_plane.py",
       "method": "GET",
       "path": "/control-plane/modules/{module_id}/boot-trace",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1718,6 +1826,7 @@
       "file": "api/control_plane.py",
       "method": "GET",
       "path": "/control-plane/modules/{module_id}/dependencies",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1735,6 +1844,7 @@
       "file": "api/control_plane_v2.py",
       "method": "GET",
       "path": "/control-plane/v2/ai/namespace",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1752,6 +1862,7 @@
       "file": "api/control_plane_v2.py",
       "method": "GET",
       "path": "/control-plane/v2/commands",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1769,6 +1880,7 @@
       "file": "api/control_plane_v2.py",
       "method": "POST",
       "path": "/control-plane/v2/commands",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1786,6 +1898,7 @@
       "file": "api/control_plane_v2.py",
       "method": "POST",
       "path": "/control-plane/v2/commands/{command_id}/cancel",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1803,6 +1916,7 @@
       "file": "api/control_plane_v2.py",
       "method": "POST",
       "path": "/control-plane/v2/commands/{command_id}/receipt",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1820,6 +1934,7 @@
       "file": "api/control_plane_v2.py",
       "method": "GET",
       "path": "/control-plane/v2/commands/{command_id}/receipts",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1836,6 +1951,7 @@
       "file": "api/control_plane_v2.py",
       "method": "GET",
       "path": "/control-plane/v2/delegation",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1852,6 +1968,7 @@
       "file": "api/control_plane_v2.py",
       "method": "POST",
       "path": "/control-plane/v2/delegation",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1868,6 +1985,7 @@
       "file": "api/control_plane_v2.py",
       "method": "DELETE",
       "path": "/control-plane/v2/delegation/{delegation_id}",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1885,6 +2003,7 @@
       "file": "api/control_plane_v2.py",
       "method": "GET",
       "path": "/control-plane/v2/heartbeats",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1902,6 +2021,7 @@
       "file": "api/control_plane_v2.py",
       "method": "POST",
       "path": "/control-plane/v2/heartbeats",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1919,6 +2039,7 @@
       "file": "api/control_plane_v2.py",
       "method": "GET",
       "path": "/control-plane/v2/heartbeats/stale",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1936,6 +2057,7 @@
       "file": "api/control_plane_v2.py",
       "method": "GET",
       "path": "/control-plane/v2/ledger",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1953,6 +2075,7 @@
       "file": "api/control_plane_v2.py",
       "method": "GET",
       "path": "/control-plane/v2/ledger/anchor",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1970,6 +2093,7 @@
       "file": "api/control_plane_v2.py",
       "method": "GET",
       "path": "/control-plane/v2/ledger/verify",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -1987,6 +2111,7 @@
       "file": "api/control_plane_v2.py",
       "method": "GET",
       "path": "/control-plane/v2/playbooks",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2004,6 +2129,7 @@
       "file": "api/control_plane_v2.py",
       "method": "POST",
       "path": "/control-plane/v2/playbooks/{playbook_name}/trigger",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2021,6 +2147,7 @@
       "file": "api/control_plane_v2.py",
       "method": "POST",
       "path": "/control-plane/v2/policy/pin",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2038,6 +2165,7 @@
       "file": "api/control_plane_v2.py",
       "method": "GET",
       "path": "/control-plane/v2/policy/pins",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2055,6 +2183,7 @@
       "file": "api/control_plane_v2.py",
       "method": "POST",
       "path": "/control-plane/v2/policy/rollback",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2072,6 +2201,7 @@
       "file": "api/control_plane_v2.py",
       "method": "POST",
       "path": "/control-plane/v2/policy/stage",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2088,6 +2218,7 @@
       "file": "api/control_plane_v2.py",
       "method": "GET",
       "path": "/control-plane/v2/terminal/allowlist",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2105,6 +2236,7 @@
       "file": "api/control_plane_v2.py",
       "method": "POST",
       "path": "/control-plane/v2/terminal/breakglass",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2122,86 +2254,7 @@
       "file": "api/control_plane_v2.py",
       "method": "POST",
       "path": "/control-plane/v2/terminal/execute",
-      "plane_id": "control",
-      "scoped": true,
-      "scopes": [
-        "control-plane:read"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": true
-    },
-    {
-      "dependency_categories": [
-        "auth",
-        "tenant"
-      ],
-      "file": "api/control_tower_snapshot.py",
-      "method": "GET",
-      "path": "/control-tower/snapshot",
-      "plane_id": "control",
-      "scoped": true,
-      "scopes": [
-        "admin:read"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": true
-    },
-    {
-      "dependency_categories": [
-        "auth",
-        "tenant"
-      ],
-      "file": "api/testing_control_tower.py",
-      "method": "GET",
-      "path": "/control/testing/health",
-      "plane_id": "control",
-      "scoped": true,
-      "scopes": [
-        "control-plane:read"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": true
-    },
-    {
-      "dependency_categories": [
-        "auth",
-        "tenant"
-      ],
-      "file": "api/testing_control_tower.py",
-      "method": "GET",
-      "path": "/control/testing/runs",
-      "plane_id": "control",
-      "scoped": true,
-      "scopes": [
-        "control-plane:read"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": true
-    },
-    {
-      "dependency_categories": [
-        "auth",
-        "tenant"
-      ],
-      "file": "api/testing_control_tower.py",
-      "method": "POST",
-      "path": "/control/testing/runs/register",
-      "plane_id": "control",
-      "scoped": true,
-      "scopes": [
-        "control-plane:admin"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": true
-    },
-    {
-      "dependency_categories": [
-        "auth",
-        "tenant"
-      ],
-      "file": "api/testing_control_tower.py",
-      "method": "GET",
-      "path": "/control/testing/runs/{run_id}",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2218,6 +2271,7 @@
       "file": "api/decisions.py",
       "method": "GET",
       "path": "/decisions",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -2234,6 +2288,7 @@
       "file": "api/decisions.py",
       "method": "GET",
       "path": "/decisions/{decision_id}",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -2250,6 +2305,7 @@
       "file": "api/defend.py",
       "method": "POST",
       "path": "/defend",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -2266,6 +2322,7 @@
       "file": "api/dev_events.py",
       "method": "POST",
       "path": "/dev/emit",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2282,6 +2339,7 @@
       "file": "api/dev_events.py",
       "method": "POST",
       "path": "/dev/seed",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2298,6 +2356,7 @@
       "file": "api/enterprise_controls.py",
       "method": "GET",
       "path": "/enterprise-controls/catalog",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2314,6 +2373,7 @@
       "file": "api/enterprise_controls.py",
       "method": "GET",
       "path": "/enterprise-controls/crosswalk",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2330,6 +2390,7 @@
       "file": "api/enterprise_controls.py",
       "method": "GET",
       "path": "/enterprise-controls/frameworks",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2346,6 +2407,7 @@
       "file": "api/enterprise_controls.py",
       "method": "POST",
       "path": "/enterprise-controls/tenant-state",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2364,6 +2426,7 @@
       "file": "api/evidence_anchors.py",
       "method": "GET",
       "path": "/evidence/anchors",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -2381,6 +2444,7 @@
       "file": "api/evidence_anchors.py",
       "method": "POST",
       "path": "/evidence/anchors",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -2397,6 +2461,7 @@
       "file": "api/attestation.py",
       "method": "POST",
       "path": "/evidence/bundles",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -2413,6 +2478,7 @@
       "file": "api/attestation.py",
       "method": "GET",
       "path": "/evidence/bundles/{bundle_id}",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -2430,6 +2496,7 @@
       "file": "api/evidence_index.py",
       "method": "GET",
       "path": "/evidence/runs",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -2447,6 +2514,7 @@
       "file": "api/evidence_index.py",
       "method": "POST",
       "path": "/evidence/runs/register",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -2464,6 +2532,7 @@
       "file": "api/evidence_index.py",
       "method": "GET",
       "path": "/evidence/runs/{run_id}",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -2480,6 +2549,7 @@
       "file": "api/attestation.py",
       "method": "POST",
       "path": "/evidence/verify",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -2497,6 +2567,7 @@
       "file": "api/exception_breakglass.py",
       "method": "POST",
       "path": "/exceptions/requests",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2514,6 +2585,7 @@
       "file": "api/exception_breakglass.py",
       "method": "POST",
       "path": "/exceptions/requests/{request_id}/approve",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2530,6 +2602,7 @@
       "file": "api/feed.py",
       "method": "GET",
       "path": "/feed/live",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -2546,6 +2619,7 @@
       "file": "api/feed.py",
       "method": "GET",
       "path": "/feed/stream",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -2562,6 +2636,7 @@
       "file": "api/feed.py",
       "method": "HEAD",
       "path": "/feed/stream",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -2578,6 +2653,7 @@
       "file": "api/forensics.py",
       "method": "GET",
       "path": "/forensics/audit_trail/{event_id}",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -2594,6 +2670,7 @@
       "file": "api/forensics.py",
       "method": "GET",
       "path": "/forensics/chain/verify",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -2610,6 +2687,7 @@
       "file": "api/forensics.py",
       "method": "GET",
       "path": "/forensics/snapshot/{event_id}",
+      "plane": "evidence",
       "plane_id": "evidence",
       "scoped": true,
       "scopes": [
@@ -2626,6 +2704,7 @@
       "file": "api/governance.py",
       "method": "GET",
       "path": "/governance/changes",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2642,6 +2721,7 @@
       "file": "api/governance.py",
       "method": "POST",
       "path": "/governance/changes",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2658,6 +2738,7 @@
       "file": "api/governance.py",
       "method": "POST",
       "path": "/governance/changes/{change_id}/approve",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2671,6 +2752,7 @@
       "file": "api/main.py",
       "method": "GET",
       "path": "/health",
+      "plane": "control",
       "plane_id": "control",
       "scoped": false,
       "scopes": [],
@@ -2682,6 +2764,7 @@
       "file": "api/main.py",
       "method": "GET",
       "path": "/health",
+      "plane": "control",
       "plane_id": "control",
       "scoped": false,
       "scopes": [],
@@ -2693,6 +2776,7 @@
       "file": "api/main.py",
       "method": "GET",
       "path": "/health/detailed",
+      "plane": "control",
       "plane_id": "control",
       "scoped": false,
       "scopes": [],
@@ -2704,6 +2788,7 @@
       "file": "api/main.py",
       "method": "GET",
       "path": "/health/live",
+      "plane": "control",
       "plane_id": "control",
       "scoped": false,
       "scopes": [],
@@ -2715,6 +2800,7 @@
       "file": "api/main.py",
       "method": "GET",
       "path": "/health/live",
+      "plane": "control",
       "plane_id": "control",
       "scoped": false,
       "scopes": [],
@@ -2726,6 +2812,7 @@
       "file": "api/main.py",
       "method": "GET",
       "path": "/health/ready",
+      "plane": "control",
       "plane_id": "control",
       "scoped": false,
       "scopes": [],
@@ -2737,6 +2824,7 @@
       "file": "api/main.py",
       "method": "GET",
       "path": "/health/ready",
+      "plane": "control",
       "plane_id": "control",
       "scoped": false,
       "scopes": [],
@@ -2751,6 +2839,7 @@
       "file": "api/ingest.py",
       "method": "POST",
       "path": "/ingest",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -2767,6 +2856,7 @@
       "file": "api/connectors_internal.py",
       "method": "POST",
       "path": "/internal/connectors/{connector_id}/ingest",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2784,6 +2874,7 @@
       "file": "api/keys.py",
       "method": "GET",
       "path": "/keys",
+      "plane": "security",
       "plane_id": "security",
       "scoped": true,
       "scopes": [
@@ -2801,6 +2892,7 @@
       "file": "api/keys.py",
       "method": "POST",
       "path": "/keys",
+      "plane": "security",
       "plane_id": "security",
       "scoped": true,
       "scopes": [
@@ -2818,6 +2910,7 @@
       "file": "api/keys.py",
       "method": "POST",
       "path": "/keys/revoke",
+      "plane": "security",
       "plane_id": "security",
       "scoped": true,
       "scopes": [
@@ -2835,6 +2928,7 @@
       "file": "api/keys.py",
       "method": "POST",
       "path": "/keys/rotate",
+      "plane": "security",
       "plane_id": "security",
       "scoped": true,
       "scopes": [
@@ -2852,6 +2946,7 @@
       "file": "api/keys.py",
       "method": "DELETE",
       "path": "/keys/{prefix}",
+      "plane": "security",
       "plane_id": "security",
       "scoped": true,
       "scopes": [
@@ -2865,6 +2960,7 @@
       "file": "api/mission_envelope.py",
       "method": "GET",
       "path": "/missions",
+      "plane": "connector",
       "plane_id": "connector",
       "scoped": false,
       "scopes": [],
@@ -2876,6 +2972,7 @@
       "file": "api/mission_envelope.py",
       "method": "GET",
       "path": "/missions/{mission_id}",
+      "plane": "connector",
       "plane_id": "connector",
       "scoped": false,
       "scopes": [],
@@ -2887,6 +2984,7 @@
       "file": "api/mission_envelope.py",
       "method": "GET",
       "path": "/missions/{mission_id}/status",
+      "plane": "connector",
       "plane_id": "connector",
       "scoped": false,
       "scopes": [],
@@ -2900,6 +2998,7 @@
       "file": "api/attestation.py",
       "method": "GET",
       "path": "/modules",
+      "plane": "connector",
       "plane_id": "connector",
       "scoped": true,
       "scopes": [
@@ -2915,6 +3014,7 @@
       "file": "api/attestation.py",
       "method": "GET",
       "path": "/modules/enforce/{module_id}",
+      "plane": "connector",
       "plane_id": "connector",
       "scoped": true,
       "scopes": [
@@ -2930,6 +3030,7 @@
       "file": "api/attestation.py",
       "method": "POST",
       "path": "/modules/register",
+      "plane": "connector",
       "plane_id": "connector",
       "scoped": true,
       "scopes": [
@@ -2945,6 +3046,7 @@
       "file": "api/attestation.py",
       "method": "GET",
       "path": "/modules/{module_id}",
+      "plane": "connector",
       "plane_id": "connector",
       "scoped": true,
       "scopes": [
@@ -2961,6 +3063,7 @@
       "file": "api/planes.py",
       "method": "GET",
       "path": "/planes",
+      "plane": "control",
       "plane_id": "control",
       "scoped": true,
       "scopes": [
@@ -2974,6 +3077,7 @@
       "file": "api/ring_router.py",
       "method": "GET",
       "path": "/rings/isolation",
+      "plane": "connector",
       "plane_id": "connector",
       "scoped": false,
       "scopes": [],
@@ -2985,6 +3089,7 @@
       "file": "api/ring_router.py",
       "method": "GET",
       "path": "/rings/policies",
+      "plane": "connector",
       "plane_id": "connector",
       "scoped": false,
       "scopes": [],
@@ -2996,6 +3101,7 @@
       "file": "api/ring_router.py",
       "method": "POST",
       "path": "/rings/route",
+      "plane": "connector",
       "plane_id": "connector",
       "scoped": false,
       "scopes": [],
@@ -3007,6 +3113,7 @@
       "file": "api/roe_engine.py",
       "method": "POST",
       "path": "/roe/evaluate",
+      "plane": "connector",
       "plane_id": "connector",
       "scoped": false,
       "scopes": [],
@@ -3018,6 +3125,7 @@
       "file": "api/roe_engine.py",
       "method": "GET",
       "path": "/roe/policy",
+      "plane": "connector",
       "plane_id": "connector",
       "scoped": false,
       "scopes": [],
@@ -3032,6 +3140,7 @@
       "file": "api/stats.py",
       "method": "GET",
       "path": "/stats",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -3045,6 +3154,7 @@
       "file": "api/main.py",
       "method": "GET",
       "path": "/stats/debug",
+      "plane": "data",
       "plane_id": "data",
       "scoped": false,
       "scopes": [],
@@ -3059,6 +3169,7 @@
       "file": "api/stats.py",
       "method": "GET",
       "path": "/stats/summary",
+      "plane": "data",
       "plane_id": "data",
       "scoped": true,
       "scopes": [
@@ -3072,6 +3183,7 @@
       "file": "api/main.py",
       "method": "GET",
       "path": "/status",
+      "plane": "control",
       "plane_id": "control",
       "scoped": false,
       "scopes": [],
@@ -3086,6 +3198,7 @@
       "file": "api/ui_ai_console.py",
       "method": "GET",
       "path": "/ui/ai",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3103,6 +3216,7 @@
       "file": "api/ui_ai_console.py",
       "method": "POST",
       "path": "/ui/ai/chat",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3121,6 +3235,7 @@
       "file": "api/ui_ai_console.py",
       "method": "GET",
       "path": "/ui/ai/experience",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3138,6 +3253,7 @@
       "file": "api/ui_ai_console.py",
       "method": "GET",
       "path": "/ui/ai/usage",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3156,6 +3272,7 @@
       "file": "api/ui_audit_dashboard.py",
       "method": "GET",
       "path": "/ui/audit/chain-integrity",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3173,6 +3290,7 @@
       "file": "api/ui_audit_dashboard.py",
       "method": "GET",
       "path": "/ui/audit/export-link",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3190,6 +3308,7 @@
       "file": "api/ui_audit_dashboard.py",
       "method": "GET",
       "path": "/ui/audit/overview",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3206,6 +3325,7 @@
       "file": "api/ui_dashboards.py",
       "method": "POST",
       "path": "/ui/audit/packet",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3222,6 +3342,7 @@
       "file": "api/ui_dashboards.py",
       "method": "GET",
       "path": "/ui/audit/packet/{packet_id}/download",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3239,6 +3360,7 @@
       "file": "api/ui_audit_dashboard.py",
       "method": "GET",
       "path": "/ui/audit/status",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3256,6 +3378,7 @@
       "file": "api/ui_compliance_dashboard.py",
       "method": "GET",
       "path": "/ui/compliance/exam-readiness",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3273,6 +3396,7 @@
       "file": "api/ui_compliance_dashboard.py",
       "method": "GET",
       "path": "/ui/compliance/findings",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3290,6 +3414,7 @@
       "file": "api/ui_compliance_dashboard.py",
       "method": "GET",
       "path": "/ui/compliance/overview",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3307,6 +3432,7 @@
       "file": "api/ui_compliance_dashboard.py",
       "method": "GET",
       "path": "/ui/compliance/requirements/status",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3323,6 +3449,7 @@
       "file": "api/ui_dashboards.py",
       "method": "GET",
       "path": "/ui/controls",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3339,6 +3466,7 @@
       "file": "api/ui_dashboards.py",
       "method": "GET",
       "path": "/ui/controls/{inv_id}",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3354,6 +3482,7 @@
       "file": "api/ui_dashboards.py",
       "method": "GET",
       "path": "/ui/csrf",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": false,
       "scopes": [],
@@ -3368,6 +3497,7 @@
       "file": "api/ui.py",
       "method": "GET",
       "path": "/ui/dash/controls",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3384,6 +3514,7 @@
       "file": "api/ui.py",
       "method": "GET",
       "path": "/ui/dash/forensics",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3400,6 +3531,7 @@
       "file": "api/ui.py",
       "method": "GET",
       "path": "/ui/dash/posture",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3414,26 +3546,10 @@
         "rate",
         "tenant"
       ],
-      "file": "api/ui_testing_control_tower.py",
-      "method": "GET",
-      "path": "/ui/dash/testing-control-tower",
-      "plane_id": "ui",
-      "scoped": true,
-      "scopes": [
-        "ui:read"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": true
-    },
-    {
-      "dependency_categories": [
-        "auth",
-        "rate",
-        "tenant"
-      ],
       "file": "api/ui_dashboards.py",
       "method": "GET",
       "path": "/ui/decision/{decision_id}",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3451,6 +3567,7 @@
       "file": "api/ui_dashboards.py",
       "method": "GET",
       "path": "/ui/decisions",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3468,6 +3585,7 @@
       "file": "api/ui_ai_console.py",
       "method": "POST",
       "path": "/ui/devices/{device_id}/disable",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3486,6 +3604,7 @@
       "file": "api/ui_ai_console.py",
       "method": "POST",
       "path": "/ui/devices/{device_id}/enable",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3503,6 +3622,7 @@
       "file": "api/ui.py",
       "method": "GET",
       "path": "/ui/feed",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3520,6 +3640,7 @@
       "file": "api/ui_dashboards.py",
       "method": "GET",
       "path": "/ui/forensics/chain/verify",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3537,6 +3658,7 @@
       "file": "api/ui_dashboards.py",
       "method": "GET",
       "path": "/ui/posture",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3552,6 +3674,7 @@
       "file": "api/ui_dashboards.py",
       "method": "GET",
       "path": "/ui/scopes",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": false,
       "scopes": [],
@@ -3566,6 +3689,7 @@
       "file": "api/ui.py",
       "method": "GET",
       "path": "/ui/token",
+      "plane": "ui",
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
@@ -3579,6 +3703,7 @@
       "file": "api/main.py",
       "method": "GET",
       "path": "/v1/status",
+      "plane": "connector",
       "plane_id": "connector",
       "scoped": false,
       "scopes": [],
@@ -3586,6 +3711,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-02-26T19:13:14.131068+00:00",
+  "generated_at": "2026-02-25T18:59:26.589845+00:00",
+  "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

@@ -1,21 +1,111 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://frostgate/contracts/artifacts/plane_registry_response.schema.json",
+  "title": "Plane Registry Response",
+  "description": "Authoritative plane registry contract used by Control Plane governance.",
   "type": "object",
-  "required": ["planes"],
+  "additionalProperties": false,
+  "required": ["schema_version", "planes"],
   "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "v1"
+    },
+
     "planes": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["plane_id", "route_prefixes", "mount_flag", "required_make_targets"],
+        "additionalProperties": false,
+        "required": [
+          "plane_id",
+          "route_prefixes",
+          "mount_flag",
+          "required_make_targets"
+        ],
         "properties": {
-          "plane_id": {"type": "string"},
-          "route_prefixes": {"type": "array", "items": {"type": "string"}},
-          "mount_flag": {"type": "string"},
-          "required_make_targets": {"type": "array", "items": {"type": "string"}},
-          "evidence": {"type": "array"},
-          "required_route_invariants": {"type": "array", "items": {"type": "string"}}
+          "plane_id": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 64,
+            "pattern": "^[a-z0-9_-]+$"
+          },
+
+          "route_prefixes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "^/[a-zA-Z0-9/_-]*$"
+            }
+          },
+
+          "mount_flag": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+
+          "required_make_targets": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+
+          "exposure": {
+            "type": "string",
+            "enum": ["public", "internal", "admin", "agent"]
+          },
+
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["artifact_type", "schema_id"],
+              "properties": {
+                "artifact_type": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "schema_id": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "retention_class": {
+                  "type": "string",
+                  "enum": [
+                    "standard",
+                    "elevated",
+                    "legal_hold",
+                    "permanent"
+                  ]
+                }
+              }
+            }
+          },
+
+          "required_route_invariants": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+
+          "auth_class": {
+            "type": "string",
+            "enum": [
+              "none",
+              "api_key",
+              "tenant_bound",
+              "admin_only",
+              "agent_cert"
+            ]
+          }
         }
       }
     }

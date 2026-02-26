@@ -17,7 +17,9 @@ from typing import Any
 from urllib import error, request
 
 LOG = logging.getLogger("frostgate.agent")
-logging.basicConfig(level=logging.INFO, format='{"level":"%(levelname)s","msg":"%(message)s"}')
+logging.basicConfig(
+    level=logging.INFO, format='{"level":"%(levelname)s","msg":"%(message)s"}'
+)
 
 WINDOWS_CONFIG = Path(r"C:\ProgramData\FrostGate\agent\config.json")
 LINUX_CONFIG = Path("/etc/frostgate/agent/config.json")
@@ -47,8 +49,12 @@ class AgentRuntime:
     def _load_config(self) -> AgentConfig:
         payload = json.loads(self.config_path.read_text())
         api_base_url = str(payload["api_base_url"]).strip()
-        if api_base_url.startswith("http://") and not payload.get("insecure_allow_http", False):
-            raise RuntimeError("HTTPS required; set insecure_allow_http=true for development only")
+        if api_base_url.startswith("http://") and not payload.get(
+            "insecure_allow_http", False
+        ):
+            raise RuntimeError(
+                "HTTPS required; set insecure_allow_http=true for development only"
+            )
         if api_base_url.startswith("http://"):
             LOG.warning("INSECURE OVERRIDE ENABLED: api_base_url uses http://")
         return AgentConfig(
@@ -83,7 +89,9 @@ class AgentRuntime:
         ctx = ssl.create_default_context()
         return ctx
 
-    def _request(self, path: str, body: dict[str, Any], headers: dict[str, str] | None = None) -> dict[str, Any]:
+    def _request(
+        self, path: str, body: dict[str, Any], headers: dict[str, str] | None = None
+    ) -> dict[str, Any]:
         data = json.dumps(body, separators=(",", ":"), sort_keys=True).encode("utf-8")
         req = request.Request(
             f"{self.config.api_base_url}{path}",
@@ -101,11 +109,19 @@ class AgentRuntime:
         if not self.config.device_key_id or not self.config.device_key:
             raise RuntimeError("device key material missing")
         ts = str(int(time.time()))
-        nonce = hashlib.sha256(f"{ts}:{random.random()}".encode("utf-8")).hexdigest()[:24]
-        body_raw = json.dumps(body, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        nonce = hashlib.sha256(f"{ts}:{random.random()}".encode("utf-8")).hexdigest()[
+            :24
+        ]
+        body_raw = json.dumps(body, separators=(",", ":"), sort_keys=True).encode(
+            "utf-8"
+        )
         body_hash = hashlib.sha256(body_raw).hexdigest()
         canonical = "\n".join(["POST", path, body_hash, ts, nonce])
-        sig = hmac.new(self.config.device_key.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
+        sig = hmac.new(
+            self.config.device_key.encode("utf-8"),
+            canonical.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
         return {
             "X-FG-DEVICE-KEY": self.config.device_key_id,
             "X-FG-TS": ts,
@@ -140,7 +156,11 @@ class AgentRuntime:
         if os.name == "nt":
             debugged = bool(ctypes.windll.kernel32.IsDebuggerPresent())
             expected = WINDOWS_EXPECTED_DIR
-            tamper = not str(Path(__file__).resolve()).lower().startswith(str(expected).lower())
+            tamper = (
+                not str(Path(__file__).resolve())
+                .lower()
+                .startswith(str(expected).lower())
+            )
         else:
             tracer_pid = 0
             status = Path("/proc/self/status")
@@ -150,7 +170,9 @@ class AgentRuntime:
                         tracer_pid = int(line.split(":", 1)[1].strip())
                         break
             debugged = tracer_pid > 0
-            tamper = not str(Path(__file__).resolve()).startswith(str(LINUX_EXPECTED_DIR))
+            tamper = not str(Path(__file__).resolve()).startswith(
+                str(LINUX_EXPECTED_DIR)
+            )
 
         tamper = tamper or debugged or self._check_config_permissions()
         return {"tamper": tamper, "debugged": debugged}

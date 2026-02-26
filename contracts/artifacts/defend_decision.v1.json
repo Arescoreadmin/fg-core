@@ -6,6 +6,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "schema_version",
     "explanation_brief",
     "threat_level",
     "mitigations",
@@ -18,44 +19,84 @@
     "policy"
   ],
   "properties": {
-    "explanation_brief": {"type": "string"},
+    "schema_version": {
+      "type": "string",
+      "const": "v1"
+    },
+
+    "explanation_brief": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+
     "threat_level": {
       "type": "string",
       "enum": ["none", "low", "medium", "high", "critical"]
     },
+
     "mitigations": {
       "type": "array",
-      "items": {"$ref": "#/$defs/mitigationAction"}
+      "items": { "$ref": "#/$defs/mitigationAction" }
     },
-    "explain": {"$ref": "#/$defs/decisionExplain"},
-    "ai_adversarial_score": {"type": "number"},
-    "pq_fallback": {"type": "boolean"},
-    "clock_drift_ms": {"type": "integer"},
-    "event_id": {"type": "string"},
-    "policy_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+
+    "explain": { "$ref": "#/$defs/decisionExplain" },
+
+    "ai_adversarial_score": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+
+    "pq_fallback": { "type": "boolean" },
+
+    "clock_drift_ms": {
+      "type": "integer",
+      "minimum": -86400000,
+      "maximum": 86400000
+    },
+
+    "event_id": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+
+    "policy_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+
     "policy": {
       "type": "object",
       "additionalProperties": false,
       "required": ["allow", "reasons"],
       "properties": {
-        "allow": {"type": "boolean"},
-        "reasons": {"type": "array", "items": {"type": "string"}}
+        "allow": { "type": "boolean" },
+        "reasons": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+        }
       }
     }
   },
+
   "$defs": {
     "mitigationAction": {
       "type": "object",
       "additionalProperties": false,
       "required": ["action", "reason", "confidence"],
       "properties": {
-        "action": {"type": "string"},
-        "target": {"type": ["string", "null"]},
-        "reason": {"type": "string"},
-        "confidence": {"type": "number"},
-        "meta": {"type": ["object", "null"], "additionalProperties": true}
+        "action": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "target": { "type": ["string", "null"], "minLength": 1, "maxLength": 256 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "meta": { "type": ["object", "null"], "additionalProperties": true }
       }
     },
+
     "tieD": {
       "type": "object",
       "additionalProperties": false,
@@ -72,40 +113,47 @@
         "policy_hash"
       ],
       "properties": {
-        "roe_applied": {"type": "boolean"},
-        "disruption_limited": {"type": "boolean"},
-        "ao_required": {"type": "boolean"},
-        "persona": {"type": ["string", "null"]},
-        "classification": {"type": ["string", "null"]},
-        "service_impact": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-        "user_impact": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        "roe_applied": { "type": "boolean" },
+        "disruption_limited": { "type": "boolean" },
+        "ao_required": { "type": "boolean" },
+        "persona": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+        "classification": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+        "service_impact": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "user_impact": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
         "gating_decision": {
           "type": "string",
           "enum": ["allow", "require_approval", "reject"]
         },
-        "policy_version": {"type": "string"},
-        "policy_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        "policy_version": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "policy_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
       }
     },
+
     "decisionExplain": {
       "type": "object",
       "additionalProperties": false,
       "required": ["summary", "rules_triggered", "anomaly_score", "tie_d", "score"],
       "properties": {
-        "summary": {"type": "string"},
+        "summary": { "type": "string", "minLength": 1, "maxLength": 4096 },
+
         "rules_triggered": {
           "type": "array",
-          "items": {"type": "string"}
+          "items": { "type": "string", "minLength": 1, "maxLength": 256 }
         },
-        "anomaly_score": {"type": "number"},
-        "llm_note": {"type": ["string", "null"]},
-        "tie_d": {"$ref": "#/$defs/tieD"},
-        "score": {"type": "integer"},
-        "roe_applied": {"type": "boolean"},
-        "disruption_limited": {"type": "boolean"},
-        "ao_required": {"type": "boolean"},
-        "persona": {"type": ["string", "null"]},
-        "classification": {"type": ["string", "null"]}
+
+        "anomaly_score": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+
+        "llm_note": { "type": ["string", "null"], "maxLength": 4096 },
+
+        "tie_d": { "$ref": "#/$defs/tieD" },
+
+        "score": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+
+        "roe_applied": { "type": "boolean" },
+        "disruption_limited": { "type": "boolean" },
+        "ao_required": { "type": "boolean" },
+        "persona": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+        "classification": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 }
       }
     }
   }

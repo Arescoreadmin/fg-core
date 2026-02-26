@@ -1,9 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://frostgate/contracts/artifacts/ai_plane_evidence.schema.json",
+  "title": "AI Plane Evidence Artifact",
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "schema_version",
+    "plane_id",
     "git_sha",
     "timestamp",
     "feature_flag_snapshot",
@@ -14,16 +17,61 @@
     "route_snapshot"
   ],
   "properties": {
-    "git_sha": {"type": "string", "minLength": 1},
-    "timestamp": {"type": "string", "minLength": 1},
-    "feature_flag_snapshot": {"type": "object"},
-    "total_inference_calls": {"type": "integer", "minimum": 0},
-    "total_blocked_calls": {"type": "integer", "minimum": 0},
-    "total_policy_violations": {"type": "integer", "minimum": 0},
-    "simulated_mode": {"type": "boolean", "const": true},
+    "schema_version": {
+      "type": "string",
+      "const": "v1"
+    },
+
+    "plane_id": {
+      "type": "string",
+      "const": "ai"
+    },
+
+    "git_sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{7,64}$"
+    },
+
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+
+    "feature_flag_snapshot": {
+      "type": "object",
+      "additionalProperties": {
+        "type": ["boolean", "string", "number"]
+      }
+    },
+
+    "total_inference_calls": {
+      "type": "integer",
+      "minimum": 0
+    },
+
+    "total_blocked_calls": {
+      "type": "integer",
+      "minimum": 0
+    },
+
+    "total_policy_violations": {
+      "type": "integer",
+      "minimum": 0
+    },
+
+    "simulated_mode": {
+      "type": "boolean",
+      "const": true
+    },
+
     "route_snapshot": {
       "type": "array",
-      "items": {"type": "string", "pattern": "^/ai/"}
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^/ai/"
+      }
     }
   }
 }

@@ -13,3 +13,17 @@ repos:
         entry: .venv/bin/python -m pytest -q tests/test_admin_gateway_middleware.py
         language: system
         pass_filenames: false
+
+      - id: fg-soc-review-sync
+        name: FrostGate SOC review sync
+        entry: bash -lc 'make soc-review-sync'
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: fg-soc-manifest-verify
+        name: FrostGate SOC manifest verify
+        entry: bash -lc 'make soc-manifest-verify'
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]

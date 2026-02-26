@@ -348,6 +348,7 @@ async def ingest(
         decision["summary"] = result.explanation_brief
         decision["rules"] = list(result.rules_triggered or [])
         decision["pq_fallback"] = False
+        decision["schema_version"] = "v1"
         decision["config_hash"] = config_hash
     except Exception:
         log.exception("evaluation failed")
@@ -355,6 +356,7 @@ async def ingest(
         fallback_summary = "evaluation error; defaulted to low threat"
         fallback_tie_d = TieD(policy_hash=fingerprint.policy_hash)
         decision = {
+            "schema_version": "v1",
             "tenant_id": tenant_id,
             "source": source,
             "event_type": event_type,
@@ -375,6 +377,24 @@ async def ingest(
             "policy": {"allow": False, "reasons": ["evaluation_error"]},
             "pq_fallback": False,
         }
+
+    # ---- normalize decision to satisfy schemas ----
+    # schema: ingest_decision.v1 forbids these at top-level (they belong in tie_d)
+    for k in ("roe_applied", "disruption_limited", "ao_required"):
+        if isinstance(decision, dict):
+            decision.pop(k, None)
+
+    # schema: policy.reasons must have at least 1 item
+    if isinstance(decision, dict):
+        policy = decision.get("policy") or {}
+        if not isinstance(policy, dict):
+            policy = {}
+        reasons = list(policy.get("reasons") or [])
+        if not reasons:
+            reasons = ["policy:allow" if policy.get("allow", True) else "policy:deny"]
+        policy["reasons"] = reasons
+        decision["policy"] = policy
+    # ---- end normalization ----
 
     threat_level = str(decision.get("threat_level") or "low").lower()
     latency_ms = int((time.time() - t0) * 1000)

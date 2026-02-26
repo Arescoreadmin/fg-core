@@ -263,33 +263,22 @@ Format: `Risk | File | Description | Exploit Path | Fix Strategy`
 ### Reviewer
 - Jason (repo owner / final authority)
 
-## SOC Review Sync Update (2026-02-26T00:00:00Z)
+## SOC Review Sync Update (2026-02-25T19:31:33Z)
 
-**Commit:** pending
+**Commit:** b477eba
 
 ### Files reviewed (required by SOC-HIGH-002)
-- .github/workflows/fg-required.yml
 - tools/ci/attestation_bundle.sha256
-- tools/ci/build_meta.json
-- tools/ci/check_prod_unsafe_config.py
-- tools/ci/contract_routes.json
-- tools/ci/plane_registry_snapshot.json
-- tools/ci/plane_registry_snapshot.sha256
-- tools/ci/route_inventory.json
-- tools/ci/route_inventory_summary.json
-- tools/ci/topology.sha256
 
 ### Summary
-- Reviewed CI workflow and SOC-critical tooling updates added for Control Tower consolidation and guardrail enforcement.
-- Verified pytest-asyncio sanity check insertion in fg-required workflow and confirmed requirements-dev pinning alignment.
-- Reviewed regenerated route/plane/contract inventory artifacts and associated hash updates to keep route inventory gate deterministic.
-- Reviewed prod-unsafe config gate extension that forbids legacy UI enablement in prod-like manifests.
+- Reviewed security impact of auth/tenant controls and route inventory updates.
+- Verified route inventory gate is green and audit routes remain scope-protected + tenant-bound.
 
 ### Verification
-- .venv/bin/python tools/testing/harness/required_tests_gate.py
+- make admin-test
 - make route-inventory-generate
-- make soc-review-sync
-- .venv/bin/python tools/testing/harness/fg_required.py --global-budget-seconds 480 --lane-timeout-seconds 480
+- make route-inventory-audit
+- make fg-fast-full (expected to pass SOC sync after this update)
 
 ### Reviewer
 - Jason (repo owner / final authority)

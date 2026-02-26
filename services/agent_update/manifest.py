@@ -43,7 +43,9 @@ def verify_manifest_signature(manifest: UpdateManifest, public_key_pem: str) -> 
     raise ValueError("unsupported signing key")
 
 
-def verify_update_payload(binary: bytes, expected_sha256: str, expected_size: int) -> bool:
+def verify_update_payload(
+    binary: bytes, expected_sha256: str, expected_size: int
+) -> bool:
     if len(binary) != int(expected_size):
         return False
     digest = hashlib.sha256(binary).hexdigest()

@@ -13,7 +13,8 @@ def test_anchor_receipt_schema_validates() -> None:
         )
     )
     payload = {
-        "receipt_id": "ar-123",
+        "schema_version": "v1",
+        "receipt_id": "ar-12345678",
         "tenant_id": "tenant-a",
         "artifact_sha256": "a" * 64,
         "provider": "local",

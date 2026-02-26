@@ -12,7 +12,9 @@ POLICY = REPO / "tools/ci/artifact_policy_allowlist.json"
 def _git_tracked() -> list[str]:
     import subprocess
 
-    proc = subprocess.run(["git", "ls-files"], cwd=REPO, check=True, text=True, capture_output=True)
+    proc = subprocess.run(
+        ["git", "ls-files"], cwd=REPO, check=True, text=True, capture_output=True
+    )
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
 

@@ -18,6 +18,7 @@ P1 Hardening:
 - Hash-chained audit: each tenant's audit chain carries prev_audit_hash so entries
   are tamper-evident within a process lifetime.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -30,7 +31,9 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
+
+import re as _re  # used for reason validation regex
 
 log = logging.getLogger("frostgate.control_plane.locker_command_bus")
 
@@ -60,6 +63,7 @@ ERR_UNKNOWN_LOCKER = ERR_LOCKER_NOT_FOUND
 # Enumerations
 # ---------------------------------------------------------------------------
 
+
 class LockerCommand(str, Enum):
     RESTART = "restart"
     PAUSE = "pause"
@@ -79,7 +83,7 @@ class LockerState(str, Enum):
 
 class CommandResult(str, Enum):
     ACCEPTED = "accepted"
-    IDEMPOTENT = "idempotent"   # same key, same result
+    IDEMPOTENT = "idempotent"  # same key, same result
     REJECTED = "rejected"
     COOLDOWN = "cooldown"
     NOT_FOUND = "not_found"
@@ -88,6 +92,7 @@ class CommandResult(str, Enum):
 # ---------------------------------------------------------------------------
 # Command request
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class LockerCommandRequest:
@@ -99,9 +104,9 @@ class LockerCommandRequest:
     request_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     tenant_id: str = "unknown"
     issued_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc)
-        .isoformat()
-        .replace("+00:00", "Z")
+        default_factory=lambda: (
+            datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        )
     )
 
 
@@ -148,6 +153,7 @@ class CommandOutcome:
 # Locker runtime record (managed by the bus)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class LockerRuntime:
     locker_id: str
@@ -157,9 +163,9 @@ class LockerRuntime:
     state: LockerState = LockerState.UNKNOWN
     last_heartbeat_ts: Optional[str] = None
     registered_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc)
-        .isoformat()
-        .replace("+00:00", "Z")
+        default_factory=lambda: (
+            datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        )
     )
     last_command: Optional[str] = None
     last_command_ts: Optional[str] = None
@@ -193,6 +199,7 @@ class LockerRuntime:
 # ---------------------------------------------------------------------------
 # Idempotency store (P1: tenant-scoped composite keys)
 # ---------------------------------------------------------------------------
+
 
 class IdempotencyStore:
     """
@@ -252,6 +259,7 @@ def _idempotency_composite_key(cmd: "LockerCommandRequest") -> str:
 # Cooldown tracker
 # ---------------------------------------------------------------------------
 
+
 class CooldownTracker:
     """
     Per-locker command cooldown enforcement.
@@ -303,9 +311,8 @@ class CooldownTracker:
 # Reason charset validation (P1)
 # ---------------------------------------------------------------------------
 
-import re as _re  # import here to avoid top-level pollution
 
-_REASON_INVALID_CHARS_RE = _re.compile(r'[<>()\[\]{}|\\^`~]')
+_REASON_INVALID_CHARS_RE = _re.compile(r"[<>()\[\]{}|\\^`~]")
 _REASON_MIN_LENGTH = 3
 _REASON_MAX_LENGTH = 512
 
@@ -338,7 +345,11 @@ def validate_reason(reason: Optional[str]) -> str:
 
     Returns the reason string on success; raises ValueError on failure.
     """
-    if reason is None or not str(reason).strip() or len(str(reason).strip()) < _REASON_MIN_LENGTH:
+    if (
+        reason is None
+        or not str(reason).strip()
+        or len(str(reason).strip()) < _REASON_MIN_LENGTH
+    ):
         raise ValueError(
             f"{ERR_REASON_REQUIRED}: reason is required, non-blank, "
             f"and at least {_REASON_MIN_LENGTH} characters"
@@ -359,6 +370,7 @@ def validate_reason(reason: Optional[str]) -> str:
 # ---------------------------------------------------------------------------
 # Hash-chained audit ledger (P1)
 # ---------------------------------------------------------------------------
+
 
 class AuditChain:
     """
@@ -404,6 +416,7 @@ class AuditChain:
 # ---------------------------------------------------------------------------
 # Audit ledger entry emitter
 # ---------------------------------------------------------------------------
+
 
 def emit_command_audit(
     *,
@@ -470,6 +483,7 @@ def emit_command_audit(
 # ---------------------------------------------------------------------------
 # Command Bus
 # ---------------------------------------------------------------------------
+
 
 class LockerCommandBus:
     """
@@ -649,7 +663,10 @@ class LockerCommandBus:
 
         # 4. Quarantine guard
         with runtime._lock:
-            if runtime.state == LockerState.QUARANTINED and cmd_enum != LockerCommand.RESUME:
+            if (
+                runtime.state == LockerState.QUARANTINED
+                and cmd_enum != LockerCommand.RESUME
+            ):
                 return CommandOutcome(
                     request_id=str(uuid.uuid4()),
                     locker_id=locker_id,
@@ -672,7 +689,9 @@ class LockerCommandBus:
             tenant_id=tenant_id,
         )
         composite_key = _idempotency_composite_key(fake_req)
-        is_new, existing_request_id = self._idempotency.check_and_set(composite_key, req_id)
+        is_new, existing_request_id = self._idempotency.check_and_set(
+            composite_key, req_id
+        )
         if not is_new:
             return CommandOutcome(
                 request_id=existing_request_id or req_id,
@@ -903,9 +922,7 @@ class LockerCommandBus:
             result=CommandResult.ACCEPTED,
             issued_at=_utc_now_iso(),
         )
-        emit_command_audit(
-            command=cmd, outcome=outcome, audit_chain=self._audit_chain
-        )
+        emit_command_audit(command=cmd, outcome=outcome, audit_chain=self._audit_chain)
         return outcome
 
     # ------------------------------------------------------------------
@@ -981,13 +998,16 @@ class LockerCommandBus:
 # Utilities
 # ---------------------------------------------------------------------------
 
+
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _is_prod_like() -> bool:
     return (os.getenv("FG_ENV") or "").strip().lower() in {
-        "prod", "production", "staging"
+        "prod",
+        "production",
+        "staging",
     }
 
 

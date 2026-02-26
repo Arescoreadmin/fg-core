@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -28,9 +29,13 @@ SCHEMA_EXPECTED = {
     "contract_routes": "v1",
     "build_meta": "v1",
 }
+
 SHA_LINE_RE = re.compile(r"^[0-9a-f]{64}\s{2}[^\s].+$")
 
 
+# -----------------------------
+# Deterministic helpers
+# -----------------------------
 def _dump_json(payload: Any) -> str:
     return (
         json.dumps(
@@ -44,6 +49,32 @@ def _dump_json(payload: Any) -> str:
     )
 
 
+def _canonical_json(obj: Any) -> str:
+    # Deterministic JSON for hashing/fingerprinting
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _sha256_text(s: str) -> str:
+    return hashlib.sha256(s.encode("utf-8")).hexdigest()
+
+
+def _governance_fingerprint(
+    plane_snapshot: list[dict[str, Any]],
+    route_inventory: list[dict[str, Any]],
+    contract_routes: list[dict[str, Any]],
+) -> str:
+    # Stable fingerprint for same governance surface
+    blob = (
+        _canonical_json(plane_snapshot)
+        + _canonical_json(route_inventory)
+        + _canonical_json(contract_routes)
+    )
+    return _sha256_text(blob)
+
+
+# -----------------------------
+# IO / Validation primitives
+# -----------------------------
 def require_file(path: Path) -> None:
     if not path.exists() or not path.is_file():
         raise FileNotFoundError(str(path.relative_to(REPO)))
@@ -108,23 +139,30 @@ def _extract_v1_data(
             f"{artifact_name} must be an object with schema_version/generated_at/data"
         )
     _require_keys(raw, {"schema_version", "generated_at", "data"}, artifact_name)
+
     schema_version = raw["schema_version"]
     if schema_version != SCHEMA_EXPECTED[artifact_name]:
         raise ValueError(
             f"{artifact_name}.schema_version expected {SCHEMA_EXPECTED[artifact_name]}, got {schema_version}"
         )
+
     if not isinstance(raw["generated_at"], str) or not raw["generated_at"].strip():
         raise ValueError(f"{artifact_name}.generated_at must be a non-empty string")
+
     data = raw["data"]
     if not isinstance(data, list):
         raise ValueError(f"{artifact_name}.data must be a list")
     if not all(isinstance(item, dict) for item in data):
         raise ValueError(f"{artifact_name}.data entries must be objects")
+
     return data, schema_version
 
 
 def _validate_plane_snapshot(
-    records: list[dict[str, Any]], *, unknown_warnings: list[str], reject_unknown: bool
+    records: list[dict[str, Any]],
+    *,
+    unknown_warnings: list[str],
+    reject_unknown: bool,
 ) -> None:
     plane_allowed = {
         "allowed_dependency_categories",
@@ -160,6 +198,7 @@ def _validate_plane_snapshot(
         _validate_unknown_keys(
             plane, plane_allowed, context, unknown_warnings, reject_unknown
         )
+
         if not isinstance(plane["plane_id"], str) or not plane["plane_id"].strip():
             raise ValueError(f"{context}.plane_id must be non-empty string")
         _require_list_of_strings(plane["route_prefixes"], f"{context}.route_prefixes")
@@ -203,7 +242,10 @@ def _validate_plane_snapshot(
 
 
 def _validate_route_inventory(
-    records: list[dict[str, Any]], *, unknown_warnings: list[str], reject_unknown: bool
+    records: list[dict[str, Any]],
+    *,
+    unknown_warnings: list[str],
+    reject_unknown: bool,
 ) -> None:
     allowed = {
         "dependency_categories",
@@ -211,6 +253,7 @@ def _validate_route_inventory(
         "method",
         "path",
         "plane_id",
+        "plane",
         "scoped",
         "scopes",
         "source",
@@ -225,7 +268,10 @@ def _validate_route_inventory(
 
 
 def _validate_contract_routes(
-    records: list[dict[str, Any]], *, unknown_warnings: list[str], reject_unknown: bool
+    records: list[dict[str, Any]],
+    *,
+    unknown_warnings: list[str],
+    reject_unknown: bool,
 ) -> None:
     allowed = {"method", "path", "scopes", "source", "plane_id"}
     for idx, route in enumerate(records):
@@ -262,6 +308,7 @@ def _load_governance_inputs(
         raise SystemExit(2)
 
     unknown_warnings: list[str] = []
+
     raw_plane = load_json(GOVERNANCE_INPUTS["plane_registry"])
     raw_runtime = load_json(GOVERNANCE_INPUTS["route_inventory"])
     raw_contract = load_json(GOVERNANCE_INPUTS["contract_routes"])
@@ -293,6 +340,7 @@ def _load_governance_inputs(
     )
 
     topology_sha = read_sha256(GOVERNANCE_INPUTS["topology_hash"])
+
     attestation_sha = None
     if OPTIONAL_INPUTS["attestation_hash"].exists():
         attestation_sha = read_sha256(OPTIONAL_INPUTS["attestation_hash"])
@@ -336,7 +384,7 @@ def _make_targets() -> set[str]:
         text=True,
         capture_output=True,
     )
-    out = set()
+    out: set[str] = set()
     for line in proc.stdout.splitlines():
         if ":" in line and not line.startswith("\t") and not line.startswith("#"):
             name = line.split(":", 1)[0].strip()
@@ -353,6 +401,28 @@ def _sorted_route_signatures(routes: list[dict[str, Any]]) -> list[str]:
     return [f"{m} {p}" for m, p in sorted({(r["method"], r["path"]) for r in routes})]
 
 
+def _deterministic_git_sha(build_meta: dict[str, Any] | None) -> str:
+    """
+    Auditor-friendly default:
+    - Prefer build_meta.git_sha (governance evidence)
+    - Fallback to git rev-parse HEAD (best effort)
+    """
+    if isinstance(build_meta, dict):
+        v = build_meta.get("git_sha")
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    try:
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=REPO,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except Exception:
+        return "unknown"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -364,6 +434,11 @@ def main(argv: list[str] | None = None) -> int:
         "--reject-unknown-keys",
         action="store_true",
         help="Fail when governance artifacts include unknown keys.",
+    )
+    parser.add_argument(
+        "--include-volatile",
+        action="store_true",
+        help="Also write volatile evidence payload (git_sha, build_meta, attestation/topology hashes) to artifacts/platform_inventory.json.",
     )
     args = parser.parse_args(argv)
 
@@ -381,12 +456,6 @@ def main(argv: list[str] | None = None) -> int:
         or os.getenv("FG_REJECT_UNKNOWN_GOVERNANCE_KEYS") == "1"
     )
 
-    route_inventory_doc = load_json(REPO / "tools/ci/route_inventory.json")
-    route_inventory = (
-        route_inventory_doc.get("data", route_inventory_doc.get("routes", []))
-        if isinstance(route_inventory_doc, dict)
-        else []
-    )
     make_targets = _make_targets()
     artifact_schemas = sorted(
         p.as_posix().replace(str(REPO) + "/", "")
@@ -394,8 +463,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     soc_text = (REPO / "artifacts/SOC_AUDIT_GATES.md").read_text(encoding="utf-8")
 
-    planes = []
-    gaps = []
+    gov_fp = _governance_fingerprint(plane_snapshot, route_inventory, contract_routes)
+
+    planes: list[dict[str, Any]] = []
+    gaps: list[dict[str, Any]] = []
     failures: list[str] = []
     by_plane_routes: dict[str, list[str]] = {}
     owned_prefixes: list[str] = []
@@ -407,6 +478,7 @@ def main(argv: list[str] | None = None) -> int:
             str(prefix) for prefix in (plane.get("route_prefixes") or [])
         )
         owned_prefixes.extend(route_prefixes)
+
         required_targets = sorted(
             str(t) for t in (plane.get("required_make_targets") or [])
         )
@@ -420,6 +492,7 @@ def main(argv: list[str] | None = None) -> int:
                     "suggested_fix": "Add missing make targets declared by plane registry.",
                 }
             )
+
         if pid not in soc_text:
             gaps.append(
                 {
@@ -441,11 +514,13 @@ def main(argv: list[str] | None = None) -> int:
             ],
             key=lambda x: (x["schema"], x["generator"]),
         )
+
         compat = {
             "deprecated_mount_flag": str(plane.get("mount_flag", "n/a")),
             "deprecated_evidence": evidence,
             "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth",
         }
+
         route_records_by_plane[pid] = []
         planes.append(
             {
@@ -458,11 +533,13 @@ def main(argv: list[str] | None = None) -> int:
             }
         )
 
+    # Build plane route map from stamped plane_id first; fallback to prefix mapping.
     for route in sorted(route_inventory, key=_route_sort_key):
         pid = str(route.get("plane_id", "")).strip()
         if pid in route_records_by_plane:
             route_records_by_plane[pid].append(route)
             continue
+
         path = str(route.get("path", ""))
         method = str(route.get("method", ""))
         mapped = False
@@ -530,14 +607,11 @@ def main(argv: list[str] | None = None) -> int:
         ).exists(),
     }
 
-    payload: dict[str, Any] = {
-        "git_sha": subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=REPO,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip(),
+    # -----------------------------
+    # Deterministic payload (tracked)
+    # -----------------------------
+    det_payload: dict[str, Any] = {
+        "governance_fingerprint": gov_fp,
         "planes": sorted(planes, key=lambda x: x["plane_id"]),
         "routes_by_plane": {k: by_plane_routes[k] for k in sorted(by_plane_routes)},
         "artifact_schemas": artifact_schemas,
@@ -553,10 +627,6 @@ def main(argv: list[str] | None = None) -> int:
         "governance": {
             "schema_versions": schema_versions,
             "schema_unknown_key_warnings": sorted(unknown_warnings),
-            "topology_sha256": topology_sha,
-            "topology_sha256_note": "Content hashes of plane_registry_snapshot.json, route_inventory.json, contract_routes.json.",
-            "attestation_sha256": attestation_sha,
-            "build_meta": build_meta,
             "runtime_count": len(route_inventory),
             "contract_count": len(contract_routes),
             "runtime_only": sorted(
@@ -568,32 +638,66 @@ def main(argv: list[str] | None = None) -> int:
         },
     }
 
+    # -----------------------------
+    # Volatile payload (evidence)
+    # -----------------------------
+    vol_payload: dict[str, Any] | None = None
+    if args.include_volatile:
+        payload_git_sha = _deterministic_git_sha(build_meta)
+        vol_payload = dict(det_payload)
+        vol_payload["git_sha"] = payload_git_sha
+        vol_payload["governance"] = dict(det_payload["governance"])
+        vol_payload["governance"].update(
+            {
+                "topology_sha256": topology_sha,
+                "topology_sha256_note": "Content hashes of plane_registry_snapshot.json, route_inventory.json, contract_routes.json.",
+                "attestation_sha256": attestation_sha,
+                "build_meta": build_meta,
+            }
+        )
+
+    # -----------------------------
+    # Write artifacts
+    # -----------------------------
     art = REPO / "artifacts"
     art.mkdir(exist_ok=True)
-    (art / "platform_inventory.json").write_text(_dump_json(payload), encoding="utf-8")
+
+    (art / "platform_inventory.det.json").write_text(
+        _dump_json(det_payload), encoding="utf-8"
+    )
 
     inv_md = ["# Platform Inventory", "", "## Planes"]
-    for plane in payload["planes"]:
+    for plane in det_payload["planes"]:
         inv_md.append(
             f"- `{plane['plane_id']}` flags=`{plane['mount_flag']}` targets={', '.join(plane['required_make_targets'])}"
         )
     inv_md += ["", "## Enterprise readiness checklist status"]
     for k, v in sorted(readiness.items()):
         inv_md.append(f"- {k}: {'PASS' if v else 'FAIL'}")
-    (art / "PLATFORM_INVENTORY.md").write_text(
+    (art / "PLATFORM_INVENTORY.det.md").write_text(
         "\n".join(inv_md) + "\n", encoding="utf-8"
     )
 
     gap_md = ["# Platform Gaps", ""]
-    if payload["gaps"]:
-        for gap in payload["gaps"]:
+    if det_payload["gaps"]:
+        for gap in det_payload["gaps"]:
             gap_md.append(
                 f"- [{gap['type']}] {gap.get('plane', 'global')}: {gap['details']} | fix: {gap['suggested_fix']}"
             )
     else:
         gap_md.append("- none")
-    (art / "PLATFORM_GAPS.md").write_text("\n".join(gap_md) + "\n", encoding="utf-8")
+    (art / "PLATFORM_GAPS.det.md").write_text(
+        "\n".join(gap_md) + "\n", encoding="utf-8"
+    )
 
+    if vol_payload is not None:
+        (art / "platform_inventory.json").write_text(
+            _dump_json(vol_payload), encoding="utf-8"
+        )
+
+    # -----------------------------
+    # Semantic integrity enforcement
+    # -----------------------------
     if failures and not (
         args.allow_gaps or os.getenv("FG_PLATFORM_INVENTORY_ALLOW_GAPS") == "1"
     ):
@@ -602,6 +706,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f" - {failure}", file=sys.stderr)
         print(" - re-run with --allow-gaps for local diagnostics", file=sys.stderr)
         return 1
+
     return 0
 
 

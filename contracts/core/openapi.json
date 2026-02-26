@@ -1159,6 +1159,15 @@
             "title": "Pq Fallback",
             "type": "boolean"
           },
+          "schema_version": {
+            "const": "v1",
+            "default": "v1",
+            "enum": [
+              "v1"
+            ],
+            "title": "Schema Version",
+            "type": "string"
+          },
           "threat_level": {
             "enum": [
               "none",

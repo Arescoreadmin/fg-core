@@ -9,21 +9,21 @@ from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from api.deps import tenant_db_session
 
 from api.auth_scopes import bind_tenant_id, require_scopes
 from api.db import set_tenant_context
 from api.db_models import DecisionRecord
-from api.deps import tenant_db_session
-from api.evidence_chain import chain_fields_for_decision
-from api.evidence_artifacts import emit_decision_evidence
 from api.decision_diff import (
     compute_decision_diff,
     snapshot_from_current,
     snapshot_from_record,
 )
+from api.evidence_artifacts import emit_decision_evidence
+from api.evidence_chain import chain_fields_for_decision
 from api.ratelimit import rate_limit_guard
 from api.schemas import TelemetryInput
 from api.schemas_doctrine import TieD
@@ -31,7 +31,6 @@ from api.schemas_doctrine import TieD
 from engine.pipeline import Mitigation as PipelineMitigation
 from engine.pipeline import PipelineInput, evaluate as pipeline_evaluate
 from engine.pipeline import _apply_doctrine as pipeline_apply_doctrine
-from engine.types import PolicyDecision
 
 log = logging.getLogger("frostgate.defend")
 
@@ -233,7 +232,21 @@ class DecisionExplain(BaseModel):
     classification: Optional[str] = None
 
 
+class PolicyDecision(BaseModel):
+    allow: bool
+    reasons: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _ensure_reasons(self) -> "PolicyDecision":
+        # defend_decision.v1.json requires minItems=1
+        if not self.reasons:
+            self.reasons = ["policy:allow" if self.allow else "policy:deny"]
+        return self
+
+
 class DefendResponse(BaseModel):
+    schema_version: Literal["v1"] = "v1"  # REQUIRED by defend_decision.v1.json
+
     explanation_brief: str
     threat_level: Literal["none", "low", "medium", "high", "critical"]
     mitigations: list[MitigationAction] = Field(default_factory=list)
@@ -249,10 +262,6 @@ class DefendResponse(BaseModel):
 # =============================================================================
 # Tamper-evident chain hash (best effort)
 # =============================================================================
-
-
-def _sha256_hex(s: str) -> str:
-    return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
 
 def _supports_chain_fields() -> bool:
@@ -423,6 +432,18 @@ def defend(
             },
         )
 
+    # -------------------------------------------------------------------------
+    # Enforce policy_hash + event_id invariants
+    # -------------------------------------------------------------------------
+    policy_hash = (result.policy_hash or "").strip()
+    if not policy_hash or len(policy_hash) != 64:
+        # fail closed in prod-like, degrade in dev
+        if _is_prod_like():
+            raise HTTPException(status_code=500, detail="POLICY_HASH_MISSING")
+        policy_hash = "0" * 64  # dev fallback only
+
+    event_id_out = (result.event_id or event_id).strip()
+
     threat_level = result.threat_level
     rules_triggered = result.rules_triggered
     mitigations = result.mitigations
@@ -433,7 +454,7 @@ def defend(
 
     explain = DecisionExplain(
         summary=summary,
-        rules_triggered=list(rules_triggered),
+        rules_triggered=list(rules_triggered or []),
         anomaly_score=float(anomaly_score or 0.0),
         score=int(score or 0),
         tie_d=tie_d,
@@ -477,19 +498,20 @@ def defend(
                 )
             )
 
-    resp = DefendResponse(
+    resp_model = DefendResponse(
+        schema_version="v1",
         explanation_brief=summary,
-        threat_level=threat_level,
+        threat_level=str(threat_level).lower(),  # ensure literal match
         mitigations=api_mitigations,
         explain=explain,
         ai_adversarial_score=float(result.ai_adversarial_score or 0.0),
         pq_fallback=False,
         clock_drift_ms=int(result.clock_drift_ms or 0),
-        event_id=result.event_id,
-        policy_hash=result.policy_hash,
+        event_id=event_id_out,
+        policy_hash=policy_hash,
         policy=PolicyDecision(
             allow=bool(result.policy.allow),
-            reasons=list(result.policy.reasons or []),
+            reasons=list(getattr(result.policy, "reasons", None) or []),
         ),
     )
 
@@ -497,22 +519,21 @@ def defend(
     _persist_decision_best_effort(
         db=db,
         req=req,
-        event_id=event_id,
+        event_id=event_id_out,
         event_type=event_type,
-        decision=resp,
-        rules_triggered=rules_triggered,
-        anomaly_score=anomaly_score,
+        decision=resp_model,
+        rules_triggered=list(rules_triggered or []),
+        anomaly_score=float(anomaly_score or 0.0),
         latency_ms=latency_ms,
-        score=score,
+        score=int(score or 0),
     )
 
-    return resp
+    return resp_model
 
 
 # =============================================================================
 # Legacy exports (do NOT add new call sites)
 # =============================================================================
-
 # No "def evaluate" in api/ (INV-004 regression test will look for it).
 # We still export "evaluate" as a module attribute for legacy imports.
 
@@ -526,11 +547,13 @@ def legacy_evaluate(req: Any):
         payload = req
     else:
         payload = {}
+
     req_payload = payload.get("payload")
     if req_payload is None and hasattr(req, "payload"):
         req_payload = getattr(req, "payload")
     if not isinstance(req_payload, dict):
         req_payload = {}
+
     inp = PipelineInput(
         tenant_id=payload.get("tenant_id")
         or getattr(req, "tenant_id", None)

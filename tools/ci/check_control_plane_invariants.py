@@ -16,9 +16,9 @@ Verifies that the control plane implementation meets all security invariants:
 Exit code 0 = all invariants pass.
 Exit code 1 = one or more invariants failed.
 """
+
 from __future__ import annotations
 
-import ast
 import re
 import sys
 from pathlib import Path
@@ -62,9 +62,7 @@ def check_scope_enforcement() -> None:
     src = read_source(CONTROL_PLANE_API)
 
     # Find all @router.post and @router.get decorators (not WS)
-    route_pattern = re.compile(
-        r'@router\.(get|post)\(\s*\n?\s*"([^"]+)"', re.MULTILINE
-    )
+    route_pattern = re.compile(r'@router\.(get|post)\(\s*\n?\s*"([^"]+)"', re.MULTILINE)
     for match in route_pattern.finditer(src):
         method, path = match.group(1), match.group(2)
 
@@ -94,7 +92,10 @@ def check_no_subprocess() -> None:
     forbidden_patterns = [
         (re.compile(r"^\s*import subprocess", re.MULTILINE), "import subprocess"),
         (re.compile(r"^\s*from subprocess", re.MULTILINE), "from subprocess import"),
-        (re.compile(r"subprocess\.(run|Popen|call|check_output|check_call)\s*\("), "subprocess.run/Popen/call"),
+        (
+            re.compile(r"subprocess\.(run|Popen|call|check_output|check_call)\s*\("),
+            "subprocess.run/Popen/call",
+        ),
         (re.compile(r"os\.system\s*\("), "os.system()"),
         (re.compile(r"os\.popen\s*\("), "os.popen()"),
         (re.compile(r"\bshell\s*=\s*True"), "shell=True"),
@@ -290,7 +291,9 @@ def check_no_fail_open() -> None:
     # Look for bare except: pass patterns in auth context
     bare_except = re.findall(r"except\s+Exception\s*:\s*\n\s*pass", src)
     if bare_except:
-        fail(f"[INV-8] Found {len(bare_except)} bare 'except Exception: pass' in control_plane.py")
+        fail(
+            f"[INV-8] Found {len(bare_except)} bare 'except Exception: pass' in control_plane.py"
+        )
     else:
         ok("No bare 'except Exception: pass' in control_plane.py")
 
@@ -367,13 +370,15 @@ def main() -> None:
     print("=" * 60)
 
     # Check all files exist
-    all_exist = all([
-        check_file_exists(CONTROL_PLANE_API, "api/control_plane.py"),
-        check_file_exists(LOCKER_COMMAND_BUS, "services/locker_command_bus.py"),
-        check_file_exists(MODULE_REGISTRY, "services/module_registry.py"),
-        check_file_exists(BOOT_TRACE, "services/boot_trace.py"),
-        check_file_exists(EVENT_STREAM, "services/event_stream.py"),
-    ])
+    all_exist = all(
+        [
+            check_file_exists(CONTROL_PLANE_API, "api/control_plane.py"),
+            check_file_exists(LOCKER_COMMAND_BUS, "services/locker_command_bus.py"),
+            check_file_exists(MODULE_REGISTRY, "services/module_registry.py"),
+            check_file_exists(BOOT_TRACE, "services/boot_trace.py"),
+            check_file_exists(EVENT_STREAM, "services/event_stream.py"),
+        ]
+    )
 
     if not all_exist:
         print("\n❌ Required files missing. Cannot continue checks.")
