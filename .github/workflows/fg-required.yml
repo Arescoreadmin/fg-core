@@ -50,6 +50,8 @@ jobs:
       - name: install deps (pinned)
         run: make venv
 
+      - name: sanity check pytest-asyncio plugin version
+        run: .venv/bin/python -c "import pytest_asyncio; print(pytest_asyncio.__version__)"
 
       - name: run required-tests gate resolution tests
         run: .venv/bin/python -m unittest -q tests.tools_minimal.test_required_tests_gate_resolution

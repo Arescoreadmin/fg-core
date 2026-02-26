@@ -59,6 +59,7 @@ from api.connectors_control_plane import router as connectors_control_plane_rout
 from api.control_plane import router as control_plane_router
 from api.control_plane_v2 import router as control_plane_v2_router
 from api.testing_control_tower import router as testing_control_tower_router
+from api.control_tower_snapshot import router as control_tower_snapshot_router
 from api.ui_testing_control_tower import router as ui_testing_control_tower_router
 from services.ai_plane_extension import ai_external_provider_enabled, ai_plane_enabled
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
@@ -541,6 +542,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(connectors_control_plane_router)
     app.include_router(control_plane_router)
     app.include_router(control_plane_v2_router)
+    app.include_router(control_tower_snapshot_router)
     if _testing_control_tower_enabled():
         app.include_router(testing_control_tower_router)
     if _should_mount_admin_routes():

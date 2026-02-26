@@ -232,3 +232,57 @@ export async function readAlignmentArtifact(): Promise<AlignmentArtifact | null>
   const payload = (await response.json()) as { artifact?: AlignmentArtifact | null };
   return payload.artifact || null;
 }
+
+export interface ControlTowerSnapshotV1 {
+  version: 'ControlTowerSnapshotV1';
+  tenant: { tenant_id: string; clamp: { requested_tenant_id: string | null; effective_tenant_id: string; clamped: boolean } };
+  planes: Record<string, string>;
+  last_replay: { event_id: string | null; timestamp: string | null; result: string; request_id: string | null };
+  chain_integrity: { status: string; first_bad: string | null; chain_head_hash: string | null };
+  key_lifecycle: { active_key_count: number; last_rotation: string | null; grace_window_seconds: number | null; recent_actions: Array<Record<string, unknown>> };
+  connectors: { enabled: number; last_sync: string | null; errors: Array<Record<string, unknown>> };
+  agents: { total: number; quarantine_count: number; update_channel_status: string };
+  lockers: { status: string; last_restart: string | null; count: number };
+  audit_incidents: { recent_events: Array<Record<string, unknown>>; facets: Record<string, string[]> };
+  links: Record<string, string>;
+}
+
+export function getControlTowerSnapshot() {
+  return requestWithMeta<ControlTowerSnapshotV1>('/control-tower/snapshot');
+}
+
+export function getConnectorStatus() {
+  return request<Record<string, unknown>>('/admin/connectors/status');
+}
+
+export function toggleConnector(connectorId: string) {
+  return request<Record<string, unknown>>(`/admin/connectors/${encodeURIComponent(connectorId)}/revoke`, { method: 'POST' });
+}
+
+export function listAgents() {
+  return request<Record<string, unknown>>('/admin/agent/devices');
+}
+
+export function quarantineAgent(deviceId: string, reason: string) {
+  return request<Record<string, unknown>>(`/admin/agent/quarantine/${encodeURIComponent(deviceId)}`, { method: 'POST', body: JSON.stringify({ reason }) });
+}
+
+export function restoreAgent(deviceId: string, reason: string) {
+  return request<Record<string, unknown>>(`/admin/agent/unquarantine/${encodeURIComponent(deviceId)}`, { method: 'POST', body: JSON.stringify({ reason }) });
+}
+
+export function listLockers() {
+  return request<Record<string, unknown>>('/control-plane/lockers');
+}
+
+export function lockerRestart(lockerId: string, reason: string) {
+  return request<Record<string, unknown>>(`/control-plane/lockers/${encodeURIComponent(lockerId)}/restart`, { method: 'POST', body: JSON.stringify({ reason, idempotency_key: `console-${Date.now()}` }) });
+}
+
+export function lockerResume(lockerId: string, reason: string) {
+  return request<Record<string, unknown>>(`/control-plane/lockers/${encodeURIComponent(lockerId)}/resume`, { method: 'POST', body: JSON.stringify({ reason, idempotency_key: `console-${Date.now()}` }) });
+}
+
+export function exportEvidenceBundle() {
+  return request<Record<string, unknown>>('/audit/export?format=json');
+}

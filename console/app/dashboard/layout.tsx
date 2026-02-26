@@ -11,9 +11,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <header style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem', gap: '0.8rem' }}>
         <nav style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           <Link href="/dashboard">Overview</Link>
+          <Link href="/dashboard/control-tower">Control Tower</Link>
           <Link href="/dashboard/decisions">Decisions</Link>
           <Link href="/dashboard/forensics">Forensics</Link>
-          <Link href="/dashboard/keys">Keys</Link>
           <Link href="/dashboard/alignment">Alignment</Link>
         </nav>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>

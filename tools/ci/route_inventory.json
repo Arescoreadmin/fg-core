@@ -2135,6 +2135,22 @@
         "auth",
         "tenant"
       ],
+      "file": "api/control_tower_snapshot.py",
+      "method": "GET",
+      "path": "/control-tower/snapshot",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
       "file": "api/testing_control_tower.py",
       "method": "GET",
       "path": "/control/testing/health",
@@ -3570,6 +3586,6 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-02-26T12:50:24.042749+00:00",
+  "generated_at": "2026-02-26T19:13:14.131068+00:00",
   "schema_version": "v1"
 }

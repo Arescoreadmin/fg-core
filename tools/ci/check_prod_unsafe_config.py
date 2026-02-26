@@ -16,6 +16,7 @@ UNSAFE_TRUE_FLAGS = (
     "fg_rl_allow_bypass_in_prod",
     "fg_contract_gen_context",
     "fg_webhook_allow_unsigned",
+    "fg_ui_enabled",
 )
 
 FORBIDDEN_OUTBOUND_BYPASS_KEYS = (
