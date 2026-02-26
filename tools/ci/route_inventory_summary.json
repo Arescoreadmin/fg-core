@@ -11,10 +11,11 @@
     "data": 31,
     "evidence": 22,
     "security": 6,
-    "ui": 30
+    "ui": 30,
+    "unmapped": 1
   },
   "removed": [],
-  "runtime_count": 227,
+  "runtime_count": 228,
   "runtime_only": [
     "DELETE /control-plane/v2/delegation/{delegation_id}",
     "GET /_debug/routes",
@@ -45,6 +46,7 @@
     "GET /control-plane/v2/playbooks",
     "GET /control-plane/v2/policy/pins",
     "GET /control-plane/v2/terminal/allowlist",
+    "GET /control-tower/snapshot",
     "GET /control/testing/health",
     "GET /control/testing/runs",
     "GET /control/testing/runs/{run_id}",
