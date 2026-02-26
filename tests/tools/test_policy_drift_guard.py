@@ -98,3 +98,35 @@ def test_policy_change_allowed_with_label_only(
     changed, files = enforce_policy_drift("main", event, allow_flag=False)
     assert changed is True
     assert "tools/testing/policy/runtime_baselines.yaml" in files
+
+
+def test_policy_change_allowed_with_narrative_body(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    import subprocess
+
+    def fake_run(*_args, **_kwargs):
+        return subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout="tools/testing/policy/runtime_baselines.yaml\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    event = tmp_path / "event.json"
+    event.write_text(
+        json.dumps(
+            {
+                "pull_request": {
+                    "body": "Policy changed because runtime budget impact requires baseline tuning.",
+                    "labels": [],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    changed, files = enforce_policy_drift("main", event, allow_flag=False)
+    assert changed is True
+    assert "tools/testing/policy/runtime_baselines.yaml" in files

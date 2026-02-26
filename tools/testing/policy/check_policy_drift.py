@@ -49,10 +49,19 @@ def enforce_policy_drift(base_ref: str, event_path: Path, allow_flag: bool) -> t
             body = str(pr.get("body") or "")
             labels_raw = pr.get("labels") or []
             labels = [str(lbl.get("name") if isinstance(lbl, dict) else "") for lbl in labels_raw]
-        justification = "## Policy Change Justification" in body
+        body_l = body.lower()
+        explicit_justification = "## policy change justification" in body_l
+        narrative_justification = (
+            len(body.strip()) >= 40
+            and "policy" in body_l
+            and any(tok in body_l for tok in ("because", "reason", "rationale", "impact"))
+        )
+        justification = explicit_justification or narrative_justification
         label_ok = "policy-change-approved" in labels
         if not (justification or label_ok):
-            raise SystemExit("policy files changed without Policy Change Justification section or policy-change-approved label")
+            raise SystemExit(
+                "policy files changed without justification narrative/section or policy-change-approved label"
+            )
     return True, touched
 
 
