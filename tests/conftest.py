@@ -16,11 +16,11 @@ os.environ.setdefault(
 import pytest
 
 
-
 def _load_app_modules():
     try:
         from api.db import init_db, reset_engine_cache
         from api.main import build_app as _build_app
+
         return init_db, reset_engine_cache, _build_app
     except Exception:
         return None

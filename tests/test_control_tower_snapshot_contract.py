@@ -15,7 +15,9 @@ def test_control_tower_snapshot_contract_and_determinism(build_app):
     client = TestClient(app)
     key = mint_key("admin:read", tenant_id="tenant-a")
 
-    response = client.get("/control-tower/snapshot", headers={"X-API-Key": key, "X-Request-ID": "rid-1"})
+    response = client.get(
+        "/control-tower/snapshot", headers={"X-API-Key": key, "X-Request-ID": "rid-1"}
+    )
     assert response.status_code == 200
     assert response.headers.get("x-request-id") == "rid-1"
     payload = response.json()
@@ -37,7 +39,9 @@ def test_control_tower_snapshot_contract_and_determinism(build_app):
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     assert response.text == canonical
 
-    response_2 = client.get("/control-tower/snapshot", headers={"X-API-Key": key, "X-Request-ID": "rid-1"})
+    response_2 = client.get(
+        "/control-tower/snapshot", headers={"X-API-Key": key, "X-Request-ID": "rid-1"}
+    )
     assert response_2.status_code == 200
     assert response_2.text == response.text
 
@@ -47,7 +51,10 @@ def test_control_tower_tenant_clamp_and_override_policy(build_app):
     client = TestClient(app)
     key = mint_key("admin:read", tenant_id="tenant-a")
 
-    response = client.get("/control-tower/snapshot?requested_tenant_id=tenant-b", headers={"X-API-Key": key})
+    response = client.get(
+        "/control-tower/snapshot?requested_tenant_id=tenant-b",
+        headers={"X-API-Key": key},
+    )
     assert response.status_code == 200
     payload = response.json()
     assert payload["tenant"]["tenant_id"] == "tenant-a"

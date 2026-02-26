@@ -11,7 +11,12 @@ from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_scopes
 from api.auth_scopes.mapping import list_api_keys
-from api.db_models import AgentDeviceRegistry, AuditLedgerRecord, ConnectorTenantState, DecisionRecord
+from api.db_models import (
+    AgentDeviceRegistry,
+    AuditLedgerRecord,
+    ConnectorTenantState,
+    DecisionRecord,
+)
 from api.deps import tenant_db_required
 from api.evidence_chain import verify_chain_for_tenant
 from services.locker_command_bus import LockerCommandBus
@@ -30,11 +35,15 @@ def _iso(value: Any) -> str | None:
 
 
 def _canonical_payload(payload: dict[str, Any]) -> str:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    )
 
 
 @router.get("/snapshot", dependencies=[Depends(require_scopes("admin:read"))])
-def control_tower_snapshot_v1(request: Request, db: Session = Depends(tenant_db_required)) -> Response:
+def control_tower_snapshot_v1(
+    request: Request, db: Session = Depends(tenant_db_required)
+) -> Response:
     tenant_id = str(getattr(request.state, "tenant_id", "unknown"))
     request_id = request.headers.get("x-request-id") or ""
     requested_tenant = request.query_params.get("requested_tenant_id")
@@ -57,10 +66,18 @@ def control_tower_snapshot_v1(request: Request, db: Session = Depends(tenant_db_
         .all()
     )
 
-    agent_total = db.query(func.count(AgentDeviceRegistry.id)).filter(AgentDeviceRegistry.tenant_id == tenant_id).scalar() or 0
+    agent_total = (
+        db.query(func.count(AgentDeviceRegistry.id))
+        .filter(AgentDeviceRegistry.tenant_id == tenant_id)
+        .scalar()
+        or 0
+    )
     agent_quarantine = (
         db.query(func.count(AgentDeviceRegistry.id))
-        .filter(AgentDeviceRegistry.tenant_id == tenant_id, AgentDeviceRegistry.status == "quarantined")
+        .filter(
+            AgentDeviceRegistry.tenant_id == tenant_id,
+            AgentDeviceRegistry.status == "quarantined",
+        )
         .scalar()
         or 0
     )
@@ -88,7 +105,9 @@ def control_tower_snapshot_v1(request: Request, db: Session = Depends(tenant_db_
         "planes": {
             "agent": "ok" if agent_quarantine == 0 else "degraded",
             "ai": "unknown",
-            "connector": "ok" if all(bool(c.enabled) for c in connector_rows) else "degraded",
+            "connector": "ok"
+            if all(bool(c.enabled) for c in connector_rows)
+            else "degraded",
             "control": "ok",
             "data": "ok",
             "evidence": "ok" if chain_result.get("ok", False) else "degraded",
@@ -103,18 +122,31 @@ def control_tower_snapshot_v1(request: Request, db: Session = Depends(tenant_db_
         },
         "chain_integrity": {
             "status": "pass" if chain_result.get("ok", False) else "fail",
-            "first_bad": chain_result.get("first_bad") if isinstance(chain_result, dict) else None,
-            "chain_head_hash": chain_result.get("head_hash") if isinstance(chain_result, dict) else None,
+            "first_bad": chain_result.get("first_bad")
+            if isinstance(chain_result, dict)
+            else None,
+            "chain_head_hash": chain_result.get("head_hash")
+            if isinstance(chain_result, dict)
+            else None,
         },
         "key_lifecycle": {
             "active_key_count": len(active_keys),
-            "last_rotation": max((_iso(k.get("created_at")) for k in active_keys if k.get("created_at")), default=None),
+            "last_rotation": max(
+                (_iso(k.get("created_at")) for k in active_keys if k.get("created_at")),
+                default=None,
+            ),
             "grace_window_seconds": None,
-            "recent_actions": [{"prefix": k.get("prefix"), "enabled": bool(k.get("enabled", False))} for k in sorted(keys, key=lambda x: str(x.get("prefix", "")))[:10]],
+            "recent_actions": [
+                {"prefix": k.get("prefix"), "enabled": bool(k.get("enabled", False))}
+                for k in sorted(keys, key=lambda x: str(x.get("prefix", "")))[:10]
+            ],
         },
         "connectors": {
             "enabled": sum(1 for c in connector_rows if bool(c.enabled)),
-            "last_sync": max((_iso(c.last_success_at) for c in connector_rows if c.last_success_at), default=None),
+            "last_sync": max(
+                (_iso(c.last_success_at) for c in connector_rows if c.last_success_at),
+                default=None,
+            ),
             "errors": [
                 {"connector_id": c.connector_id, "error": c.last_error_code}
                 for c in connector_rows
@@ -156,4 +188,11 @@ def control_tower_snapshot_v1(request: Request, db: Session = Depends(tenant_db_
     }
 
     body = _canonical_payload(payload)
-    return Response(content=body, media_type="application/json", headers={"Cache-Control": "no-store", "x-request-id": request_id or "snapshot-local"})
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={
+            "Cache-Control": "no-store",
+            "x-request-id": request_id or "snapshot-local",
+        },
+    )
