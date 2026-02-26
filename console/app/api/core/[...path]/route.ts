@@ -16,6 +16,14 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'forensics/snapshot', methods: new Set(['GET', 'HEAD']) },
   { prefix: 'forensics/audit_trail', methods: new Set(['GET', 'HEAD']) },
   { prefix: 'keys', methods: new Set(['GET', 'POST', 'DELETE', 'HEAD']) },
+  { prefix: 'control-tower/snapshot', methods: new Set(['GET', 'HEAD']) },
+  { prefix: 'admin/connectors/status', methods: new Set(['GET', 'HEAD']) },
+  { prefix: 'admin/connectors', methods: new Set(['POST', 'GET', 'HEAD']) },
+  { prefix: 'admin/agent/devices', methods: new Set(['GET', 'HEAD']) },
+  { prefix: 'admin/agent/quarantine', methods: new Set(['POST']) },
+  { prefix: 'admin/agent/unquarantine', methods: new Set(['POST']) },
+  { prefix: 'control-plane/lockers', methods: new Set(['GET', 'POST', 'HEAD']) },
+  { prefix: 'audit/export', methods: new Set(['GET', 'HEAD']) },
 ];
 
 const WINDOW_MS = 10_000;

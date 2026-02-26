@@ -15,7 +15,7 @@ def _env_bool(name: str, default: bool = False) -> bool:
 def ui_enabled() -> bool:
     raw = os.getenv("FG_UI_ENABLED")
     if raw is None or not str(raw).strip():
-        return False if is_production_env() else True
+        return False
     return _env_bool("FG_UI_ENABLED", default=False)
 
 

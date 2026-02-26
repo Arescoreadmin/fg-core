@@ -95,3 +95,28 @@ test('no NEXT_PUBLIC_CORE_API_KEY usage anywhere in console source', () => {
     assert.doesNotMatch(read(file), /NEXT_PUBLIC_CORE_API_KEY/);
   }
 });
+
+test('control tower route is canonical in nav and legacy keys route is removed', () => {
+  const layout = read('app/dashboard/layout.tsx');
+  assert.match(layout, /\/dashboard\/control-tower/);
+  assert.doesNotMatch(layout, /\/dashboard\/keys/);
+});
+
+test('control tower snapshot and action routes are allowlisted in BFF', () => {
+  const proxy = read('app/api/core/[...path]/route.ts');
+  const requiredPaths = [
+    'control-tower/snapshot',
+    'keys',
+    'admin/connectors/status',
+    'admin/connectors',
+    'admin/agent/devices',
+    'admin/agent/quarantine',
+    'admin/agent/unquarantine',
+    'control-plane/lockers',
+    'audit/export',
+    'forensics/chain/verify',
+  ];
+  for (const route of requiredPaths) {
+    assert.match(proxy, new RegExp(route.replace(/[-/]/g, (m) => `\\${m}`)));
+  }
+});

@@ -1,21 +1,10 @@
 :root {
-  --foreground: #171717;
-  --background: #ffffff;
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --border: #e5e7eb;
-  --muted: #6b7280;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground: #ededed;
-    --background: #0a0a0a;
-    --primary: #3b82f6;
-    --primary-hover: #60a5fa;
-    --border: #27272a;
-    --muted: #a1a1aa;
-  }
+  --foreground: #E9EEF5;
+  --background: #05070A;
+  --primary: #FF5A1F;
+  --primary-hover: #cc4919;
+  --border: #0B3A4A;
+  --muted: #94a3b8;
 }
 
 * {
