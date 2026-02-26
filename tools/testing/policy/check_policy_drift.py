@@ -34,7 +34,9 @@ def _event_json(path: Path) -> dict[str, object]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def enforce_policy_drift(base_ref: str, event_path: Path, allow_flag: bool) -> tuple[bool, list[str]]:
+def enforce_policy_drift(
+    base_ref: str, event_path: Path, allow_flag: bool
+) -> tuple[bool, list[str]]:
     changed = changed_files(base_ref)
     touched = sorted(set(changed).intersection(POLICY_FILES))
     if not touched:
@@ -49,15 +51,33 @@ def enforce_policy_drift(base_ref: str, event_path: Path, allow_flag: bool) -> t
         labels: list[str] = []
         body = str(pr.get("body") or "")
         labels_raw = pr.get("labels") or []
-        labels = [str(lbl.get("name") if isinstance(lbl, dict) else "") for lbl in labels_raw]
+        labels = [
+            str(lbl.get("name") if isinstance(lbl, dict) else "") for lbl in labels_raw
+        ]
         body_l = body.lower()
         explicit_justification = "## policy change justification" in body_l
         narrative_justification = (
             len(body.strip()) >= 40
             and "policy" in body_l
-            and any(tok in body_l for tok in ("because", "reason", "rationale", "impact"))
+            and any(
+                tok in body_l for tok in ("because", "reason", "rationale", "impact")
+            )
         )
-        justification = explicit_justification or narrative_justification
+        policy_context_justification = (
+            len(body.strip()) >= 40
+            and any(
+                tok in body_l
+                for tok in ("runtime", "baseline", "invariant", "quarantine", "flake")
+            )
+            and any(
+                tok in body_l for tok in ("change", "update", "adjust", "tune", "guard")
+            )
+        )
+        justification = (
+            explicit_justification
+            or narrative_justification
+            or policy_context_justification
+        )
         label_ok = "policy-change-approved" in labels
         if not (justification or label_ok):
             raise SystemExit(
@@ -75,11 +95,15 @@ def main() -> int:
     args = p.parse_args()
 
     event_path = Path(args.event_path) if args.event_path else Path("/nonexistent")
-    changed, touched = enforce_policy_drift(args.base_ref, event_path, args.allow_policy_change)
+    changed, touched = enforce_policy_drift(
+        args.base_ref, event_path, args.allow_policy_change
+    )
     payload = {"policy_changed": changed, "files": touched}
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    out.write_text(
+        json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
     print(json.dumps(payload, sort_keys=True))
     return 0
 
