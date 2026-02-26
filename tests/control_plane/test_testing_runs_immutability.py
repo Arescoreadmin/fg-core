@@ -14,7 +14,24 @@ def test_testing_runs_rows_immutable(monkeypatch: pytest.MonkeyPatch, tmp_path) 
     con = sqlite3.connect(str(db))
     con.execute(
         "INSERT INTO testing_runs (run_id, tenant_id, lane, status, started_at, finished_at, duration_ms, commit_sha, ref, triggered_by, triage_schema_version, triage_category_counts, artifact_hashes, artifact_paths, summary_md, canonical_payload_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        ("r1", "t1", "fg-fast", "passed", "2026-01-01T00:00:00Z", "2026-01-01T00:01:00Z", 1, "a", "r", "ci", "2.0", "{}", "{}", "[]", "", "h" * 64),
+        (
+            "r1",
+            "t1",
+            "fg-fast",
+            "passed",
+            "2026-01-01T00:00:00Z",
+            "2026-01-01T00:01:00Z",
+            1,
+            "a",
+            "r",
+            "ci",
+            "2.0",
+            "{}",
+            "{}",
+            "[]",
+            "",
+            "h" * 64,
+        ),
     )
     con.commit()
     with pytest.raises(sqlite3.DatabaseError):

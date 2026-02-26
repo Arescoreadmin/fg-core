@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tools.testing.harness.runtime_budgets import enforce_lane_budget, load_runtime_budgets
+from tools.testing.harness.runtime_budgets import (
+    enforce_lane_budget,
+    load_runtime_budgets,
+)
 
 
 def test_runtime_budget_overrun_fails() -> None:

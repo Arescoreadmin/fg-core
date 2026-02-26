@@ -12,5 +12,7 @@ def test_detect_flakes_identifies_oscillation() -> None:
 
 
 def test_detect_flakes_ignores_consistent_failures() -> None:
-    findings = detect_flakes(["tests/a.py::test_x"], {"tests/a.py::test_x": ["fail", "fail", "fail"]})
+    findings = detect_flakes(
+        ["tests/a.py::test_x"], {"tests/a.py::test_x": ["fail", "fail", "fail"]}
+    )
     assert findings == []

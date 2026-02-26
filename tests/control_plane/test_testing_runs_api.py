@@ -11,8 +11,13 @@ from api.auth_scopes import mint_key
 
 
 def _sign(payload: dict[str, object], secret: str) -> str:
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return "sha256=" + hmac.new(secret.encode("utf-8"), canonical, hashlib.sha256).hexdigest()
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    return (
+        "sha256="
+        + hmac.new(secret.encode("utf-8"), canonical, hashlib.sha256).hexdigest()
+    )
 
 
 def _client(build_app, monkeypatch):
@@ -45,7 +50,9 @@ def _payload() -> dict[str, object]:
     }
 
 
-def _canonical_for_signing(payload: dict[str, object], tenant_id: str) -> dict[str, object]:
+def _canonical_for_signing(
+    payload: dict[str, object], tenant_id: str
+) -> dict[str, object]:
     seed = {
         "tenant_id": tenant_id,
         "lane": payload["lane"],
@@ -53,8 +60,11 @@ def _canonical_for_signing(payload: dict[str, object], tenant_id: str) -> dict[s
         "started_at": payload["started_at"],
         "artifact_hashes": payload["artifact_hashes"],
     }
-    canonical_hash = hashlib.sha256(json.dumps(seed, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    canonical_hash = hashlib.sha256(
+        json.dumps(seed, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
     import uuid
+
     run_id = str(uuid.uuid5(uuid.NAMESPACE_URL, canonical_hash))
     c = dict(payload)
     c["tenant_id"] = tenant_id
@@ -99,13 +109,16 @@ def test_register_and_list_runs(build_app, monkeypatch) -> None:
     assert health.json()["snapshots"]
 
 
-
-def test_register_rejects_unverified_policy_change_event(build_app, monkeypatch) -> None:
+def test_register_rejects_unverified_policy_change_event(
+    build_app, monkeypatch
+) -> None:
     client = _client(build_app, monkeypatch)
     key = mint_key("control-plane:admin", tenant_id="tenant-a")
     payload = _payload()
     payload["policy_change_event"] = True
-    canonical = _canonical_for_signing({**payload, "policy_change_event": False}, "tenant-a")
+    canonical = _canonical_for_signing(
+        {**payload, "policy_change_event": False}, "tenant-a"
+    )
     r = client.post(
         "/control/testing/runs/register",
         json=payload,
@@ -119,7 +132,9 @@ def test_register_rejects_unverified_policy_change_event(build_app, monkeypatch)
     assert r.status_code == 403
 
 
-def test_register_derives_policy_change_event_from_artifact(build_app, monkeypatch, tmp_path) -> None:
+def test_register_derives_policy_change_event_from_artifact(
+    build_app, monkeypatch, tmp_path
+) -> None:
     artifact = tmp_path / "policy-drift.json"
     artifact.write_text(json.dumps({"policy_changed": True}), encoding="utf-8")
     monkeypatch.setenv("FG_POLICY_DRIFT_ARTIFACT", str(artifact))
@@ -127,7 +142,9 @@ def test_register_derives_policy_change_event_from_artifact(build_app, monkeypat
     key = mint_key("control-plane:admin", "control-plane:read", tenant_id="tenant-a")
     payload = _payload()
     payload["policy_change_event"] = False
-    canonical = _canonical_for_signing({**payload, "policy_change_event": True}, "tenant-a")
+    canonical = _canonical_for_signing(
+        {**payload, "policy_change_event": True}, "tenant-a"
+    )
 
     r = client.post(
         "/control/testing/runs/register",

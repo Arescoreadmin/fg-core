@@ -10,11 +10,14 @@ from api.auth_scopes import mint_key
 
 
 def _sign(payload: dict[str, object], secret: str) -> str:
-    return "sha256=" + hmac.new(
-        secret.encode("utf-8"),
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
+    return (
+        "sha256="
+        + hmac.new(
+            secret.encode("utf-8"),
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+    )
 
 
 def _client(build_app, monkeypatch):
@@ -53,8 +56,11 @@ def _canonical(payload: dict[str, object], tenant: str) -> dict[str, object]:
         "started_at": payload["started_at"],
         "artifact_hashes": payload["artifact_hashes"],
     }
-    canonical_hash = hashlib.sha256(json.dumps(seed, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    canonical_hash = hashlib.sha256(
+        json.dumps(seed, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
     import uuid
+
     run_id = str(uuid.uuid5(uuid.NAMESPACE_URL, canonical_hash))
     c = dict(payload)
     c["tenant_id"] = tenant
@@ -96,5 +102,6 @@ def test_tenant_cannot_read_other_tenant_runs(build_app, monkeypatch) -> None:
 
 def test_rls_policy_rejects_unbound_reads(build_app, monkeypatch) -> None:
     client = _client(build_app, monkeypatch)
-    resp = client.get("/control/testing/runs", headers={"X-API-Key": "ci-test-key-00000000000000000000000000000000"})
+    unbound_key = mint_key("control-plane:read")
+    resp = client.get("/control/testing/runs", headers={"X-API-Key": unbound_key})
     assert resp.status_code == 400

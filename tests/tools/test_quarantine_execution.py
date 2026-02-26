@@ -22,6 +22,9 @@ def test_nightly_lane_does_not_deselect() -> None:
 
 def test_new_suspect_requires_policy_entry(tmp_path: Path) -> None:
     report = tmp_path / "flake-report.json"
-    report.write_text(json.dumps({"newly_suspected": [{"nodeid": "tests/x.py::test_a"}]}), encoding="utf-8")
+    report.write_text(
+        json.dumps({"newly_suspected": [{"nodeid": "tests/x.py::test_a"}]}),
+        encoding="utf-8",
+    )
     with pytest.raises(SystemExit):
         ensure_new_suspects_have_policy_entries(report)

@@ -13,7 +13,9 @@ from tools.testing.security.check_invariant_coverage import (
 
 def test_critical_invariant_without_enforcement_fails() -> None:
     with pytest.raises(SystemExit):
-        validate_critical_coverage([{"id": "INV-X", "severity": "critical", "enforced_by": []}])
+        validate_critical_coverage(
+            [{"id": "INV-X", "severity": "critical", "enforced_by": []}]
+        )
 
 
 def test_new_protected_path_requires_mapping() -> None:
@@ -21,7 +23,9 @@ def test_new_protected_path_requires_mapping() -> None:
         validate_path_mapping(["migrations/new.sql"], {"security/": ["INV-1"]})
 
 
-def test_new_api_route_module_requires_mapping(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_new_api_route_module_requires_mapping(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.chdir(tmp_path)
     api_dir = tmp_path / "api"
     api_dir.mkdir(parents=True, exist_ok=True)
