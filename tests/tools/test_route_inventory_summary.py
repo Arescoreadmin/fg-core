@@ -20,13 +20,10 @@ def test_route_inventory_summary_object_shape(monkeypatch):
         check_route_inventory, "_route_diff", lambda expected, cur: ([], [], [])
     )
     monkeypatch.setattr(
-        check_route_inventory, "_write_summary", lambda cur, expected: None
+        check_route_inventory,
+        "_summary_payload",
+        lambda cur, expected: {"runtime_only": [], "contract_only": []},
     )
-    monkeypatch.setattr(check_route_inventory, "_write_registry_snapshot", lambda: None)
-    monkeypatch.setattr(
-        check_route_inventory, "_write_attestation_bundle", lambda cur: None
-    )
-    monkeypatch.setattr(check_route_inventory, "_write_topology_hash", lambda: None)
     monkeypatch.setattr(
         check_route_inventory,
         "INVENTORY",

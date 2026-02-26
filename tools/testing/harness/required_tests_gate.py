@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 POLICY_DIR = REPO_ROOT / "tools/testing/policy"
@@ -34,6 +33,8 @@ def _json_dumps(obj: object) -> str:
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
+    import yaml
+
     with path.open("r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle) or {}
     if not isinstance(data, dict):
