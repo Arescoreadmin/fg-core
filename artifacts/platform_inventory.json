@@ -26,24 +26,23 @@
       "type": "missing_soc_gate_reference"
     }
   ],
-  "git_sha": "a002e2806d9ae20727bcb001b4f1c11659d6f294",
+  "git_sha": "721290493329c17315620a290cfef538aa224bd6",
   "governance": {
-    "attestation_sha256": "b222f701ff986b0630d66f8966b2a973bb3411bc7b6948596e6a45996169409a  plane_registry_snapshot.json\n4750a3abdcc4edbf47bef4c5522db001bb6005a3c66b9c6841a8dca70042b4e0  route_inventory.json\n5f510fe14d7062b0b9b0e74a28ee775a30beb60664af0e9ba464ef9d632a236a  contract_routes.json\n5580fe326f8687023f52a50e550939cf6843714e246e2362081e2a4a06ff2846  build_meta.json",
+    "attestation_sha256": "5a2016ff9993f2f7bc3e41801a4d36dc64e79bd8d38971ed2681ab5120ca1e2d  plane_registry_snapshot.json\n78adf06371d95da09b5f9761690ef73fcc1e491dcfc3bc4405421926d5cf8da3  route_inventory.json\n4a1169038d2db6320b8ba34db8ab78405356c39973e76afabb58599909f0f44a  contract_routes.json\n4f232381f025a3b1db67277d009272207467c5181f094b87e51db284b1c0fe84  build_meta.json",
     "build_meta": {
-      "build_timestamp_utc": "2026-02-25T00:59:20.785388+00:00",
-      "ci_runner_id": "48595d363192",
-      "git_sha": "a002e2806d9ae20727bcb001b4f1c11659d6f294",
-      "inventory_sha256": "9b0161c22c699ac5952bced8d8da4e2694e029766bd53b55307a3670b3c92db9",
+      "build_timestamp_utc": "2026-02-26T00:36:07.648901+00:00",
+      "ci_runner_id": "c2f24402de24",
+      "git_sha": "721290493329c17315620a290cfef538aa224bd6",
+      "inventory_sha256": "c1bfd688ac84dcbac8c3d5ca27c0039d5a94b7015db623cd61795bc512bdf52a",
       "tool": "tools/ci/check_route_inventory.py",
       "tool_version": "v1"
     },
     "contract_count": 120,
     "contract_only": [],
-    "runtime_count": 223,
+    "runtime_count": 226,
     "runtime_only": [
       "DELETE /control-plane/v2/delegation/{delegation_id}",
       "GET /_debug/routes",
-      "GET /_legacy/ui_feed/_disabled",
       "GET /admin/agent/devices",
       "GET /admin/agent/evidence/export/{device_id}",
       "GET /admin/audit/search",
@@ -71,6 +70,8 @@
       "GET /control-plane/v2/playbooks",
       "GET /control-plane/v2/policy/pins",
       "GET /control-plane/v2/terminal/allowlist",
+      "GET /control-plane/v2/testing/lanes",
+      "GET /control-plane/v2/testing/runs/{run_id}/artifacts",
       "GET /health/detailed",
       "GET /stats/debug",
       "GET /status",
@@ -92,6 +93,7 @@
       "GET /ui/dash/controls",
       "GET /ui/dash/forensics",
       "GET /ui/dash/posture",
+      "GET /ui/dash/testing-control-tower",
       "GET /ui/decision/{decision_id}",
       "GET /ui/decisions",
       "GET /ui/feed",
@@ -132,6 +134,7 @@
       "POST /control-plane/v2/policy/stage",
       "POST /control-plane/v2/terminal/breakglass",
       "POST /control-plane/v2/terminal/execute",
+      "POST /control-plane/v2/testing/runs",
       "POST /dev/emit",
       "POST /dev/seed",
       "POST /ui/ai/chat",
@@ -148,7 +151,7 @@
       "plane_registry": "v1",
       "route_inventory": "v1"
     },
-    "topology_sha256": "b222f701ff986b0630d66f8966b2a973bb3411bc7b6948596e6a45996169409a  plane_registry_snapshot.json\n4750a3abdcc4edbf47bef4c5522db001bb6005a3c66b9c6841a8dca70042b4e0  route_inventory.json\n5f510fe14d7062b0b9b0e74a28ee775a30beb60664af0e9ba464ef9d632a236a  contract_routes.json",
+    "topology_sha256": "5a2016ff9993f2f7bc3e41801a4d36dc64e79bd8d38971ed2681ab5120ca1e2d  plane_registry_snapshot.json\n78adf06371d95da09b5f9761690ef73fcc1e491dcfc3bc4405421926d5cf8da3  route_inventory.json\n4a1169038d2db6320b8ba34db8ab78405356c39973e76afabb58599909f0f44a  contract_routes.json",
     "topology_sha256_note": "Content hashes of plane_registry_snapshot.json, route_inventory.json, contract_routes.json."
   },
   "planes": [
@@ -361,7 +364,6 @@
     "control": [
       "DELETE /control-plane/v2/delegation/{delegation_id}",
       "GET /_debug/routes",
-      "GET /_legacy/ui_feed/_disabled",
       "GET /admin/agent/devices",
       "GET /admin/agent/evidence/export/{device_id}",
       "GET /admin/audit/search",
@@ -399,6 +401,8 @@
       "GET /control-plane/v2/playbooks",
       "GET /control-plane/v2/policy/pins",
       "GET /control-plane/v2/terminal/allowlist",
+      "GET /control-plane/v2/testing/lanes",
+      "GET /control-plane/v2/testing/runs/{run_id}/artifacts",
       "GET /enterprise-controls/catalog",
       "GET /enterprise-controls/crosswalk",
       "GET /enterprise-controls/frameworks",
@@ -450,6 +454,7 @@
       "POST /control-plane/v2/policy/stage",
       "POST /control-plane/v2/terminal/breakglass",
       "POST /control-plane/v2/terminal/execute",
+      "POST /control-plane/v2/testing/runs",
       "POST /dev/emit",
       "POST /dev/seed",
       "POST /enterprise-controls/tenant-state",
@@ -545,6 +550,7 @@
       "GET /ui/dash/controls",
       "GET /ui/dash/forensics",
       "GET /ui/dash/posture",
+      "GET /ui/dash/testing-control-tower",
       "GET /ui/decision/{decision_id}",
       "GET /ui/decisions",
       "GET /ui/feed",

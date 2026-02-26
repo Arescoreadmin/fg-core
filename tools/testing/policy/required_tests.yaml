@@ -1,0 +1,34 @@
+version: 1
+fail_closed: true
+categories:
+  unit:
+    required_test_globs:
+    - tests/**/*.py
+  contract:
+    required_test_globs:
+    - scripts/contracts_*.py
+    - tools/ci/check_openapi_security_diff.py
+    - tools/testing/contracts/**/*.py
+    - tests/tools/**/*.py
+    - tests/tools/*.py
+  security:
+    required_test_globs:
+    - tests/security/**/*.py
+    - tools/ci/check_*security*.py
+    - tools/testing/security/**/*.py
+    - tests/tools/**/*.py
+    - tests/tools/*.py
+  integration:
+    required_test_globs:
+    - tests/test_e2e_http_local.py
+    - tests/control_plane/**/*.py
+    - tools/testing/integration/**/*.py
+    - tests/tools/**/*.py
+    - tests/tools/*.py
+module_registration:
+  registry_files:
+  - tools/testing/policy/ownership_map.yaml
+  - tools/testing/policy/module_manifest.yaml
+  required_skeleton_globs:
+  - tests/modules/test_{module_id}_unit.py
+  - tests/security/test_{module_id}_tenant_binding.py

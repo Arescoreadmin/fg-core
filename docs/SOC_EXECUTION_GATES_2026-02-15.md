@@ -573,3 +573,10 @@ Gate impact:
 - `route-inventory-audit` (SOC-P1-001): restored runtime stability (no NameError).
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
 
+
+## SOC Review Update Log
+
+- 2026-02-25: Added `testing-module.yml` CI workflow for fail-closed testing lanes (`fg-fast`, `fg-contract`, `fg-security`, `fg-full`) and validated this workflow remains under SOC-HIGH-002 review-sync governance.
+- 2026-02-25: Regenerated `tools/ci/route_inventory.json` and related attestation/topology snapshots after adding Testing Control Tower preview routes so route-inventory and SOC gates remain synchronized.
+- 2026-02-26: Moved Testing Control Tower API routes to `/control-plane/v2/testing/*`, tightened scopes/tenant binding, and regenerated route inventory/snapshot artifacts to keep SOC critical-file gates synchronized.
+- 2026-02-26: Normalized route-inventory generated governance artifacts to schema `v1` object envelopes (`schema_version/generated_at/data`) and refreshed topology/attestation snapshots plus platform inventory generator compatibility.

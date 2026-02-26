@@ -1,0 +1,10 @@
+-- 0028_testing_control_tower_stub.sql
+-- Phase 0-1 placeholder migration for Testing Control Tower persistence.
+-- Intentionally non-operative in this PR to avoid schema drift before API contracts settle.
+--
+-- Planned objects (Phase 3+):
+--   - test_runs
+--   - test_run_artifacts
+--   - RLS policies for tenant scoped reads + global admin override.
+--
+-- This file is tracked to prevent "feature assumed complete" confusion.

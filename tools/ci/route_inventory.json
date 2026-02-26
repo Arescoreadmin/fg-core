@@ -1,6 +1,5 @@
 {
-  "generated_by": "tools/ci/check_route_inventory.py",
-  "routes": [
+  "data": [
     {
       "dependency_categories": [],
       "file": "api/main.py",
@@ -2134,6 +2133,57 @@
     {
       "dependency_categories": [
         "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/testing_control_tower.py",
+      "method": "GET",
+      "path": "/control-plane/v2/testing/lanes",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/testing_control_tower.py",
+      "method": "POST",
+      "path": "/control-plane/v2/testing/runs",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:admin"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/testing_control_tower.py",
+      "method": "GET",
+      "path": "/control-plane/v2/testing/runs/{run_id}/artifacts",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
         "tenant"
       ],
       "file": "api/decisions.py",
@@ -3335,6 +3385,23 @@
         "rate",
         "tenant"
       ],
+      "file": "api/ui_testing_control_tower.py",
+      "method": "GET",
+      "path": "/ui/dash/testing-control-tower",
+      "plane_id": "ui",
+      "scoped": true,
+      "scopes": [
+        "ui:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
       "file": "api/ui_dashboards.py",
       "method": "GET",
       "path": "/ui/decision/{decision_id}",
@@ -3490,5 +3557,6 @@
       "tenant_bound": false
     }
   ],
-  "schema_version": 1
+  "generated_at": "2026-02-26T00:35:53.127551+00:00",
+  "schema_version": "v1"
 }

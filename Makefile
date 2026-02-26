@@ -594,7 +594,7 @@ fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate \
-	verify-spine-modules verify-schemas verify-drift align-score
+	verify-spine-modules verify-schemas verify-drift policy-validate align-score
 	@$(MAKE) -s test-unit
 	@$(MAKE) -s fg-lint
 	@$(MAKE) -s test-dashboard-p0
@@ -1248,3 +1248,28 @@ agent-phase2-gate: venv _require-pytest-venv
 	@$(PY) -m py_compile api/agent_phase2.py services/agent_update/manifest.py services/agent_log_integrity/chain.py
 	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/agent/test_phase2_enterprise.py tests/agent/test_phase2_acceptance.py tests/agent/test_phase21_command_lease.py tests/agent/test_phase21_command_allowlist.py tests/agent/test_phase21_rollout.py tests/agent/test_phase21_rate_limits.py tests/services/test_agent_update_security.py tests/services/test_agent_update_safe_mode.py tests/services/test_agent_log_integrity.py tests/services/test_agent_log_anchor_cadence.py
 	@$(PY) tools/ci/check_agent_phase2_rls.py
+
+# =============================================================================
+# Testing Module Lanes (fail-closed)
+# =============================================================================
+
+
+.PHONY: required-tests-gate policy-validate fg-security fg-full fg-triage
+
+policy-validate: venv
+	@$(PY) tools/testing/policy/validate_policy.py
+
+required-tests-gate: venv policy-validate
+	@$(PY) tools/testing/harness/required_tests_gate.py --base-ref "$${GITHUB_BASE_REF:-main}"
+
+fg-security: venv _require-pytest-venv required-tests-gate
+	@$(PY) tools/testing/security/check_security_invariants.py
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/security/test_scope_enforcement.py tests/security/test_tenant_binding_global.py
+
+fg-full: venv fg-fast fg-security
+	@$(PY) tools/testing/integration/smoke_suite.py
+	@$(MAKE) -s fg-fast-full
+
+fg-triage: venv
+	@test -n "$(LOG)" || (echo "LOG=<path> is required" && exit 1)
+	@$(PY) tools/testing/harness/triage_report.py --log "$(LOG)" --out "$(ARTIFACTS_DIR)/triage.json"
