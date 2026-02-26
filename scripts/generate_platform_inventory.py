@@ -382,7 +382,11 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     route_inventory_doc = load_json(REPO / "tools/ci/route_inventory.json")
-    route_inventory = route_inventory_doc.get("data", route_inventory_doc.get("routes", [])) if isinstance(route_inventory_doc, dict) else []
+    route_inventory = (
+        route_inventory_doc.get("data", route_inventory_doc.get("routes", []))
+        if isinstance(route_inventory_doc, dict)
+        else []
+    )
     make_targets = _make_targets()
     artifact_schemas = sorted(
         p.as_posix().replace(str(REPO) + "/", "")

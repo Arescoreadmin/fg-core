@@ -25,7 +25,9 @@ def test_missing_required_test_changes_fails() -> None:
             "security": {"required_test_globs": ["tests/security/**/*.py"]},
         }
     }
-    failures = _verify_required_tests_changed(["api/control_plane_v2.py"], {"security"}, policy)
+    failures = _verify_required_tests_changed(
+        ["api/control_plane_v2.py"], {"security"}, policy
+    )
     assert failures
     assert failures[0].category == "security"
 

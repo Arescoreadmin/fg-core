@@ -48,7 +48,9 @@ def test_plane_registry_checker_passes() -> None:
 
 def test_route_inventory_excludes_legacy_disabled_ui_routes() -> None:
     inventory_doc = json.loads(Path("tools/ci/route_inventory.json").read_text())
-    inventory = inventory_doc.get("routes", []) if isinstance(inventory_doc, dict) else []
+    inventory = (
+        inventory_doc.get("routes", []) if isinstance(inventory_doc, dict) else []
+    )
     inventory_paths = {route["path"] for route in inventory}
     assert set(FORBIDDEN_LEGACY_DISABLED).isdisjoint(inventory_paths)
 
@@ -59,4 +61,6 @@ def test_route_inventory_excludes_legacy_disabled_ui_routes() -> None:
             if forbidden_path in source:
                 offenders.append(f"{api_file}:{forbidden_path}")
 
-    assert not offenders, f"found forbidden legacy disabled route strings in source: {offenders}"
+    assert not offenders, (
+        f"found forbidden legacy disabled route strings in source: {offenders}"
+    )

@@ -34,7 +34,10 @@ def start_run(request: Request) -> dict[str, object]:
     }
 
 
-@router.get("/runs/{run_id}/artifacts", dependencies=[Depends(require_scopes("control-plane:read"))])
+@router.get(
+    "/runs/{run_id}/artifacts",
+    dependencies=[Depends(require_scopes("control-plane:read"))],
+)
 def run_artifacts(run_id: str, request: Request) -> dict[str, object]:
     _ = require_bound_tenant(request)
     raise HTTPException(
