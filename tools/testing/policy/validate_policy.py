@@ -99,8 +99,17 @@ def _load_plane_prefixes() -> set[str]:
     if not PLANE_REGISTRY.exists():
         return set()
     raw = json.loads(PLANE_REGISTRY.read_text(encoding="utf-8"))
+    if isinstance(raw, dict):
+        records = raw.get("data", [])
+    elif isinstance(raw, list):
+        records = raw
+    else:
+        raise SystemExit("plane_registry_snapshot must be object or list")
+
     prefixes: set[str] = set()
-    for item in raw.get("data", []):
+    for item in records:
+        if not isinstance(item, dict):
+            continue
         for prefix in item.get("route_prefixes", []):
             prefixes.add(prefix)
     return prefixes

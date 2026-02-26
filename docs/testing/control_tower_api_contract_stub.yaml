@@ -3,19 +3,19 @@ info:
   title: FrostGate Testing Control Tower Stub
   version: 0.1.0-stub
 paths:
-  /v1/testing/lanes:
+  /control-plane/v2/testing/lanes:
     get:
       summary: List lanes (stub)
       responses:
         '501':
           description: Not implemented
-  /v1/testing/runs:
+  /control-plane/v2/testing/runs:
     post:
       summary: Start lane run (stub)
       responses:
         '200':
           description: Stub accepted
-  /v1/testing/runs/{run_id}/artifacts:
+  /control-plane/v2/testing/runs/{run_id}/artifacts:
     get:
       summary: List artifact metadata (stub)
       parameters:

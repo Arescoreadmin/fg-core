@@ -36,7 +36,7 @@ owners:
       - tools/dev/new_spine_module.py
       - tests/tools/test_required_tests_gate.py
     route_prefixes:
-      - /v1/testing
+      - /control-plane/v2/testing
     required_categories:
       - unit
       - contract

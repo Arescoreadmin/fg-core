@@ -578,3 +578,4 @@ Gate impact:
 
 - 2026-02-25: Added `testing-module.yml` CI workflow for fail-closed testing lanes (`fg-fast`, `fg-contract`, `fg-security`, `fg-full`) and validated this workflow remains under SOC-HIGH-002 review-sync governance.
 - 2026-02-25: Regenerated `tools/ci/route_inventory.json` and related attestation/topology snapshots after adding Testing Control Tower preview routes so route-inventory and SOC gates remain synchronized.
+- 2026-02-26: Moved Testing Control Tower API routes to `/control-plane/v2/testing/*`, tightened scopes/tenant binding, and regenerated route inventory/snapshot artifacts to keep SOC critical-file gates synchronized.

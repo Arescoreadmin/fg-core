@@ -118,18 +118,18 @@ Policy examples are in:
 ## 6) Control Tower API contract
 
 ### REST endpoints
-- `GET /v1/testing/lanes`
+- `GET /control-plane/v2/testing/lanes`
   - Returns lane status summary, durations, last commit, PR URL, artifact refs.
-- `POST /v1/testing/runs`
+- `POST /control-plane/v2/testing/runs`
   - Starts lane run (auth scope: `testing.runs.execute`), body:
   - `{ "lane": "fg-fast", "ref": "sha-or-branch", "tenant_id": "...", "reason": "manual trigger" }`
-- `GET /v1/testing/runs?lane=fg-fast&limit=50`
+- `GET /control-plane/v2/testing/runs?lane=fg-fast&limit=50`
   - Returns run history + failure bucket summary.
-- `GET /v1/testing/runs/{run_id}/artifacts`
+- `GET /control-plane/v2/testing/runs/{run_id}/artifacts`
   - Returns immutable artifact metadata + hashes.
 
 ### WebSocket
-- `GET /v1/testing/runs/{run_id}/stream`
+- `GET /control-plane/v2/testing/runs/{run_id}/stream`
   - Streams events:
   - `{ "ts":"...", "run_id":"...", "phase":"execute", "line":"...", "progress":42 }`
 

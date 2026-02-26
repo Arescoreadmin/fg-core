@@ -2134,6 +2134,57 @@
     {
       "dependency_categories": [
         "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/testing_control_tower.py",
+      "method": "GET",
+      "path": "/control-plane/v2/testing/lanes",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/testing_control_tower.py",
+      "method": "POST",
+      "path": "/control-plane/v2/testing/runs",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:admin"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/testing_control_tower.py",
+      "method": "GET",
+      "path": "/control-plane/v2/testing/runs/{run_id}/artifacts",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
         "tenant"
       ],
       "file": "api/decisions.py",
@@ -3332,7 +3383,8 @@
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/ui_testing_control_tower.py",
       "method": "GET",
@@ -3340,10 +3392,10 @@
       "plane_id": "ui",
       "scoped": true,
       "scopes": [
-        "testing.runs.read"
+        "ui:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
@@ -3502,51 +3554,6 @@
       "plane_id": "connector",
       "scoped": false,
       "scopes": [],
-      "source": "runtime-ast",
-      "tenant_bound": false
-    },
-    {
-      "dependency_categories": [
-        "auth"
-      ],
-      "file": "api/testing_control_tower.py",
-      "method": "GET",
-      "path": "/v1/testing/lanes",
-      "plane_id": "connector",
-      "scoped": true,
-      "scopes": [
-        "testing.runs.read"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": false
-    },
-    {
-      "dependency_categories": [
-        "auth"
-      ],
-      "file": "api/testing_control_tower.py",
-      "method": "POST",
-      "path": "/v1/testing/runs",
-      "plane_id": "connector",
-      "scoped": true,
-      "scopes": [
-        "testing.runs.execute"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": false
-    },
-    {
-      "dependency_categories": [
-        "auth"
-      ],
-      "file": "api/testing_control_tower.py",
-      "method": "GET",
-      "path": "/v1/testing/runs/{run_id}/artifacts",
-      "plane_id": "connector",
-      "scoped": true,
-      "scopes": [
-        "testing.runs.read"
-      ],
       "source": "runtime-ast",
       "tenant_bound": false
     }

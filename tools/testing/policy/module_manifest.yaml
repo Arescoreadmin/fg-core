@@ -14,10 +14,10 @@ modules:
   - module_id: testing_module
     plane: security
     route_prefixes:
-      - /v1/testing
+      - /control-plane/v2/testing
     required_scopes:
-      - testing.runs.read
-      - testing.runs.execute
+      - control-plane:read
+      - control-plane:admin
     required_test_category:
       - unit
       - contract
