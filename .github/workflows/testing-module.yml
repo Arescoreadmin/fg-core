@@ -171,7 +171,7 @@ jobs:
           path: artifacts/testing
       - run: |
           test -f artifacts/testing/junit.xml || printf '%s\n' '<testsuites><testsuite name="empty" tests="0" failures="0"/></testsuites>' > artifacts/testing/junit.xml
-      - run: .venv/bin/python tools/testing/harness/flake_detect.py --junit artifacts/testing/junit.xml --out artifacts/testing/flake-report.json
+      - run: .venv/bin/python -m tools.testing.harness.flake_detect --junit artifacts/testing/junit.xml --out artifacts/testing/flake-report.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
