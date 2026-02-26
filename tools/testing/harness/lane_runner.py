@@ -11,6 +11,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from tools.testing.harness.quarantine_policy import pytest_addopts_for_lane
 
 TOOL_VERSION = "1.0.0"
@@ -33,11 +37,15 @@ ALLOWED_LANES: dict[str, tuple[CommandSpec, ...]] = {
     ),
     "fg-contract": (
         CommandSpec(("make", "fg-contract")),
-        CommandSpec((sys.executable, "tools/testing/contracts/check_contract_drift.py")),
+        CommandSpec(
+            (sys.executable, "tools/testing/contracts/check_contract_drift.py")
+        ),
     ),
     "fg-security": (
         CommandSpec(("make", "fg-security")),
-        CommandSpec((sys.executable, "tools/testing/security/check_security_invariants.py")),
+        CommandSpec(
+            (sys.executable, "tools/testing/security/check_security_invariants.py")
+        ),
     ),
     "fg-full": (CommandSpec(("make", "fg-full"), timeout_seconds=1800),),
 }
@@ -73,12 +81,18 @@ def _command_env(lane: str) -> dict[str, str]:
         env["PYTEST_ADDOPTS"] = f"{existing} {addopts}".strip()
     return env
 
+
 def _json_dumps(obj: object) -> str:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
 
 def _sanitize_log(text: str) -> str:
-    redaction_tokens = ["FG_API_KEY", "POSTGRES_PASSWORD", "NATS_AUTH_TOKEN", "FG_WEBHOOK_SECRET"]
+    redaction_tokens = [
+        "FG_API_KEY",
+        "POSTGRES_PASSWORD",
+        "NATS_AUTH_TOKEN",
+        "FG_WEBHOOK_SECRET",
+    ]
     lines: list[str] = []
     for line in text.splitlines():
         sanitized = line
@@ -89,7 +103,9 @@ def _sanitize_log(text: str) -> str:
     return "\n".join(lines)
 
 
-def _run_command(command: CommandSpec, cwd: Path, log_file: Path, lane: str = "") -> int:
+def _run_command(
+    command: CommandSpec, cwd: Path, log_file: Path, lane: str = ""
+) -> int:
     proc = subprocess.run(
         list(command.argv),
         cwd=cwd,
@@ -120,7 +136,9 @@ def _sha256(path: Path) -> str:
 
 
 def _iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return (
+        datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    )
 
 
 def _artifact_dir(repo_root: Path, out_dir: str) -> Path:
@@ -140,7 +158,7 @@ def main() -> int:
     parser.add_argument("--commit", default=os.getenv("GITHUB_SHA", "local"))
     args = parser.parse_args()
 
-    repo_root = Path(__file__).resolve().parents[3]
+    repo_root = REPO_ROOT
     out_dir = _artifact_dir(repo_root, args.out_dir)
     log_file = out_dir / f"{args.lane}.log"
     metadata_file = out_dir / f"{args.lane}.metadata.json"
@@ -149,7 +167,9 @@ def main() -> int:
     status = "passed"
     for command in ALLOWED_LANES[args.lane]:
         try:
-            code = _run_command(command, cwd=repo_root, log_file=log_file, lane=args.lane)
+            code = _run_command(
+                command, cwd=repo_root, log_file=log_file, lane=args.lane
+            )
         except subprocess.TimeoutExpired:
             status = "failed"
             with log_file.open("a", encoding="utf-8") as handle:
