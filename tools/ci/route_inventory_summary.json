@@ -7,12 +7,11 @@
     "agent": 13,
     "ai": 4,
     "connector": 13,
-    "control": 104,
+    "control": 108,
     "data": 31,
     "evidence": 22,
     "security": 6,
-    "ui": 30,
-    "unmapped": 4
+    "ui": 30
   },
   "removed": [],
   "runtime_count": 227,

@@ -512,6 +512,7 @@
       ],
       "route_prefixes": [
         "/control-plane",
+        "/control/testing",
         "/compliance",
         "/compliance-cp",
         "/enterprise-controls",
@@ -859,6 +860,6 @@
       ]
     }
   ],
-  "generated_at": "2026-02-26T12:33:37.745666+00:00",
+  "generated_at": "2026-02-26T12:50:24.052554+00:00",
   "schema_version": "v1"
 }

@@ -105,5 +105,6 @@
       "pattern": "^[a-f0-9]{64}$"
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "version": "1.0.0"
 }

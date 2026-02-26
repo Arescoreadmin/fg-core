@@ -2,13 +2,18 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlTowerRunListResponse",
   "type": "object",
-  "required": ["runs"],
+  "required": [
+    "runs"
+  ],
   "properties": {
     "runs": {
       "type": "array",
-      "items": { "$ref": "./control_tower_run.schema.json" },
+      "items": {
+        "$ref": "./control_tower_run.schema.json"
+      },
       "maxItems": 50
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "version": "1.0.0"
 }
