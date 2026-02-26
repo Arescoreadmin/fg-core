@@ -58,6 +58,12 @@ jobs:
         timeout-minutes: 8
         run: .venv/bin/python tools/testing/harness/fg_required.py --global-budget-seconds 480 --lane-timeout-seconds 480
 
+      - name: prepare artifacts dir
+        if: always()
+        run: |
+          mkdir -p artifacts/testing
+          test -f artifacts/testing/fg-required-summary.md || echo "fg-required artifact bundle prepared after failure" > artifacts/testing/_upload_notice.txt
+
       - name: verify required artifacts
         run: |
           test -f artifacts/testing/fg-required-summary.json
@@ -69,4 +75,4 @@ jobs:
         with:
           name: fg-required-artifacts
           path: artifacts/testing
-          if-no-files-found: error
+          if-no-files-found: warn
