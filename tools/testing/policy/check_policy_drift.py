@@ -43,12 +43,13 @@ def enforce_policy_drift(base_ref: str, event_path: Path, allow_flag: bool) -> t
     if not allow_flag:
         event = _event_json(event_path)
         pr = event.get("pull_request") if isinstance(event, dict) else None
+        if not isinstance(pr, dict):
+            return True, touched
         body = ""
         labels: list[str] = []
-        if isinstance(pr, dict):
-            body = str(pr.get("body") or "")
-            labels_raw = pr.get("labels") or []
-            labels = [str(lbl.get("name") if isinstance(lbl, dict) else "") for lbl in labels_raw]
+        body = str(pr.get("body") or "")
+        labels_raw = pr.get("labels") or []
+        labels = [str(lbl.get("name") if isinstance(lbl, dict) else "") for lbl in labels_raw]
         body_l = body.lower()
         explicit_justification = "## policy change justification" in body_l
         narrative_justification = (

@@ -130,3 +130,26 @@ def test_policy_change_allowed_with_narrative_body(
     changed, files = enforce_policy_drift("main", event, allow_flag=False)
     assert changed is True
     assert "tools/testing/policy/runtime_baselines.yaml" in files
+
+
+def test_policy_change_non_pr_event_does_not_require_justification(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    import subprocess
+
+    def fake_run(*_args, **_kwargs):
+        return subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout="tools/testing/policy/runtime_baselines.yaml\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    event = tmp_path / "event.json"
+    event.write_text(json.dumps({"push": {"ref": "refs/heads/main"}}), encoding="utf-8")
+
+    changed, files = enforce_policy_drift("main", event, allow_flag=False)
+    assert changed is True
+    assert "tools/testing/policy/runtime_baselines.yaml" in files
