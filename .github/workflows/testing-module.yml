@@ -1,8 +1,6 @@
 name: testing-module
 
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:

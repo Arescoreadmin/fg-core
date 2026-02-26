@@ -1,0 +1,72 @@
+name: fg-required
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: fg-required-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  fg-required:
+    name: fg-required
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: setup python + cache pip
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            constraints.txt
+            pyproject.toml
+
+      - name: verify workflow filename uniqueness
+        run: |
+          test -f .github/workflows/fg-required.yml
+          test ! -f .github/workflows/fg-required.yaml
+          test ! -f .github/workflows/FG-required.yml
+
+      - name: run hermetic tool tests
+        # tools_minimal intentionally uses unittest to avoid pytest bootstrap/plugin imports
+        run: python -m unittest -q tests.tools_minimal.test_fg_required_minimal
+
+      - name: create venv
+        run: python -m venv .venv
+
+      - name: install deps (pinned)
+        run: make venv
+
+
+      - name: run required-tests gate resolution tests
+        run: .venv/bin/python -m unittest -q tests.tools_minimal.test_required_tests_gate_resolution
+
+      - name: run fg-required
+        timeout-minutes: 8
+        run: .venv/bin/python tools/testing/harness/fg_required.py --global-budget-seconds 480 --lane-timeout-seconds 480
+
+      - name: verify required artifacts
+        run: |
+          test -f artifacts/testing/fg-required-summary.json
+          test -f artifacts/testing/fg-required-summary.md
+
+      - name: upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fg-required-artifacts
+          path: artifacts/testing
+          if-no-files-found: error
