@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
 
 from fastapi.testclient import TestClient
 
@@ -40,6 +41,7 @@ def _payload() -> dict[str, object]:
         "artifact_hashes": {"lane.log": "a" * 64},
         "artifact_paths": ["artifacts/testing/lane.log"],
         "summary_md": "ok",
+        "policy_change_event": True,
     }
 
 
@@ -51,11 +53,15 @@ def _canonical_for_signing(payload: dict[str, object], tenant_id: str) -> dict[s
         "started_at": payload["started_at"],
         "artifact_hashes": payload["artifact_hashes"],
     }
-    run_id = hashlib.sha256(json.dumps(seed, sort_keys=True).encode("utf-8")).hexdigest()[:32]
+    canonical_hash = hashlib.sha256(json.dumps(seed, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    import uuid
+    run_id = str(uuid.uuid5(uuid.NAMESPACE_URL, canonical_hash))
     c = dict(payload)
     c["tenant_id"] = tenant_id
     c["status"] = str(payload["status"]).lower()
+    c["canonical_payload_hash"] = canonical_hash
     c["run_id"] = run_id
+    c["policy_change_event"] = bool(c.get("policy_change_event", False))
     return c
 
 
@@ -77,6 +83,7 @@ def test_register_and_list_runs(build_app, monkeypatch) -> None:
     )
     assert r.status_code == 200
     run_id = r.json()["run_id"]
+    assert re.match(r"^[0-9a-f-]{36}$", run_id)
 
     listed = client.get("/control/testing/runs", headers={"X-API-Key": key})
     assert listed.status_code == 200

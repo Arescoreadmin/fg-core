@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS testing_runs (
   triggered_by TEXT NOT NULL,
   triage_schema_version TEXT NOT NULL DEFAULT '2.0',
   summary_md TEXT NOT NULL DEFAULT '',
+  canonical_payload_hash CHAR(64) NOT NULL DEFAULT '',
   triage_category_counts JSONB NOT NULL DEFAULT '{}'::jsonb,
   request_signature TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

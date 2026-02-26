@@ -2,11 +2,37 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlTowerRunTriggerRequest",
   "type": "object",
-  "required": ["lane", "ref"],
+  "required": [
+    "lane",
+    "ref"
+  ],
   "properties": {
-    "lane": {"type": "string", "enum": ["fg-full", "fg-flake-detect", "fg-security", "fg-contract", "fg-fast"]},
-    "ref": {"type": "string", "minLength": 1, "maxLength": 255},
-    "tenant_id": {"type": ["string", "null"], "maxLength": 64}
+    "lane": {
+      "type": "string",
+      "enum": [
+        "fg-full",
+        "fg-flake-detect",
+        "fg-security",
+        "fg-contract",
+        "fg-fast"
+      ]
+    },
+    "ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "tenant_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 64
+    },
+    "policy_change_event": {
+      "type": "boolean",
+      "default": false
+    }
   },
   "additionalProperties": false
 }

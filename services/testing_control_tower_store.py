@@ -38,10 +38,15 @@ def ensure_tables() -> None:
               artifact_hashes TEXT NOT NULL,
               artifact_paths TEXT NOT NULL,
               summary_md TEXT NOT NULL,
+              canonical_payload_hash TEXT NOT NULL,
               created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
             )
             """
         )
+        cols = {r[1] for r in con.execute("PRAGMA table_info(testing_runs)").fetchall()}
+        if "canonical_payload_hash" not in cols:
+            con.execute("ALTER TABLE testing_runs ADD COLUMN canonical_payload_hash TEXT NOT NULL DEFAULT ''")
+
         con.execute(
             """
             CREATE TABLE IF NOT EXISTS testing_run_audit (
@@ -102,8 +107,8 @@ def register_run(payload: dict[str, Any], *, actor: str, policy_change_event: bo
             INSERT INTO testing_runs (
               run_id, tenant_id, lane, status, started_at, finished_at, duration_ms,
               commit_sha, ref, triggered_by, triage_schema_version, triage_category_counts,
-              artifact_hashes, artifact_paths, summary_md
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              artifact_hashes, artifact_paths, summary_md, canonical_payload_hash
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 payload["run_id"],
@@ -121,6 +126,7 @@ def register_run(payload: dict[str, Any], *, actor: str, policy_change_event: bo
                 json.dumps(payload.get("artifact_hashes", {}), sort_keys=True),
                 json.dumps(payload.get("artifact_paths", [])),
                 payload.get("summary_md", ""),
+                payload.get("canonical_payload_hash", ""),
             ),
         )
         audit_details = {
@@ -128,6 +134,7 @@ def register_run(payload: dict[str, Any], *, actor: str, policy_change_event: bo
             "status": payload["status"],
             "commit_sha": payload["commit_sha"],
             "policy_change_event": bool(policy_change_event),
+            "canonical_payload_hash": payload.get("canonical_payload_hash", ""),
         }
         con.execute(
             "INSERT INTO testing_run_audit (run_id, tenant_id, action, actor, details) VALUES (?, ?, ?, ?, ?)",
@@ -249,4 +256,5 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "artifact_hashes": json.loads(row["artifact_hashes"]),
         "artifact_paths": json.loads(row["artifact_paths"]),
         "summary_md": row["summary_md"],
+        "canonical_payload_hash": row["canonical_payload_hash"],
     }

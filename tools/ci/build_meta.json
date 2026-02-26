@@ -1,14 +1,14 @@
 {
   "data": [
     {
-      "build_timestamp_utc": "2026-02-26T00:36:42.783375+00:00",
-      "ci_runner_id": "c2f24402de24",
-      "git_sha": "721290493329c17315620a290cfef538aa224bd6",
-      "inventory_sha256": "5bda2c5dff6fbd433427047236359e171029346aadf47c9b7010cdb6ff214d8a",
+      "build_timestamp_utc": "2026-02-26T12:33:37.762641+00:00",
+      "ci_runner_id": "a34ea5459fb0",
+      "git_sha": "b74fc6092d51ee768a8f31d7ba5871a8e468a736",
+      "inventory_sha256": "d2ecb9f99072c037f7064fdebccbd048777b3f8f5a19176d4919e7343f7252a1",
       "tool": "tools/ci/check_route_inventory.py",
       "tool_version": "v1"
     }
   ],
-  "generated_at": "2026-02-26T00:36:42.787072+00:00",
+  "generated_at": "2026-02-26T12:33:37.767087+00:00",
   "schema_version": "v1"
 }

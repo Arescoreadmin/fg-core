@@ -2133,13 +2133,12 @@
     {
       "dependency_categories": [
         "auth",
-        "rate",
         "tenant"
       ],
       "file": "api/testing_control_tower.py",
       "method": "GET",
-      "path": "/control-plane/v2/testing/lanes",
-      "plane_id": "control",
+      "path": "/control/testing/health",
+      "plane_id": "unmapped",
       "scoped": true,
       "scopes": [
         "control-plane:read"
@@ -2150,13 +2149,28 @@
     {
       "dependency_categories": [
         "auth",
-        "rate",
+        "tenant"
+      ],
+      "file": "api/testing_control_tower.py",
+      "method": "GET",
+      "path": "/control/testing/runs",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "control-plane:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
         "tenant"
       ],
       "file": "api/testing_control_tower.py",
       "method": "POST",
-      "path": "/control-plane/v2/testing/runs",
-      "plane_id": "control",
+      "path": "/control/testing/runs/register",
+      "plane_id": "unmapped",
       "scoped": true,
       "scopes": [
         "control-plane:admin"
@@ -2167,13 +2181,12 @@
     {
       "dependency_categories": [
         "auth",
-        "rate",
         "tenant"
       ],
       "file": "api/testing_control_tower.py",
       "method": "GET",
-      "path": "/control-plane/v2/testing/runs/{run_id}/artifacts",
-      "plane_id": "control",
+      "path": "/control/testing/runs/{run_id}",
+      "plane_id": "unmapped",
       "scoped": true,
       "scopes": [
         "control-plane:read"
@@ -3557,6 +3570,6 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-02-26T00:35:53.127551+00:00",
+  "generated_at": "2026-02-26T12:33:37.736161+00:00",
   "schema_version": "v1"
 }

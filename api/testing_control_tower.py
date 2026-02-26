@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import os
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -29,6 +30,7 @@ _REQUIRED_FIELDS = {
     "artifact_hashes",
     "artifact_paths",
     "summary_md",
+    "policy_change_event",
 }
 
 
@@ -49,8 +51,9 @@ def _internal_guard(request: Request) -> None:
 
 
 def _canonical_payload(body: dict[str, Any], tenant_id: str) -> dict[str, Any]:
+    optional_fields = {"policy_change_event"}
     unknown = sorted(set(body) - _REQUIRED_FIELDS)
-    missing = sorted(_REQUIRED_FIELDS - set(body))
+    missing = sorted((_REQUIRED_FIELDS - optional_fields) - set(body))
     if unknown or missing:
         raise HTTPException(status_code=400, detail={"missing": missing, "unknown": unknown})
 
@@ -68,6 +71,7 @@ def _canonical_payload(body: dict[str, Any], tenant_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="commit_sha_mismatch")
 
     canonical = dict(body)
+    canonical.setdefault("policy_change_event", False)
     canonical["tenant_id"] = tenant_id
     canonical["status"] = status_val
 
@@ -79,7 +83,9 @@ def _canonical_payload(body: dict[str, Any], tenant_id: str) -> dict[str, Any]:
         "started_at": canonical["started_at"],
         "artifact_hashes": canonical["artifact_hashes"],
     }
-    canonical["run_id"] = hashlib.sha256(json.dumps(seed, sort_keys=True).encode("utf-8")).hexdigest()[:32]
+    canonical_hash = hashlib.sha256(json.dumps(seed, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    canonical["canonical_payload_hash"] = canonical_hash
+    canonical["run_id"] = str(uuid.uuid5(uuid.NAMESPACE_URL, canonical_hash))
     return canonical
 
 

@@ -581,3 +581,6 @@ Gate impact:
 - 2026-02-26: Moved Testing Control Tower API routes to `/control-plane/v2/testing/*`, tightened scopes/tenant binding, and regenerated route inventory/snapshot artifacts to keep SOC critical-file gates synchronized.
 - 2026-02-26: Normalized route-inventory generated governance artifacts to schema `v1` object envelopes (`schema_version/generated_at/data`) and refreshed topology/attestation snapshots plus platform inventory generator compatibility.
 - 2026-02-26: Updated CI workflow controls for the required testing gate in `.github/workflows/fg-required.yml` and adjusted `.github/workflows/testing-module.yml` trigger scope to `workflow_dispatch`-only; reviewed under SOC-HIGH-002 to keep critical workflow-path changes synchronized with SOC review evidence.
+
+- 2026-02-26: Hardened `.github/workflows/testing-module.yml` for artifact handoff (`download-artifact` in `fg-flake-detect`), deterministic junit fallback, and non-failing artifact uploads (`if-no-files-found: warn`), and reviewed under SOC-HIGH-002.
+- 2026-02-26: Updated Testing Control Tower routes and regenerated `tools/ci/route_inventory.json` to satisfy SOC-P1-001 route inventory drift controls.

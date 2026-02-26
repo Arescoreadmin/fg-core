@@ -2,22 +2,108 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlTowerRun",
   "type": "object",
-  "required": ["run_id", "lane", "status", "started_at", "duration_ms", "commit_sha", "ref", "triggered_by", "triage_schema_version", "triage_category_counts", "artifact_hashes", "artifact_paths", "summary_md"],
+  "required": [
+    "run_id",
+    "lane",
+    "status",
+    "started_at",
+    "duration_ms",
+    "commit_sha",
+    "ref",
+    "triggered_by",
+    "triage_schema_version",
+    "triage_category_counts",
+    "artifact_hashes",
+    "artifact_paths",
+    "summary_md",
+    "canonical_payload_hash"
+  ],
   "properties": {
-    "run_id": {"type": "string", "format": "uuid"},
-    "lane": {"type": "string", "enum": ["fg-fast", "fg-contract", "fg-security", "fg-full", "fg-flake-detect"]},
-    "status": {"type": "string", "enum": ["queued", "running", "passed", "failed", "canceled"]},
-    "started_at": {"type": "string", "format": "date-time"},
-    "finished_at": {"type": ["string", "null"], "format": "date-time"},
-    "duration_ms": {"type": "integer", "minimum": 0},
-    "commit_sha": {"type": "string", "pattern": "^[a-f0-9]{7,40}$"},
-    "ref": {"type": "string", "minLength": 1, "maxLength": 255},
-    "triggered_by": {"type": "string", "minLength": 1, "maxLength": 128},
-    "triage_schema_version": {"type": "string", "pattern": "^2\\.[0-9]+$"},
-    "triage_category_counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
-    "artifact_hashes": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[a-f0-9]{64}$"}},
-    "artifact_paths": {"type": "array", "items": {"type": "string"}},
-    "summary_md": {"type": "string", "maxLength": 5000}
+    "run_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "lane": {
+      "type": "string",
+      "enum": [
+        "fg-fast",
+        "fg-contract",
+        "fg-security",
+        "fg-full",
+        "fg-flake-detect"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "running",
+        "passed",
+        "failed",
+        "canceled"
+      ]
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "commit_sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{7,40}$"
+    },
+    "ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "triggered_by": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "triage_schema_version": {
+      "type": "string",
+      "pattern": "^2\\.[0-9]+$"
+    },
+    "triage_category_counts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "artifact_hashes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    },
+    "artifact_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "summary_md": {
+      "type": "string",
+      "maxLength": 5000
+    },
+    "canonical_payload_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
   },
   "additionalProperties": false
 }

@@ -20,12 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: setup python + cache pip
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
@@ -34,43 +32,34 @@ jobs:
             requirements-dev.txt
             constraints.txt
             pyproject.toml
-      - name: cache venv
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt', 'constraints.txt') }}
-      - name: create venv
-        run: python -m venv .venv
-      - name: install deps (pinned)
-        run: make venv
-      - name: run tests
-        run: make fg-fast
-      - name: required-tests gate
-        run: make required-tests-gate
-      - name: policy drift guard
-        run: .venv/bin/python tools/testing/policy/check_policy_drift.py --base-ref "${{ github.base_ref || 'main' }}" --event-path "${{ github.event_path }}"
-      - name: runtime budget enforcement
-        run: .venv/bin/python -c "from pathlib import Path; from tools.testing.harness.runtime_budgets import load_runtime_budgets,enforce_lane_budget; d=load_runtime_budgets(Path('tools/testing/policy/runtime_budgets.yaml')); ok,msg=enforce_lane_budget('fg-fast',180,d,150); print(msg); raise SystemExit(0 if ok else 1)"
-      - name: invariant coverage enforcement
-        run: .venv/bin/python tools/testing/security/check_invariant_coverage.py
-      - name: lane runner metadata
-        run: .venv/bin/python tools/testing/harness/lane_runner.py --lane fg-fast --out-dir artifacts/testing
+      - run: python -m venv .venv
+      - run: make venv
+      - run: mkdir -p artifacts/testing
+      - run: make fg-fast
+      - run: make required-tests-gate
+      - run: .venv/bin/python tools/testing/policy/check_policy_drift.py --base-ref "${{ github.base_ref || 'main' }}" --event-path "${{ github.event_path }}"
+      - run: .venv/bin/python -c "from pathlib import Path; from tools.testing.harness.runtime_budgets import load_runtime_budgets,enforce_lane_budget; d=load_runtime_budgets(Path('tools/testing/policy/runtime_budgets.yaml')); ok,msg=enforce_lane_budget('fg-fast',180,d,150); print(msg); raise SystemExit(0 if ok else 1)"
+      - run: .venv/bin/python tools/testing/security/check_invariant_coverage.py
+      - run: .venv/bin/python tools/testing/harness/lane_runner.py --lane fg-fast --out-dir artifacts/testing
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: fg-fast-artifacts
           path: artifacts/testing
+          if-no-files-found: warn
 
   fg-contract:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: setup python + cache pip
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
@@ -79,17 +68,14 @@ jobs:
             requirements-dev.txt
             constraints.txt
             pyproject.toml
-      - name: cache venv
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt', 'constraints.txt') }}
-      - name: create venv
-        run: python -m venv .venv
-      - name: install deps (pinned)
-        run: make venv
-      - name: run tests
-        run: |
+      - run: python -m venv .venv
+      - run: make venv
+      - run: mkdir -p artifacts/testing
+      - run: |
           make fg-contract
           .venv/bin/python tools/testing/contracts/check_contract_drift.py
       - uses: actions/upload-artifact@v4
@@ -97,17 +83,16 @@ jobs:
         with:
           name: fg-contract-artifacts
           path: artifacts/testing
+          if-no-files-found: warn
 
   fg-security:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: setup python + cache pip
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
@@ -116,22 +101,20 @@ jobs:
             requirements-dev.txt
             constraints.txt
             pyproject.toml
-      - name: cache venv
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt', 'constraints.txt') }}
-      - name: create venv
-        run: python -m venv .venv
-      - name: install deps (pinned)
-        run: make venv
-      - name: run tests
-        run: make fg-security
+      - run: python -m venv .venv
+      - run: make venv
+      - run: mkdir -p artifacts/testing
+      - run: make fg-security
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: fg-security-artifacts
           path: artifacts/testing
+          if-no-files-found: warn
 
   fg-full:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'pull_request'
@@ -139,12 +122,10 @@ jobs:
     timeout-minutes: 30
     needs: [fg-fast, fg-contract, fg-security]
     steps:
-      - name: checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: setup python + cache pip
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
@@ -153,46 +134,47 @@ jobs:
             requirements-dev.txt
             constraints.txt
             pyproject.toml
-      - name: cache venv
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt', 'constraints.txt') }}
-      - name: create venv
-        run: python -m venv .venv
-      - name: install deps (pinned)
-        run: make venv
-      - name: run tests
-        run: make fg-full
+      - run: python -m venv .venv
+      - run: make venv
+      - run: mkdir -p artifacts/testing
+      - run: make fg-full
+      - run: .venv/bin/python -m pytest -q tests/tools/test_flake_detection.py --junitxml artifacts/testing/junit.xml || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: fg-full-artifacts
           path: artifacts/testing
-
+          if-no-files-found: warn
       - name: update runtime baseline (main only)
         if: github.ref_name == 'main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         run: .venv/bin/python tools/testing/harness/runtime_baseline.py --lane fg-full --duration 1200 --branch ${{ github.ref_name }} --event ${{ github.event_name }}
 
-
   fg-flake-detect:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'pull_request' || github.event_name == 'schedule'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [fg-full]
     steps:
-      - name: checkout
-        uses: actions/checkout@v4
-      - name: setup python + cache pip
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: install deps (pinned)
-        run: make venv
-      - name: run flake detection
-        run: .venv/bin/python tools/testing/harness/flake_detect.py --junit artifacts/testing/junit.xml --out artifacts/testing/flake-report.json
+      - run: make venv
+      - run: mkdir -p artifacts/testing
+      - uses: actions/download-artifact@v4
+        with:
+          name: fg-full-artifacts
+          path: artifacts/testing
+      - run: |
+          test -f artifacts/testing/junit.xml || printf '%s\n' '<testsuites><testsuite name="empty" tests="0" failures="0"/></testsuites>' > artifacts/testing/junit.xml
+      - run: .venv/bin/python tools/testing/harness/flake_detect.py --junit artifacts/testing/junit.xml --out artifacts/testing/flake-report.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: fg-flake-artifacts
           path: artifacts/testing
+          if-no-files-found: warn

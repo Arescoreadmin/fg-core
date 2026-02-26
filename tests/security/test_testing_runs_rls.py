@@ -53,11 +53,15 @@ def _canonical(payload: dict[str, object], tenant: str) -> dict[str, object]:
         "started_at": payload["started_at"],
         "artifact_hashes": payload["artifact_hashes"],
     }
-    run_id = hashlib.sha256(json.dumps(seed, sort_keys=True).encode("utf-8")).hexdigest()[:32]
+    canonical_hash = hashlib.sha256(json.dumps(seed, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    import uuid
+    run_id = str(uuid.uuid5(uuid.NAMESPACE_URL, canonical_hash))
     c = dict(payload)
     c["tenant_id"] = tenant
     c["status"] = str(payload["status"]).lower()
+    c["canonical_payload_hash"] = canonical_hash
     c["run_id"] = run_id
+    c["policy_change_event"] = bool(c.get("policy_change_event", False))
     return c
 
 
