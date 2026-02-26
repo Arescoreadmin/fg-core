@@ -1,6 +1,5 @@
 {
-  "generated_by": "tools/ci/check_route_inventory.py",
-  "routes": [
+  "data": [
     {
       "dependency_categories": [],
       "file": "api/main.py",
@@ -3558,5 +3557,6 @@
       "tenant_bound": false
     }
   ],
-  "schema_version": 1
+  "generated_at": "2026-02-26T00:35:53.127551+00:00",
+  "schema_version": "v1"
 }
