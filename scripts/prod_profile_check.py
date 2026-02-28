@@ -19,6 +19,7 @@ SOC compatibility:
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,7 +28,6 @@ from typing import Any
 
 REPO = Path(__file__).resolve().parents[1]
 DEFAULT_COMPOSE = REPO / "docker-compose.yml"
-
 
 REQUIRED_KEYS = [
     "FG_DOS_GUARD_ENABLED",
@@ -90,14 +90,38 @@ class ProductionProfileChecker:
             "resolved_core_service": rep.resolved_core_service,
         }
 
+    def _compose_profiles(self) -> list[str]:
+        """
+        Compose profiles for docker compose config.
+
+        Why this exists:
+        - Your compose hides frostgate-core behind profile 'core'.
+        - docker compose config --services without profiles will NOT include it.
+        - CI and pre-commit often run without COMPOSE_PROFILES set.
+
+        Behavior:
+        - If COMPOSE_PROFILES is unset/empty -> default to ['core'].
+        - If set -> support comma and/or whitespace separated list.
+        """
+        raw = (os.getenv("COMPOSE_PROFILES") or "").strip()
+        if not raw:
+            return ["core"]
+        parts = [p.strip() for p in re.split(r"[,\s]+", raw) if p.strip()]
+        return parts or ["core"]
+
     def _run_compose_config(self) -> dict[str, Any]:
         """
         Use docker compose to render the fully merged configuration.
         This is the only reliable way to resolve env_file layering + interpolation.
         """
+        cmd = ["docker", "compose", "-f", str(self.compose_path)]
+        for prof in self._compose_profiles():
+            cmd += ["--profile", prof]
+        cmd += ["config"]
+
         try:
             out = subprocess.check_output(
-                ["docker", "compose", "-f", str(self.compose_path), "config"],
+                cmd,
                 cwd=REPO,
                 text=True,
             )

@@ -164,6 +164,10 @@ def _validate_plane_snapshot(
     unknown_warnings: list[str],
     reject_unknown: bool,
 ) -> None:
+    # Governance-first plane schema: do NOT require nor consume deprecated PlaneDef internals.
+    #
+    # We still *tolerate* legacy keys (mount_flag/evidence/required_route_invariants) by
+    # including them in `plane_allowed`, but they are not used for inventory decisions.
     plane_allowed = {
         "allowed_dependency_categories",
         "auth_class",
@@ -176,10 +180,11 @@ def _validate_plane_snapshot(
         "public_routes",
         "required_ci_gates",
         "required_make_targets",
-        "required_route_invariants",
         "route_prefixes",
+        # tolerated legacy keys (compat-only, not consumed):
         "mount_flag",
         "evidence",
+        "required_route_invariants",
     }
     route_allowed = {
         "class_name",
@@ -206,11 +211,7 @@ def _validate_plane_snapshot(
             plane["required_make_targets"], f"{context}.required_make_targets"
         )
 
-        for k in (
-            "allowed_dependency_categories",
-            "required_ci_gates",
-            "required_route_invariants",
-        ):
+        for k in ("allowed_dependency_categories", "required_ci_gates"):
             if k in plane:
                 _require_list_of_strings(plane[k], f"{context}.{k}")
 
@@ -503,22 +504,13 @@ def main(argv: list[str] | None = None) -> int:
                 }
             )
 
-        evidence = sorted(
-            [
-                {
-                    "schema": str(item.get("schema_path", "")),
-                    "generator": str(item.get("generator_script", "")),
-                }
-                for item in (plane.get("evidence") or [])
-                if isinstance(item, dict)
-            ],
-            key=lambda x: (x["schema"], x["generator"]),
-        )
-
+        # Governance-first: do NOT consume deprecated PlaneDef internals.
         compat = {
-            "deprecated_mount_flag": str(plane.get("mount_flag", "n/a")),
-            "deprecated_evidence": evidence,
-            "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth",
+            "deprecation_notice": (
+                "platform inventory is derived from canonical governance artifacts. "
+                "Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) "
+                "are ignored even if present in snapshots."
+            )
         }
 
         route_records_by_plane[pid] = []
@@ -526,9 +518,7 @@ def main(argv: list[str] | None = None) -> int:
             {
                 "plane_id": pid,
                 "route_prefixes": route_prefixes,
-                "mount_flag": compat["deprecated_mount_flag"],
                 "required_make_targets": required_targets,
-                "evidence": compat["deprecated_evidence"],
                 "compat": compat,
             }
         )
@@ -650,7 +640,10 @@ def main(argv: list[str] | None = None) -> int:
         vol_payload["governance"].update(
             {
                 "topology_sha256": topology_sha,
-                "topology_sha256_note": "Content hashes of plane_registry_snapshot.json, route_inventory.json, contract_routes.json.",
+                "topology_sha256_note": (
+                    "Content hashes of plane_registry_snapshot.json, route_inventory.json, "
+                    "contract_routes.json."
+                ),
                 "attestation_sha256": attestation_sha,
                 "build_meta": build_meta,
             }
@@ -669,7 +662,7 @@ def main(argv: list[str] | None = None) -> int:
     inv_md = ["# Platform Inventory", "", "## Planes"]
     for plane in det_payload["planes"]:
         inv_md.append(
-            f"- `{plane['plane_id']}` flags=`{plane['mount_flag']}` targets={', '.join(plane['required_make_targets'])}"
+            f"- `{plane['plane_id']}` targets={', '.join(plane['required_make_targets'])}"
         )
     inv_md += ["", "## Enterprise readiness checklist status"]
     for k, v in sorted(readiness.items()):

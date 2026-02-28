@@ -148,12 +148,8 @@
   "planes": [
     {
       "compat": {
-        "deprecated_evidence": [],
-        "deprecated_mount_flag": "n/a",
-        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+        "deprecation_notice": "platform inventory is derived from canonical governance artifacts. Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) are ignored even if present in snapshots."
       },
-      "evidence": [],
-      "mount_flag": "n/a",
       "plane_id": "agent",
       "required_make_targets": [
         "agent-unit"
@@ -164,12 +160,8 @@
     },
     {
       "compat": {
-        "deprecated_evidence": [],
-        "deprecated_mount_flag": "n/a",
-        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+        "deprecation_notice": "platform inventory is derived from canonical governance artifacts. Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) are ignored even if present in snapshots."
       },
-      "evidence": [],
-      "mount_flag": "n/a",
       "plane_id": "ai",
       "required_make_targets": [
         "ai-plane-spot"
@@ -181,12 +173,8 @@
     },
     {
       "compat": {
-        "deprecated_evidence": [],
-        "deprecated_mount_flag": "n/a",
-        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+        "deprecation_notice": "platform inventory is derived from canonical governance artifacts. Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) are ignored even if present in snapshots."
       },
-      "evidence": [],
-      "mount_flag": "n/a",
       "plane_id": "connector",
       "required_make_targets": [
         "check-connectors-rls"
@@ -201,12 +189,8 @@
     },
     {
       "compat": {
-        "deprecated_evidence": [],
-        "deprecated_mount_flag": "n/a",
-        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+        "deprecation_notice": "platform inventory is derived from canonical governance artifacts. Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) are ignored even if present in snapshots."
       },
-      "evidence": [],
-      "mount_flag": "n/a",
       "plane_id": "control",
       "required_make_targets": [
         "control-plane-check",
@@ -235,12 +219,8 @@
     },
     {
       "compat": {
-        "deprecated_evidence": [],
-        "deprecated_mount_flag": "n/a",
-        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+        "deprecation_notice": "platform inventory is derived from canonical governance artifacts. Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) are ignored even if present in snapshots."
       },
-      "evidence": [],
-      "mount_flag": "n/a",
       "plane_id": "data",
       "required_make_targets": [
         "soc-invariants"
@@ -256,12 +236,8 @@
     },
     {
       "compat": {
-        "deprecated_evidence": [],
-        "deprecated_mount_flag": "n/a",
-        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+        "deprecation_notice": "platform inventory is derived from canonical governance artifacts. Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) are ignored even if present in snapshots."
       },
-      "evidence": [],
-      "mount_flag": "n/a",
       "plane_id": "evidence",
       "required_make_targets": [
         "audit-chain-verify"
@@ -276,12 +252,8 @@
     },
     {
       "compat": {
-        "deprecated_evidence": [],
-        "deprecated_mount_flag": "n/a",
-        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+        "deprecation_notice": "platform inventory is derived from canonical governance artifacts. Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) are ignored even if present in snapshots."
       },
-      "evidence": [],
-      "mount_flag": "n/a",
       "plane_id": "security",
       "required_make_targets": [
         "security-regression-gates"
@@ -293,12 +265,8 @@
     },
     {
       "compat": {
-        "deprecated_evidence": [],
-        "deprecated_mount_flag": "n/a",
-        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+        "deprecation_notice": "platform inventory is derived from canonical governance artifacts. Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) are ignored even if present in snapshots."
       },
-      "evidence": [],
-      "mount_flag": "n/a",
       "plane_id": "ui",
       "required_make_targets": [
         "test-quality-gate"

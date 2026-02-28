@@ -310,3 +310,14 @@ Format: `Risk | File | Description | Exploit Path | Fix Strategy`
 
 ### Rollback
 - Revert the above files to prior commit if unexpected enforcement behavior occurs.
+
+## 2026-02-28 — Governance artifact refresh
+
+- Updated: tools/ci/route_inventory.json
+- Reason: regenerated runtime route inventory (AST-derived) to reflect current routes.
+- Evidence:
+  - route_inventory.json sha256: e5c637c65d3248e20ff4a34950f03bbe9494fcabca2a246ed9af346c433f8630
+  - topology.sha256 entries:
+    - plane_registry_snapshot.json: 090eec7430a6a27ba18f6043a396e108292ec72eda78da6478e52ceee034aaea
+    - route_inventory.json: e5c637c65d3248e20ff4a34950f03bbe9494fcabca2a246ed9af346c433f8630
+    - contract_routes.json: 53b62b172162b69baa75348306371186f5e6d32d0663854c6c97d2d327a98b63
