@@ -2268,6 +2268,91 @@
         "auth",
         "tenant"
       ],
+      "file": "api/control_tower_snapshot.py",
+      "method": "GET",
+      "path": "/control-tower/snapshot",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/testing_control_tower.py",
+      "method": "GET",
+      "path": "/control/testing/health",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/testing_control_tower.py",
+      "method": "GET",
+      "path": "/control/testing/runs",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/testing_control_tower.py",
+      "method": "POST",
+      "path": "/control/testing/runs/register",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:admin"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/testing_control_tower.py",
+      "method": "GET",
+      "path": "/control/testing/runs/{run_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
       "file": "api/decisions.py",
       "method": "GET",
       "path": "/decisions",
@@ -3546,6 +3631,24 @@
         "rate",
         "tenant"
       ],
+      "file": "api/ui_testing_control_tower.py",
+      "method": "GET",
+      "path": "/ui/dash/testing-control-tower",
+      "plane": "ui",
+      "plane_id": "ui",
+      "scoped": true,
+      "scopes": [
+        "ui:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
       "file": "api/ui_dashboards.py",
       "method": "GET",
       "path": "/ui/decision/{decision_id}",
@@ -3711,7 +3814,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-02-25T18:59:26.589845+00:00",
+  "generated_at": "2026-02-28T16:26:47.645247+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

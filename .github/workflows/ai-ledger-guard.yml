@@ -1,0 +1,42 @@
+name: AI Ledger Guard (PR_FIX_LOG)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  pr_fix_log_guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history for diff)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Fetch base
+        run: |
+          git fetch --no-tags --prune --depth=200 origin "${{ github.base_ref }}"
+
+      - name: Enforce PR_FIX_LOG update (or explicit override)
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          BASE="origin/${{ github.base_ref }}"
+          HEAD="${{ github.sha }}"
+
+          # If PR body contains override marker, allow it (still visible for review).
+          if printf "%s" "${PR_BODY:-}" | grep -q "NO_FIX_LOG_REQUIRED:"; then
+            echo "Override marker found in PR body: NO_FIX_LOG_REQUIRED:"
+            exit 0
+          fi
+
+          python tools/ci/guard_pr_fix_log.py --base "$BASE" --head "$HEAD"

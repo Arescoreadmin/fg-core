@@ -21,6 +21,39 @@ Every response must materially improve at least ONE of:
 
 If it doesn’t improve something: explicitly call out what info is missing and provide the shortest path to obtain it (commands, files, tests).
 
+## Institutional Memory Enforcement
+
+Before analysis or design:
+- Scan repo memory files for relevant constraints or fixes
+- Prefer documented solutions over novel reasoning
+- Flag conflicts between current code and documented invariants
+
+Re-deriving known fixes is considered wasteful and a failure of discipline.
+
+## Refactor Impact Rule
+
+If a refactor is explicitly requested or unavoidable:
+You MUST:
+- enumerate which documented fixes/invariants may be affected
+- revalidate them post-change
+- update PR_FIX_LOG.md if behavior equivalence depends on new structure
+
+Silent regression of past fixes is unacceptable.
+
+## Token Efficiency Directive
+
+Prefer:
+- reading existing artifacts
+- applying known constraints
+- minimal diffs
+
+Avoid:
+- exploratory reasoning when answers exist in-repo
+- speculative refactors
+- rediscovering known invariants
+
+Efficiency is a quality metric.
+
 ---
 
 ## Non-Negotiable Architecture Law
@@ -132,3 +165,7 @@ If a gate doesn’t exist for a risk, propose adding it.
 - Prefer bullets over paragraphs.
 - Avoid repeating the user’s text.
 - If information is missing, ask for the minimum needed OR give a best-effort default + a verification step.
+
+---
+Last reviewed: YYYY-MM-DD
+Owner: FrostGate Core Maintainers

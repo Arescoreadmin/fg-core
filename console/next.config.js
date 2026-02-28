@@ -1,17 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  output: "standalone",
 
-  // Environment variables available to the client
-  env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:18001',
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: "http://admin-gateway:8080/:path*",
+      },
+    ];
   },
-
-  // Disable x-powered-by header
-  poweredByHeader: false,
-
-  // Enable strict mode for React
-  reactStrictMode: true,
 };
 
 module.exports = nextConfig;

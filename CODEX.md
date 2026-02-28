@@ -1,5 +1,20 @@
 # CODEX.md — FrostGate Core (Enterprise Production Contract for Codex)
 
+## Mandatory Repository Memory Protocol
+
+Before proposing or implementing any change, Codex MUST:
+1) Read `CODEX.md`
+2) Read `CLAUDE.md`
+3) Read `docs/ai/PR_FIX_LOG.md` (if present)
+4) Read `docs/ai/GOTCHAS.md` (if present)
+
+If a relevant prior fix, invariant, or constraint exists:
+- Reuse it
+- Cite it implicitly by complying with it
+- Do NOT re-derive the same solution
+
+Failure to consult repo memory is considered a correctness failure.
+
 ## Output Rule (Hard)
 Codex must return ONLY:
 - The requested artifact (unified diff, full new file, tests, config, migration), OR
@@ -98,3 +113,30 @@ Backward Compatibility:
 Migration/Rollback Plan:
 Residual Risks:
 Competitive/Moat Impact:
+
+## Fix Persistence Requirement (Hard)
+
+If a change:
+- fixes a bug
+- closes a regression
+- resolves a CI/gate failure
+- enforces a new invariant
+- hardens security or tenancy
+
+Codex MUST append a concise entry to `docs/ai/PR_FIX_LOG.md`
+using the project template.
+
+If no entry is required, explicitly state:
+NO_FIX_LOG_REQUIRED: <one-line justification>
+
+## Knowledge Hygiene
+
+When modifying behavior that intersects a prior logged fix:
+- Update the existing entry OR
+- Mark it as superseded with a reason
+
+Never leave stale or misleading fix records.
+
+---
+Last reviewed: YYYY-MM-DD
+Owner: FrostGate Core Maintainers

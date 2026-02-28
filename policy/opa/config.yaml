@@ -1,0 +1,11 @@
+services:
+  bundlesvc:
+    url: http://opa-bundles
+
+bundles:
+  frostgate:
+    service: bundlesvc
+    resource: bundle.tar.gz
+    polling:
+      min_delay_seconds: 10
+      max_delay_seconds: 30

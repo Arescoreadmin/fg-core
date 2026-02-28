@@ -29,7 +29,7 @@
   "governance": {
     "contract_count": 120,
     "contract_only": [],
-    "runtime_count": 222,
+    "runtime_count": 228,
     "runtime_only": [
       "DELETE /control-plane/v2/delegation/{delegation_id}",
       "GET /_debug/routes",
@@ -60,6 +60,10 @@
       "GET /control-plane/v2/playbooks",
       "GET /control-plane/v2/policy/pins",
       "GET /control-plane/v2/terminal/allowlist",
+      "GET /control-tower/snapshot",
+      "GET /control/testing/health",
+      "GET /control/testing/runs",
+      "GET /control/testing/runs/{run_id}",
       "GET /health/detailed",
       "GET /stats/debug",
       "GET /status",
@@ -81,6 +85,7 @@
       "GET /ui/dash/controls",
       "GET /ui/dash/forensics",
       "GET /ui/dash/posture",
+      "GET /ui/dash/testing-control-tower",
       "GET /ui/decision/{decision_id}",
       "GET /ui/decisions",
       "GET /ui/feed",
@@ -121,6 +126,7 @@
       "POST /control-plane/v2/policy/stage",
       "POST /control-plane/v2/terminal/breakglass",
       "POST /control-plane/v2/terminal/execute",
+      "POST /control/testing/runs/register",
       "POST /dev/emit",
       "POST /dev/seed",
       "POST /ui/ai/chat",
@@ -138,7 +144,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "3aa2a27e4bfe2fa196f124db186e0e3f32891916b44b513a1f905d9a0ffe1c6c",
+  "governance_fingerprint": "cb3a2b04a95e2bbc89e021f9a8912e82308f0a76480a5bb496ec2b1157179e7b",
   "planes": [
     {
       "compat": {
@@ -215,6 +221,8 @@
         "/compliance-cp",
         "/config",
         "/control-plane",
+        "/control-tower",
+        "/control/testing",
         "/dev",
         "/enterprise-controls",
         "/exceptions",
@@ -386,6 +394,10 @@
       "GET /control-plane/v2/playbooks",
       "GET /control-plane/v2/policy/pins",
       "GET /control-plane/v2/terminal/allowlist",
+      "GET /control-tower/snapshot",
+      "GET /control/testing/health",
+      "GET /control/testing/runs",
+      "GET /control/testing/runs/{run_id}",
       "GET /enterprise-controls/catalog",
       "GET /enterprise-controls/crosswalk",
       "GET /enterprise-controls/frameworks",
@@ -437,6 +449,7 @@
       "POST /control-plane/v2/policy/stage",
       "POST /control-plane/v2/terminal/breakglass",
       "POST /control-plane/v2/terminal/execute",
+      "POST /control/testing/runs/register",
       "POST /dev/emit",
       "POST /dev/seed",
       "POST /enterprise-controls/tenant-state",
@@ -532,6 +545,7 @@
       "GET /ui/dash/controls",
       "GET /ui/dash/forensics",
       "GET /ui/dash/posture",
+      "GET /ui/dash/testing-control-tower",
       "GET /ui/decision/{decision_id}",
       "GET /ui/decisions",
       "GET /ui/feed",

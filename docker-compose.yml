@@ -1,180 +1,285 @@
+name: fg-core
 services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    networks: [internal]
-    user: "999:999"
+    networks:
+    - internal
+    user: 999:999
     command:
-      [
-        "redis-server",
-        "--bind", "0.0.0.0",
-        "--protected-mode", "yes",
-        "--save", "",
-        "--appendonly", "no",
-        "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}",
-        "--rename-command", "FLUSHALL", "",
-        "--rename-command", "FLUSHDB", "",
-        "--rename-command", "CONFIG", "",
-        "--rename-command", "SHUTDOWN", "",
-        "--rename-command", "MODULE", ""
-      ]
+    - redis-server
+    - --bind
+    - 0.0.0.0
+    - --protected-mode
+    - 'yes'
+    - --save
+    - ''
+    - --appendonly
+    - 'no'
+    - --requirepass
+    - ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+    - --rename-command
+    - FLUSHALL
+    - ''
+    - --rename-command
+    - FLUSHDB
+    - ''
+    - --rename-command
+    - CONFIG
+    - ''
+    - --rename-command
+    - SHUTDOWN
+    - ''
+    - --rename-command
+    - MODULE
+    - ''
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: ["ALL"]
-    cap_add: ["SETGID", "SETUID"]
-    tmpfs:
-      - /data:rw,noexec,nosuid,size=128m,uid=999,gid=999,mode=700
-
-  nats:
-    image: nats:2.10-alpine
-    restart: unless-stopped
-    networks: [internal, public]
-    ports:
-      - "4222:4222"
-      - "8222:8222" # monitoring (DEV ONLY)
-    command: ["-js", "-m", "8222", "--auth", "${NATS_AUTH_TOKEN:?set NATS_AUTH_TOKEN in .env}"]
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: ["ALL"]
-    read_only: true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=64m,mode=700
-
-  nats-health:
-    image: curlimages/curl:8.6.0
-    restart: unless-stopped
-    networks: [internal]
-    depends_on:
-      - nats
-    entrypoint: ["sh", "-lc"]
-    command: ["sleep infinity"]
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://nats:8222/varz >/dev/null 2>&1"]
-      interval: 5s
-      timeout: 3s
-      retries: 60
-      start_period: 5s
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: ["ALL"]
-    read_only: true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=16m,mode=700
-
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    networks: [internal, public]
-    ports:
-      - "5432:5432" # DEV ONLY
-    env_file: [.env]
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-fg_user}
-      POSTGRES_DB: ${POSTGRES_DB:-frostgate}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=trust"
-    volumes:
-      - fg_pgdata:/var/lib/postgresql/data
-      - ./scripts/postgres/init_roles.sh:/docker-entrypoint-initdb.d/init_roles.sh:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h 127.0.0.1 -p 5432"]
+      test:
+      - CMD
+      - redis-cli
+      - -a
+      - ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+      - ping
       interval: 5s
       timeout: 3s
       retries: 30
       start_period: 5s
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: ["ALL"]
-    cap_add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"]
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    cap_add:
+    - SETGID
+    - SETUID
+    read_only: true
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=128m,mode=700
-
+    - /tmp:rw,noexec,nosuid,size=32m,mode=700
+    - /data:rw,noexec,nosuid,size=128m,uid=999,gid=999,mode=700
+  nats:
+    image: nats:2.10-alpine
+    restart: unless-stopped
+    networks:
+    - internal
+    command:
+    - -js
+    - --auth
+    - ${NATS_AUTH_TOKEN:?set NATS_AUTH_TOKEN in .env}
+    - -m
+    - '8222'
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wget -qO- http://127.0.0.1:8222/healthz >/dev/null 2>&1 || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    read_only: true
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,size=64m,mode=700
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    networks:
+    - internal
+    env_file:
+    - .env
+    - env/prod.env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fg_user}
+      POSTGRES_DB: ${POSTGRES_DB:-frostgate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=trust
+    volumes:
+    - fg_pgdata:/var/lib/postgresql/data
+    - ./scripts/postgres/init_roles.sh:/docker-entrypoint-initdb.d/init_roles.sh:ro
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h 127.0.0.1 -p 5432
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    cap_add:
+    - CHOWN
+    - DAC_OVERRIDE
+    - FOWNER
+    - SETGID
+    - SETUID
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,size=128m,mode=700
+  opa-bundles:
+    image: nginx:alpine
+    user: 0:0
+    read_only: true
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    cap_add:
+    - SETUID
+    - SETGID
+    - CHOWN
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,size=16m,mode=700
+    networks:
+    - internal
+    volumes:
+    - ./policy/bundles:/usr/share/nginx/html:ro
+    - ./policy/bundles/nginx.conf:/etc/nginx/nginx.conf:ro
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wget -q -T 2 -O - http://127.0.0.1/healthz >/dev/null 2>&1
+      interval: 5s
+      timeout: 2s
+      retries: 12
+      start_period: 5s
+  opa:
+    image: openpolicyagent/opa:0.64.1
+    profiles:
+    - core
+    restart: unless-stopped
+    networks:
+    - internal
+    depends_on:
+      opa-bundles:
+        condition: service_healthy
+    command:
+    - run
+    - --server
+    - --addr=0.0.0.0:8181
+    - --log-level=info
+    - --log-format=json
+    - --ready-timeout=20
+    - --config-file=/config/config.yaml
+    volumes:
+    - ./policy/opa/config.yaml:/config/config.yaml:ro
+    read_only: true
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,size=32m,mode=700
+  opa-health:
+    image: curlimages/curl:8.6.0
+    profiles:
+    - core
+    restart: unless-stopped
+    networks:
+    - internal
+    depends_on:
+      opa:
+        condition: service_started
+    command:
+    - sh
+    - -lc
+    - while true; do sleep 3600; done
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    read_only: true
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,size=8m,mode=700
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -fsS
+      - http://opa:8181/health
+      interval: 5s
+      timeout: 2s
+      retries: 30
+      start_period: 10s
+  opa-debug:
+    extends: opa
+    profiles:
+    - debug
+    ports:
+    - 127.0.0.1:8181:8181
+  frostgate-bootstrap:
+    image: alpine:3.20
+    restart: 'no'
+    networks:
+    - internal
+    entrypoint:
+    - sh
+    - -lc
+    command:
+    - /bootstrap/bootstrap.sh
+    volumes:
+    - ./scripts/bootstrap.sh:/bootstrap/bootstrap.sh:ro
+    - fg_mission:/var/lib/frostgate/mission
+    - fg_state:/var/lib/frostgate/state
+    - fg_agent_queue:/var/lib/frostgate/agent_queue
+    - fg_ring_state:/var/lib/frostgate/ring/state
+    - fg_ring_models:/var/lib/frostgate/ring/models
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    read_only: true
+    tmpfs:
+    - /tmp:rw,noexec,nosuid,size=128m,mode=700
+    - /var/lib/frostgate/pycache:rw,noexec,nosuid,size=64m,mode=700
   frostgate-migrate:
     image: frostgate-core:latest
-    env_file: [.env]
+    env_file:
+    - .env
     environment:
       FG_DB_BACKEND: ${FG_DB_BACKEND:-postgres}
       FG_DB_URL: postgresql+psycopg://${POSTGRES_APP_USER:-fg_app}:${POSTGRES_APP_PASSWORD:-${POSTGRES_PASSWORD}}@postgres:5432/${POSTGRES_DB:-frostgate}
     depends_on:
       postgres:
         condition: service_healthy
-    entrypoint: ["sh","-lc"]
-    command: |
-      set -eux
-      python -m api.db_migrations --backend postgres --apply;
-      python -m api.db_migrations --backend postgres --assert;
-    restart: "no"
+    entrypoint:
+    - sh
+    - -lc
+    command: 'set -eux
+
+      python -m api.db_migrations --backend postgres --apply
+
+      python -m api.db_migrations --backend postgres --assert
+
+      '
+    restart: 'no'
     read_only: true
-    networks: [internal]
+    networks:
+    - internal
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=32m,mode=700
-
-
-
-  opa:
-    image: openpolicyagent/opa:0.64.1
-    restart: unless-stopped
-    networks: [internal]
-    command: ["run","--server","--addr","0.0.0.0:8181","--log-level=info","/policies"]
-    volumes:
-      - ./policy/opa:/policies:ro
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: ["ALL"]
-    read_only: true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=32m,mode=700
-
-  opa-health:
-    image: curlimages/curl:8.6.0
-    restart: unless-stopped
-    networks: [internal]
-    depends_on:
-      - opa
-    entrypoint: ["sh", "-lc"]
-    command: ["sleep infinity"]
-    healthcheck:
-      test: ["CMD-SHELL","curl -fsS http://opa:8181/health >/dev/null 2>&1"]
-      interval: 5s
-      timeout: 3s
-      retries: 60
-      start_period: 5s
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: ["ALL"]
-    read_only: true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=16m,mode=700
-
-  # One-shot bootstrap: creates required directories and mission envelope file in shared volumes.
-  frostgate-bootstrap:
-    image: alpine:3.20
-    restart: "no"
-    networks: [internal]
-    entrypoint: ["sh", "-lc"]
-    command: ["/bootstrap/bootstrap.sh"]
-    volumes:
-      - ./scripts/bootstrap.sh:/bootstrap/bootstrap.sh:ro
-      - fg_mission:/var/lib/frostgate/mission
-      - fg_state:/var/lib/frostgate/state
-      - fg_agent_queue:/var/lib/frostgate/agent_queue
-      - fg_ring_state:/var/lib/frostgate/ring/state
-      - fg_ring_models:/var/lib/frostgate/ring/models
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: ["ALL"]
-    read_only: true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=128m,mode=700
-      - /var/lib/frostgate/pycache:rw,noexec,nosuid,size=64m,mode=700
-
-
+    - /tmp:rw,noexec,nosuid,size=32m,mode=700
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
   frostgate-core:
     build:
       context: .
       dockerfile: Dockerfile
     image: frostgate-core:latest
-    command: ["sh","-lc","exec uvicorn api.main:app --host 0.0.0.0 --port 8080"]
+    command:
+    - sh
+    - -lc
+    - exec uvicorn api.main:app --host 0.0.0.0 --port 8080
     restart: unless-stopped
-    networks: [internal, public]
+    profiles:
+    - core
+    networks:
+      internal:
+        aliases:
+        - frostgate-core
+      public: {}
     init: true
     stop_grace_period: 20s
     depends_on:
@@ -182,7 +287,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      nats-health:
+      nats:
         condition: service_healthy
       opa-health:
         condition: service_healthy
@@ -190,198 +295,149 @@ services:
         condition: service_completed_successfully
       frostgate-migrate:
         condition: service_completed_successfully
-
-    ports:
-      - "18080:8080"
-    env_file: [.env]
+    env_file:
+    - .env
+    - env/prod.env
     environment:
-      FG_ENV: ${FG_ENV:-dev}
+      FG_ENV: ${FG_ENV:-prod}
       FG_DEBUG: ${FG_DEBUG:-false}
       FG_LOG_LEVEL: ${FG_LOG_LEVEL:-info}
-
       FG_STATE_DIR: /var/lib/frostgate/state
       FG_AGENT_QUEUE_DIR: /var/lib/frostgate/agent_queue
       FG_PYCACHE_DIR: /var/lib/frostgate/pycache
-
       FG_RING_ROUTER_ENABLED: ${FG_RING_ROUTER_ENABLED:-true}
       FG_RING_STATE_DIR: /var/lib/frostgate/ring/state
       FG_RING_MODEL_DIR: /var/lib/frostgate/ring/models
-
       FG_MISSION_ENVELOPE_ENABLED: ${FG_MISSION_ENVELOPE_ENABLED:-true}
       FG_MISSION_ENVELOPE_PATH: ${FG_MISSION_ENVELOPE_PATH:-/var/lib/frostgate/mission/envelope.json}
-
       FG_AUTH_ENABLED: ${FG_AUTH_ENABLED:-1}
       FG_AUTH_ALLOW_FALLBACK: ${FG_AUTH_ALLOW_FALLBACK:-false}
       FG_API_KEY: ${FG_API_KEY:?set FG_API_KEY in .env}
       FG_API_KEYS_FILE: /run/secrets/fg_api_keys
-
       FG_DB_BACKEND: ${FG_DB_BACKEND:-postgres}
       FG_TENANT_CONTEXT_MODE: ${FG_TENANT_CONTEXT_MODE:-db_session}
       FG_DB_URL: postgresql+psycopg://${POSTGRES_APP_USER:-fg_app}:${POSTGRES_APP_PASSWORD:-${POSTGRES_PASSWORD}}@postgres:5432/${POSTGRES_DB:-frostgate}
-
-      FG_REDIS_URL: ${FG_REDIS_URL:-redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}@redis:6379/0}
-      FG_NATS_URL: ${FG_NATS_URL:-nats://${NATS_AUTH_TOKEN:?set NATS_AUTH_TOKEN in .env}@nats:4222}
-
+      FG_REDIS_URL: ${FG_REDIS_URL:-redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD
+        in .env}@redis:6379/0}
+      FG_NATS_URL: ${FG_NATS_URL:-nats://${NATS_AUTH_TOKEN:?set NATS_AUTH_TOKEN in
+        .env}@nats:4222}
       FG_OPA_URL: ${FG_OPA_URL:-http://opa:8181}
       FG_OPA_PATH: ${FG_OPA_PATH:-/v1/data/frostgate/defend}
       FG_OPA_TIMEOUT_SEC: ${FG_OPA_TIMEOUT_SEC:-0.25}
       FG_OPA_ENFORCE: ${FG_OPA_ENFORCE:-true}
       FG_OPA_RISK_ACCEPTED: ${FG_OPA_RISK_ACCEPTED:-false}
-
-      FG_DOS_GUARD_ENABLED: ${FG_DOS_GUARD_ENABLED:-true}
-      FG_MAX_BODY_BYTES: ${FG_MAX_BODY_BYTES:-1048576}
-      FG_MAX_QUERY_BYTES: ${FG_MAX_QUERY_BYTES:-8192}
-      FG_MAX_PATH_BYTES: ${FG_MAX_PATH_BYTES:-2048}
-      FG_MAX_HEADERS_COUNT: ${FG_MAX_HEADERS_COUNT:-100}
-      FG_MAX_HEADERS_BYTES: ${FG_MAX_HEADERS_BYTES:-16384}
-      FG_MAX_HEADER_LINE_BYTES: ${FG_MAX_HEADER_LINE_BYTES:-8192}
-      FG_MULTIPART_MAX_BYTES: ${FG_MULTIPART_MAX_BYTES:-5242880}
-      FG_MULTIPART_MAX_PARTS: ${FG_MULTIPART_MAX_PARTS:-50}
-      FG_REQUEST_TIMEOUT_SEC: ${FG_REQUEST_TIMEOUT_SEC:-15}
-      FG_KEEPALIVE_TIMEOUT_SEC: ${FG_KEEPALIVE_TIMEOUT_SEC:-5}
-      FG_MAX_CONCURRENT_REQUESTS: ${FG_MAX_CONCURRENT_REQUESTS:-100}
-
-      FG_RL_ENABLED: ${FG_RL_ENABLED:-true}
-      FG_RL_BACKEND: ${FG_RL_BACKEND:-redis}
-      FG_RL_SCOPE: ${FG_RL_SCOPE:-tenant}
-      FG_RL_PATHS: ${FG_RL_PATHS:-/defend}
-      FG_RL_RATE_PER_SEC: ${FG_RL_RATE_PER_SEC:-2}
-      FG_RL_BURST: ${FG_RL_BURST:-60}
-      FG_RL_PREFIX: ${FG_RL_PREFIX:-fg:rl:prod}
-      FG_RL_ALLOW_BYPASS_IN_PROD: ${FG_RL_ALLOW_BYPASS_IN_PROD:-false}
-      FG_RL_FAIL_OPEN: ${FG_RL_FAIL_OPEN:-false}
       FG_WEBHOOK_SECRET: ${FG_WEBHOOK_SECRET:?set FG_WEBHOOK_SECRET in .env}
-
-    secrets: [fg_api_keys]
+      FG_RL_FAIL_OPEN: 'false'
+    secrets:
+    - fg_api_keys
     volumes:
-      - fg_state:/var/lib/frostgate/state
-      - fg_agent_queue:/var/lib/frostgate/agent_queue
-      - fg_ring_state:/var/lib/frostgate/ring/state
-      - fg_ring_models:/var/lib/frostgate/ring/models
-      - fg_mission:/var/lib/frostgate/mission
+    - fg_state:/var/lib/frostgate/state
+    - fg_agent_queue:/var/lib/frostgate/agent_queue
+    - fg_ring_state:/var/lib/frostgate/ring/state
+    - fg_ring_models:/var/lib/frostgate/ring/models
+    - fg_mission:/var/lib/frostgate/mission
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=2).read()\""]
+      test:
+      - CMD-SHELL
+      - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready',
+        timeout=2).read()"
       interval: 5s
       timeout: 2s
       retries: 30
       start_period: 10s
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: ["ALL"]
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=128m,mode=700
-
-  frostgate-agent:
-    profiles: ["agent"]
-    build:
-      context: .
-      dockerfile: agent/Dockerfile
-    image: frostgate-agent:latest
-    restart: unless-stopped
-    networks: [internal]
-    init: true
-    depends_on:
-      frostgate-core:
-        condition: service_healthy
-    secrets: [fg_api_keys]
-    environment:
-      FG_AGENT_TENANT_ID: t1
-      FG_AGENT_SOURCE: agent
-      FG_CORE_BASE_URL: http://frostgate-core:8080
-      FG_AGENT_INTERVAL_SEC: 60
-      FG_AGENT_API_KEY: ${FG_AGENT_API_KEY:?set FG_AGENT_API_KEY in .env}
-      FG_INGEST_LOG_EVERY: ${FG_INGEST_LOG_EVERY:-200}
-      FG_AGENT_LOG_EVERY: ${FG_AGENT_LOG_EVERY:-30}
-      FG_STATE_DIR: /var/lib/frostgate/state
-      FG_AGENT_QUEUE_DIR: /var/lib/frostgate/agent_queue
-      FG_PYCACHE_DIR: /var/lib/frostgate/pycache
-    volumes:
-      - fg_state:/var/lib/frostgate/state
-      - fg_agent_queue:/var/lib/frostgate/agent_queue
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: ["ALL"]
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
     read_only: true
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=64m,mode=700
-
+    - /tmp:rw,noexec,nosuid,size=128m,mode=700
   admin-gateway:
-    profiles: ["admin"]
+    profiles:
+    - admin
     build:
       context: .
       dockerfile: admin_gateway/Dockerfile
     image: frostgate-admin-gateway:latest
     restart: unless-stopped
-    networks: [internal, public]
+    networks:
+    - internal
+    - public
     init: true
     depends_on:
       frostgate-core:
         condition: service_healthy
     ports:
-      - "18001:8080"
-    env_file: [.env]
+    - 127.0.0.1:18080:8080
+    env_file:
+    - .env
+    - env/prod.env
     environment:
-      FG_ENV: ${FG_ENV:-dev}
+      FG_ENV: ${FG_ENV:-prod}
       AG_LOG_LEVEL: ${FG_LOG_LEVEL:-info}
       AG_CORE_BASE_URL: http://frostgate-core:8080
       FG_AUTH_ALLOW_FALLBACK: ${FG_AUTH_ALLOW_FALLBACK:-false}
-      AG_CORS_ORIGINS: ${AG_CORS_ORIGINS:?set AG_CORS_ORIGINS in .env (e.g., http://localhost:13000)}
+      AG_CORS_ORIGINS: http://127.0.0.1:13000,http://localhost:13000
       AG_AUDIT_ENABLED: ${AG_AUDIT_ENABLED:-true}
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()\""]
+      test:
+      - CMD-SHELL
+      - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health',
+        timeout=2).read()"
       interval: 10s
       timeout: 3s
       retries: 10
       start_period: 10s
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: ["ALL"]
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
     read_only: true
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=64m,mode=700
-
+    - /tmp:rw,noexec,nosuid,size=64m,mode=700
   console:
-    profiles: ["admin"]
+    profiles:
+    - admin
     build:
       context: ./console
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: http://admin-gateway:8080
+        NEXT_PUBLIC_API_URL: http://127.0.0.1:18080
     image: frostgate-console:latest
     restart: unless-stopped
-    networks: [public]
+    networks:
+    - public
     init: true
     depends_on:
       admin-gateway:
         condition: service_healthy
     ports:
-      - "13000:3000"
+    - 127.0.0.1:13000:3000
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: http://admin-gateway:8080
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:18080
     healthcheck:
       test:
-        [
-          "CMD-SHELL",
-          "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""
-        ]
+      - CMD-SHELL
+      - node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 20s
-    security_opt: ["no-new-privileges:true"]
-    cap_drop: ["ALL"]
-
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
 volumes:
-  fg_pgdata:
-  fg_state:
-  fg_agent_queue:
-  fg_ring_state:
-  fg_ring_models:
-  fg_mission:
-  nats_data:
-
+  fg_pgdata: null
+  fg_state: null
+  fg_agent_queue: null
+  fg_ring_state: null
+  fg_ring_models: null
+  fg_mission: null
 secrets:
   fg_api_keys:
     file: ./secrets/fg_api_keys.txt
-
 networks:
   public: {}
   internal:

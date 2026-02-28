@@ -282,3 +282,31 @@ Format: `Risk | File | Description | Exploit Path | Fix Strategy`
 
 ### Reviewer
 - Jason (repo owner / final authority)
+
+## 2026-02-28 — PR: SOC-critical updates (workflow + OPA + CI guards + route inventory)
+
+### Files changed (SOC-critical)
+- .github/workflows/ai-ledger-guard.yml
+- policy/opa/config.yaml
+- policy/opa/opa-config.yml
+- tools/ci/guard_pr_fix_log.py
+- tools/ci/route_inventory.json
+
+### Why
+- Updated CI/workflow guard behavior and related SOC enforcement scripts.
+- Updated OPA configuration (policy runtime behavior).
+- Regenerated route inventory after adding/adjusting routes (inventory must match runtime).
+
+### Risk
+- **Workflow changes:** may affect CI enforcement paths; mitigated by running full `make pr-check`.
+- **OPA config changes:** affects authorization/decisioning; mitigated by existing OPA + contract gates and policy tests.
+- **Route inventory changes:** documentation/inventory alignment; mitigated by `route-inventory-audit` passing.
+
+### Validation performed
+- `python -m py_compile scripts/prod_profile_check.py`
+- `make route-inventory-generate`
+- `make route-inventory-audit`
+- `make pr-check` (all gates except SOC review sync prior to this doc update)
+
+### Rollback
+- Revert the above files to prior commit if unexpected enforcement behavior occurs.

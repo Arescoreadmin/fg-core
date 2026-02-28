@@ -2,6 +2,29 @@
 
 ## How to ask Codex (copy/paste patterns)
 
+## Hard Preflight (Non-Negotiable)
+Before doing anything, Codex MUST read:
+- CODEX.md
+- CLAUDE.md
+- docs/ai/PR_FIX_LOG.md (if exists)
+- docs/ai/GOTCHAS.md (if exists)
+
+If a relevant fix/invariant exists, reuse it. Do NOT rediscover it.
+
+## Output Clamp (Hard)
+Codex MUST output ONLY the requested artifact.
+- If unified diff requested: output unified diff only.
+- If full file requested: output full file only.
+- If summary requested: output PR Summary only.
+No commentary. No explanations. No extra text. No headings.
+
+## Fix Writeback (Hard)
+If the change fixes a bug/regression/gate failure or introduces an invariant:
+- Append an entry to docs/ai/PR_FIX_LOG.md
+OR output:
+NO_FIX_LOG_REQUIRED: <one-line reason>
+(only when the user explicitly requested no file changes beyond code)
+
 ### 1) Patch request (unified diff only)
 Request:
 - Goal: <one sentence>
@@ -9,6 +32,10 @@ Request:
 - Constraints: <caps, no refactor, etc.>
 - Evidence: <failing test / stack trace / diff hunk>
 Return: unified diff only.
+
+Constraints MUST include:
+- Diff budget: <max lines changed> (default 200)
+- No refactor unless required for invariant (explicitly justify in PR_FIX_LOG)
 
 Example:
 Goal: Fix OpenAPI security 401/403 requirement for GET /planes.

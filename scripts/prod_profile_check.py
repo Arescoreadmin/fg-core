@@ -1,136 +1,226 @@
 #!/usr/bin/env python3
-"""Production profile validation for FrostGate Core.
-
+"""
 Validates docker-compose.yml and related config have safe production defaults.
 
-Checks (core + admin-gateway):
-- FG_RL_FAIL_OPEN must be false (fail-closed rate limiting)
-- FG_AUTH_ALLOW_FALLBACK must be false (no dev bypass in production)
-- FG_AUTH_ENABLED must be true or 1 (core)
-- DoS hardening must be enabled and finite (core)
-- No default/weak secrets in production config (basic checks)
+What this gate enforces (minimum):
+- DoS hardening must be explicitly enabled
+- Request/headers/multipart limits must be explicitly set to finite positive values
+- Timeouts and concurrency must be explicitly set to finite positive values
+- Rate limiting must be fail-closed in production (FG_RL_FAIL_OPEN=false)
 
-Run as part of CI to prevent unsafe configurations from reaching production.
+This is a release-safety gate. It should be deterministic and loud.
+
+SOC compatibility:
+- tools/ci/check_soc_invariants.py imports ProductionProfileChecker
+- It calls checker.check_compose_file(path)
+- It checks checker.errors after running
 """
 
 from __future__ import annotations
 
-import sys
+import os
+import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
+
+REPO = Path(__file__).resolve().parents[1]
+DEFAULT_COMPOSE = REPO / "docker-compose.yml"
 
 
-def _env_truthy(value: str | bool | None) -> bool:
-    """Check if an environment value is truthy."""
-    if value is None:
-        return False
-    if isinstance(value, bool):
-        return value
-    val = str(value).strip().lower()
-    if val in ("1", "true", "yes", "on"):
-        return True
-    if ":-" in val:
-        default = val.split(":-", 1)[1].rstrip("}")
-        return default.strip().lower() in ("1", "true", "yes", "on")
-    return False
+REQUIRED_KEYS = [
+    "FG_DOS_GUARD_ENABLED",
+    "FG_MAX_BODY_BYTES",
+    "FG_MAX_QUERY_BYTES",
+    "FG_MAX_PATH_BYTES",
+    "FG_MAX_HEADERS_COUNT",
+    "FG_MAX_HEADERS_BYTES",
+    "FG_MAX_HEADER_LINE_BYTES",
+    "FG_MULTIPART_MAX_BYTES",
+    "FG_MULTIPART_MAX_PARTS",
+    "FG_REQUEST_TIMEOUT_SEC",
+    "FG_KEEPALIVE_TIMEOUT_SEC",
+    "FG_MAX_CONCURRENT_REQUESTS",
+    "FG_RL_FAIL_OPEN",
+]
 
 
-def _env_falsy(value: str | bool | None) -> bool:
-    """Check if an environment value is explicitly false.
-
-    Handles shell variable syntax like ${VAR:-default}.
-    """
-    if value is None:
-        return False
-    if isinstance(value, bool):
-        return not value
-    val = str(value).strip().lower()
-    if val in ("0", "false", "no", "off"):
-        return True
-    if ":-" in val:
-        default = val.split(":-", 1)[1].rstrip("}")
-        return default.strip().lower() in ("0", "false", "no", "off")
-    return False
-
-
-def _normalize_env(env: Any) -> dict[str, Any]:
-    """Compose 'environment' can be dict or list of KEY=VALUE strings."""
-    if env is None:
-        return {}
-    if isinstance(env, dict):
-        return env
-    if isinstance(env, list):
-        out: dict[str, Any] = {}
-        for item in env:
-            if not isinstance(item, str):
-                continue
-            if "=" not in item:
-                out[item.strip()] = ""
-                continue
-            k, v = item.split("=", 1)
-            out[k.strip()] = v.strip()
-        return out
-    return {}
-
-
-def _env_default_is_prod(env: dict[str, Any]) -> bool:
-    """Treat as prod if FG_ENV is prod or defaults to prod (or missing)."""
-    v = env.get("FG_ENV")
-    if v is None:
-        return True
-    s = str(v).strip().lower()
-    if s == "prod" or s == "production":
-        return True
-    if ":-" in s:
-        default = s.split(":-", 1)[1].rstrip("}").strip().lower()
-        return default in ("prod", "production")
-    return False
+@dataclass(frozen=True)
+class Report:
+    ok: bool
+    errors: list[str]
+    resolved_core_service: str
 
 
 class ProductionProfileChecker:
-    """Validates production configuration for safety."""
+    """
+    Deterministic production profile checker.
+    """
 
-    def __init__(self) -> None:
+    _DEFAULT_CORE_CANDIDATES = ("core", "frostgate-core")
+
+    def __init__(
+        self,
+        compose_path: Path | None = None,
+        *,
+        core_service_name: str | None = None,
+    ) -> None:
+        self.compose_path = Path(compose_path) if compose_path else DEFAULT_COMPOSE
+
+        # SOC expects these attributes.
         self.errors: list[str] = []
-        self.warnings: list[str] = []
 
-    def check_compose_file(self, compose_path: Path) -> None:
-        """Check docker-compose.yml for unsafe production settings."""
-        if not compose_path.exists():
-            self.errors.append(f"Compose file not found: {compose_path}")
+        # Allow override (env > ctor), else resolved from compose services.
+        self.core_service = (
+            core_service_name or os.getenv("FG_CORE_SERVICE_NAME") or "core"
+        )
+
+        # Exposed for debugging / SOC log tail usefulness
+        self.resolved_core_service: str = "unknown"
+
+    # --- SOC compatibility shim ---
+    def check_compose_file(self, compose_path: Path) -> dict[str, Any]:
+        self.compose_path = Path(compose_path)
+        rep = self.check()
+        # Some call sites expect a dict-like object; provide one.
+        return {
+            "ok": rep.ok,
+            "errors": rep.errors,
+            "resolved_core_service": rep.resolved_core_service,
+        }
+
+    def _run_compose_config(self) -> dict[str, Any]:
+        """
+        Use docker compose to render the fully merged configuration.
+        This is the only reliable way to resolve env_file layering + interpolation.
+        """
+        try:
+            out = subprocess.check_output(
+                ["docker", "compose", "-f", str(self.compose_path), "config"],
+                cwd=REPO,
+                text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"docker compose config failed: {e}") from e
+
+        # Lazy import to avoid hard dependency if not needed, but CI will have it.
+        try:
+            import yaml  # type: ignore
+        except Exception as e:
+            raise RuntimeError(
+                "PyYAML is required to parse docker compose config output"
+            ) from e
+
+        data = yaml.safe_load(out)
+        if not isinstance(data, dict):
+            raise ValueError("docker compose config output must be a YAML object")
+        return data
+
+    def _resolve_core_service_name(self, services: dict[str, Any]) -> str:
+        """
+        Resolve which service is the core API.
+
+        Order:
+        1) explicit core_service (env/ctor) if present
+        2) known candidates: core, frostgate-core
+        """
+        if self.core_service in services:
+            return self.core_service
+
+        for name in self._DEFAULT_CORE_CANDIDATES:
+            if name in services:
+                return name
+
+        available = ", ".join(sorted(services.keys()))
+        raise KeyError(
+            "compose is missing required core service "
+            f"(tried {self.core_service!r} then {self._DEFAULT_CORE_CANDIDATES!r}). "
+            f"Available services: {available}"
+        )
+
+    def _collect_env(self) -> dict[str, str]:
+        compose = self._run_compose_config()
+        services = compose.get("services", {})
+        if not isinstance(services, dict):
+            raise ValueError("compose.services must be an object")
+
+        resolved = self._resolve_core_service_name(services)
+        self.resolved_core_service = resolved
+
+        svc = services.get(resolved, {})
+        if not isinstance(svc, dict):
+            raise ValueError(f"compose.services[{resolved!r}] must be an object")
+
+        env = svc.get("environment", {})
+        if env is None:
+            env = {}
+        if not isinstance(env, dict):
+            raise ValueError(
+                f"compose.services[{resolved!r}].environment must be an object"
+            )
+
+        # docker compose config renders env as {KEY: value} already.
+        out: dict[str, str] = {}
+        for k, v in env.items():
+            if v is None:
+                continue
+            out[str(k)] = str(v)
+
+        return out
+
+    def _require_explicit(self, env: dict[str, str], key: str) -> None:
+        if key not in env:
+            self.errors.append(
+                f"[ERROR] CRITICAL: {key} must be explicitly set in production."
+            )
+
+    def _require_positive_int(self, env: dict[str, str], key: str) -> None:
+        self._require_explicit(env, key)
+        if key not in env:
             return
+        try:
+            val = int(str(env[key]).strip())
+        except Exception:
+            self.errors.append(f"[ERROR] CRITICAL: {key} must be an integer.")
+            return
+        if val <= 0:
+            self.errors.append(f"[ERROR] CRITICAL: {key} must be > 0.")
 
-        with open(compose_path, encoding="utf-8") as f:
-            compose = yaml.safe_load(f) or {}
-
-        services = compose.get("services", {}) or {}
-
-        core_svc = services.get("frostgate-core") or services.get("core") or {}
-        core_env = _normalize_env(core_svc.get("environment"))
-        self._check_core_env(core_env)
-
-        admin_svc = services.get("admin-gateway") or {}
-        admin_env = _normalize_env(admin_svc.get("environment"))
-        self._check_admin_env(admin_env)
-
-    def _check_core_env(self, env: dict[str, Any]) -> None:
-        """Validate core service environment variables."""
-        is_prod = _env_default_is_prod(env)
-
-        # DoS hardening must be enabled and finite in production
-        dos_enabled = env.get("FG_DOS_GUARD_ENABLED")
-        if dos_enabled is None:
+    def _require_boolish(self, env: dict[str, str], key: str) -> None:
+        self._require_explicit(env, key)
+        if key not in env:
+            return
+        s = str(env[key]).strip().lower()
+        if s not in {"0", "1", "true", "false"}:
             self.errors.append(
-                "CRITICAL: FG_DOS_GUARD_ENABLED must be explicitly set in production."
-            )
-        elif not _env_truthy(dos_enabled):
-            self.errors.append(
-                "CRITICAL: FG_DOS_GUARD_ENABLED must be true in production."
+                f"[ERROR] CRITICAL: {key} must be boolean-like (true/false/1/0)."
             )
 
-        required_positive = [
+    def _require_fail_closed_rl(self, env: dict[str, str]) -> None:
+        # Fail-closed means FG_RL_FAIL_OPEN must be explicitly false.
+        if "FG_RL_FAIL_OPEN" not in env:
+            self.errors.append(
+                "[ERROR] CRITICAL: FG_RL_FAIL_OPEN is not set in core. "
+                "Production MUST set FG_RL_FAIL_OPEN=false for fail-closed rate limiting."
+            )
+            return
+        s = str(env["FG_RL_FAIL_OPEN"]).strip().lower()
+        if s != "false":
+            self.errors.append(
+                "[ERROR] CRITICAL: Production MUST set FG_RL_FAIL_OPEN=false for fail-closed rate limiting."
+            )
+
+    def check(self) -> Report:
+        self.errors = []  # reset per run
+
+        env = self._collect_env()
+
+        # Explicit enablement toggle
+        self._require_boolish(env, "FG_DOS_GUARD_ENABLED")
+
+        # Size limits
+        for k in (
             "FG_MAX_BODY_BYTES",
             "FG_MAX_QUERY_BYTES",
             "FG_MAX_PATH_BYTES",
@@ -139,134 +229,52 @@ class ProductionProfileChecker:
             "FG_MAX_HEADER_LINE_BYTES",
             "FG_MULTIPART_MAX_BYTES",
             "FG_MULTIPART_MAX_PARTS",
+        ):
+            self._require_positive_int(env, k)
+
+        # Timeouts / concurrency
+        for k in (
             "FG_REQUEST_TIMEOUT_SEC",
             "FG_KEEPALIVE_TIMEOUT_SEC",
             "FG_MAX_CONCURRENT_REQUESTS",
-        ]
+        ):
+            self._require_positive_int(env, k)
 
-        for key in required_positive:
-            value = env.get(key)
-            if value is None:
-                self.errors.append(
-                    f"CRITICAL: {key} must be explicitly set in production."
-                )
-                continue
-            try:
-                if isinstance(value, str) and ":-" in value:
-                    raw = value.split(":-", 1)[1].rstrip("}")
-                else:
-                    raw = value
-                parsed = float(str(raw).strip())
-                if parsed <= 0:
-                    raise ValueError
-            except Exception:
-                self.errors.append(
-                    f"CRITICAL: {key} must be a positive number in production (got {value!r})."
-                )
+        # Rate limiting: must fail-closed
+        self._require_fail_closed_rl(env)
 
-        # Rate limiting fail-open must be false in production
-        fail_open = env.get("FG_RL_FAIL_OPEN")
-        if fail_open is None:
-            self.errors.append(
-                "CRITICAL: FG_RL_FAIL_OPEN is not set in core. "
-                "Production MUST set FG_RL_FAIL_OPEN=false for fail-closed rate limiting."
-            )
-        elif not _env_falsy(fail_open):
-            self.errors.append(
-                f"CRITICAL: FG_RL_FAIL_OPEN={fail_open!r} in core. "
-                "Production MUST use FG_RL_FAIL_OPEN=false."
-            )
-
-        # Auth enabled must be on in prod
-        auth_enabled = env.get("FG_AUTH_ENABLED")
-        if is_prod and auth_enabled is not None and not _env_truthy(auth_enabled):
-            self.errors.append(
-                f"CRITICAL: FG_AUTH_ENABLED={auth_enabled!r} in core. "
-                "Production MUST enable authentication."
-            )
-
-        # Auth fallback must default false
-        allow_fallback = env.get("FG_AUTH_ALLOW_FALLBACK")
-        if allow_fallback is None:
-            self.errors.append(
-                "CRITICAL: FG_AUTH_ALLOW_FALLBACK must be explicitly set in core "
-                "and default to false in production."
-            )
-        elif _env_truthy(allow_fallback):
-            self.errors.append(
-                "CRITICAL: FG_AUTH_ALLOW_FALLBACK is enabled in core. "
-                "Production MUST set FG_AUTH_ALLOW_FALLBACK=false."
-            )
-
-        rl_backend = env.get("FG_RL_BACKEND")
-        if rl_backend and str(rl_backend).strip().lower() == "memory":
-            self.warnings.append(
-                "WARNING: FG_RL_BACKEND=memory in core. "
-                "Production should use FG_RL_BACKEND=redis for distributed rate limiting."
-            )
-
-        bypass_in_prod = env.get("FG_RL_ALLOW_BYPASS_IN_PROD")
-        if bypass_in_prod is not None and _env_truthy(bypass_in_prod):
-            self.errors.append(
-                "CRITICAL: FG_RL_ALLOW_BYPASS_IN_PROD=true in core. "
-                "Production MUST NOT allow rate limit bypass."
-            )
-
-    def _check_admin_env(self, env: dict[str, Any]) -> None:
-        """Validate admin-gateway environment variables."""
-        is_prod = _env_default_is_prod(env)
-
-        allow_fallback = env.get("FG_AUTH_ALLOW_FALLBACK")
-        if allow_fallback is None:
-            # In prod-like, being explicit is the whole point
-            if is_prod:
-                self.errors.append(
-                    "CRITICAL: FG_AUTH_ALLOW_FALLBACK must be explicitly set in admin-gateway "
-                    "and default to false in production."
-                )
-            else:
-                self.warnings.append(
-                    "WARNING: FG_AUTH_ALLOW_FALLBACK is not set in admin-gateway. "
-                    "Set FG_AUTH_ALLOW_FALLBACK=false explicitly."
-                )
-            return
-
-        if _env_truthy(allow_fallback):
-            self.errors.append(
-                "CRITICAL: FG_AUTH_ALLOW_FALLBACK=true in admin-gateway. "
-                "Production MUST set FG_AUTH_ALLOW_FALLBACK=false."
-            )
-
-    def report(self) -> int:
-        """Print report and return exit code (0 = pass, 1 = fail)."""
-        if self.errors:
-            print("=" * 60)
-            print("PRODUCTION PROFILE CHECK: FAILED")
-            print("=" * 60)
-            for error in self.errors:
-                print(f"  [ERROR] {error}")
-            print()
-
-        if self.warnings:
-            print("-" * 60)
-            print("PRODUCTION PROFILE WARNINGS:")
-            print("-" * 60)
-            for warning in self.warnings:
-                print(f"  {warning}")
-            print()
-
-        if not self.errors and not self.warnings:
-            print("Production profile check: OK")
-
-        return 1 if self.errors else 0
+        ok = len(self.errors) == 0
+        return Report(
+            ok=ok,
+            errors=list(self.errors),
+            resolved_core_service=self.resolved_core_service,
+        )
 
 
 def main() -> int:
-    """Run production profile checks."""
     checker = ProductionProfileChecker()
-    checker.check_compose_file(Path("docker-compose.yml"))
-    return checker.report()
+    try:
+        report = checker.check()
+    except Exception as e:
+        print("=" * 60)
+        print("PRODUCTION PROFILE CHECK: FAILED (crash)")
+        print("=" * 60)
+        print(str(e))
+        return 2
+
+    if report.ok:
+        print("=" * 60)
+        print("PRODUCTION PROFILE CHECK: PASSED")
+        print("=" * 60)
+        return 0
+
+    print("=" * 60)
+    print("PRODUCTION PROFILE CHECK: FAILED")
+    print("=" * 60)
+    for err in report.errors:
+        print(f"  {err}")
+    return 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

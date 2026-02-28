@@ -1,0 +1,27 @@
+services:
+  bundlesvc:
+    url: http://opa-bundles
+
+bundles:
+  frostgate:
+    service: bundlesvc
+    resource: /bundle.tar.gz
+    polling:
+      min_delay_seconds: 5
+      max_delay_seconds: 30
+
+status:
+  service: bundlesvc
+
+decision_logs:
+  console: true
+  reporting:
+    min_delay_seconds: 2
+    max_delay_seconds: 10
+
+server:
+  addr: 0.0.0.0:8181
+
+# optional but useful when debugging bundle errors quickly
+logging:
+  level: info

@@ -1,40 +1,56 @@
-# Console Dockerfile
-# Multi-stage build for Next.js
+# Console Dockerfile (production-ready)
+# - Multi-stage build
+# - Non-root runtime
+# - Standalone output
+# - Same-origin API by default (/api), so browser access "just works"
+# - Build-time args supported, but safe defaults
 
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-# Install dependencies
+# Reduce attack surface / improve determinism
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Install deps (prefer lockfile)
 COPY package.json package-lock.json* ./
-RUN npm ci --only=production || npm install --only=production
+RUN npm ci
 
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Copy dependencies
+ENV NEXT_TELEMETRY_DISABLED=1
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build environment variables
-ARG NEXT_PUBLIC_API_URL=http://admin-gateway:8080
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-ENV NEXT_TELEMETRY_DISABLED=1
+# ---- Future-facing config knobs ----
+# We default to same-origin /api so the browser never needs Docker DNS.
+# If you ever want a different base path, you can override at build time.
+ARG NEXT_PUBLIC_API_BASE=/api
+ENV NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE}
 
-# Build application
+# Make Next build predictable
+ENV NODE_ENV=production
+
+# Build (assumes next.config.js outputs standalone)
 RUN npm run build
 
-# Production stage
 FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# Keep runtime env too (useful for server-side routes / logging)
+ARG NEXT_PUBLIC_API_BASE=/api
+ENV NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE}
 
-# Copy standalone build
+# Add non-root user
+RUN addgroup --system --gid 1001 nodejs \
+ && adduser  --system --uid 1001 nextjs
+
+# Copy standalone output only
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
@@ -42,12 +58,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 USER nextjs
 
 EXPOSE 3000
-
 ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
+ENV HOSTNAME=0.0.0.0
 
-# Health check
-HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
+# Minimal, reliable healthcheck (no extra packages assumed beyond BusyBox wget)
+HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=5 \
+  CMD wget -q -T 2 -O - http://127.0.0.1:3000/api/health >/dev/null 2>&1 || exit 1
 
 CMD ["node", "server.js"]

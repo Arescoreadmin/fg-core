@@ -9,7 +9,14 @@
 // Types
 // ---------------------------------------------------------------------------
 
-export type ModuleState = 'starting' | 'ready' | 'degraded' | 'failed' | 'stopped' | 'stale';
+export type ModuleState =
+  | 'starting'
+  | 'ready'
+  | 'degraded'
+  | 'failed'
+  | 'stopped'
+  | 'stale'
+  | 'restarting';
 export type DepStatus = 'ok' | 'degraded' | 'failed' | 'unknown';
 export type LockerState = 'active' | 'paused' | 'quarantined' | 'restarting' | 'stopped' | 'unknown';
 
