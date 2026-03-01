@@ -84,6 +84,16 @@ def _safe_env() -> dict[str, str]:
         "GITHUB_REF",
         "GITHUB_SHA",
         "GITHUB_RUN_ID",
+        # Preserve network/pip routing in constrained CI or proxied environments.
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "no_proxy",
+        "PIP_INDEX_URL",
+        "PIP_EXTRA_INDEX_URL",
+        "PIP_TRUSTED_HOST",
     }
     env = {k: v for k, v in os.environ.items() if k in allow}
     env.setdefault("PYTHONHASHSEED", "0")

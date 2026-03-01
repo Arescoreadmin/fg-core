@@ -404,3 +404,38 @@ Critical-path modifications now include explicit SOC review-log updates in the s
 
 ### Governance Change
 Yes — SOC evidence-chain synchronization was updated for critical-file modifications.
+
+## [2026-03-01] fg_required Env Passthrough + Docker Profile Build Alignment
+
+### Summary
+Follow-up fixes addressed two remaining CI failure modes: `fg_required` lane bootstrap failures in restricted/proxied environments due over-sanitized environment passthrough, and docker validation failures where `frostgate-migrate` attempted to pull `frostgate-core` instead of using a locally built image.
+
+### Symptom
+- `Run .venv/bin/python tools/testing/harness/fg_required.py --global-budget-seconds 480 --lane-timeout-seconds 480` exited 1 during policy lane bootstrap.
+- `pull access denied for frostgate-core ... requested access to the resource is denied` during docker stack startup.
+
+### Root Cause
+`fg_required.py` whitelisted only a narrow environment set and dropped proxy/pip routing variables required in some runner contexts for dependency bootstrap. In docker CI, compose build/start commands did not activate profiles that include `frostgate-core`, so `frostgate-migrate` referenced an image tag that was never built in that job.
+
+### Impact Surface
+- Files: `tools/testing/harness/fg_required.py`, `.github/workflows/docker-ci.yml`
+- Services: required-lane harness bootstrap, docker-validate job
+- Profiles: `fg-required`, docker validation workflow
+- Governance surfaces affected: required-lane reliability and deterministic docker validation behavior
+
+### Resolution
+Expanded `fg_required.py` safe environment allowlist to include proxy and pip index variables (`HTTP(S)_PROXY`, `NO_PROXY`, `PIP_*`) while maintaining fail-closed filtering for sensitive shell context. Updated docker CI compose invocations to use `--profile core --profile admin` consistently for build/up/logs/down so `frostgate-core` is built locally and available to dependent services (`frostgate-migrate`) during stack bring-up.
+
+### Gates Executed
+- `.venv/bin/python tools/testing/harness/fg_required.py --global-budget-seconds 480 --lane-timeout-seconds 480 || true`
+- `rg -n "HTTP_PROXY|PIP_INDEX_URL|PIP_EXTRA_INDEX_URL" tools/testing/harness/fg_required.py`
+- `rg -n "--profile core --profile admin" .github/workflows/docker-ci.yml`
+
+### Final Status
+PASS
+
+### Preventative Control
+Required-lane harness now preserves essential network/bootstrap routing env while still constraining execution env; docker validate now explicitly builds/runs the same profiled service set it validates.
+
+### Governance Change
+Yes — CI lane execution preconditions and docker validation determinism were hardened.
