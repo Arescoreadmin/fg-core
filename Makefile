@@ -1106,9 +1106,9 @@ __mkdb__:
 makefile-sanity: guard-scripts
 	@echo "Makefile sanity: OK"
 
-pr-check-fast:
+pr-check-fast-legacy:
 	@$(MAKE) -s fg-fast
-	@echo "pr-check-fast: OK"
+	@echo "pr-check-fast-legacy: OK"
 
 pr-check-lint:
 	@$(MAKE) -s fg-lint
@@ -1165,7 +1165,7 @@ codex-check: venv
 .PHONY: soc-manifest-sync soc-manifest-verify
 
 soc-manifest-sync: venv
-	@PYTHONPATH=. $(PY) tools/ci/sync_soc_manifest_status.py --mode sync --write
+	@PYTHONPATH=. $(PY) tools/ci/sync_soc_manifest_status.py --mode sync
 
 soc-manifest-verify: venv
 	@PYTHONPATH=. $(PY) tools/ci/sync_soc_manifest_status.py --mode verify --fail-on-unresolved-p0
