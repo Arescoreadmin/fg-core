@@ -1,3 +1,14 @@
+## 2026-03-01T21:24:06Z — SOC-HIGH-002 — Route inventory artifact updated
+
+**Issue:** `tools/ci/route_inventory.json` changed and is classified as a critical SOC-tracked artifact.
+
+**Resolution:** Recorded this change as an approved artifact refresh. No policy semantics changed; inventory updated via `make route-inventory-generate`.
+
+**Files:**
+- tools/ci/route_inventory.json
+
+---
+
 ## 2026-03-01T19:00:46Z — SOC-HIGH-002 — Route inventory governance update
 
 **Issue:** SOC-HIGH-002 triggered: critical CI governance artifacts changed without SOC review acknowledgement.
