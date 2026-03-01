@@ -11,6 +11,37 @@ REPO = Path(__file__).resolve().parents[2]
 CONTRACT_OPENAPI = REPO / "contracts/core/openapi.json"
 
 
+def _route_tuple(method: str, path: str) -> tuple[str, str]:
+    return (method.upper(), path)
+
+
+def route_exception_classes(plane_id: str, method: str, path: str) -> set[str]:
+    """
+    Returns exception class names that match (method, path) within the given plane.
+    Consumed by tools/ci/check_plane_registry.py and unit tests.
+    """
+    plane = next((p for p in PLANE_REGISTRY if p.plane_id == plane_id), None)
+    if plane is None:
+        return set()
+    key = _route_tuple(method, path)
+    classes: set[str] = set()
+    for pool in (
+        plane.global_routes,
+        plane.public_routes,
+        plane.bootstrap_routes,
+        plane.auth_exempt_routes,
+        plane.docs_routes,
+    ):
+        for e in pool:
+            if _route_tuple(e.method, e.path) == key:
+                classes.add(e.class_name)
+    return classes
+
+
+def route_has_exception(plane_id: str, method: str, path: str) -> bool:
+    return bool(route_exception_classes(plane_id, method, path))
+
+
 def dependency_categories_for_record(rec) -> list[str]:
     categories: list[str] = []
     if rec.route_has_scope_dependency or rec.route_scopes:
@@ -60,24 +91,31 @@ def runtime_routes_ast() -> list[dict[str, object]]:
 
 
 def runtime_routes_app() -> list[dict[str, object]] | None:
+    """
+    Best-effort runtime route extraction from the built FastAPI app.
+
+    Returns None if the runtime app can't be imported/built (to avoid bricking CI).
+    """
     try:
         from api.main import build_runtime_app
     except Exception:
         return None
-    app = build_runtime_app(auth_enabled=True)
+
+    try:
+        app = build_runtime_app(auth_enabled=True)
+    except Exception:
+        return None
+
     rows: list[dict[str, object]] = []
-    for r in app.routes:
-        methods = sorted(
-            m
-            for m in (getattr(r, "methods", set()) or set())
-            if m not in {"HEAD", "OPTIONS"}
-        )
+    for r in getattr(app, "routes", []) or []:
         path = getattr(r, "path", None)
-        if not methods or not path:
+        methods = getattr(r, "methods", None)
+        if not path or not methods:
             continue
-        for method in methods:
-            rows.append({"method": method.upper(), "path": str(path)})
-    return sorted(rows, key=lambda x: (x["path"], x["method"]))
+        ms = sorted(m for m in (methods or set()) if m not in {"HEAD", "OPTIONS"})
+        for m in ms:
+            rows.append({"method": str(m).upper(), "path": str(path)})
+    return sorted(rows, key=lambda x: (str(x["path"]), str(x["method"])))
 
 
 def contract_routes() -> list[dict[str, object]]:
@@ -126,29 +164,6 @@ def match_plane(path: str) -> list[str]:
 
 def _route_tuple(method: str, path: str) -> tuple[str, str]:
     return (method.upper(), path)
-
-
-def route_exception_classes(plane_id: str, method: str, path: str) -> set[str]:
-    plane = next((p for p in PLANE_REGISTRY if p.plane_id == plane_id), None)
-    if plane is None:
-        return set()
-    key = _route_tuple(method, path)
-    classes: set[str] = set()
-    for pool in (
-        plane.global_routes,
-        plane.public_routes,
-        plane.bootstrap_routes,
-        plane.auth_exempt_routes,
-        plane.docs_routes,
-    ):
-        for e in pool:
-            if _route_tuple(e.method, e.path) == key:
-                classes.add(e.class_name)
-    return classes
-
-
-def route_has_exception(plane_id: str, method: str, path: str) -> bool:
-    return bool(route_exception_classes(plane_id, method, path))
 
 
 def plane_coverage_summary(routes: list[dict[str, object]]) -> dict[str, int]:

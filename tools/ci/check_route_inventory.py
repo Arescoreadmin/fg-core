@@ -42,7 +42,6 @@ def _sha256(path: Path) -> str:
 
 
 def _stable_json_bytes(obj: object) -> bytes:
-    # Deterministic bytes (for hashing), independent of pretty formatting
     return json.dumps(
         obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False
     ).encode("utf-8")
@@ -53,16 +52,6 @@ def _dump_json(obj: object) -> str:
 
 
 def _v1_wrap(data: object, *, generated_by: str | None = None) -> dict[str, Any]:
-    """
-    Canonical wrapper expected by generate_platform_inventory.py:
-
-      {
-        "schema_version": "v1",
-        "generated_at": "...",
-        "data": <payload>,
-        "generated_by": "..."
-      }
-    """
     out: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "generated_at": _now_iso(),
@@ -74,11 +63,6 @@ def _v1_wrap(data: object, *, generated_by: str | None = None) -> dict[str, Any]
 
 
 def _read_data(path: Union[Path, str], label: str) -> object:
-    """
-    Test compatibility hook: tests monkeypatch this name.
-
-    Reads JSON from disk and raises a ValueError with a useful message on failure.
-    """
     p = Path(path)
     try:
         return json.loads(p.read_text(encoding="utf-8"))
@@ -86,7 +70,6 @@ def _read_data(path: Union[Path, str], label: str) -> object:
         raise ValueError(f"{label} must be valid JSON: {e}") from e
 
 
-# Backwards-compat alias (older code may import _read_json).
 def _read_json(path: Path, *, label: str) -> object:
     return _read_data(path, label)
 
@@ -116,22 +99,10 @@ def _require_list_of_dicts(value: object, *, label: str) -> list[dict[str, Any]]
 
 
 def _inventory_from_data(data: object) -> list[dict[str, Any]]:
-    """
-    Test/legacy compatibility hook.
-    Unit tests monkeypatch this symbol, so it must exist.
-    """
     return _inventory_from_doc(data)
 
 
 def _inventory_from_doc(doc: object) -> list[dict[str, Any]]:
-    """
-    Accepts:
-      - v1 wrapper: {schema_version, generated_at, data:[{...}]}
-      - legacy: {routes:[{...}]}
-      - legacy: {items:[{...}]}
-      - legacy: [{...}]
-    """
-    # legacy container shapes
     if isinstance(doc, dict) and "routes" in doc:
         return _require_list_of_dicts(doc.get("routes"), label="route_inventory")
     if isinstance(doc, dict) and "items" in doc:
@@ -198,11 +169,21 @@ def _as_list_of_dicts(value: object, *, label: str) -> list[dict[str, Any]]:
 # -----------------------------
 # inventory building
 # -----------------------------
+def _plane_id_for_path(path: str) -> str:
+    planes = match_plane(path)
+    if isinstance(planes, list) and len(planes) == 1:
+        try:
+            return str(planes[0])
+        except Exception:
+            return "unmapped"
+    return "unmapped"
+
+
 def current_inventory() -> list[dict[str, Any]]:
     """
     IMPORTANT:
+    - Canonical route inventory is derived from AST (deterministic).
     - Emit BOTH `plane_id` (canonical) and `plane` (compat alias).
-    - The platform inventory generator must be able to trust `plane_id` stamps.
     """
     rows: list[dict[str, Any]] = []
     for route in runtime_routes_ast():
@@ -211,10 +192,7 @@ def current_inventory() -> list[dict[str, Any]]:
 
         plane_id = "unmapped"
         if isinstance(planes, list) and len(planes) == 1:
-            try:
-                plane_id = str(planes[0])
-            except Exception:
-                plane_id = "unmapped"
+            plane_id = str(planes[0])
 
         rows.append({**route, "plane_id": plane_id, "plane": plane_id})
 
@@ -298,10 +276,6 @@ def _write_topology_hash() -> None:
 def _summary_payload(
     cur: list[dict[str, Any]], expected: list[dict[str, Any]] | None
 ) -> dict[str, Any]:
-    """
-    Test/legacy compatibility hook.
-    Unit tests monkeypatch this symbol, so it must exist.
-    """
     contract = contract_routes()
     contract_list = _as_list_of_dicts(contract, label="contract_routes()")
 

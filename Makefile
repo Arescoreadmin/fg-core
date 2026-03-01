@@ -608,6 +608,31 @@ pr-soc-prep:
 	@echo "==> Verifying SOC manifest"
 	$(MAKE) soc-manifest-verify
 
+
+# -------------------------
+# fg-required lanes (harness expects these targets)
+# -------------------------
+
+.PHONY: policy-validate required-tests-gate fg-security
+
+policy-validate: guard-scripts
+	@set -euo pipefail; \
+	python -V >/dev/null; \
+	.venv/bin/python tools/testing/policy/validate_policy.py
+
+required-tests-gate: guard-scripts
+	@set -euo pipefail; \
+	python -V >/dev/null; \
+	.venv/bin/python tools/testing/harness/required_tests_gate.py
+
+# fg-security is a lane target, not a single check.
+# Keep it deterministic and scoped: policy validation + invariant coverage + SOC invariants (if already defined).
+fg-security: policy-validate required-tests-gate soc-invariants
+	@set -euo pipefail; \
+	.venv/bin/python tools/testing/security/check_invariant_coverage.py; \
+	echo "fg-security: PASS"
+
+	
 # =============================================================================
 # Formatting / Lint (ruff) - venv always
 # =============================================================================
@@ -702,7 +727,8 @@ fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check \
 	bp-s0-001-gate bp-s0-005-gate bp-c-001-gate bp-c-002-gate bp-c-003-gate bp-c-004-gate bp-c-005-gate bp-c-006-gate \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate \
-	verify-spine-modules verify-schemas verify-drift align-score
+	verify-spine-modules verify-schemas verify-drift align-score pr-fix-log
+	
 	@$(MAKE) -s test-unit
 	@$(MAKE) -s fg-lint
 	@$(MAKE) -s test-dashboard-p0
@@ -1134,9 +1160,9 @@ __mkdb__:
 makefile-sanity: guard-scripts
 	@echo "Makefile sanity: OK"
 
-pr-check-fast:
+pr-check-fast-legacy:
 	@$(MAKE) -s fg-fast
-	@echo "pr-check-fast: OK"
+	@echo "pr-check-fast-legacy: OK"
 
 pr-check-lint:
 	@$(MAKE) -s fg-lint
@@ -1193,7 +1219,7 @@ codex-check: venv
 .PHONY: soc-manifest-sync soc-manifest-verify
 
 soc-manifest-sync: venv
-	@PYTHONPATH=. $(PY) tools/ci/sync_soc_manifest_status.py --mode sync --write
+	@PYTHONPATH=. $(PY) tools/ci/sync_soc_manifest_status.py --mode sync
 
 soc-manifest-verify: venv
 	@PYTHONPATH=. $(PY) tools/ci/sync_soc_manifest_status.py --mode verify --fail-on-unresolved-p0
@@ -1295,3 +1321,13 @@ nuclear-full: pr-check
 platform-inventory: fg-contract
 openapi-summary: fg-contract
 pr-merge-smoke: pr-check-fast
+
+# =============================================================================
+# PR Fixes Log Guard
+# =============================================================================
+
+pr-fix-log:
+	@scripts/ci/enforce_pr_fix_log.sh
+
+pr-check-fast: fg-fast pr-fix-log
+	@echo "pr-check-fast: OK"
