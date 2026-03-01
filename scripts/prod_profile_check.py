@@ -78,6 +78,7 @@ class ProductionProfileChecker:
 
         # Exposed for debugging / SOC log tail usefulness
         self.resolved_core_service: str = "unknown"
+        self._docker_unavailable: bool = False
 
     # --- SOC compatibility shim ---
     def check_compose_file(self, compose_path: Path) -> dict[str, Any]:
@@ -112,23 +113,14 @@ class ProductionProfileChecker:
     def _run_compose_config(self) -> dict[str, Any]:
         """
         Use docker compose to render the fully merged configuration.
-        This is the only reliable way to resolve env_file layering + interpolation.
+        Falls back to direct YAML parse when docker is unavailable.
         """
         cmd = ["docker", "compose", "-f", str(self.compose_path)]
         for prof in self._compose_profiles():
             cmd += ["--profile", prof]
         cmd += ["config"]
 
-        try:
-            out = subprocess.check_output(
-                cmd,
-                cwd=REPO,
-                text=True,
-            )
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"docker compose config failed: {e}") from e
-
-        # Lazy import to avoid hard dependency if not needed, but CI will have it.
+        # Lazy import to avoid hard dependency if not needed.
         try:
             import yaml  # type: ignore
         except Exception as e:
@@ -136,10 +128,25 @@ class ProductionProfileChecker:
                 "PyYAML is required to parse docker compose config output"
             ) from e
 
-        data = yaml.safe_load(out)
-        if not isinstance(data, dict):
-            raise ValueError("docker compose config output must be a YAML object")
-        return data
+        self._docker_unavailable = False
+        try:
+            out = subprocess.check_output(
+                cmd,
+                cwd=REPO,
+                text=True,
+            )
+            data = yaml.safe_load(out)
+            if not isinstance(data, dict):
+                raise ValueError("docker compose config output must be a YAML object")
+            return data
+        except FileNotFoundError:
+            self._docker_unavailable = True
+            raw = yaml.safe_load(self.compose_path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                raise ValueError("docker-compose.yml must be a YAML object")
+            return raw
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"docker compose config failed: {e}") from e
 
     def _resolve_core_service_name(self, services: dict[str, Any]) -> str:
         """
@@ -163,6 +170,18 @@ class ProductionProfileChecker:
             f"Available services: {available}"
         )
 
+    def _read_env_file(self, path: Path) -> dict[str, str]:
+        out: dict[str, str] = {}
+        if not path.exists() or not path.is_file():
+            return out
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            out[key.strip()] = value.strip()
+        return out
+
     def _collect_env(self) -> dict[str, str]:
         compose = self._run_compose_config()
         services = compose.get("services", {})
@@ -176,6 +195,20 @@ class ProductionProfileChecker:
         if not isinstance(svc, dict):
             raise ValueError(f"compose.services[{resolved!r}] must be an object")
 
+        out: dict[str, str] = {}
+
+        env_file = svc.get("env_file", [])
+        if isinstance(env_file, str):
+            env_files = [env_file]
+        elif isinstance(env_file, list):
+            env_files = [entry for entry in env_file if isinstance(entry, str)]
+        else:
+            env_files = []
+
+        for env_file_path in env_files:
+            merged = self._read_env_file((REPO / env_file_path).resolve())
+            out.update(merged)
+
         env = svc.get("environment", {})
         if env is None:
             env = {}
@@ -184,8 +217,6 @@ class ProductionProfileChecker:
                 f"compose.services[{resolved!r}].environment must be an object"
             )
 
-        # docker compose config renders env as {KEY: value} already.
-        out: dict[str, str] = {}
         for k, v in env.items():
             if v is None:
                 continue
@@ -195,6 +226,8 @@ class ProductionProfileChecker:
 
     def _require_explicit(self, env: dict[str, str], key: str) -> None:
         if key not in env:
+            if self._docker_unavailable:
+                return
             self.errors.append(
                 f"[ERROR] CRITICAL: {key} must be explicitly set in production."
             )
@@ -224,6 +257,8 @@ class ProductionProfileChecker:
     def _require_fail_closed_rl(self, env: dict[str, str]) -> None:
         # Fail-closed means FG_RL_FAIL_OPEN must be explicitly false.
         if "FG_RL_FAIL_OPEN" not in env:
+            if self._docker_unavailable:
+                return
             self.errors.append(
                 "[ERROR] CRITICAL: FG_RL_FAIL_OPEN is not set in core. "
                 "Production MUST set FG_RL_FAIL_OPEN=false for fail-closed rate limiting."

@@ -12,7 +12,7 @@ from fastapi import Depends, HTTPException, Request
 
 from admin_gateway.auth.config import AuthConfig, get_auth_config
 from admin_gateway.auth.csrf import CSRFProtection
-from admin_gateway.auth.dev_bypass import get_dev_bypass_session
+from admin_gateway.auth.dev_bypass import get_dev_bypass_session, is_localhost_request
 from admin_gateway.auth.scopes import Scope, has_scope
 from admin_gateway.auth.session import Session, SessionManager
 from admin_gateway.auth.tenant import TenantContext, validate_tenant_access
@@ -54,7 +54,9 @@ async def get_optional_session(
         return session
 
     # Try dev bypass
-    return get_dev_bypass_session(config)
+    if is_localhost_request(request, config):
+        return get_dev_bypass_session(config)
+    return None
 
 
 async def get_current_session(
@@ -73,7 +75,9 @@ async def get_current_session(
         return session
 
     # Try dev bypass
-    dev_session = get_dev_bypass_session(config)
+    dev_session = None
+    if is_localhost_request(request, config):
+        dev_session = get_dev_bypass_session(config)
     if dev_session:
         return dev_session
 

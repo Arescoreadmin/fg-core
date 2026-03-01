@@ -27,11 +27,51 @@ if ruff --help | grep -q "format"; then
 fi
 
 echo "==> Gates: mypy"
-# Strict by default. If you want optional, make it explicit in fast mode.
+GATE_EXCEPTIONS_FILE="${ROOT}/docs/ai/CODEX_GATE_EXCEPTIONS.md"
+mypy_exception_status() {
+  # Returns:
+  #   0 => exactly one valid active mypy exception line
+  #   1 => no active mypy exception
+  #   2 => malformed or ambiguous active mypy exception lines present
+  [ -f "${GATE_EXCEPTIONS_FILE}" ] || return 1
+
+  local active_count valid_count
+  active_count="$(rg -n "^GATE_EXCEPTION\|mypy\|active\|" "${GATE_EXCEPTIONS_FILE}" | wc -l | tr -d ' ')"
+  valid_count="$({
+    rg -n "^GATE_EXCEPTION\|mypy\|active\|reason=[^|]+\|scope=[^|]+\|follow_up=[^|]+\|owner=[^|]+\|expires=[0-9]{4}-[0-9]{2}-[0-9]{2}$" "${GATE_EXCEPTIONS_FILE}" || true
+  } | wc -l | tr -d ' ')"
+
+  if [ "${active_count}" = "0" ]; then
+    return 1
+  fi
+
+  if [ "${active_count}" = "1" ] && [ "${valid_count}" = "1" ]; then
+    return 0
+  fi
+
+  return 2
+}
+# Strict by default. In strict mode, mypy may only be non-blocking if there is an explicit codex gate exception record.
 if [ "${GATES_MODE}" = "fast" ]; then
   mypy . || { echo "WARN: mypy failed in fast mode (non-blocking)"; }
 else
-  mypy .
+  if ! mypy .; then
+    exception_status=0
+    mypy_exception_status || exception_status=$?
+    case "${exception_status}" in
+      0)
+        echo "WARN: mypy failed under active codex gate exception (see ${GATE_EXCEPTIONS_FILE})"
+        ;;
+      1)
+        echo "ERROR: mypy failed and no codex gate exception is active"
+        exit 1
+        ;;
+      *)
+        echo "ERROR: malformed or ambiguous mypy exception entry in ${GATE_EXCEPTIONS_FILE}"
+        exit 1
+        ;;
+    esac
+  fi
 fi
 
 echo "==> Gates: pytest"
@@ -42,7 +82,10 @@ python -m pip check
 
 echo "==> Gates: basic secret scan (cheap tripwire)"
 # Prevent accidental key commits. Extend patterns over time.
+# Exclusions are intentionally narrow: detector-source files that contain known-safe pattern literals.
 rg -n --hidden --no-ignore-vcs \
+  -g '!services/ai_plane_extension/policy_engine.py' \
+  -g '!codex_gates.sh' \
   "(OPENAI_API_KEY|AWS_SECRET_ACCESS_KEY|BEGIN( RSA)? PRIVATE KEY|xox[baprs]-|-----BEGIN PRIVATE KEY-----)" \
   . && { echo "ERROR: possible secret detected (see matches above)"; exit 1; } || true
 

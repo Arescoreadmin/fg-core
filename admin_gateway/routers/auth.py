@@ -6,7 +6,9 @@ Handles OIDC login, callback, and logout flows.
 from __future__ import annotations
 
 import logging
+import os
 from typing import Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -14,12 +16,34 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from admin_gateway.auth.config import AuthConfig, get_auth_config
 from admin_gateway.auth.csrf import CSRFProtection
 from admin_gateway.auth.dev_bypass import get_dev_bypass_session
+from admin_gateway.auth.dev_bypass import is_localhost_request
 from admin_gateway.auth.oidc import OIDCClient
 from admin_gateway.auth.session import SessionManager
 
 log = logging.getLogger("admin-gateway.auth-router")
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _is_allowed_return_to(return_to: Optional[str]) -> bool:
+    if not return_to:
+        return True
+    if not return_to.startswith("/") or return_to.startswith("//"):
+        return False
+    parsed = urlparse(return_to)
+    if parsed.scheme or parsed.netloc:
+        return False
+    allow_prefixes = [
+        item.strip()
+        for item in os.getenv(
+            "FG_AUTH_RETURN_TO_ALLOWLIST", "/admin,/dashboard,/"
+        ).split(",")
+        if item.strip()
+    ]
+    return any(
+        return_to == prefix or return_to.startswith(f"{prefix}/")
+        for prefix in allow_prefixes
+    )
 
 
 def get_oidc_client(config: AuthConfig = Depends(get_auth_config)) -> OIDCClient:
@@ -51,8 +75,15 @@ async def login(
     If OIDC is not configured and dev bypass is enabled, creates a dev session.
     Otherwise, redirects to the OIDC provider.
     """
+    if not _is_allowed_return_to(return_to):
+        raise HTTPException(status_code=400, detail="Invalid return_to")
+
     # Check for dev bypass first
     if config.dev_bypass_allowed and not config.oidc_enabled:
+        if not is_localhost_request(request, config):
+            raise HTTPException(
+                status_code=403, detail="Dev bypass is restricted to localhost origins"
+            )
         # Create dev session and redirect to return_to or /admin/me
         session_manager = SessionManager(config)
         csrf = CSRFProtection(config)
@@ -133,7 +164,9 @@ async def callback(
         return_to = "/admin/me"
         pending_returns = getattr(request.app.state, "pending_returns", {})
         if state in pending_returns:
-            return_to = pending_returns.pop(state)
+            candidate = pending_returns.pop(state)
+            if _is_allowed_return_to(candidate):
+                return_to = candidate
 
         # Set session cookie and redirect
         response = RedirectResponse(url=return_to, status_code=302)

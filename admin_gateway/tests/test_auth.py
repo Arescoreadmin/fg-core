@@ -24,6 +24,32 @@ def test_dev_bypass_allows_access(monkeypatch):
     assert response.status_code == 200
 
 
+def test_dev_bypass_rejected_for_non_local_origin(monkeypatch):
+    monkeypatch.setenv("FG_ENV", "dev")
+    monkeypatch.setenv("FG_DEV_AUTH_BYPASS", "true")
+    monkeypatch.setenv("FG_SESSION_SECRET", "test-session-secret")
+    from admin_gateway.auth.config import reset_auth_config
+    from admin_gateway.main import build_app
+
+    reset_auth_config()
+    app = build_app()
+    with TestClient(app) as client:
+        response = client.get(
+            "/auth/login",
+            headers={"origin": "https://evil.example.com"},
+            follow_redirects=False,
+        )
+    assert response.status_code == 403
+
+
+def test_auth_login_rejects_unallowlisted_return_to(client_no_bypass):
+    response = client_no_bypass.get(
+        "/auth/login?return_to=https://evil.example.com/pwn",
+        follow_redirects=False,
+    )
+    assert response.status_code == 400
+
+
 def test_dev_bypass_refused_in_prod(monkeypatch):
     monkeypatch.setenv("FG_ENV", "prod")
     monkeypatch.setenv("FG_DEV_AUTH_BYPASS", "true")
@@ -32,9 +58,9 @@ def test_dev_bypass_refused_in_prod(monkeypatch):
     monkeypatch.setenv("FG_OIDC_CLIENT_ID", "client")
     monkeypatch.setenv("FG_OIDC_CLIENT_SECRET", "secret")
     monkeypatch.setenv(
-        "FG_OIDC_REDIRECT_URL",
-        "https://console.example.com/auth/callback",
+        "FG_OIDC_REDIRECT_URI", "https://console.example.com/auth/callback"
     )
+    monkeypatch.setenv("FG_OIDC_SCOPES", "openid profile email")
     import importlib
     import sys
 

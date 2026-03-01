@@ -17,8 +17,8 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools.testing.harness.triage_report import _classify
-from tools.testing.harness.quarantine_policy import pytest_addopts_for_lane
+from tools.testing.harness.triage_report import _classify  # noqa: E402
+from tools.testing.harness.quarantine_policy import pytest_addopts_for_lane  # noqa: E402
 
 ARTIFACT_ROOT = REPO_ROOT / "artifacts/testing"
 GLOBAL_BUDGET_SECONDS = 480
@@ -113,8 +113,18 @@ def _sanitize(text: str, secrets: list[str]) -> str:
     ]
     for pattern in two_group_patterns:
         cleaned = re.sub(pattern, r"\1[REDACTED]", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r'(\"api_key\"\s*:\s*\")(.*?)(\")', r"\1[REDACTED]\3", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r'(\"token\"\s*:\s*\")(.*?)(\")', r"\1[REDACTED]\3", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(
+        r"(\"api_key\"\s*:\s*\")(.*?)(\")",
+        r"\1[REDACTED]\3",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"(\"token\"\s*:\s*\")(.*?)(\")",
+        r"\1[REDACTED]\3",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
     cleaned = re.sub(r"\beyJ[a-zA-Z0-9._-]+\b", "[REDACTED]", cleaned)
     for secret in secrets:
         cleaned = cleaned.replace(secret, "[REDACTED]")
@@ -124,7 +134,9 @@ def _sanitize(text: str, secrets: list[str]) -> str:
 def _write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    tmp.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     tmp.replace(path)
 
 
@@ -141,7 +153,12 @@ def _sha256(path: Path) -> str:
 
 def _check_working_tree_clean(stage: str) -> None:
     proc = subprocess.run(
-        ["git", "status", "--porcelain"], cwd=REPO_ROOT, text=True, capture_output=True, check=False, shell=False
+        ["git", "status", "--porcelain"],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+        shell=False,
     )
     if proc.returncode != 0:
         raise SystemExit(f"unable to verify working tree at {stage}")
@@ -193,7 +210,13 @@ def _write_lane_triage(lane_dir: Path, log_file: Path) -> Path:
     return triage_path
 
 
-def _run_lane(lane: str, lane_timeout: int, remaining_budget: int, secrets: list[str], dry_run: bool) -> LaneResult:
+def _run_lane(
+    lane: str,
+    lane_timeout: int,
+    remaining_budget: int,
+    secrets: list[str],
+    dry_run: bool,
+) -> LaneResult:
     started = time.monotonic()
     lane_dir = ARTIFACT_ROOT / "lanes" / lane
     lane_dir.mkdir(parents=True, exist_ok=True)
@@ -202,14 +225,30 @@ def _run_lane(lane: str, lane_timeout: int, remaining_budget: int, secrets: list
     if dry_run:
         _append_capped_log(log_file, "[dry-run] commands skipped\n")
         triage_path = _write_lane_triage(lane_dir, log_file)
-        return LaneResult(lane=lane, status="passed", duration_seconds=0, timeout=False, artifact_paths={"lane_log": str(log_file), "lane_triage": str(triage_path)})
+        return LaneResult(
+            lane=lane,
+            status="passed",
+            duration_seconds=0,
+            timeout=False,
+            artifact_paths={"lane_log": str(log_file), "lane_triage": str(triage_path)},
+        )
 
     for command in LANE_COMMANDS[lane]:
         timeout = min(lane_timeout, remaining_budget)
         if timeout <= 0:
             _append_capped_log(log_file, "[budget-exhausted]\n")
             triage_path = _write_lane_triage(lane_dir, log_file)
-            return LaneResult(lane=lane, status="failed", duration_seconds=int(time.monotonic() - started), timeout=True, error="global_budget_exhausted", artifact_paths={"lane_log": str(log_file), "lane_triage": str(triage_path)})
+            return LaneResult(
+                lane=lane,
+                status="failed",
+                duration_seconds=int(time.monotonic() - started),
+                timeout=True,
+                error="global_budget_exhausted",
+                artifact_paths={
+                    "lane_log": str(log_file),
+                    "lane_triage": str(triage_path),
+                },
+            )
         try:
             env = _safe_env()
             addopts = pytest_addopts_for_lane(lane)
@@ -229,7 +268,17 @@ def _run_lane(lane: str, lane_timeout: int, remaining_budget: int, secrets: list
         except subprocess.TimeoutExpired:
             _append_capped_log(log_file, f"$ {' '.join(command)}\n[timeout]\n")
             triage_path = _write_lane_triage(lane_dir, log_file)
-            return LaneResult(lane=lane, status="failed", duration_seconds=int(time.monotonic() - started), timeout=True, error="lane_timeout", artifact_paths={"lane_log": str(log_file), "lane_triage": str(triage_path)})
+            return LaneResult(
+                lane=lane,
+                status="failed",
+                duration_seconds=int(time.monotonic() - started),
+                timeout=True,
+                error="lane_timeout",
+                artifact_paths={
+                    "lane_log": str(log_file),
+                    "lane_triage": str(triage_path),
+                },
+            )
 
         _append_capped_log(log_file, f"$ {' '.join(command)}\n")
         if proc.stdout:
@@ -239,10 +288,26 @@ def _run_lane(lane: str, lane_timeout: int, remaining_budget: int, secrets: list
 
         if proc.returncode != 0:
             triage_path = _write_lane_triage(lane_dir, log_file)
-            return LaneResult(lane=lane, status="failed", duration_seconds=int(time.monotonic() - started), timeout=False, error=f"exit_{proc.returncode}", artifact_paths={"lane_log": str(log_file), "lane_triage": str(triage_path)})
+            return LaneResult(
+                lane=lane,
+                status="failed",
+                duration_seconds=int(time.monotonic() - started),
+                timeout=False,
+                error=f"exit_{proc.returncode}",
+                artifact_paths={
+                    "lane_log": str(log_file),
+                    "lane_triage": str(triage_path),
+                },
+            )
 
     triage_path = _write_lane_triage(lane_dir, log_file)
-    return LaneResult(lane=lane, status="passed", duration_seconds=int(time.monotonic() - started), timeout=False, artifact_paths={"lane_log": str(log_file), "lane_triage": str(triage_path)})
+    return LaneResult(
+        lane=lane,
+        status="passed",
+        duration_seconds=int(time.monotonic() - started),
+        timeout=False,
+        artifact_paths={"lane_log": str(log_file), "lane_triage": str(triage_path)},
+    )
 
 
 def _write_lane_reports(results: list[LaneResult]) -> tuple[dict[str, str], list[str]]:
@@ -256,7 +321,10 @@ def _write_lane_reports(results: list[LaneResult]) -> tuple[dict[str, str], list
     for lane, report_name in report_specs.items():
         if not any(r.lane == lane for r in results):
             continue
-        payload = {"lane": lane, "status": next((r.status for r in results if r.lane == lane), "failed")}
+        payload = {
+            "lane": lane,
+            "status": next((r.status for r in results if r.lane == lane), "failed"),
+        }
         path = ARTIFACT_ROOT / report_name
         _write_json(path, payload)
         hashes[report_name] = _sha256(path)
@@ -264,7 +332,13 @@ def _write_lane_reports(results: list[LaneResult]) -> tuple[dict[str, str], list
     return hashes, generated
 
 
-def _write_summary(results: list[LaneResult], overall_status: str, budget_seconds: int, elapsed_seconds: int, artifact_hashes: dict[str, str]) -> None:
+def _write_summary(
+    results: list[LaneResult],
+    overall_status: str,
+    budget_seconds: int,
+    elapsed_seconds: int,
+    artifact_hashes: dict[str, str],
+) -> None:
     payload = {
         "artifact_hashes": artifact_hashes,
         "budget_seconds": budget_seconds,
@@ -295,11 +369,17 @@ def _write_summary(results: list[LaneResult], overall_status: str, budget_second
     ]
     for lane in payload["lanes"]:
         suffix = f" - {lane['error']}" if lane["error"] else ""
-        lines.append(f"- {lane['name']}: {lane['status']} ({lane['duration_seconds']}s){suffix}")
-    (ARTIFACT_ROOT / "fg-required-summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        lines.append(
+            f"- {lane['name']}: {lane['status']} ({lane['duration_seconds']}s){suffix}"
+        )
+    (ARTIFACT_ROOT / "fg-required-summary.md").write_text(
+        "\n".join(lines) + "\n", encoding="utf-8"
+    )
 
 
-def _verify_required_files(results: list[LaneResult], generated_reports: list[str], strict: bool) -> None:
+def _verify_required_files(
+    results: list[LaneResult], generated_reports: list[str], strict: bool
+) -> None:
     if not strict:
         return
     required = set(ALWAYS_REQUIRED_FILES)
@@ -307,17 +387,31 @@ def _verify_required_files(results: list[LaneResult], generated_reports: list[st
     for result in results:
         if result.artifact_paths is None:
             raise SystemExit(f"missing lane artifacts metadata for lane={result.lane}")
-        required.add(Path(result.artifact_paths["lane_log"]).relative_to(ARTIFACT_ROOT).as_posix())
-        required.add(Path(result.artifact_paths["lane_triage"]).relative_to(ARTIFACT_ROOT).as_posix())
+        required.add(
+            Path(result.artifact_paths["lane_log"])
+            .relative_to(ARTIFACT_ROOT)
+            .as_posix()
+        )
+        required.add(
+            Path(result.artifact_paths["lane_triage"])
+            .relative_to(ARTIFACT_ROOT)
+            .as_posix()
+        )
     missing = [name for name in sorted(required) if not (ARTIFACT_ROOT / name).exists()]
     if missing:
         raise SystemExit(f"missing required artifacts: {','.join(missing)}")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run fg-required deterministic hard gate")
-    parser.add_argument("--global-budget-seconds", type=int, default=GLOBAL_BUDGET_SECONDS)
-    parser.add_argument("--lane-timeout-seconds", type=int, default=DEFAULT_LANE_TIMEOUT_SECONDS)
+    parser = argparse.ArgumentParser(
+        description="Run fg-required deterministic hard gate"
+    )
+    parser.add_argument(
+        "--global-budget-seconds", type=int, default=GLOBAL_BUDGET_SECONDS
+    )
+    parser.add_argument(
+        "--lane-timeout-seconds", type=int, default=DEFAULT_LANE_TIMEOUT_SECONDS
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--strict", action=argparse.BooleanOptionalAction, default=True)
     args = parser.parse_args()
@@ -353,13 +447,22 @@ def main() -> int:
                     duration_seconds=0,
                     timeout=True,
                     error="global_budget_exceeded",
-                    artifact_paths={"lane_log": str(log_path), "lane_triage": str(triage_path)},
+                    artifact_paths={
+                        "lane_log": str(log_path),
+                        "lane_triage": str(triage_path),
+                    },
                 )
             )
             overall_status = "failed"
             break
 
-        lane_result = _run_lane(lane=lane, lane_timeout=lane_timeout, remaining_budget=remaining, secrets=secrets, dry_run=args.dry_run)
+        lane_result = _run_lane(
+            lane=lane,
+            lane_timeout=lane_timeout,
+            remaining_budget=remaining,
+            secrets=secrets,
+            dry_run=args.dry_run,
+        )
         results.append(lane_result)
         if lane_result.status != "passed":
             overall_status = "failed"
@@ -369,7 +472,9 @@ def main() -> int:
 
     elapsed_seconds = int(time.monotonic() - started)
     hashes, generated_reports = _write_lane_reports(results)
-    _write_summary(results, overall_status, args.global_budget_seconds, elapsed_seconds, hashes)
+    _write_summary(
+        results, overall_status, args.global_budget_seconds, elapsed_seconds, hashes
+    )
     _verify_required_files(results, generated_reports, strict=args.strict)
     return 0 if overall_status == "passed" else 1
 

@@ -7,6 +7,35 @@ from contextlib import contextmanager
 from pathlib import Path
 
 
+def test_make_metadata_canonicalized_across_sources():
+    from scripts.generate_platform_inventory import _extract_make_metadata
+
+    make_qp_lines = [
+        ".DEFAULT_GOAL := all",
+        ".PHONY: test lint fmt",
+        "include local.mk shared.mk",
+        "lint:",
+        "all:",
+        "fmt:",
+    ]
+    makefile_lines = [
+        "include shared.mk local.mk",
+        ".PHONY: fmt lint test",
+        ".DEFAULT_GOAL := all",
+        "fmt:",
+        "all:",
+        "lint:",
+    ]
+
+    a = _extract_make_metadata(make_qp_lines)
+    b = _extract_make_metadata(makefile_lines)
+
+    assert a == b
+    assert a["targets"] == ["all", "fmt", "lint"]
+    assert a["phony"] == ["fmt", "lint", "test"]
+    assert a["includes"] == ["local.mk", "shared.mk"]
+
+
 FILES = [
     Path("artifacts/PLATFORM_INVENTORY.md"),
     Path("artifacts/PLATFORM_GAPS.md"),

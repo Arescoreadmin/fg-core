@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import logging
 import os
+from urllib.parse import urlparse
 from typing import Iterable, Optional, Set
+
+from fastapi import Request
 
 from admin_gateway.auth.config import AuthConfig, get_auth_config
 from admin_gateway.auth.scopes import Scope
@@ -146,6 +149,29 @@ def get_dev_bypass_session(config: Optional[AuthConfig] = None) -> Optional[Sess
         )
 
     return None
+
+
+def is_localhost_request(request: Request, config: Optional[AuthConfig] = None) -> bool:
+    cfg = config or get_auth_config()
+    allowed_origins = set(cfg.dev_bypass_allowed_origins)
+    origin = request.headers.get("origin")
+    referer = request.headers.get("referer")
+
+    saw_web_origin = False
+    for candidate in (origin, referer):
+        if not candidate:
+            continue
+        saw_web_origin = True
+        parsed = urlparse(candidate)
+        source = f"{parsed.scheme}://{parsed.netloc}"
+        if source and source in allowed_origins:
+            return True
+
+    if saw_web_origin:
+        return False
+
+    host = (request.url.hostname or "").lower()
+    return host in {"localhost", "127.0.0.1", "::1", "testserver"}
 
 
 def _parse_csv_env(name: str) -> list[str]:

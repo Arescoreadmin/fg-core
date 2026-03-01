@@ -109,7 +109,9 @@ def setup_test_env(tmp_path, monkeypatch):
         "FG_OIDC_ISSUER",
         "FG_OIDC_CLIENT_ID",
         "FG_OIDC_CLIENT_SECRET",
+        "FG_OIDC_REDIRECT_URI",
         "FG_OIDC_REDIRECT_URL",
+        "FG_OIDC_SCOPES",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -158,7 +160,9 @@ def app_no_bypass(tmp_path, monkeypatch):
         "FG_OIDC_ISSUER",
         "FG_OIDC_CLIENT_ID",
         "FG_OIDC_CLIENT_SECRET",
+        "FG_OIDC_REDIRECT_URI",
         "FG_OIDC_REDIRECT_URL",
+        "FG_OIDC_SCOPES",
     ):
         monkeypatch.delenv(key, raising=False)
 

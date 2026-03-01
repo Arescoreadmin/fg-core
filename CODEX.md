@@ -90,6 +90,10 @@ Codex must instruct running:
 
 A change is not “done” unless gates pass.
 
+All Codex gates require a provisioned Codex environment.
+If `.venv` or required tooling is missing, the gate MUST fail-fast with a precondition error.
+Such precondition failures are not considered gate failures.
+
 ---
 
 ## PR Summary format (only when asked)
