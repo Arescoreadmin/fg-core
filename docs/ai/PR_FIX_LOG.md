@@ -263,3 +263,39 @@ Log normalization now enforces one-symptom-per-entry and canonical executable pa
 
 ### Governance Change
 Yes — governance evidence formatting and replayability constraints were tightened.
+
+## [2026-03-01] CI Lane Reliability Fixes for fg-required/fg-fast/docker-validate
+
+### Summary
+Several CI failures were caused by governance/infra preconditions rather than auth logic regressions: `fg-security` target was missing, required compose interpolation variables were not consistently provisioned for `prod-profile-check`, and shared secret generation omitted `NATS_AUTH_TOKEN`. The fix restores deterministic lane behavior and makes CI guard/docker validation align with the intended required lanes.
+
+### Symptom
+- `make: *** No rule to make target 'fg-security'.  Stop.`
+- `error while interpolating services.... required variable ... is missing a value`
+- `Error: Process completed with exit code 1` in `fg-required` / `fg-fast` / docker validation lanes.
+
+### Root Cause
+The testing governance lane contract referenced `fg-security`, but Makefile did not define it. In parallel, production-profile checks invoked compose resolution in contexts where required env interpolation values could be absent, and the shared CI secrets composite action did not export `NATS_AUTH_TOKEN`.
+
+### Impact Surface
+- Files: `Makefile`, `.github/actions/fg-secrets/action.yml`, `.gitignore`, `env/prod.env`
+- Services: CI lane runner, compose/prod-profile validation, security lane orchestration
+- Profiles: PR guard (`fg-fast`), required-lane harness (`fg-required`), docker validation
+- Governance surfaces affected: required lane contract, production-profile gate determinism
+
+### Resolution
+Added explicit `fg-security` make target and phony registration, sourced `PROD_ENV_FILE` consistently in production-profile checks, injected deterministic fallback interpolation values for compose-required secrets during profile gate execution (gate-only context), exported `NATS_AUTH_TOKEN` from the shared CI secrets action, and committed a non-secret `env/prod.env` hardening profile (with `.gitignore` exception) so compose `env_file` paths resolve in CI.
+
+### Gates Executed
+- `make -n fg-security`
+- `make -n prod-profile-check`
+- `python -m unittest -q tests.tools_minimal.test_fg_required_minimal`
+
+### Final Status
+PASS
+
+### Preventative Control
+CI now has an explicit security lane target and deterministic compose/prod-profile preconditions, reducing false-red required-lane failures.
+
+### Governance Change
+Yes — required lane implementation now matches declared governance lane set (`fg-fast`, `fg-contract`, `fg-security`).
