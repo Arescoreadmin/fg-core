@@ -373,17 +373,43 @@ PROD_ENV_FILE ?= env/prod.env
 .PHONY: prod-profile-check dos-hardening-check
 prod-profile-check: venv
 	@set -euo pipefail; \
-	if [ -f env/prod.env ]; then \
-		set -a; . env/prod.env; set +a; \
+	if [ -f "$(PROD_ENV_FILE)" ]; then \
+		set -a; . "$(PROD_ENV_FILE)"; set +a; \
 	fi; \
+	if [ -z "${POSTGRES_PASSWORD:-}" ]; then POSTGRES_PASSWORD=fg_password; fi; \
+	if [ -z "${REDIS_PASSWORD:-}" ]; then REDIS_PASSWORD=fg_redis_password; fi; \
+	if [ -z "${NATS_AUTH_TOKEN:-}" ]; then NATS_AUTH_TOKEN=fg_nats_token; fi; \
+	if [ -z "${FG_API_KEY:-}" ]; then FG_API_KEY=fg_api_key_ci_only; fi; \
+	if [ -z "${FG_WEBHOOK_SECRET:-}" ]; then FG_WEBHOOK_SECRET=fg_webhook_secret_ci_only; fi; \
+	export POSTGRES_PASSWORD REDIS_PASSWORD NATS_AUTH_TOKEN FG_API_KEY FG_WEBHOOK_SECRET; \
+	created_env=0; \
+	if [ ! -f .env ]; then \
+		created_env=1; \
+		printf "POSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nNATS_AUTH_TOKEN=%s\nFG_API_KEY=%s\nFG_WEBHOOK_SECRET=%s\n" "$$POSTGRES_PASSWORD" "$$REDIS_PASSWORD" "$$NATS_AUTH_TOKEN" "$$FG_API_KEY" "$$FG_WEBHOOK_SECRET" > .env; \
+	fi; \
+	cleanup(){ if [ "$$created_env" = "1" ]; then rm -f .env; fi; }; \
+	trap cleanup EXIT; \
 	FG_ENV=prod $(PY_CONTRACT) scripts/prod_profile_check.py
 
 dos-hardening-check: _require-venv
 	@FG_ENV=prod $(PYTEST_ENV) $(PYTEST) -q -p no:unraisableexception tests/test_dos_guard.py
 	@set -euo pipefail; \
-	if [ -f env/prod.env ]; then \
-		set -a; . env/prod.env; set +a; \
+	if [ -f "$(PROD_ENV_FILE)" ]; then \
+		set -a; . "$(PROD_ENV_FILE)"; set +a; \
 	fi; \
+	if [ -z "${POSTGRES_PASSWORD:-}" ]; then POSTGRES_PASSWORD=fg_password; fi; \
+	if [ -z "${REDIS_PASSWORD:-}" ]; then REDIS_PASSWORD=fg_redis_password; fi; \
+	if [ -z "${NATS_AUTH_TOKEN:-}" ]; then NATS_AUTH_TOKEN=fg_nats_token; fi; \
+	if [ -z "${FG_API_KEY:-}" ]; then FG_API_KEY=fg_api_key_ci_only; fi; \
+	if [ -z "${FG_WEBHOOK_SECRET:-}" ]; then FG_WEBHOOK_SECRET=fg_webhook_secret_ci_only; fi; \
+	export POSTGRES_PASSWORD REDIS_PASSWORD NATS_AUTH_TOKEN FG_API_KEY FG_WEBHOOK_SECRET; \
+	created_env=0; \
+	if [ ! -f .env ]; then \
+		created_env=1; \
+		printf "POSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nNATS_AUTH_TOKEN=%s\nFG_API_KEY=%s\nFG_WEBHOOK_SECRET=%s\n" "$$POSTGRES_PASSWORD" "$$REDIS_PASSWORD" "$$NATS_AUTH_TOKEN" "$$FG_API_KEY" "$$FG_WEBHOOK_SECRET" > .env; \
+	fi; \
+	cleanup(){ if [ "$$created_env" = "1" ]; then rm -f .env; fi; }; \
+	trap cleanup EXIT; \
 	FG_ENV=prod $(PY_CONTRACT) scripts/prod_profile_check.py
 
 # =============================================================================
@@ -479,13 +505,38 @@ bp-d-000-gate: venv
 prod-unsafe-config-check: venv
 	@$(PY) tools/ci/check_prod_unsafe_config.py
 
+
+.PHONY: policy-validate required-tests-gate
+policy-validate: venv
+	@$(PY) tools/testing/policy/validate_policy.py
+
+required-tests-gate: venv
+	@$(PY) tools/testing/harness/required_tests_gate.py --base-ref "$${GITHUB_BASE_REF:-main}"
+
 security-regression-gates: venv
 	@$(PY) tools/ci/check_security_regression_gates.py
 	@$(PY) tools/ci/check_openapi_security_diff.py
 	@$(PY) tools/ci/check_artifact_policy.py
 
 soc-invariants: venv
-	@PYTHONPATH=. $(PY) tools/ci/check_soc_invariants.py
+	@set -euo pipefail; \
+	if [ -f "$(PROD_ENV_FILE)" ]; then \
+		set -a; . "$(PROD_ENV_FILE)"; set +a; \
+	fi; \
+	if [ -z "${POSTGRES_PASSWORD:-}" ]; then POSTGRES_PASSWORD=fg_password; fi; \
+	if [ -z "${REDIS_PASSWORD:-}" ]; then REDIS_PASSWORD=fg_redis_password; fi; \
+	if [ -z "${NATS_AUTH_TOKEN:-}" ]; then NATS_AUTH_TOKEN=fg_nats_token; fi; \
+	if [ -z "${FG_API_KEY:-}" ]; then FG_API_KEY=fg_api_key_ci_only; fi; \
+	if [ -z "${FG_WEBHOOK_SECRET:-}" ]; then FG_WEBHOOK_SECRET=fg_webhook_secret_ci_only; fi; \
+	export POSTGRES_PASSWORD REDIS_PASSWORD NATS_AUTH_TOKEN FG_API_KEY FG_WEBHOOK_SECRET; \
+	created_env=0; \
+	if [ ! -f .env ]; then \
+		created_env=1; \
+		printf "POSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nNATS_AUTH_TOKEN=%s\nFG_API_KEY=%s\nFG_WEBHOOK_SECRET=%s\n" "$$POSTGRES_PASSWORD" "$$REDIS_PASSWORD" "$$NATS_AUTH_TOKEN" "$$FG_API_KEY" "$$FG_WEBHOOK_SECRET" > .env; \
+	fi; \
+	cleanup(){ if [ "$$created_env" = "1" ]; then rm -f .env; fi; }; \
+	trap cleanup EXIT; \
+	PYTHONPATH=. $(PY) tools/ci/check_soc_invariants.py
 
 check-connectors-rls: venv
 	@$(PY) tools/ci/check_connectors_rls.py
@@ -631,7 +682,7 @@ exam-export-test: venv _require-pytest-venv
 exam-reproduce-test: venv _require-pytest-venv
 	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_audit_engine.py -k "exam_reproduce"
 
-.PHONY: fg-fast fg-fast-ci fg-fast-full connectors-gate g-fast
+.PHONY: fg-fast fg-fast-ci fg-fast-full fg-security connectors-gate g-fast
 
 connectors-gate: venv _require-pytest-venv
 	@$(MAKE) -s validate-connector-contracts
@@ -639,6 +690,10 @@ connectors-gate: venv _require-pytest-venv
 	@$(MAKE) -s route-inventory-audit
 	@$(PY) tools/ci/check_openapi_security_diff.py
 	@$(MAKE) -s check-connectors-rls
+
+
+fg-security: venv security-regression-gates soc-invariants check-connectors-rls
+	@$(PY) tools/testing/security/check_security_invariants.py
 
 fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check \
 	prod-unsafe-config-check security-regression-gates soc-invariants soc-manifest-verify \

@@ -34,6 +34,7 @@ runs:
           echo "FG_API_KEY=$(gen)"
           echo "REDIS_PASSWORD=$(gen | cut -c1-32)"
           echo "POSTGRES_PASSWORD=$(gen | cut -c1-32)"
+          echo "NATS_AUTH_TOKEN=$(gen | cut -c1-32)"
           echo "FG_AGENT_API_KEY=$(gen)"
           echo "FG_WEBHOOK_SECRET=$(gen)"
         } >> "$GITHUB_ENV"

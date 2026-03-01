@@ -14,7 +14,7 @@ from starlette.responses import JSONResponse
 
 from admin_gateway.auth.config import get_auth_config
 from admin_gateway.auth.csrf import CSRFProtection, STATE_CHANGING_METHODS
-from admin_gateway.auth.dev_bypass import get_dev_bypass_session
+from admin_gateway.auth.dev_bypass import get_dev_bypass_session, is_localhost_request
 from admin_gateway.auth.session import Session, SessionManager
 
 log = logging.getLogger("admin-gateway.auth-middleware")
@@ -149,7 +149,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return session
 
         # Try dev bypass
-        return get_dev_bypass_session(self.config)
+        if is_localhost_request(request, self.config):
+            return get_dev_bypass_session(self.config)
+        return None
 
     def _requires_auth(self, path: str) -> bool:
         """Check if path requires authentication."""

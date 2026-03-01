@@ -63,11 +63,11 @@ jobs:
 
       - name: Build images via docker compose
         run: |
-          docker compose --env-file .env.ci build
+          docker compose --env-file .env.ci --profile core --profile admin build
 
       - name: Start stack
         run: |
-          docker compose --env-file .env.ci up -d
+          docker compose --env-file .env.ci --profile core --profile admin up -d --build
 
       - name: Smoke test /health
         run: |
@@ -86,9 +86,9 @@ jobs:
       - name: Dump docker compose logs on failure
         if: failure()
         run: |
-          docker compose --env-file .env.ci logs || true
+          docker compose --env-file .env.ci --profile core --profile admin logs || true
 
       - name: Tear down stack
         if: always()
         run: |
-          docker compose --env-file .env.ci down -v || true
+          docker compose --env-file .env.ci --profile core --profile admin down -v || true

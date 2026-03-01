@@ -16,7 +16,9 @@ def save(path: Path, payload: dict[str, object]) -> None:
     path.write_text(yaml.safe_dump(payload, sort_keys=True), encoding="utf-8")
 
 
-def update_baseline(path: Path, lane: str, duration_seconds: int, branch: str, event: str) -> None:
+def update_baseline(
+    path: Path, lane: str, duration_seconds: int, branch: str, event: str
+) -> None:
     if branch != "main" or event not in {"schedule", "workflow_dispatch", "push"}:
         raise SystemExit("baseline updates allowed only on main protected workflows")
     doc = load(path)
@@ -34,7 +36,9 @@ def main() -> int:
     p.add_argument("--branch", required=True)
     p.add_argument("--event", required=True)
     args = p.parse_args()
-    update_baseline(Path(args.baseline), args.lane, args.duration, args.branch, args.event)
+    update_baseline(
+        Path(args.baseline), args.lane, args.duration, args.branch, args.event
+    )
     return 0
 
 

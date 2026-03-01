@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from functools import lru_cache
+from urllib.parse import urlparse
 from typing import Optional
 
 _TRUE = {"1", "true", "yes", "y", "on"}
@@ -38,7 +39,9 @@ class AuthConfig:
         FG_OIDC_ISSUER: OIDC issuer URL
         FG_OIDC_CLIENT_ID: OAuth client ID
         FG_OIDC_CLIENT_SECRET: OAuth client secret
-        FG_OIDC_REDIRECT_URL: OAuth callback URL
+        FG_OIDC_REDIRECT_URI: OAuth callback URI
+        FG_OIDC_SCOPES: OAuth scopes (space/comma separated)
+        FG_OIDC_AUDIENCE: Optional OAuth audience
         FG_ENV: Environment (prod/staging/dev/test)
         FG_DEV_AUTH_BYPASS: Enable dev auth bypass (dev/test only)
         FG_DEV_TENANT_ID: Tenant id to mint in dev bypass session (default: default)
@@ -51,7 +54,10 @@ class AuthConfig:
     oidc_issuer: Optional[str] = None
     oidc_client_id: Optional[str] = None
     oidc_client_secret: Optional[str] = None
-    oidc_redirect_url: Optional[str] = None
+    oidc_redirect_uri: Optional[str] = None
+    oidc_redirect_url: Optional[str] = None  # legacy alias
+    oidc_scopes: str = "openid profile email"
+    oidc_audience: Optional[str] = None
 
     env: str = "dev"
     dev_auth_bypass: bool = False
@@ -65,6 +71,13 @@ class AuthConfig:
 
     csrf_cookie_name: str = "fg_csrf_token"
     csrf_header_name: str = "X-CSRF-Token"
+    dev_bypass_allowed_origins: list[str] = field(
+        default_factory=lambda: ["http://localhost", "http://127.0.0.1"]
+    )
+
+    def __post_init__(self) -> None:
+        if (not self.oidc_redirect_uri) and self.oidc_redirect_url:
+            object.__setattr__(self, "oidc_redirect_uri", self.oidc_redirect_url)
 
     @property
     def env_lower(self) -> str:
@@ -92,8 +105,14 @@ class AuthConfig:
             self.oidc_issuer
             and self.oidc_client_id
             and self.oidc_client_secret
-            and self.oidc_redirect_url
+            and self.oidc_redirect_uri
+            and self.oidc_scopes.strip()
         )
+
+    @property
+    def oidc_scopes_list(self) -> list[str]:
+        raw = self.oidc_scopes.replace(",", " ")
+        return [scope for scope in raw.split() if scope]
 
     @property
     def dev_bypass_allowed(self) -> bool:
@@ -123,13 +142,15 @@ class AuthConfig:
         if self.is_prod and not self.oidc_enabled:
             errors.append("OIDC must be configured in production")
 
-        oidc_fields = [
+        oidc_core_fields = [
             self.oidc_issuer,
             self.oidc_client_id,
             self.oidc_client_secret,
-            self.oidc_redirect_url,
+            self.oidc_redirect_uri,
         ]
-        if any(oidc_fields) and not all(oidc_fields):
+        if any(oidc_core_fields) and not all(
+            [*oidc_core_fields, self.oidc_scopes.strip()]
+        ):
             missing: list[str] = []
             if not self.oidc_issuer:
                 missing.append("FG_OIDC_ISSUER")
@@ -137,11 +158,38 @@ class AuthConfig:
                 missing.append("FG_OIDC_CLIENT_ID")
             if not self.oidc_client_secret:
                 missing.append("FG_OIDC_CLIENT_SECRET")
-            if not self.oidc_redirect_url:
-                missing.append("FG_OIDC_REDIRECT_URL")
+            if not self.oidc_redirect_uri:
+                missing.append("FG_OIDC_REDIRECT_URI")
+            if not self.oidc_scopes.strip():
+                missing.append("FG_OIDC_SCOPES")
             errors.append(f"OIDC partially configured, missing: {', '.join(missing)}")
 
+        if self.dev_auth_bypass:
+            invalid_origins = [
+                origin
+                for origin in self.dev_bypass_allowed_origins
+                if not _is_loopback_origin(origin)
+            ]
+            if invalid_origins:
+                errors.append(
+                    "FG_DEV_BYPASS_ALLOWED_ORIGINS must contain localhost-only origins; "
+                    f"invalid: {', '.join(invalid_origins)}"
+                )
+
         return errors
+
+
+def _is_loopback_origin(origin: str) -> bool:
+    if not origin:
+        return False
+    parsed = urlparse(origin)
+    host = (parsed.hostname or "").lower()
+    return host in {"localhost", "127.0.0.1", "::1"}
+
+
+def _parse_csv(name: str, default: str) -> list[str]:
+    value = os.getenv(name, default)
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 @lru_cache(maxsize=1)
@@ -150,12 +198,19 @@ def get_auth_config() -> AuthConfig:
         oidc_issuer=os.getenv("FG_OIDC_ISSUER"),
         oidc_client_id=os.getenv("FG_OIDC_CLIENT_ID"),
         oidc_client_secret=os.getenv("FG_OIDC_CLIENT_SECRET"),
+        oidc_redirect_uri=os.getenv("FG_OIDC_REDIRECT_URI")
+        or os.getenv("FG_OIDC_REDIRECT_URL"),
         oidc_redirect_url=os.getenv("FG_OIDC_REDIRECT_URL"),
+        oidc_scopes=os.getenv("FG_OIDC_SCOPES", "openid profile email"),
+        oidc_audience=os.getenv("FG_OIDC_AUDIENCE"),
         env=os.getenv("FG_ENV", "dev"),
         dev_auth_bypass=_env_bool("FG_DEV_AUTH_BYPASS", False),
         session_secret=os.getenv("FG_SESSION_SECRET", os.urandom(32).hex()),
         session_cookie_name=os.getenv("FG_SESSION_COOKIE_NAME", "fg_admin_session"),
         session_ttl_seconds=_env_int("FG_SESSION_TTL_SECONDS", 28800),
+        dev_bypass_allowed_origins=_parse_csv(
+            "FG_DEV_BYPASS_ALLOWED_ORIGINS", "http://localhost,http://127.0.0.1"
+        ),
     )
 
 

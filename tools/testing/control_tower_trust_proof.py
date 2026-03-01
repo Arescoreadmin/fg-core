@@ -15,7 +15,9 @@ def _base_url() -> str:
     return base_url.rstrip("/")
 
 
-def _request_json(base_url: str, path: str, headers: dict[str, str]) -> tuple[int, dict, str | None]:
+def _request_json(
+    base_url: str, path: str, headers: dict[str, str]
+) -> tuple[int, dict, str | None]:
     req = Request(f"{base_url}{path}", headers=headers, method="GET")
     try:
         with urlopen(req, timeout=30) as resp:
@@ -44,10 +46,12 @@ def _emit(artifact: dict) -> None:
 
 def main() -> None:
     run_at = datetime.now(timezone.utc).isoformat()
-    build_sha = (os.getenv("GITHUB_SHA") or os.getenv("CI_COMMIT_SHA") or "unknown").strip()
+    build_sha = (
+        os.getenv("GITHUB_SHA") or os.getenv("CI_COMMIT_SHA") or "unknown"
+    ).strip()
     try:
         base_url = _base_url()
-    except SystemExit as exc:
+    except SystemExit:
         artifact = {
             "status": "fail",
             "reason": "FG_CONTROL_TOWER_BASE_URL is required (example: http://127.0.0.1:8000)",
@@ -74,19 +78,31 @@ def main() -> None:
     }
 
     try:
-        snapshot_status, snapshot, request_id = _request_json(base_url, "/control-tower/snapshot", headers)
-        verify_status, verify, _ = _request_json(base_url, "/forensics/chain/verify", headers)
-        replay_status, replay, _ = _request_json(base_url, "/forensics/chain/verify?limit=1", headers)
+        snapshot_status, snapshot, request_id = _request_json(
+            base_url, "/control-tower/snapshot", headers
+        )
+        verify_status, verify, _ = _request_json(
+            base_url, "/forensics/chain/verify", headers
+        )
+        replay_status, replay, _ = _request_json(
+            base_url, "/forensics/chain/verify?limit=1", headers
+        )
         export_status, _, _ = _request_json(base_url, "/audit/export", headers)
 
         chain_pass = bool(verify.get("ok", verify.get("status") == "PASS"))
         replay_pass = bool(replay.get("ok", replay.get("status") == "PASS"))
-        clamp = (snapshot.get("tenant") or {}).get("clamp") if isinstance(snapshot, dict) else None
+        clamp = (
+            (snapshot.get("tenant") or {}).get("clamp")
+            if isinstance(snapshot, dict)
+            else None
+        )
 
         artifact.update(
             {
                 "snapshot_status": snapshot_status,
-                "snapshot_version": snapshot.get("version") if isinstance(snapshot, dict) else None,
+                "snapshot_version": snapshot.get("version")
+                if isinstance(snapshot, dict)
+                else None,
                 "tenant_clamp": clamp,
                 "chain_verify_status": verify_status,
                 "chain_verify_result": "pass" if chain_pass else "fail",

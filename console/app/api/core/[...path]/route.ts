@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
-const CORE_API_KEY = process.env.CORE_API_KEY;
-const CORE_TENANT_ID = process.env.CORE_TENANT_ID;
+const ADMIN_GATEWAY_URL = (process.env.ADMIN_GATEWAY_URL || 'http://localhost:8001').replace(/\/$/, '');
 const NODE_ENV = process.env.NODE_ENV || 'development';
-const ALLOW_TENANT_QUERY_OVERRIDE = NODE_ENV === 'development' && process.env.FG_CONSOLE_ALLOW_TENANT_QUERY_OVERRIDE === '1';
 
 const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'health/live', methods: new Set(['GET', 'HEAD']) },
@@ -64,21 +61,9 @@ function enforceRateLimit(request: NextRequest, requestId: string): NextResponse
   return null;
 }
 
-function resolveTenant(request: NextRequest): string | null {
-  const queryTenant = new URL(request.url).searchParams.get('tenant_id');
-  if (ALLOW_TENANT_QUERY_OVERRIDE && queryTenant) return queryTenant;
-  return CORE_TENANT_ID || null;
-}
-
 function buildCoreUrl(path: string[], request: NextRequest): string {
   const incoming = new URL(request.url);
-  const query = new URLSearchParams(incoming.search);
-  query.delete('tenant_id');
-
-  const tenant = resolveTenant(request);
-  if (tenant) query.set('tenant_id', tenant);
-
-  return `${CORE_API_URL}/${path.join('/')}?${query.toString()}`.replace(/\?$/, '');
+  return `${ADMIN_GATEWAY_URL}/${path.join('/')}?${incoming.searchParams.toString()}`.replace(/\?$/, '');
 }
 
 function isAlignmentArtifact(path: string[]) {
@@ -107,17 +92,17 @@ function isPrivateHost(hostname: string): boolean {
 }
 
 async function proxyToCore(request: NextRequest, path: string[], requestId: string): Promise<NextResponse> {
-  if (!CORE_API_KEY) return jsonError('CORE_API_KEY is not configured', 500, requestId);
-
   if (!isProxyPathAllowed(path, request.method)) {
     return jsonError('Route/method is not allowed by proxy policy', 403, requestId);
   }
 
   const headers = new Headers();
-  headers.set('X-API-Key', CORE_API_KEY);
   headers.set('X-Request-ID', requestId);
-  const tenant = resolveTenant(request);
-  if (tenant) headers.set('X-Tenant-ID', tenant);
+
+  const csrfToken = request.headers.get('x-csrf-token');
+  if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
+  const cookie = request.headers.get('cookie');
+  if (cookie) headers.set('Cookie', cookie);
 
   const contentType = request.headers.get('content-type');
   if (contentType && (request.method === 'POST' || request.method === 'DELETE')) {
@@ -128,7 +113,7 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
   if (request.method !== 'GET' && request.method !== 'HEAD') init.body = await request.text();
 
   const target = buildCoreUrl(path, request);
-  console.info(`[core-proxy] ${requestId} ${request.method} ${target}`);
+  console.info(`[admin-gateway-proxy] ${requestId} ${request.method} ${target}`);
 
   const response = await fetch(target, init);
   const body = await response.text();

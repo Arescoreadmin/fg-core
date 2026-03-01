@@ -42,7 +42,13 @@ def load_quarantine_nodeids(path: Path = POLICY_PATH) -> list[str]:
 
 def pytest_addopts_for_lane(lane: str) -> str:
     # Quarantined tests must not run in PR-required lanes.
-    if lane not in {"fg-fast", "fg-contract", "fg-security", "required-tests-gate", "policy-validate"}:
+    if lane not in {
+        "fg-fast",
+        "fg-contract",
+        "fg-security",
+        "required-tests-gate",
+        "policy-validate",
+    }:
         return ""
     nodeids = load_quarantine_nodeids()
     if not nodeids:
@@ -51,7 +57,9 @@ def pytest_addopts_for_lane(lane: str) -> str:
     return " ".join(deselects)
 
 
-def ensure_new_suspects_have_policy_entries(report_path: Path, policy_path: Path = POLICY_PATH) -> None:
+def ensure_new_suspects_have_policy_entries(
+    report_path: Path, policy_path: Path = POLICY_PATH
+) -> None:
     import json
 
     report = json.loads(report_path.read_text(encoding="utf-8"))
@@ -59,4 +67,6 @@ def ensure_new_suspects_have_policy_entries(report_path: Path, policy_path: Path
     policy_nodeids = set(load_quarantine_nodeids(policy_path))
     missing = sorted(suspects - policy_nodeids)
     if missing:
-        raise SystemExit(f"missing quarantine policy entries for suspected flakes: {missing}")
+        raise SystemExit(
+            f"missing quarantine policy entries for suspected flakes: {missing}"
+        )

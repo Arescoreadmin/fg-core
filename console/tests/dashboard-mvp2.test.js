@@ -7,6 +7,19 @@ function read(relPath) {
   return fs.readFileSync(path.join(__dirname, '..', relPath), 'utf8');
 }
 
+function listFilesRecursive(baseDir) {
+  const out = [];
+  for (const entry of fs.readdirSync(baseDir, { withFileTypes: true })) {
+    const full = path.join(baseDir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...listFilesRecursive(full));
+      continue;
+    }
+    out.push(full);
+  }
+  return out;
+}
+
 test('client API uses BFF /api/core and does not depend on NEXT_PUBLIC_CORE_API_KEY', () => {
   const coreApi = read('lib/coreApi.ts');
   assert.match(coreApi, /fetch\(`\/api\/core\$\{path\}`/);
@@ -60,17 +73,11 @@ test('proxy has strict route allowlist and blocks wildcard patterns', () => {
   assert.doesNotMatch(proxy, /prefix:\s*'\*'/);
 });
 
-test('tenant query override is disabled by default and gated to development flag', () => {
+test('proxy forwards browser session cookies and csrf header to admin gateway only', () => {
   const proxy = read('app/api/core/[...path]/route.ts');
-  assert.match(proxy, /FG_CONSOLE_ALLOW_TENANT_QUERY_OVERRIDE/);
-  assert.match(proxy, /NODE_ENV === 'development'/);
-  assert.match(proxy, /if \(ALLOW_TENANT_QUERY_OVERRIDE && queryTenant\) return queryTenant/);
-});
-
-test('proxy never forwards browser cookies or authorization headers', () => {
-  const proxy = read('app/api/core/[...path]/route.ts');
-  assert.match(proxy, /headers\.set\('X-API-Key', CORE_API_KEY\)/);
-  assert.doesNotMatch(proxy, /cookie/i);
+  assert.doesNotMatch(proxy, /X-API-Key/);
+  assert.match(proxy, /headers\.set\('Cookie', cookie\)/);
+  assert.match(proxy, /headers\.set\('X-CSRF-Token', csrfToken\)/);
   assert.doesNotMatch(proxy, /authorization/i);
   assert.match(proxy, /Cache-Control': 'no-store'/);
 });
@@ -93,6 +100,21 @@ test('no NEXT_PUBLIC_CORE_API_KEY usage anywhere in console source', () => {
   ];
   for (const file of files) {
     assert.doesNotMatch(read(file), /NEXT_PUBLIC_CORE_API_KEY/);
+  }
+});
+
+
+
+test('console api routes do not reference core direct envs or core auth headers', () => {
+  const apiRoot = path.join(__dirname, '..', 'app', 'api');
+  const apiFiles = listFilesRecursive(apiRoot)
+    .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'));
+
+  for (const fullPath of apiFiles) {
+    const content = fs.readFileSync(fullPath, 'utf8');
+    assert.doesNotMatch(content, /CORE_API_URL/);
+    assert.doesNotMatch(content, /CORE_API_KEY/);
+    assert.doesNotMatch(content, /X-API-Key/);
   }
 });
 

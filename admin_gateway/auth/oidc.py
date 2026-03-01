@@ -7,6 +7,7 @@ Handles OAuth 2.0 / OpenID Connect authentication flow with any compliant provid
 from __future__ import annotations
 
 import hashlib
+import base64
 import logging
 import secrets
 import time
@@ -111,7 +112,7 @@ class OIDCClient:
     def _generate_code_challenge(self, verifier: str) -> str:
         """Generate PKCE code challenge from verifier."""
         digest = hashlib.sha256(verifier.encode()).digest()
-        return secrets.base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+        return base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
 
     async def get_authorization_url(
         self,
@@ -147,13 +148,13 @@ class OIDCClient:
 
         # Default scopes
         if scopes is None:
-            scopes = ["openid", "profile", "email"]
+            scopes = self.config.oidc_scopes_list
 
         # Build authorization URL
         params = {
             "response_type": "code",
             "client_id": self.config.oidc_client_id,
-            "redirect_uri": self.config.oidc_redirect_url,
+            "redirect_uri": self.config.oidc_redirect_uri,
             "scope": " ".join(scopes),
             "state": state,
             "nonce": nonce,
@@ -163,6 +164,8 @@ class OIDCClient:
 
         if extra_params:
             params.update(extra_params)
+        if self.config.oidc_audience:
+            params["audience"] = self.config.oidc_audience
 
         url = f"{provider.authorization_endpoint}?{urlencode(params)}"
         return url, state, code_verifier
@@ -227,7 +230,7 @@ class OIDCClient:
                 data={
                     "grant_type": "authorization_code",
                     "code": code,
-                    "redirect_uri": self.config.oidc_redirect_url,
+                    "redirect_uri": self.config.oidc_redirect_uri,
                     "client_id": self.config.oidc_client_id,
                     "client_secret": self.config.oidc_client_secret,
                     "code_verifier": state_data["code_verifier"],
