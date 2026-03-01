@@ -376,12 +376,19 @@ prod-profile-check: venv
 	if [ -f "$(PROD_ENV_FILE)" ]; then \
 		set -a; . "$(PROD_ENV_FILE)"; set +a; \
 	fi; \
-	if [ -z "$$POSTGRES_PASSWORD" ]; then POSTGRES_PASSWORD=fg_password; fi; \
-	if [ -z "$$REDIS_PASSWORD" ]; then REDIS_PASSWORD=fg_redis_password; fi; \
-	if [ -z "$$NATS_AUTH_TOKEN" ]; then NATS_AUTH_TOKEN=fg_nats_token; fi; \
-	if [ -z "$$FG_API_KEY" ]; then FG_API_KEY=fg_api_key_ci_only; fi; \
-	if [ -z "$$FG_WEBHOOK_SECRET" ]; then FG_WEBHOOK_SECRET=fg_webhook_secret_ci_only; fi; \
+	if [ -z "${POSTGRES_PASSWORD:-}" ]; then POSTGRES_PASSWORD=fg_password; fi; \
+	if [ -z "${REDIS_PASSWORD:-}" ]; then REDIS_PASSWORD=fg_redis_password; fi; \
+	if [ -z "${NATS_AUTH_TOKEN:-}" ]; then NATS_AUTH_TOKEN=fg_nats_token; fi; \
+	if [ -z "${FG_API_KEY:-}" ]; then FG_API_KEY=fg_api_key_ci_only; fi; \
+	if [ -z "${FG_WEBHOOK_SECRET:-}" ]; then FG_WEBHOOK_SECRET=fg_webhook_secret_ci_only; fi; \
 	export POSTGRES_PASSWORD REDIS_PASSWORD NATS_AUTH_TOKEN FG_API_KEY FG_WEBHOOK_SECRET; \
+	created_env=0; \
+	if [ ! -f .env ]; then \
+		created_env=1; \
+		printf "POSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nNATS_AUTH_TOKEN=%s\nFG_API_KEY=%s\nFG_WEBHOOK_SECRET=%s\n" "$$POSTGRES_PASSWORD" "$$REDIS_PASSWORD" "$$NATS_AUTH_TOKEN" "$$FG_API_KEY" "$$FG_WEBHOOK_SECRET" > .env; \
+	fi; \
+	cleanup(){ if [ "$$created_env" = "1" ]; then rm -f .env; fi; }; \
+	trap cleanup EXIT; \
 	FG_ENV=prod $(PY_CONTRACT) scripts/prod_profile_check.py
 
 dos-hardening-check: _require-venv
@@ -390,12 +397,19 @@ dos-hardening-check: _require-venv
 	if [ -f "$(PROD_ENV_FILE)" ]; then \
 		set -a; . "$(PROD_ENV_FILE)"; set +a; \
 	fi; \
-	if [ -z "$$POSTGRES_PASSWORD" ]; then POSTGRES_PASSWORD=fg_password; fi; \
-	if [ -z "$$REDIS_PASSWORD" ]; then REDIS_PASSWORD=fg_redis_password; fi; \
-	if [ -z "$$NATS_AUTH_TOKEN" ]; then NATS_AUTH_TOKEN=fg_nats_token; fi; \
-	if [ -z "$$FG_API_KEY" ]; then FG_API_KEY=fg_api_key_ci_only; fi; \
-	if [ -z "$$FG_WEBHOOK_SECRET" ]; then FG_WEBHOOK_SECRET=fg_webhook_secret_ci_only; fi; \
+	if [ -z "${POSTGRES_PASSWORD:-}" ]; then POSTGRES_PASSWORD=fg_password; fi; \
+	if [ -z "${REDIS_PASSWORD:-}" ]; then REDIS_PASSWORD=fg_redis_password; fi; \
+	if [ -z "${NATS_AUTH_TOKEN:-}" ]; then NATS_AUTH_TOKEN=fg_nats_token; fi; \
+	if [ -z "${FG_API_KEY:-}" ]; then FG_API_KEY=fg_api_key_ci_only; fi; \
+	if [ -z "${FG_WEBHOOK_SECRET:-}" ]; then FG_WEBHOOK_SECRET=fg_webhook_secret_ci_only; fi; \
 	export POSTGRES_PASSWORD REDIS_PASSWORD NATS_AUTH_TOKEN FG_API_KEY FG_WEBHOOK_SECRET; \
+	created_env=0; \
+	if [ ! -f .env ]; then \
+		created_env=1; \
+		printf "POSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nNATS_AUTH_TOKEN=%s\nFG_API_KEY=%s\nFG_WEBHOOK_SECRET=%s\n" "$$POSTGRES_PASSWORD" "$$REDIS_PASSWORD" "$$NATS_AUTH_TOKEN" "$$FG_API_KEY" "$$FG_WEBHOOK_SECRET" > .env; \
+	fi; \
+	cleanup(){ if [ "$$created_env" = "1" ]; then rm -f .env; fi; }; \
+	trap cleanup EXIT; \
 	FG_ENV=prod $(PY_CONTRACT) scripts/prod_profile_check.py
 
 # =============================================================================
@@ -491,13 +505,38 @@ bp-d-000-gate: venv
 prod-unsafe-config-check: venv
 	@$(PY) tools/ci/check_prod_unsafe_config.py
 
+
+.PHONY: policy-validate required-tests-gate
+policy-validate: venv
+	@$(PY) tools/testing/policy/validate_policy.py
+
+required-tests-gate: venv
+	@$(PY) tools/testing/harness/required_tests_gate.py --base-ref "$${GITHUB_BASE_REF:-main}"
+
 security-regression-gates: venv
 	@$(PY) tools/ci/check_security_regression_gates.py
 	@$(PY) tools/ci/check_openapi_security_diff.py
 	@$(PY) tools/ci/check_artifact_policy.py
 
 soc-invariants: venv
-	@PYTHONPATH=. $(PY) tools/ci/check_soc_invariants.py
+	@set -euo pipefail; \
+	if [ -f "$(PROD_ENV_FILE)" ]; then \
+		set -a; . "$(PROD_ENV_FILE)"; set +a; \
+	fi; \
+	if [ -z "${POSTGRES_PASSWORD:-}" ]; then POSTGRES_PASSWORD=fg_password; fi; \
+	if [ -z "${REDIS_PASSWORD:-}" ]; then REDIS_PASSWORD=fg_redis_password; fi; \
+	if [ -z "${NATS_AUTH_TOKEN:-}" ]; then NATS_AUTH_TOKEN=fg_nats_token; fi; \
+	if [ -z "${FG_API_KEY:-}" ]; then FG_API_KEY=fg_api_key_ci_only; fi; \
+	if [ -z "${FG_WEBHOOK_SECRET:-}" ]; then FG_WEBHOOK_SECRET=fg_webhook_secret_ci_only; fi; \
+	export POSTGRES_PASSWORD REDIS_PASSWORD NATS_AUTH_TOKEN FG_API_KEY FG_WEBHOOK_SECRET; \
+	created_env=0; \
+	if [ ! -f .env ]; then \
+		created_env=1; \
+		printf "POSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nNATS_AUTH_TOKEN=%s\nFG_API_KEY=%s\nFG_WEBHOOK_SECRET=%s\n" "$$POSTGRES_PASSWORD" "$$REDIS_PASSWORD" "$$NATS_AUTH_TOKEN" "$$FG_API_KEY" "$$FG_WEBHOOK_SECRET" > .env; \
+	fi; \
+	cleanup(){ if [ "$$created_env" = "1" ]; then rm -f .env; fi; }; \
+	trap cleanup EXIT; \
+	PYTHONPATH=. $(PY) tools/ci/check_soc_invariants.py
 
 check-connectors-rls: venv
 	@$(PY) tools/ci/check_connectors_rls.py

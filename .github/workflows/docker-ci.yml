@@ -67,7 +67,7 @@ jobs:
 
       - name: Start stack
         run: |
-          docker compose --env-file .env.ci up -d
+          docker compose --env-file .env.ci up -d --build
 
       - name: Smoke test /health
         run: |
