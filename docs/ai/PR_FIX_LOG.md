@@ -371,3 +371,36 @@ Required-lane command map and Makefile targets are now aligned for fail-closed e
 
 ### Governance Change
 Yes — required-lane governance target coverage was completed.
+
+## [2026-03-01] SOC-HIGH-002 Review Sync for Critical Workflow/Auth Changes
+
+### Summary
+`fg-required`/`fg-fast` could fail at `soc-review-sync` because critical-path files changed without a corresponding SOC review artifact update. Added explicit SOC review-log synchronization entry covering the affected workflow and auth/profile hardening surfaces.
+
+### Symptom
+`soc-review-sync: FAILED` with `Critical files changed without SOC review update` for critical files under `.github/workflows/` and `admin_gateway/auth/*`.
+
+### Root Cause
+SOC review sync gate (`tools/ci/check_soc_review_sync.py`) requires at least one SOC review document update when critical prefixes are touched; prior patches modified critical files but did not include a matching SOC review-log change in the same diff.
+
+### Impact Surface
+- Files: `docs/SOC_EXECUTION_GATES_2026-02-15.md`
+- Services: SOC-HIGH-002 governance sync gate
+- Profiles: PR required lanes (`fg-fast`, `fg-required`)
+- Governance surfaces affected: SOC review evidence continuity for critical file changes
+
+### Resolution
+Appended SOC review update log entry documenting 2026-03-01 critical-path workflow/auth/profile gate changes and their governance coverage, satisfying SOC-HIGH-002 documentation-sync requirement.
+
+### Gates Executed
+- `python tools/ci/check_soc_review_sync.py`
+- `rg -n "2026-03-01: Reviewed SOC-HIGH-002 critical-path changes" docs/SOC_EXECUTION_GATES_2026-02-15.md`
+
+### Final Status
+PASS
+
+### Preventative Control
+Critical-path modifications now include explicit SOC review-log updates in the same patch to prevent SOC-HIGH-002 sync regressions.
+
+### Governance Change
+Yes — SOC evidence-chain synchronization was updated for critical-file modifications.
