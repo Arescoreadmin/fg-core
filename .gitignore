@@ -23,6 +23,8 @@ __pycache__/
 .env
 .env.*
 *.env
+# Track the committed placeholder — never add secrets to this file
+!env/prod.env
 
 # Local DB / volumes / state
 fg_pgdata/

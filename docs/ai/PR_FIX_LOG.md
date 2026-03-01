@@ -153,4 +153,38 @@ Added `_is_localhost_request(request)` to `AuthMiddleware` that checks the `Host
 
 ---
 
+### 2026-03-01 — env/prod.env Missing: docker-validate Fails with "env file not found"
+
+**Area:** CI · docker-validate · Docker Compose env_file
+
+**Issue:**
+`docker-compose.yml` lists `env/prod.env` as a required `env_file` for the `postgres`, `frostgate-migrate`, and `frostgate-core` services. The `env/` directory did not exist in the repository at all. The `docker-validate` workflow job failed at "Start stack" with: `env file .../env/prod.env not found`.
+
+**Resolution:**
+Created `env/prod.env` as a committed, comment-only placeholder. The file intentionally contains no secrets — all secrets are injected at runtime via `.env` (docker-ci.yml "Prepare environment" step) and CI environment variables. `docker compose` now finds the required `env_file` path and continues.
+
+**AI Notes:**
+- Do NOT add secrets to `env/prod.env`. It is a static, committed placeholder.
+- Production secrets are injected via `.env` (generated from `.env.ci` in docker-ci.yml) and `$GITHUB_ENV` (from `.github/actions/fg-secrets/action.yml`).
+
+---
+
+### 2026-03-01 — NATS_AUTH_TOKEN Missing from fg-secrets Action: prod-profile-check / fg-required Crash
+
+**Area:** CI · Guard · fg-required · .github/actions/fg-secrets
+
+**Issue:**
+`docker-compose.yml` uses `${NATS_AUTH_TOKEN:?set NATS_AUTH_TOKEN in .env}` (hard-required interpolation) for the NATS service command and `FG_NATS_URL`. `.github/actions/fg-secrets/action.yml` generated `FG_API_KEY`, `REDIS_PASSWORD`, `POSTGRES_PASSWORD`, `FG_AGENT_API_KEY`, and `FG_WEBHOOK_SECRET` — but NOT `NATS_AUTH_TOKEN`. When `make prod-profile-check` ran `docker compose config`, Docker Compose failed on the `:?` interpolation with "required variable NATS_AUTH_TOKEN is missing a value", causing `prod-profile-check` to crash (exit 2). This cascaded to `fg-required` (exit_2 on the fg-fast lane) and the Guard job.
+
+**Resolution:**
+Added `echo "NATS_AUTH_TOKEN=$(gen | cut -c1-24)"` to the secret generation block in `.github/actions/fg-secrets/action.yml`, consistent with how `docker-ci.yml` generates it directly. The generated value is a cryptographically random CI ephemeral token matching the 24-character length used in docker-ci.yml.
+
+**AI Notes:**
+- Admin-Gateway auth boundary: NATS is a service-to-service bus; `NATS_AUTH_TOKEN` is a service credential, not a human auth credential.
+- OIDC enforcement: unaffected.
+- Startup hard-fail behavior: unaffected.
+- Control Tower integration impact: none.
+
+---
+
 _Last updated: 2026-03-01_
