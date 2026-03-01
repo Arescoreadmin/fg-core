@@ -141,6 +141,27 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         return response
 
+    def _is_localhost_request(self, request: Request) -> bool:
+        """Return True when the request Host resolves to a loopback address.
+
+        Dev bypass MUST only serve requests from localhost to prevent exposure
+        of unauthenticated access when a dev server is accidentally reachable
+        from a non-loopback network interface.
+
+        `testserver` is accepted in non-prod-like environments because
+        TestClient (used in unit tests) sends that synthetic hostname;
+        it is not a real external host and cannot be reached from the internet.
+        In prod-like environments bypass is already refused at config validation
+        so this branch is never reached.
+        """
+        host = request.headers.get("host", "").split(":")[0].strip("[]")
+        if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+            return True
+        # Allow the synthetic test host only when not in prod-like environments.
+        if not self.config.is_prod_like and host == "testserver":
+            return True
+        return False
+
     def _get_session(self, request: Request) -> Session | None:
         """Get session from request."""
         # Try session cookie
@@ -148,7 +169,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if session:
             return session
 
-        # Try dev bypass
+        # Try dev bypass — only for localhost origins (defense-in-depth)
+        if not self._is_localhost_request(request):
+            return None
         return get_dev_bypass_session(self.config)
 
     def _requires_auth(self, path: str) -> bool:

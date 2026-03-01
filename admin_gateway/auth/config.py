@@ -52,6 +52,7 @@ class AuthConfig:
     oidc_client_id: Optional[str] = None
     oidc_client_secret: Optional[str] = None
     oidc_redirect_url: Optional[str] = None
+    oidc_scopes: Optional[str] = None  # space/comma-separated; required in production
 
     env: str = "dev"
     dev_auth_bypass: bool = False
@@ -85,6 +86,14 @@ class AuthConfig:
     @property
     def is_test(self) -> bool:
         return self.env_lower == "test"
+
+    @property
+    def oidc_scopes_list(self) -> list[str]:
+        """Parsed OIDC scopes list.  Falls back to minimal default when unconfigured."""
+        if not self.oidc_scopes:
+            return ["openid", "profile", "email"]
+        raw = self.oidc_scopes.replace(",", " ")
+        return [s.strip() for s in raw.split() if s.strip()]
 
     @property
     def oidc_enabled(self) -> bool:
@@ -123,6 +132,9 @@ class AuthConfig:
         if self.is_prod and not self.oidc_enabled:
             errors.append("OIDC must be configured in production")
 
+        if self.is_prod and not self.oidc_scopes:
+            errors.append("FG_OIDC_SCOPES must be set in production")
+
         oidc_fields = [
             self.oidc_issuer,
             self.oidc_client_id,
@@ -151,6 +163,7 @@ def get_auth_config() -> AuthConfig:
         oidc_client_id=os.getenv("FG_OIDC_CLIENT_ID"),
         oidc_client_secret=os.getenv("FG_OIDC_CLIENT_SECRET"),
         oidc_redirect_url=os.getenv("FG_OIDC_REDIRECT_URL"),
+        oidc_scopes=os.getenv("FG_OIDC_SCOPES"),
         env=os.getenv("FG_ENV", "dev"),
         dev_auth_bypass=_env_bool("FG_DEV_AUTH_BYPASS", False),
         session_secret=os.getenv("FG_SESSION_SECRET", os.urandom(32).hex()),

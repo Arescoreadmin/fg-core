@@ -19,6 +19,31 @@ from admin_gateway.auth.session import SessionManager
 
 log = logging.getLogger("admin-gateway.auth-router")
 
+_SAFE_RETURN_TO_DEFAULT = "/admin/me"
+
+
+def _is_safe_return_to(url: Optional[str]) -> bool:
+    """Return True only for safe same-origin relative paths.
+
+    Blocks protocol-relative (//evil.com) and absolute URLs (https://evil.com)
+    to prevent open-redirect attacks.
+    """
+    if not url:
+        return False
+    if url.startswith("//") or "://" in url:
+        return False
+    return url.startswith("/")
+
+
+def _safe_return_to(url: Optional[str]) -> str:
+    """Return validated return_to or the safe default."""
+    if _is_safe_return_to(url):
+        return url  # type: ignore[return-value]
+    if url:
+        log.warning("Rejected unsafe return_to value: %r", url)
+    return _SAFE_RETURN_TO_DEFAULT
+
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
@@ -59,7 +84,7 @@ async def login(
 
         session = get_dev_bypass_session(config)
         if session:
-            redirect_url = return_to or "/admin/me"
+            redirect_url = _safe_return_to(return_to)
             response = RedirectResponse(url=redirect_url, status_code=302)
             session_manager.set_session_cookie(response, session)
             csrf.set_token_cookie(response)
@@ -75,13 +100,13 @@ async def login(
     # Generate authorization URL
     url, state, _ = await oidc.get_authorization_url()
 
-    # Store return_to in session (using state as key)
-    # In a real implementation, you'd store this in a more persistent way
-    if return_to:
+    # Store validated return_to against state (allowlist-enforced)
+    safe_url = _safe_return_to(return_to)
+    if safe_url != _SAFE_RETURN_TO_DEFAULT or return_to:
         request.app.state.pending_returns = getattr(
             request.app.state, "pending_returns", {}
         )
-        request.app.state.pending_returns[state] = return_to
+        request.app.state.pending_returns[state] = safe_url
 
     return RedirectResponse(url=url, status_code=302)
 
@@ -129,11 +154,12 @@ async def callback(
         # Create session from tokens
         session = await oidc.create_session_from_tokens(tokens)
 
-        # Get return URL
-        return_to = "/admin/me"
+        # Get return URL — re-validate to defend against corrupted state store
+        _stored = None
         pending_returns = getattr(request.app.state, "pending_returns", {})
         if state in pending_returns:
-            return_to = pending_returns.pop(state)
+            _stored = pending_returns.pop(state)
+        return_to = _safe_return_to(_stored)
 
         # Set session cookie and redirect
         response = RedirectResponse(url=return_to, status_code=302)

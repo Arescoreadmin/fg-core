@@ -1,3 +1,40 @@
+## 2026-03-01 — Production Auth Contract Remediation (GAP-1, GAP-2, GAP-3)
+
+### Files changed (SOC-critical)
+- `admin_gateway/auth/config.py`
+- `admin_gateway/auth/oidc.py`
+- `admin_gateway/middleware/auth.py`
+- `admin_gateway/routers/auth.py`
+- `admin_gateway/main.py`
+
+### Why
+- **GAP-1:** `FG_OIDC_SCOPES` was absent from `AuthConfig` and production validation. Added field, startup hard-fail, and `oidc_scopes_list` property. Production boot now refuses if `FG_OIDC_SCOPES` is unset.
+- **GAP-2:** `/auth/login` and `/auth/callback` accepted arbitrary `return_to` URLs — open redirect. Added `_is_safe_return_to` / `_safe_return_to` enforcing relative-only paths. Absolute and protocol-relative URLs are rejected and redirected to the safe default (`/admin/me`).
+- **GAP-3:** Dev bypass could be activated from non-localhost hosts in dev mode. `AuthMiddleware._is_localhost_request` now gates bypass on `Host: localhost | 127.0.0.1 | ::1 | 0.0.0.0`; non-loopback hosts receive 401.
+
+### Risk
+- **GAP-1 fix:** Hard fail if `FG_OIDC_SCOPES` is missing in production — intentional; all prod deployments must set this env var. Non-prod unaffected.
+- **GAP-2 fix:** Any `return_to` with `://` or `//` prefix now falls back to `/admin/me`. No legitimate same-origin redirect is affected.
+- **GAP-3 fix:** Dev bypass now blocked for non-localhost `Host` headers. `testserver` (TestClient synthetic host) allowed in non-prod-like environments only.
+
+### Validation performed
+- `make fg-contract` — PASSED
+- `make fg-compile` — PASSED
+- `make security-regression-gates` — PASSED
+- `make test-quality-gate` — PASSED
+- `make gap-audit` — PASSED
+- `make check-connectors-rls` — PASSED
+- `make route-inventory-audit` — PASSED (runtime-only drift is WARNING per GATE-ROUTE-INVENTORY-RUNTIME-ONLY)
+- `python -m pytest admin_gateway/tests/ -q` — 168 passed
+- `prod-profile-check` / `soc-invariants` / `dos-hardening-check` — pre-existing infrastructure failure (missing `POSTGRES_PASSWORD` / `NATS_AUTH_TOKEN` env vars in sandbox; confirmed failing before these changes)
+
+### Rollback
+- Revert `admin_gateway/auth/config.py`, `admin_gateway/auth/oidc.py`, `admin_gateway/middleware/auth.py`, `admin_gateway/routers/auth.py`, `admin_gateway/main.py` to prior commit.
+
+<!-- SOC-AUTH-CONTRACT-2026-03-01::production-auth-gap-remediation -->
+
+---
+
 ## 2026-03-01T19:00:46Z — SOC-HIGH-002 — Route inventory governance update
 
 **Issue:** SOC-HIGH-002 triggered: critical CI governance artifacts changed without SOC review acknowledgement.

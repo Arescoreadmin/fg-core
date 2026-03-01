@@ -98,6 +98,8 @@ def _filter_contract_ctx_config_errors(errors: list[str]) -> list[str]:
             continue
         if "missing oidc configuration in production" in msg:
             continue
+        if "fg_oidc_scopes must be set in production" in msg:
+            continue
         filtered.append(e)
     return filtered
 

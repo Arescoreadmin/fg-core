@@ -145,9 +145,9 @@ class OIDCClient:
         # Clean up old states
         self._cleanup_old_states()
 
-        # Default scopes
+        # Default scopes — use configured FG_OIDC_SCOPES if set, else minimal default
         if scopes is None:
-            scopes = ["openid", "profile", "email"]
+            scopes = self.config.oidc_scopes_list
 
         # Build authorization URL
         params = {
