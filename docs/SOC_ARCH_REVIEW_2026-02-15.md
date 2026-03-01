@@ -1,3 +1,18 @@
+## 2026-03-01T19:00:46Z — SOC-HIGH-002 — Route inventory governance update
+
+**Issue:** SOC-HIGH-002 triggered: critical CI governance artifacts changed without SOC review acknowledgement.
+
+**Resolution:** Updated route inventory pipeline + plane registry checks; regenerated route inventory; recorded this change for SOC traceability.
+
+**Files changed:**
+- `tools/ci/check_route_inventory.py`
+- `tools/ci/plane_registry_checks.py`
+- `tools/ci/route_inventory.json`
+
+**Entry policy:** Exactly one issue + one resolution per entry. If additional issues exist, add separate entries.
+
+<!-- SOC-HIGH-002::854d66dd93ea1b3007b82c2b85851ce605d50480::2026-03-01 -->
+
 # Senior Principal Security & Architecture Review (Evidence-Only)
 
 Date: 2026-02-15  
