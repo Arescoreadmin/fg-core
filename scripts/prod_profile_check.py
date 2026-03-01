@@ -31,7 +31,6 @@ REPO = Path(__file__).resolve().parents[1]
 DEFAULT_COMPOSE = REPO / "docker-compose.yml"
 
 
-
 @contextmanager
 def _temporary_root_env_file(repo: Path) -> Any:
     """
@@ -49,8 +48,12 @@ def _temporary_root_env_file(repo: Path) -> Any:
             "REDIS_PASSWORD": os.getenv("REDIS_PASSWORD", "fg_redis_password"),
             "NATS_AUTH_TOKEN": os.getenv("NATS_AUTH_TOKEN", "fg_nats_token"),
             "FG_API_KEY": os.getenv("FG_API_KEY", "fg_api_key_ci_only"),
-            "FG_WEBHOOK_SECRET": os.getenv("FG_WEBHOOK_SECRET", "fg_webhook_secret_ci_only"),
-            "FG_AGENT_API_KEY": os.getenv("FG_AGENT_API_KEY", "fg_agent_api_key_ci_only"),
+            "FG_WEBHOOK_SECRET": os.getenv(
+                "FG_WEBHOOK_SECRET", "fg_webhook_secret_ci_only"
+            ),
+            "FG_AGENT_API_KEY": os.getenv(
+                "FG_AGENT_API_KEY", "fg_agent_api_key_ci_only"
+            ),
         }
         payload = "".join(f"{k}={v}\n" for k, v in defaults.items())
         env_path.write_text(payload, encoding="utf-8")
@@ -59,6 +62,7 @@ def _temporary_root_env_file(repo: Path) -> Any:
     finally:
         if created:
             env_path.unlink(missing_ok=True)
+
 
 REQUIRED_KEYS = [
     "FG_DOS_GUARD_ENABLED",

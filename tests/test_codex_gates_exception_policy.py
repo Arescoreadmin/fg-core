@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import shutil
 import stat
 import subprocess
 from pathlib import Path
@@ -36,11 +35,54 @@ def _prepare_sandbox(tmp_path: Path, exception_content: str | None) -> Path:
     _write_executable(stub_bin / "pytest", "#!/usr/bin/env bash\nexit 0\n")
     _write_executable(stub_bin / "pip", "#!/usr/bin/env bash\nexit 0\n")
     _write_executable(stub_bin / "pip-audit", "#!/usr/bin/env bash\nexit 0\n")
-    rg_bin = shutil.which("rg")
-    if rg_bin:
-        _write_executable(stub_bin / "rg", f'#!/usr/bin/env bash\n"{rg_bin}" "$@"\n')
-    else:
-        _write_executable(stub_bin / "rg", '#!/usr/bin/env bash\n/bin/grep "$@"\n')
+    _write_executable(
+        stub_bin / "rg",
+        """#!/usr/bin/env python3
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+args = sys.argv[1:]
+if "--hidden" in args or "--no-ignore-vcs" in args:
+    raise SystemExit(1)
+
+show_line = False
+filtered: list[str] = []
+for arg in args:
+    if arg == "-n":
+        show_line = True
+        continue
+    if arg.startswith("-"):
+        continue
+    filtered.append(arg)
+
+if len(filtered) < 2:
+    raise SystemExit(1)
+
+pattern = filtered[0]
+files = filtered[1:]
+regex = re.compile(pattern)
+matched = False
+
+for file_path in files:
+    path = Path(file_path)
+    if not path.is_file():
+        continue
+    for line_no, line in enumerate(
+        path.read_text(encoding="utf-8", errors="ignore").splitlines(), start=1
+    ):
+        if regex.search(line):
+            matched = True
+            if show_line:
+                print(f"{path}:{line_no}:{line}")
+            else:
+                print(line)
+
+raise SystemExit(0 if matched else 1)
+""",
+    )
 
     docs_ai = sandbox / "docs" / "ai"
     docs_ai.mkdir(parents=True)

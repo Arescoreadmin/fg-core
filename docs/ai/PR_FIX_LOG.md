@@ -473,3 +473,38 @@ Critical gate regression tests now avoid hardcoded binary paths, and production 
 
 ### Governance Change
 Yes — required-lane reliability and profile-check determinism were hardened.
+
+## [2026-03-01] Fix Malformed-Exception Gate Test Semantics and Formatting Regression
+
+### Summary
+Addressed remaining CI failures by making the codex gate exception sandbox `rg` stub deterministic and option-compatible (without depending on system `/usr/bin/rg`), and reformatted `scripts/prod_profile_check.py` to satisfy formatting gates.
+
+### Symptom
+- `test_mypy_exception_malformed_is_blocking` returned success unexpectedly because the fallback `grep` stub did not emulate `rg` options used by `codex_gates.sh`.
+- `fmt-check` failed with `Would reformat: scripts/prod_profile_check.py`.
+
+### Root Cause
+The previous sandbox fallback used `/bin/grep` directly, which does not support `rg` flags (`--hidden`, `--no-ignore-vcs`, glob filters), allowing gate flow to deviate from intended failure semantics. Separately, one modified file was not run through repository formatter.
+
+### Impact Surface
+- Files: `tests/test_codex_gates_exception_policy.py`, `scripts/prod_profile_check.py`
+- Services: codex gate test harness, formatting gate
+- Profiles: fg-fast unit lane
+- Governance surfaces affected: exception-policy test reliability and formatting gate determinism
+
+### Resolution
+Replaced sandbox `rg` stub with an embedded Python implementation that deterministically handles the subset of behaviors used in gate tests (line-number regex matching and secret-scan no-match behavior for hidden/no-ignore scan path). Ran formatter on `scripts/prod_profile_check.py`.
+
+### Gates Executed
+- `ruff format scripts/prod_profile_check.py tests/test_codex_gates_exception_policy.py`
+- `.venv/bin/python -m pytest -q tests/test_codex_gates_exception_policy.py tests/test_security_hardening.py -k "mypy_exception_malformed_is_blocking or mypy_exception_valid_allows_progress or prod_profile_checker_script_runs"`
+- `.venv/bin/python tools/testing/harness/fg_required.py --global-budget-seconds 480 --lane-timeout-seconds 480`
+
+### Final Status
+PASS
+
+### Preventative Control
+Gate sandbox now avoids non-portable binary-path assumptions and better mirrors `rg` semantics required by codex gate policy tests.
+
+### Governance Change
+Yes — codex gate regression test determinism and formatting compliance were hardened.
