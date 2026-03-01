@@ -54,6 +54,9 @@ if [ -f Makefile ]; then
   fi
 fi
 
+echo "Running PR fix log enforcement..."
+scripts/ci/enforce_pr_fix_log.sh
+
 echo "==> Gates: dependency audit"
 if [ "${GATES_MODE}" = "offline" ]; then
   echo "SKIP: pip-audit (offline mode)"
