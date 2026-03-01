@@ -508,3 +508,24 @@ Gate sandbox now avoids non-portable binary-path assumptions and better mirrors 
 
 ### Governance Change
 Yes — codex gate regression test determinism and formatting compliance were hardened.
+
+## [2026-03-01] Fix Missing pip-audit Tooling in codex_gates
+
+### Summary
+Made dependency-audit gate deterministic by bootstrapping `pip-audit` into the active virtualenv when the binary is missing, then executing the venv-local `pip-audit` binary with a PATH fallback.
+
+### Symptom
+`bash codex_gates.sh` failed at dependency-audit stage with `pip-audit: command not found`.
+
+### Root Cause
+The gate invoked `pip-audit` as a shell binary and assumed it was preinstalled on PATH in all environments.
+
+### Resolution
+Updated `codex_gates.sh` to detect missing `pip-audit`, install it in `.venv` using `python -m pip`, and run the venv-local executable (`.venv/bin/pip-audit`) with a PATH fallback for sandbox compatibility.
+
+### Gates Executed
+- `bash codex_gates.sh`
+- `.venv/bin/python tools/testing/harness/fg_required.py --global-budget-seconds 480 --lane-timeout-seconds 480`
+
+### Final Status
+PASS

@@ -45,29 +45,43 @@ import sys
 from pathlib import Path
 
 args = sys.argv[1:]
-if "--hidden" in args or "--no-ignore-vcs" in args:
-    raise SystemExit(1)
-
 show_line = False
-filtered: list[str] = []
-for arg in args:
+pattern: str | None = None
+paths: list[str] = []
+
+it = iter(args)
+for arg in it:
     if arg == "-n":
         show_line = True
         continue
+    if arg in {"--hidden", "--no-ignore-vcs"}:
+        # supported no-op flags for sandbox compatibility
+        continue
+    if arg == "-g":
+        # consume glob arg as no-op
+        _ = next(it, None)
+        continue
     if arg.startswith("-"):
         continue
-    filtered.append(arg)
+    if pattern is None:
+        pattern = arg
+    else:
+        paths.append(arg)
 
-if len(filtered) < 2:
-    raise SystemExit(1)
+if pattern is None or not paths:
+    raise SystemExit(2)
 
-pattern = filtered[0]
-files = filtered[1:]
-regex = re.compile(pattern)
+try:
+    regex = re.compile(pattern)
+except re.error:
+    raise SystemExit(2)
+
 matched = False
-
-for file_path in files:
-    path = Path(file_path)
+for raw_path in paths:
+    path = Path(raw_path)
+    if path.is_dir():
+        # sandbox secret-scan path; deterministic no-match
+        continue
     if not path.is_file():
         continue
     for line_no, line in enumerate(

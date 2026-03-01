@@ -101,7 +101,15 @@ echo "==> Gates: dependency audit"
 if [ "${GATES_MODE}" = "offline" ]; then
   echo "SKIP: pip-audit (offline mode)"
 else
-  pip-audit
+  if ! command -v pip-audit >/dev/null 2>&1; then
+    echo "pip-audit not found in PATH; installing into ${VENV_DIR}"
+    python -m pip install --quiet pip-audit
+  fi
+  if [ -x "${VENV_DIR}/bin/pip-audit" ]; then
+    "${VENV_DIR}/bin/pip-audit"
+  else
+    pip-audit
+  fi
 fi
 
 echo "==> All gates passed."
