@@ -187,4 +187,41 @@ Added `echo "NATS_AUTH_TOKEN=$(gen | cut -c1-24)"` to the secret generation bloc
 
 ---
 
+### 2026-03-01 — docker-validate Fails: frostgate-migrate Pulls frostgate-core from Registry
+
+**Area:** CI · docker-validate · Docker Compose profiles
+
+**Issue:**
+`frostgate-core` is under the `core` profile in docker-compose.yml with a `build:` section. `frostgate-migrate` reuses `image: frostgate-core:latest` but has no `build:` section. `docker compose build` in docker-ci.yml ran without `--profile core`, so `frostgate-core:latest` was never built locally. `docker compose up -d` then tried to pull the image from a registry, received "access denied", and the job failed.
+
+**Resolution:**
+Added `--profile core` to all four `docker compose` invocations in `.github/workflows/docker-ci.yml`: `build`, `up -d`, `logs` (failure dump), and `down -v` (teardown). `frostgate-core:latest` is now built locally before the stack starts.
+
+**AI Notes:**
+- Do NOT remove `--profile core` from docker-ci.yml without ensuring `frostgate-core` is built by another step.
+
+---
+
+### 2026-03-01 — prod-profile-check Crashes: .env Missing + DoS Hardening Config Absent
+
+**Area:** CI · Guard · Makefile · docker-compose.yml
+
+**Issue:**
+Two cascading problems exposed after the NATS_AUTH_TOKEN fix allowed `docker compose config` to run further:
+1. `docker compose config` failed with `.env not found` — `.env` is listed as an explicit `env_file` for multiple services but is gitignored and not created in the Guard CI job.
+2. `prod_profile_check.py` requires 12 DoS hardening keys to be explicitly set in the resolved compose config. Only `FG_RL_FAIL_OPEN` was present; the other 11 were absent.
+
+**Resolution:**
+1. Added `.env` fallback to Makefile `prod-profile-check` target: if `.env` is absent and `.env.example` exists, copy it. Creates a non-secret placeholder before `docker compose config` runs.
+2. Added all 12 missing DoS hardening keys with safe production defaults to `frostgate-core` service in `docker-compose.yml` (body: 4 MB, query: 8 KB, path: 2 KB, headers: 50/16 KB, header-line: 8 KB, multipart: 10 MB/20 parts, request-timeout: 30 s, keepalive: 65 s, concurrency: 200).
+
+**AI Notes:**
+- Admin-Gateway auth boundary: unaffected.
+- OIDC enforcement: unaffected.
+- Startup hard-fail behavior: unaffected.
+- Control Tower integration impact: none.
+- Do NOT remove the DoS hardening block from docker-compose.yml — required by `prod-profile-check` gate.
+
+---
+
 _Last updated: 2026-03-01_

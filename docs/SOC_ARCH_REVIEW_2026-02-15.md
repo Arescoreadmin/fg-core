@@ -1,3 +1,31 @@
+## 2026-03-01 — CI Fixes: docker-ci.yml profile + .env fallback + DoS hardening config
+
+### Files changed (SOC-critical)
+- `.github/workflows/docker-ci.yml`
+
+### Why
+- **docker-ci.yml `--profile core` missing**: `frostgate-core:latest` is behind the `core` profile in docker-compose.yml. `docker compose build` without `--profile core` never built it locally. `frostgate-migrate` reuses `frostgate-core:latest` with no `build:` section of its own, so `docker compose up` fell back to a registry pull and failed with "access denied". Fix: add `--profile core` to `build`, `up`, `logs`, and `down` steps in docker-ci.yml.
+- **prod-profile-check `.env` fallback**: `docker compose config` fails if `.env` doesn't exist (listed as explicit env_file). Added fallback in Makefile `prod-profile-check` target: `if [ ! -f .env ] && [ -f .env.example ]; then cp .env.example .env; fi`.
+- **DoS hardening config absent from docker-compose.yml**: `prod_profile_check.py` requires `FG_DOS_GUARD_ENABLED`, `FG_MAX_*`, `FG_REQUEST_TIMEOUT_SEC`, `FG_KEEPALIVE_TIMEOUT_SEC`, and `FG_MAX_CONCURRENT_REQUESTS` to be explicitly set in the resolved compose config. These were missing. Added all 12 required keys with safe production defaults to the `frostgate-core` service environment.
+
+### Risk
+- **docker-ci.yml**: SOC-critical CI workflow change. Risk is low — adding `--profile core` is the correct behavior; without it the stack was partially unbuilt and the test was incomplete.
+- **DoS hardening values**: Production-safe defaults (4 MB body, 30s timeout, 200 concurrent, etc.). These harden rather than loosen the attack surface.
+
+### Validation performed
+- `make prod-profile-check` (with CI-equivalent env vars) — PASSED
+- `make fg-contract` — PASSED
+- `make security-regression-gates` — PASSED
+- `make test-quality-gate` — PASSED
+- `make soc-review-sync` — PASSED (after this entry)
+
+### Rollback
+- Remove `--profile core` from docker-ci.yml steps; remove DoS hardening block from docker-compose.yml; remove `.env` fallback from Makefile.
+
+<!-- SOC-DOCKER-CI-FIX-2026-03-01 -->
+
+---
+
 ## 2026-03-01 — CI Infrastructure Fixes (env/prod.env + NATS_AUTH_TOKEN in fg-secrets)
 
 ### Files changed (SOC-critical)

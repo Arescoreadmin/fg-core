@@ -376,6 +376,9 @@ prod-profile-check: venv
 	if [ -f env/prod.env ]; then \
 		set -a; . env/prod.env; set +a; \
 	fi; \
+	if [ ! -f .env ] && [ -f .env.example ]; then \
+		cp .env.example .env; \
+	fi; \
 	FG_ENV=prod $(PY_CONTRACT) scripts/prod_profile_check.py
 
 dos-hardening-check: _require-venv
