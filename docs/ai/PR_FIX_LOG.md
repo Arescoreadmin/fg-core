@@ -439,3 +439,37 @@ Required-lane harness now preserves essential network/bootstrap routing env whil
 
 ### Governance Change
 Yes — CI lane execution preconditions and docker validation determinism were hardened.
+
+## [2026-03-01] Fix fg_required Regression Tests for Portable rg and Prod Profile .env Bootstrap
+
+### Summary
+CI failures were reproduced and fixed in two places: the codex gate exception policy sandbox test assumed `rg` existed at `/usr/bin/rg`, and production profile checker crashed when docker compose required root `.env` that was absent in runner contexts. The fixes make both paths portable and deterministic.
+
+### Symptom
+- `tests/test_codex_gates_exception_policy.py::test_mypy_exception_valid_allows_progress` failed with stub `rg` path error (`/usr/bin/rg: No such file or directory`).
+- `TestProductionProfileValidation::test_prod_profile_checker_script_runs` failed with `docker compose config failed` and `env file .../.env not found`.
+
+### Root Cause
+The sandboxed test hardcoded an OS-specific `rg` path instead of resolving it at runtime. `scripts/prod_profile_check.py` executed docker compose config without guaranteeing a root `.env` file, even though compose service `env_file` referenced it.
+
+### Impact Surface
+- Files: `tests/test_codex_gates_exception_policy.py`, `scripts/prod_profile_check.py`
+- Services: codex gate exception-policy test harness, production profile checker
+- Profiles: fg-required / fg-fast unit test lanes
+- Governance surfaces affected: gate regression test portability, prod profile gate determinism
+
+### Resolution
+Updated exception-policy test sandbox to resolve `rg` via `shutil.which("rg")` and fall back to `/bin/grep` when unavailable. Added temporary root `.env` bootstrap context in `scripts/prod_profile_check.py` so `docker compose config` can resolve required env_file interpolation even when `.env` is not pre-created; the file is removed afterward when created by the checker.
+
+### Gates Executed
+- `.venv/bin/python -m pytest -q tests/test_codex_gates_exception_policy.py tests/test_security_hardening.py -k "mypy_exception_valid_allows_progress or prod_profile_checker_script_runs"`
+- `.venv/bin/python tools/testing/harness/fg_required.py --global-budget-seconds 480 --lane-timeout-seconds 480`
+
+### Final Status
+PASS
+
+### Preventative Control
+Critical gate regression tests now avoid hardcoded binary paths, and production profile checker has deterministic env_file precondition handling for compose config evaluation.
+
+### Governance Change
+Yes — required-lane reliability and profile-check determinism were hardened.

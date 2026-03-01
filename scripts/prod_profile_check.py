@@ -21,6 +21,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,36 @@ from typing import Any
 
 REPO = Path(__file__).resolve().parents[1]
 DEFAULT_COMPOSE = REPO / "docker-compose.yml"
+
+
+
+@contextmanager
+def _temporary_root_env_file(repo: Path) -> Any:
+    """
+    Ensure docker-compose root `.env` exists for `docker compose config` interpolation.
+
+    Some CI contexts do not commit/populate `.env` but compose service `env_file` requires it.
+    This creates a minimal temporary file only when missing and removes it afterward.
+    """
+    env_path = repo / ".env"
+    created = False
+    if not env_path.exists():
+        created = True
+        defaults = {
+            "POSTGRES_PASSWORD": os.getenv("POSTGRES_PASSWORD", "fg_password"),
+            "REDIS_PASSWORD": os.getenv("REDIS_PASSWORD", "fg_redis_password"),
+            "NATS_AUTH_TOKEN": os.getenv("NATS_AUTH_TOKEN", "fg_nats_token"),
+            "FG_API_KEY": os.getenv("FG_API_KEY", "fg_api_key_ci_only"),
+            "FG_WEBHOOK_SECRET": os.getenv("FG_WEBHOOK_SECRET", "fg_webhook_secret_ci_only"),
+            "FG_AGENT_API_KEY": os.getenv("FG_AGENT_API_KEY", "fg_agent_api_key_ci_only"),
+        }
+        payload = "".join(f"{k}={v}\n" for k, v in defaults.items())
+        env_path.write_text(payload, encoding="utf-8")
+    try:
+        yield
+    finally:
+        if created:
+            env_path.unlink(missing_ok=True)
 
 REQUIRED_KEYS = [
     "FG_DOS_GUARD_ENABLED",
@@ -130,11 +161,12 @@ class ProductionProfileChecker:
 
         self._docker_unavailable = False
         try:
-            out = subprocess.check_output(
-                cmd,
-                cwd=REPO,
-                text=True,
-            )
+            with _temporary_root_env_file(REPO):
+                out = subprocess.check_output(
+                    cmd,
+                    cwd=REPO,
+                    text=True,
+                )
             data = yaml.safe_load(out)
             if not isinstance(data, dict):
                 raise ValueError("docker compose config output must be a YAML object")

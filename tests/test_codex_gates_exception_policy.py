@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import stat
 import subprocess
 from pathlib import Path
@@ -35,7 +36,11 @@ def _prepare_sandbox(tmp_path: Path, exception_content: str | None) -> Path:
     _write_executable(stub_bin / "pytest", "#!/usr/bin/env bash\nexit 0\n")
     _write_executable(stub_bin / "pip", "#!/usr/bin/env bash\nexit 0\n")
     _write_executable(stub_bin / "pip-audit", "#!/usr/bin/env bash\nexit 0\n")
-    _write_executable(stub_bin / "rg", '#!/usr/bin/env bash\n/usr/bin/rg "$@"\n')
+    rg_bin = shutil.which("rg")
+    if rg_bin:
+        _write_executable(stub_bin / "rg", f'#!/usr/bin/env bash\n"{rg_bin}" "$@"\n')
+    else:
+        _write_executable(stub_bin / "rg", '#!/usr/bin/env bash\n/bin/grep "$@"\n')
 
     docs_ai = sandbox / "docs" / "ai"
     docs_ai.mkdir(parents=True)
