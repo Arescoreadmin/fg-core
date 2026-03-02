@@ -11,6 +11,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   fg-required:
@@ -37,34 +38,55 @@ jobs:
 
       - name: verify workflow filename uniqueness
         run: |
+          set -euo pipefail
           test -f .github/workflows/fg-required.yml
           test ! -f .github/workflows/fg-required.yaml
           test ! -f .github/workflows/FG-required.yml
 
       - name: run hermetic tool tests
         # tools_minimal intentionally uses unittest to avoid pytest bootstrap/plugin imports
-        run: python -m unittest -q tests.tools_minimal.test_fg_required_minimal
+        run: |
+          set -euo pipefail
+          python -m unittest -q tests.tools_minimal.test_fg_required_minimal
 
       - name: create venv
-        run: python -m venv .venv
+        run: |
+          set -euo pipefail
+          python -m venv .venv
 
       - name: install deps (pinned)
-        run: make venv
+        run: |
+          set -euo pipefail
+          make venv
 
       - name: sanity check pytest-asyncio plugin version
-        run: .venv/bin/python -c "import pytest_asyncio; print(pytest_asyncio.__version__)"
+        run: |
+          set -euo pipefail
+          .venv/bin/python -c "import pytest_asyncio; print(pytest_asyncio.__version__)"
 
       - name: run required-tests gate resolution tests
-        run: .venv/bin/python -m unittest -q tests.tools_minimal.test_required_tests_gate_resolution
+        run: |
+          set -euo pipefail
+          .venv/bin/python -m unittest -q tests.tools_minimal.test_required_tests_gate_resolution
 
       - name: run fg-required
         id: fg_required
         timeout-minutes: 8
-        run: .venv/bin/python tools/testing/harness/fg_required.py --global-budget-seconds 480 --lane-timeout-seconds 480
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/fg-required artifacts/testing
+
+          # Prefer to force outputs into artifacts/fg-required if the harness supports it.
+          # If it doesn't, it will ignore unknown args and fail, so we DO NOT add new args here blindly.
+          # Keep invocation stable; collect logs in a later step.
+          .venv/bin/python tools/testing/harness/fg_required.py \
+            --global-budget-seconds 480 \
+            --lane-timeout-seconds 480
 
       - name: prepare artifacts dirs + fallback notice
         if: always()
         run: |
+          set -euo pipefail
           mkdir -p artifacts/testing artifacts/fg-required
 
           # Ensure we always have at least one file to upload, even if fg-required crashes early.
@@ -74,12 +96,75 @@ jobs:
           test -f artifacts/fg-required/_upload_notice.txt || \
             echo "fg-required artifact bundle prepared after failure" > artifacts/fg-required/_upload_notice.txt
 
+      - name: collect lane logs (best effort)
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/fg-required
+
+          # Copy common lane output locations if present (never fail).
+          # NOTE: These are best guesses because CI runners vary.
+          for d in \
+            artifacts/fg-required \
+            artifacts/testing \
+            artifacts/fg-required/lanes \
+            artifacts/testing/lanes \
+            artifacts/fg-required/lanes/fg-fast \
+            artifacts/testing/lanes/fg-fast
+          do
+            test -d "$d" && echo "found dir: $d" || true
+          done
+
+          # Grab lane.log and a few other likely useful files from shallow depth.
+          # Limit to avoid uploading the universe.
+          mapfile -t files < <(
+            find . -maxdepth 6 -type f \( \
+              -name "lane.log" -o \
+              -name "*fg-required*" -o \
+              -name "*required*" -o \
+              -name "*.junit.xml" -o \
+              -name "*pytest*.log" -o \
+              -name "*pytest*.txt" -o \
+              -name "*harness*.log" \
+            \) 2>/dev/null | head -n 200
+          )
+
+          if [ "${#files[@]}" -gt 0 ]; then
+            echo "collecting ${#files[@]} files into artifacts/fg-required/"
+            for f in "${files[@]}"; do
+              # Preserve basename, avoid collisions by prefixing a hash if needed
+              bn="$(basename "$f")"
+              dest="artifacts/fg-required/$bn"
+              if [ -e "$dest" ]; then
+                h="$(printf '%s' "$f" | sha256sum | awk '{print $1}' | cut -c1-12)"
+                dest="artifacts/fg-required/${h}__$bn"
+              fi
+              cp -a "$f" "$dest" || true
+            done
+          else
+            echo "no extra lane logs found (best effort)"
+          fi
+
       - name: verify required artifacts
         # Only enforce existence when fg-required actually succeeded.
         if: success()
         run: |
+          set -euo pipefail
           test -f artifacts/testing/fg-required-summary.json
           test -f artifacts/testing/fg-required-summary.md
+
+      - name: job summary
+        if: always()
+        run: |
+          {
+            echo "## fg-required"
+            echo ""
+            echo "- Status: **${{ job.status }}**"
+            echo "- Artifact bundle: **fg-required-artifacts**"
+            echo "- Debug paths:"
+            echo "  - artifacts/fg-required/"
+            echo "  - artifacts/testing/"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: upload artifacts
         if: always()
