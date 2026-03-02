@@ -119,27 +119,26 @@ services:
     - /tmp:rw,noexec,nosuid,size=128m,mode=700
   opa-bundles:
     image: nginx:alpine
-    user: 0:0
+    entrypoint: ["nginx", "-g", "daemon off;"]
+    # keep your command unset
     read_only: true
+    user: 0:0
     security_opt:
-    - no-new-privileges:true
-    cap_drop:
-    - ALL
-    cap_add:
-    - SETUID
-    - SETGID
-    - CHOWN
+      - no-new-privileges:true
+    cap_drop: [ "ALL" ]
+    cap_add: [ "SETUID", "SETGID", "CHOWN" ]
     tmpfs:
-    - /tmp:rw,noexec,nosuid,size=16m,mode=700
-    networks:
-    - internal
+      - /tmp:rw,noexec,nosuid,size=16m,mode=700
+      - /var/cache/nginx:rw,noexec,nosuid,size=64m,mode=700
+      - /var/run:rw,noexec,nosuid,size=8m,mode=700
+    networks: [ "internal" ]
     volumes:
-    - ./policy/bundles:/usr/share/nginx/html:ro
-    - ./policy/bundles/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./policy/bundles:/usr/share/nginx/html:ro
+      - ./policy/bundles/nginx.conf:/etc/nginx/nginx.conf:ro
     healthcheck:
       test:
-      - CMD-SHELL
-      - wget -q -T 2 -O - http://127.0.0.1/healthz >/dev/null 2>&1
+        - CMD-SHELL
+        - wget -q -T 2 -O - http://127.0.0.1/health >/dev/null 2>&1
       interval: 5s
       timeout: 2s
       retries: 12

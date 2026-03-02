@@ -615,3 +615,19 @@ Gate impact:
 2026-03-02 — SOC-HIGH-002 — Workflow artifact upload path was too narrow
 Issue: .github/workflows/fg-required.yml uploaded only artifacts/testing, causing missing diagnostic artifacts and reducing incident forensics.
 Resolution: Expanded upload-artifact paths to include fg-required + gates + docker + testing roots and ensured _upload_notice.txt exists so uploads occur even on failure. No privilege escalation; retention set to 7 days.
+
+## 2026-03-02 — CI Execution Surface Updates (Workflows + CI Helper)
+
+**Change class:** CI/CD execution surface (SOC-HIGH-002)
+**Files:**
+- .github/workflows/ai-ledger-guard.yml
+- .github/workflows/docker-ci.yml
+- .github/workflows/fg-required.yml
+- .github/workflows/release-images.yml
+- .github/workflows/testing-module.yml
+- tools/ci/wait_healthy.sh
+
+**Intent:** Stabilize CI by enforcing required audit/update gates, hardening docker/compose validation inputs, and ensuring artifact collection always uploads correct roots.
+
+**Risk notes:** No production runtime behavior change. CI behavior becomes stricter/more deterministic. Artifacts retained for post-failure forensics.
+

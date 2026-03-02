@@ -4,12 +4,19 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
 
+concurrency:
+  group: pr-fix-log-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   pr_fix_log_guard:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+
     steps:
       - name: Checkout (full history for diff)
         uses: actions/checkout@v4
@@ -21,22 +28,56 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Fetch base
+      - name: Resolve base ref + fetch base (robust)
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
-          git fetch --no-tags --prune --depth=200 origin "${{ github.base_ref }}"
+          set -euo pipefail
+
+          if [ -z "${BASE_REF:-}" ]; then
+            echo "ERROR: pull_request.base.ref is empty; cannot compute diff base."
+            exit 2
+          fi
+
+          echo "Base ref: ${BASE_REF}"
+
+          # Ensure we have the base branch locally with full history.
+          # Avoid shallow depth games that break merge-base and diff correctness.
+          git fetch --no-tags --prune origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
 
       - name: Enforce PR_FIX_LOG update (or explicit override)
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_SHA: ${{ github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          BASE="origin/${{ github.base_ref }}"
-          HEAD="${{ github.sha }}"
+          BASE="origin/${BASE_REF}"
+          HEAD="${HEAD_SHA}"
 
-          # If PR body contains override marker, allow it (still visible for review).
-          if printf "%s" "${PR_BODY:-}" | grep -q "NO_FIX_LOG_REQUIRED:"; then
-            echo "Override marker found in PR body: NO_FIX_LOG_REQUIRED:"
+          # Override marker (must include a reason so reviewers can see intent).
+          # Example: NO_FIX_LOG_REQUIRED: reason="docs-only change"
+          if printf "%s" "${PR_BODY:-}" | grep -Eq '^NO_FIX_LOG_REQUIRED:\s*reason='; then
+            echo "Override marker found in PR body (NO_FIX_LOG_REQUIRED: reason=...)"
+            {
+              echo "## PR_FIX_LOG Guard"
+              echo ""
+              echo "- PR: #${PR_NUMBER}"
+              echo "- Status: **OVERRIDDEN**"
+              echo "- Base: \`${BASE}\`"
+              echo "- Head: \`${HEAD}\`"
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
           python tools/ci/guard_pr_fix_log.py --base "$BASE" --head "$HEAD"
+
+          {
+            echo "## PR_FIX_LOG Guard"
+            echo ""
+            echo "- PR: #${PR_NUMBER}"
+            echo "- Status: **PASS**"
+            echo "- Base: \`${BASE}\`"
+            echo "- Head: \`${HEAD}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
