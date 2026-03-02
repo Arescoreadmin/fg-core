@@ -17,6 +17,7 @@ jobs:
     name: fg-required
     runs-on: ubuntu-latest
     timeout-minutes: 10
+
     steps:
       - name: checkout
         uses: actions/checkout@v4
@@ -57,16 +58,25 @@ jobs:
         run: .venv/bin/python -m unittest -q tests.tools_minimal.test_required_tests_gate_resolution
 
       - name: run fg-required
+        id: fg_required
         timeout-minutes: 8
         run: .venv/bin/python tools/testing/harness/fg_required.py --global-budget-seconds 480 --lane-timeout-seconds 480
 
-      - name: prepare artifacts dir
+      - name: prepare artifacts dirs + fallback notice
         if: always()
         run: |
-          mkdir -p artifacts/testing
-          test -f artifacts/testing/fg-required-summary.md || echo "fg-required artifact bundle prepared after failure" > artifacts/testing/_upload_notice.txt
+          mkdir -p artifacts/testing artifacts/fg-required
+
+          # Ensure we always have at least one file to upload, even if fg-required crashes early.
+          test -f artifacts/testing/_upload_notice.txt || \
+            echo "fg-required artifact bundle prepared after failure" > artifacts/testing/_upload_notice.txt
+
+          test -f artifacts/fg-required/_upload_notice.txt || \
+            echo "fg-required artifact bundle prepared after failure" > artifacts/fg-required/_upload_notice.txt
 
       - name: verify required artifacts
+        # Only enforce existence when fg-required actually succeeded.
+        if: success()
         run: |
           test -f artifacts/testing/fg-required-summary.json
           test -f artifacts/testing/fg-required-summary.md
@@ -76,5 +86,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fg-required-artifacts
-          path: artifacts/testing
+          path: |
+            artifacts/fg-required/**
+            artifacts/gates/**
+            artifacts/docker/**
+            artifacts/testing/**
+            artifacts/**/_upload_notice.txt
           if-no-files-found: warn
+          retention-days: 7
