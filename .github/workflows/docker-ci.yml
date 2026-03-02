@@ -2,19 +2,28 @@ name: frostgate-docker-ci
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
+
+concurrency:
+  group: frostgate-docker-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   docker-validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Generate CI secrets
+        shell: bash
         run: |
           python - <<'PY' >> "$GITHUB_ENV"
           import secrets
@@ -27,6 +36,7 @@ jobs:
           PY
 
       - name: Verify required env vars are set
+        shell: bash
         run: |
           set -euo pipefail
           missing=0
@@ -46,11 +56,53 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Prepare environment
+      - name: Ensure required policy bundle files exist
+        shell: bash
         run: |
+          set -euo pipefail
+          mkdir -p policy/bundles
+
+          # If repo doesn't have it (or it got deleted), create CI-safe minimal nginx.conf.
+          # This keeps nginx alive with read_only rootfs by writing pid/temp to /tmp (tmpfs).
+          if [ ! -f policy/bundles/nginx.conf ]; then
+            cat > policy/bundles/nginx.conf <<'CONF'
+            pid /tmp/nginx.pid;
+
+            events {}
+
+            http {
+              client_body_temp_path /tmp/client_body_temp;
+              proxy_temp_path       /tmp/proxy_temp;
+              fastcgi_temp_path     /tmp/fastcgi_temp;
+              uwsgi_temp_path       /tmp/uwsgi_temp;
+              scgi_temp_path        /tmp/scgi_temp;
+
+              server {
+                listen 8080;
+
+                location /health { return 200 "ok\n"; }
+
+                location / {
+                  root /usr/share/nginx/html;
+                  try_files $uri =404;
+                }
+              }
+            }
+            CONF
+          fi
+
+          # Optional: ensure bundle dir isn't empty so nginx has something to serve
+          test -f policy/bundles/_ci_notice.txt || echo "CI bundle placeholder" > policy/bundles/_ci_notice.txt
+
+      - name: Prepare environment
+        shell: bash
+        run: |
+          set -euo pipefail
           cp .env.example .env.ci
+
           mkdir -p secrets
           {
+            echo "FG_ENV=ci"
             echo "FG_API_KEY=${FG_API_KEY}"
             echo "REDIS_PASSWORD=${REDIS_PASSWORD}"
             echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}"
@@ -58,37 +110,76 @@ jobs:
             echo "FG_AGENT_API_KEY=${FG_AGENT_API_KEY}"
             echo "FG_WEBHOOK_SECRET=${FG_WEBHOOK_SECRET}"
           } >> .env.ci
+
+          # Some compose files reference .env directly.
           cp .env.ci .env
+
+          # compose secret file
           echo "${FG_API_KEY}" > secrets/fg_api_keys.txt
 
+          # Keep CI-only env out of commits
+          grep -qE '^\Q.env.ci\E$' .gitignore || echo ".env.ci" >> .gitignore
+
       - name: Build images via docker compose
+        shell: bash
         run: |
-          docker compose --env-file .env.ci --profile core --profile admin build
+          set -euo pipefail
+          docker compose --env-file .env.ci build
 
-      - name: Start stack
+      - name: Start opa-bundles first
+        shell: bash
         run: |
-          docker compose --env-file .env.ci --profile core --profile admin up -d --build
+          set -euo pipefail
+          docker compose --env-file .env.ci up -d --force-recreate opa-bundles
 
-      - name: Smoke test /health
+      - name: Wait for opa-bundles healthy
+        shell: bash
         run: |
-          echo "Waiting for core-api to come up..."
-          for i in $(seq 1 20); do
+          set -euo pipefail
+          timeout 45 bash -lc '
+            until [ "$(docker inspect -f "{{.State.Health.Status}}" fg-core-opa-bundles-1 2>/dev/null)" = "healthy" ]; do
+              docker ps --filter name=fg-core-opa-bundles-1 --format "opa-bundles status={{.Status}}"
+              sleep 1
+            done
+          '
+
+      - name: Start full stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose --env-file .env.ci up -d
+
+      - name: Smoke test admin-gateway /health
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Waiting for admin-gateway on 127.0.0.1:18080 ..."
+          for i in $(seq 1 40); do
             if curl -sSf http://127.0.0.1:18080/health >/dev/null; then
-              echo "core-api is healthy"
+              echo "admin-gateway is healthy"
               exit 0
             fi
             sleep 2
           done
-          echo "core-api failed to become healthy in time"
-          docker compose logs
+          echo "admin-gateway failed to become healthy in time"
           exit 1
 
-      - name: Dump docker compose logs on failure
+      - name: Debug dump (containers + logs)
         if: failure()
+        shell: bash
         run: |
-          docker compose --env-file .env.ci --profile core --profile admin logs || true
+          set +e
+          echo "=== docker compose ps ==="
+          docker compose --env-file .env.ci ps
+          echo
+          echo "=== docker compose logs (tail) ==="
+          docker compose --env-file .env.ci logs --tail=300 || true
+          echo
+          echo "=== opa-bundles nginx config ==="
+          docker exec -t fg-core-opa-bundles-1 nginx -T || true
 
       - name: Tear down stack
         if: always()
+        shell: bash
         run: |
-          docker compose --env-file .env.ci --profile core --profile admin down -v || true
+          docker compose --env-file .env.ci down -v --remove-orphans || true

@@ -190,6 +190,4 @@ tools/ci/contract_routes.json
 tools/ci/plane_registry_snapshot.json
 tools/ci/plane_registry_snapshot.sha256
 tools/ci/topology.sha256
-
-# committed non-secret production profile defaults for CI/gates
-!env/prod.env
+.env.ci
