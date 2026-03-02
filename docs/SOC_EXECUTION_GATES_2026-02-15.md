@@ -1,3 +1,14 @@
+## 2026-03-01T21:24:06Z — SOC-HIGH-002 — Route inventory artifact updated
+
+**Issue:** `tools/ci/route_inventory.json` changed and is classified as a critical SOC-tracked artifact.
+
+**Resolution:** Recorded this change as an approved artifact refresh. No policy semantics changed; inventory updated via `make route-inventory-generate`.
+
+**Files:**
+- tools/ci/route_inventory.json
+
+---
+
 ## 2026-03-01T19:00:46Z — SOC-HIGH-002 — Route inventory governance update
 
 **Issue:** SOC-HIGH-002 triggered: critical CI governance artifacts changed without SOC review acknowledgement.
@@ -600,3 +611,7 @@ Gate impact:
 - 2026-02-26: Hardened `.github/workflows/testing-module.yml` for artifact handoff (`download-artifact` in `fg-flake-detect`), deterministic junit fallback, and non-failing artifact uploads (`if-no-files-found: warn`), and reviewed under SOC-HIGH-002.
 - 2026-02-26: Updated Testing Control Tower routes and regenerated `tools/ci/route_inventory.json` to satisfy SOC-P1-001 route inventory drift controls.
 - 2026-02-26: Regenerated critical CI governance artifacts (`tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/plane_registry_snapshot.sha256`, `tools/ci/attestation_bundle.sha256`, `tools/ci/build_meta.json`, `tools/ci/topology.sha256`) after testing route/schema/prefix updates; SOC-HIGH-002 sync maintained.
+
+2026-03-02 — SOC-HIGH-002 — Workflow artifact upload path was too narrow
+Issue: .github/workflows/fg-required.yml uploaded only artifacts/testing, causing missing diagnostic artifacts and reducing incident forensics.
+Resolution: Expanded upload-artifact paths to include fg-required + gates + docker + testing roots and ensured _upload_notice.txt exists so uploads occur even on failure. No privilege escalation; retention set to 7 days.
