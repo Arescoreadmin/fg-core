@@ -1,3 +1,17 @@
+## 2026-03-03T19:26:45Z — SOC-HIGH-002 — docker-ci workflow update
+
+**Issue:** SOC-HIGH-002 triggered: security-critical CI workflow changed without SOC review acknowledgement.
+
+<!-- SOC-HIGH-002::4773164b51fce50dcbcf139e1672c382ef90b353::2026-03-03 -->
+
+### Critical-path files reviewed (SOC-HIGH-002)
+- `.github/workflows/docker-ci.yml`
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+---
+
 ## 2026-03-01T21:24:06Z — SOC-HIGH-002 — Route inventory artifact updated
 
 **Issue:** `tools/ci/route_inventory.json` changed and is classified as a critical SOC-tracked artifact.

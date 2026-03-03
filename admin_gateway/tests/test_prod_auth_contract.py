@@ -7,11 +7,7 @@ Covers:
 """
 
 from __future__ import annotations
-
-import os
 from typing import Optional
-from unittest.mock import patch
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -76,6 +72,7 @@ class TestOidcScopesProductionRequired:
         monkeypatch.setenv("FG_OIDC_SCOPES", "openid email")
         reset_auth_config()
         from admin_gateway.auth.config import get_auth_config
+
         cfg = get_auth_config()
         assert cfg.oidc_scopes == "openid email"
         reset_auth_config()
@@ -96,6 +93,7 @@ class TestOidcScopesProductionRequired:
         reset_auth_config()
 
         import sys
+
         sys.modules.pop("admin_gateway.main", None)
         from admin_gateway.main import build_app
 
@@ -120,6 +118,7 @@ class TestOidcScopesProductionRequired:
         reset_auth_config()
 
         import sys
+
         sys.modules.pop("admin_gateway.main", None)
         from admin_gateway.main import build_app
 
@@ -177,12 +176,17 @@ class TestRedirectAllowlist:
         monkeypatch.setenv("AG_SQLITE_PATH", str(tmp_path / "test.db"))
         monkeypatch.setenv("AG_CORE_BASE_URL", "http://core.local")
         monkeypatch.setenv("AG_CORE_API_KEY", "test-key")
-        for k in ("FG_OIDC_ISSUER", "FG_OIDC_CLIENT_ID", "FG_OIDC_CLIENT_SECRET",
-                  "FG_OIDC_REDIRECT_URL"):
+        for k in (
+            "FG_OIDC_ISSUER",
+            "FG_OIDC_CLIENT_ID",
+            "FG_OIDC_CLIENT_SECRET",
+            "FG_OIDC_REDIRECT_URL",
+        ):
             monkeypatch.delenv(k, raising=False)
         reset_auth_config()
 
         import sys
+
         sys.modules.pop("admin_gateway.main", None)
         from admin_gateway.main import build_app
 
@@ -209,12 +213,17 @@ class TestRedirectAllowlist:
         monkeypatch.setenv("AG_SQLITE_PATH", str(tmp_path / "test.db"))
         monkeypatch.setenv("AG_CORE_BASE_URL", "http://core.local")
         monkeypatch.setenv("AG_CORE_API_KEY", "test-key")
-        for k in ("FG_OIDC_ISSUER", "FG_OIDC_CLIENT_ID", "FG_OIDC_CLIENT_SECRET",
-                  "FG_OIDC_REDIRECT_URL"):
+        for k in (
+            "FG_OIDC_ISSUER",
+            "FG_OIDC_CLIENT_ID",
+            "FG_OIDC_CLIENT_SECRET",
+            "FG_OIDC_REDIRECT_URL",
+        ):
             monkeypatch.delenv(k, raising=False)
         reset_auth_config()
 
         import sys
+
         sys.modules.pop("admin_gateway.main", None)
         from admin_gateway.main import build_app
 
@@ -247,12 +256,17 @@ class TestDevBypassLocalhostRestriction:
         monkeypatch.setenv("AG_SQLITE_PATH", str(tmp_path / "test.db"))
         monkeypatch.setenv("AG_CORE_BASE_URL", "http://core.local")
         monkeypatch.setenv("AG_CORE_API_KEY", "test-key")
-        for k in ("FG_OIDC_ISSUER", "FG_OIDC_CLIENT_ID", "FG_OIDC_CLIENT_SECRET",
-                  "FG_OIDC_REDIRECT_URL"):
+        for k in (
+            "FG_OIDC_ISSUER",
+            "FG_OIDC_CLIENT_ID",
+            "FG_OIDC_CLIENT_SECRET",
+            "FG_OIDC_REDIRECT_URL",
+        ):
             monkeypatch.delenv(k, raising=False)
         reset_auth_config()
 
         import sys
+
         sys.modules.pop("admin_gateway.main", None)
         from admin_gateway.main import build_app
 

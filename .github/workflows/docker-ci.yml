@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Generate CI secrets
         shell: bash
@@ -62,37 +64,49 @@ jobs:
           set -euo pipefail
           mkdir -p policy/bundles
 
-          # If repo doesn't have it (or it got deleted), create CI-safe minimal nginx.conf.
-          # This keeps nginx alive with read_only rootfs by writing pid/temp to /tmp (tmpfs).
+          # Production stance: repo should contain this.
+          # CI fallback exists only to prevent "missing file" flakiness if someone nukes bundles again.
           if [ ! -f policy/bundles/nginx.conf ]; then
-            cat > policy/bundles/nginx.conf <<'CONF'
-            pid /tmp/nginx.pid;
+            echo "WARN: policy/bundles/nginx.conf missing in repo. Creating CI fallback." >&2
+            python - <<'PY'
+          from pathlib import Path
+          p = Path("policy/bundles/nginx.conf")
+          p.write_text(
+          """# policy/bundles/nginx.conf
+          pid /tmp/nginx.pid;
 
-            events {}
+          events {}
 
-            http {
-              client_body_temp_path /tmp/client_body_temp;
-              proxy_temp_path       /tmp/proxy_temp;
-              fastcgi_temp_path     /tmp/fastcgi_temp;
-              uwsgi_temp_path       /tmp/uwsgi_temp;
-              scgi_temp_path        /tmp/scgi_temp;
+          http {
+            client_body_temp_path /tmp/client_body_temp;
+            proxy_temp_path       /tmp/proxy_temp;
+            fastcgi_temp_path     /tmp/fastcgi_temp;
+            uwsgi_temp_path       /tmp/uwsgi_temp;
+            scgi_temp_path        /tmp/scgi_temp;
 
-              server {
-                listen 8080;
+            server {
+              listen 80;
 
-                location /health { return 200 "ok\n"; }
+              location /health { return 200 "ok\\n"; }
 
-                location / {
-                  root /usr/share/nginx/html;
-                  try_files $uri =404;
-                }
+              location / {
+                root /usr/share/nginx/html;
+                try_files $uri =404;
               }
             }
-            CONF
+          }
+          """
+          )
+          print("CI wrote fallback", p)
+          PY
           fi
 
-          # Optional: ensure bundle dir isn't empty so nginx has something to serve
+          # Ensure bundle dir isn't empty so nginx has something to serve
           test -f policy/bundles/_ci_notice.txt || echo "CI bundle placeholder" > policy/bundles/_ci_notice.txt
+
+          # Sanity
+          test -s policy/bundles/nginx.conf
+          sed -n '1,160p' policy/bundles/nginx.conf
 
       - name: Prepare environment
         shell: bash
@@ -117,9 +131,6 @@ jobs:
           # compose secret file
           echo "${FG_API_KEY}" > secrets/fg_api_keys.txt
 
-          # Keep CI-only env out of commits
-          grep -qE '^\Q.env.ci\E$' .gitignore || echo ".env.ci" >> .gitignore
-
       - name: Build images via docker compose
         shell: bash
         run: |
@@ -136,9 +147,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          timeout 45 bash -lc '
-            until [ "$(docker inspect -f "{{.State.Health.Status}}" fg-core-opa-bundles-1 2>/dev/null)" = "healthy" ]; do
-              docker ps --filter name=fg-core-opa-bundles-1 --format "opa-bundles status={{.Status}}"
+          OPA_BUNDLES_CID="$(docker compose --env-file .env.ci ps -q opa-bundles)"
+          test -n "${OPA_BUNDLES_CID}"
+          timeout 60 bash -lc '
+            cid="'"${OPA_BUNDLES_CID}"'"
+            until [ "$(docker inspect -f "{{.State.Health.Status}}" "$cid" 2>/dev/null)" = "healthy" ]; do
+              st="$(docker inspect -f "{{.State.Status}}/{{.State.Health.Status}}" "$cid" 2>/dev/null || true)"
+              echo "opa-bundles: ${st}"
               sleep 1
             done
           '
@@ -176,7 +191,8 @@ jobs:
           docker compose --env-file .env.ci logs --tail=300 || true
           echo
           echo "=== opa-bundles nginx config ==="
-          docker exec -t fg-core-opa-bundles-1 nginx -T || true
+          cid="$(docker compose --env-file .env.ci ps -q opa-bundles)"
+          docker exec -t "$cid" nginx -T || true
 
       - name: Tear down stack
         if: always()
