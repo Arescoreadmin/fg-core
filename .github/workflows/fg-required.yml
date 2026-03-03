@@ -37,6 +37,7 @@ jobs:
             pyproject.toml
 
       - name: verify workflow filename uniqueness
+        shell: bash
         run: |
           set -euo pipefail
           test -f .github/workflows/fg-required.yml
@@ -44,27 +45,32 @@ jobs:
           test ! -f .github/workflows/FG-required.yml
 
       - name: run hermetic tool tests
+        shell: bash
         # tools_minimal intentionally uses unittest to avoid pytest bootstrap/plugin imports
         run: |
           set -euo pipefail
           python -m unittest -q tests.tools_minimal.test_fg_required_minimal
 
       - name: create venv
+        shell: bash
         run: |
           set -euo pipefail
           python -m venv .venv
 
       - name: install deps (pinned)
+        shell: bash
         run: |
           set -euo pipefail
           make venv
 
       - name: sanity check pytest-asyncio plugin version
+        shell: bash
         run: |
           set -euo pipefail
           .venv/bin/python -c "import pytest_asyncio; print(pytest_asyncio.__version__)"
 
       - name: run required-tests gate resolution tests
+        shell: bash
         run: |
           set -euo pipefail
           .venv/bin/python -m unittest -q tests.tools_minimal.test_required_tests_gate_resolution
@@ -72,24 +78,37 @@ jobs:
       - name: run fg-required
         id: fg_required
         timeout-minutes: 8
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts/fg-required artifacts/testing
 
-          # Prefer to force outputs into artifacts/fg-required if the harness supports it.
-          # If it doesn't, it will ignore unknown args and fail, so we DO NOT add new args here blindly.
-          # Keep invocation stable; collect logs in a later step.
           .venv/bin/python tools/testing/harness/fg_required.py \
             --global-budget-seconds 480 \
             --lane-timeout-seconds 480
 
+      - name: dump failed lane logs (tail)
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          echo "=== fg-required lanes directory ==="
+          find artifacts/fg-required/lanes -maxdepth 2 -type f -name "lane.log" -print || true
+          echo
+          echo "=== tail lane.log files ==="
+          for f in $(find artifacts/fg-required/lanes -type f -name "lane.log" 2>/dev/null); do
+            echo
+            echo "----- $f -----"
+            tail -n 200 "$f" || true
+          done
+
       - name: prepare artifacts dirs + fallback notice
         if: always()
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts/testing artifacts/fg-required
 
-          # Ensure we always have at least one file to upload, even if fg-required crashes early.
           test -f artifacts/testing/_upload_notice.txt || \
             echo "fg-required artifact bundle prepared after failure" > artifacts/testing/_upload_notice.txt
 
@@ -98,12 +117,11 @@ jobs:
 
       - name: collect lane logs (best effort)
         if: always()
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts/fg-required
 
-          # Copy common lane output locations if present (never fail).
-          # NOTE: These are best guesses because CI runners vary.
           for d in \
             artifacts/fg-required \
             artifacts/testing \
@@ -115,8 +133,6 @@ jobs:
             test -d "$d" && echo "found dir: $d" || true
           done
 
-          # Grab lane.log and a few other likely useful files from shallow depth.
-          # Limit to avoid uploading the universe.
           mapfile -t files < <(
             find . -maxdepth 6 -type f \( \
               -name "lane.log" -o \
@@ -132,7 +148,6 @@ jobs:
           if [ "${#files[@]}" -gt 0 ]; then
             echo "collecting ${#files[@]} files into artifacts/fg-required/"
             for f in "${files[@]}"; do
-              # Preserve basename, avoid collisions by prefixing a hash if needed
               bn="$(basename "$f")"
               dest="artifacts/fg-required/$bn"
               if [ -e "$dest" ]; then
@@ -146,8 +161,8 @@ jobs:
           fi
 
       - name: verify required artifacts
-        # Only enforce existence when fg-required actually succeeded.
         if: success()
+        shell: bash
         run: |
           set -euo pipefail
           test -f artifacts/testing/fg-required-summary.json
@@ -155,6 +170,7 @@ jobs:
 
       - name: job summary
         if: always()
+        shell: bash
         run: |
           {
             echo "## fg-required"

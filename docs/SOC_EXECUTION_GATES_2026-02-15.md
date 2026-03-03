@@ -1,3 +1,16 @@
+## 2026-03-03T20:22:44Z — SOC-HIGH-002 — CI workflow governance update
+
+**Change class:** CI/CD execution surface (SOC-HIGH-002)
+
+### Files reviewed (required by SOC-HIGH-002)
+- `.github/workflows/fg-required.yml`
+
+### Verification performed
+- `make soc-review-sync` (must pass after this entry)
+- `make soc-manifest-verify`
+
+<!-- SOC-HIGH-002::a56ee100af646285c520f5401b6821a53f7fffcb::2026-03-03 -->
+
 ## 2026-03-03T19:26:45Z — SOC-HIGH-002 — docker-ci workflow update
 
 **Issue:** SOC-HIGH-002 triggered: security-critical CI workflow changed without SOC review acknowledgement.
