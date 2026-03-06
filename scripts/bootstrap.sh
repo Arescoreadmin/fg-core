@@ -3,23 +3,32 @@ set -eu
 
 echo "[bootstrap] starting"
 
-# Only create directories that are volume-backed in this container.
+BASE=/var/lib/frostgate
+
+MISSION=$BASE/mission
+STATE=$BASE/state
+QUEUE=$BASE/agent_queue
+RING_STATE=$BASE/ring/state
+RING_MODELS=$BASE/ring/models
+
+# Ensure directories exist
 mkdir -p \
-  /var/lib/frostgate/mission \
-  /var/lib/frostgate/state \
-  /var/lib/frostgate/agent_queue \
-  /var/lib/frostgate/ring/state \
-  /var/lib/frostgate/ring/models
+  "$MISSION" \
+  "$STATE" \
+  "$QUEUE" \
+  "$RING_STATE" \
+  "$RING_MODELS"
 
-# Create mission envelope if missing
-if [ ! -f /var/lib/frostgate/mission/envelope.json ]; then
-  ts="$(date -u +%FT%TZ)"
-  printf '%s\n' "{\"version\":1,\"generated_by\":\"compose-bootstrap\",\"ts\":\"${ts}\",\"resources\":[]}" \
-    > /var/lib/frostgate/mission/envelope.json
-  echo "[bootstrap] wrote /var/lib/frostgate/mission/envelope.json"
-else
-  echo "[bootstrap] mission envelope already present"
-fi
+# Fix permissions first (important for fresh volumes)
+chmod -R 0775 "$BASE" || true
+chown -R 0:0 "$BASE" || true
 
-ls -lah /var/lib/frostgate/mission || true
-echo "[bootstrap] done"
+# Create mission envelope safely
+touch "$MISSION/envelope.json"
+chmod 0664 "$MISSION/envelope.json"
+
+echo "{}" > "$MISSION/envelope.json"
+
+echo "[bootstrap] mission envelope created"
+
+echo "[bootstrap] complete"

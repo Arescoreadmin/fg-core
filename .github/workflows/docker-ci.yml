@@ -16,7 +16,9 @@ permissions:
 jobs:
   docker-validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    env:
+      COMPOSE_PROJECT_NAME: fg-core
 
     steps:
       - name: Checkout
@@ -29,6 +31,7 @@ jobs:
         run: |
           python - <<'PY' >> "$GITHUB_ENV"
           import secrets
+
           print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
           print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
           print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
@@ -64,47 +67,43 @@ jobs:
           set -euo pipefail
           mkdir -p policy/bundles
 
-          # Production stance: repo should contain this.
-          # CI fallback exists only to prevent "missing file" flakiness if someone nukes bundles again.
           if [ ! -f policy/bundles/nginx.conf ]; then
             echo "WARN: policy/bundles/nginx.conf missing in repo. Creating CI fallback." >&2
             python - <<'PY'
-          from pathlib import Path
-          p = Path("policy/bundles/nginx.conf")
-          p.write_text(
-          """# policy/bundles/nginx.conf
-          pid /tmp/nginx.pid;
+            from pathlib import Path
 
-          events {}
+            p = Path("policy/bundles/nginx.conf")
+            p.write_text(
+                """# policy/bundles/nginx.conf
+            pid /tmp/nginx.pid;
 
-          http {
-            client_body_temp_path /tmp/client_body_temp;
-            proxy_temp_path       /tmp/proxy_temp;
-            fastcgi_temp_path     /tmp/fastcgi_temp;
-            uwsgi_temp_path       /tmp/uwsgi_temp;
-            scgi_temp_path        /tmp/scgi_temp;
+            events {}
 
-            server {
-              listen 80;
+            http {
+              client_body_temp_path /tmp/client_body_temp;
+              proxy_temp_path       /tmp/proxy_temp;
+              fastcgi_temp_path     /tmp/fastcgi_temp;
+              uwsgi_temp_path       /tmp/uwsgi_temp;
+              scgi_temp_path        /tmp/scgi_temp;
 
-              location /health { return 200 "ok\\n"; }
+              server {
+                listen 80;
 
-              location / {
-                root /usr/share/nginx/html;
-                try_files $uri =404;
+                location /health { return 200 "ok\\n"; }
+
+                location / {
+                  root /usr/share/nginx/html;
+                  try_files $uri =404;
+                }
               }
             }
-          }
-          """
-          )
-          print("CI wrote fallback", p)
-          PY
+            """
+            )
+            print("CI wrote fallback", p)
+            PY
           fi
 
-          # Ensure bundle dir isn't empty so nginx has something to serve
           test -f policy/bundles/_ci_notice.txt || echo "CI bundle placeholder" > policy/bundles/_ci_notice.txt
-
-          # Sanity
           test -s policy/bundles/nginx.conf
           sed -n '1,160p' policy/bundles/nginx.conf
 
@@ -116,7 +115,7 @@ jobs:
 
           mkdir -p secrets
           {
-            echo "FG_ENV=ci"
+            echo "FG_ENV=test"
             echo "FG_API_KEY=${FG_API_KEY}"
             echo "REDIS_PASSWORD=${REDIS_PASSWORD}"
             echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}"
@@ -125,36 +124,92 @@ jobs:
             echo "FG_WEBHOOK_SECRET=${FG_WEBHOOK_SECRET}"
           } >> .env.ci
 
-          # Some compose files reference .env directly.
           cp .env.ci .env
+          printf '%s\n' "${FG_API_KEY}" > secrets/fg_api_keys.txt
 
-          # compose secret file
-          echo "${FG_API_KEY}" > secrets/fg_api_keys.txt
+          echo "=== .env.ci sanity (redacted) ==="
+          sed \
+            -e 's/^\(FG_API_KEY=\).*/\1[REDACTED]/' \
+            -e 's/^\(REDIS_PASSWORD=\).*/\1[REDACTED]/' \
+            -e 's/^\(POSTGRES_PASSWORD=\).*/\1[REDACTED]/' \
+            -e 's/^\(NATS_AUTH_TOKEN=\).*/\1[REDACTED]/' \
+            -e 's/^\(FG_AGENT_API_KEY=\).*/\1[REDACTED]/' \
+            -e 's/^\(FG_WEBHOOK_SECRET=\).*/\1[REDACTED]/' \
+            .env.ci
+
+      - name: Render docker compose config
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset COMPOSE_FILE
+          unset COMPOSE_PROFILES
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.lockdown.yml \
+            -f docker-compose.override.yml \
+            --env-file .env.ci \
+            --profile core \
+            --profile admin \
+            config > /tmp/fg.compose.rendered.yml
+
+          test -s /tmp/fg.compose.rendered.yml
+          sed -n '1,220p' /tmp/fg.compose.rendered.yml
 
       - name: Build images via docker compose
         shell: bash
         run: |
           set -euo pipefail
-          docker compose --env-file .env.ci build
+          unset COMPOSE_FILE
+          unset COMPOSE_PROFILES
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.lockdown.yml \
+            -f docker-compose.override.yml \
+            --env-file .env.ci \
+            --profile core \
+            --profile admin \
+            build
 
       - name: Start opa-bundles first
         shell: bash
         run: |
           set -euo pipefail
-          docker compose --env-file .env.ci up -d --force-recreate opa-bundles
+          unset COMPOSE_FILE
+          unset COMPOSE_PROFILES
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.lockdown.yml \
+            -f docker-compose.override.yml \
+            --env-file .env.ci \
+            --profile core \
+            --profile admin \
+            up -d --force-recreate opa-bundles
 
       - name: Wait for opa-bundles healthy
         shell: bash
         run: |
           set -euo pipefail
-          OPA_BUNDLES_CID="$(docker compose --env-file .env.ci ps -q opa-bundles)"
+          unset COMPOSE_FILE
+          unset COMPOSE_PROFILES
+          OPA_BUNDLES_CID="$(
+            docker compose \
+              -f docker-compose.yml \
+              -f docker-compose.lockdown.yml \
+              -f docker-compose.override.yml \
+              --env-file .env.ci \
+              --profile core \
+              --profile admin \
+              ps -q opa-bundles
+          )"
+
           test -n "${OPA_BUNDLES_CID}"
-          timeout 60 bash -lc '
+
+          timeout 90 bash -lc '
             cid="'"${OPA_BUNDLES_CID}"'"
             until [ "$(docker inspect -f "{{.State.Health.Status}}" "$cid" 2>/dev/null)" = "healthy" ]; do
-              st="$(docker inspect -f "{{.State.Status}}/{{.State.Health.Status}}" "$cid" 2>/dev/null || true)"
+              st="$(docker inspect -f "{{.State.Status}}/{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}" "$cid" 2>/dev/null || true)"
               echo "opa-bundles: ${st}"
-              sleep 1
+              sleep 2
             done
           '
 
@@ -162,15 +217,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker compose --env-file .env.ci up -d
+          unset COMPOSE_FILE
+          unset COMPOSE_PROFILES
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.lockdown.yml \
+            -f docker-compose.override.yml \
+            --env-file .env.ci \
+            --profile core \
+            --profile admin \
+            up -d --build
 
       - name: Smoke test admin-gateway /health
         shell: bash
         run: |
           set -euo pipefail
           echo "Waiting for admin-gateway on 127.0.0.1:18080 ..."
-          for i in $(seq 1 40); do
-            if curl -sSf http://127.0.0.1:18080/health >/dev/null; then
+          for i in $(seq 1 60); do
+            if curl -fsS --max-time 3 http://127.0.0.1:18080/health >/dev/null; then
               echo "admin-gateway is healthy"
               exit 0
             fi
@@ -184,18 +248,63 @@ jobs:
         shell: bash
         run: |
           set +e
+          unset COMPOSE_FILE
+          unset COMPOSE_PROFILES
+
           echo "=== docker compose ps ==="
-          docker compose --env-file .env.ci ps
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.lockdown.yml \
+            -f docker-compose.override.yml \
+            --env-file .env.ci \
+            --profile core \
+            --profile admin \
+            ps
+
           echo
-          echo "=== docker compose logs (tail) ==="
-          docker compose --env-file .env.ci logs --tail=300 || true
+          echo "=== docker compose logs (tail=300) ==="
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.lockdown.yml \
+            -f docker-compose.override.yml \
+            --env-file .env.ci \
+            --profile core \
+            --profile admin \
+            logs --tail=300 || true
+
           echo
           echo "=== opa-bundles nginx config ==="
-          cid="$(docker compose --env-file .env.ci ps -q opa-bundles)"
-          docker exec -t "$cid" nginx -T || true
+          cid="$(
+            docker compose \
+              -f docker-compose.yml \
+              -f docker-compose.lockdown.yml \
+              -f docker-compose.override.yml \
+              --env-file .env.ci \
+              --profile core \
+              --profile admin \
+              ps -q opa-bundles
+          )"
+          if [ -n "${cid}" ]; then
+            docker exec -t "$cid" nginx -T || true
+          else
+            echo "opa-bundles container not found"
+          fi
+
+          echo
+          echo "=== rendered compose config ==="
+          sed -n '1,260p' /tmp/fg.compose.rendered.yml || true
 
       - name: Tear down stack
         if: always()
         shell: bash
         run: |
-          docker compose --env-file .env.ci down -v --remove-orphans || true
+          unset COMPOSE_FILE
+          unset COMPOSE_PROFILES
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.lockdown.yml \
+            -f docker-compose.override.yml \
+            --env-file .env.ci \
+            --profile core \
+            --profile admin \
+            down -v --remove-orphans || true

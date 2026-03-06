@@ -1,3 +1,20 @@
+## 2026-03-06T22:55:00Z — SOC-HIGH-002 — docker-ci and compose governance alignment
+
+**Change class:** CI/CD execution surface (SOC-HIGH-002)
+
+### Files reviewed (required by SOC-HIGH-002)
+- `.github/workflows/docker-ci.yml`
+- `docker-compose.yml`
+
+SOC review outcome:
+- Verified docker validation workflow aligns with the profiled compose stack used by the repo.
+- Verified compose core service naming now matches production-profile governance expectations.
+- Verified admin gateway DB configuration no longer falls back to SQLite on read-only filesystem.
+- `make prod-profile-check`: passed
+- `make soc-invariants`: passed
+- `make soc-review-sync`: expected to pass after this documentation update
+
+<!-- SOC-HIGH-002::docker-ci-compose-alignment::2026-03-06 -->
 ## 2026-03-03T20:22:44Z — SOC-HIGH-002 — CI workflow governance update
 
 **Change class:** CI/CD execution surface (SOC-HIGH-002)
