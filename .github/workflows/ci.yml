@@ -74,7 +74,6 @@ jobs:
       - name: Syntax / import guard (fast fail)
         run: python -m compileall -q api engine tests
 
-      # ✅ Added: SQL migration percent-token guard (psycopg3 hazard)
       - name: SQL migration percent-token guard
         run: python tools/ci/guard_no_raw_percent_in_sql.py
 
@@ -87,8 +86,23 @@ jobs:
       - name: Enforce security regression gates
         run: python tools/ci/check_security_regression_gates.py
 
+      - name: Preflight OPA runtime config
+        run: |
+          set -euo pipefail
+          echo "Checking OPA runtime config..."
+          test -f policy/opa/config.yaml
+          sed -n '1,200p' policy/opa/config.yaml
+          if [ -f policy/opa/opa-config.yml ]; then
+            echo "ERROR: stale policy/opa/opa-config.yml exists and can cause OPA merge errors"
+            sed -n '1,200p' policy/opa/opa-config.yml
+            exit 1
+          fi
+
       - name: Run fg-fast guard lane (lock regression)
-        run: make fg-fast-full
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/fg-fast
+          make fg-fast-full 2>&1 | tee artifacts/fg-fast/fg-fast.log
         env:
           FG_API_KEY: ${{ env.FG_API_KEY }}
 
@@ -391,8 +405,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
       - name: Generate CI secrets
         uses: ./.github/actions/fg-secrets
+
       - name: Python setup (cached)
         uses: ./.github/actions/fg-python-setup
         with:
@@ -400,10 +416,13 @@ jobs:
           install-os-deps: "true"
           prepare-workspace: "false"
           build-venv: "true"
+
       - name: Verify FG_API_KEY is set
         run: python -c "import os; assert os.getenv('FG_API_KEY')"
+
       - name: Syntax / import guard (fast fail)
         run: python -m compileall -q api engine tests
+
       - name: Run admin gateway lane
         run: make ci-admin
 
@@ -454,8 +473,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
       - name: Generate CI secrets
         uses: ./.github/actions/fg-secrets
+
       - name: Python setup (cached)
         uses: ./.github/actions/fg-python-setup
         with:
@@ -463,10 +484,13 @@ jobs:
           install-os-deps: "true"
           prepare-workspace: "false"
           build-venv: "true"
+
       - name: Verify FG_API_KEY is set
         run: python -c "import os; assert os.getenv('FG_API_KEY')"
+
       - name: Syntax / import guard (fast fail)
         run: python -m compileall -q api engine tests
+
       - name: Run PT lane
         run: make ci-pt
 
@@ -487,8 +511,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
       - name: Generate CI secrets
         uses: ./.github/actions/fg-secrets
+
       - name: Python setup (cached)
         uses: ./.github/actions/fg-python-setup
         with:
@@ -496,6 +522,7 @@ jobs:
           install-os-deps: "true"
           prepare-workspace: "false"
           build-venv: "true"
+
       - name: Verify FG_API_KEY is set
         run: python -c "import os; assert os.getenv('FG_API_KEY')"
 
@@ -507,14 +534,15 @@ jobs:
       - name: Syntax / import guard (fast fail)
         run: python -m compileall -q api engine tests
 
-      # ✅ Added: explicit security regression lane (your request)
       - name: Security regression tests
         run: pytest tests/security -q
 
       - name: Run Hardening Tests - Decision Pipeline Unity
         run: make test-decision-unified
+
       - name: Run Hardening Tests - Tenant Isolation
         run: make test-tenant-isolation
+
       - name: Run Hardening Tests - Auth Hardening
         run: make test-auth-hardening
 
@@ -678,7 +706,6 @@ jobs:
             state/**
           if-no-files-found: error
 
-
   agent_linux:
     name: Agent Linux (unit + contract)
     runs-on: ubuntu-latest
@@ -693,8 +720,10 @@ jobs:
           install-os-deps: "true"
           prepare-workspace: "true"
           build-venv: "true"
+
       - name: Agent unit tests
         run: make agent-unit
+
       - name: Core OpenAPI contract refresh check
         run: make contracts-core-gen && git diff --exit-code contracts/core/openapi.json
 
@@ -708,14 +737,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - name: Build Windows agent
         shell: powershell
         run: make agent-build-windows
+
       - name: Verify dist manifest and hash
         shell: powershell
         run: |
           if (!(Test-Path dist/manifest.json)) { throw "manifest missing" }
           if (!(Test-Path dist/frostgate-agent.exe.sha256)) { throw "sha256 missing" }
+
       - uses: actions/upload-artifact@v4
         with:
           name: frostgate-agent-windows

@@ -1,3 +1,28 @@
+## 2026-03-06T23:00:00Z — SOC-HIGH-002 — OPA config merge-error guard and stale config removal
+
+**Change class:** CI/CD execution surface (SOC-HIGH-002)
+
+**Issue:** CI OPA validation was vulnerable to stale duplicate config files under `policy/opa/`, causing merge errors during `opa-check`. The workflow was also missing an explicit fail-fast guard for this condition.
+
+### Files reviewed (required by SOC-HIGH-002)
+- `.github/workflows/ci.yml`
+- `policy/opa/opa-config.yml`
+
+### Review summary
+- Added CI fail-fast validation in `.github/workflows/ci.yml` to require `policy/opa/config.yaml` and fail if stale `policy/opa/opa-config.yml` exists.
+- Removed stale `policy/opa/opa-config.yml` to eliminate duplicate top-level OPA YAML documents that caused merge errors during policy loading.
+- Confirmed the canonical runtime OPA config remains `policy/opa/config.yaml`.
+
+### Risk assessment
+- Low implementation risk.
+- Positive security and reliability impact because CI now fails deterministically on duplicate OPA config state instead of failing later inside policy validation.
+
+### Validation
+- `make soc-review-sync`
+- `make opa-check`
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
 ## 2026-03-06T22:55:00Z — SOC-HIGH-002 — docker-ci and compose governance alignment
 
 **Change class:** CI/CD execution surface (SOC-HIGH-002)
