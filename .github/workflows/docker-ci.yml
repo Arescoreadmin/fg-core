@@ -65,47 +65,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           mkdir -p policy/bundles
 
-          if [ ! -f policy/bundles/nginx.conf ]; then
-            echo "WARN: policy/bundles/nginx.conf missing in repo. Creating CI fallback." >&2
-            python - <<'PY'
-            from pathlib import Path
+          test -f policy/bundles/nginx.conf
+          test -f policy/opa/config.yaml
 
-            p = Path("policy/bundles/nginx.conf")
-            p.write_text(
-                """# policy/bundles/nginx.conf
-            pid /tmp/nginx.pid;
-
-            events {}
-
-            http {
-              client_body_temp_path /tmp/client_body_temp;
-              proxy_temp_path       /tmp/proxy_temp;
-              fastcgi_temp_path     /tmp/fastcgi_temp;
-              uwsgi_temp_path       /tmp/uwsgi_temp;
-              scgi_temp_path        /tmp/scgi_temp;
-
-              server {
-                listen 80;
-
-                location /health { return 200 "ok\\n"; }
-
-                location / {
-                  root /usr/share/nginx/html;
-                  try_files $uri =404;
-                }
-              }
-            }
-            """
-            )
-            print("CI wrote fallback", p)
-            PY
+          if [ -f policy/opa/opa-config.yml ]; then
+            echo "ERROR: stale policy/opa/opa-config.yml exists and can cause OPA merge errors"
+            sed -n '1,200p' policy/opa/opa-config.yml || true
+            exit 1
           fi
 
-          test -f policy/bundles/_ci_notice.txt || echo "CI bundle placeholder" > policy/bundles/_ci_notice.txt
-          test -s policy/bundles/nginx.conf
-          sed -n '1,160p' policy/bundles/nginx.conf
+          if [ ! -f policy/bundles/bundle.tar.gz ]; then
+            echo "ERROR: missing policy/bundles/bundle.tar.gz"
+            ls -la policy/bundles || true
+            exit 1
+          fi
+
+          echo "OPA bundle inputs present"
+          ls -la policy/bundles
 
       - name: Prepare environment
         shell: bash

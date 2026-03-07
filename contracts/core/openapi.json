@@ -385,6 +385,22 @@
         "title": "BreakglassSessionCreate",
         "type": "object"
       },
+      "CancelCommandRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 512,
+            "minLength": 4,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "CancelCommandRequest",
+        "type": "object"
+      },
       "CertEnrollRequest": {
         "additionalProperties": false,
         "properties": {
@@ -507,6 +523,50 @@
           "controller_id"
         ],
         "title": "CommandLeaseRequest",
+        "type": "object"
+      },
+      "CommandRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Command",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 512,
+            "minLength": 4,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_type": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Target Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_type",
+          "target_id",
+          "command",
+          "reason",
+          "idempotency_key"
+        ],
+        "title": "CommandRequest",
         "type": "object"
       },
       "ComplianceCPEvidenceIngestRequest": {
@@ -1190,6 +1250,59 @@
           "policy"
         ],
         "title": "DefendResponse",
+        "type": "object"
+      },
+      "DelegationCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "delegatee_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Delegatee Id",
+            "type": "string"
+          },
+          "scope": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Scope",
+            "type": "string"
+          },
+          "target_tenant": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Target Tenant",
+            "type": "string"
+          },
+          "ttl_hours": {
+            "default": 24,
+            "maximum": 720.0,
+            "minimum": 1.0,
+            "title": "Ttl Hours",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "delegatee_id",
+          "target_tenant",
+          "scope"
+        ],
+        "title": "DelegationCreateRequest",
+        "type": "object"
+      },
+      "DelegationRevokeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 512,
+            "minLength": 4,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "DelegationRevokeRequest",
         "type": "object"
       },
       "DeviceActivityProofRequest": {
@@ -2200,6 +2313,72 @@
       "Health": {
         "$ref": "schemas/api/health.schema.json"
       },
+      "HeartbeatRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "breaker_state": {
+            "default": "closed",
+            "maxLength": 16,
+            "title": "Breaker State",
+            "type": "string"
+          },
+          "entity_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "entity_type": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "last_state": {
+            "default": "active",
+            "maxLength": 32,
+            "title": "Last State",
+            "type": "string"
+          },
+          "node_id": {
+            "default": "",
+            "maxLength": 128,
+            "title": "Node Id",
+            "type": "string"
+          },
+          "queue_depth": {
+            "default": 0,
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Queue Depth",
+            "type": "integer"
+          },
+          "version": {
+            "default": "",
+            "maxLength": 64,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_type",
+          "entity_id"
+        ],
+        "title": "HeartbeatRequest",
+        "type": "object"
+      },
       "IngestPayload": {
         "additionalProperties": false,
         "properties": {
@@ -2940,6 +3119,52 @@
         "title": "ModuleRegistrationRequest",
         "type": "object"
       },
+      "PlaybookTriggerRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "idempotency_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params"
+          },
+          "reason": {
+            "maxLength": 512,
+            "minLength": 4,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_id",
+          "reason",
+          "idempotency_key"
+        ],
+        "title": "PlaybookTriggerRequest",
+        "type": "object"
+      },
       "PolicyApprovalRequest": {
         "description": "Request model for approving a policy change.",
         "properties": {
@@ -3138,6 +3363,59 @@
         "title": "PolicyDecision",
         "type": "object"
       },
+      "PolicyPinRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "policy_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Policy Id",
+            "type": "string"
+          },
+          "ttl_hours": {
+            "default": 168,
+            "maximum": 720.0,
+            "minimum": 1.0,
+            "title": "Ttl Hours",
+            "type": "integer"
+          },
+          "version_hash": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Version Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "policy_id",
+          "version_hash"
+        ],
+        "title": "PolicyPinRequest",
+        "type": "object"
+      },
+      "PolicyRollbackRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "policy_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Policy Id",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 512,
+            "minLength": 4,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "policy_id",
+          "reason"
+        ],
+        "title": "PolicyRollbackRequest",
+        "type": "object"
+      },
       "PolicySetRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3151,6 +3429,43 @@
           "version"
         ],
         "title": "PolicySetRequest",
+        "type": "object"
+      },
+      "PolicyStageRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "policy_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Policy Id",
+            "type": "string"
+          },
+          "rollout_pct": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Rollout Pct",
+            "type": "integer"
+          },
+          "ttl_hours": {
+            "default": 168,
+            "maximum": 720.0,
+            "minimum": 1.0,
+            "title": "Ttl Hours",
+            "type": "integer"
+          },
+          "version_hash": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Version Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "policy_id",
+          "version_hash",
+          "rollout_pct"
+        ],
+        "title": "PolicyStageRequest",
         "type": "object"
       },
       "ROEEvaluationRequest": {
@@ -3231,6 +3546,70 @@
           }
         },
         "title": "ROEPolicy",
+        "type": "object"
+      },
+      "ReceiptRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "duration_ms": {
+            "anyOf": [
+              {
+                "maximum": 3600000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence"
+          },
+          "executor_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Executor Id",
+            "type": "string"
+          },
+          "executor_type": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Executor Type",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "executor_id",
+          "executor_type",
+          "ok"
+        ],
+        "title": "ReceiptRequest",
         "type": "object"
       },
       "ReproduceRequest": {
@@ -3894,6 +4273,64 @@
           "status"
         ],
         "title": "TenantControlStateUpsert",
+        "type": "object"
+      },
+      "TerminalBreakglassRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 512,
+            "minLength": 4,
+            "title": "Reason",
+            "type": "string"
+          },
+          "ttl_seconds": {
+            "default": 3600,
+            "maximum": 3600.0,
+            "minimum": 60.0,
+            "title": "Ttl Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "TerminalBreakglassRequest",
+        "type": "object"
+      },
+      "TerminalExecuteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "breakglass_session_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Breakglass Session Id"
+          },
+          "command": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Command",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 512,
+            "minLength": 4,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command",
+          "reason"
+        ],
+        "title": "TerminalExecuteRequest",
         "type": "object"
       },
       "ThreatCounts": {
@@ -7700,6 +8137,132 @@
         ]
       }
     },
+    "/control-plane/evidence/bundle": {
+      "get": {
+        "description": "Compliance-grade evidence bundle.\n\nReturns:\n  - All ledger events in scope\n  - Commands in scope\n  - Receipts for each command (if include_receipts=True)\n  - Hash-chain integrity verification report\n  - Merkle root\n  - Deterministic JSON output suitable for external notarisation\n\nTenant isolation enforced. MSP cross-tenant requires msp scope + explicit tenant_id.",
+        "operationId": "get_evidence_bundle_control_plane_evidence_bundle_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "description": "ISO-8601 lower bound",
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO-8601 lower bound",
+              "title": "Since"
+            }
+          },
+          {
+            "description": "ISO-8601 upper bound",
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO-8601 upper bound",
+              "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_receipts",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Receipts",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 2000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Evidence Bundle Control Plane Evidence Bundle Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export audit-grade evidence bundle (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
     "/control-plane/lockers": {
       "get": {
         "operationId": "list_lockers_control_plane_lockers_get",
@@ -8252,6 +8815,1742 @@
         "summary": "Get dependency health probes for a module",
         "tags": [
           "control-plane"
+        ]
+      }
+    },
+    "/control-plane/v2/ai/namespace": {
+      "get": {
+        "description": "Return the tenant's scoped AI embedding namespace.\n\nThe namespace is derived from the tenant_id using SHA-256.\nThis namespace is used to partition all AI embeddings, vectors,\nand RAG retrievals to prevent cross-tenant AI drift.\n\nTenant isolation: namespace is derived from auth context only.\nCross-tenant drift is structurally impossible within this namespace.",
+        "operationId": "get_ai_namespace_control_plane_v2_ai_namespace_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Ai Namespace Control Plane V2 Ai Namespace Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get tenant-scoped AI embedding namespace (Phase 3)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/commands": {
+      "get": {
+        "operationId": "list_commands_control_plane_v2_commands_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 32,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Commands Control Plane V2 Commands Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List operator commands (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      },
+      "post": {
+        "operationId": "create_command_control_plane_v2_commands_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Create Command Control Plane V2 Commands Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Queue an operator command (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/commands/{command_id}/cancel": {
+      "post": {
+        "operationId": "cancel_command_control_plane_v2_commands__command_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "command_id",
+            "required": true,
+            "schema": {
+              "title": "Command Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelCommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Cancel Command Control Plane V2 Commands  Command Id  Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel a queued command (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/commands/{command_id}/receipt": {
+      "post": {
+        "description": "Receipt endpoint.\nValidates that the submitter has executor-compatible identity.\nNon-executors are rejected with 403.",
+        "operationId": "submit_receipt_control_plane_v2_commands__command_id__receipt_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "command_id",
+            "required": true,
+            "schema": {
+              "title": "Command Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Submit Receipt Control Plane V2 Commands  Command Id  Receipt Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit executor receipt (CP v2) \u2014 executor identity required",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/commands/{command_id}/receipts": {
+      "get": {
+        "operationId": "get_receipts_control_plane_v2_commands__command_id__receipts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "command_id",
+            "required": true,
+            "schema": {
+              "title": "Command Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Receipts Control Plane V2 Commands  Command Id  Receipts Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get receipts for a command (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/delegation": {
+      "get": {
+        "description": "List delegation records. MSP scope required.\nReturns 404 for unauthorized cross-tenant attempts (anti-enumeration).",
+        "operationId": "list_delegations_control_plane_v2_delegation_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "target_tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Tenant"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_expired",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Expired",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Delegations Control Plane V2 Delegation Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List MSP delegation records (Phase 4)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      },
+      "post": {
+        "description": "Create a delegation record granting another actor limited access to a tenant.\n\nRequires control-plane:msp:admin scope.\ntarget_tenant must be explicit (anti-enumeration).\nAll delegation operations emit ledger events at warning severity.",
+        "operationId": "create_delegation_control_plane_v2_delegation_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DelegationCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Create Delegation Control Plane V2 Delegation Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create MSP delegation record (Phase 4)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/delegation/{delegation_id}": {
+      "delete": {
+        "description": "Revoke a delegation record. Once revoked, it cannot be un-revoked.\nEmits a ledger event at warning severity.",
+        "operationId": "revoke_delegation_control_plane_v2_delegation__delegation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "delegation_id",
+            "required": true,
+            "schema": {
+              "title": "Delegation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DelegationRevokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Revoke Delegation Control Plane V2 Delegation  Delegation Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke an MSP delegation record (Phase 4)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/heartbeats": {
+      "get": {
+        "operationId": "list_heartbeats_control_plane_v2_heartbeats_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "entity_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entity Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stale_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Stale Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Heartbeats Control Plane V2 Heartbeats Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List entity heartbeats (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      },
+      "post": {
+        "operationId": "upsert_heartbeat_control_plane_v2_heartbeats_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Upsert Heartbeat Control Plane V2 Heartbeats Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upsert entity heartbeat (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/heartbeats/stale": {
+      "get": {
+        "operationId": "list_stale_heartbeats_control_plane_v2_heartbeats_stale_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Stale Heartbeats Control Plane V2 Heartbeats Stale Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List stale entities (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/ledger": {
+      "get": {
+        "operationId": "query_ledger_control_plane_v2_ledger_get",
+        "parameters": [
+          {
+            "description": "ISO-8601 timestamp lower bound",
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO-8601 timestamp lower bound",
+              "title": "Since"
+            }
+          },
+          {
+            "description": "ISO-8601 timestamp upper bound",
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO-8601 timestamp upper bound",
+              "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "event_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Query Ledger Control Plane V2 Ledger Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Query control-plane v2 event ledger",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/ledger/anchor": {
+      "get": {
+        "operationId": "export_ledger_anchor_control_plane_v2_ledger_anchor_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Export Ledger Anchor Control Plane V2 Ledger Anchor Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export daily Merkle anchor for ledger chain (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/ledger/verify": {
+      "get": {
+        "description": "Full chain verification \u2014 recomputes every hash and verifies linkage.\nReturns deterministic integrity report.\nFails with 500 if tampering is detected (chain broken).",
+        "operationId": "verify_ledger_control_plane_v2_ledger_verify_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Verify Ledger Control Plane V2 Ledger Verify Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify full ledger chain integrity (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/playbooks": {
+      "get": {
+        "operationId": "list_playbooks_control_plane_v2_playbooks_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Playbooks Control Plane V2 Playbooks Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List available remediation playbooks (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/playbooks/{playbook_name}/trigger": {
+      "post": {
+        "operationId": "trigger_playbook_control_plane_v2_playbooks__playbook_name__trigger_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "playbook_name",
+            "required": true,
+            "schema": {
+              "title": "Playbook Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaybookTriggerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Trigger Playbook Control Plane V2 Playbooks  Playbook Name  Trigger Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trigger an allowlisted remediation playbook (CP v2)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/policy/pin": {
+      "post": {
+        "description": "Pin a specific policy version hash for the authenticated tenant.\n\nPrevents policy drift: the policy engine will serve this exact version\nuntil the pin expires or a rollback is performed.\n\nSecurity invariants:\n  - tenant_id from auth context only.\n  - version_hash must be a 64-character SHA-256 hex string.\n  - ttl_hours bounded by POLICY_PIN_MAX_TTL_HOURS.\n  - Ledger event emitted at warning severity before returning.",
+        "operationId": "pin_policy_version_control_plane_v2_policy_pin_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyPinRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Pin Policy Version Control Plane V2 Policy Pin Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pin a policy version hash for this tenant (Phase 5)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/policy/pins": {
+      "get": {
+        "description": "List all active policy pins for the authenticated tenant.\n\nReturns only pins for the current tenant (no cross-tenant enumeration).",
+        "operationId": "list_policy_pins_control_plane_v2_policy_pins_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Policy Pins Control Plane V2 Policy Pins Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List active policy pins for the authenticated tenant (Phase 5)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/policy/rollback": {
+      "post": {
+        "description": "Rollback a policy to the version that was pinned before the current one.\n\nRequires the current active pin to have a recorded previous_hash.\n\nSecurity invariants:\n  - tenant_id from auth context only.\n  - Requires a prior pin with a non-None previous_hash.\n  - Raises 409 (no rollback target) if no prior pin exists.\n  - Ledger event emitted at warning severity before returning.",
+        "operationId": "rollback_policy_control_plane_v2_policy_rollback_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyRollbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Rollback Policy Control Plane V2 Policy Rollback Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rollback policy to previous pinned version (Phase 5)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/policy/stage": {
+      "post": {
+        "description": "Stage a policy version for gradual (canary) rollout to this tenant.\n\nThe staged version is served to `rollout_pct`% of traffic.\nUse /policy/pin to promote to 100%.\n\nSecurity invariants:\n  - tenant_id from auth context only.\n  - version_hash must be a 64-character SHA-256 hex string.\n  - rollout_pct must be 0\u2013100.\n  - Ledger event emitted at warning severity before returning.",
+        "operationId": "stage_policy_version_control_plane_v2_policy_stage_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyStageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Stage Policy Version Control Plane V2 Policy Stage Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stage a policy version for canary rollout (Phase 5)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/terminal/allowlist": {
+      "get": {
+        "description": "Return the allowlisted terminal DSL commands.",
+        "operationId": "list_terminal_allowlist_control_plane_v2_terminal_allowlist_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Terminal Allowlist Control Plane V2 Terminal Allowlist Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List allowed sandboxed terminal commands (Phase 6)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/terminal/breakglass": {
+      "post": {
+        "description": "Create a time-bounded break-glass scope elevation session.\n\nRequires control-plane:terminal:breakglass scope.\nTTL is capped at BREAKGLASS_MAX_TTL_SECONDS (3600s / 1 hour).\nMandatory reason required.\nEmits ledger event at warning severity.",
+        "operationId": "create_breakglass_session_control_plane_v2_terminal_breakglass_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TerminalBreakglassRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Create Breakglass Session Control Plane V2 Terminal Breakglass Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create break-glass terminal scope elevation session (Phase 6)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-plane/v2/terminal/execute": {
+      "post": {
+        "description": "Execute a sandboxed DSL command.\n\nSecurity:\n  - Only allowlisted commands accepted.\n  - No subprocess, no shell, no arbitrary code execution.\n  - Mandatory reason required.\n  - Break-glass commands require control-plane:terminal:breakglass scope.\n  - All invocations emit ledger events (before returning output).\n  - Evidence bundle link included in every response.\n  - Tenant isolation enforced \u2014 tenant from auth context only.",
+        "operationId": "terminal_execute_control_plane_v2_terminal_execute_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TerminalExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Terminal Execute Control Plane V2 Terminal Execute Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Execute a sandboxed terminal DSL command (Phase 6)",
+        "tags": [
+          "control-plane-v2"
+        ]
+      }
+    },
+    "/control-tower/snapshot": {
+      "get": {
+        "operationId": "control_tower_snapshot_v1_control_tower_snapshot_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Control Tower Snapshot V1",
+        "tags": [
+          "control-tower"
         ]
       }
     },
@@ -11920,6 +14219,89 @@
         "summary": "Get Stats Summary",
         "tags": [
           "stats"
+        ]
+      }
+    },
+    "/v1/defend": {
+      "post": {
+        "operationId": "defend_v1_defend_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "_",
+            "required": false,
+            "schema": {
+              "title": " "
+            }
+          },
+          {
+            "in": "query",
+            "name": "sqlite_path",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sqlite Path"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TelemetryInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefendResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Defend",
+        "tags": [
+          "defend"
         ]
       }
     }

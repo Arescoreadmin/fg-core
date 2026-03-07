@@ -1,8 +1,3 @@
-# NOTE:
-# - Console/Compliance gating uses dorny/paths-filter, because GitHub Actions does not provide reliable
-#   per-job changed-files expressions.
-# - DRY setup is implemented via composite actions in .github/actions/.
-
 name: frostgate-core-ci
 
 on:
@@ -15,8 +10,6 @@ concurrency:
   group: frostgate-core-ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Least-privilege defaults for the whole workflow.
-# Jobs that need more can override.
 permissions:
   contents: read
 
@@ -55,7 +48,7 @@ jobs:
 
       - name: Detect changed paths
         id: filter
-        run: python tools/ci/detect_changed_paths.py
+        run: python3 tools/ci/detect_changed_paths.py
 
       - name: Generate CI secrets
         uses: ./.github/actions/fg-secrets
@@ -105,6 +98,13 @@ jobs:
           make fg-fast-full 2>&1 | tee artifacts/fg-fast/fg-fast.log
         env:
           FG_API_KEY: ${{ env.FG_API_KEY }}
+
+      - name: Dump fg-fast log tail on failure
+        if: failure()
+        run: |
+          set +e
+          echo "=== artifacts/fg-fast/fg-fast.log (tail) ==="
+          tail -n 250 artifacts/fg-fast/fg-fast.log || true
 
       - name: Upload artifacts (always)
         if: always()
@@ -670,28 +670,24 @@ jobs:
           set -euo pipefail
           out="$(cat artifacts/latest_evidence_dir.txt)"
 
-          # If minisig missing:
-          # - On PRs (no secret key), we skip (expected for forks).
-          # - If secret key exists but minisig is missing, fail hard.
           if [ ! -f "$out/manifest.sha256.minisig" ]; then
             if [ -z "${MINISIGN_SECRET_KEY:-}" ]; then
-              echo "⚠️ Skipping signature verification: MINISIGN_SECRET_KEY not available (expected for PRs/forks)"
+              echo "Skipping signature verification: MINISIGN_SECRET_KEY not available"
               exit 0
             fi
-            echo "❌ missing minisig (but MINISIGN_SECRET_KEY was set)"
+            echo "missing minisig (but MINISIGN_SECRET_KEY was set)"
             exit 1
           fi
 
-          # Prefer repo key if present, else fall back to secret public key
           if [ -f keys/minisign.pub ]; then
             PUB="$(cat keys/minisign.pub)"
           else
-            test -n "${MINISIGN_PUBLIC_KEY:-}" || (echo "❌ no public key (keys/minisign.pub or MINISIGN_PUBLIC_KEY)" && exit 1)
+            test -n "${MINISIGN_PUBLIC_KEY:-}" || (echo "no public key (keys/minisign.pub or MINISIGN_PUBLIC_KEY)" && exit 1)
             PUB="${MINISIGN_PUBLIC_KEY}"
           fi
 
           minisign -Vm "$out/manifest.sha256" -P "$PUB"
-          echo "✅ signature verified"
+          echo "signature verified"
 
       - name: Upload evidence zip
         if: always()
@@ -711,9 +707,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: unit
     if: ${{ always() && needs.unit.result == 'success' }}
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: ./.github/actions/fg-secrets
+
       - uses: ./.github/actions/fg-python-setup
         with:
           python-version: "3.12"
@@ -732,8 +731,10 @@ jobs:
     runs-on: windows-latest
     needs: unit
     if: ${{ always() && needs.unit.result == 'success' }}
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

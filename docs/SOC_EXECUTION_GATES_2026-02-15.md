@@ -1,3 +1,19 @@
+## 2026-03-07T02:15:00Z — SOC-HIGH-002 — CI workflow and route inventory governance sync
+
+**Change class:** CI/CD execution surface and governance artifact sync (SOC-HIGH-002)
+
+### Files reviewed (required by SOC-HIGH-002)
+- `.github/workflows/ci.yml`
+- `.github/workflows/docker-ci.yml`
+- `tools/ci/route_inventory_summary.json`
+
+SOC review outcome:
+- Reviewed CI workflow changes that hard-fail on stale OPA runtime config and improve fg-fast failure capture/logging.
+- Reviewed docker validation workflow alignment for compose stack hardening, bootstrap/migration execution, and admin-gateway database wiring.
+- Reviewed regenerated route inventory summary artifact to confirm governance metadata remains synchronized with current route inventory state.
+- `make soc-review-sync` must pass with these files included in the SOC review record.
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
 ## 2026-03-07T02:15:00Z — SOC-HIGH-002 — Plane registry inventory alignment for /v1/defend
 
 **Change class:** CI/governance route inventory alignment (SOC-HIGH-002)

@@ -27,11 +27,10 @@
     }
   ],
   "governance": {
-    "contract_count": 120,
+    "contract_count": 146,
     "contract_only": [],
-    "runtime_count": 228,
+    "runtime_count": 225,
     "runtime_only": [
-      "DELETE /control-plane/v2/delegation/{delegation_id}",
       "GET /_debug/routes",
       "GET /admin/agent/devices",
       "GET /admin/agent/evidence/export/{device_id}",
@@ -47,20 +46,6 @@
       "GET /admin/usage/all",
       "GET /ai-plane/inference",
       "GET /ai-plane/policies",
-      "GET /control-plane/evidence/bundle",
-      "GET /control-plane/v2/ai/namespace",
-      "GET /control-plane/v2/commands",
-      "GET /control-plane/v2/commands/{command_id}/receipts",
-      "GET /control-plane/v2/delegation",
-      "GET /control-plane/v2/heartbeats",
-      "GET /control-plane/v2/heartbeats/stale",
-      "GET /control-plane/v2/ledger",
-      "GET /control-plane/v2/ledger/anchor",
-      "GET /control-plane/v2/ledger/verify",
-      "GET /control-plane/v2/playbooks",
-      "GET /control-plane/v2/policy/pins",
-      "GET /control-plane/v2/terminal/allowlist",
-      "GET /control-tower/snapshot",
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
@@ -94,6 +79,7 @@
       "GET /ui/scopes",
       "GET /ui/token",
       "GET /v1/status",
+      "HEAD /feed/stream",
       "POST /admin/agent/commands/issue",
       "POST /admin/agent/devices/{device_id}/revoke",
       "POST /admin/agent/enrollment-tokens",
@@ -115,17 +101,6 @@
       "POST /admin/tenants/{tenant_id}/suspend",
       "POST /ai-plane/policies",
       "POST /ai/infer",
-      "POST /control-plane/v2/commands",
-      "POST /control-plane/v2/commands/{command_id}/cancel",
-      "POST /control-plane/v2/commands/{command_id}/receipt",
-      "POST /control-plane/v2/delegation",
-      "POST /control-plane/v2/heartbeats",
-      "POST /control-plane/v2/playbooks/{playbook_name}/trigger",
-      "POST /control-plane/v2/policy/pin",
-      "POST /control-plane/v2/policy/rollback",
-      "POST /control-plane/v2/policy/stage",
-      "POST /control-plane/v2/terminal/breakglass",
-      "POST /control-plane/v2/terminal/execute",
       "POST /control/testing/runs/register",
       "POST /dev/emit",
       "POST /dev/seed",
@@ -144,7 +119,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "cb3a2b04a95e2bbc89e021f9a8912e82308f0a76480a5bb496ec2b1157179e7b",
+  "governance_fingerprint": "0a9e85c6ab8ea263839eb97fb04742be8cc6e552559f38f1b0c6bb68a4f1f4e8",
   "planes": [
     {
       "compat": {
@@ -317,7 +292,6 @@
       "GET /rings/isolation",
       "GET /rings/policies",
       "GET /roe/policy",
-      "GET /v1/status",
       "POST /modules/register",
       "POST /rings/route",
       "POST /roe/evaluate"
@@ -376,6 +350,7 @@
       "GET /health/ready",
       "GET /planes",
       "GET /status",
+      "GET /v1/status",
       "POST /admin/agent/commands/issue",
       "POST /admin/agent/devices/{device_id}/revoke",
       "POST /admin/agent/enrollment-tokens",
@@ -460,7 +435,8 @@
       "POST /billing/invoices/{invoice_id}/reproduce",
       "POST /billing/runs",
       "POST /defend",
-      "POST /ingest"
+      "POST /ingest",
+      "POST /v1/defend"
     ],
     "evidence": [
       "GET /approvals/{subject_type}/{subject_id}",
