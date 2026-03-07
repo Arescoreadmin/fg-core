@@ -1,3 +1,32 @@
+## 2026-03-07T02:15:00Z — SOC-HIGH-002 — Plane registry inventory alignment for /v1/defend
+
+**Change class:** CI/governance route inventory alignment (SOC-HIGH-002)
+
+### Files reviewed (required by SOC-HIGH-002)
+- `tools/ci/plane_registry_checks.py`
+- `tools/ci/route_inventory.json`
+- `tools/ci/route_inventory_summary.json`
+
+### Why this changed
+- Aligned AST-derived runtime inventory with the canonical `/v1/defend` alias that is mounted at runtime and present in the core contract.
+- This removes false contract/runtime drift for `/v1/defend` during route inventory and plane registry checks.
+
+### Risk review
+- Change is limited to governance/inventory generation, not request handling behavior.
+- Runtime route ownership and contract route coverage were revalidated after regeneration.
+- `control-plane-check` now passes with `/v1/defend` represented consistently.
+
+### Verification
+- `python -m py_compile tools/ci/plane_registry_checks.py`
+- `make route-inventory-generate`
+- `make route-inventory-audit`
+- `make control-plane-check`
+- `make soc-review-sync`
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+
 ## 2026-03-06T23:00:00Z — SOC-HIGH-002 — OPA config merge-error guard and stale config removal
 
 **Change class:** CI/CD execution surface (SOC-HIGH-002)

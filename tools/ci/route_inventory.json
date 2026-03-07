@@ -446,24 +446,6 @@
     {
       "dependency_categories": [
         "auth",
-        "rate",
-        "tenant"
-      ],
-      "file": "api/admin.py",
-      "method": "POST",
-      "path": "/admin/keys/{key_prefix}/rotate",
-      "plane": "control",
-      "plane_id": "control",
-      "scoped": true,
-      "scopes": [
-        "keys:write"
-      ],
-      "source": "runtime-ast",
-      "tenant_bound": true
-    },
-    {
-      "dependency_categories": [
-        "auth",
         "rate"
       ],
       "file": "api/admin.py",
@@ -2848,18 +2830,6 @@
       "dependency_categories": [],
       "file": "api/main.py",
       "method": "GET",
-      "path": "/health",
-      "plane": "control",
-      "plane_id": "control",
-      "scoped": false,
-      "scopes": [],
-      "source": "runtime-ast",
-      "tenant_bound": false
-    },
-    {
-      "dependency_categories": [],
-      "file": "api/main.py",
-      "method": "GET",
       "path": "/health/detailed",
       "plane": "control",
       "plane_id": "control",
@@ -2873,30 +2843,6 @@
       "file": "api/main.py",
       "method": "GET",
       "path": "/health/live",
-      "plane": "control",
-      "plane_id": "control",
-      "scoped": false,
-      "scopes": [],
-      "source": "runtime-ast",
-      "tenant_bound": false
-    },
-    {
-      "dependency_categories": [],
-      "file": "api/main.py",
-      "method": "GET",
-      "path": "/health/live",
-      "plane": "control",
-      "plane_id": "control",
-      "scoped": false,
-      "scopes": [],
-      "source": "runtime-ast",
-      "tenant_bound": false
-    },
-    {
-      "dependency_categories": [],
-      "file": "api/main.py",
-      "method": "GET",
-      "path": "/health/ready",
       "plane": "control",
       "plane_id": "control",
       "scoped": false,
@@ -3802,19 +3748,36 @@
       "tenant_bound": false
     },
     {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/defend.py",
+      "method": "POST",
+      "path": "/v1/defend",
+      "plane": "data",
+      "plane_id": "data",
+      "scoped": true,
+      "scopes": [
+        "defend:write"
+      ],
+      "source": "runtime-app-alias",
+      "tenant_bound": true
+    },
+    {
       "dependency_categories": [],
       "file": "api/main.py",
       "method": "GET",
       "path": "/v1/status",
-      "plane": "connector",
-      "plane_id": "connector",
+      "plane": "control",
+      "plane_id": "control",
       "scoped": false,
       "scopes": [],
       "source": "runtime-ast",
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-03-01T21:21:59.538361+00:00",
+  "generated_at": "2026-03-07T11:09:31.040555+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
