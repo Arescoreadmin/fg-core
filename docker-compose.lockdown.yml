@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  opa:
+    image: openpolicyagent/opa:latest
+    command: ["run", "--server", "/policy"]
+    volumes:
+      - ./policy:/policy:ro
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
