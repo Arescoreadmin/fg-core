@@ -1,3 +1,30 @@
+## 2026-03-08T00:00:00Z — SOC-HIGH-002 — fg-required timeout budget alignment
+
+**Change class:** CI/CD execution surface (SOC-HIGH-002)
+
+### Files reviewed (required by SOC-HIGH-002)
+- `.github/workflows/fg-required.yml`
+
+### Summary
+- Increased `fg-required` job timeout budget to align with current `fg-fast` runtime.
+- Increased the `run fg-required` step timeout so GitHub Actions does not kill the lane before the harness budget expires.
+- Kept artifact capture in place so failed-lane logs remain available for triage.
+
+### Rationale
+- `fg-fast` now completes successfully locally but exceeds the prior 480-second / 8-minute CI lane budget.
+- The prior failure mode was a timeout, not a test/assertion failure.
+- This change aligns GitHub job/step timeout budgets with the harness runtime budget.
+
+### Verification
+- Reproduced the lane locally via `tools/testing/harness/fg_required.py`.
+- Confirmed failure mode was `lane_timeout`.
+- Confirmed lane log contained:
+  - `make fg-fast`
+  - `[timeout]`
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
 ## 2026-03-07T02:15:00Z — SOC-HIGH-002 — CI workflow and route inventory governance sync
 
 **Change class:** CI/CD execution surface and governance artifact sync (SOC-HIGH-002)

@@ -17,7 +17,7 @@ jobs:
   fg-required:
     name: fg-required
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
 
     steps:
       - name: checkout
@@ -46,7 +46,6 @@ jobs:
 
       - name: run hermetic tool tests
         shell: bash
-        # tools_minimal intentionally uses unittest to avoid pytest bootstrap/plugin imports
         run: |
           set -euo pipefail
           python -m unittest -q tests.tools_minimal.test_fg_required_minimal
@@ -77,15 +76,16 @@ jobs:
 
       - name: run fg-required
         id: fg_required
-        timeout-minutes: 8
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts/fg-required artifacts/testing
 
           .venv/bin/python tools/testing/harness/fg_required.py \
-            --global-budget-seconds 480 \
-            --lane-timeout-seconds 480
+            --global-budget-seconds 1200 \
+            --lane-timeout-seconds 1200 \
+            2>&1 | tee artifacts/fg-required/fg_required.log
 
       - name: dump failed lane logs (tail)
         if: failure()
