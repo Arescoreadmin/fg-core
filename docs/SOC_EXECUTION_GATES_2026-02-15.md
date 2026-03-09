@@ -1,3 +1,37 @@
+## 2026-03-09 — SOC-HIGH-002 — fg-required compose env bootstrap for prod-profile-check
+
+**Change class:** CI/CD workflow execution surface
+
+### Files reviewed
+- `.github/workflows/fg-required.yml`
+
+### Summary
+Extended the `fg-required` workflow to create a deterministic CI `.env` before running compose-backed gates.
+
+### Rationale
+`fg-fast` executes `prod-profile-check`, which runs `docker compose config`. Compose requires all interpolated variables to be present in `.env`. The workflow previously lacked required values such as `NATS_AUTH_TOKEN` and `FG_WEBHOOK_SECRET`, causing false-negative CI failures unrelated to application correctness.
+
+### Changes reviewed
+- Added CI `.env` bootstrap step in `fg-required.yml`
+- Included deterministic placeholder values for:
+  - `FG_API_KEY`
+  - `FG_WEBHOOK_SECRET`
+  - `FG_AGENT_API_KEY`
+  - `REDIS_PASSWORD`
+  - `POSTGRES_PASSWORD`
+  - `NATS_AUTH_TOKEN`
+  - `FG_NATS_URL`
+  - `FG_ENCRYPTION_KEY`
+  - `FG_JWT_SECRET`
+
+### Verification
+- Reviewed `.github/workflows/fg-required.yml`
+- Confirmed workflow now provides required env interpolation inputs for compose-backed validation
+- Confirmed this change preserves fail-closed behavior while removing CI-only env drift
+
+SOC review outcome:
+- `soc-review-sync` coverage satisfied for `.github/workflows/fg-required.yml`
+
 ## 2026-03-09 — SOC-HIGH-002 — fg-required timeout budget increase
 
 **Change class:** CI/CD workflow execution surface

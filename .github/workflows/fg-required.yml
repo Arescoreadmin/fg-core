@@ -13,11 +13,19 @@ permissions:
   contents: read
   actions: read
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   fg-required:
     name: fg-required
     runs-on: ubuntu-latest
     timeout-minutes: 25
+
+    env:
+      PYTHONHASHSEED: "0"
+      TZ: "UTC"
 
     steps:
       - name: checkout
@@ -37,7 +45,6 @@ jobs:
             pyproject.toml
 
       - name: verify workflow filename uniqueness
-        shell: bash
         run: |
           set -euo pipefail
           test -f .github/workflows/fg-required.yml
@@ -45,31 +52,55 @@ jobs:
           test ! -f .github/workflows/FG-required.yml
 
       - name: run hermetic tool tests
-        shell: bash
         run: |
           set -euo pipefail
           python -m unittest -q tests.tools_minimal.test_fg_required_minimal
 
       - name: create venv
-        shell: bash
         run: |
           set -euo pipefail
           python -m venv .venv
 
       - name: install deps (pinned)
-        shell: bash
         run: |
           set -euo pipefail
           make venv
 
+      - name: create CI .env for compose-backed gates
+        run: |
+          set -euo pipefail
+
+          cat > .env <<'EOF'
+          FG_ENV=test
+          FG_API_KEY=ci-api-key
+          FG_WEBHOOK_SECRET=ci-webhook-secret
+          FG_AGENT_API_KEY=ci-agent-api-key
+          REDIS_PASSWORD=ci-redis-password
+          POSTGRES_PASSWORD=ci-postgres-password
+          NATS_AUTH_TOKEN=ci-nats-token
+          FG_NATS_URL=nats://localhost:4222
+          FG_ENCRYPTION_KEY=ci-encryption-key
+          FG_JWT_SECRET=ci-jwt-secret
+          EOF
+
+          echo "=== .env sanity (redacted) ==="
+          sed \
+            -e 's/^\(FG_API_KEY=\).*/\1[REDACTED]/' \
+            -e 's/^\(FG_WEBHOOK_SECRET=\).*/\1[REDACTED]/' \
+            -e 's/^\(FG_AGENT_API_KEY=\).*/\1[REDACTED]/' \
+            -e 's/^\(REDIS_PASSWORD=\).*/\1[REDACTED]/' \
+            -e 's/^\(POSTGRES_PASSWORD=\).*/\1[REDACTED]/' \
+            -e 's/^\(NATS_AUTH_TOKEN=\).*/\1[REDACTED]/' \
+            -e 's/^\(FG_ENCRYPTION_KEY=\).*/\1[REDACTED]/' \
+            -e 's/^\(FG_JWT_SECRET=\).*/\1[REDACTED]/' \
+            .env
+
       - name: sanity check pytest-asyncio plugin version
-        shell: bash
         run: |
           set -euo pipefail
           .venv/bin/python -c "import pytest_asyncio; print(pytest_asyncio.__version__)"
 
       - name: run required-tests gate resolution tests
-        shell: bash
         run: |
           set -euo pipefail
           .venv/bin/python -m unittest -q tests.tools_minimal.test_required_tests_gate_resolution
@@ -77,7 +108,6 @@ jobs:
       - name: run fg-required
         id: fg_required
         timeout-minutes: 20
-        shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts/fg-required artifacts/testing
@@ -88,7 +118,6 @@ jobs:
 
       - name: dump failed lane logs (tail)
         if: failure()
-        shell: bash
         run: |
           set +e
           echo "=== fg-required lanes directory ==="
@@ -103,7 +132,6 @@ jobs:
 
       - name: prepare artifacts dirs + fallback notice
         if: always()
-        shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts/testing artifacts/fg-required
@@ -116,7 +144,6 @@ jobs:
 
       - name: collect lane logs (best effort)
         if: always()
-        shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts/fg-required
@@ -161,7 +188,6 @@ jobs:
 
       - name: verify required artifacts
         if: success()
-        shell: bash
         run: |
           set -euo pipefail
           test -f artifacts/testing/fg-required-summary.json
@@ -169,7 +195,6 @@ jobs:
 
       - name: job summary
         if: always()
-        shell: bash
         run: |
           {
             echo "## fg-required"
