@@ -13,12 +13,18 @@ concurrency:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   docker-validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       COMPOSE_PROJECT_NAME: fg-core
+      PYTHONHASHSEED: "0"
+      TZ: "UTC"
 
     steps:
       - name: Checkout
@@ -27,25 +33,37 @@ jobs:
           fetch-depth: 0
 
       - name: Generate CI secrets
-        shell: bash
         run: |
           python - <<'PY' >> "$GITHUB_ENV"
           import secrets
 
-          print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
-          print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
-          print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
-          print(f"NATS_AUTH_TOKEN={secrets.token_urlsafe(24)}")
-          print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(24)}")
-          print(f"FG_WEBHOOK_SECRET={secrets.token_urlsafe(32)}")
+          def tok(n: int) -> str:
+              return secrets.token_urlsafe(n)
+
+          print(f"FG_API_KEY={tok(32)}")
+          print(f"REDIS_PASSWORD={tok(24)}")
+          print(f"POSTGRES_PASSWORD={tok(24)}")
+          print(f"NATS_AUTH_TOKEN={tok(24)}")
+          print(f"FG_AGENT_API_KEY={tok(24)}")
+          print(f"FG_WEBHOOK_SECRET={tok(32)}")
+          print(f"FG_ENCRYPTION_KEY={tok(32)}")
+          print(f"FG_JWT_SECRET={tok(32)}")
           PY
 
       - name: Verify required env vars are set
-        shell: bash
         run: |
           set -euo pipefail
           missing=0
-          for var in FG_API_KEY REDIS_PASSWORD POSTGRES_PASSWORD NATS_AUTH_TOKEN FG_AGENT_API_KEY FG_WEBHOOK_SECRET; do
+          for var in \
+            FG_API_KEY \
+            REDIS_PASSWORD \
+            POSTGRES_PASSWORD \
+            NATS_AUTH_TOKEN \
+            FG_AGENT_API_KEY \
+            FG_WEBHOOK_SECRET \
+            FG_ENCRYPTION_KEY \
+            FG_JWT_SECRET
+          do
             if [ -n "${!var:-}" ]; then
               echo "${var}=set"
             else
@@ -62,7 +80,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Ensure required policy bundle files exist
-        shell: bash
         run: |
           set -euo pipefail
 
@@ -87,9 +104,9 @@ jobs:
           ls -la policy/bundles
 
       - name: Prepare environment
-        shell: bash
         run: |
           set -euo pipefail
+
           cp .env.example .env.ci
 
           mkdir -p secrets
@@ -101,6 +118,9 @@ jobs:
             echo "NATS_AUTH_TOKEN=${NATS_AUTH_TOKEN}"
             echo "FG_AGENT_API_KEY=${FG_AGENT_API_KEY}"
             echo "FG_WEBHOOK_SECRET=${FG_WEBHOOK_SECRET}"
+            echo "FG_ENCRYPTION_KEY=${FG_ENCRYPTION_KEY}"
+            echo "FG_JWT_SECRET=${FG_JWT_SECRET}"
+            echo "FG_NATS_URL=nats://${NATS_AUTH_TOKEN}@nats:4222"
           } >> .env.ci
 
           cp .env.ci .env
@@ -114,10 +134,11 @@ jobs:
             -e 's/^\(NATS_AUTH_TOKEN=\).*/\1[REDACTED]/' \
             -e 's/^\(FG_AGENT_API_KEY=\).*/\1[REDACTED]/' \
             -e 's/^\(FG_WEBHOOK_SECRET=\).*/\1[REDACTED]/' \
+            -e 's/^\(FG_ENCRYPTION_KEY=\).*/\1[REDACTED]/' \
+            -e 's/^\(FG_JWT_SECRET=\).*/\1[REDACTED]/' \
             .env.ci
 
       - name: Render docker compose config
-        shell: bash
         run: |
           set -euo pipefail
           unset COMPOSE_FILE
@@ -134,8 +155,36 @@ jobs:
           test -s /tmp/fg.compose.rendered.yml
           sed -n '1,220p' /tmp/fg.compose.rendered.yml
 
+      - name: Debug console source tree before docker build
+        run: |
+          set -euo pipefail
+
+          echo "=== git identity ==="
+          git rev-parse HEAD
+          git status --short || true
+
+          echo
+          echo "=== console key files ==="
+          ls -l console/lib
+          ls -l console/components/tables
+          test -f console/lib/api.ts
+          test -f console/lib/coreApi.ts
+          test -f console/styles/tokens.ts
+          test -f console/components/tables/DecisionsTable.tsx
+
+          echo
+          echo "=== tsconfig ==="
+          sed -n '1,120p' console/tsconfig.json
+
+          echo
+          echo "=== imports ==="
+          rg -n "@/lib/coreApi|@/lib/api|@/styles/tokens|@/components/tables/DecisionsTable" console
+
+          echo
+          echo "=== docker build context sanity ==="
+          find console -maxdepth 3 -type f | sort | sed -n '1,220p'
+
       - name: Build images via docker compose
-        shell: bash
         run: |
           set -euo pipefail
           unset COMPOSE_FILE
@@ -147,10 +196,9 @@ jobs:
             --env-file .env.ci \
             --profile core \
             --profile admin \
-            build
+            build --no-cache
 
       - name: Start opa-bundles first
-        shell: bash
         run: |
           set -euo pipefail
           unset COMPOSE_FILE
@@ -165,7 +213,6 @@ jobs:
             up -d --force-recreate opa-bundles
 
       - name: Wait for opa-bundles healthy
-        shell: bash
         run: |
           set -euo pipefail
           unset COMPOSE_FILE
@@ -193,7 +240,6 @@ jobs:
           '
 
       - name: Start full stack
-        shell: bash
         run: |
           set -euo pipefail
           unset COMPOSE_FILE
@@ -208,7 +254,6 @@ jobs:
             up -d --build
 
       - name: Smoke test admin-gateway /health
-        shell: bash
         run: |
           set -euo pipefail
           echo "Waiting for admin-gateway on 127.0.0.1:18080 ..."
@@ -224,12 +269,15 @@ jobs:
 
       - name: Debug dump (containers + logs)
         if: failure()
-        shell: bash
         run: |
           set +e
           unset COMPOSE_FILE
           unset COMPOSE_PROFILES
 
+          echo "=== git identity ==="
+          git rev-parse HEAD || true
+
+          echo
           echo "=== docker compose ps ==="
           docker compose \
             -f docker-compose.yml \
@@ -250,6 +298,13 @@ jobs:
             --profile core \
             --profile admin \
             logs --tail=300 || true
+
+          echo
+          echo "=== console key files on runner ==="
+          ls -l console/lib || true
+          ls -l console/components/tables || true
+          sed -n '1,120p' console/tsconfig.json || true
+          rg -n "@/lib/coreApi|@/lib/api|@/styles/tokens|@/components/tables/DecisionsTable" console || true
 
           echo
           echo "=== opa-bundles nginx config ==="
@@ -275,7 +330,6 @@ jobs:
 
       - name: Tear down stack
         if: always()
-        shell: bash
         run: |
           unset COMPOSE_FILE
           unset COMPOSE_PROFILES

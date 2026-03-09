@@ -1,3 +1,38 @@
+## 2026-03-09 — SOC-HIGH-002 — docker-ci source-tree debug preflight for console build validation
+
+**Change class:** CI/CD workflow execution surface
+
+### Files reviewed
+- `.github/workflows/docker-ci.yml`
+
+### Summary
+Extended `docker-ci` with explicit runner-side source-tree verification before compose image build and strengthened deterministic CI env bootstrap for compose-backed stack validation.
+
+### Rationale
+`docker-validate` showed repeated console build failures in GitHub Actions despite successful local compose builds on the same branch tip. To eliminate ambiguity between stale runner state, checkout drift, and Docker build context issues, the workflow now prints the checked-out commit, confirms required console source files exist on the runner, prints `console/tsconfig.json`, enumerates relevant imports, and records build-context file inventory before compose build.
+
+### Changes reviewed
+- Added runner-side debug preflight before docker compose build
+- Verified presence of:
+  - `console/lib/api.ts`
+  - `console/lib/coreApi.ts`
+  - `console/styles/tokens.ts`
+  - `console/components/tables/DecisionsTable.tsx`
+- Printed `console/tsconfig.json` and relevant alias imports
+- Extended CI env bootstrap to include:
+  - `FG_ENCRYPTION_KEY`
+  - `FG_JWT_SECRET`
+  - `FG_NATS_URL`
+- Switched compose image build to deterministic `--no-cache`
+
+### Verification
+- Workflow remains fail-closed
+- Compose render still occurs before stack startup
+- Failure path now captures runner source-tree state needed to distinguish checkout drift from build/runtime failure
+
+SOC review outcome:
+- `soc-review-sync` coverage satisfied for `.github/workflows/docker-ci.yml`
+
 ## 2026-03-09 — SOC-HIGH-002 — fg-required compose env bootstrap for prod-profile-check
 
 **Change class:** CI/CD workflow execution surface
