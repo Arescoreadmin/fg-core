@@ -84,7 +84,7 @@ jobs:
 
           .venv/bin/python tools/testing/harness/fg_required.py \
             --global-budget-seconds 1800 \
-            --lane-timeout-seconds 1800
+            --lane-timeout-seconds 1500
 
       - name: dump failed lane logs (tail)
         if: failure()

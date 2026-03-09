@@ -1,3 +1,24 @@
+## 2026-03-09 — SOC-HIGH-002 — fg-required timeout budget increase
+
+**Change class:** CI/CD workflow execution surface
+
+### Files reviewed
+- `.github/workflows/fg-required.yml`
+
+### Summary
+Increased the fg-required job and lane timeout budgets so the `fg-fast` lane is not terminated early by harness or workflow limits.
+
+### Rationale
+Recent `fg-fast` runtime exceeds the prior fg-required lane timeout in CI, causing false-negative failures due to timeout rather than gate failure.
+
+### Verification
+- Reviewed `.github/workflows/fg-required.yml`
+- Confirmed timeout budget changes align with observed `fg-fast` runtime
+- Confirmed SOC review coverage for workflow execution change
+
+SOC review outcome:
+- `soc-review-sync` coverage satisfied for `.github/workflows/fg-required.yml`
+
 ## 2026-03-09T00:00:00Z — SOC-HIGH-002 — CI workflow hardening for compliance and fg-required stability
 
 **Change class:** CI/CD execution surface (SOC-HIGH-002)
