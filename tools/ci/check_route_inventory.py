@@ -3,10 +3,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 from services.plane_registry import PLANE_REGISTRY
 from tools.ci.plane_registry_checks import (
@@ -28,17 +29,19 @@ TOPOLOGY_HASH = REPO / "tools/ci/topology.sha256"
 
 SCHEMA_VERSION = "v1"
 TOOL_NAME = "tools/ci/check_route_inventory.py"
+CI_ENV = os.getenv("CI", "").strip().lower() in {"1", "true", "yes"}
 
 
-# -----------------------------
-# small, boring, correct utils
-# -----------------------------
 def _now_iso() -> str:
     return datetime.now(tz=UTC).isoformat()
 
 
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return _sha256_bytes(path.read_bytes())
 
 
 def _stable_json_bytes(obj: object) -> bytes:
@@ -62,16 +65,12 @@ def _v1_wrap(data: object, *, generated_by: str | None = None) -> dict[str, Any]
     return out
 
 
-def _read_data(path: Union[Path, str], label: str) -> object:
+def _read_data(path: Path | str, label: str) -> object:
     p = Path(path)
     try:
         return json.loads(p.read_text(encoding="utf-8"))
     except Exception as e:
         raise ValueError(f"{label} must be valid JSON: {e}") from e
-
-
-def _read_json(path: Path, *, label: str) -> object:
-    return _read_data(path, label)
 
 
 def _is_v1_wrapper(obj: object) -> bool:
@@ -89,33 +88,33 @@ def _unwrap_v1(obj: object) -> object:
 
 def _require_list_of_dicts(value: object, *, label: str) -> list[dict[str, Any]]:
     if not isinstance(value, list):
-        raise ValueError(f"{label}.data must be a list")
+        raise ValueError(f"{label} must be a list")
     out: list[dict[str, Any]] = []
     for i, item in enumerate(value):
         if not isinstance(item, dict):
-            raise ValueError(f"{label}.data[{i}] must be an object")
+            raise ValueError(f"{label}[{i}] must be an object")
         out.append(item)
     return out
 
 
-def _inventory_from_data(data: object) -> list[dict[str, Any]]:
-    return _inventory_from_doc(data)
-
-
 def _inventory_from_doc(doc: object) -> list[dict[str, Any]]:
-    if isinstance(doc, dict) and "routes" in doc:
-        return _require_list_of_dicts(doc.get("routes"), label="route_inventory")
-    if isinstance(doc, dict) and "items" in doc:
-        return _require_list_of_dicts(doc.get("items"), label="route_inventory")
-
     payload = _unwrap_v1(doc)
 
     if isinstance(payload, dict) and "routes" in payload:
-        return _require_list_of_dicts(payload.get("routes"), label="route_inventory")
+        return _require_list_of_dicts(
+            payload.get("routes"), label="route_inventory.data.routes"
+        )
     if isinstance(payload, dict) and "items" in payload:
-        return _require_list_of_dicts(payload.get("items"), label="route_inventory")
+        return _require_list_of_dicts(
+            payload.get("items"), label="route_inventory.data.items"
+        )
 
-    return _require_list_of_dicts(payload, label="route_inventory")
+    if isinstance(doc, dict) and "routes" in doc:
+        return _require_list_of_dicts(doc.get("routes"), label="route_inventory.routes")
+    if isinstance(doc, dict) and "items" in doc:
+        return _require_list_of_dicts(doc.get("items"), label="route_inventory.items")
+
+    return _require_list_of_dicts(payload, label="route_inventory.data")
 
 
 def _key(entry: dict[str, Any]) -> tuple[str, str, str]:
@@ -155,36 +154,7 @@ def _route_diff(
     return [str(x) for x in missing], [str(x) for x in added], changed
 
 
-def _as_list_of_dicts(value: object, *, label: str) -> list[dict[str, Any]]:
-    if not isinstance(value, list):
-        raise ValueError(f"{label} must be a list")
-    out: list[dict[str, Any]] = []
-    for i, item in enumerate(value):
-        if not isinstance(item, dict):
-            raise ValueError(f"{label}[{i}] must be an object")
-        out.append(item)
-    return out
-
-
-# -----------------------------
-# inventory building
-# -----------------------------
-def _plane_id_for_path(path: str) -> str:
-    planes = match_plane(path)
-    if isinstance(planes, list) and len(planes) == 1:
-        try:
-            return str(planes[0])
-        except Exception:
-            return "unmapped"
-    return "unmapped"
-
-
 def current_inventory() -> list[dict[str, Any]]:
-    """
-    IMPORTANT:
-    - Canonical route inventory is derived from AST (deterministic).
-    - Emit BOTH `plane_id` (canonical) and `plane` (compat alias).
-    """
     rows: list[dict[str, Any]] = []
     for route in runtime_routes_ast():
         path = str(route.get("path", ""))
@@ -206,28 +176,20 @@ def current_inventory() -> list[dict[str, Any]]:
     )
 
 
-# -----------------------------
-# artifact writers
-# -----------------------------
-def _write_registry_snapshot() -> None:
+def _registry_snapshot_doc() -> str:
     planes = [p.to_dict() for p in sorted(PLANE_REGISTRY, key=lambda x: x.plane_id)]
-    blob = _dump_json(_v1_wrap(planes, generated_by=TOOL_NAME))
-    REGISTRY_SNAPSHOT.write_text(blob, encoding="utf-8")
-
-    digest = hashlib.sha256(blob.encode("utf-8")).hexdigest()
-    REGISTRY_HASH.write_text(f"{digest}  {REGISTRY_SNAPSHOT.name}\n", encoding="utf-8")
+    return _dump_json(_v1_wrap(planes, generated_by=TOOL_NAME))
 
 
-def _write_contract_routes() -> list[dict[str, Any]]:
-    cr = contract_routes()
-    cr_list = _as_list_of_dicts(cr, label="contract_routes()")
-    CONTRACT_ROUTES.write_text(
-        _dump_json(_v1_wrap(cr_list, generated_by=TOOL_NAME)), encoding="utf-8"
-    )
-    return cr_list
+def _contract_routes_list() -> list[dict[str, Any]]:
+    return _require_list_of_dicts(contract_routes(), label="contract_routes()")
 
 
-def _write_build_meta(cur: list[dict[str, Any]]) -> None:
+def _contract_routes_doc() -> str:
+    return _dump_json(_v1_wrap(_contract_routes_list(), generated_by=TOOL_NAME))
+
+
+def _build_meta_doc(cur: list[dict[str, Any]]) -> str:
     git_sha = "unknown"
     try:
         git_sha = subprocess.check_output(
@@ -250,34 +212,20 @@ def _write_build_meta(cur: list[dict[str, Any]]) -> None:
         "ci_runner_id": runner,
         "tool": TOOL_NAME,
         "tool_version": SCHEMA_VERSION,
-        "inventory_sha256": hashlib.sha256(_stable_json_bytes(cur)).hexdigest(),
+        "inventory_sha256": _sha256_bytes(_stable_json_bytes(cur)),
     }
 
-    BUILD_META.write_text(
-        _dump_json(_v1_wrap([meta], generated_by=TOOL_NAME)), encoding="utf-8"
-    )
+    return _dump_json(_v1_wrap([meta], generated_by=TOOL_NAME))
 
 
-def _write_attestation_bundle(cur: list[dict[str, Any]]) -> None:
-    _write_contract_routes()
-    _write_build_meta(cur)
-
-    bundle_files = [REGISTRY_SNAPSHOT, INVENTORY, CONTRACT_ROUTES, BUILD_META]
-    lines = [f"{_sha256(f)}  {f.name}" for f in bundle_files]
-    BUNDLE_HASH.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def _write_topology_hash() -> None:
-    topology_files = [REGISTRY_SNAPSHOT, INVENTORY, CONTRACT_ROUTES]
-    lines = [f"{_sha256(f)}  {f.name}" for f in topology_files]
-    TOPOLOGY_HASH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+def _inventory_doc(cur: list[dict[str, Any]]) -> str:
+    return _dump_json(_v1_wrap(cur, generated_by=TOOL_NAME))
 
 
 def _summary_payload(
     cur: list[dict[str, Any]], expected: list[dict[str, Any]] | None
 ) -> dict[str, Any]:
-    contract = contract_routes()
-    contract_list = _as_list_of_dicts(contract, label="contract_routes()")
+    contract_list = _contract_routes_list()
 
     runtime_keys = {(str(r.get("method")), str(r.get("path"))) for r in cur}
     contract_keys = {(str(r.get("method")), str(r.get("path"))) for r in contract_list}
@@ -289,14 +237,15 @@ def _summary_payload(
         removed, added, changed = _route_diff(expected, cur)
 
     return {
+        "schema_version": SCHEMA_VERSION,
+        "generated_by": TOOL_NAME,
+        "generated_at": _now_iso(),
         "plane_coverage": plane_coverage_summary(cur),
         "runtime_count": len(cur),
         "contract_count": len(contract_list),
-        "runtime_only": sorted(
-            [f"{m} {p}" for (m, p) in (runtime_keys - contract_keys)]
-        ),
+        "runtime_only": sorted(f"{m} {p}" for (m, p) in (runtime_keys - contract_keys)),
         "contract_only": sorted(
-            [f"{m} {p}" for (m, p) in (contract_keys - runtime_keys)]
+            f"{m} {p}" for (m, p) in (contract_keys - runtime_keys)
         ),
         "added": added,
         "removed": removed,
@@ -304,57 +253,67 @@ def _summary_payload(
     }
 
 
+def _write_text(path: Path, content: str) -> None:
+    path.write_text(content, encoding="utf-8")
+
+
+def _write_registry_snapshot() -> None:
+    blob = _registry_snapshot_doc()
+    _write_text(REGISTRY_SNAPSHOT, blob)
+    digest = _sha256_bytes(blob.encode("utf-8"))
+    _write_text(REGISTRY_HASH, f"{digest}  {REGISTRY_SNAPSHOT.name}\n")
+
+
+def _write_contract_routes() -> None:
+    _write_text(CONTRACT_ROUTES, _contract_routes_doc())
+
+
+def _write_build_meta(cur: list[dict[str, Any]]) -> None:
+    _write_text(BUILD_META, _build_meta_doc(cur))
+
+
+def _write_attestation_bundle(cur: list[dict[str, Any]]) -> None:
+    _write_contract_routes()
+    _write_build_meta(cur)
+
+    bundle_files = [REGISTRY_SNAPSHOT, INVENTORY, CONTRACT_ROUTES, BUILD_META]
+    lines = [f"{_sha256(f)}  {f.name}" for f in bundle_files]
+    _write_text(BUNDLE_HASH, "\n".join(lines) + "\n")
+
+
+def _write_topology_hash() -> None:
+    topology_files = [REGISTRY_SNAPSHOT, INVENTORY, CONTRACT_ROUTES]
+    lines = [f"{_sha256(f)}  {f.name}" for f in topology_files]
+    _write_text(TOPOLOGY_HASH, "\n".join(lines) + "\n")
+
+
 def _write_summary(
     cur: list[dict[str, Any]], expected: list[dict[str, Any]] | None
 ) -> None:
-    summary = _summary_payload(cur, expected)
-    SUMMARY.write_text(_dump_json(summary), encoding="utf-8")
+    _write_text(SUMMARY, _dump_json(_summary_payload(cur, expected)))
 
 
 def write_inventory() -> None:
     cur = current_inventory()
-    INVENTORY.write_text(
-        _dump_json(_v1_wrap(cur, generated_by=TOOL_NAME)), encoding="utf-8"
-    )
-
+    _write_text(INVENTORY, _inventory_doc(cur))
     _write_summary(cur, expected=None)
     _write_registry_snapshot()
     _write_attestation_bundle(cur)
     _write_topology_hash()
 
 
-# -----------------------------
-# main
-# -----------------------------
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--write",
-        action="store_true",
-        help="Write route_inventory + governance snapshots",
-    )
-    args = parser.parse_args()
-
+def verify_inventory() -> int:
     cur = current_inventory()
-
-    if args.write:
-        write_inventory()
-        print(f"route inventory: wrote {INVENTORY.relative_to(REPO)}")
-        return 0
 
     if not INVENTORY.exists():
         print(f"route inventory missing: {INVENTORY.relative_to(REPO)}")
         return 1
 
     expected_doc = _read_data(INVENTORY, "route_inventory")
-    expected = _inventory_from_data(expected_doc)
+    expected = _inventory_from_doc(expected_doc)
 
     removed, added, changed = _route_diff(expected, cur)
-
-    _write_summary(cur, expected)
-    _write_registry_snapshot()
-    _write_attestation_bundle(cur)
-    _write_topology_hash()
+    summary = _summary_payload(cur, expected)
 
     failures: list[str] = []
     if removed:
@@ -364,18 +323,16 @@ def main() -> int:
     if changed:
         failures.extend(changed)
 
-    summary_payload = _read_data(SUMMARY, "route_inventory_summary")
-    summary = summary_payload if isinstance(summary_payload, dict) else {}
+    runtime_only = summary.get("runtime_only", [])
+    contract_only = summary.get("contract_only", [])
 
-    if summary.get("runtime_only"):
+    if runtime_only:
         print(
             "route inventory: WARNING runtime vs contract drift (runtime_only): "
-            f"{summary['runtime_only']}"
+            f"{runtime_only}"
         )
-    if summary.get("contract_only"):
-        failures.append(
-            f"runtime vs contract drift (contract_only): {summary['contract_only']}"
-        )
+    if contract_only:
+        failures.append(f"runtime vs contract drift (contract_only): {contract_only}")
 
     if failures:
         print("route inventory: FAILED")
@@ -386,6 +343,30 @@ def main() -> int:
 
     print("route inventory: OK")
     return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Validate or regenerate FrostGate route inventory artifacts."
+    )
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Write route_inventory + governance snapshots",
+    )
+    args = parser.parse_args()
+
+    if args.write:
+        if CI_ENV:
+            print("route inventory: write suppressed in CI")
+            print(" - refusing to mutate tracked inventory artifacts when CI is set")
+            print(" - run locally without CI=true: make route-inventory-generate")
+            return 0
+        write_inventory()
+        print(f"route inventory: wrote {INVENTORY.relative_to(REPO)}")
+        return 0
+
+    return verify_inventory()
 
 
 if __name__ == "__main__":

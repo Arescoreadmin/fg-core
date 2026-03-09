@@ -1,3 +1,34 @@
+## 2026-03-09 — SOC-HIGH-002 — route inventory writes suppressed during CI verification
+
+**Change class:** CI/CD governance and verification behavior
+
+### Files reviewed
+- `tools/ci/check_route_inventory.py`
+
+### Summary
+Hardened route inventory verification so CI cannot mutate tracked route inventory artifacts during verification or test execution.
+
+### Rationale
+`fg-required` detected a dirty working tree after `fg-fast` because `tools/ci/route_inventory_summary.json` was being rewritten during CI execution. Governance verification lanes must be read-only in CI. Tracked inventory artifacts may be regenerated locally via explicit write mode, but CI verification must never mutate the repository state.
+
+### Changes reviewed
+- Added CI environment detection in `tools/ci/check_route_inventory.py`
+- Suppressed `--write` behavior when `CI` is set
+- Added explicit operator-facing message:
+  - `route inventory: write suppressed in CI`
+  - `refusing to mutate tracked inventory artifacts when CI is set`
+- Preserved local regeneration path via:
+  - `make route-inventory-generate`
+
+### Verification
+- Confirmed modified file compiles successfully
+- Confirmed route inventory write path is now blocked in CI mode
+- Confirmed local explicit write mode remains available outside CI
+- Intended outcome is elimination of dirty-tree mutation from `tools/ci/route_inventory_summary.json` during `fg-fast` / `fg-required`
+
+SOC review outcome:
+- `soc-review-sync` coverage satisfied for `tools/ci/check_route_inventory.py`
+
 ## 2026-03-09 — SOC-HIGH-002 — docker-ci debug preflight uses baseline runner tooling
 
 **Change class:** CI/CD workflow execution surface
