@@ -233,12 +233,23 @@ help:
 # Convenience
 # =============================================================================
 
-.PHONY: fix ci-local
+.PHONY: fix ci-local dev-check-fast dev-check
+
 fix: venv
 	@$(RUFF) check . --fix
 	@$(RUFF) format .
 
 ci-local: fix fg-fast
+
+# Fast local developer sanity check
+dev-check-fast:
+	@$(MAKE) -s fg-contract
+	@$(MAKE) -s prod-profile-check
+
+# Full local confidence pass
+dev-check:
+	@$(MAKE) -s dev-check-fast
+	@$(MAKE) -s test-unit
 
 # =============================================================================
 # Update Contracts
