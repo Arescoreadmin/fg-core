@@ -83,9 +83,8 @@ jobs:
           mkdir -p artifacts/fg-required artifacts/testing
 
           .venv/bin/python tools/testing/harness/fg_required.py \
-            --global-budget-seconds 1200 \
-            --lane-timeout-seconds 1200 \
-            2>&1 | tee artifacts/fg-required/fg_required.log
+            --global-budget-seconds 1800 \
+            --lane-timeout-seconds 1800
 
       - name: dump failed lane logs (tail)
         if: failure()

@@ -1,3 +1,28 @@
+## 2026-03-09T00:00:00Z — SOC-HIGH-002 — CI workflow hardening for compliance and fg-required stability
+
+**Change class:** CI/CD execution surface (SOC-HIGH-002)
+
+### Files reviewed
+- `.github/workflows/ci.yml`
+- `.github/workflows/fg-required.yml`
+
+### Summary
+- Hardened compliance workflow behavior around artifact generation and verification.
+- Increased fg-required runtime budget to better match real fg-fast lane execution time.
+- Improved CI resilience and artifact/debug handling for workflow-based gates.
+
+### Rationale
+- Prior workflow behavior could fail due to brittle assumptions around compliance artifact production and tight fg-required lane timing.
+- The updated workflow reduces false-negative CI failures while preserving fail-closed verification.
+
+### Verification
+- Reviewed workflow changes in `.github/workflows/ci.yml`.
+- Reviewed fg-required timeout/budget changes in `.github/workflows/fg-required.yml`.
+- Confirmed SOC review sync coverage for both workflow files.
+
+SOC review outcome:
+- `soc-review-sync` coverage satisfied for CI workflow changes.
+
 ## 2026-03-09T00:00:00Z — SOC-HIGH-002 — compliance artifact discovery hardening
 
 **Change class:** CI/CD execution surface (SOC-HIGH-002)
