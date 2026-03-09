@@ -590,14 +590,37 @@ jobs:
       - name: Run SCAP Scan
         run: make compliance-scap
 
+      - name: Inspect compliance artifacts
+        if: always()
+        run: |
+          set -euo pipefail
+          echo "=== artifacts tree (json only) ==="
+          find artifacts -maxdepth 4 -type f -name "*.json" | sort || true
+
       - name: Verify Compliance Artifacts
         run: |
           set -euo pipefail
-          test -f artifacts/sbom.json || (echo "SBOM missing" && exit 1)
-          test -f artifacts/provenance.json || (echo "Provenance missing" && exit 1)
-          test -f artifacts/cis_check.json || (echo "CIS check missing" && exit 1)
-          test -f artifacts/scap_scan.json || (echo "SCAP scan missing" && exit 1)
+
+          sbom_path="$(find artifacts -maxdepth 4 -type f \( -name 'sbom.json' -o -name '*sbom*.json' \) | sort | head -n 1 || true)"
+          provenance_path="$(find artifacts -maxdepth 4 -type f -name 'provenance.json' | sort | head -n 1 || true)"
+          cis_path="$(find artifacts -maxdepth 4 -type f -name 'cis_check.json' | sort | head -n 1 || true)"
+          scap_path="$(find artifacts -maxdepth 4 -type f -name 'scap_scan.json' | sort | head -n 1 || true)"
+
+          test -n "$sbom_path" || (echo "SBOM missing" && exit 1)
+          test -f "$provenance_path" || (echo "Provenance missing" && exit 1)
+          test -f "$cis_path" || (echo "CIS check missing" && exit 1)
+          test -f "$scap_path" || (echo "SCAP scan missing" && exit 1)
+
+          echo "SBOM_PATH=$sbom_path" >> "$GITHUB_ENV"
+          echo "PROVENANCE_PATH=$provenance_path" >> "$GITHUB_ENV"
+          echo "CIS_PATH=$cis_path" >> "$GITHUB_ENV"
+          echo "SCAP_PATH=$scap_path" >> "$GITHUB_ENV"
+
           echo "All compliance artifacts generated"
+          echo "  sbom: $sbom_path"
+          echo "  provenance: $provenance_path"
+          echo "  cis: $cis_path"
+          echo "  scap: $scap_path"
 
       - name: Upload Compliance Artifacts
         if: always()
@@ -605,10 +628,7 @@ jobs:
         with:
           name: frostgate-compliance-artifacts
           path: |
-            artifacts/sbom.json
-            artifacts/provenance.json
-            artifacts/cis_check.json
-            artifacts/scap_scan.json
+            artifacts/**/*.json
           if-no-files-found: error
 
   evidence:

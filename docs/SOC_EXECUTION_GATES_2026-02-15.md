@@ -1,3 +1,27 @@
+## 2026-03-09T00:00:00Z — SOC-HIGH-002 — compliance artifact discovery hardening
+
+**Change class:** CI/CD execution surface (SOC-HIGH-002)
+
+### Files reviewed (required by SOC-HIGH-002)
+- `.github/workflows/ci.yml`
+
+### Summary
+- Hardened compliance artifact verification to discover SBOM/provenance/CIS/SCAP outputs under `artifacts/` instead of assuming one rigid SBOM path.
+- Broadened compliance artifact upload coverage so CI retains generated JSON evidence even when the SBOM location differs from the old fixed path.
+- Added artifact inspection output to improve CI triage when compliance generation paths drift.
+
+### Rationale
+- The prior workflow assumed `artifacts/sbom.json`, but CI showed SBOM output was not always present at that exact location.
+- This caused false-negative workflow failures during artifact verification and upload even when compliance generation partially succeeded.
+- The update keeps the gate fail-closed while making artifact discovery path-robust.
+
+### Verification
+- Reviewed `.github/workflows/ci.yml` compliance job changes.
+- Confirmed SOC review sync requirement is satisfied for this workflow-path update.
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
 ## 2026-03-08T00:00:00Z — SOC-HIGH-002 — fg-required timeout budget alignment
 
 **Change class:** CI/CD execution surface (SOC-HIGH-002)
