@@ -178,7 +178,7 @@ jobs:
 
           echo
           echo "=== imports ==="
-          rg -n "@/lib/coreApi|@/lib/api|@/styles/tokens|@/components/tables/DecisionsTable" console
+          grep -RInE "@/lib/coreApi|@/lib/api|@/styles/tokens|@/components/tables/DecisionsTable" console || true
 
           echo
           echo "=== docker build context sanity ==="
@@ -304,7 +304,7 @@ jobs:
           ls -l console/lib || true
           ls -l console/components/tables || true
           sed -n '1,120p' console/tsconfig.json || true
-          rg -n "@/lib/coreApi|@/lib/api|@/styles/tokens|@/components/tables/DecisionsTable" console || true
+          grep -RInE "@/lib/coreApi|@/lib/api|@/styles/tokens|@/components/tables/DecisionsTable" console || true
 
           echo
           echo "=== opa-bundles nginx config ==="

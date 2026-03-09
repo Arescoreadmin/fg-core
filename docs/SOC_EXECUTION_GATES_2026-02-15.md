@@ -1,3 +1,33 @@
+## 2026-03-09 — SOC-HIGH-002 — docker-ci debug preflight uses baseline runner tooling
+
+**Change class:** CI/CD workflow execution surface
+
+### Files reviewed
+- `.github/workflows/docker-ci.yml`
+
+### Summary
+Adjusted the docker-ci console source-tree debug preflight to use baseline runner tooling only.
+
+### Rationale
+The prior debug preflight used `rg`, which is not guaranteed on the GitHub runner image for this workflow and caused the diagnostic step itself to fail before the intended docker validation path executed. Replacing `rg` with `grep` preserves diagnostic coverage without introducing an undeclared runner dependency.
+
+### Changes reviewed
+- Replaced `rg` usage with `grep -RInE` in docker-ci debug preflight
+- Replaced `rg` usage with `grep -RInE` in docker-ci failure dump path
+- Preserved source-tree verification coverage for:
+  - `@/lib/coreApi`
+  - `@/lib/api`
+  - `@/styles/tokens`
+  - `@/components/tables/DecisionsTable`
+
+### Verification
+- Reviewed `.github/workflows/docker-ci.yml`
+- Confirmed debug preflight now relies only on standard runner shell tooling
+- Confirmed failure diagnostics still capture console import/path state before and after build failure
+
+SOC review outcome:
+- `soc-review-sync` coverage satisfied for `.github/workflows/docker-ci.yml`
+
 ## 2026-03-09 — SOC-HIGH-002 — docker-ci source-tree debug preflight for console build validation
 
 **Change class:** CI/CD workflow execution surface
