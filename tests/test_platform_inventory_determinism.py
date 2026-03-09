@@ -7,11 +7,23 @@ from contextlib import contextmanager
 from pathlib import Path
 
 
-FILES = [
+OUTPUT_FILES = [
     Path("artifacts/PLATFORM_INVENTORY.md"),
     Path("artifacts/PLATFORM_GAPS.md"),
     Path("artifacts/platform_inventory.json"),
 ]
+
+GOVERNANCE_INPUTS = [
+    Path("tools/ci/plane_registry_snapshot.json"),
+    Path("tools/ci/route_inventory.json"),
+    Path("tools/ci/route_inventory_summary.json"),
+    Path("tools/ci/contract_routes.json"),
+    Path("tools/ci/topology.sha256"),
+    Path("tools/ci/attestation_bundle.sha256"),
+    Path("tools/ci/build_meta.json"),
+]
+
+FILES_TO_PRESERVE = OUTPUT_FILES + GOVERNANCE_INPUTS
 
 
 @contextmanager
@@ -31,30 +43,50 @@ def _preserve_files(paths: list[Path]):
             path.write_bytes(content)
 
 
-def _hashes():
-    return [hashlib.sha256(p.read_bytes()).hexdigest() for p in FILES]
+def _hashes() -> list[str]:
+    return [hashlib.sha256(p.read_bytes()).hexdigest() for p in OUTPUT_FILES]
+
+
+def _require_governance_inputs() -> None:
+    missing = [str(p) for p in GOVERNANCE_INPUTS if not p.exists()]
+    if missing:
+        joined = "\n - ".join(missing)
+        raise AssertionError(
+            "Required governance inputs are missing for platform inventory tests:\n"
+            f" - {joined}\n"
+            "Generate them locally before running this test, for example:\n"
+            "PYTHONPATH=. python tools/ci/check_route_inventory.py --write"
+        )
+
+
+def _run_platform_inventory() -> None:
+    subprocess.run(
+        [sys.executable, "scripts/generate_platform_inventory.py"],
+        check=True,
+    )
 
 
 def test_platform_inventory_deterministic():
-    with _preserve_files(FILES):
-        subprocess.run(
-            [sys.executable, "scripts/generate_platform_inventory.py"], check=True
-        )
+    with _preserve_files(FILES_TO_PRESERVE):
+        _require_governance_inputs()
+
+        _run_platform_inventory()
         h1 = _hashes()
-        subprocess.run(
-            [sys.executable, "scripts/generate_platform_inventory.py"], check=True
-        )
+
+        _run_platform_inventory()
         h2 = _hashes()
+
     assert h1 == h2
 
 
 def test_platform_inventory_sections_present():
-    with _preserve_files(FILES):
-        subprocess.run(
-            [sys.executable, "scripts/generate_platform_inventory.py"], check=True
-        )
+    with _preserve_files(FILES_TO_PRESERVE):
+        _require_governance_inputs()
+
+        _run_platform_inventory()
         inv = Path("artifacts/PLATFORM_INVENTORY.md").read_text(encoding="utf-8")
         gaps = Path("artifacts/PLATFORM_GAPS.md").read_text(encoding="utf-8")
+
     assert "## Planes" in inv
     assert "## Enterprise readiness checklist status" in inv
     assert "# Platform Gaps" in gaps
