@@ -1,14 +1,15 @@
+const path = require('path');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: "standalone",
-
-  async rewrites() {
-    return [
-      {
-        source: "/api/:path*",
-        destination: "http://admin-gateway:8080/:path*",
-      },
-    ];
+  output: 'standalone',
+  webpack: (config) => {
+    config.resolve = config.resolve || {};
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      '@': path.resolve(__dirname),
+    };
+    return config;
   },
 };
 
