@@ -115,12 +115,13 @@ FG_ENV                  ?= dev
 
 FG_SERVICE              ?= frostgate-core
 FG_AUTH_ENABLED         ?= 1
-FG_API_KEY              ?=
+FG_API_KEY              ?= ci-api-key
 FG_KEY_PEPPER           ?= ci-test-pepper
 FG_ENFORCEMENT_MODE     ?= observe
 FG_DEV_EVENTS_ENABLED   ?= 0
 FG_UI_TOKEN_GET_ENABLED ?= 1
 ADMIN_SKIP_PIP_INSTALL  ?= 0
+FG_WEBHOOK_SECRET       ?= ci-webhook-secret
 
 # Admin-gateway dev-bypass tenant defaults (tests expect tenant-dev)
 FG_DEV_TENANT_ID        ?= tenant-dev
