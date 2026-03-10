@@ -11,10 +11,28 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 POLICY_DIR = REPO_ROOT / "tools/testing/policy"
 PLANE_REGISTRY = REPO_ROOT / "tools/ci/plane_registry_snapshot.json"
 
-OWNERSHIP_ALLOWED_KEYS = {"module_id", "plane", "owner", "path_globs", "route_prefixes", "required_categories"}
-REQUIRED_TESTS_ALLOWED_KEYS = {"version", "fail_closed", "categories", "module_registration"}
+OWNERSHIP_ALLOWED_KEYS = {
+    "module_id",
+    "plane",
+    "owner",
+    "path_globs",
+    "route_prefixes",
+    "required_categories",
+}
+REQUIRED_TESTS_ALLOWED_KEYS = {
+    "version",
+    "fail_closed",
+    "categories",
+    "module_registration",
+}
 MODULE_MANIFEST_ALLOWED_KEYS = {"version", "modules"}
-MODULE_ALLOWED_KEYS = {"module_id", "plane", "route_prefixes", "required_scopes", "required_test_category"}
+MODULE_ALLOWED_KEYS = {
+    "module_id",
+    "plane",
+    "route_prefixes",
+    "required_scopes",
+    "required_test_category",
+}
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -50,14 +68,26 @@ def _validate_ownership_map(data: dict[str, Any], categories: set[str]) -> None:
         if not isinstance(owner, dict):
             raise SystemExit("ownership_map owner entry must be mapping")
         _assert_unknown_keys("ownership_map.owner", owner, OWNERSHIP_ALLOWED_KEYS)
-        for required in ["module_id", "plane", "owner", "path_globs", "required_categories"]:
+        for required in [
+            "module_id",
+            "plane",
+            "owner",
+            "path_globs",
+            "required_categories",
+        ]:
             if required not in owner:
-                raise SystemExit(f"ownership_map owner missing required key: {required}")
+                raise SystemExit(
+                    f"ownership_map owner missing required key: {required}"
+                )
         for path_glob in owner.get("path_globs", []):
             _assert_normalized_glob(path_glob)
-        missing_categories = sorted(set(owner.get("required_categories", [])) - categories)
+        missing_categories = sorted(
+            set(owner.get("required_categories", [])) - categories
+        )
         if missing_categories:
-            raise SystemExit(f"ownership_map owner references undefined categories: {missing_categories}")
+            raise SystemExit(
+                f"ownership_map owner references undefined categories: {missing_categories}"
+            )
 
 
 def _validate_required_tests(data: dict[str, Any]) -> set[str]:
@@ -75,7 +105,9 @@ def _validate_required_tests(data: dict[str, Any]) -> set[str]:
             raise SystemExit(f"required_tests category {category} must be mapping")
         required_globs = cfg.get("required_test_globs")
         if not isinstance(required_globs, list) or not required_globs:
-            raise SystemExit(f"required_tests category {category} requires non-empty required_test_globs")
+            raise SystemExit(
+                f"required_tests category {category} requires non-empty required_test_globs"
+            )
         for pattern in required_globs:
             _assert_normalized_glob(pattern)
 
@@ -115,7 +147,9 @@ def _load_plane_prefixes() -> set[str]:
     return prefixes
 
 
-def _validate_module_manifest(data: dict[str, Any], categories: set[str], known_prefixes: set[str]) -> None:
+def _validate_module_manifest(
+    data: dict[str, Any], categories: set[str], known_prefixes: set[str]
+) -> None:
     _assert_unknown_keys("module_manifest", data, MODULE_MANIFEST_ALLOWED_KEYS)
     for required in ["version", "modules"]:
         if required not in data:
@@ -128,13 +162,25 @@ def _validate_module_manifest(data: dict[str, Any], categories: set[str], known_
         if not isinstance(module, dict):
             raise SystemExit("module_manifest module entry must be mapping")
         _assert_unknown_keys("module_manifest.module", module, MODULE_ALLOWED_KEYS)
-        for required in ["module_id", "plane", "route_prefixes", "required_scopes", "required_test_category"]:
+        for required in [
+            "module_id",
+            "plane",
+            "route_prefixes",
+            "required_scopes",
+            "required_test_category",
+        ]:
             if required not in module:
-                raise SystemExit(f"module_manifest module missing required key: {required}")
+                raise SystemExit(
+                    f"module_manifest module missing required key: {required}"
+                )
 
-        missing_categories = sorted(set(module.get("required_test_category", [])) - categories)
+        missing_categories = sorted(
+            set(module.get("required_test_category", [])) - categories
+        )
         if missing_categories:
-            raise SystemExit(f"module_manifest has undefined test categories: {missing_categories}")
+            raise SystemExit(
+                f"module_manifest has undefined test categories: {missing_categories}"
+            )
 
         if known_prefixes:
             normalized_known = {_normalize_prefix(p) for p in known_prefixes}

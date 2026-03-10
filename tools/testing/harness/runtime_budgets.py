@@ -20,17 +20,28 @@ def load_runtime_budgets(path: Path) -> dict[str, object]:
     return data
 
 
-def enforce_lane_budget(lane: str, duration_seconds: int, budget_doc: dict[str, object], baseline_seconds: int) -> tuple[bool, str]:
+def enforce_lane_budget(
+    lane: str,
+    duration_seconds: int,
+    budget_doc: dict[str, object],
+    baseline_seconds: int,
+) -> tuple[bool, str]:
     lane_cfg = (budget_doc.get("lanes") or {}).get(lane)
     if not lane_cfg:
         return True, ""
     max_seconds = int(lane_cfg["max_seconds"])
     fail_pct = int(lane_cfg["fail_pct"])
     if duration_seconds > max_seconds:
-        return False, f"lane={lane} exceeded max_seconds={max_seconds} actual={duration_seconds}"
+        return (
+            False,
+            f"lane={lane} exceeded max_seconds={max_seconds} actual={duration_seconds}",
+        )
     allowed = int(baseline_seconds * (1 + (fail_pct / 100.0)))
     if baseline_seconds > 0 and duration_seconds > allowed:
-        return False, f"lane={lane} regression exceeds fail_pct={fail_pct} baseline={baseline_seconds} actual={duration_seconds}"
+        return (
+            False,
+            f"lane={lane} regression exceeds fail_pct={fail_pct} baseline={baseline_seconds} actual={duration_seconds}",
+        )
     return True, ""
 
 
