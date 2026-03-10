@@ -6,6 +6,8 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 
+from tools.ci import check_route_inventory
+
 
 OUTPUT_FILES = [
     Path("artifacts/PLATFORM_INVENTORY.md"),
@@ -47,15 +49,23 @@ def _hashes() -> list[str]:
     return [hashlib.sha256(p.read_bytes()).hexdigest() for p in OUTPUT_FILES]
 
 
-def _require_governance_inputs() -> None:
-    missing = [str(p) for p in GOVERNANCE_INPUTS if not p.exists()]
-    if missing:
-        joined = "\n - ".join(missing)
+def _ensure_governance_inputs() -> None:
+    missing = [p for p in GOVERNANCE_INPUTS if not p.exists()]
+    if not missing:
+        return
+
+    # Intentionally call the module writer directly instead of the CLI.
+    # The CLI suppresses --write when CI=true, but these tests need canonical
+    # governance artifacts available in-process and restore them afterward.
+    check_route_inventory.write_inventory()
+
+    still_missing = [str(p) for p in GOVERNANCE_INPUTS if not p.exists()]
+    if still_missing:
+        joined = "\n - ".join(still_missing)
         raise AssertionError(
-            "Required governance inputs are missing for platform inventory tests:\n"
-            f" - {joined}\n"
-            "Generate them locally before running this test, for example:\n"
-            "PYTHONPATH=. python tools/ci/check_route_inventory.py --write"
+            "Required governance inputs are missing for platform inventory tests "
+            "after bootstrap:\n"
+            f" - {joined}"
         )
 
 
@@ -68,7 +78,7 @@ def _run_platform_inventory() -> None:
 
 def test_platform_inventory_deterministic():
     with _preserve_files(FILES_TO_PRESERVE):
-        _require_governance_inputs()
+        _ensure_governance_inputs()
 
         _run_platform_inventory()
         h1 = _hashes()
@@ -81,7 +91,7 @@ def test_platform_inventory_deterministic():
 
 def test_platform_inventory_sections_present():
     with _preserve_files(FILES_TO_PRESERVE):
-        _require_governance_inputs()
+        _ensure_governance_inputs()
 
         _run_platform_inventory()
         inv = Path("artifacts/PLATFORM_INVENTORY.md").read_text(encoding="utf-8")
