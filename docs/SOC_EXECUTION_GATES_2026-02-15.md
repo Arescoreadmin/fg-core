@@ -1,3 +1,38 @@
+## 2026-03-09 — SOC-HIGH-002 — route inventory CI write suppression and compatibility shim
+
+**Change class:** CI/CD governance verification hardening
+
+### Files reviewed
+- `tools/ci/check_route_inventory.py`
+
+### Summary
+Hardened route inventory governance behavior so CI verification does not mutate tracked artifacts, and restored a backwards-compatibility shim required by existing route inventory summary tests.
+
+### Rationale
+`fg-fast` / `fg-required` could leave the working tree dirty because route inventory governance tooling could write tracked artifacts during CI execution. Verification paths in CI must be read-only.
+
+Separately, route inventory summary tests still reference `_inventory_from_data`, which had been removed during refactor. A compatibility shim was restored to preserve the existing test contract without weakening the refactored implementation.
+
+### Changes reviewed
+- Added CI environment detection in `tools/ci/check_route_inventory.py`
+- Suppressed `--write` behavior when `CI` is set
+- Added explicit operator-facing messages:
+  - `route inventory: write suppressed in CI`
+  - `refusing to mutate tracked inventory artifacts when CI is set`
+- Restored `_inventory_from_data()` as a compatibility shim delegating to `_inventory_from_doc()`
+- Preserved explicit local regeneration path via:
+  - `make route-inventory-generate`
+
+### Verification
+- Confirmed `tools/ci/check_route_inventory.py` compiles successfully
+- Confirmed route inventory summary tests pass with compatibility shim restored
+- Confirmed CI write path is blocked in CI mode
+- Confirmed local explicit write mode remains available outside CI
+- Intended outcome is elimination of dirty-tree mutation during CI verification while preserving test/tool compatibility
+
+SOC review outcome:
+- `soc-review-sync` coverage satisfied for `tools/ci/check_route_inventory.py`
+
 ## 2026-03-09 — SOC-HIGH-002 — route inventory writes suppressed during CI verification
 
 **Change class:** CI/CD governance and verification behavior

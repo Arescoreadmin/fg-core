@@ -117,6 +117,14 @@ def _inventory_from_doc(doc: object) -> list[dict[str, Any]]:
     return _require_list_of_dicts(payload, label="route_inventory.data")
 
 
+def _inventory_from_data(data: object) -> list[dict[str, Any]]:
+    """
+    Backwards-compatibility shim for older tests and tooling that still patch or
+    call _inventory_from_data() directly.
+    """
+    return _inventory_from_doc(data)
+
+
 def _key(entry: dict[str, Any]) -> tuple[str, str, str]:
     return (
         str(entry.get("method", "")),
