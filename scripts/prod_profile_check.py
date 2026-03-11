@@ -49,17 +49,6 @@ REQUIRED_KEYS = [
     "FG_RL_FAIL_OPEN",
 ]
 
-COMPOSE_PLACEHOLDER_ENV: dict[str, str] = {
-    "POSTGRES_PASSWORD": "ci-postgres-password",
-    "REDIS_PASSWORD": "ci-redis-password",
-    "NATS_AUTH_TOKEN": "ci-nats-token",
-    "FG_API_KEY": "ci-api-key",
-    "FG_AGENT_API_KEY": "ci-agent-api-key",
-    "FG_WEBHOOK_SECRET": "ci-webhook-secret",
-    "FG_ENCRYPTION_KEY": "ci-encryption-key-32-bytes-minimum",
-    "FG_JWT_SECRET": "ci-jwt-secret-32-bytes-minimum",
-}
-
 
 @dataclass(frozen=True)
 class Report:
@@ -74,6 +63,16 @@ class ProductionProfileChecker:
     """
 
     _DEFAULT_CORE_CANDIDATES = ("core", "frostgate-core")
+    _COMPOSE_PLACEHOLDER_ENV: dict[str, str] = {
+        "POSTGRES_PASSWORD": "ci-postgres-password",
+        "REDIS_PASSWORD": "ci-redis-password",
+        "NATS_AUTH_TOKEN": "ci-nats-token",
+        "FG_API_KEY": "ci-api-key",
+        "FG_AGENT_API_KEY": "ci-agent-api-key",
+        "FG_WEBHOOK_SECRET": "ci-webhook-secret",
+        "FG_ENCRYPTION_KEY": "ci-encryption-key-32-bytes-minimum",
+        "FG_JWT_SECRET": "ci-jwt-secret-32-bytes-minimum",
+    }
 
     def __init__(
         self,
@@ -122,15 +121,6 @@ class ProductionProfileChecker:
         return out or [self.compose_path]
 
     def _resolve_env_file(self) -> Path | None:
-        """
-        Pick the env-file for docker compose interpolation.
-
-        Order:
-        1) FG_ENV_FILE if explicitly set and exists
-        2) .env.ci if present
-        3) .env if present
-        4) None (CI-safe fallback)
-        """
         explicit = (os.getenv("FG_ENV_FILE") or "").strip()
         if explicit:
             p = Path(explicit)
@@ -152,9 +142,8 @@ class ProductionProfileChecker:
 
     def _compose_env(self) -> dict[str, str]:
         env = dict(os.environ)
-        for key, fallback in COMPOSE_PLACEHOLDER_ENV.items():
-            current = env.get(key)
-            if current is None or not str(current).strip():
+        for key, fallback in self._COMPOSE_PLACEHOLDER_ENV.items():
+            if not env.get(key):
                 env[key] = fallback
         return env
 
