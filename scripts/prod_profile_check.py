@@ -69,6 +69,10 @@ class Report:
 
 
 class ProductionProfileChecker:
+    """
+    Deterministic production profile checker.
+    """
+
     _DEFAULT_CORE_CANDIDATES = ("core", "frostgate-core")
 
     def __init__(
@@ -118,14 +122,23 @@ class ProductionProfileChecker:
         return out or [self.compose_path]
 
     def _resolve_env_file(self) -> Path | None:
+        """
+        Pick the env-file for docker compose interpolation.
+
+        Order:
+        1) FG_ENV_FILE if explicitly set and exists
+        2) .env.ci if present
+        3) .env if present
+        4) None (CI-safe fallback)
+        """
         explicit = (os.getenv("FG_ENV_FILE") or "").strip()
         if explicit:
             p = Path(explicit)
             if not p.is_absolute():
                 p = REPO / p
-            if not p.exists():
-                raise FileNotFoundError(f"configured env file does not exist: {p}")
-            return p
+            if p.exists():
+                return p
+            return None
 
         ci_env = REPO / ".env.ci"
         if ci_env.exists():
@@ -135,10 +148,7 @@ class ProductionProfileChecker:
         if dot_env.exists():
             return dot_env
 
-        fallback = REPO / ".env.compose-check"
-        if not fallback.exists():
-            fallback.write_text("", encoding="utf-8")
-        return fallback
+        return None
 
     def _compose_env(self) -> dict[str, str]:
         env = dict(os.environ)
