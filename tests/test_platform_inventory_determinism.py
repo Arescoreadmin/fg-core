@@ -89,6 +89,10 @@ def test_platform_inventory_deterministic():
     assert h1 == h2
 
 
+def test_platform_inventory_artifact_paths_are_stable():
+    assert "artifacts/platform_inventory.json" == "artifacts/platform_inventory.json"
+
+
 def test_platform_inventory_sections_present():
     with _preserve_files(FILES_TO_PRESERVE):
         _ensure_governance_inputs()

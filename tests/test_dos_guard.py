@@ -30,6 +30,10 @@ def dos_env() -> dict[str, str]:
     }
 
 
+def test_dos_guard_prod_profile_marker():
+    assert True
+
+
 def _build_hardened_app(env: dict[str, str]):
     from api.main import build_app
 

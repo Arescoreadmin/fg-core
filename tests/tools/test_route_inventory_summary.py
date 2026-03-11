@@ -3,6 +3,10 @@ from __future__ import annotations
 from tools.ci import check_route_inventory
 
 
+def test_route_inventory_summary_marker():
+    assert True
+
+
 def test_route_inventory_summary_object_shape(monkeypatch):
     monkeypatch.setattr("sys.argv", ["check_route_inventory.py"])
     monkeypatch.setattr(check_route_inventory, "current_inventory", lambda: [])

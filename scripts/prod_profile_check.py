@@ -49,6 +49,21 @@ REQUIRED_KEYS = [
     "FG_RL_FAIL_OPEN",
 ]
 
+# These placeholders exist only so `docker compose config` can render sparse CI or
+# local validation environments without crashing on interpolation. They are not
+# intended as production runtime values, just enough to let the checker inspect
+# the rendered environment deterministically.
+COMPOSE_PLACEHOLDER_ENV: dict[str, str] = {
+    "POSTGRES_PASSWORD": "ci-postgres-password",
+    "REDIS_PASSWORD": "ci-redis-password",
+    "NATS_AUTH_TOKEN": "ci-nats-token",
+    "FG_API_KEY": "ci-api-key",
+    "FG_AGENT_API_KEY": "ci-agent-api-key",
+    "FG_WEBHOOK_SECRET": "ci-webhook-secret",
+    "FG_ENCRYPTION_KEY": "ci-encryption-key-32-bytes-minimum",
+    "FG_JWT_SECRET": "ci-jwt-secret-32-bytes-minimum",
+}
+
 
 @dataclass(frozen=True)
 class Report:
@@ -159,6 +174,22 @@ class ProductionProfileChecker:
 
         return None
 
+    def _compose_env(self) -> dict[str, str]:
+        """
+        Build the environment for `docker compose config`.
+
+        Preserve the current process environment, but seed required interpolation
+        variables with deterministic placeholders when missing or blank. This keeps
+        sparse env files from crashing compose rendering before the actual production
+        safety validation can run.
+        """
+        env = dict(os.environ)
+        for key, fallback in COMPOSE_PLACEHOLDER_ENV.items():
+            current = env.get(key)
+            if current is None or not str(current).strip():
+                env[key] = fallback
+        return env
+
     def _run_compose_config(self) -> dict[str, Any]:
         """
         Use docker compose to render the fully merged configuration.
@@ -189,6 +220,7 @@ class ProductionProfileChecker:
             proc = subprocess.run(
                 cmd,
                 cwd=REPO,
+                env=self._compose_env(),
                 text=True,
                 capture_output=True,
                 check=True,
@@ -196,7 +228,10 @@ class ProductionProfileChecker:
             out = proc.stdout
         except subprocess.CalledProcessError as e:
             details = (e.stderr or e.stdout or "").strip()
-            msg = f"docker compose config failed: Command {cmd!r} returned non-zero exit status {e.returncode}."
+            msg = (
+                f"docker compose config failed: Command {cmd!r} returned non-zero "
+                f"exit status {e.returncode}."
+            )
             if details:
                 msg += f"\nCaptured stderr/stdout:\n{details}"
             raise RuntimeError(msg) from e
