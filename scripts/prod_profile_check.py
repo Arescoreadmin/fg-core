@@ -49,10 +49,6 @@ REQUIRED_KEYS = [
     "FG_RL_FAIL_OPEN",
 ]
 
-# These placeholders exist only so `docker compose config` can render sparse CI or
-# local validation environments without crashing on interpolation. They are not
-# intended as production runtime values, just enough to let the checker inspect
-# the rendered environment deterministically.
 COMPOSE_PLACEHOLDER_ENV: dict[str, str] = {
     "POSTGRES_PASSWORD": "ci-postgres-password",
     "REDIS_PASSWORD": "ci-redis-password",
@@ -73,10 +69,6 @@ class Report:
 
 
 class ProductionProfileChecker:
-    """
-    Deterministic production profile checker.
-    """
-
     _DEFAULT_CORE_CANDIDATES = ("core", "frostgate-core")
 
     def __init__(
@@ -86,19 +78,12 @@ class ProductionProfileChecker:
         core_service_name: str | None = None,
     ) -> None:
         self.compose_path = Path(compose_path) if compose_path else DEFAULT_COMPOSE
-
-        # SOC expects this attribute.
         self.errors: list[str] = []
-
-        # Allow override (env > ctor), else resolve later.
         self.core_service = (
             core_service_name or os.getenv("FG_CORE_SERVICE_NAME") or "core"
         )
-
-        # Exposed for debugging / SOC log usefulness.
         self.resolved_core_service: str = "unknown"
 
-    # --- SOC compatibility shim ---
     def check_compose_file(self, compose_path: Path) -> dict[str, Any]:
         self.compose_path = Path(compose_path)
         rep = self.check()
@@ -109,13 +94,6 @@ class ProductionProfileChecker:
         }
 
     def _compose_profiles(self) -> list[str]:
-        """
-        Compose profiles to include when rendering config.
-
-        Behavior:
-        - If COMPOSE_PROFILES is unset/empty -> default to ['core']
-        - If set -> support comma and/or whitespace separated list
-        """
         raw = (os.getenv("COMPOSE_PROFILES") or "").strip()
         if not raw:
             return ["core"]
@@ -123,12 +101,6 @@ class ProductionProfileChecker:
         return parts or ["core"]
 
     def _compose_files(self) -> list[Path]:
-        """
-        Compose files to render.
-
-        Override with FG_PROD_PROFILE_COMPOSE_FILES using comma/space-separated paths.
-        Otherwise use only self.compose_path for stable behavior.
-        """
         raw = (os.getenv("FG_PROD_PROFILE_COMPOSE_FILES") or "").strip()
         if not raw:
             return [self.compose_path]
@@ -146,15 +118,6 @@ class ProductionProfileChecker:
         return out or [self.compose_path]
 
     def _resolve_env_file(self) -> Path | None:
-        """
-        Pick the env-file for docker compose interpolation.
-
-        Order:
-        1) FG_ENV_FILE if explicitly set
-        2) .env.ci if present
-        3) .env if present
-        4) None
-        """
         explicit = (os.getenv("FG_ENV_FILE") or "").strip()
         if explicit:
             p = Path(explicit)
@@ -172,17 +135,12 @@ class ProductionProfileChecker:
         if dot_env.exists():
             return dot_env
 
-        return None
+        fallback = REPO / ".env.compose-check"
+        if not fallback.exists():
+            fallback.write_text("", encoding="utf-8")
+        return fallback
 
     def _compose_env(self) -> dict[str, str]:
-        """
-        Build the environment for `docker compose config`.
-
-        Preserve the current process environment, but seed required interpolation
-        variables with deterministic placeholders when missing or blank. This keeps
-        sparse env files from crashing compose rendering before the actual production
-        safety validation can run.
-        """
         env = dict(os.environ)
         for key, fallback in COMPOSE_PLACEHOLDER_ENV.items():
             current = env.get(key)
@@ -191,10 +149,6 @@ class ProductionProfileChecker:
         return env
 
     def _run_compose_config(self) -> dict[str, Any]:
-        """
-        Use docker compose to render the fully merged configuration.
-        This is the only reliable way to resolve env-file layering + interpolation.
-        """
         compose_files = self._compose_files()
         missing = [str(p) for p in compose_files if not p.exists()]
         if missing:
@@ -249,13 +203,6 @@ class ProductionProfileChecker:
         return data
 
     def _resolve_core_service_name(self, services: dict[str, Any]) -> str:
-        """
-        Resolve which service is the core API.
-
-        Order:
-        1) explicit core_service (env/ctor) if present
-        2) known candidates: core, frostgate-core
-        """
         if self.core_service in services:
             return self.core_service
 
@@ -355,10 +302,8 @@ class ProductionProfileChecker:
 
         env = self._collect_env()
 
-        # Explicit enablement toggle
         self._require_true(env, "FG_DOS_GUARD_ENABLED")
 
-        # Size limits
         for key in (
             "FG_MAX_BODY_BYTES",
             "FG_MAX_QUERY_BYTES",
@@ -371,7 +316,6 @@ class ProductionProfileChecker:
         ):
             self._require_positive_int(env, key)
 
-        # Timeouts / concurrency
         for key in (
             "FG_REQUEST_TIMEOUT_SEC",
             "FG_KEEPALIVE_TIMEOUT_SEC",
@@ -379,7 +323,6 @@ class ProductionProfileChecker:
         ):
             self._require_positive_int(env, key)
 
-        # Rate limiting: must fail-closed
         self._require_fail_closed_rl(env)
 
         ok = len(self.errors) == 0
