@@ -16,7 +16,11 @@ permissions:
 jobs:
   docker-validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+
+    env:
+      COMPOSE_DOCKER_CLI_BUILD: "1"
+      DOCKER_BUILDKIT: "1"
 
     steps:
       - name: Checkout
@@ -25,14 +29,18 @@ jobs:
       - name: Generate CI secrets
         shell: bash
         run: |
+          set -euo pipefail
           python - <<'PY' >> "$GITHUB_ENV"
           import secrets
+
           print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
           print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
           print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
           print(f"NATS_AUTH_TOKEN={secrets.token_urlsafe(24)}")
           print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(24)}")
           print(f"FG_WEBHOOK_SECRET={secrets.token_urlsafe(32)}")
+          print(f"FG_ENCRYPTION_KEY={secrets.token_urlsafe(32)}")
+          print(f"FG_JWT_SECRET={secrets.token_urlsafe(32)}")
           PY
 
       - name: Verify required env vars are set
@@ -40,7 +48,16 @@ jobs:
         run: |
           set -euo pipefail
           missing=0
-          for var in FG_API_KEY REDIS_PASSWORD POSTGRES_PASSWORD NATS_AUTH_TOKEN FG_AGENT_API_KEY FG_WEBHOOK_SECRET; do
+          for var in \
+            FG_API_KEY \
+            REDIS_PASSWORD \
+            POSTGRES_PASSWORD \
+            NATS_AUTH_TOKEN \
+            FG_AGENT_API_KEY \
+            FG_WEBHOOK_SECRET \
+            FG_ENCRYPTION_KEY \
+            FG_JWT_SECRET
+          do
             if [ -n "${!var:-}" ]; then
               echo "${var}=set"
             else
@@ -48,6 +65,7 @@ jobs:
               missing=1
             fi
           done
+
           if [ "$missing" -ne 0 ]; then
             echo "Required env vars missing; aborting."
             exit 1
@@ -60,65 +78,123 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           mkdir -p policy/bundles
 
-          # If repo doesn't have it (or it got deleted), create CI-safe minimal nginx.conf.
-          # This keeps nginx alive with read_only rootfs by writing pid/temp to /tmp (tmpfs).
           if [ ! -f policy/bundles/nginx.conf ]; then
-            cat > policy/bundles/nginx.conf <<'CONF'
-            pid /tmp/nginx.pid;
-
-            events {}
-
-            http {
-              client_body_temp_path /tmp/client_body_temp;
-              proxy_temp_path       /tmp/proxy_temp;
-              fastcgi_temp_path     /tmp/fastcgi_temp;
-              uwsgi_temp_path       /tmp/uwsgi_temp;
-              scgi_temp_path        /tmp/scgi_temp;
-
-              server {
-                listen 8080;
-
-                location /health { return 200 "ok\n"; }
-
-                location / {
-                  root /usr/share/nginx/html;
-                  try_files $uri =404;
-                }
-              }
-            }
-            CONF
+            {
+              printf '%s\n' 'pid /tmp/nginx.pid;'
+              printf '\n'
+              printf '%s\n' 'events {}'
+              printf '\n'
+              printf '%s\n' 'http {'
+              printf '%s\n' '  client_body_temp_path /tmp/client_body_temp;'
+              printf '%s\n' '  proxy_temp_path       /tmp/proxy_temp;'
+              printf '%s\n' '  fastcgi_temp_path     /tmp/fastcgi_temp;'
+              printf '%s\n' '  uwsgi_temp_path       /tmp/uwsgi_temp;'
+              printf '%s\n' '  scgi_temp_path        /tmp/scgi_temp;'
+              printf '\n'
+              printf '%s\n' '  server {'
+              printf '%s\n' '    listen 8080;'
+              printf '\n'
+              printf '%s\n' '    location /health { return 200 "ok\n"; }'
+              printf '\n'
+              printf '%s\n' '    location / {'
+              printf '%s\n' '      root /usr/share/nginx/html;'
+              printf '%s\n' '      try_files $uri =404;'
+              printf '%s\n' '    }'
+              printf '%s\n' '  }'
+              printf '%s\n' '}'
+            } > policy/bundles/nginx.conf
           fi
 
-          # Optional: ensure bundle dir isn't empty so nginx has something to serve
-          test -f policy/bundles/_ci_notice.txt || echo "CI bundle placeholder" > policy/bundles/_ci_notice.txt
+          if [ ! -f policy/bundles/_ci_notice.txt ]; then
+            printf '%s\n' 'CI bundle placeholder' > policy/bundles/_ci_notice.txt
+          fi
 
       - name: Prepare environment
         shell: bash
         run: |
           set -euo pipefail
-          cp .env.example .env.ci
 
-          mkdir -p secrets
+          mkdir -p secrets env
+
           {
-            echo "FG_ENV=ci"
-            echo "FG_API_KEY=${FG_API_KEY}"
-            echo "REDIS_PASSWORD=${REDIS_PASSWORD}"
-            echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}"
-            echo "NATS_AUTH_TOKEN=${NATS_AUTH_TOKEN}"
-            echo "FG_AGENT_API_KEY=${FG_AGENT_API_KEY}"
-            echo "FG_WEBHOOK_SECRET=${FG_WEBHOOK_SECRET}"
-          } >> .env.ci
+            printf '%s\n' 'POSTGRES_USER=fg_user'
+            printf '%s\n' "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}"
+            printf '%s\n' 'POSTGRES_DB=frostgate'
+            printf '\n'
+            printf '%s\n' "REDIS_PASSWORD=${REDIS_PASSWORD}"
+            printf '\n'
+            printf '%s\n' "NATS_AUTH_TOKEN=${NATS_AUTH_TOKEN}"
+            printf '%s\n' 'FG_NATS_URL='
+            printf '%s\n' 'FG_NATS_ENABLED=0'
+            printf '%s\n' 'FG_NATS_RISK_ACCEPTED=0'
+            printf '\n'
+            printf '%s\n' "FG_API_KEY=${FG_API_KEY}"
+            printf '%s\n' "FG_AGENT_API_KEY=${FG_AGENT_API_KEY}"
+            printf '%s\n' "FG_WEBHOOK_SECRET=${FG_WEBHOOK_SECRET}"
+            printf '%s\n' "FG_ENCRYPTION_KEY=${FG_ENCRYPTION_KEY}"
+            printf '%s\n' "FG_JWT_SECRET=${FG_JWT_SECRET}"
+            printf '\n'
+            printf '%s\n' 'FG_ENV=test'
+            printf '%s\n' 'FG_DEBUG=false'
+            printf '%s\n' 'FG_LOG_LEVEL=info'
+            printf '%s\n' 'FG_DB_BACKEND=postgres'
+            printf '%s\n' 'FG_DB_URL='
+            printf '%s\n' 'FG_DB_MIGRATIONS_REQUIRED=1'
+            printf '%s\n' 'FG_DB_MIGRATIONS_RISK_ACCEPTED=0'
+            printf '\n'
+            printf '%s\n' 'FG_CORS_ORIGINS=https://example.com'
+            printf '%s\n' 'FG_UI_ENABLED=0'
+            printf '\n'
+            printf '%s\n' 'AG_CORS_ORIGINS=http://localhost:13000'
+            printf '%s\n' 'AG_AUDIT_ENABLED=true'
+            printf '\n'
+            printf '%s\n' 'FG_GOVERNANCE_ENABLED=1'
+            printf '%s\n' 'FG_ROE_ENGINE_ENABLED=1'
+            printf '%s\n' 'FG_RING_ROUTER_ENABLED=1'
+            printf '%s\n' 'FG_MISSION_ENVELOPE_ENABLED=1'
+            printf '\n'
+            printf '%s\n' 'FG_OPA_URL=http://localhost:18181'
+            printf '%s\n' 'FG_OPA_ENFORCE=1'
+            printf '%s\n' 'FG_OPA_RISK_ACCEPTED=0'
+            printf '\n'
+            printf '%s\n' 'FG_MISSION_ENVELOPE_PATH=/etc/frostgate/mission_envelope.json'
+            printf '%s\n' 'FG_RING_STATE_DIR=/var/lib/frostgate/state'
+            printf '%s\n' 'FG_RING_MODEL_DIR=/var/lib/frostgate/models'
+            printf '\n'
+            printf '%s\n' 'FG_DOS_GUARD_ENABLED=true'
+            printf '%s\n' 'FG_MAX_BODY_BYTES=4194304'
+            printf '%s\n' 'FG_MAX_QUERY_BYTES=8192'
+            printf '%s\n' 'FG_MAX_PATH_BYTES=2048'
+            printf '%s\n' 'FG_MAX_HEADERS_COUNT=50'
+            printf '%s\n' 'FG_MAX_HEADERS_BYTES=16384'
+            printf '%s\n' 'FG_MAX_HEADER_LINE_BYTES=8192'
+            printf '%s\n' 'FG_MULTIPART_MAX_BYTES=10485760'
+            printf '%s\n' 'FG_MULTIPART_MAX_PARTS=20'
+            printf '%s\n' 'FG_REQUEST_TIMEOUT_SEC=30'
+            printf '%s\n' 'FG_KEEPALIVE_TIMEOUT_SEC=65'
+            printf '%s\n' 'FG_MAX_CONCURRENT_REQUESTS=200'
+            printf '%s\n' 'FG_RL_FAIL_OPEN=false'
+          } > .env.ci
 
-          # Some compose files reference .env directly.
           cp .env.ci .env
 
-          # compose secret file
-          echo "${FG_API_KEY}" > secrets/fg_api_keys.txt
+          {
+            printf '%s\n' '# Production environment overrides'
+            printf '%s\n' '#'
+            printf '%s\n' '# CI uses generated secrets in .env.ci / .env.'
+            printf '%s\n' '# Keep this file present because docker-compose.yml references it.'
+          } > env/prod.env
 
-          # Keep CI-only env out of commits
-          grep -qE '^\Q.env.ci\E$' .gitignore || echo ".env.ci" >> .gitignore
+          printf '%s\n' "${FG_API_KEY}" > secrets/fg_api_keys.txt
+
+      - name: Validate compose config
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose --env-file .env.ci config > /tmp/fg.compose.rendered.yml
 
       - name: Build images via docker compose
         shell: bash

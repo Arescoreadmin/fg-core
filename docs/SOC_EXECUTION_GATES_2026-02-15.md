@@ -1,3 +1,19 @@
+## 2026-03-11 — Docker CI workflow hardening
+
+Updated `.github/workflows/docker-ci.yml` to stabilize CI execution for compose-backed validation.
+
+Changes:
+- Replaced fragile heredoc-driven bundle bootstrap with safer file generation logic.
+- Ensured `.env.ci`, `.env`, and `env/prod.env` are created deterministically during CI.
+- Preserved required secret/env interpolation for docker compose validation.
+- Reduced workflow failure modes caused by YAML indentation and shell parsing drift.
+
+Security / governance impact:
+- Keeps docker validation deterministic and reviewable.
+- Prevents false-negative CI failures caused by malformed workflow scripting.
+- Preserves production-profile validation inputs required by FrostGate compose gates.
+
+
 ## 2026-03-01T21:24:06Z — SOC-HIGH-002 — Route inventory artifact updated
 
 **Issue:** `tools/ci/route_inventory.json` changed and is classified as a critical SOC-tracked artifact.
