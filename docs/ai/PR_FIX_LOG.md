@@ -179,6 +179,56 @@ Moved the `CONF` terminator from column 12 to column 10 in the YAML source. Afte
 
 ---
 
+### 2026-03-12 — OPA docker check Glob Not Expanded: scratch Image Has No Shell
+
+**Area:** CI · Makefile · opa-check · Docker scratch image
+
+**Issue:**
+The `opa-check` Makefile target (docker branch) ran:
+`docker run ... "$IMAGE" check --strict /policies/*.rego`
+Docker passes args directly to the container entrypoint — no shell is involved, so `*.rego` is passed as a literal path to OPA. The `openpolicyagent/opa` image is built on scratch (no `/bin/sh`), so the workaround `sh -c '...'` does not work. OPA reported `stat /policies/*.rego: no such file or directory` and exited non-zero.
+
+**Resolution:**
+The Makefile now builds `REGO_ARGS` with a host-shell `for` loop that expands `*.rego` in `$POLICY_DIR` and constructs space-separated `/policies/<basename>` paths. Those expanded paths are passed to the docker run command directly, without relying on a shell inside the container. The local-opa branch already used shell glob expansion and was unaffected.
+
+**AI Notes:**
+- Do NOT revert to passing the directory or an unexpanded glob to the docker branch.
+- The OPA image has no shell. Glob expansion must happen in the Makefile host shell.
+
+---
+
+### 2026-03-12 — fg-core-opa-health-1 Unhealthy: bundle.tar.gz Missing From CI Bundle Dir
+
+**Area:** CI · docker-ci.yml · opa-bundles nginx · OPA bundle loading
+
+**Issue:**
+`docker-validate` failed at "Start full stack" with `dependency failed to start: container fg-core-opa-health-1 is unhealthy`. The OPA server (`policy/opa/config.yaml`) is configured to download `bundle.tar.gz` from `http://opa-bundles`. The CI step "Ensure required policy bundle files exist" created only `nginx.conf` and `_ci_notice.txt` in `policy/bundles/` — no `bundle.tar.gz`. Nginx returned 404 on every bundle poll, OPA stayed in loading state, and `GET /health` never returned 200-ready.
+
+**Resolution:**
+Added a block in the "Ensure required policy bundle files exist" CI step that creates a minimal valid OPA bundle (`bundle.tar.gz` with only a `.manifest` JSON file) when none is present. OPA loads it, becomes ready, and `opa-health` transitions to healthy.
+
+**AI Notes:**
+- Do NOT remove the `bundle.tar.gz` creation block. Without it, OPA never becomes ready and the entire stack fails to start.
+- The bundle contains no Rego policy — it is a CI bootstrapping artifact only.
+
+---
+
+### 2026-03-12 — fg-fast Working-Tree Mutation: route_inventory.json Was Stale
+
+**Area:** CI · fg-required harness · route_inventory.json · route-inventory-audit
+
+**Issue:**
+`fg-required` reported `working tree mutated at after-lane:fg-fast: M tools/ci/route_inventory_summary.json`. The `route-inventory-audit` Make target always writes `route_inventory_summary.json` (even in audit mode) based on a diff between current routes and the committed `route_inventory.json`. Because `route_inventory.json` was stale (routes had been added/changed without regenerating the file), the diff produced non-empty `added`/`removed` lists, so the summary content differed from the committed version.
+
+**Resolution:**
+Regenerated `route_inventory.json` by running `PYTHONPATH=. python tools/ci/check_route_inventory.py --write` and committed the result. After regeneration, the audit run produces a summary identical to the committed one — no working-tree mutation occurs.
+
+**AI Notes:**
+- Do NOT skip regenerating `route_inventory.json` when routes are added or changed.
+- `route_inventory_summary.json` is always rewritten by audit; keeping `route_inventory.json` current ensures the two stay in sync.
+
+---
+
 ### 2026-03-12 — console Service Profile Caused Admin Build to Pull in Next.js/Webpack Build
 
 **Area:** CI · Docker Compose · docker-ci.yml · console service

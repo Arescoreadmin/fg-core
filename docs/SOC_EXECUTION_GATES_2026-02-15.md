@@ -703,3 +703,42 @@ Fixes three concrete blockers:
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this entry.
 - `frostgate-docker-ci / docker-validate`: heredoc syntax error resolved.
 - `fg-required / fg-fast / prod-profile-check`: no longer crashes on clean runner.
+
+
+---
+
+## SOC-HIGH-002 | 2026-03-12 | PR-163 Repair — opa-health + OPA glob expansion
+
+**Author:** AI repair agent (claude/repair-pr-163-8i3ua)
+
+**Changed files:**
+- `.github/workflows/docker-ci.yml`
+
+**Intent:** Fix `docker-validate` failure where `fg-core-opa-health-1` reported unhealthy
+because OPA could not find or download a bundle from the opa-bundles nginx service.
+
+**Root cause:** The CI step "Ensure required policy bundle files exist" created only
+`nginx.conf` and a placeholder text file in `policy/bundles/`. OPA's startup config
+(`policy/opa/config.yaml`) instructs OPA to fetch `bundle.tar.gz` from the opa-bundles
+service. With no `bundle.tar.gz` present, nginx returned 404, OPA entered a permanent
+loading state, and the `/health` endpoint never returned 200-ready, causing the
+`opa-health` container healthcheck to fail and the `frostgate-bootstrap` dependency
+chain to abort.
+
+**Fix:** Added a shell block in the "Ensure required policy bundle files exist" CI step
+that creates a minimal valid OPA bundle (`bundle.tar.gz`) containing only a `.manifest`
+JSON file with `{"revision":"ci","roots":[""]}`. OPA accepts this as a valid (empty)
+bundle, loads it successfully, and reports healthy.
+
+**Security invariants confirmed:**
+- The CI bundle contains no Rego policy. It is used only to satisfy OPA's bundle-loading
+  requirement on clean CI runners. Policy files in the repo are validated separately by
+  the `opa-check` Make target.
+- The `bundle.tar.gz` creation is gated with `if [ ! -f ... ]` so it does not overwrite
+  a real bundle if one exists (e.g. in a repo where `bundle.tar.gz` is committed).
+- No policy gate removed or downgraded.
+
+**Gate impact:**
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this entry.
+- `frostgate-docker-ci / docker-validate / Start full stack`: opa-health now becomes
+  healthy, unblocking frostgate-bootstrap and the full stack.

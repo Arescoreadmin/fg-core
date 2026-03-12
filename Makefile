@@ -292,8 +292,10 @@ opa-check:
 		IMAGE="$(OPA_IMAGE)"; \
 		MOUNT="-v $$POLICY_DIR:/policies"; \
 		echo "opa-check: using pinned docker image $$IMAGE"; \
-		docker run --rm $$MOUNT "$$IMAGE" check --strict /policies/*.rego; \
-		docker run --rm $$MOUNT "$$IMAGE" test /policies/*.rego; \
+		REGO_ARGS=""; \
+		for f in "$$POLICY_DIR"/*.rego; do REGO_ARGS="$$REGO_ARGS /policies/$$(basename $$f)"; done; \
+		docker run --rm $$MOUNT "$$IMAGE" check --strict $$REGO_ARGS; \
+		docker run --rm $$MOUNT "$$IMAGE" test $$REGO_ARGS; \
 	fi
 
 verify-spine-modules: venv

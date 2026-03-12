@@ -94,6 +94,15 @@ jobs:
           # Optional: ensure bundle dir isn't empty so nginx has something to serve
           test -f policy/bundles/_ci_notice.txt || echo "CI bundle placeholder" > policy/bundles/_ci_notice.txt
 
+          # Create a minimal OPA bundle so OPA can load it and report /health ready.
+          # OPA requires at least a .manifest at the root of the tarball.
+          if [ ! -f policy/bundles/bundle.tar.gz ]; then
+            BTMP=$(mktemp -d)
+            printf '{"revision":"ci","roots":[""]}' > "$BTMP/.manifest"
+            tar -czf policy/bundles/bundle.tar.gz -C "$BTMP" .manifest
+            rm -rf "$BTMP"
+          fi
+
       - name: Prepare environment
         shell: bash
         run: |
