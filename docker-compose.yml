@@ -400,7 +400,7 @@ services:
     - /tmp:rw,noexec,nosuid,size=64m,mode=700
   console:
     profiles:
-    - admin
+    - console
     build:
       context: ./console
       dockerfile: Dockerfile

@@ -286,14 +286,14 @@ opa-check:
 	$(MAKE) -s require-opa-runtime; \
 	if command -v opa >/dev/null 2>&1; then \
 		echo "opa-check: using local opa CLI"; \
-		opa check --strict "$$POLICY_DIR"; \
-		opa test "$$POLICY_DIR"; \
+		opa check --strict "$$POLICY_DIR"/*.rego; \
+		opa test "$$POLICY_DIR"/*.rego; \
 	else \
 		IMAGE="$(OPA_IMAGE)"; \
 		MOUNT="-v $$POLICY_DIR:/policies"; \
 		echo "opa-check: using pinned docker image $$IMAGE"; \
-		docker run --rm $$MOUNT "$$IMAGE" check --strict /policies; \
-		docker run --rm $$MOUNT "$$IMAGE" test /policies; \
+		docker run --rm $$MOUNT "$$IMAGE" check --strict /policies/*.rego; \
+		docker run --rm $$MOUNT "$$IMAGE" test /policies/*.rego; \
 	fi
 
 verify-spine-modules: venv

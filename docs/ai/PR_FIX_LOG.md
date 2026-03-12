@@ -179,6 +179,38 @@ Moved the `CONF` terminator from column 12 to column 10 in the YAML source. Afte
 
 ---
 
+### 2026-03-12 — console Service Profile Caused Admin Build to Pull in Next.js/Webpack Build
+
+**Area:** CI · Docker Compose · docker-ci.yml · console service
+
+**Issue:**
+`console` service was under the `admin` profile. The docker-ci.yml build step runs `--profile core --profile admin`, which caused the Next.js/webpack console build to run in CI. The console build failed with webpack errors (missing/mismatched deps on the clean runner), exit code 1, causing the entire docker-validate job to fail.
+
+**Resolution:**
+Changed `console` service profile from `admin` to `console` in `docker-compose.yml`. The `--profile core --profile admin` build in docker-ci.yml now only builds `frostgate-core` and `admin-gateway`, not the console. The console service can be started separately with `--profile console` when needed.
+
+**AI Notes:**
+- Do NOT revert console to the `admin` profile. Its inclusion in the `admin` profile caused CI build failures.
+- The `console` profile is intentionally separate so that docker-ci.yml can validate the admin-gateway without triggering a full Next.js build.
+
+---
+
+### 2026-03-12 — OPA check --strict Fails on Non-Rego YAML Files in policy/opa/
+
+**Area:** CI · Makefile · opa-check · OPA bundle YAML
+
+**Issue:**
+`make opa-check` ran `opa check --strict /policies` (the full `policy/opa/` directory). OPA loads ALL `.yaml`/`.yml` files as data documents and attempts to merge them. `policy/opa/` contains both `config.yaml` and `opa-config.yml`, both with a top-level `services:` key. OPA reported `1 error occurred during loading: /policies/opa-config.yml: merge error` and exited non-zero, failing the Guard workflow.
+
+**Resolution:**
+Changed `opa-check` in `Makefile` to pass `*.rego` glob patterns instead of the directory path for both the local-opa and docker-run branches. OPA now only checks and tests Rego policy files; YAML server-config files are not loaded.
+
+**AI Notes:**
+- Do NOT revert opa-check to passing the directory path. The directory path loads all YAML files as data, which causes merge errors when multiple YAML files share top-level keys.
+- `opa check --strict /policies/*.rego` and `opa test /policies/*.rego` are the correct forms.
+
+---
+
 ## Reopening Policy
 
 An issue listed here may only be revisited if:
@@ -191,4 +223,4 @@ Absent these conditions, the issue is **closed**.
 
 ---
 
-_Last updated: 2026-03-01_
+_Last updated: 2026-03-12_
