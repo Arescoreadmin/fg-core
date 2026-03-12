@@ -88,7 +88,7 @@ jobs:
                 }
               }
             }
-            CONF
+          CONF
           fi
 
           # Optional: ensure bundle dir isn't empty so nginx has something to serve

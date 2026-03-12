@@ -119,11 +119,36 @@ class ProductionProfileChecker:
             cmd += ["--profile", prof]
         cmd += ["config"]
 
+        # Supply CI-safe placeholder values for compose required variables
+        # (${VAR:?message} patterns in docker-compose.yml) when they are absent
+        # from the process environment.  This allows docker compose config to
+        # parse successfully on clean runners that have no .env file with real
+        # secrets (e.g. the fg-required CI lane).
+        #
+        # These placeholders never reach production:
+        # - In production/docker-ci they are always superseded by real values
+        #   already present in the process environment.
+        # - The gate only inspects the frostgate-core service environment for
+        #   DoS hardening settings; the placeholder secrets are irrelevant to
+        #   the validation outcome.
+        _ci_placeholders: dict[str, str] = {
+            "REDIS_PASSWORD": "ci-gate-placeholder",
+            "POSTGRES_PASSWORD": "ci-gate-placeholder",
+            "NATS_AUTH_TOKEN": "ci-gate-placeholder",
+            "FG_API_KEY": "ci-gate-placeholder-32chars-00000",
+            "FG_WEBHOOK_SECRET": "ci-gate-placeholder-32chars-0000",
+        }
+        env = os.environ.copy()
+        for k, v in _ci_placeholders.items():
+            if not env.get(k):
+                env[k] = v
+
         try:
             out = subprocess.check_output(
                 cmd,
                 cwd=REPO,
                 text=True,
+                env=env,
             )
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"docker compose config failed: {e}") from e

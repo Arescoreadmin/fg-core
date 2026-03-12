@@ -87,7 +87,8 @@ services:
     networks:
     - internal
     env_file:
-    - .env
+    - path: .env
+      required: false
     - env/prod.env
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-fg_user}
@@ -235,7 +236,8 @@ services:
   frostgate-migrate:
     image: frostgate-core:latest
     env_file:
-    - .env
+    - path: .env
+      required: false
     environment:
       FG_DB_BACKEND: ${FG_DB_BACKEND:-postgres}
       FG_DB_URL: postgresql+psycopg://${POSTGRES_APP_USER:-fg_app}:${POSTGRES_APP_PASSWORD:-${POSTGRES_PASSWORD}}@postgres:5432/${POSTGRES_DB:-frostgate}
@@ -295,7 +297,8 @@ services:
       frostgate-migrate:
         condition: service_completed_successfully
     env_file:
-    - .env
+    - path: .env
+      required: false
     - env/prod.env
     environment:
       FG_ENV: ${FG_ENV:-prod}
@@ -369,7 +372,8 @@ services:
     ports:
     - 127.0.0.1:18080:8080
     env_file:
-    - .env
+    - path: .env
+      required: false
     - env/prod.env
     environment:
       FG_ENV: ${FG_ENV:-prod}

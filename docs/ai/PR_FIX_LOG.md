@@ -141,6 +141,44 @@ Appended a SOC-HIGH-002 entry to `docs/SOC_EXECUTION_GATES_2026-02-15.md` docume
 
 ---
 
+---
+
+### 2026-03-12 — docker-ci.yml Heredoc Terminator Broken by YAML Indentation
+
+**Area:** CI · GitHub Actions · docker-ci.yml · bash heredoc
+
+**Issue:**
+In the "Ensure required policy bundle files exist" step, a bash heredoc used `<<'CONF'` to write a minimal nginx.conf. The `CONF` terminator was at YAML column 12. YAML block scalar (`|`) strips 10 leading spaces from each content line; the terminator was left with 2 spaces before it in the rendered shell script. Bash requires heredoc terminators at column 0 with no leading whitespace, so it read until EOF and reported "here-document at line 7 delimited by end-of-file (wanted `CONF`)" — exit code 2.
+
+**Resolution:**
+Moved the `CONF` terminator from column 12 to column 10 in the YAML source. After YAML block scalar dedenting, it lands at column 0 in the shell script, which bash correctly recognizes as the heredoc terminator.
+
+**AI Notes:**
+- In YAML `run: |` blocks, heredoc terminators must be placed at exactly the YAML block scalar's base indentation level (the indentation of the first content line) to produce column-0 output in the rendered shell script.
+- `<<-'TERM'` strips TABS only; it does not help when indentation uses spaces.
+
+---
+
+### 2026-03-12 — prod_profile_check.py Crashes on Clean Runners Due to Missing Secrets
+
+**Area:** CI · Gate · scripts/prod_profile_check.py · docker-compose.yml
+
+**Issue:**
+`prod_profile_check.py` calls `docker compose config --profile core` to validate DoS hardening settings in the frostgate-core service environment. On clean runners (fg-required lane), two problems caused CalledProcessError → RuntimeError → exit 2:
+1. `env_file: .env` in docker-compose.yml fails when `.env` doesn't exist on the runner (docker compose v2.20+ requires env_file entries to exist by default).
+2. Required variable patterns `${REDIS_PASSWORD:?...}`, `${POSTGRES_PASSWORD:?...}`, `${NATS_AUTH_TOKEN:?...}`, `${FG_API_KEY:?...}`, `${FG_WEBHOOK_SECRET:?...}` in docker-compose.yml cause docker compose config to exit with error when the variables are absent from the process environment.
+
+**Resolution:**
+- `docker-compose.yml`: Changed `env_file: [.env, ...]` entries for postgres, frostgate-migrate, frostgate-core, and admin-gateway to use `required: false` for the `.env` entry (docker compose v2 object format). `.env` is optional in CI and non-local environments; fail-closed service startup behavior on missing vars is preserved.
+- `prod_profile_check.py`: Added CI-safe placeholder values (only when vars are absent from the process environment) for the five required compose variables before calling `docker compose config`. Placeholders are never used by running services; real values in the process environment take precedence via `os.environ.copy()`.
+
+**AI Notes:**
+- Do NOT remove the `required: false` from `env_file: path: .env` entries. This is correct behavior: `.env` is a local convenience file, not a production requirement.
+- Do NOT remove the `_ci_placeholders` logic from `prod_profile_check.py`. Its absence causes crash on any runner without real secrets.
+- The gate logic itself (DoS guard var validation) is unchanged; security invariants are not weakened.
+
+---
+
 ## Reopening Policy
 
 An issue listed here may only be revisited if:

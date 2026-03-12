@@ -663,8 +663,43 @@ Fixes three concrete blockers:
 - No gate removed, downgraded, or suppressed.
 
 **Gate impact:**
-- `soc-review-sync` (SOC-HIGH-002): satisfied by this entry.
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this entry (2026-03-12 initial repair).
 - `prod-profile-check`: restored — env/prod.env present with valid DoS hardening values.
 - `frostgate-docker-ci` workflow: smoke test for admin-gateway /health now reachable.
 
 
+## 2026-03-12 — PR-163 CI Hardening Repair (continued — heredoc fix + compose/check hardening)
+
+**Change class:** CI/CD execution surface (SOC-HIGH-002)
+
+**Files:**
+- `.github/workflows/docker-ci.yml`
+- `docker-compose.yml`
+- `scripts/prod_profile_check.py`
+
+**Intent:** Fix two CI failures remaining after initial PR-163 repair commit.
+
+1. `docker-validate` bash syntax error: heredoc `CONF` terminator was at YAML column 12;
+   YAML block scalar dedenting (10 spaces) left it 2-space indented in the shell script.
+   Bash requires heredoc terminators at column 0. Moved `CONF` to column 10 in YAML
+   so it lands at column 0 in the rendered shell script.
+
+2. `fg-required / fg-fast` lane crash (exit_2): `prod_profile_check.py` calls
+   `docker compose config --profile core` which requires required-variable patterns
+   (REDIS_PASSWORD, POSTGRES_PASSWORD, NATS_AUTH_TOKEN, FG_API_KEY, FG_WEBHOOK_SECRET)
+   to be resolved. The fg-required runner has no .env file with these secrets. Also,
+   `env_file: .env` without `required: false` fails on clean runners.
+
+**Security invariants confirmed:**
+- CI placeholder values supplied in prod_profile_check.py are only used for compose
+  config parsing (not service execution). Real values in the process environment always
+  take precedence; placeholders only fill gaps on clean runners.
+- Making `env_file: .env` optional does not weaken production: .env always exists in
+  production/docker-ci and is loaded normally. Missing .env causes services to
+  fail-closed on startup if required vars are absent.
+- No gate removed or downgraded.
+
+**Gate impact:**
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this entry.
+- `frostgate-docker-ci / docker-validate`: heredoc syntax error resolved.
+- `fg-required / fg-fast / prod-profile-check`: no longer crashes on clean runner.
