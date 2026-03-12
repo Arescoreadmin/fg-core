@@ -21,6 +21,7 @@ jobs:
     env:
       COMPOSE_DOCKER_CLI_BUILD: "1"
       DOCKER_BUILDKIT: "1"
+      COMPOSE_PROFILES: "core,admin"
 
     steps:
       - name: Checkout
@@ -190,6 +191,12 @@ jobs:
 
           printf '%s\n' "${FG_API_KEY}" > secrets/fg_api_keys.txt
 
+      - name: Ensure env directory exists
+        shell: bash
+        run: |
+          mkdir -p env
+          touch env/prod.env
+
       - name: Validate compose config
         shell: bash
         run: |
@@ -223,7 +230,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker compose --env-file .env.ci up -d
+          docker compose --env-file .env.ci up -d --build --no-pull
 
       - name: Smoke test admin-gateway /health
         shell: bash

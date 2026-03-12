@@ -1,3 +1,19 @@
+## 2026-03-11 — Docker CI workflow hardening review
+
+Critical file updated:
+- `.github/workflows/docker-ci.yml`
+
+Change summary:
+- enabled required compose profiles for docker validation
+- ensured CI creates `.env.ci`, `.env`, and `env/prod.env` as needed for compose-backed validation
+- hardened policy bundle bootstrap to avoid shell/heredoc parsing failures
+- updated compose startup behavior to prevent invalid remote pulls during CI validation
+
+Governance/security impact:
+- preserves deterministic docker validation behavior
+- reduces false-negative CI failures caused by workflow scripting drift
+- maintains required inputs for production profile validation and compose safety checks
+
 ## 2026-03-11 — Docker CI workflow hardening
 
 Updated `.github/workflows/docker-ci.yml` to stabilize CI execution for compose-backed validation.
