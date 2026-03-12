@@ -631,3 +631,40 @@ Resolution: Expanded upload-artifact paths to include fg-required + gates + dock
 
 **Risk notes:** No production runtime behavior change. CI behavior becomes stricter/more deterministic. Artifacts retained for post-failure forensics.
 
+## 2026-03-12 — PR-163 CI Hardening Repair (docker-ci.yml + env/prod.env)
+
+**Change class:** CI/CD execution surface (SOC-HIGH-002)
+
+**Files:**
+- `.github/workflows/docker-ci.yml`
+- `env/prod.env` (new — non-secret DoS hardening config; tracked in git)
+- `.gitignore` (added `!env/prod.env` negation to allow tracking)
+
+**Intent:** Restore docker-ci.yml workflow to green on clean runners.
+Fixes three concrete blockers:
+1. `env/prod.env` absent from git — docker compose config fails on any clean runner
+   since postgres, frostgate-core, and admin-gateway declare it as `env_file`.
+   This crashed prod-profile-check and all compose operations.
+2. docker-ci.yml build/up steps lacked `--profile core --profile admin` — frostgate-core
+   and admin-gateway were never built or started. frostgate-migrate attempted a pull of
+   `frostgate-core:latest` from Docker Hub; admin-gateway smoke test at port 18080 failed.
+3. SOC review sync blocked — docker-ci.yml is in `.github/workflows/` (CRITICAL_PREFIXES)
+   without a corresponding SOC doc update; this entry resolves that.
+
+**Security invariants confirmed:**
+- `env/prod.env` contains only non-secret DoS hardening settings. No credentials. OIDC
+  secrets (required in prod) are NOT in this file; they must be injected by the deployment
+  secret manager. Admin-gateway enforces OIDC at startup (`RuntimeError`) when FG_ENV=prod.
+- CI uses `FG_ENV=ci` (from .env.ci); admin-gateway correctly skips OIDC enforcement for
+  non-prod envs. Production enforcement is code-level, invariant to this file.
+- `FG_RL_FAIL_OPEN=false` explicit in env/prod.env (also enforced inline in compose).
+- Profile additions (`core`, `admin`) do not weaken any gate. Console files were already
+  tracked in git (api.ts, coreApi.ts, tokens.ts, DecisionsTable.tsx).
+- No gate removed, downgraded, or suppressed.
+
+**Gate impact:**
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this entry.
+- `prod-profile-check`: restored — env/prod.env present with valid DoS hardening values.
+- `frostgate-docker-ci` workflow: smoke test for admin-gateway /health now reachable.
+
+

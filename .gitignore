@@ -23,6 +23,7 @@ __pycache__/
 .env
 .env.*
 *.env
+!env/prod.env
 
 # Local DB / volumes / state
 fg_pgdata/

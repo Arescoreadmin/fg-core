@@ -124,7 +124,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker compose --env-file .env.ci build
+          docker compose --env-file .env.ci --profile core --profile admin build
 
       - name: Start opa-bundles first
         shell: bash
@@ -147,7 +147,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker compose --env-file .env.ci up -d
+          docker compose --env-file .env.ci --profile core --profile admin up -d
 
       - name: Smoke test admin-gateway /health
         shell: bash
