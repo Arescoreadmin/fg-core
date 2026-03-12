@@ -273,4 +273,46 @@ Absent these conditions, the issue is **closed**.
 
 ---
 
+---
+
+## Fix: frostgate-core unhealthy — FG_ENV=ci not in VALID_FG_ENVS
+
+**Issue:** `docker-validate` failed: `frostgate-core` container became unhealthy,
+blocking `admin-gateway` (dependency: `service_healthy`).
+
+**Root cause:** `.github/workflows/docker-ci.yml` "Prepare environment" step appended
+`FG_ENV=ci` to `.env.ci`. The value `ci` is not in `VALID_FG_ENVS` in
+`api/config/env.py`, causing `resolve_env()` to raise `RuntimeError` at Python module
+import time. Uvicorn exited immediately; the Docker healthcheck never succeeded.
+
+**Fix:** Changed `echo "FG_ENV=ci"` to `echo "FG_ENV=test"` in the "Prepare
+environment" step of `.github/workflows/docker-ci.yml`.
+
+**File changed:** `.github/workflows/docker-ci.yml`
+
+**Status:** CLOSED
+
+---
+
+## Fix: control-plane-check — runtime-app-only routes (docs + /v1/defend)
+
+**Issue:** Guard workflow `control-plane-check` FAILED with
+`runtime-app-only routes detected: [('GET', '/docs'), ('GET', '/docs/oauth2-redirect'),
+('GET', '/openapi.json'), ('GET', '/redoc'), ('POST', '/v1/defend')]`.
+
+**Root cause:** `runtime_routes_app()` in `plane_registry_checks.py` returned all routes
+from the running FastAPI app, including FastAPI auto-generated docs routes and the
+`/v1/defend` versioned alias (defend_router mounted twice in `main.py` with and without
+`prefix="/v1"`). The AST scanner cannot see these routes (framework-generated or
+cross-file prefix mounts), causing a false `runtime-app-only` failure.
+
+**Fix:** Added `_RUNTIME_APP_EXCLUDED` frozenset to `plane_registry_checks.py` and
+filtered those five known routes from `runtime_routes_app()` output before comparison.
+
+**File changed:** `tools/ci/plane_registry_checks.py`
+
+**Status:** CLOSED
+
+---
+
 _Last updated: 2026-03-12_

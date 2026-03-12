@@ -742,3 +742,79 @@ bundle, loads it successfully, and reports healthy.
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this entry.
 - `frostgate-docker-ci / docker-validate / Start full stack`: opa-health now becomes
   healthy, unblocking frostgate-bootstrap and the full stack.
+
+---
+
+## SOC-HIGH-002 Review Sync — docker-ci.yml FG_ENV fix (2026-03-12)
+
+**Trigger:** Change to CRITICAL_PREFIX path `.github/workflows/docker-ci.yml`
+
+**Intent:** Fix `docker-validate` failure where `frostgate-core` container became
+unhealthy immediately after start, causing the `admin-gateway` health-check to fail
+(dependency chain: `admin-gateway` → `frostgate-core: service_healthy`).
+
+**Root cause:** The "Prepare environment" step appended `echo "FG_ENV=ci"` to `.env.ci`.
+The value `ci` is not in `VALID_FG_ENVS` (`api/config/env.py`), so `resolve_env()` raises
+`RuntimeError` at Python module import time. Uvicorn exits before serving any request,
+the Docker healthcheck (`/health/ready`) never succeeds, and the container is marked
+unhealthy.
+
+**Fix:** Changed `echo "FG_ENV=ci"` to `echo "FG_ENV=test"` in the
+"Prepare environment" step of `.github/workflows/docker-ci.yml`.
+`test` is an accepted value in `VALID_FG_ENVS`; all `severity="error"` startup checks
+are gated on `is_production` and are therefore skipped in test env, so startup
+validation does not block the container.
+
+**Security invariants confirmed:**
+- Production still requires `FG_ENV` to be a prod-family value; the production docker-
+  compose default is `${FG_ENV:-prod}` which is unchanged.
+- No production guard removed, no auth check skipped.
+- `FG_ENV=test` keeps `startup_validation.is_production=False`, preventing any new
+  lax-production code path from being exercised in CI.
+
+**Gate impact:**
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this entry.
+- `frostgate-docker-ci / docker-validate`: frostgate-core now starts successfully in CI.
+
+---
+
+## SOC-HIGH-002 Review Sync — plane_registry_checks.py runtime-app exclusions (2026-03-12)
+
+**Trigger:** Change to `tools/ci/plane_registry_checks.py` (Guard workflow `control-plane-check`).
+
+**Intent:** Fix `control-plane-check` FAILED with
+`runtime-app-only routes detected: [('GET', '/docs'), ('GET', '/docs/oauth2-redirect'),
+('GET', '/openapi.json'), ('GET', '/redoc'), ('POST', '/v1/defend')]`.
+
+**Root cause:** `runtime_routes_app()` returned all routes from the running FastAPI
+application, including:
+1. FastAPI framework auto-generated docs routes (`/docs`, `/docs/oauth2-redirect`,
+   `/openapi.json`, `/redoc`) — these are not declared as explicit route handlers in
+   application code and are therefore invisible to the AST scanner.
+2. `POST /v1/defend` — `main.py` mounts `defend_router` twice:
+   `include_router(defend_router)` (→ `POST /defend`) and
+   `include_router(defend_router, prefix="/v1")` (→ `POST /v1/defend`).
+   The AST scanner captures only `POST /defend` from the router definition in
+   `api/defend.py`. The `/v1` alias is invisible to the per-file AST scan.
+
+The check treats routes present in the runtime app but absent from the AST scan as
+failures (`runtime-app-only routes detected`).
+
+**Fix:** Added `_RUNTIME_APP_EXCLUDED` frozenset to `plane_registry_checks.py`
+containing the five known framework/alias routes, and skipped them in
+`runtime_routes_app()` before appending to the results list.
+
+**Security invariants confirmed:**
+- The excluded docs routes (`/docs`, etc.) are FastAPI meta-routes, not API endpoints;
+  they carry no authentication, no data, and no policy implications.
+- `POST /v1/defend` is the identical handler as `POST /defend` (same router, same
+  dependencies: `require_scopes("defend:write")`, rate_limit_guard, tenant binding).
+  Its security properties are captured by the AST scan of `POST /defend`. No auth
+  bypass is introduced.
+- No existing plane registry exception is removed or weakened.
+- The Gate check (`check_plane_registry.py`) logic itself is unchanged; only the
+  helper that enumerates app routes is narrowed to exclude known, intentional entries.
+
+**Gate impact:**
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this entry.
+- Guard workflow `control-plane-check`: now passes (OK instead of FAILED).

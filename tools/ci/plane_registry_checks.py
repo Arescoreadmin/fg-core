@@ -90,6 +90,24 @@ def runtime_routes_ast() -> list[dict[str, object]]:
     )
 
 
+# Routes excluded from the runtime-app vs AST-scan comparison:
+# - FastAPI auto-generates /docs, /docs/oauth2-redirect, /openapi.json, /redoc
+#   from its docs_url/redoc_url/openapi_url settings; they are not declared in
+#   application route code and are therefore invisible to the AST scanner.
+# - POST /v1/defend is an intentional versioned alias: main.py mounts
+#   defend_router a second time under prefix="/v1".  The AST scanner captures
+#   the canonical POST /defend; the /v1 alias is covered by proxy.
+_RUNTIME_APP_EXCLUDED: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("GET", "/docs"),
+        ("GET", "/docs/oauth2-redirect"),
+        ("GET", "/openapi.json"),
+        ("GET", "/redoc"),
+        ("POST", "/v1/defend"),
+    }
+)
+
+
 def runtime_routes_app() -> list[dict[str, object]] | None:
     """
     Best-effort runtime route extraction from the built FastAPI app.
@@ -114,6 +132,8 @@ def runtime_routes_app() -> list[dict[str, object]] | None:
             continue
         ms = sorted(m for m in (methods or set()) if m not in {"HEAD", "OPTIONS"})
         for m in ms:
+            if (str(m).upper(), str(path)) in _RUNTIME_APP_EXCLUDED:
+                continue
             rows.append({"method": str(m).upper(), "path": str(path)})
     return sorted(rows, key=lambda x: (str(x["path"]), str(x["method"])))
 
