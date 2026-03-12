@@ -101,4 +101,18 @@ Absent these conditions, the issue is **closed**.
 
 ---
 
-_Last updated: 2026-03-01_
+2026-03-12 — Production Profile / Compose Hardening Alignment
+Area: Compose · Production Profile · Startup Validation
+
+Issue:
+Production-related compose and profile validation files were modified, but the repository governance policy requires every such change to be recorded in docs/ai/PR_FIX_LOG.md. The pr-fix-log gate failed because docker-compose.lockdown.yml, docker-compose.yml, and scripts/prod_profile_check.py changed without a corresponding appended entry.
+
+Resolution:
+Updated compose and production profile validation files to align runtime and production enforcement behavior. Added this PR fix log entry to satisfy governance requirements and preserve an auditable record of the change set affecting production deployment controls and validation behavior.
+
+AI Notes:
+This entry documents a production-surface change touching compose/runtime enforcement. No feature behavior is claimed here beyond the tracked file changes; this log exists to satisfy repository governance and auditability requirements for production-profile modifications.
+
+---
+
+_Last updated: 2026-03-12_
