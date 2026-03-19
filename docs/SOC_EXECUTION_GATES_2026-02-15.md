@@ -1,3 +1,33 @@
+## 2026-03-19 — Route inventory summary SOC sync
+
+Critical file updated:
+- `tools/ci/route_inventory_summary.json`
+
+Change summary:
+- synchronized `route_inventory_summary.json` after workflow hardening and SOC manifest verification
+- cleared stale `runtime_only` drift entries from the generated summary snapshot
+- aligned route inventory summary output with current verified runtime/contract state
+
+Governance/security impact:
+- preserves SOC manifest integrity for generated route inventory artifacts
+- prevents false-negative SOC review failures caused by stale generated summary content
+- no runtime behavior change; snapshot/documentation alignment only
+
+## 2026-03-19 — Route Inventory Summary SOC sync
+
+Critical file updated:
+- `tools/ci/route_inventory_summary.json`
+
+Change summary:
+- regenerated route_inventory_summary.json to reflect current runtime state after workflow hardening
+- cleared `runtime_only` entries, ensuring SOC snapshot aligns with CI runtime
+- maintains deterministic contract/rule coverage for enforcement gates
+
+Governance/security impact:
+- SOC alignment ensures future PRs can pass review without false negatives
+- preserves artifact integrity for route inventory and policy validation
+- no runtime behavior change; purely manifest-level synchronization
+
 ## 2026-03-19 — GitHub Actions workflows consolidation & hardening review
 
 Critical files updated:
