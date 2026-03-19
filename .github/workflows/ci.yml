@@ -1,7 +1,8 @@
 # NOTE:
-# - Console/Compliance gating uses dorny/paths-filter, because GitHub Actions does not provide reliable
-#   per-job changed-files expressions.
+# - Console/Compliance gating uses repo-native changed-path detection.
 # - DRY setup is implemented via composite actions in .github/actions/.
+# - This workflow is optimized to fail fast, preserve artifacts, and avoid
+#   unnecessary job fan-out when guarded paths are untouched.
 
 name: frostgate-core-ci
 
@@ -12,17 +13,18 @@ on:
     branches: ["main"]
 
 concurrency:
-  group: frostgate-core-ci-${{ github.ref }}
+  group: frostgate-core-ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-# Least-privilege defaults for the whole workflow.
-# Jobs that need more can override.
 permissions:
   contents: read
 
 env:
   PYTHONHASHSEED: "0"
   TZ: "UTC"
+  PYTHONUNBUFFERED: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_PYTHON_VERSION_WARNING: "1"
 
 defaults:
   run:
@@ -74,7 +76,6 @@ jobs:
       - name: Syntax / import guard (fast fail)
         run: python -m compileall -q api engine tests
 
-      # ✅ Added: SQL migration percent-token guard (psycopg3 hazard)
       - name: SQL migration percent-token guard
         run: python tools/ci/guard_no_raw_percent_in_sql.py
 
@@ -87,20 +88,21 @@ jobs:
       - name: Enforce security regression gates
         run: python tools/ci/check_security_regression_gates.py
 
-      - name: Run fg-fast guard lane (lock regression)
+      - name: Run fg-fast guard lane
         run: make fg-fast-full
         env:
           FG_API_KEY: ${{ env.FG_API_KEY }}
 
-      - name: Upload artifacts (always)
+      - name: Upload guard artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: frostgate-guard-artifacts
+          name: frostgate-guard-artifacts-${{ github.run_attempt }}
           path: |
             artifacts/**
             state/**
           if-no-files-found: ignore
+          retention-days: 7
 
   enforcement_mode_matrix:
     name: Enforcement Mode Matrix (prod/staging)
@@ -130,6 +132,17 @@ jobs:
 
       - name: Run enforcement-mode matrix check
         run: make enforcement-mode-matrix
+
+      - name: Upload enforcement artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostgate-enforcement-mode-artifacts-${{ github.run_attempt }}
+          path: |
+            artifacts/**
+            state/**
+          if-no-files-found: ignore
+          retention-days: 7
 
   unit:
     name: Unit (ci)
@@ -165,10 +178,10 @@ jobs:
       - name: Verify FG_API_KEY is set
         run: python -c "import os; assert os.getenv('FG_API_KEY')"
 
-      - name: Production profile check (fail-fast on unsafe defaults)
+      - name: Production profile check
         run: make prod-profile-check
 
-      - name: Gap audit (fail if Production-blocking gaps exist)
+      - name: Gap audit
         run: make gap-audit
 
       - name: Run unit lane
@@ -176,15 +189,16 @@ jobs:
         env:
           FG_API_KEY: ${{ env.FG_API_KEY }}
 
-      - name: Upload artifacts (always)
+      - name: Upload unit artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: frostgate-unit-artifacts
+          name: frostgate-unit-artifacts-${{ github.run_attempt }}
           path: |
             artifacts/**
             state/**
           if-no-files-found: ignore
+          retention-days: 7
 
   contract_authority:
     name: Contract Authority (prod-spec)
@@ -224,12 +238,23 @@ jobs:
       - name: Verify contract authority markers
         run: make contract-authority-check
 
+      - name: Upload contract artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostgate-contract-authority-artifacts-${{ github.run_attempt }}
+          path: |
+            artifacts/**
+            state/**
+          if-no-files-found: ignore
+          retention-days: 7
+
   integration:
     name: Integration (itest-local)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: unit
-    if: ${{ always() && needs.unit.result == 'success' }}
+    if: ${{ needs.unit.result == 'success' }}
     permissions:
       contents: read
     env:
@@ -261,21 +286,22 @@ jobs:
       - name: Verify FG_API_KEY is set
         run: python -c "import os; assert os.getenv('FG_API_KEY')"
 
-      - name: Syntax / import guard (fast fail)
+      - name: Syntax / import guard
         run: python -m compileall -q api engine tests
 
       - name: Run integration lane
         run: make ci-integration
 
-      - name: Upload artifacts (always)
+      - name: Upload integration artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: frostgate-integration-artifacts
+          name: frostgate-integration-artifacts-${{ github.run_attempt }}
           path: |
             artifacts/**
             state/**
           if-no-files-found: ignore
+          retention-days: 7
 
   migrations_replay:
     name: Migrations Replay
@@ -323,6 +349,17 @@ jobs:
 
       - name: Run migration replay test
         run: pytest -q -s tests/test_migrations_postgres_replay.py
+
+      - name: Upload migration replay artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostgate-migrations-replay-artifacts-${{ github.run_attempt }}
+          path: |
+            artifacts/**
+            state/**
+          if-no-files-found: ignore
+          retention-days: 7
 
   db_postgres_verify:
     name: DB Postgres Verify
@@ -374,6 +411,17 @@ jobs:
       - name: Postgres migration smoke test
         run: pytest -q tests/test_migrations_postgres_smoke.py
 
+      - name: Upload postgres verify artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostgate-db-postgres-verify-artifacts-${{ github.run_attempt }}
+          path: |
+            artifacts/**
+            state/**
+          if-no-files-found: ignore
+          retention-days: 7
+
   admin:
     name: Admin Gateway (ci-admin)
     runs-on: ubuntu-latest
@@ -391,8 +439,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
       - name: Generate CI secrets
         uses: ./.github/actions/fg-secrets
+
       - name: Python setup (cached)
         uses: ./.github/actions/fg-python-setup
         with:
@@ -400,12 +450,26 @@ jobs:
           install-os-deps: "true"
           prepare-workspace: "false"
           build-venv: "true"
+
       - name: Verify FG_API_KEY is set
         run: python -c "import os; assert os.getenv('FG_API_KEY')"
-      - name: Syntax / import guard (fast fail)
+
+      - name: Syntax / import guard
         run: python -m compileall -q api engine tests
+
       - name: Run admin gateway lane
         run: make ci-admin
+
+      - name: Upload admin artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostgate-admin-artifacts-${{ github.run_attempt }}
+          path: |
+            artifacts/**
+            state/**
+          if-no-files-found: ignore
+          retention-days: 7
 
   console:
     name: Console (ci-console)
@@ -422,11 +486,11 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Set up Node (cached)
+      - name: Set up Node 20 (cached)
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
+          cache: npm
           cache-dependency-path: |
             console/package-lock.json
             package-lock.json
@@ -436,6 +500,17 @@ jobs:
 
       - name: Run console lane
         run: make ci-console
+
+      - name: Upload console artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostgate-console-artifacts-${{ github.run_attempt }}
+          path: |
+            artifacts/**
+            state/**
+          if-no-files-found: ignore
+          retention-days: 7
 
   pt:
     name: PT (ci-pt)
@@ -454,8 +529,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
       - name: Generate CI secrets
         uses: ./.github/actions/fg-secrets
+
       - name: Python setup (cached)
         uses: ./.github/actions/fg-python-setup
         with:
@@ -463,12 +540,26 @@ jobs:
           install-os-deps: "true"
           prepare-workspace: "false"
           build-venv: "true"
+
       - name: Verify FG_API_KEY is set
         run: python -c "import os; assert os.getenv('FG_API_KEY')"
-      - name: Syntax / import guard (fast fail)
+
+      - name: Syntax / import guard
         run: python -m compileall -q api engine tests
+
       - name: Run PT lane
         run: make ci-pt
+
+      - name: Upload PT artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostgate-pt-artifacts-${{ github.run_attempt }}
+          path: |
+            artifacts/**
+            state/**
+          if-no-files-found: ignore
+          retention-days: 7
 
   hardening:
     name: Hardening Gates (ci-hardening)
@@ -487,8 +578,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
       - name: Generate CI secrets
         uses: ./.github/actions/fg-secrets
+
       - name: Python setup (cached)
         uses: ./.github/actions/fg-python-setup
         with:
@@ -496,6 +589,7 @@ jobs:
           install-os-deps: "true"
           prepare-workspace: "false"
           build-venv: "true"
+
       - name: Verify FG_API_KEY is set
         run: python -c "import os; assert os.getenv('FG_API_KEY')"
 
@@ -504,19 +598,31 @@ jobs:
         env:
           FG_API_KEY: ${{ env.FG_API_KEY }}
 
-      - name: Syntax / import guard (fast fail)
+      - name: Syntax / import guard
         run: python -m compileall -q api engine tests
 
-      # ✅ Added: explicit security regression lane (your request)
       - name: Security regression tests
         run: pytest tests/security -q
 
       - name: Run Hardening Tests - Decision Pipeline Unity
         run: make test-decision-unified
+
       - name: Run Hardening Tests - Tenant Isolation
         run: make test-tenant-isolation
+
       - name: Run Hardening Tests - Auth Hardening
         run: make test-auth-hardening
+
+      - name: Upload hardening artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostgate-hardening-artifacts-${{ github.run_attempt }}
+          path: |
+            artifacts/**
+            state/**
+          if-no-files-found: ignore
+          retention-days: 7
 
   compliance:
     name: Compliance Gates
@@ -547,7 +653,7 @@ jobs:
           prepare-workspace: "true"
           build-venv: "true"
 
-      - name: Syntax / import guard (fast fail)
+      - name: Syntax / import guard
         run: python -m compileall -q api engine tests
 
       - name: Generate SBOM
@@ -575,20 +681,21 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: frostgate-compliance-artifacts
+          name: frostgate-compliance-artifacts-${{ github.run_attempt }}
           path: |
             artifacts/sbom.json
             artifacts/provenance.json
             artifacts/cis_check.json
             artifacts/scap_scan.json
           if-no-files-found: error
+          retention-days: 14
 
   evidence:
     name: Evidence (ci-evidence)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: integration
-    if: ${{ always() && needs.integration.result == 'success' }}
+    if: ${{ needs.integration.result == 'success' }}
     permissions:
       contents: read
     env:
@@ -621,13 +728,13 @@ jobs:
       - name: Verify FG_API_KEY is set
         run: python -c "import os; assert os.getenv('FG_API_KEY')"
 
-      - name: Syntax / import guard (fast fail)
+      - name: Syntax / import guard
         run: python -m compileall -q api engine tests
 
-      - name: Run evidence lane (server + smoke + evidence)
+      - name: Run evidence lane
         run: make ci-evidence
 
-      - name: Install minisign (for signature verification)
+      - name: Install minisign
         run: |
           set -euo pipefail
           sudo apt-get update
@@ -642,34 +749,30 @@ jobs:
           set -euo pipefail
           out="$(cat artifacts/latest_evidence_dir.txt)"
 
-          # If minisig missing:
-          # - On PRs (no secret key), we skip (expected for forks).
-          # - If secret key exists but minisig is missing, fail hard.
           if [ ! -f "$out/manifest.sha256.minisig" ]; then
             if [ -z "${MINISIGN_SECRET_KEY:-}" ]; then
-              echo "⚠️ Skipping signature verification: MINISIGN_SECRET_KEY not available (expected for PRs/forks)"
+              echo "Skipping signature verification: MINISIGN_SECRET_KEY not available"
               exit 0
             fi
-            echo "❌ missing minisig (but MINISIGN_SECRET_KEY was set)"
+            echo "missing minisig (but MINISIGN_SECRET_KEY was set)"
             exit 1
           fi
 
-          # Prefer repo key if present, else fall back to secret public key
           if [ -f keys/minisign.pub ]; then
             PUB="$(cat keys/minisign.pub)"
           else
-            test -n "${MINISIGN_PUBLIC_KEY:-}" || (echo "❌ no public key (keys/minisign.pub or MINISIGN_PUBLIC_KEY)" && exit 1)
+            test -n "${MINISIGN_PUBLIC_KEY:-}" || (echo "no public key (keys/minisign.pub or MINISIGN_PUBLIC_KEY)" && exit 1)
             PUB="${MINISIGN_PUBLIC_KEY}"
           fi
 
           minisign -Vm "$out/manifest.sha256" -P "$PUB"
-          echo "✅ signature verified"
+          echo "signature verified"
 
-      - name: Upload evidence zip
+      - name: Upload evidence bundle
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: frostgate-evidence-bundle
+          name: frostgate-evidence-bundle-${{ github.run_attempt }}
           path: |
             artifacts/frostgate_evidence_*.zip
             artifacts/latest_zip*.txt
@@ -677,50 +780,84 @@ jobs:
             artifacts/**
             state/**
           if-no-files-found: error
-
+          retention-days: 14
 
   agent_linux:
     name: Agent Linux (unit + contract)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: unit
-    if: ${{ always() && needs.unit.result == 'success' }}
+    if: ${{ needs.unit.result == 'success' }}
+    permissions:
+      contents: read
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/fg-secrets
-      - uses: ./.github/actions/fg-python-setup
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate CI secrets
+        uses: ./.github/actions/fg-secrets
+
+      - name: Python setup (cached)
+        uses: ./.github/actions/fg-python-setup
         with:
           python-version: "3.12"
           install-os-deps: "true"
           prepare-workspace: "true"
           build-venv: "true"
+
       - name: Agent unit tests
         run: make agent-unit
+
       - name: Core OpenAPI contract refresh check
         run: make contracts-core-gen && git diff --exit-code contracts/core/openapi.json
+
+      - name: Upload Linux agent artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostgate-agent-linux-artifacts-${{ github.run_attempt }}
+          path: |
+            artifacts/**
+            state/**
+          if-no-files-found: ignore
+          retention-days: 7
 
   agent_windows:
     name: Agent Windows Build
     runs-on: windows-latest
+    timeout-minutes: 20
     needs: unit
-    if: ${{ always() && needs.unit.result == 'success' }}
+    if: ${{ needs.unit.result == 'success' }}
+    permissions:
+      contents: read
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - name: Build Windows agent
         shell: powershell
         run: make agent-build-windows
+
       - name: Verify dist manifest and hash
         shell: powershell
         run: |
           if (!(Test-Path dist/manifest.json)) { throw "manifest missing" }
           if (!(Test-Path dist/frostgate-agent.exe.sha256)) { throw "sha256 missing" }
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload Windows agent
+        uses: actions/upload-artifact@v4
         with:
-          name: frostgate-agent-windows
+          name: frostgate-agent-windows-${{ github.run_attempt }}
           path: |
             dist/frostgate-agent.exe
             dist/frostgate-agent.exe.sha256
             dist/manifest.json
           if-no-files-found: error
+          retention-days: 14

@@ -2,7 +2,7 @@ name: AI Ledger Guard (PR_FIX_LOG)
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened, edited, ready_for_review]
 
 concurrency:
   group: pr-fix-log-${{ github.event.pull_request.number }}
@@ -12,10 +12,20 @@ permissions:
   contents: read
   pull-requests: read
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   pr_fix_log_guard:
+    name: pr-fix-log-guard
     runs-on: ubuntu-latest
     timeout-minutes: 5
+
+    env:
+      PYTHONUNBUFFERED: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_PYTHON_VERSION_WARNING: "1"
 
     steps:
       - name: Checkout (full history for diff)
@@ -26,9 +36,9 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
-      - name: Resolve base ref + fetch base (robust)
+      - name: Resolve base ref + fetch base
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
@@ -36,13 +46,17 @@ jobs:
 
           if [ -z "${BASE_REF:-}" ]; then
             echo "ERROR: pull_request.base.ref is empty; cannot compute diff base."
+            {
+              echo "## PR_FIX_LOG Guard"
+              echo ""
+              echo "- Status: **FAIL**"
+              echo "- Reason: missing pull request base ref"
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 2
           fi
 
           echo "Base ref: ${BASE_REF}"
 
-          # Ensure we have the base branch locally with full history.
-          # Avoid shallow depth games that break merge-base and diff correctness.
           git fetch --no-tags --prune origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
 
       - name: Enforce PR_FIX_LOG update (or explicit override)
@@ -53,12 +67,11 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
+
           BASE="origin/${BASE_REF}"
           HEAD="${HEAD_SHA}"
 
-          # Override marker (must include a reason so reviewers can see intent).
-          # Example: NO_FIX_LOG_REQUIRED: reason="docs-only change"
-          if printf "%s" "${PR_BODY:-}" | grep -Eq '^NO_FIX_LOG_REQUIRED:\s*reason='; then
+          if printf '%s\n' "${PR_BODY:-}" | grep -Eiq '^[[:space:]]*NO_FIX_LOG_REQUIRED:[[:space:]]*reason='; then
             echo "Override marker found in PR body (NO_FIX_LOG_REQUIRED: reason=...)"
             {
               echo "## PR_FIX_LOG Guard"
@@ -71,13 +84,24 @@ jobs:
             exit 0
           fi
 
-          python tools/ci/guard_pr_fix_log.py --base "$BASE" --head "$HEAD"
-
-          {
-            echo "## PR_FIX_LOG Guard"
-            echo ""
-            echo "- PR: #${PR_NUMBER}"
-            echo "- Status: **PASS**"
-            echo "- Base: \`${BASE}\`"
-            echo "- Head: \`${HEAD}\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+          if python tools/ci/guard_pr_fix_log.py --base "$BASE" --head "$HEAD"; then
+            {
+              echo "## PR_FIX_LOG Guard"
+              echo ""
+              echo "- PR: #${PR_NUMBER}"
+              echo "- Status: **PASS**"
+              echo "- Base: \`${BASE}\`"
+              echo "- Head: \`${HEAD}\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## PR_FIX_LOG Guard"
+              echo ""
+              echo "- PR: #${PR_NUMBER}"
+              echo "- Status: **FAIL**"
+              echo "- Base: \`${BASE}\`"
+              echo "- Head: \`${HEAD}\`"
+              echo "- Reason: PR_FIX_LOG update missing and no valid override marker was found"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi

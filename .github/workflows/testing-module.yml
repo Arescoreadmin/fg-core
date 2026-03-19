@@ -9,16 +9,31 @@ on:
     - cron: "15 3 * * *"
 
 concurrency:
-  group: testing-module-${{ github.workflow }}-${{ github.ref }}
+  group: testing-module-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
+env:
+  PYTHONHASHSEED: "0"
+  TZ: "UTC"
+  PYTHONUNBUFFERED: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_PYTHON_VERSION_WARNING: "1"
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   fg-fast:
+    name: fg-fast
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+
     steps:
       - name: Checkout (full history)
         uses: actions/checkout@v4
@@ -26,7 +41,6 @@ jobs:
           fetch-depth: 0
 
       - name: Fetch base (origin/main) for drift comparisons
-        shell: bash
         run: |
           set -euo pipefail
           git fetch --no-tags --prune --depth=200 origin main
@@ -42,8 +56,7 @@ jobs:
             constraints.txt
             pyproject.toml
 
-      - name: Create venv + install deps (pinned)
-        shell: bash
+      - name: Create venv + install deps
         run: |
           set -euo pipefail
           python -m venv .venv
@@ -51,57 +64,53 @@ jobs:
 
       - name: Prepare artifacts dir + fallback notice
         if: always()
-        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p artifacts/testing
           test -f artifacts/testing/_upload_notice.txt || \
             echo "testing-module artifacts prepared after failure" > artifacts/testing/_upload_notice.txt
 
       - name: Run fg-fast
-        shell: bash
         run: |
           set -euo pipefail
           make fg-fast
 
       - name: Required tests gate
-        shell: bash
         run: |
           set -euo pipefail
           make required-tests-gate
 
       - name: Policy drift check
-        shell: bash
         run: |
           set -euo pipefail
           BASE_REF="${{ github.base_ref }}"
-          if [ -z "${BASE_REF}" ]; then BASE_REF="main"; fi
+          if [ -z "${BASE_REF}" ]; then
+            BASE_REF="main"
+          fi
           .venv/bin/python tools/testing/policy/check_policy_drift.py \
             --base-ref "${BASE_REF}" \
             --event-path "${{ github.event_path }}"
 
       - name: Runtime budget enforcement (fg-fast)
-        shell: bash
         run: |
           set -euo pipefail
-          .venv/bin/python -c "from pathlib import Path; from tools.testing.harness.runtime_budgets import load_runtime_budgets,enforce_lane_budget; d=load_runtime_budgets(Path('tools/testing/policy/runtime_budgets.yaml')); ok,msg=enforce_lane_budget('fg-fast',180,d,150); print(msg); raise SystemExit(0 if ok else 1)"
+          .venv/bin/python -c "from pathlib import Path; from tools.testing.harness.runtime_budgets import load_runtime_budgets, enforce_lane_budget; budgets = load_runtime_budgets(Path('tools/testing/policy/runtime_budgets.yaml')); ok, msg = enforce_lane_budget('fg-fast', 180, budgets, 150); print(msg); raise SystemExit(0 if ok else 1)"
 
       - name: Security invariant coverage
-        shell: bash
         run: |
           set -euo pipefail
           .venv/bin/python tools/testing/security/check_invariant_coverage.py
 
       - name: Lane runner (fg-fast)
-        shell: bash
         run: |
           set -euo pipefail
           .venv/bin/python tools/testing/harness/lane_runner.py --lane fg-fast --out-dir artifacts/testing
 
       - name: Upload artifacts (fg-fast)
-        uses: actions/upload-artifact@v4
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: fg-fast-artifacts
+          name: fg-fast-artifacts-${{ github.run_attempt }}
           path: |
             artifacts/testing/**
             artifacts/**/_upload_notice.txt
@@ -109,8 +118,12 @@ jobs:
           retention-days: 7
 
   fg-contract:
+    name: fg-contract
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+
     steps:
       - name: Checkout (full history)
         uses: actions/checkout@v4
@@ -118,7 +131,6 @@ jobs:
           fetch-depth: 0
 
       - name: Fetch base (origin/main) for drift comparisons
-        shell: bash
         run: |
           set -euo pipefail
           git fetch --no-tags --prune --depth=200 origin main
@@ -134,8 +146,7 @@ jobs:
             constraints.txt
             pyproject.toml
 
-      - name: Create venv + install deps (pinned)
-        shell: bash
+      - name: Create venv + install deps
         run: |
           set -euo pipefail
           python -m venv .venv
@@ -143,24 +154,23 @@ jobs:
 
       - name: Prepare artifacts dir + fallback notice
         if: always()
-        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p artifacts/testing
           test -f artifacts/testing/_upload_notice.txt || \
             echo "testing-module artifacts prepared after failure" > artifacts/testing/_upload_notice.txt
 
       - name: Run fg-contract + contract drift check
-        shell: bash
         run: |
           set -euo pipefail
           make fg-contract
           .venv/bin/python tools/testing/contracts/check_contract_drift.py
 
       - name: Upload artifacts (fg-contract)
-        uses: actions/upload-artifact@v4
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: fg-contract-artifacts
+          name: fg-contract-artifacts-${{ github.run_attempt }}
           path: |
             artifacts/testing/**
             artifacts/**/_upload_notice.txt
@@ -168,8 +178,12 @@ jobs:
           retention-days: 7
 
   fg-security:
+    name: fg-security
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+
     steps:
       - name: Checkout (full history)
         uses: actions/checkout@v4
@@ -187,8 +201,7 @@ jobs:
             constraints.txt
             pyproject.toml
 
-      - name: Create venv + install deps (pinned)
-        shell: bash
+      - name: Create venv + install deps
         run: |
           set -euo pipefail
           python -m venv .venv
@@ -196,23 +209,22 @@ jobs:
 
       - name: Prepare artifacts dir + fallback notice
         if: always()
-        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p artifacts/testing
           test -f artifacts/testing/_upload_notice.txt || \
             echo "testing-module artifacts prepared after failure" > artifacts/testing/_upload_notice.txt
 
       - name: Run fg-security
-        shell: bash
         run: |
           set -euo pipefail
           make fg-security
 
       - name: Upload artifacts (fg-security)
-        uses: actions/upload-artifact@v4
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: fg-security-artifacts
+          name: fg-security-artifacts-${{ github.run_attempt }}
           path: |
             artifacts/testing/**
             artifacts/**/_upload_notice.txt
@@ -220,9 +232,14 @@ jobs:
           retention-days: 7
 
   fg-full:
+    name: fg-full
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
     needs: [fg-fast, fg-contract, fg-security]
+    if: ${{ needs.fg-fast.result == 'success' && needs.fg-contract.result == 'success' && needs.fg-security.result == 'success' }}
+
     steps:
       - name: Checkout (full history)
         uses: actions/checkout@v4
@@ -240,8 +257,7 @@ jobs:
             constraints.txt
             pyproject.toml
 
-      - name: Create venv + install deps (pinned)
-        shell: bash
+      - name: Create venv + install deps
         run: |
           set -euo pipefail
           python -m venv .venv
@@ -249,38 +265,24 @@ jobs:
 
       - name: Prepare artifacts dir + fallback notice
         if: always()
-        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p artifacts/testing
           test -f artifacts/testing/_upload_notice.txt || \
             echo "testing-module artifacts prepared after failure" > artifacts/testing/_upload_notice.txt
 
       - name: Run fg-full
-        shell: bash
         run: |
           set -euo pipefail
           make fg-full
 
       - name: Flake detection junit (non-blocking)
-        shell: bash
         run: |
           set -euo pipefail
           .venv/bin/python -m pytest -q tests/tools/test_flake_detection.py --junitxml artifacts/testing/junit.xml || true
 
-      - name: Upload artifacts (fg-full)
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: fg-full-artifacts
-          path: |
-            artifacts/testing/**
-            artifacts/**/_upload_notice.txt
-          if-no-files-found: warn
-          retention-days: 7
-
       - name: Update runtime baseline (main only)
-        if: github.ref_name == 'main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-        shell: bash
+        if: ${{ github.ref_name == 'main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
         run: |
           set -euo pipefail
           .venv/bin/python tools/testing/harness/runtime_baseline.py \
@@ -289,10 +291,26 @@ jobs:
             --branch "${{ github.ref_name }}" \
             --event "${{ github.event_name }}"
 
+      - name: Upload artifacts (fg-full)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fg-full-artifacts-${{ github.run_attempt }}
+          path: |
+            artifacts/testing/**
+            artifacts/**/_upload_notice.txt
+          if-no-files-found: warn
+          retention-days: 7
+
   fg-flake-detect:
+    name: fg-flake-detect
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     needs: [fg-full]
+    if: ${{ needs.fg-full.result == 'success' }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -308,8 +326,7 @@ jobs:
             constraints.txt
             pyproject.toml
 
-      - name: Create venv + install deps (pinned)
-        shell: bash
+      - name: Create venv + install deps
         run: |
           set -euo pipefail
           python -m venv .venv
@@ -317,8 +334,8 @@ jobs:
 
       - name: Prepare artifacts dir + fallback notice
         if: always()
-        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p artifacts/testing
           test -f artifacts/testing/_upload_notice.txt || \
             echo "flake-detect artifacts prepared after failure" > artifacts/testing/_upload_notice.txt
@@ -326,18 +343,16 @@ jobs:
       - name: Download fg-full artifacts
         uses: actions/download-artifact@v4
         with:
-          name: fg-full-artifacts
+          name: fg-full-artifacts-${{ github.run_attempt }}
           path: artifacts/testing
 
       - name: Ensure junit exists
-        shell: bash
         run: |
           set -euo pipefail
           test -f artifacts/testing/junit.xml || \
             printf '%s\n' '<testsuites><testsuite name="empty" tests="0" failures="0"/></testsuites>' > artifacts/testing/junit.xml
 
       - name: Run flake detect
-        shell: bash
         run: |
           set -euo pipefail
           .venv/bin/python -m tools.testing.harness.flake_detect \
@@ -345,10 +360,10 @@ jobs:
             --out artifacts/testing/flake-report.json
 
       - name: Upload artifacts (flake detect)
-        uses: actions/upload-artifact@v4
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: fg-flake-artifacts
+          name: fg-flake-artifacts-${{ github.run_attempt }}
           path: |
             artifacts/testing/**
             artifacts/**/_upload_notice.txt

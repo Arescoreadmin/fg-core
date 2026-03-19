@@ -1,10 +1,47 @@
 name: frostgate-docker-ci
 
 on:
-  push:
-    branches: ["main"]
   pull_request:
     branches: ["main"]
+    paths:
+      - ".github/workflows/docker-ci.yml"
+      - "docker-compose.yml"
+      - "docker-compose.lockdown.yml"
+      - "Dockerfile"
+      - "**/Dockerfile"
+      - "admin_gateway/**"
+      - "api/**"
+      - "console/**"
+      - "policy/**"
+      - "scripts/**"
+      - "requirements.txt"
+      - "requirements-dev.txt"
+      - "requirements.lock"
+      - "requirements-dev.lock"
+      - "constraints.txt"
+      - ".env.example"
+      - "env/**"
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/docker-ci.yml"
+      - "docker-compose.yml"
+      - "docker-compose.lockdown.yml"
+      - "Dockerfile"
+      - "**/Dockerfile"
+      - "admin_gateway/**"
+      - "api/**"
+      - "console/**"
+      - "policy/**"
+      - "scripts/**"
+      - "requirements.txt"
+      - "requirements-dev.txt"
+      - "requirements.lock"
+      - "requirements-dev.lock"
+      - "constraints.txt"
+      - ".env.example"
+      - "env/**"
+  workflow_dispatch:
 
 concurrency:
   group: frostgate-docker-ci-${{ github.event.pull_request.number || github.ref }}
@@ -15,17 +52,23 @@ permissions:
 
 jobs:
   docker-validate:
+    name: Docker Compose Validation
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     env:
       COMPOSE_DOCKER_CLI_BUILD: "1"
       DOCKER_BUILDKIT: "1"
-      COMPOSE_PROFILES: "core,admin"
+      COMPOSE_PROFILES: "core,admin,idp"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Generate CI secrets
         shell: bash
@@ -34,14 +77,20 @@ jobs:
           python - <<'PY' >> "$GITHUB_ENV"
           import secrets
 
-          print(f"FG_API_KEY={secrets.token_urlsafe(32)}")
-          print(f"REDIS_PASSWORD={secrets.token_urlsafe(24)}")
-          print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
-          print(f"NATS_AUTH_TOKEN={secrets.token_urlsafe(24)}")
-          print(f"FG_AGENT_API_KEY={secrets.token_urlsafe(24)}")
-          print(f"FG_WEBHOOK_SECRET={secrets.token_urlsafe(32)}")
-          print(f"FG_ENCRYPTION_KEY={secrets.token_urlsafe(32)}")
-          print(f"FG_JWT_SECRET={secrets.token_urlsafe(32)}")
+          def tok(n: int) -> str:
+              return secrets.token_urlsafe(n)
+
+          print(f"FG_API_KEY={tok(32)}")
+          print(f"FG_AGENT_API_KEY={tok(24)}")
+          print(f"FG_WEBHOOK_SECRET={tok(32)}")
+          print(f"FG_ENCRYPTION_KEY={tok(32)}")
+          print(f"FG_JWT_SECRET={tok(32)}")
+          print(f"REDIS_PASSWORD={tok(24)}")
+          print(f"POSTGRES_PASSWORD={tok(24)}")
+          print(f"NATS_AUTH_TOKEN={tok(24)}")
+          print(f"KEYCLOAK_DB_PASSWORD={tok(24)}")
+          print(f"KEYCLOAK_ADMIN_PASSWORD={tok(24)}")
+          print(f"KEYCLOAK_ADMIN=admin")
           PY
 
       - name: Verify required env vars are set
@@ -49,20 +98,24 @@ jobs:
         run: |
           set -euo pipefail
           missing=0
+
           for var in \
             FG_API_KEY \
-            REDIS_PASSWORD \
-            POSTGRES_PASSWORD \
-            NATS_AUTH_TOKEN \
             FG_AGENT_API_KEY \
             FG_WEBHOOK_SECRET \
             FG_ENCRYPTION_KEY \
-            FG_JWT_SECRET
+            FG_JWT_SECRET \
+            REDIS_PASSWORD \
+            POSTGRES_PASSWORD \
+            NATS_AUTH_TOKEN \
+            KEYCLOAK_DB_PASSWORD \
+            KEYCLOAK_ADMIN_PASSWORD \
+            KEYCLOAK_ADMIN
           do
             if [ -n "${!var:-}" ]; then
               echo "${var}=set"
             else
-              echo "${var}=missing"
+              echo "::error::${var} is missing"
               missing=1
             fi
           done
@@ -72,10 +125,7 @@ jobs:
             exit 1
           fi
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Ensure required policy bundle files exist
+      - name: Prepare policy bundle placeholders
         shell: bash
         run: |
           set -euo pipefail
@@ -83,131 +133,149 @@ jobs:
           mkdir -p policy/bundles
 
           if [ ! -f policy/bundles/nginx.conf ]; then
-            {
-              printf '%s\n' 'pid /tmp/nginx.pid;'
-              printf '\n'
-              printf '%s\n' 'events {}'
-              printf '\n'
-              printf '%s\n' 'http {'
-              printf '%s\n' '  client_body_temp_path /tmp/client_body_temp;'
-              printf '%s\n' '  proxy_temp_path       /tmp/proxy_temp;'
-              printf '%s\n' '  fastcgi_temp_path     /tmp/fastcgi_temp;'
-              printf '%s\n' '  uwsgi_temp_path       /tmp/uwsgi_temp;'
-              printf '%s\n' '  scgi_temp_path        /tmp/scgi_temp;'
-              printf '\n'
-              printf '%s\n' '  server {'
-              printf '%s\n' '    listen 8080;'
-              printf '\n'
-              printf '%s\n' '    location /health { return 200 "ok\n"; }'
-              printf '\n'
-              printf '%s\n' '    location / {'
-              printf '%s\n' '      root /usr/share/nginx/html;'
-              printf '%s\n' '      try_files $uri =404;'
-              printf '%s\n' '    }'
-              printf '%s\n' '  }'
-              printf '%s\n' '}'
-            } > policy/bundles/nginx.conf
+            cat > policy/bundles/nginx.conf <<'EOF'
+          pid /tmp/nginx.pid;
+
+          events {}
+
+          http {
+            client_body_temp_path /tmp/client_body_temp;
+            proxy_temp_path       /tmp/proxy_temp;
+            fastcgi_temp_path     /tmp/fastcgi_temp;
+            uwsgi_temp_path       /tmp/uwsgi_temp;
+            scgi_temp_path        /tmp/scgi_temp;
+
+            server {
+              listen 8080;
+
+              location /health {
+                return 200 "ok\n";
+              }
+
+              location / {
+                root /usr/share/nginx/html;
+                try_files $uri =404;
+              }
+            }
+          }
+          EOF
           fi
 
           if [ ! -f policy/bundles/_ci_notice.txt ]; then
             printf '%s\n' 'CI bundle placeholder' > policy/bundles/_ci_notice.txt
           fi
 
-      - name: Prepare environment
+      - name: Prepare CI environment files
         shell: bash
         run: |
           set -euo pipefail
 
-          mkdir -p secrets env
+          mkdir -p secrets env artifacts/docker
 
-          {
-            printf '%s\n' 'POSTGRES_USER=fg_user'
-            printf '%s\n' "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}"
-            printf '%s\n' 'POSTGRES_DB=frostgate'
-            printf '\n'
-            printf '%s\n' "REDIS_PASSWORD=${REDIS_PASSWORD}"
-            printf '\n'
-            printf '%s\n' "NATS_AUTH_TOKEN=${NATS_AUTH_TOKEN}"
-            printf '%s\n' 'FG_NATS_URL='
-            printf '%s\n' 'FG_NATS_ENABLED=0'
-            printf '%s\n' 'FG_NATS_RISK_ACCEPTED=0'
-            printf '\n'
-            printf '%s\n' "FG_API_KEY=${FG_API_KEY}"
-            printf '%s\n' "FG_AGENT_API_KEY=${FG_AGENT_API_KEY}"
-            printf '%s\n' "FG_WEBHOOK_SECRET=${FG_WEBHOOK_SECRET}"
-            printf '%s\n' "FG_ENCRYPTION_KEY=${FG_ENCRYPTION_KEY}"
-            printf '%s\n' "FG_JWT_SECRET=${FG_JWT_SECRET}"
-            printf '\n'
-            printf '%s\n' 'FG_ENV=test'
-            printf '%s\n' 'FG_DEBUG=false'
-            printf '%s\n' 'FG_LOG_LEVEL=info'
-            printf '%s\n' 'FG_DB_BACKEND=postgres'
-            printf '%s\n' 'FG_DB_URL='
-            printf '%s\n' 'FG_DB_MIGRATIONS_REQUIRED=1'
-            printf '%s\n' 'FG_DB_MIGRATIONS_RISK_ACCEPTED=0'
-            printf '\n'
-            printf '%s\n' 'FG_CORS_ORIGINS=https://example.com'
-            printf '%s\n' 'FG_UI_ENABLED=0'
-            printf '\n'
-            printf '%s\n' 'AG_CORS_ORIGINS=http://localhost:13000'
-            printf '%s\n' 'AG_AUDIT_ENABLED=true'
-            printf '\n'
-            printf '%s\n' 'FG_GOVERNANCE_ENABLED=1'
-            printf '%s\n' 'FG_ROE_ENGINE_ENABLED=1'
-            printf '%s\n' 'FG_RING_ROUTER_ENABLED=1'
-            printf '%s\n' 'FG_MISSION_ENVELOPE_ENABLED=1'
-            printf '\n'
-            printf '%s\n' 'FG_OPA_URL=http://localhost:18181'
-            printf '%s\n' 'FG_OPA_ENFORCE=1'
-            printf '%s\n' 'FG_OPA_RISK_ACCEPTED=0'
-            printf '\n'
-            printf '%s\n' 'FG_MISSION_ENVELOPE_PATH=/etc/frostgate/mission_envelope.json'
-            printf '%s\n' 'FG_RING_STATE_DIR=/var/lib/frostgate/state'
-            printf '%s\n' 'FG_RING_MODEL_DIR=/var/lib/frostgate/models'
-            printf '\n'
-            printf '%s\n' 'FG_DOS_GUARD_ENABLED=true'
-            printf '%s\n' 'FG_MAX_BODY_BYTES=4194304'
-            printf '%s\n' 'FG_MAX_QUERY_BYTES=8192'
-            printf '%s\n' 'FG_MAX_PATH_BYTES=2048'
-            printf '%s\n' 'FG_MAX_HEADERS_COUNT=50'
-            printf '%s\n' 'FG_MAX_HEADERS_BYTES=16384'
-            printf '%s\n' 'FG_MAX_HEADER_LINE_BYTES=8192'
-            printf '%s\n' 'FG_MULTIPART_MAX_BYTES=10485760'
-            printf '%s\n' 'FG_MULTIPART_MAX_PARTS=20'
-            printf '%s\n' 'FG_REQUEST_TIMEOUT_SEC=30'
-            printf '%s\n' 'FG_KEEPALIVE_TIMEOUT_SEC=65'
-            printf '%s\n' 'FG_MAX_CONCURRENT_REQUESTS=200'
-            printf '%s\n' 'FG_RL_FAIL_OPEN=false'
-          } > .env.ci
+          cat > .env.ci <<EOF
+          POSTGRES_USER=fg_user
+          POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+          POSTGRES_DB=frostgate
+          POSTGRES_APP_USER=fg_user
+          POSTGRES_APP_PASSWORD=${POSTGRES_PASSWORD}
+
+          REDIS_PASSWORD=${REDIS_PASSWORD}
+
+          NATS_AUTH_TOKEN=${NATS_AUTH_TOKEN}
+          FG_NATS_URL=
+          FG_NATS_ENABLED=0
+          FG_NATS_RISK_ACCEPTED=0
+
+          FG_API_KEY=${FG_API_KEY}
+          FG_AGENT_API_KEY=${FG_AGENT_API_KEY}
+          FG_WEBHOOK_SECRET=${FG_WEBHOOK_SECRET}
+          FG_ENCRYPTION_KEY=${FG_ENCRYPTION_KEY}
+          FG_JWT_SECRET=${FG_JWT_SECRET}
+
+          FG_ENV=test
+          FG_DEBUG=false
+          FG_LOG_LEVEL=info
+          FG_DB_BACKEND=postgres
+          FG_DB_URL=
+          FG_DB_MIGRATIONS_REQUIRED=1
+          FG_DB_MIGRATIONS_RISK_ACCEPTED=0
+
+          FG_CORS_ORIGINS=https://example.com
+          FG_UI_ENABLED=0
+
+          AG_CORS_ORIGINS=http://localhost:13000
+          AG_AUDIT_ENABLED=true
+
+          FG_GOVERNANCE_ENABLED=1
+          FG_ROE_ENGINE_ENABLED=1
+          FG_RING_ROUTER_ENABLED=1
+          FG_MISSION_ENVELOPE_ENABLED=1
+
+          FG_OPA_URL=http://localhost:18181
+          FG_OPA_ENFORCE=1
+          FG_OPA_RISK_ACCEPTED=0
+
+          FG_MISSION_ENVELOPE_PATH=/etc/frostgate/mission_envelope.json
+          FG_RING_STATE_DIR=/var/lib/frostgate/state
+          FG_RING_MODEL_DIR=/var/lib/frostgate/models
+
+          FG_DOS_GUARD_ENABLED=true
+          FG_MAX_BODY_BYTES=4194304
+          FG_MAX_QUERY_BYTES=8192
+          FG_MAX_PATH_BYTES=2048
+          FG_MAX_HEADERS_COUNT=50
+          FG_MAX_HEADERS_BYTES=16384
+          FG_MAX_HEADER_LINE_BYTES=8192
+          FG_MULTIPART_MAX_BYTES=10485760
+          FG_MULTIPART_MAX_PARTS=20
+          FG_REQUEST_TIMEOUT_SEC=30
+          FG_KEEPALIVE_TIMEOUT_SEC=65
+          FG_MAX_CONCURRENT_REQUESTS=200
+          FG_RL_FAIL_OPEN=false
+
+          FG_OIDC_ISSUER=http://keycloak:8080/realms/FrostGate
+          FG_OIDC_CLIENT_ID=fg-admin-gateway
+          FG_OIDC_CLIENT_SECRET=dummy-ci-client-secret
+          FG_OIDC_REDIRECT_URL=http://fg-admin.local:18080/auth/callback
+          FG_OIDC_SCOPES=openid profile email
+
+          KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN}
+          KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD}
+          KEYCLOAK_DB_PASSWORD=${KEYCLOAK_DB_PASSWORD}
+          EOF
 
           cp .env.ci .env
 
-          {
-            printf '%s\n' '# Production environment overrides'
-            printf '%s\n' '#'
-            printf '%s\n' '# CI uses generated secrets in .env.ci / .env.'
-            printf '%s\n' '# Keep this file present because docker-compose.yml references it.'
-          } > env/prod.env
+          cat > env/prod.env <<'EOF'
+          # Production environment overrides
+          #
+          # CI uses generated secrets in .env.ci / .env.
+          # Keep this file present because docker-compose.yml references it.
+          FG_OIDC_SCOPES="openid profile email"
+          FG_REDIS_URL=redis://:${REDIS_PASSWORD:-ci-redis-password}@redis:6379/0
+          FG_NATS_URL=nats://${NATS_AUTH_TOKEN:-ci-nats-token}@nats:4222
+          EOF
 
           printf '%s\n' "${FG_API_KEY}" > secrets/fg_api_keys.txt
 
-      - name: Ensure env directory exists
+      - name: Show effective compose files
         shell: bash
         run: |
-          mkdir -p env
-          touch env/prod.env
+          set -euo pipefail
+          docker compose --env-file .env.ci config > /tmp/fg.compose.rendered.yml
+          cp /tmp/fg.compose.rendered.yml artifacts/docker/compose.rendered.yml
 
       - name: Validate compose config
         shell: bash
         run: |
           set -euo pipefail
-          docker compose --env-file .env.ci config > /tmp/fg.compose.rendered.yml
+          docker compose --env-file .env.ci config >/dev/null
 
       - name: Build images via docker compose
         shell: bash
         run: |
           set -euo pipefail
-          docker compose --env-file .env.ci build
+          docker compose --env-file .env.ci build --pull
 
       - name: Start opa-bundles first
         shell: bash
@@ -219,10 +287,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          timeout 45 bash -lc '
-            until [ "$(docker inspect -f "{{.State.Health.Status}}" fg-core-opa-bundles-1 2>/dev/null)" = "healthy" ]; do
+          timeout 60 bash -lc '
+            until [ "$(docker inspect -f "{{.State.Health.Status}}" fg-core-opa-bundles-1 2>/dev/null || true)" = "healthy" ]; do
               docker ps --filter name=fg-core-opa-bundles-1 --format "opa-bundles status={{.Status}}"
-              sleep 1
+              sleep 2
             done
           '
 
@@ -232,37 +300,81 @@ jobs:
           set -euo pipefail
           docker compose --env-file .env.ci up -d --build --no-pull
 
-      - name: Smoke test admin-gateway /health
+      - name: Wait for admin-gateway health
         shell: bash
         run: |
           set -euo pipefail
           echo "Waiting for admin-gateway on 127.0.0.1:18080 ..."
-          for i in $(seq 1 40); do
-            if curl -sSf http://127.0.0.1:18080/health >/dev/null; then
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:18080/health >/dev/null; then
               echo "admin-gateway is healthy"
               exit 0
             fi
             sleep 2
           done
-          echo "admin-gateway failed to become healthy in time"
+          echo "::error::admin-gateway failed to become healthy in time"
           exit 1
 
-      - name: Debug dump (containers + logs)
-        if: failure()
+      - name: Wait for keycloak health
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Waiting for keycloak on 127.0.0.1:8081 ..."
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:8081/health/ready >/dev/null; then
+              echo "keycloak is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::warning::keycloak did not become ready in time"
+          docker compose --env-file .env.ci ps
+          exit 1
+
+      - name: Smoke test console root
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Waiting for console on 127.0.0.1:13000 ..."
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:13000 >/dev/null; then
+              echo "console is reachable"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::console failed to become reachable in time"
+          exit 1
+
+      - name: Persist docker diagnostics
+        if: always()
         shell: bash
         run: |
           set +e
-          echo "=== docker compose ps ==="
-          docker compose --env-file .env.ci ps
-          echo
-          echo "=== docker compose logs (tail) ==="
-          docker compose --env-file .env.ci logs --tail=300 || true
-          echo
-          echo "=== opa-bundles nginx config ==="
-          docker exec -t fg-core-opa-bundles-1 nginx -T || true
+          mkdir -p artifacts/docker
+
+          docker compose --env-file .env.ci ps > artifacts/docker/compose-ps.txt 2>&1 || true
+          docker compose --env-file .env.ci logs --tail=400 > artifacts/docker/compose-logs.txt 2>&1 || true
+          docker images > artifacts/docker/docker-images.txt 2>&1 || true
+          docker inspect fg-core-admin-gateway-1 > artifacts/docker/admin-gateway.inspect.json 2>/dev/null || true
+          docker inspect fg-core-keycloak-1 > artifacts/docker/keycloak.inspect.json 2>/dev/null || true
+          docker inspect fg-core-console-1 > artifacts/docker/console.inspect.json 2>/dev/null || true
+          docker exec -t fg-core-opa-bundles-1 nginx -T > artifacts/docker/opa-bundles-nginx.txt 2>&1 || true
+
+      - name: Upload docker artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostgate-docker-artifacts-${{ github.run_attempt }}
+          path: |
+            artifacts/docker/**
+            /tmp/fg.compose.rendered.yml
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Tear down stack
         if: always()
         shell: bash
         run: |
-          docker compose --env-file .env.ci down -v --remove-orphans || true
+          set +e
+          docker compose --env-file .env.ci down -v --remove-orphans

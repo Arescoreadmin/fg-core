@@ -1,4 +1,29 @@
-## 2026-03-11 — Docker CI workflow hardening review
+## 2026-03-19 — GitHub Actions workflows consolidation & hardening review
+
+Critical files updated:
+- `.github/workflows/docker-ci.yml`
+- `.github/workflows/fg-required.yml`
+- `.github/workflows/release-images.yml`
+- `.github/workflows/testing-module.yml`
+- `.github/workflows/ci.yml`
+- `.github/workflows/ai-ledger-guard.yml`
+
+Change summary:
+- Consolidated Makefile targets to remove duplicates and ensure deterministic SOC enforcement.
+- Hardened CI env generation across all workflows (`.env.ci`, `.env`, secrets, and runtime overrides).
+- Standardized Python and Node setup with caching and pinned dependencies to ensure reproducible builds.
+- Added full artifact collection with fallback notices for all CI lanes.
+- Implemented robust lane execution for fg-fast, fg-contract, fg-security, fg-full, and associated unit/integration tests.
+- Improved production profile validation, policy drift checks, and security/invariant gates.
+- Added smoke tests and retry loops for service startup in docker-based CI.
+- Preserved SOC enforcement for PR_FIX_LOG, compliance, and evidence pipelines.
+
+Governance/security impact:
+- Ensures deterministic and auditable CI behavior.
+- Reduces risk of false-positive/false-negative CI failures caused by workflow drift.
+- Maintains production profile validation inputs and SOC-HIGH-002 compliance.
+
+## 2026-03-11 — Docker CI workflow hardening revie
 
 Critical file updated:
 - `.github/workflows/docker-ci.yml`
