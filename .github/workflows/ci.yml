@@ -486,11 +486,11 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Set up Node 20 (cached)
+      - name: Set up Node (cached)
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: npm
+          cache: "npm"
           cache-dependency-path: |
             console/package-lock.json
             package-lock.json

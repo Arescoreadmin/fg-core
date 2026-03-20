@@ -749,3 +749,18 @@ Resolution: Expanded upload-artifact paths to include fg-required + gates + dock
 
 **Risk notes:** No production runtime behavior change. CI behavior becomes stricter/more deterministic. Artifacts retained for post-failure forensics.
 
+
+## 2026-03-20 — CI workflow cache normalization review
+
+Critical file updated:
+- `.github/workflows/ci.yml`
+
+Change summary:
+- normalized the Node setup step naming in CI
+- made the npm cache setting explicitly quoted for deterministic workflow parsing
+- preserved existing Node 20 setup and dependency cache behavior
+
+Governance/security impact:
+- preserves deterministic CI workflow behavior
+- reduces workflow drift from formatting/parsing differences in critical CI configuration
+- maintains expected dependency cache semantics for guarded PR validation
