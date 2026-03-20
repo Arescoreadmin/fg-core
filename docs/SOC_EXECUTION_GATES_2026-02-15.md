@@ -1,3 +1,19 @@
+## 2026-03-20 — CI workflow hardening review
+
+Critical file updated:
+- `.github/workflows/ci.yml`
+
+Change summary:
+- aligned compose/env handling with explicit production-safe variables
+- ensured CI validation paths remain compatible with app database role/database separation
+- tightened workflow reliability for production profile and SOC invariant checks
+- reduced false-negative CI failures caused by missing compose render inputs in CI-only env paths
+
+Governance/security impact:
+- preserves deterministic CI validation behavior
+- maintains explicit production-sensitive configuration requirements for compose-backed checks
+- reduces governance drift between workflow execution, compose validation, and SOC review expectations
+
 ## 2026-03-19 — Route inventory summary SOC sync
 
 Critical file updated:
