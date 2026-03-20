@@ -809,3 +809,18 @@ Governance/security impact:
 - preserves required gate coverage for material code and CI changes
 - reduces non-functional workflow churn from documentation-only edits
 - maintains deterministic required-test execution on relevant pull request changes
+
+## 2026-03-20 — OPA bundle path correction review
+
+Critical file updated:
+- `policy/opa/config.yaml`
+
+Change summary:
+- corrected the OPA bundle resource path to `/bundle.tar.gz`
+- aligned OPA bundle fetch configuration with the nginx-served bundle artifact path
+- restored deterministic policy bundle activation during compose-backed validation
+
+Governance/security impact:
+- preserves policy-engine startup determinism for guarded validation paths
+- ensures OPA loads the intended policy bundle instead of failing on missing bundle resource resolution
+- reduces false-negative CI failures caused by bundle path mismatch
