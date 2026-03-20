@@ -824,3 +824,18 @@ Governance/security impact:
 - preserves policy-engine startup determinism for guarded validation paths
 - ensures OPA loads the intended policy bundle instead of failing on missing bundle resource resolution
 - reduces false-negative CI failures caused by bundle path mismatch
+
+## 2026-03-20 — Route inventory artifact-path correction review
+
+Critical file updated:
+- `tools/ci/check_route_inventory.py`
+
+Change summary:
+- moved generated route inventory summary output from `tools/ci/route_inventory_summary.json` to `artifacts/route_inventory_summary.json`
+- added artifact directory creation before writing generated summary output
+- stopped CI validation from mutating a tracked repository file during route inventory checks
+
+Governance/security impact:
+- preserves deterministic route inventory validation behavior
+- prevents fg-fast and fg-required failures caused by post-lane working tree mutation
+- keeps generated validation artifacts in the artifacts path instead of source-controlled governance files

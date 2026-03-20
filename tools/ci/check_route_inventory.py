@@ -18,7 +18,7 @@ from tools.ci.plane_registry_checks import (
 
 REPO = Path(__file__).resolve().parents[2]
 INVENTORY = REPO / "tools/ci/route_inventory.json"
-SUMMARY = REPO / "tools/ci/route_inventory_summary.json"
+SUMMARY = REPO / "artifacts" / "route_inventory_summary.json"
 REGISTRY_SNAPSHOT = REPO / "tools/ci/plane_registry_snapshot.json"
 REGISTRY_HASH = REPO / "tools/ci/plane_registry_snapshot.sha256"
 CONTRACT_ROUTES = REPO / "tools/ci/contract_routes.json"
@@ -209,7 +209,14 @@ def current_inventory() -> list[dict[str, Any]]:
 # -----------------------------
 # artifact writers
 # -----------------------------
+
+
+def _ensure_artifact_dirs() -> None:
+    SUMMARY.parent.mkdir(parents=True, exist_ok=True)
+
+
 def _write_registry_snapshot() -> None:
+    _ensure_artifact_dirs()
     planes = [p.to_dict() for p in sorted(PLANE_REGISTRY, key=lambda x: x.plane_id)]
     blob = _dump_json(_v1_wrap(planes, generated_by=TOOL_NAME))
     REGISTRY_SNAPSHOT.write_text(blob, encoding="utf-8")

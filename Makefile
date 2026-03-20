@@ -283,17 +283,21 @@ check-no-engine-evaluate:
 opa-check:
 	@set -euo pipefail; \
 	POLICY_DIR="$$PWD/policy/opa"; \
+	REGO_FILES="$$(find "$$POLICY_DIR" -type f -name '*.rego' | sort)"; \
+	test -n "$$REGO_FILES" || (echo "❌ no .rego files found under $$POLICY_DIR" && exit 1); \
 	$(MAKE) -s require-opa-runtime; \
 	if command -v opa >/dev/null 2>&1; then \
 		echo "opa-check: using local opa CLI"; \
-		opa check --strict "$$POLICY_DIR"; \
-		opa test "$$POLICY_DIR"; \
+		opa check --strict $$REGO_FILES; \
+		opa test $$REGO_FILES; \
 	else \
 		IMAGE="$(OPA_IMAGE)"; \
-		MOUNT="-v $$POLICY_DIR:/policies"; \
+		MOUNT="-v $$POLICY_DIR:/policies:ro"; \
 		echo "opa-check: using pinned docker image $$IMAGE"; \
-		docker run --rm $$MOUNT "$$IMAGE" check --strict /policies; \
-		docker run --rm $$MOUNT "$$IMAGE" test /policies; \
+		docker run --rm $$MOUNT "$$IMAGE" sh -lc '\
+			REGO_FILES="$$(find /policies -type f -name "*.rego" | sort)"; \
+			test -n "$$REGO_FILES" || (echo "❌ no .rego files found under /policies" && exit 1); \
+			opa check --strict $$REGO_FILES && opa test $$REGO_FILES'; \
 	fi
 
 verify-spine-modules: venv
