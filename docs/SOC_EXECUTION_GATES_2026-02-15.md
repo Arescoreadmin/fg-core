@@ -1,3 +1,18 @@
+## 2026-03-20 — CI workflow validation hardening review
+
+Critical file updated:
+- `.github/workflows/ci.yml`
+
+Change summary:
+- aligned CI compose validation behavior with explicit environment defaults required for deterministic rendering
+- reduced false-negative workflow failures caused by missing compose variables in CI validation paths
+- preserved production-profile and SOC invariant checks while making CI compose evaluation self-sufficient
+
+Governance/security impact:
+- preserves deterministic CI validation behavior
+- maintains explicit production-sensitive compose requirements
+- reduces workflow drift between local validation and GitHub Actions execution
+
 ## 2026-03-20 — CI workflow hardening review
 
 Critical file updated:

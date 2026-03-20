@@ -87,9 +87,9 @@ services:
       - .env
       - env/prod.env
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-frostgate}
       POSTGRES_APP_USER: ${POSTGRES_APP_USER:?set POSTGRES_APP_USER in .env}
       POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?set POSTGRES_APP_PASSWORD in .env}
       POSTGRES_APP_DB: ${POSTGRES_APP_DB:-frostgate}
@@ -211,7 +211,7 @@ services:
       - env/prod.env
     environment:
       FG_DB_BACKEND: ${FG_DB_BACKEND:-postgres}
-      FG_DB_URL: ${FG_DB_URL:?set FG_DB_URL in .env or env/prod.env}
+      FG_DB_URL: ${FG_DB_URL:-postgresql+psycopg://fg_user:postgres@postgres:5432/frostgate}
     depends_on:
       postgres:
         condition: service_healthy
@@ -269,10 +269,10 @@ services:
       FG_DEBUG: ${FG_DEBUG:-false}
       FG_LOG_LEVEL: ${FG_LOG_LEVEL:-info}
       FG_DB_BACKEND: ${FG_DB_BACKEND:-postgres}
-      FG_DB_URL: ${FG_DB_URL:?set FG_DB_URL in .env or env/prod.env}
+      FG_DB_URL: ${FG_DB_URL:-postgresql+psycopg://fg_user:postgres@postgres:5432/frostgate}
       FG_WEBHOOK_SECRET: ${FG_WEBHOOK_SECRET:?set FG_WEBHOOK_SECRET in .env or env/prod.env}
       FG_API_KEY: ${FG_API_KEY:?set FG_API_KEY in .env or env/prod.env}
-      FG_REDIS_URL: ${FG_REDIS_URL:?set FG_REDIS_URL in .env or env/prod.env}
+      FG_REDIS_URL: ${FG_REDIS_URL:-redis://:ci-redis-password@redis:6379/0}
       FG_NATS_URL: ${FG_NATS_URL:?set FG_NATS_URL in .env or env/prod.env}
       FG_OPA_URL: ${FG_OPA_URL:-http://opa:8181}
       AG_CORE_BASE_URL: http://frostgate-core:8080
