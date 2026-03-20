@@ -3,8 +3,11 @@ name: fg-required
 on:
   pull_request:
     branches: [main]
-    paths:
-      - ".github/workflows/fg-required.yml"
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - ".gitignore"
+      - ".editorconfig"
       - "tools/testing/**"
       - "tools/ci/**"
       - "tests/tools_minimal/**"

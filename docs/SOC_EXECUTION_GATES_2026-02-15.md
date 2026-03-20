@@ -764,3 +764,48 @@ Governance/security impact:
 - preserves deterministic CI workflow behavior
 - reduces workflow drift from formatting/parsing differences in critical CI configuration
 - maintains expected dependency cache semantics for guarded PR validation
+
+## 2026-03-20 — CI workflow cache normalization review
+
+Critical file updated:
+- `.github/workflows/ci.yml`
+
+Change summary:
+- normalized the Node setup step naming in CI
+- made the npm cache setting explicitly quoted for deterministic workflow parsing
+- preserved existing Node 20 setup and dependency cache behavior
+
+Governance/security impact:
+- preserves deterministic CI workflow behavior
+- reduces workflow drift from formatting/parsing differences in critical CI configuration
+- maintains expected dependency cache semantics for guarded PR validation
+
+## 2026-03-20 — fg-required workflow scope refinement review
+
+Critical file updated:
+- `.github/workflows/fg-required.yml`
+
+Change summary:
+- replaced narrow path-trigger rules with ignore rules for docs and repository metadata-only changes
+- preserved execution for code, CI, and testing paths relevant to fg-required coverage
+- reduced unnecessary workflow runs that do not affect required gate behavior
+
+Governance/security impact:
+- preserves required gate coverage for material code and CI changes
+- reduces non-functional workflow churn from documentation-only edits
+- maintains deterministic required-test execution on relevant pull request changes
+
+## 2026-03-20 — fg-required workflow scope refinement review
+
+Critical file updated:
+- `.github/workflows/fg-required.yml`
+
+Change summary:
+- replaced narrow path-trigger rules with ignore rules for docs and repository metadata-only changes
+- preserved execution for code, CI, and testing paths relevant to fg-required coverage
+- reduced unnecessary workflow runs that do not affect required gate behavior
+
+Governance/security impact:
+- preserves required gate coverage for material code and CI changes
+- reduces non-functional workflow churn from documentation-only edits
+- maintains deterministic required-test execution on relevant pull request changes
