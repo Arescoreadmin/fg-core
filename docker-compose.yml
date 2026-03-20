@@ -84,8 +84,10 @@ services:
     networks:
       - internal
     env_file:
-      - .env
-      - env/prod.env
+      - path: .env
+        required: false
+      - path: env/prod.env
+        required: true
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -207,8 +209,10 @@ services:
     profiles: ["core"]
     image: frostgate-core:latest
     env_file:
-      - .env
-      - env/prod.env
+      - path: .env
+        required: false
+      - path: env/prod.env
+        required: true
     environment:
       FG_DB_BACKEND: ${FG_DB_BACKEND:-postgres}
       FG_DB_URL: ${FG_DB_URL:-postgresql+psycopg://fg_user:postgres@postgres:5432/frostgate}
@@ -262,8 +266,10 @@ services:
       frostgate-migrate:
         condition: service_completed_successfully
     env_file:
-      - .env
-      - env/prod.env
+      - path: .env
+        required: false
+      - path: env/prod.env
+        required: true
     environment:
       FG_ENV: ${FG_ENV:-prod}
       FG_DEBUG: ${FG_DEBUG:-false}
@@ -309,8 +315,10 @@ services:
     ports:
       - "127.0.0.1:18080:8080"
     env_file:
-      - .env
-      - env/prod.env
+      - path: .env
+        required: false
+      - path: env/prod.env
+        required: true
     environment:
       AG_CORE_BASE_URL: http://frostgate-core:8080
     healthcheck:
