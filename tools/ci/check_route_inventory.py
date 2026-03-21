@@ -16,9 +16,11 @@ from tools.ci.plane_registry_checks import (
     runtime_routes_ast,
 )
 
+
 REPO = Path(__file__).resolve().parents[2]
 INVENTORY = REPO / "tools/ci/route_inventory.json"
 SUMMARY = REPO / "artifacts" / "route_inventory_summary.json"
+LEGACY_SUMMARY = REPO / "tools/ci/route_inventory_summary.json"
 REGISTRY_SNAPSHOT = REPO / "tools/ci/plane_registry_snapshot.json"
 REGISTRY_HASH = REPO / "tools/ci/plane_registry_snapshot.sha256"
 CONTRACT_ROUTES = REPO / "tools/ci/contract_routes.json"
@@ -28,6 +30,11 @@ TOPOLOGY_HASH = REPO / "tools/ci/topology.sha256"
 
 SCHEMA_VERSION = "v1"
 TOOL_NAME = "tools/ci/check_route_inventory.py"
+
+
+def _ensure_artifact_dirs() -> None:
+    SUMMARY.parent.mkdir(parents=True, exist_ok=True)
+    LEGACY_SUMMARY.parent.mkdir(parents=True, exist_ok=True)
 
 
 # -----------------------------
@@ -213,6 +220,7 @@ def current_inventory() -> list[dict[str, Any]]:
 
 def _ensure_artifact_dirs() -> None:
     SUMMARY.parent.mkdir(parents=True, exist_ok=True)
+    LEGACY_SUMMARY.parent.mkdir(parents=True, exist_ok=True)
 
 
 def _write_registry_snapshot() -> None:
@@ -314,8 +322,12 @@ def _summary_payload(
 def _write_summary(
     cur: list[dict[str, Any]], expected: list[dict[str, Any]] | None
 ) -> None:
+    _ensure_artifact_dirs()
     summary = _summary_payload(cur, expected)
     SUMMARY.write_text(_dump_json(summary), encoding="utf-8")
+    LEGACY_SUMMARY.write_text(_dump_json(summary), encoding="utf-8")
+
+    LEGACY_SUMMARY.write_text(_dump_json(summary), encoding="utf-8")
 
 
 def write_inventory() -> None:

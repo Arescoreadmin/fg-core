@@ -839,3 +839,33 @@ Governance/security impact:
 - preserves deterministic route inventory validation behavior
 - prevents fg-fast and fg-required failures caused by post-lane working tree mutation
 - keeps generated validation artifacts in the artifacts path instead of source-controlled governance files
+
+## 2026-03-20 — Route inventory dual-write stabilization review
+
+Critical file updated:
+- `tools/ci/check_route_inventory.py`
+
+Change summary:
+- restored dual-write behavior for route inventory summary output to both `artifacts/route_inventory_summary.json` and `tools/ci/route_inventory_summary.json`
+- ensured summary artifact directories exist before writing generated output
+- stabilized CI consumers that still require the legacy tracked summary path while preserving artifact-path generation
+
+Governance/security impact:
+- preserves deterministic route inventory validation behavior across guarded CI lanes
+- prevents fg-required failures caused by missing required summary artifacts
+- reduces working tree mutation risk while maintaining compatibility with legacy governance consumers
+
+## 2026-03-20 — Route inventory dual-write stabilization review
+
+Critical file updated:
+- `tools/ci/check_route_inventory.py`
+
+Change summary:
+- restored dual-write behavior for route inventory summary output to both `artifacts/route_inventory_summary.json` and `tools/ci/route_inventory_summary.json`
+- ensured summary artifact directories exist before writing generated output
+- stabilized CI consumers that still require the legacy tracked summary path while preserving artifact-path generation
+
+Governance/security impact:
+- preserves deterministic route inventory validation behavior across guarded CI lanes
+- prevents fg-required failures caused by missing required summary artifacts
+- reduces working tree mutation risk while maintaining compatibility with legacy governance consumers
