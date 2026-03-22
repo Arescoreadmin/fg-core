@@ -884,3 +884,18 @@ Governance/security impact:
 - preserves deterministic CI validation for compose-backed stack checks
 - prevents workflow-level failures unrelated to application security posture
 - improves reliability of docker validation evidence collected during guarded pull request checks
+
+## 2026-03-20 — Stray OPA config removal review
+
+Critical file updated:
+- `policy/opa/opa-config.yml`
+
+Change summary:
+- removed stray legacy OPA config file from `policy/opa`
+- eliminated duplicate policy config input during CI OPA validation
+- preserved canonical runtime policy config in `policy/opa/config.yaml`
+
+Governance/security impact:
+- prevents OPA validation merge/load errors caused by duplicate config documents
+- restores deterministic CI policy validation behavior
+- reduces policy-loading ambiguity by keeping a single canonical OPA config source
