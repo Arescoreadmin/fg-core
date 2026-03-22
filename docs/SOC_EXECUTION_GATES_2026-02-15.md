@@ -869,3 +869,18 @@ Governance/security impact:
 - preserves deterministic route inventory validation behavior across guarded CI lanes
 - prevents fg-required failures caused by missing required summary artifacts
 - reduces working tree mutation risk while maintaining compatibility with legacy governance consumers
+
+## 2026-03-21 — Docker CI workflow stabilization review
+
+Critical file updated:
+- `.github/workflows/docker-ci.yml`
+
+Change summary:
+- removed unsupported docker compose flag usage that caused workflow startup failure
+- aligned CI compose startup flow with the currently supported docker compose command set
+- reduced false-negative docker validation failures by stabilizing workflow orchestration and diagnostics collection
+
+Governance/security impact:
+- preserves deterministic CI validation for compose-backed stack checks
+- prevents workflow-level failures unrelated to application security posture
+- improves reliability of docker validation evidence collected during guarded pull request checks
