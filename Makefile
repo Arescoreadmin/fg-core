@@ -1279,3 +1279,11 @@ pr-fix-log:
 
 pr-check-fast: fg-fast pr-fix-log
 	@echo "pr-check-fast: OK"
+
+# ==============================================================================
+# Compliance SBOM generation
+# ==============================================================================	
+compliance-sbom:
+	@mkdir -p artifacts
+	@python scripts/generate_sbom.py --output artifacts/sbom.json
+	@echo "compliance-sbom: OK"
