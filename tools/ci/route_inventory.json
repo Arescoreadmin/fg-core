@@ -3814,7 +3814,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-03-01T21:21:59.538361+00:00",
+  "generated_at": "2026-03-23T16:49:18.342000+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

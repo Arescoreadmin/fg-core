@@ -1,3 +1,20 @@
+## 2026-03-23 - Route inventory normalization
+
+Change:
+- Regenerated `tools/ci/route_inventory.json`
+- Regenerated `tools/ci/route_inventory_summary.json`
+
+Reason:
+- Normalize route inventory artifacts to match canonical route-inventory generation and remove runtime-only/debug surfaces from governance-managed inventory.
+
+Impact:
+- No production runtime behavior change.
+- Governance artifacts aligned with route-inventory audit expectations.
+
+Verification:
+- `make route-inventory-generate`
+- `make pr-check-fast`
+
 ## 2026-03-22 — Plane registry runtime-route normalization review
 
 Critical files updated:
