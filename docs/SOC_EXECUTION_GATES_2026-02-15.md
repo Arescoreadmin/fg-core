@@ -1,3 +1,26 @@
+## 2026-03-23 - Route inventory determinism fix
+
+Change:
+- Updated `tools/ci/check_route_inventory.py` to make tracked writes deterministic
+- Prevented timestamp-only rewrites of `tools/ci/route_inventory.json`
+- Separated artifact outputs (`artifacts/*`) from governance-tracked files (`tools/ci/*`)
+- Normalized write behavior to only update tracked files when logical payload changes
+
+Reason:
+- Route inventory generation was mutating on every run due to `generated_at` timestamps, causing persistent dirty diffs and CI instability
+- Required to ensure deterministic CI behavior and prevent false-positive governance drift
+
+Impact:
+- No production runtime behavior change
+- Route inventory verification is now stable and non-mutating across repeated runs
+- CI and pre-commit checks no longer fail due to timestamp churn
+
+Verification:
+- `PYTHONPATH=. python -m tools.ci.check_route_inventory --write`
+- Re-run `--write` produces no diff in `tools/ci/route_inventory.json`
+- `PYTHONPATH=. python -m tools.ci.check_route_inventory`
+- `make pr-check-fast`
+
 ## 2026-03-23 - Route inventory normalization
 
 Change:

@@ -6,7 +6,7 @@ import json
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 from services.plane_registry import PLANE_REGISTRY
 from tools.ci.plane_registry_checks import (
@@ -16,8 +16,8 @@ from tools.ci.plane_registry_checks import (
     runtime_routes_ast,
 )
 
-
 REPO = Path(__file__).resolve().parents[2]
+
 INVENTORY = REPO / "tools/ci/route_inventory.json"
 SUMMARY = REPO / "artifacts" / "route_inventory_summary.json"
 LEGACY_SUMMARY = REPO / "tools/ci/route_inventory_summary.json"
@@ -28,24 +28,40 @@ BUILD_META = REPO / "tools/ci/build_meta.json"
 BUNDLE_HASH = REPO / "tools/ci/attestation_bundle.sha256"
 TOPOLOGY_HASH = REPO / "tools/ci/topology.sha256"
 
+ARTIFACT_REGISTRY_SNAPSHOT = REPO / "artifacts" / "plane_registry_snapshot.json"
+ARTIFACT_REGISTRY_HASH = REPO / "artifacts" / "plane_registry_snapshot.sha256"
+ARTIFACT_CONTRACT_ROUTES = REPO / "artifacts" / "contract_routes.json"
+ARTIFACT_BUILD_META = REPO / "artifacts" / "build_meta.json"
+ARTIFACT_BUNDLE_HASH = REPO / "artifacts" / "attestation_bundle.sha256"
+ARTIFACT_TOPOLOGY_HASH = REPO / "artifacts" / "topology.sha256"
+
 SCHEMA_VERSION = "v1"
 TOOL_NAME = "tools/ci/check_route_inventory.py"
-
-
-def _ensure_artifact_dirs() -> None:
-    SUMMARY.parent.mkdir(parents=True, exist_ok=True)
-    LEGACY_SUMMARY.parent.mkdir(parents=True, exist_ok=True)
 
 
 # -----------------------------
 # small, boring, correct utils
 # -----------------------------
+def _ensure_artifact_dirs() -> None:
+    SUMMARY.parent.mkdir(parents=True, exist_ok=True)
+    ARTIFACT_REGISTRY_SNAPSHOT.parent.mkdir(parents=True, exist_ok=True)
+    ARTIFACT_REGISTRY_HASH.parent.mkdir(parents=True, exist_ok=True)
+    ARTIFACT_CONTRACT_ROUTES.parent.mkdir(parents=True, exist_ok=True)
+    ARTIFACT_BUILD_META.parent.mkdir(parents=True, exist_ok=True)
+    ARTIFACT_BUNDLE_HASH.parent.mkdir(parents=True, exist_ok=True)
+    ARTIFACT_TOPOLOGY_HASH.parent.mkdir(parents=True, exist_ok=True)
+
+
 def _now_iso() -> str:
     return datetime.now(tz=UTC).isoformat()
 
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
 
 
 def _stable_json_bytes(obj: object) -> bytes:
@@ -56,6 +72,15 @@ def _stable_json_bytes(obj: object) -> bytes:
 
 def _dump_json(obj: object) -> str:
     return json.dumps(obj, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+
+
+def _write_text_if_changed(path: Path, text: str) -> bool:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing = path.read_text(encoding="utf-8") if path.exists() else None
+    if existing == text:
+        return False
+    path.write_text(text, encoding="utf-8")
+    return True
 
 
 def _v1_wrap(data: object, *, generated_by: str | None = None) -> dict[str, Any]:
@@ -69,7 +94,7 @@ def _v1_wrap(data: object, *, generated_by: str | None = None) -> dict[str, Any]
     return out
 
 
-def _read_data(path: Union[Path, str], label: str) -> object:
+def _read_data(path: Path | str, label: str) -> object:
     p = Path(path)
     try:
         return json.loads(p.read_text(encoding="utf-8"))
@@ -92,6 +117,32 @@ def _is_v1_wrapper(obj: object) -> bool:
 
 def _unwrap_v1(obj: object) -> object:
     return obj["data"] if _is_v1_wrapper(obj) else obj
+
+
+def _write_wrapped_json_if_data_changed(
+    path: Path,
+    data: object,
+    *,
+    generated_by: str | None = None,
+) -> bool:
+    """
+    Write wrapped tracked JSON only if logical payload changed.
+    Prevents timestamp-only churn in tracked files.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if path.exists():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+            existing_data = _unwrap_v1(existing)
+            if existing_data == data:
+                return False
+        except Exception:
+            pass
+
+    blob = _dump_json(_v1_wrap(data, generated_by=generated_by))
+    path.write_text(blob, encoding="utf-8")
+    return True
 
 
 def _require_list_of_dicts(value: object, *, label: str) -> list[dict[str, Any]]:
@@ -216,33 +267,29 @@ def current_inventory() -> list[dict[str, Any]]:
 # -----------------------------
 # artifact writers
 # -----------------------------
-
-
-def _ensure_artifact_dirs() -> None:
-    SUMMARY.parent.mkdir(parents=True, exist_ok=True)
-    LEGACY_SUMMARY.parent.mkdir(parents=True, exist_ok=True)
-
-
-def _write_registry_snapshot() -> None:
+def _write_registry_snapshot_artifact() -> None:
     _ensure_artifact_dirs()
     planes = [p.to_dict() for p in sorted(PLANE_REGISTRY, key=lambda x: x.plane_id)]
     blob = _dump_json(_v1_wrap(planes, generated_by=TOOL_NAME))
-    REGISTRY_SNAPSHOT.write_text(blob, encoding="utf-8")
+    _write_text_if_changed(ARTIFACT_REGISTRY_SNAPSHOT, blob)
+    digest = _sha256_bytes(blob.encode("utf-8"))
+    _write_text_if_changed(
+        ARTIFACT_REGISTRY_HASH,
+        f"{digest}  {ARTIFACT_REGISTRY_SNAPSHOT.name}\n",
+    )
 
-    digest = hashlib.sha256(blob.encode("utf-8")).hexdigest()
-    REGISTRY_HASH.write_text(f"{digest}  {REGISTRY_SNAPSHOT.name}\n", encoding="utf-8")
 
-
-def _write_contract_routes() -> list[dict[str, Any]]:
+def _write_contract_routes_artifact() -> list[dict[str, Any]]:
     cr = contract_routes()
     cr_list = _as_list_of_dicts(cr, label="contract_routes()")
-    CONTRACT_ROUTES.write_text(
-        _dump_json(_v1_wrap(cr_list, generated_by=TOOL_NAME)), encoding="utf-8"
+    _write_text_if_changed(
+        ARTIFACT_CONTRACT_ROUTES,
+        _dump_json(_v1_wrap(cr_list, generated_by=TOOL_NAME)),
     )
     return cr_list
 
 
-def _write_build_meta(cur: list[dict[str, Any]]) -> None:
+def _write_build_meta_artifact(cur: list[dict[str, Any]]) -> None:
     git_sha = "unknown"
     try:
         git_sha = subprocess.check_output(
@@ -268,24 +315,36 @@ def _write_build_meta(cur: list[dict[str, Any]]) -> None:
         "inventory_sha256": hashlib.sha256(_stable_json_bytes(cur)).hexdigest(),
     }
 
-    BUILD_META.write_text(
-        _dump_json(_v1_wrap([meta], generated_by=TOOL_NAME)), encoding="utf-8"
+    _write_text_if_changed(
+        ARTIFACT_BUILD_META,
+        _dump_json(_v1_wrap([meta], generated_by=TOOL_NAME)),
     )
 
 
-def _write_attestation_bundle(cur: list[dict[str, Any]]) -> None:
-    _write_contract_routes()
-    _write_build_meta(cur)
+def _write_attestation_bundle_artifact(cur: list[dict[str, Any]]) -> None:
+    _write_contract_routes_artifact()
+    _write_build_meta_artifact(cur)
 
-    bundle_files = [REGISTRY_SNAPSHOT, INVENTORY, CONTRACT_ROUTES, BUILD_META]
-    lines = [f"{_sha256(f)}  {f.name}" for f in bundle_files]
-    BUNDLE_HASH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    bundle_files = [
+        ARTIFACT_REGISTRY_SNAPSHOT,
+        INVENTORY,
+        ARTIFACT_CONTRACT_ROUTES,
+        ARTIFACT_BUILD_META,
+    ]
+    lines = [
+        f"{_sha256(f)}  {f.name}" if f.exists() else f"MISSING  {f.name}"
+        for f in bundle_files
+    ]
+    _write_text_if_changed(ARTIFACT_BUNDLE_HASH, "\n".join(lines) + "\n")
 
 
-def _write_topology_hash() -> None:
-    topology_files = [REGISTRY_SNAPSHOT, INVENTORY, CONTRACT_ROUTES]
-    lines = [f"{_sha256(f)}  {f.name}" for f in topology_files]
-    TOPOLOGY_HASH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+def _write_topology_hash_artifact() -> None:
+    topology_files = [ARTIFACT_REGISTRY_SNAPSHOT, INVENTORY, ARTIFACT_CONTRACT_ROUTES]
+    lines = [
+        f"{_sha256(f)}  {f.name}" if f.exists() else f"MISSING  {f.name}"
+        for f in topology_files
+    ]
+    _write_text_if_changed(ARTIFACT_TOPOLOGY_HASH, "\n".join(lines) + "\n")
 
 
 def _summary_payload(
@@ -319,27 +378,119 @@ def _summary_payload(
     }
 
 
-def _write_summary(
+def _write_summary_artifact(
     cur: list[dict[str, Any]], expected: list[dict[str, Any]] | None
 ) -> None:
     _ensure_artifact_dirs()
     summary = _summary_payload(cur, expected)
-    SUMMARY.write_text(_dump_json(summary), encoding="utf-8")
-    LEGACY_SUMMARY.write_text(_dump_json(summary), encoding="utf-8")
+    _write_text_if_changed(SUMMARY, _dump_json(summary))
 
-    LEGACY_SUMMARY.write_text(_dump_json(summary), encoding="utf-8")
+
+def _write_summary_tracked(
+    cur: list[dict[str, Any]], expected: list[dict[str, Any]] | None
+) -> None:
+    summary = _summary_payload(cur, expected)
+    _write_text_if_changed(LEGACY_SUMMARY, _dump_json(summary))
+
+
+def _write_registry_snapshot_tracked() -> bool:
+    planes = [p.to_dict() for p in sorted(PLANE_REGISTRY, key=lambda x: x.plane_id)]
+    changed = _write_wrapped_json_if_data_changed(
+        REGISTRY_SNAPSHOT, planes, generated_by=TOOL_NAME
+    )
+    _write_text_if_changed(
+        REGISTRY_HASH,
+        f"{_sha256(REGISTRY_SNAPSHOT)}  {REGISTRY_SNAPSHOT.name}\n",
+    )
+    return changed
+
+
+def _write_contract_routes_tracked() -> tuple[list[dict[str, Any]], bool]:
+    cr = contract_routes()
+    cr_list = _as_list_of_dicts(cr, label="contract_routes()")
+    changed = _write_wrapped_json_if_data_changed(
+        CONTRACT_ROUTES, cr_list, generated_by=TOOL_NAME
+    )
+    return cr_list, changed
+
+
+def _write_build_meta_tracked(cur: list[dict[str, Any]]) -> None:
+    git_sha = "unknown"
+    try:
+        git_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=REPO, text=True
+        ).strip()
+    except Exception:
+        pass
+
+    runner = "unknown"
+    hn = Path("/proc/sys/kernel/hostname")
+    if hn.exists():
+        try:
+            runner = hn.read_text(encoding="utf-8").strip()
+        except Exception:
+            pass
+
+    meta = {
+        "git_sha": git_sha,
+        "build_timestamp_utc": _now_iso(),
+        "ci_runner_id": runner,
+        "tool": TOOL_NAME,
+        "tool_version": SCHEMA_VERSION,
+        "inventory_sha256": hashlib.sha256(_stable_json_bytes(cur)).hexdigest(),
+    }
+
+    _write_text_if_changed(
+        BUILD_META,
+        _dump_json(_v1_wrap([meta], generated_by=TOOL_NAME)),
+    )
+
+
+def _write_attestation_bundle_tracked() -> None:
+    bundle_files = [REGISTRY_SNAPSHOT, INVENTORY, CONTRACT_ROUTES, BUILD_META]
+    lines = [f"{_sha256(f)}  {f.name}" for f in bundle_files]
+    _write_text_if_changed(BUNDLE_HASH, "\n".join(lines) + "\n")
+
+
+def _write_topology_hash_tracked() -> None:
+    topology_files = [REGISTRY_SNAPSHOT, INVENTORY, CONTRACT_ROUTES]
+    lines = [f"{_sha256(f)}  {f.name}" for f in topology_files]
+    _write_text_if_changed(TOPOLOGY_HASH, "\n".join(lines) + "\n")
+
+
+def _write_artifacts_only(
+    cur: list[dict[str, Any]], expected: list[dict[str, Any]] | None
+) -> None:
+    _write_summary_artifact(cur, expected)
+    _write_registry_snapshot_artifact()
+    _write_attestation_bundle_artifact(cur)
+    _write_topology_hash_artifact()
 
 
 def write_inventory() -> None:
     cur = current_inventory()
-    INVENTORY.write_text(
-        _dump_json(_v1_wrap(cur, generated_by=TOOL_NAME)), encoding="utf-8"
-    )
 
-    _write_summary(cur, expected=None)
-    _write_registry_snapshot()
-    _write_attestation_bundle(cur)
-    _write_topology_hash()
+    inventory_changed = _write_wrapped_json_if_data_changed(
+        INVENTORY, cur, generated_by=TOOL_NAME
+    )
+    _write_summary_tracked(cur, expected=None)
+    registry_changed = _write_registry_snapshot_tracked()
+    _, contract_changed = _write_contract_routes_tracked()
+
+    # BUILD_META is intentionally volatile. Only rewrite it, and hashes that depend on it,
+    # when logical tracked inputs actually changed.
+    if (
+        inventory_changed
+        or registry_changed
+        or contract_changed
+        or not BUILD_META.exists()
+    ):
+        _write_build_meta_tracked(cur)
+        _write_attestation_bundle_tracked()
+        _write_topology_hash_tracked()
+
+    # Always emit artifacts for CI/debugging.
+    _write_artifacts_only(cur, expected=None)
 
 
 # -----------------------------
@@ -370,10 +521,7 @@ def main() -> int:
 
     removed, added, changed = _route_diff(expected, cur)
 
-    _write_summary(cur, expected)
-    _write_registry_snapshot()
-    _write_attestation_bundle(cur)
-    _write_topology_hash()
+    _write_artifacts_only(cur, expected)
 
     failures: list[str] = []
     if removed:
