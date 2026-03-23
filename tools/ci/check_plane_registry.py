@@ -12,18 +12,35 @@ sys.path.insert(0, str(REPO))
 
 ADMIN_PREFIX_POLICY = "control_only"
 
+# FastAPI framework-generated documentation/runtime surfaces.
+# These may exist at runtime even when they are intentionally excluded from
+# contract-plane ownership checks.
+FRAMEWORK_ROUTE_ALLOWLIST: set[tuple[str, str]] = {
+    ("GET", "/openapi.json"),
+    ("GET", "/docs"),
+    ("GET", "/docs/oauth2-redirect"),
+    ("GET", "/redoc"),
+}
+
+# Explicitly approved runtime compatibility aliases.
+RUNTIME_ROUTE_ALIAS_ALLOWLIST: set[tuple[str, str]] = {
+    ("POST", "/v1/defend"),
+}
+
 
 def _exception_health(
     route_ex, *, plane_id: str, pool_name: str, warnings: list[str], failures: list[str]
 ) -> None:
     if not route_ex.justification.strip():
         failures.append(
-            f"plane {plane_id} has unjustified exception in {pool_name}: {route_ex.method} {route_ex.path}"
+            f"plane {plane_id} has unjustified exception in {pool_name}: "
+            f"{route_ex.method} {route_ex.path}"
         )
 
     if not route_ex.permanent and not route_ex.expires_at.strip():
         failures.append(
-            f"plane {plane_id} non-permanent exception missing expires_at in {pool_name}: {route_ex.method} {route_ex.path}"
+            f"plane {plane_id} non-permanent exception missing expires_at in {pool_name}: "
+            f"{route_ex.method} {route_ex.path}"
         )
         return
 
@@ -36,7 +53,9 @@ def _exception_health(
         )
     except ValueError:
         failures.append(
-            f"plane {plane_id} exception has invalid expires_at (YYYY-MM-DD required) in {pool_name}: {route_ex.method} {route_ex.path} -> {route_ex.expires_at}"
+            "plane "
+            f"{plane_id} exception has invalid expires_at (YYYY-MM-DD required) in "
+            f"{pool_name}: {route_ex.method} {route_ex.path} -> {route_ex.expires_at}"
         )
         return
 
@@ -44,16 +63,31 @@ def _exception_health(
     delta_days = (expires - now).days
     if delta_days > 90:
         failures.append(
-            f"plane {plane_id} exception exceeds maximum 90-day horizon in {pool_name}: {route_ex.method} {route_ex.path} expires {route_ex.expires_at}"
+            f"plane {plane_id} exception exceeds maximum 90-day horizon in {pool_name}: "
+            f"{route_ex.method} {route_ex.path} expires {route_ex.expires_at}"
         )
     elif delta_days < 0:
         failures.append(
-            f"plane {plane_id} exception exceeded 90-day expiry window in {pool_name}: {route_ex.method} {route_ex.path} expired {route_ex.expires_at}"
+            f"plane {plane_id} exception exceeded 90-day expiry window in {pool_name}: "
+            f"{route_ex.method} {route_ex.path} expired {route_ex.expires_at}"
         )
     elif delta_days <= 30:
         warnings.append(
-            f"plane {plane_id} exception expires within 30 days in {pool_name}: {route_ex.method} {route_ex.path} expires {route_ex.expires_at}"
+            f"plane {plane_id} exception expires within 30 days in {pool_name}: "
+            f"{route_ex.method} {route_ex.path} expires {route_ex.expires_at}"
         )
+
+
+def _normalize_route_key(method: str, path: str) -> tuple[str, str]:
+    return (str(method).upper().strip(), str(path).strip())
+
+
+def _filter_runtime_app_only(
+    routes: list[tuple[str, str]],
+) -> list[tuple[str, str]]:
+    ignored = FRAMEWORK_ROUTE_ALLOWLIST | RUNTIME_ROUTE_ALIAS_ALLOWLIST
+    normalized = {_normalize_route_key(method, path) for method, path in routes}
+    return sorted(route for route in normalized if route not in ignored)
 
 
 def main() -> int:
@@ -98,8 +132,8 @@ def main() -> int:
                     failures=failures,
                 )
 
-    runtime_keys = {(r["method"], r["path"]) for r in runtime}
-    contract_keys = {(r["method"], r["path"]) for r in contract}
+    runtime_keys = {_normalize_route_key(r["method"], r["path"]) for r in runtime}
+    contract_keys = {_normalize_route_key(r["method"], r["path"]) for r in contract}
     missing_from_runtime = sorted(contract_keys - runtime_keys)
     missing_from_contract = sorted(runtime_keys - contract_keys)
 
@@ -111,8 +145,8 @@ def main() -> int:
     prod_like = os.getenv("PROD_LIKE", "0") == "1"
 
     for route in runtime:
-        method = str(route["method"])
-        path = str(route["path"])
+        method = str(route["method"]).upper().strip()
+        path = str(route["path"]).strip()
         planes = match_plane(path)
         if not planes:
             failures.append(f"unexpected-route gap: {method} {path}")
@@ -128,7 +162,8 @@ def main() -> int:
 
         if path.startswith("/admin") and plane_id != "control":
             failures.append(
-                f"admin-surface ownership violation under {ADMIN_PREFIX_POLICY}: {method} {path} owned by {plane_id}, expected control"
+                f"admin-surface ownership violation under {ADMIN_PREFIX_POLICY}: "
+                f"{method} {path} owned by {plane_id}, expected control"
             )
 
         if prod_like and path.startswith(("/dev", "/_debug", "/_legacy")):
@@ -150,10 +185,11 @@ def main() -> int:
             and not has_exception
         ):
             failures.append(
-                f"{method} {path} plane={plane_id} missing tenant binding without exact exception"
+                f"{method} {path} plane={plane_id} missing tenant binding "
+                "without exact exception"
             )
 
-        scopes = set(str(s) for s in (route.get("scopes") or []))
+        scopes = {str(s) for s in (route.get("scopes") or [])}
         prefixes = tuple(plane.auth_class.required_scope_prefixes)
         if (
             prefixes
@@ -161,14 +197,16 @@ def main() -> int:
             and not any(any(scope.startswith(p) for p in prefixes) for scope in scopes)
         ):
             failures.append(
-                f"{method} {path} plane={plane_id} scopes violate policy: {sorted(scopes)}"
+                f"{method} {path} plane={plane_id} scopes violate policy: "
+                f"{sorted(scopes)}"
             )
 
-        categories = set(str(c) for c in (route.get("dependency_categories") or []))
+        categories = {str(c) for c in (route.get("dependency_categories") or [])}
         allowed = set(plane.allowed_dependency_categories)
         if not categories.issubset(allowed):
             failures.append(
-                f"{method} {path} plane={plane_id} dependency categories not allowed: {sorted(categories - allowed)}"
+                f"{method} {path} plane={plane_id} dependency categories not allowed: "
+                f"{sorted(categories - allowed)}"
             )
 
     if args.use_runtime_app:
@@ -178,16 +216,20 @@ def main() -> int:
             allow_missing = os.getenv("ALLOW_RUNTIME_APP_DEPS_MISSING", "0") == "1"
             if in_ci and not allow_missing:
                 failures.append(
-                    "runtime app route extraction unavailable in CI (set ALLOW_RUNTIME_APP_DEPS_MISSING=1 only for dev override)"
+                    "runtime app route extraction unavailable in CI "
+                    "(set ALLOW_RUNTIME_APP_DEPS_MISSING=1 only for dev override)"
                 )
             else:
                 warnings.append(
                     "runtime app route extraction unavailable (dependency/import issue)"
                 )
         else:
-            app_keys = {(r["method"], r["path"]) for r in runtime_app}
+            app_keys = {
+                _normalize_route_key(r["method"], r["path"]) for r in runtime_app
+            }
             ast_only = sorted(runtime_keys - app_keys)
-            app_only = sorted(app_keys - runtime_keys)
+            app_only = _filter_runtime_app_only(list(app_keys - runtime_keys))
+
             if app_only:
                 failures.append(f"runtime-app-only routes detected: {app_only}")
             if ast_only:
@@ -195,12 +237,12 @@ def main() -> int:
 
     if failures:
         print("plane registry check: FAILED")
-        for f in sorted(set(failures)):
-            print(f" - {f}")
+        for failure in sorted(set(failures)):
+            print(f" - {failure}")
         return 1
 
-    for w in sorted(set(warnings)):
-        print(f"plane registry check: WARNING {w}")
+    for warning in sorted(set(warnings)):
+        print(f"plane registry check: WARNING {warning}")
 
     print("plane registry check: OK")
     return 0

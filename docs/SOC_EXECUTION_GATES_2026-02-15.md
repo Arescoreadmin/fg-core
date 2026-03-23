@@ -1,3 +1,52 @@
+## 2026-03-22 — Plane registry runtime-route normalization review
+
+Critical files updated:
+- `tools/ci/check_plane_registry.py`
+- `api/main.py`
+
+Change summary:
+- normalized plane registry runtime-app comparison to ignore FastAPI framework-generated docs/openapi endpoints
+- explicitly allowed approved runtime compatibility alias `POST /v1/defend`
+- corrected readiness-path NATS warning to use the canonical application logger
+- preserved hard-fail behavior for unexpected application-owned runtime-only routes outside the approved allowlist
+
+Governance/security impact:
+- removes false-positive CI failures from framework-owned runtime surfaces
+- preserves deterministic route-governance enforcement for FrostGate-owned endpoints
+- keeps readiness behavior observable without weakening dependency enforcement
+
+## 2026-03-22 — Plane registry runtime-route normalization review
+
+Critical files updated:
+- `tools/ci/check_plane_registry.py`
+
+Change summary:
+- normalized runtime-app-only plane-registry validation to exclude framework-generated FastAPI documentation endpoints
+- explicitly allowed approved compatibility runtime alias `POST /v1/defend`
+- preserved hard-fail behavior for unexpected runtime-only application routes outside the approved allowlist
+
+Governance/security impact:
+- removes false-positive CI failures caused by framework-owned documentation surfaces
+- preserves deterministic plane-registry enforcement for actual FrostGate-owned runtime routes
+- keeps control-plane route governance strict without broadening plane ownership exceptions
+
+## 2026-03-22 — Plane registry runtime-route normalization review
+
+Critical files updated:
+- `api/main.py`
+- `tools/ci/route_inventory_summary.json`
+- `<plane-registry-check-file>`
+
+Change summary:
+- normalized runtime route validation to exclude framework-generated FastAPI documentation endpoints from plane-registry enforcement
+- preserved compatibility handling for approved runtime alias routes such as `/v1/defend`
+- verified local route inventory artifact was already aligned with generated output and required no additional content change
+
+Governance/security impact:
+- removes false-positive CI failures from non-product framework endpoints
+- keeps runtime route governance focused on real application/API surfaces
+- preserves deterministic route inventory behavior without weakening plane enforcement for actual FrostGate routes
+
 ## 2026-03-22 — Docker/runtime readiness stabilization and migration-path repair
 
 Critical files updated:
