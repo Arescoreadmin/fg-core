@@ -143,7 +143,7 @@ services:
       - ./policy/bundles:/usr/share/nginx/html:ro
       - ./policy/bundles/nginx.conf:/etc/nginx/nginx.conf:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -T 2 -O - http://127.0.0.1/health >/dev/null 2>&1"]
+      test: ["CMD", "wget", "-q", "-T", "2", "-O", "-", "http://127.0.0.1/health"]
       interval: 5s
       timeout: 2s
       retries: 12
@@ -151,7 +151,10 @@ services:
 
   opa:
     profiles: ["core"]
-    image: openpolicyagent/opa:0.64.1
+    build:
+      context: .
+      dockerfile: policy/opa/Dockerfile
+    image: frostgate-opa:latest
     restart: unless-stopped
     networks:
       - internal
@@ -169,11 +172,11 @@ services:
     volumes:
       - ./policy/opa/config.yaml:/config/config.yaml:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -T 2 -O - http://127.0.0.1:8181/health?bundle=true >/dev/null 2>&1"]
+      test: ["CMD", "wget", "-q", "-T", "2", "-O", "-", "http://127.0.0.1:8181/health?bundle=true"]
       interval: 5s
-      timeout: 2s
+      timeout: 3s
       retries: 12
-      start_period: 5s
+      start_period: 10s
     read_only: true
     security_opt:
       - no-new-privileges:true
@@ -181,7 +184,6 @@ services:
       - ALL
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=32m,mode=700
-
   frostgate-bootstrap:
     profiles: ["core"]
     image: alpine:3.20
@@ -220,9 +222,9 @@ services:
       postgres:
         condition: service_healthy
     entrypoint: ["sh", "-lc"]
-    command: |
-      set -eux
-      python -m api.db_migrations --backend "${FG_DB_BACKEND}" --apply
+    command: >
+      set -eux;
+      python -m api.db_migrations --backend "${FG_DB_BACKEND}" --apply;
       python -m api.db_migrations --backend "${FG_DB_BACKEND}" --assert
     restart: "no"
     read_only: true
@@ -284,6 +286,12 @@ services:
       AG_CORE_BASE_URL: http://frostgate-core:8080
       FG_AUTH_ALLOW_FALLBACK: ${FG_AUTH_ALLOW_FALLBACK:-false}
       FG_RL_FAIL_OPEN: ${FG_RL_FAIL_OPEN:-false}
+    volumes:
+      - fg_mission:/var/lib/frostgate/mission
+      - fg_state:/var/lib/frostgate/state
+      - fg_agent_queue:/var/lib/frostgate/agent_queue
+      - fg_ring_state:/var/lib/frostgate/ring/state
+      - fg_ring_models:/var/lib/frostgate/ring/models
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=2).read()\""]
       interval: 5s
@@ -297,7 +305,6 @@ services:
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=128m,mode=700
-
   admin-gateway:
     profiles: ["admin"]
     build:
