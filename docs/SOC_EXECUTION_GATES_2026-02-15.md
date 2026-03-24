@@ -1235,3 +1235,23 @@ SOC review outcome:
 
 SOC review outcome:
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+## 2026-03-24 — Admin gateway compose auth fallback removal
+
+### Files reviewed (required by SOC-HIGH-002)
+- `docker-compose.yml`
+
+### Summary
+- Removed `FG_AUTH_ALLOW_FALLBACK=true` from admin-gateway compose configuration.
+- Kept explicit local/dev auth posture for compose validation without enabling forbidden fallback behavior.
+- No intended production runtime behavior change.
+
+### Verification
+- `docker compose --profile core --profile admin up -d --build`
+- `make soc-review-sync`
+- `make pr-check-fast`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.

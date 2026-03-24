@@ -337,7 +337,6 @@ services:
       # Explicit local/CI-safe auth posture for admin profile until OIDC is wired.
       FG_ENV: local
       FG_AUTH_MODE: dev
-      FG_AUTH_ALLOW_FALLBACK: "true"
       FG_DEBUG: "false"
       FG_LOG_LEVEL: info
     healthcheck:
