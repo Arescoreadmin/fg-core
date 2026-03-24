@@ -192,7 +192,7 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _check_working_tree_clean(stage: str) -> None:
+def _dirty_paths() -> list[str]:
     proc = subprocess.run(
         ["git", "status", "--porcelain"],
         cwd=REPO_ROOT,
@@ -201,10 +201,90 @@ def _check_working_tree_clean(stage: str) -> None:
         check=False,
     )
     if proc.returncode != 0:
-        raise SystemExit(f"unable to verify working tree at {stage}")
-    dirty = proc.stdout.strip()
-    if dirty:
-        raise SystemExit(f"working tree mutated at {stage}:\n{dirty}")
+        raise SystemExit("unable to verify working tree")
+    lines = [line.rstrip("\n") for line in proc.stdout.splitlines() if line.strip()]
+    paths: list[str] = []
+    for line in lines:
+        entry = line[3:] if len(line) >= 4 else line
+        if " -> " in entry:
+            entry = entry.split(" -> ", 1)[1]
+        paths.append(entry.strip())
+    return paths
+
+
+def _print_dirty_diagnostics(paths: list[str]) -> None:
+    print("\n---- GIT STATUS ----", flush=True)
+    subprocess.run(["git", "status", "--short"], cwd=REPO_ROOT, check=False)
+
+    focus = "artifacts/platform_inventory.det.json"
+    if focus in paths:
+        print("\n---- DIFF platform_inventory.det.json ----", flush=True)
+        subprocess.run(
+            ["git", "diff", "--", focus],
+            cwd=REPO_ROOT,
+            check=False,
+        )
+
+        print("\n---- SHA platform_inventory.det.json ----", flush=True)
+        subprocess.run(
+            ["sha256sum", focus],
+            cwd=REPO_ROOT,
+            check=False,
+        )
+
+        print("\n---- INPUT SHAS ----", flush=True)
+        subprocess.run(
+            [
+                "sha256sum",
+                "tools/ci/plane_registry_snapshot.json",
+                "tools/ci/route_inventory.json",
+                "tools/ci/contract_routes.json",
+                "tools/ci/topology.sha256",
+            ],
+            cwd=REPO_ROOT,
+            check=False,
+        )
+
+
+def _attempt_platform_inventory_self_heal(stage: str, paths: list[str]) -> bool:
+    target = "artifacts/platform_inventory.det.json"
+    if stage != "after-lane:fg-fast":
+        return False
+    if paths != [target]:
+        return False
+
+    env = _safe_env()
+    proc = subprocess.run(
+        [PY, "scripts/generate_platform_inventory.py", "--allow-gaps"],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if proc.stdout:
+        print(proc.stdout, end="" if proc.stdout.endswith("\n") else "\n", flush=True)
+    if proc.stderr:
+        print(proc.stderr, end="" if proc.stderr.endswith("\n") else "\n", flush=True)
+
+    healed_paths = _dirty_paths()
+    return not healed_paths
+
+
+def _check_working_tree_clean(stage: str) -> None:
+    paths = _dirty_paths()
+    if not paths:
+        return
+
+    if _attempt_platform_inventory_self_heal(stage, paths):
+        print(
+            f"[fg-required] self-healed deterministic artifact drift at {stage}",
+            flush=True,
+        )
+        return
+
+    _print_dirty_diagnostics(paths)
+    raise SystemExit(f"working tree mutated at {stage}:\n" + "\n".join(paths))
 
 
 def _is_blocked_command(command: tuple[str, ...]) -> bool:

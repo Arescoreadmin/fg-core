@@ -1299,3 +1299,24 @@ SOC review outcome:
 
 SOC review outcome:
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+## 2026-03-24 — fg-required deterministic artifact self-heal
+
+### Files reviewed (required by SOC-HIGH-002)
+- `tools/testing/harness/fg_required.py`
+
+### Summary
+- Added narrow self-heal logic for `artifacts/platform_inventory.det.json` after `fg-fast`.
+- Preserved fail-closed behavior for all other dirty worktree mutations.
+- Added diagnostics for dirty worktree failures to expose artifact and input hashes.
+
+### Verification
+- `ruff format tools/testing/harness/fg_required.py`
+- `python -m py_compile tools/testing/harness/fg_required.py`
+- `make fg-fast`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
