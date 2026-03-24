@@ -1192,3 +1192,25 @@ SOC review outcome:
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
 
 <!-- APPEND NEW SOC ENTRIES BELOW THIS LINE ONLY -->
+## 2026-03-24 — Platform inventory governance input restoration
+
+### Files reviewed (required by SOC-HIGH-002)
+- `tools/ci/contract_routes.json`
+- `tools/ci/plane_registry_snapshot.json`
+- `tools/ci/topology.sha256`
+
+### Summary
+- Regenerated and committed required governance inputs consumed by platform inventory generation.
+- Restored deterministic repository state expected by `fg-fast` and `fg-required`.
+- No intended runtime behavior change.
+
+### Verification
+- `PYTHONPATH=. python scripts/generate_platform_inventory.py --allow-gaps`
+- `make soc-review-sync`
+- `make pr-check-fast`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
