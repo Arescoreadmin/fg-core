@@ -1255,3 +1255,24 @@ SOC review outcome:
 
 SOC review outcome:
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+## 2026-03-24 — AI table append-only assertion alignment
+
+### Files reviewed (required by SOC-HIGH-002)
+- `api/db_migrations.py`
+
+### Summary
+- Removed mutable AI tables from append-only trigger assertion enforcement.
+- Preserved tenant RLS assertion coverage for AI tenant-isolated tables.
+- Prevented docker compose migration assert failures caused by treating mutable AI tables as append-only.
+
+### Verification
+- `python -m api.db_migrations --backend postgres --assert`
+- `docker compose --profile core up -d --build`
+- `docker logs fg-core-frostgate-migrate-1 --tail=200`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
