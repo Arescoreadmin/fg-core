@@ -209,6 +209,9 @@ services:
 
   frostgate-migrate:
     profiles: ["core"]
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: frostgate-core:latest
     env_file:
       - path: .env
@@ -217,15 +220,17 @@ services:
         required: true
     environment:
       FG_DB_BACKEND: ${FG_DB_BACKEND:-postgres}
-      FG_DB_URL: ${FG_DB_URL:-postgresql+psycopg://fg_user:postgres@postgres:5432/frostgate}
+      FG_DB_URL: ${FG_DB_URL:-postgresql+psycopg://${POSTGRES_APP_USER:-fg_user}:${POSTGRES_APP_PASSWORD:-postgres}@postgres:5432/${POSTGRES_APP_DB:-frostgate}}
     depends_on:
       postgres:
         condition: service_healthy
-    entrypoint: ["sh", "-lc"]
-    command: >
-      set -eux;
-      python -m api.db_migrations --backend "${FG_DB_BACKEND}" --apply;
-      python -m api.db_migrations --backend "${FG_DB_BACKEND}" --assert
+    entrypoint:
+      - sh
+      - -lc
+      - >
+        set -eux;
+        python -m api.db_migrations --backend "${FG_DB_BACKEND}" --apply;
+        python -m api.db_migrations --backend "${FG_DB_BACKEND}" --assert
     restart: "no"
     read_only: true
     networks:
@@ -328,6 +333,13 @@ services:
         required: true
     environment:
       AG_CORE_BASE_URL: http://frostgate-core:8080
+
+      # Explicit local/CI-safe auth posture for admin profile until OIDC is wired.
+      FG_ENV: local
+      FG_AUTH_MODE: dev
+      FG_AUTH_ALLOW_FALLBACK: "true"
+      FG_DEBUG: "false"
+      FG_LOG_LEVEL: info
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()\""]
       interval: 10s

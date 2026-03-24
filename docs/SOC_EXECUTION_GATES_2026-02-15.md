@@ -1214,3 +1214,24 @@ SOC review outcome:
 
 SOC review outcome:
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+## 2026-03-24 — Admin gateway auth posture stabilization for compose validation
+
+### Files reviewed (required by SOC-HIGH-002)
+- `docker-compose.yml`
+
+### Summary
+- Set explicit local admin-gateway auth posture for compose-based validation runs.
+- Prevented production OIDC enforcement from crashing admin-gateway when no IdP is present in the local/CI compose path.
+- No change to core service runtime behavior.
+
+### Verification
+- `docker compose --profile core --profile admin up -d --build`
+- `docker compose ps`
+- `docker logs fg-core-admin-gateway-1 --tail=200`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
