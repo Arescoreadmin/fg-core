@@ -1276,3 +1276,26 @@ SOC review outcome:
 
 SOC review outcome:
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+## 2026-03-24 — Deterministic platform inventory volatility fix
+
+### Files reviewed (required by SOC-HIGH-002)
+- `scripts/generate_platform_inventory.py`
+- `artifacts/platform_inventory.det.json`
+- `artifacts/platform_inventory.json`
+
+### Summary
+- Removed `build_meta` from deterministic platform inventory output.
+- Preserved `build_meta` only in volatile platform inventory output.
+- Prevented CI mutation of `artifacts/platform_inventory.det.json` caused by run-variant build metadata.
+
+### Verification
+- `PYTHONPATH=. python scripts/generate_platform_inventory.py --allow-gaps`
+- `git diff -- artifacts/platform_inventory.det.json`
+- `make soc-review-sync`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.

@@ -645,7 +645,6 @@ def main(argv: list[str] | None = None) -> int:
                     "contract_routes.json."
                 ),
                 "attestation_sha256": attestation_sha,
-                "build_meta": build_meta,
             }
         )
 
@@ -684,6 +683,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if vol_payload is not None:
+        vol_payload["build_meta"] = build_meta
         (art / "platform_inventory.json").write_text(
             _dump_json(vol_payload), encoding="utf-8"
         )
