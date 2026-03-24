@@ -1283,7 +1283,9 @@ pr-check-fast: fg-fast pr-fix-log
 # ==============================================================================
 # Compliance SBOM generation
 # ==============================================================================	
-compliance-sbom:
+compliance-provenance: venv
 	@mkdir -p artifacts
-	@python scripts/generate_sbom.py --output artifacts/sbom.json
-	@echo "compliance-sbom: OK"
+	@.venv/bin/python scripts/provenance.py --output artifacts/provenance.json
+	@echo "compliance-provenance: OK"
+
+
