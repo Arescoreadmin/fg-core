@@ -1,0 +1,333 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.5.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:c77ea476a57bbb40801dbb6acd99717bbb09",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-03-24T00:15:43.060311+00:00",
+    "tools": [
+      {
+        "vendor": "FrostGate",
+        "name": "generate_sbom.py",
+        "version": "1.0.0"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "name": "frostgate-core",
+      "version": "v0.9.2-agent-hardening-231-g48de858",
+      "purl": "pkg:github/frostgate/fg-core@48de858"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "fastapi",
+      "version": "0.120.4",
+      "purl": "pkg:pypi/fastapi@0.120.4",
+      "bom-ref": "pypi:fastapi:0.120.4"
+    },
+    {
+      "type": "library",
+      "name": "starlette",
+      "version": "0.49.1",
+      "purl": "pkg:pypi/starlette@0.49.1",
+      "bom-ref": "pypi:starlette:0.49.1"
+    },
+    {
+      "type": "library",
+      "name": "uvicorn[standard]",
+      "version": "0.30.0",
+      "purl": "pkg:pypi/uvicorn[standard]@0.30.0",
+      "bom-ref": "pypi:uvicorn[standard]:0.30.0"
+    },
+    {
+      "type": "library",
+      "name": "pydantic",
+      "version": "2.9.0",
+      "purl": "pkg:pypi/pydantic@2.9.0",
+      "bom-ref": "pypi:pydantic:2.9.0"
+    },
+    {
+      "type": "library",
+      "name": "pydantic-settings",
+      "version": "2.5.2",
+      "purl": "pkg:pypi/pydantic-settings@2.5.2",
+      "bom-ref": "pypi:pydantic-settings:2.5.2"
+    },
+    {
+      "type": "library",
+      "name": "httpx",
+      "version": "0.27.2",
+      "purl": "pkg:pypi/httpx@0.27.2",
+      "bom-ref": "pypi:httpx:0.27.2"
+    },
+    {
+      "type": "library",
+      "name": "loguru",
+      "version": "0.7.2",
+      "purl": "pkg:pypi/loguru@0.7.2",
+      "bom-ref": "pypi:loguru:0.7.2"
+    },
+    {
+      "type": "library",
+      "name": "python-dotenv",
+      "version": "1.0.1",
+      "purl": "pkg:pypi/python-dotenv@1.0.1",
+      "bom-ref": "pypi:python-dotenv:1.0.1"
+    },
+    {
+      "type": "library",
+      "name": "prometheus-fastapi-instrumentator",
+      "version": "7.1.0",
+      "purl": "pkg:pypi/prometheus-fastapi-instrumentator@7.1.0",
+      "bom-ref": "pypi:prometheus-fastapi-instrumentator:7.1.0"
+    },
+    {
+      "type": "library",
+      "name": "redis",
+      "version": "7.1.0",
+      "purl": "pkg:pypi/redis@7.1.0",
+      "bom-ref": "pypi:redis:7.1.0"
+    },
+    {
+      "type": "library",
+      "name": "cryptography",
+      "version": "46.0.5",
+      "purl": "pkg:pypi/cryptography@46.0.5",
+      "bom-ref": "pypi:cryptography:46.0.5"
+    },
+    {
+      "type": "library",
+      "name": "alembic",
+      "version": "1.11.1",
+      "purl": "pkg:pypi/alembic@1.11.1",
+      "bom-ref": "pypi:alembic:1.11.1"
+    },
+    {
+      "type": "library",
+      "name": "psycopg[binary]",
+      "version": "3.3.2",
+      "purl": "pkg:pypi/psycopg[binary]@3.3.2",
+      "bom-ref": "pypi:psycopg[binary]:3.3.2"
+    },
+    {
+      "type": "library",
+      "name": "sqlalchemy",
+      "version": "2.0.20",
+      "purl": "pkg:pypi/sqlalchemy@2.0.20",
+      "bom-ref": "pypi:sqlalchemy:2.0.20"
+    },
+    {
+      "type": "library",
+      "name": "sqlparse",
+      "version": "0.5.4",
+      "purl": "pkg:pypi/sqlparse@0.5.4",
+      "bom-ref": "pypi:sqlparse:0.5.4"
+    },
+    {
+      "type": "library",
+      "name": "itsdangerous",
+      "version": "2.1.2",
+      "purl": "pkg:pypi/itsdangerous@2.1.2",
+      "bom-ref": "pypi:itsdangerous:2.1.2"
+    },
+    {
+      "type": "library",
+      "name": "python-json-logger",
+      "version": "2.0.0",
+      "purl": "pkg:pypi/python-json-logger@2.0.0",
+      "bom-ref": "pypi:python-json-logger:2.0.0"
+    },
+    {
+      "type": "library",
+      "name": "aiosqlite",
+      "version": "0.19.0",
+      "purl": "pkg:pypi/aiosqlite@0.19.0",
+      "bom-ref": "pypi:aiosqlite:0.19.0"
+    },
+    {
+      "type": "library",
+      "name": "argon2-cffi",
+      "version": "23.1.0",
+      "purl": "pkg:pypi/argon2-cffi@23.1.0",
+      "bom-ref": "pypi:argon2-cffi:23.1.0"
+    },
+    {
+      "type": "library",
+      "name": "pyjwt",
+      "version": "2.12.0",
+      "purl": "pkg:pypi/pyjwt@2.12.0",
+      "bom-ref": "pypi:pyjwt:2.12.0"
+    },
+    {
+      "type": "library",
+      "name": "pytest",
+      "version": "8.4.2",
+      "purl": "pkg:pypi/pytest@8.4.2",
+      "bom-ref": "pypi:pytest:8.4.2"
+    },
+    {
+      "type": "library",
+      "name": "pytest-asyncio",
+      "version": "0.24.0",
+      "purl": "pkg:pypi/pytest-asyncio@0.24.0",
+      "bom-ref": "pypi:pytest-asyncio:0.24.0"
+    },
+    {
+      "type": "library",
+      "name": "pytest-env",
+      "version": "1.2.0",
+      "purl": "pkg:pypi/pytest-env@1.2.0",
+      "bom-ref": "pypi:pytest-env:1.2.0"
+    },
+    {
+      "type": "library",
+      "name": "pytest-cov",
+      "version": "7.0.0",
+      "purl": "pkg:pypi/pytest-cov@7.0.0",
+      "bom-ref": "pypi:pytest-cov:7.0.0"
+    },
+    {
+      "type": "library",
+      "name": "ruff",
+      "version": "0.4.0",
+      "purl": "pkg:pypi/ruff@0.4.0",
+      "bom-ref": "pypi:ruff:0.4.0"
+    },
+    {
+      "type": "library",
+      "name": "jsonschema",
+      "version": "4.23.0",
+      "purl": "pkg:pypi/jsonschema@4.23.0",
+      "bom-ref": "pypi:jsonschema:4.23.0"
+    },
+    {
+      "type": "library",
+      "name": "requests",
+      "version": "2.31",
+      "purl": "pkg:pypi/requests@2.31",
+      "bom-ref": "pypi:requests:2.31"
+    },
+    {
+      "type": "library",
+      "name": "pre-commit",
+      "version": "4.0.1",
+      "purl": "pkg:pypi/pre-commit@4.0.1",
+      "bom-ref": "pypi:pre-commit:4.0.1"
+    },
+    {
+      "type": "library",
+      "name": "pyjwt[crypto]",
+      "version": "2.12.0",
+      "purl": "pkg:pypi/pyjwt[crypto]@2.12.0",
+      "bom-ref": "pypi:pyjwt[crypto]:2.12.0"
+    },
+    {
+      "type": "library",
+      "name": "next",
+      "version": "14.2.5",
+      "purl": "pkg:npm/next@14.2.5",
+      "bom-ref": "npm:next:14.2.5"
+    },
+    {
+      "type": "library",
+      "name": "react",
+      "version": "18.3.1",
+      "purl": "pkg:npm/react@18.3.1",
+      "bom-ref": "npm:react:18.3.1"
+    },
+    {
+      "type": "library",
+      "name": "react-dom",
+      "version": "18.3.1",
+      "purl": "pkg:npm/react-dom@18.3.1",
+      "bom-ref": "npm:react-dom:18.3.1"
+    },
+    {
+      "type": "library",
+      "name": "@types/node",
+      "version": "20.14.0",
+      "purl": "pkg:npm/@types/node@20.14.0",
+      "bom-ref": "npm:@types/node:20.14.0"
+    },
+    {
+      "type": "library",
+      "name": "@types/react",
+      "version": "18.3.3",
+      "purl": "pkg:npm/@types/react@18.3.3",
+      "bom-ref": "npm:@types/react:18.3.3"
+    },
+    {
+      "type": "library",
+      "name": "@types/react-dom",
+      "version": "18.3.0",
+      "purl": "pkg:npm/@types/react-dom@18.3.0",
+      "bom-ref": "npm:@types/react-dom:18.3.0"
+    },
+    {
+      "type": "library",
+      "name": "eslint",
+      "version": "8.57.0",
+      "purl": "pkg:npm/eslint@8.57.0",
+      "bom-ref": "npm:eslint:8.57.0"
+    },
+    {
+      "type": "library",
+      "name": "eslint-config-next",
+      "version": "14.2.5",
+      "purl": "pkg:npm/eslint-config-next@14.2.5",
+      "bom-ref": "npm:eslint-config-next:14.2.5"
+    },
+    {
+      "type": "library",
+      "name": "typescript",
+      "version": "5.4.5",
+      "purl": "pkg:npm/typescript@5.4.5",
+      "bom-ref": "npm:typescript:5.4.5"
+    },
+    {
+      "type": "library",
+      "name": "pydantic-core",
+      "version": "2.23.2",
+      "purl": "pkg:pypi/pydantic-core@2.23.2",
+      "bom-ref": "pypi:pydantic-core:2.23.2"
+    },
+    {
+      "type": "library",
+      "name": "typing-extensions",
+      "version": "4.15.0",
+      "purl": "pkg:pypi/typing-extensions@4.15.0",
+      "bom-ref": "pypi:typing-extensions:4.15.0"
+    },
+    {
+      "type": "library",
+      "name": "httpx",
+      "version": "0.26.0",
+      "purl": "pkg:pypi/httpx@0.26.0",
+      "bom-ref": "pypi:httpx:0.26.0"
+    },
+    {
+      "type": "library",
+      "name": "sqlalchemy",
+      "version": "2.0.0",
+      "purl": "pkg:pypi/sqlalchemy@2.0.0",
+      "bom-ref": "pypi:sqlalchemy:2.0.0"
+    },
+    {
+      "type": "library",
+      "name": "alembic",
+      "version": "1.13.0",
+      "purl": "pkg:pypi/alembic@1.13.0",
+      "bom-ref": "pypi:alembic:1.13.0"
+    },
+    {
+      "type": "library",
+      "name": "psycopg[binary]",
+      "version": "3.1.0",
+      "purl": "pkg:pypi/psycopg[binary]@3.1.0",
+      "bom-ref": "pypi:psycopg[binary]:3.1.0"
+    }
+  ]
+}
