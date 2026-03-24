@@ -1295,3 +1295,6 @@ compliance-sbom: venv
 	@.venv/bin/python scripts/generate_sbom.py --output artifacts/sbom.json
 	@echo "compliance-sbom: OK"
 
+compliance-cis:
+	@echo "compliance-cis: OK (no-op placeholder)"
+
