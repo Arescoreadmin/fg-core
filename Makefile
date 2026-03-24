@@ -1288,4 +1288,10 @@ compliance-provenance: venv
 	@.venv/bin/python scripts/provenance.py --output artifacts/provenance.json
 	@echo "compliance-provenance: OK"
 
+.PHONY: compliance-sbom
+
+compliance-sbom: venv
+	@mkdir -p artifacts
+	@.venv/bin/python scripts/generate_sbom.py --output artifacts/sbom.json
+	@echo "compliance-sbom: OK"
 
