@@ -1298,3 +1298,6 @@ compliance-sbom: venv
 compliance-cis:
 	@echo "compliance-cis: OK (no-op placeholder)"
 
+compliance-scap:
+	@echo "compliance-scap: OK (no-op placeholder)"
+
