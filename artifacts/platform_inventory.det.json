@@ -138,7 +138,6 @@
     ],
     "schema_unknown_key_warnings": [],
     "schema_versions": {
-      "build_meta": "v1",
       "contract_routes": "v1",
       "plane_registry": "v1",
       "route_inventory": "v1"
