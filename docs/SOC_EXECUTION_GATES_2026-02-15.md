@@ -1171,3 +1171,24 @@ Governance/security impact:
 - prevents OPA validation merge/load errors caused by duplicate config documents
 - restores deterministic CI policy validation behavior
 - reduces policy-loading ambiguity by keeping a single canonical OPA config source
+
+## 2026-03-24 — Webhook SSRF validation unification review
+
+Critical file updated:
+- `api/security_alerts.py`
+
+Change summary:
+- replaced duplicated webhook target validation logic with wrapper to `api.security.outbound_policy.validate_target`
+- introduced `_compat_validate_target` to preserve test monkeypatch seams
+- ensured production path uses canonical outbound SSRF enforcement
+
+Governance/security impact:
+- eliminates split SSRF validation logic across modules
+- ensures deterministic and consistent outbound validation behavior
+- preserves existing SSRF protections including DNS rebinding detection
+- maintains test determinism without weakening production enforcement
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+<!-- APPEND NEW SOC ENTRIES BELOW THIS LINE ONLY -->
