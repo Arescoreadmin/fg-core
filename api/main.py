@@ -22,7 +22,6 @@ from api.config.startup_validation import (
     compliance_module_enabled,
     validate_startup_config,
 )
-from api.config.ui import ui_enabled
 from api.db import init_db
 from api.decisions import router as decisions_router
 from api.defend import router as defend_router
@@ -34,13 +33,7 @@ from api.keys import router as keys_router
 from api.stats import router as stats_router
 from api.attestation import router as attestation_router
 from api.config_control import router as config_control_router
-from api.ui import router as ui_router
-from api.ui_dashboards import router as ui_dashboards_router
 from api.audit import router as audit_router
-from api.ui_audit_dashboard import router as ui_audit_dashboard_router
-from api.ui_compliance_dashboard import router as ui_compliance_dashboard_router
-from api.ui_ai_console import admin_router as ui_ai_admin_router
-from api.ui_ai_console import router as ui_ai_router
 from api.compliance import router as compliance_router
 from api.billing import router as billing_router
 from api.compliance_cp_extension import router as compliance_cp_extension_router
@@ -60,7 +53,6 @@ from api.control_plane import router as control_plane_router
 from api.control_plane_v2 import router as control_plane_v2_router
 from api.testing_control_tower import router as testing_control_tower_router
 from api.control_tower_snapshot import router as control_tower_snapshot_router
-from api.ui_testing_control_tower import router as ui_testing_control_tower_router
 from services.ai_plane_extension import ai_external_provider_enabled, ai_plane_enabled
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
@@ -524,16 +516,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(planes_router)
     app.include_router(evidence_index_router)
 
-    if ui_enabled():
-        app.include_router(ui_router)
-        app.include_router(ui_dashboards_router)
-        app.include_router(ui_audit_dashboard_router)
-        app.include_router(ui_compliance_dashboard_router)
-        app.include_router(ui_ai_router)
-        app.include_router(ui_ai_admin_router)
-        if _testing_control_tower_enabled():
-            app.include_router(ui_testing_control_tower_router)
-
     app.include_router(keys_router)
     app.include_router(forensics_router)
     app.include_router(agent_enrollment_router)
@@ -560,11 +542,6 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
 
     if _dev_enabled():
         app.include_router(dev_events_router)
-
-    # ---- Admin router ----
-    admin_router = getattr(spine_modules, "admin_router", None)
-    if admin_router is not None and _should_mount_admin_routes():
-        app.include_router(admin_router)
 
     # ---- Health / Status ----
     @app.get("/health")
