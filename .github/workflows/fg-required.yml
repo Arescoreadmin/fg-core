@@ -190,8 +190,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f artifacts/testing/fg-required-summary.json
-          test -f artifacts/testing/fg-required-summary.md
+
+          test -f artifacts/fg-required/fg-required-summary.json
+          test -f artifacts/fg-required/fg-required-summary.md
+          test -f artifacts/fg-required/fg-required.stdout.log
+          test -f artifacts/fg-required/toolchain.txt
+
+          .venv/bin/python - <<'PY'
+          from pathlib import Path
+          import json
+
+          summary_json = Path("artifacts/fg-required/fg-required-summary.json")
+          summary_md = Path("artifacts/fg-required/fg-required-summary.md")
+
+          payload = json.loads(summary_json.read_text(encoding="utf-8"))
+          assert isinstance(payload, dict), "summary json must be an object"
+          assert "overall_status" in payload, "summary json missing overall_status"
+          assert "lanes" in payload, "summary json missing lanes"
+          assert summary_md.read_text(encoding="utf-8").strip(), "summary markdown is empty"
+          PY
 
       - name: Publish job summary
         if: always()

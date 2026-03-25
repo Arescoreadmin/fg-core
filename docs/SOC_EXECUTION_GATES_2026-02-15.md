@@ -1339,3 +1339,26 @@ SOC review outcome:
 
 SOC review outcome:
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+## 2026-03-25 — fg-required summary artifact verification alignment
+
+### Critical-path files reviewed (SOC-HIGH-002)
+- `.github/workflows/fg-required.yml`
+- `tools/testing/harness/fg_required.py`
+- `Makefile`
+
+### Summary
+- Aligned `fg-required` workflow summary verification with the harness artifact root.
+- Workflow had been checking `artifacts/testing/fg-required-summary.*` while the harness writes `fg-required-summary.json` and `fg-required-summary.md` under `artifacts/fg-required/`.
+- Removed redundant Makefile-owned summary generation to preserve a single source of truth for required gate artifacts.
+
+### Verification
+- `python tools/testing/harness/fg_required.py`
+- `make fg-fast`
+- artifact bundle inspection confirmed `artifacts/fg-required/fg-required-summary.json` and `.md`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
