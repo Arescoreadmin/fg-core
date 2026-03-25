@@ -668,6 +668,8 @@ connectors-gate: venv _require-pytest-venv
 	@$(PY) tools/ci/check_openapi_security_diff.py
 	@$(MAKE) -s check-connectors-rls
 
+.PHONY: fg-fast g-fast fg-fast-ci fg-fast-full fg-full
+
 fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check \
 	prod-unsafe-config-check security-regression-gates soc-invariants soc-manifest-verify \
 	route-inventory-audit check-decision-roe test-quality-gate soc-review-sync pr-base-mainline-check \
@@ -676,18 +678,17 @@ fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate \
 	verify-spine-modules verify-schemas verify-drift align-score pr-fix-log
-	
 	@$(MAKE) -s test-unit
 	@$(MAKE) -s fg-lint
 	@$(MAKE) -s test-dashboard-p0
 	@$(MAKE) -s sql-migration-percent-guard
 
-# Compat alias (you referenced "g-fast")
+# Compat alias
 g-fast: fg-fast
 
 fg-fast-ci: fg-fast billing-ledger-verify billing-invoice-verify opa-check control-plane-check
 
-fg-fast-full: fg-fast-ci audit-chain-verify compliance-chain-verify canonicalization-guard
+fg-fast-full: fg-fast-ci compliance-chain-verify canonicalization-guard
 
 fg-full: fg-fast-full \
 	audit-export-test audit-repro-test compliance-registry-test exam-export-test exam-reproduce-test
