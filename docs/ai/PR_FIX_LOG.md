@@ -115,4 +115,21 @@ This entry documents a production-surface change touching compose/runtime enforc
 
 ---
 
-_Last updated: 2026-03-12_
+
+### 2026-03-25 — Core Auth Boundary Router Composition Enforcement
+
+**Area:** Core API · Auth Boundary · CI Governance
+
+**Issue:**  
+`pr-fix-log-guard` blocked the auth-boundary change because `api/main.py` was modified to remove human-facing route mounts but `docs/ai/PR_FIX_LOG.md` was not updated.
+
+**Resolution:**  
+Appended this entry to record the high-risk routing change: core runtime composition no longer mounts browser-facing `/ui*` routers or the dynamic spine admin router mount, aligning runtime exposure with the Admin-Gateway-only human auth boundary contract.
+
+**AI Notes:**  
+- For auth-boundary or other high-risk route composition changes, always append a `PR_FIX_LOG` entry in the same patch.
+- Do NOT bypass this requirement unless an explicit override marker is intentionally provided in the PR description.
+
+---
+
+_Last updated: 2026-03-25_
