@@ -1,0 +1,66 @@
+{
+  "_type": "https://in-toto.io/Statement/v1",
+  "subject": [
+    {
+      "name": "sbom.json",
+      "digest": {
+        "sha256": "4bf38d50a74c81a377030f02a786d416694be5c7e3f30daea9212ee94ac04733"
+      }
+    }
+  ],
+  "predicateType": "https://slsa.dev/provenance/v1",
+  "predicate": {
+    "buildDefinition": {
+      "buildType": "https://frostgate.io/build/v1",
+      "externalParameters": {
+        "source": "git@github.com:Arescoreadmin/fg-core.git",
+        "ref": "fix/docker-ci-workflow-stabilization",
+        "commit": "66d3223933e84d5039ec17081070fe072277d6ca"
+      },
+      "internalParameters": {
+        "dirty": true
+      },
+      "resolvedDependencies": [
+        {
+          "uri": "git@github.com:Arescoreadmin/fg-core.git",
+          "digest": {
+            "sha1": "66d3223933e84d5039ec17081070fe072277d6ca"
+          }
+        },
+        {
+          "uri": "file://Dockerfile",
+          "digest": {
+            "sha256": "af6a62b468e44d2e7702b158f7a34a0634809d007289dcbaca698f8e67323156"
+          }
+        },
+        {
+          "uri": "file://requirements.txt",
+          "digest": {
+            "sha256": "69fef2c32dd98df76a9be9bfb83e9807dffe59efdced85c9c53dd2dc9016a47a"
+          }
+        },
+        {
+          "uri": "file://requirements-dev.txt",
+          "digest": {
+            "sha256": "549aac388e22fa3140939e9baaa23ce6a7c6f483f3cfda2dcb71914239334a78"
+          }
+        }
+      ]
+    },
+    "runDetails": {
+      "builder": {
+        "id": "https://frostgate.io/builders/None",
+        "version": {
+          "python": "3.12.3",
+          "platform": "Linux"
+        }
+      },
+      "metadata": {
+        "invocationId": "fc70a5e4f93d52ea",
+        "startedOn": "2026-03-23T23:49:50.815423+00:00",
+        "finishedOn": "2026-03-23T23:49:50.824529+00:00"
+      },
+      "byproducts": []
+    }
+  }
+}

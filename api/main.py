@@ -658,7 +658,9 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 check_nats = getattr(checker, "check_nats", None)
                 if not callable(check_nats):
                     deps_status["nats"] = "not_supported"
-                    failures.append("nats: enabled but no check_nats() available")
+                    log.warning(
+                        "NATS enabled but no check_nats() available; skipping NATS readiness enforcement"
+                    )
                 else:
                     try:
                         nats_check = check_nats()

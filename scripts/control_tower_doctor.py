@@ -41,7 +41,7 @@ REPO = Path(__file__).resolve().parents[1]
 # Canonical governance artifacts (source of truth)
 PLANE_REGISTRY_SNAPSHOT = REPO / "tools/ci/plane_registry_snapshot.json"
 ROUTE_INVENTORY = REPO / "tools/ci/route_inventory.json"
-ROUTE_INVENTORY_SUMMARY = REPO / "tools/ci/route_inventory_summary.json"
+ROUTE_INVENTORY_SUMMARY = REPO / "artifacts/route_inventory_summary.json"
 CONTRACT_ROUTES = REPO / "tools/ci/contract_routes.json"
 TOPOLOGY_HASH = REPO / "tools/ci/topology.sha256"
 ATTESTATION_BUNDLE_HASH = REPO / "tools/ci/attestation_bundle.sha256"
@@ -294,7 +294,7 @@ def _platform_inventory_generator_decoupled() -> CheckResult:
             "Requirement: platform inventory must be derived from canonical governance artifacts on disk:\n"
             " - tools/ci/plane_registry_snapshot.json\n"
             " - tools/ci/route_inventory.json\n"
-            " - tools/ci/route_inventory_summary.json (optional)\n"
+            " - artifacts/route_inventory_summary.json (optional)\n"
             " - tools/ci/contract_routes.json\n"
             " - tools/ci/topology.sha256\n"
             " - tools/ci/attestation_bundle.sha256\n"

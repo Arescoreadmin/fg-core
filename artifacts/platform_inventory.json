@@ -26,20 +26,10 @@
       "type": "missing_soc_gate_reference"
     }
   ],
-  "git_sha": "575797bb28ba0f9e362dfe1a4e725828c24be373",
   "governance": {
-    "attestation_sha256": "8623d2eac5c061323c397ffa67bd95c76efdcaa2a4df7aa46329288acbc1cf67  plane_registry_snapshot.json\n7361cfae827919314b7956c698b6e806944e6f20f8c4ab610eb9aa69b126da94  route_inventory.json\n51b1ad86b1c65b66ffa4635bbf49cdda563e05acb3d7463350fdba3c2be0113f  contract_routes.json\n353e9f0e84b1b13e176c30536609aaebc2ca33568ef48a9715982448646dccd8  build_meta.json",
-    "build_meta": {
-      "build_timestamp_utc": "2026-02-25T18:59:10.482113+00:00",
-      "ci_runner_id": "Odin",
-      "git_sha": "575797bb28ba0f9e362dfe1a4e725828c24be373",
-      "inventory_sha256": "69986ecd25f72302e23a25ad70f0416e0fea578870e093d553fe230aa31d5fae",
-      "tool": "tools/ci/check_route_inventory.py",
-      "tool_version": "v1"
-    },
     "contract_count": 120,
     "contract_only": [],
-    "runtime_count": 222,
+    "runtime_count": 228,
     "runtime_only": [
       "DELETE /control-plane/v2/delegation/{delegation_id}",
       "GET /_debug/routes",
@@ -70,6 +60,10 @@
       "GET /control-plane/v2/playbooks",
       "GET /control-plane/v2/policy/pins",
       "GET /control-plane/v2/terminal/allowlist",
+      "GET /control-tower/snapshot",
+      "GET /control/testing/health",
+      "GET /control/testing/runs",
+      "GET /control/testing/runs/{run_id}",
       "GET /health/detailed",
       "GET /stats/debug",
       "GET /status",
@@ -91,6 +85,7 @@
       "GET /ui/dash/controls",
       "GET /ui/dash/forensics",
       "GET /ui/dash/posture",
+      "GET /ui/dash/testing-control-tower",
       "GET /ui/decision/{decision_id}",
       "GET /ui/decisions",
       "GET /ui/feed",
@@ -131,6 +126,7 @@
       "POST /control-plane/v2/policy/stage",
       "POST /control-plane/v2/terminal/breakglass",
       "POST /control-plane/v2/terminal/execute",
+      "POST /control/testing/runs/register",
       "POST /dev/emit",
       "POST /dev/seed",
       "POST /ui/ai/chat",
@@ -142,24 +138,17 @@
     ],
     "schema_unknown_key_warnings": [],
     "schema_versions": {
-      "build_meta": "v1",
       "contract_routes": "v1",
       "plane_registry": "v1",
       "route_inventory": "v1"
-    },
-    "topology_sha256": "8623d2eac5c061323c397ffa67bd95c76efdcaa2a4df7aa46329288acbc1cf67  plane_registry_snapshot.json\n7361cfae827919314b7956c698b6e806944e6f20f8c4ab610eb9aa69b126da94  route_inventory.json\n51b1ad86b1c65b66ffa4635bbf49cdda563e05acb3d7463350fdba3c2be0113f  contract_routes.json",
-    "topology_sha256_note": "Content hashes of plane_registry_snapshot.json, route_inventory.json, contract_routes.json."
+    }
   },
-  "governance_fingerprint": "3aa2a27e4bfe2fa196f124db186e0e3f32891916b44b513a1f905d9a0ffe1c6c",
+  "governance_fingerprint": "cb3a2b04a95e2bbc89e021f9a8912e82308f0a76480a5bb496ec2b1157179e7b",
   "planes": [
     {
       "compat": {
-        "deprecated_evidence": [],
-        "deprecated_mount_flag": "n/a",
-        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+        "deprecation_notice": "platform inventory is derived from canonical governance artifacts. Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) are ignored even if present in snapshots."
       },
-      "evidence": [],
-      "mount_flag": "n/a",
       "plane_id": "agent",
       "required_make_targets": [
         "agent-unit"
@@ -170,12 +159,8 @@
     },
     {
       "compat": {
-        "deprecated_evidence": [],
-        "deprecated_mount_flag": "n/a",
-        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+        "deprecation_notice": "platform inventory is derived from canonical governance artifacts. Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) are ignored even if present in snapshots."
       },
-      "evidence": [],
-      "mount_flag": "n/a",
       "plane_id": "ai",
       "required_make_targets": [
         "ai-plane-spot"
@@ -187,12 +172,8 @@
     },
     {
       "compat": {
-        "deprecated_evidence": [],
-        "deprecated_mount_flag": "n/a",
-        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+        "deprecation_notice": "platform inventory is derived from canonical governance artifacts. Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) are ignored even if present in snapshots."
       },
-      "evidence": [],
-      "mount_flag": "n/a",
       "plane_id": "connector",
       "required_make_targets": [
         "check-connectors-rls"
@@ -207,12 +188,8 @@
     },
     {
       "compat": {
-        "deprecated_evidence": [],
-        "deprecated_mount_flag": "n/a",
-        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+        "deprecation_notice": "platform inventory is derived from canonical governance artifacts. Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) are ignored even if present in snapshots."
       },
-      "evidence": [],
-      "mount_flag": "n/a",
       "plane_id": "control",
       "required_make_targets": [
         "control-plane-check",
@@ -227,6 +204,8 @@
         "/compliance-cp",
         "/config",
         "/control-plane",
+        "/control-tower",
+        "/control/testing",
         "/dev",
         "/enterprise-controls",
         "/exceptions",
@@ -239,12 +218,8 @@
     },
     {
       "compat": {
-        "deprecated_evidence": [],
-        "deprecated_mount_flag": "n/a",
-        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+        "deprecation_notice": "platform inventory is derived from canonical governance artifacts. Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) are ignored even if present in snapshots."
       },
-      "evidence": [],
-      "mount_flag": "n/a",
       "plane_id": "data",
       "required_make_targets": [
         "soc-invariants"
@@ -260,12 +235,8 @@
     },
     {
       "compat": {
-        "deprecated_evidence": [],
-        "deprecated_mount_flag": "n/a",
-        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+        "deprecation_notice": "platform inventory is derived from canonical governance artifacts. Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) are ignored even if present in snapshots."
       },
-      "evidence": [],
-      "mount_flag": "n/a",
       "plane_id": "evidence",
       "required_make_targets": [
         "audit-chain-verify"
@@ -280,12 +251,8 @@
     },
     {
       "compat": {
-        "deprecated_evidence": [],
-        "deprecated_mount_flag": "n/a",
-        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+        "deprecation_notice": "platform inventory is derived from canonical governance artifacts. Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) are ignored even if present in snapshots."
       },
-      "evidence": [],
-      "mount_flag": "n/a",
       "plane_id": "security",
       "required_make_targets": [
         "security-regression-gates"
@@ -297,12 +264,8 @@
     },
     {
       "compat": {
-        "deprecated_evidence": [],
-        "deprecated_mount_flag": "n/a",
-        "deprecation_notice": "mount_flag/evidence are compatibility-only and not governance source of truth"
+        "deprecation_notice": "platform inventory is derived from canonical governance artifacts. Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) are ignored even if present in snapshots."
       },
-      "evidence": [],
-      "mount_flag": "n/a",
       "plane_id": "ui",
       "required_make_targets": [
         "test-quality-gate"
@@ -398,6 +361,10 @@
       "GET /control-plane/v2/playbooks",
       "GET /control-plane/v2/policy/pins",
       "GET /control-plane/v2/terminal/allowlist",
+      "GET /control-tower/snapshot",
+      "GET /control/testing/health",
+      "GET /control/testing/runs",
+      "GET /control/testing/runs/{run_id}",
       "GET /enterprise-controls/catalog",
       "GET /enterprise-controls/crosswalk",
       "GET /enterprise-controls/frameworks",
@@ -449,6 +416,7 @@
       "POST /control-plane/v2/policy/stage",
       "POST /control-plane/v2/terminal/breakglass",
       "POST /control-plane/v2/terminal/execute",
+      "POST /control/testing/runs/register",
       "POST /dev/emit",
       "POST /dev/seed",
       "POST /enterprise-controls/tenant-state",
@@ -544,6 +512,7 @@
       "GET /ui/dash/controls",
       "GET /ui/dash/forensics",
       "GET /ui/dash/posture",
+      "GET /ui/dash/testing-control-tower",
       "GET /ui/decision/{decision_id}",
       "GET /ui/decisions",
       "GET /ui/feed",

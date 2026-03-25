@@ -28,6 +28,7 @@ from api.security.outbound_policy import (
     sanitize_header_value,
     sanitize_outbound_headers,
     sanitize_url_for_log,
+    validate_target as _validate_target_core,
 )
 
 log = logging.getLogger("frostgate.security.alerts")
@@ -605,13 +606,19 @@ def resolve_host(host: str) -> List[str]:
 
 
 def is_ip_blocked(ip_raw: str) -> bool:
+    """Backward-compatible alias for tests and legacy callers."""
     from api.security.outbound_policy import _is_ip_blocked
 
     return _is_ip_blocked(ip_raw)
 
 
-def validate_target(url: str) -> tuple[str, list[str]]:
-    """Compatibility wrapper that preserves monkeypatch points in tests."""
+def _compat_validate_target(url: str) -> tuple[str, list[str]]:
+    """
+    Legacy-compatible validation path.
+
+    This exists only to preserve current monkeypatch points in tests that patch
+    security_alerts.resolve_host / security_alerts.is_ip_blocked directly.
+    """
     cleaned = str(url)
     try:
         parsed = urlsplit(cleaned)
@@ -634,3 +641,23 @@ def validate_target(url: str) -> tuple[str, list[str]]:
         raise SSRFBlocked("dns_rebinding_detected")
     normalized_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path or '/'}"
     return normalized_url, ips
+
+
+def validate_target(url: str) -> tuple[str, list[str]]:
+    """
+    Canonical SSRF validation wrapper.
+
+    Production path delegates to api.security.outbound_policy.validate_target.
+    If local compatibility seams are monkeypatched, fall back to the local
+    compatibility implementation so existing tests remain deterministic.
+    """
+    host_resolver_patched = getattr(resolve_host, "__module__", __name__) != __name__
+    ip_checker_patched = getattr(is_ip_blocked, "__module__", __name__) != __name__
+
+    if host_resolver_patched or ip_checker_patched:
+        return _compat_validate_target(url)
+
+    try:
+        return _validate_target_core(url)
+    except OutboundPolicyError as exc:
+        raise SSRFBlocked(str(exc)) from exc

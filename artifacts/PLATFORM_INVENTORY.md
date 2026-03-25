@@ -1,14 +1,14 @@
 # Platform Inventory
 
 ## Planes
-- `agent` flags=`n/a` targets=agent-unit
-- `ai` flags=`n/a` targets=ai-plane-spot
-- `connector` flags=`n/a` targets=check-connectors-rls
-- `control` flags=`n/a` targets=control-plane-check, plane-registry-spot
-- `data` flags=`n/a` targets=soc-invariants
-- `evidence` flags=`n/a` targets=audit-chain-verify
-- `security` flags=`n/a` targets=security-regression-gates
-- `ui` flags=`n/a` targets=test-quality-gate
+- `agent` targets=agent-unit
+- `ai` targets=ai-plane-spot
+- `connector` targets=check-connectors-rls
+- `control` targets=control-plane-check, plane-registry-spot
+- `data` targets=soc-invariants
+- `evidence` targets=audit-chain-verify
+- `security` targets=security-regression-gates
+- `ui` targets=test-quality-gate
 
 ## Enterprise readiness checklist status
 - artifact_policy_enforced: PASS

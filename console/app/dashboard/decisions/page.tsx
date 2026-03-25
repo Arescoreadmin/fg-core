@@ -46,7 +46,7 @@ export default function DecisionsPage() {
   const applyFilters = useCallback(() => {
     setAppliedEventType(eventType.trim());
     setAppliedThreatLevel(threatLevel.trim());
-    setOffset(0); // triggers reload via useEffect/load dependency
+    setOffset(0);
     setDetail(null);
   }, [eventType, threatLevel]);
 
@@ -83,10 +83,16 @@ export default function DecisionsPage() {
       />
 
       <div style={{ display: 'flex', gap: '0.5rem' }}>
-        <button disabled={offset === 0} onClick={() => setOffset(Math.max(offset - PAGE_SIZE, 0))}>
+        <button
+          disabled={offset === 0}
+          onClick={() => setOffset(Math.max(offset - PAGE_SIZE, 0))}
+        >
           Previous
         </button>
-        <button disabled={offset + PAGE_SIZE >= total} onClick={() => setOffset(offset + PAGE_SIZE)}>
+        <button
+          disabled={offset + PAGE_SIZE >= total}
+          onClick={() => setOffset(offset + PAGE_SIZE)}
+        >
           Next
         </button>
         <span>
@@ -95,9 +101,17 @@ export default function DecisionsPage() {
       </div>
 
       {detail ? (
-        <section style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '1rem' }}>
+        <section
+          style={{
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: '1rem',
+          }}
+        >
           <h3>Decision detail</h3>
-          <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(detail, null, 2)}</pre>
+          <pre style={{ whiteSpace: 'pre-wrap' }}>
+            {JSON.stringify(detail, null, 2)}
+          </pre>
         </section>
       ) : null}
     </div>

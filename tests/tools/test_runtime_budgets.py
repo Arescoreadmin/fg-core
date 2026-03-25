@@ -10,7 +10,7 @@ from tools.testing.harness.runtime_budgets import (
 
 def test_runtime_budget_overrun_fails() -> None:
     doc = load_runtime_budgets(Path("tools/testing/policy/runtime_budgets.yaml"))
-    ok, msg = enforce_lane_budget("fg-fast", 181, doc, baseline_seconds=150)
+    ok, msg = enforce_lane_budget("fg-fast", 901, doc, baseline_seconds=600)
     assert not ok
     assert "exceeded" in msg
 

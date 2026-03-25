@@ -11,19 +11,25 @@ concurrency:
   group: frostgate-release-images-${{ github.ref }}
   cancel-in-progress: true
 
-jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+permissions:
+  contents: read
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: ${{ github.repository_owner }}
+  DOCKER_BUILDKIT: "1"
+  BUILDKIT_PROGRESS: plain
+  PYTHONUNBUFFERED: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_PYTHON_VERSION_WARNING: "1"
+
+jobs:
+  release-gate:
+    name: Release Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
     permissions:
       contents: read
-      packages: write
-
-    env:
-      REGISTRY: ghcr.io
-      IMAGE_OWNER: ${{ github.repository_owner }}
-      DOCKER_BUILDKIT: "1"
 
     steps:
       - name: Checkout (full history + tags)
@@ -32,7 +38,7 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Set up Python
+      - name: Set up Python 3.12 with pip cache
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -40,39 +46,78 @@ jobs:
           cache-dependency-path: |
             requirements.txt
             requirements-dev.txt
+            requirements.lock
+            requirements-dev.lock
             constraints.txt
             pyproject.toml
 
-      - name: Generate CI env (dummy secrets for gates)
+      - name: Generate CI env for release gates
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY' >> "$GITHUB_ENV"
           import secrets
-          def tok(n): return secrets.token_urlsafe(n)
+
+          def tok(n: int) -> str:
+              return secrets.token_urlsafe(n)
+
           print(f"FG_API_KEY={tok(32)}")
           print(f"FG_AGENT_API_KEY={tok(32)}")
           print(f"REDIS_PASSWORD={tok(24)}")
           print(f"POSTGRES_PASSWORD={tok(24)}")
           print(f"NATS_AUTH_TOKEN={tok(24)}")
           print(f"FG_WEBHOOK_SECRET={tok(32)}")
-          # Optional: if any gates expect these, keep them non-empty.
+          print(f"FG_ENCRYPTION_KEY={tok(32)}")
+          print(f"FG_JWT_SECRET={tok(32)}")
           print("FG_ENV=ci")
           PY
 
-      - name: Run tests (gate release via Makefile)
+      - name: Verify generated env is populated
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for var in \
+            FG_API_KEY \
+            FG_AGENT_API_KEY \
+            REDIS_PASSWORD \
+            POSTGRES_PASSWORD \
+            NATS_AUTH_TOKEN \
+            FG_WEBHOOK_SECRET \
+            FG_ENCRYPTION_KEY \
+            FG_JWT_SECRET \
+            FG_ENV
+          do
+            if [ -n "${!var:-}" ]; then
+              echo "${var}=set"
+            else
+              echo "${var}=missing"
+              missing=1
+            fi
+          done
+
+          test "$missing" -eq 0
+
+      - name: Create venv and install pinned dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv .venv
+          make venv
+
+      - name: Run CI gate
         shell: bash
         run: |
           set -euo pipefail
           make ci
 
-      - name: Release gate check (blocks if Production-blocking gaps exist)
+      - name: Run release gate
         shell: bash
         run: |
           set -euo pipefail
           make release-gate
 
-      - name: Set up Go (with cache)
+      - name: Set up Go 1.22 with cache
         uses: actions/setup-go@v5
         with:
           go-version: "1.22"
@@ -84,6 +129,34 @@ jobs:
           set -euo pipefail
           cd supervisor-sidecar
           go build ./...
+
+      - name: Upload release-gate artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostgate-release-gate-artifacts-${{ github.run_attempt }}
+          path: |
+            artifacts/**
+            state/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  build-and-push:
+    name: Build and Push Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: release-gate
+    if: ${{ needs.release-gate.result == 'success' }}
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout (full history + tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -101,16 +174,28 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Release tags: VERSION = vX.Y.Z exactly
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             VERSION="${GITHUB_REF_NAME}"
           else
-            # Main branch: edge-<sha>
             VERSION="edge-${GITHUB_SHA::12}"
           fi
 
           echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Computed VERSION=${VERSION}"
+
+      - name: Record image metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/release
+          {
+            echo "registry=${REGISTRY}"
+            echo "image_owner=${IMAGE_OWNER}"
+            echo "version=${{ steps.version.outputs.VERSION }}"
+            echo "ref=${GITHUB_REF}"
+            echo "sha=${GITHUB_SHA}"
+            echo "actor=${GITHUB_ACTOR}"
+          } | tee artifacts/release/image-build-metadata.txt
 
       - name: Build images
         shell: bash
@@ -120,9 +205,6 @@ jobs:
           IMAGE_OWNER='${{ env.IMAGE_OWNER }}' \
           VERSION='${{ steps.version.outputs.VERSION }}' \
           make docker-build
-        env:
-          # Build cache via GitHub Actions cache backend (works with buildx)
-          BUILDKIT_PROGRESS: plain
 
       - name: Push images
         shell: bash
@@ -132,3 +214,14 @@ jobs:
           IMAGE_OWNER='${{ env.IMAGE_OWNER }}' \
           VERSION='${{ steps.version.outputs.VERSION }}' \
           make docker-push
+
+      - name: Upload release artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostgate-release-artifacts-${{ github.run_attempt }}
+          path: |
+            artifacts/**
+            state/**
+          if-no-files-found: ignore
+          retention-days: 14

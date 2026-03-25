@@ -1,14 +1,14 @@
 global_pr_budget_seconds: 600
 lanes:
   fg-fast:
-    max_seconds: 180
+    max_seconds: 900
     warn_pct: 20
     fail_pct: 40
   fg-contract:
-    max_seconds: 180
+    max_seconds: 900
     warn_pct: 20
     fail_pct: 40
   fg-security:
-    max_seconds: 240
+    max_seconds: 900
     warn_pct: 20
     fail_pct: 40

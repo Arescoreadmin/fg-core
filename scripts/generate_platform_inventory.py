@@ -23,19 +23,19 @@ OPTIONAL_INPUTS = {
     "build_meta": REPO / "tools/ci/build_meta.json",
 }
 
+# Deterministic governance inputs only.
 SCHEMA_EXPECTED = {
     "plane_registry": "v1",
     "route_inventory": "v1",
     "contract_routes": "v1",
-    "build_meta": "v1",
 }
+
+# Optional, volatile-only evidence schema.
+BUILD_META_SCHEMA_EXPECTED = "v1"
 
 SHA_LINE_RE = re.compile(r"^[0-9a-f]{64}\s{2}[^\s].+$")
 
 
-# -----------------------------
-# Deterministic helpers
-# -----------------------------
 def _dump_json(payload: Any) -> str:
     return (
         json.dumps(
@@ -50,7 +50,6 @@ def _dump_json(payload: Any) -> str:
 
 
 def _canonical_json(obj: Any) -> str:
-    # Deterministic JSON for hashing/fingerprinting
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
@@ -63,7 +62,6 @@ def _governance_fingerprint(
     route_inventory: list[dict[str, Any]],
     contract_routes: list[dict[str, Any]],
 ) -> str:
-    # Stable fingerprint for same governance surface
     blob = (
         _canonical_json(plane_snapshot)
         + _canonical_json(route_inventory)
@@ -72,9 +70,6 @@ def _governance_fingerprint(
     return _sha256_text(blob)
 
 
-# -----------------------------
-# IO / Validation primitives
-# -----------------------------
 def require_file(path: Path) -> None:
     if not path.exists() or not path.is_file():
         raise FileNotFoundError(str(path.relative_to(REPO)))
@@ -132,7 +127,7 @@ def _require_list_of_strings(value: Any, context: str) -> list[str]:
 
 
 def _extract_v1_data(
-    raw: Any, *, artifact_name: str
+    raw: Any, *, artifact_name: str, expected_schema: str
 ) -> tuple[list[dict[str, Any]], str]:
     if not isinstance(raw, dict):
         raise ValueError(
@@ -141,9 +136,9 @@ def _extract_v1_data(
     _require_keys(raw, {"schema_version", "generated_at", "data"}, artifact_name)
 
     schema_version = raw["schema_version"]
-    if schema_version != SCHEMA_EXPECTED[artifact_name]:
+    if schema_version != expected_schema:
         raise ValueError(
-            f"{artifact_name}.schema_version expected {SCHEMA_EXPECTED[artifact_name]}, got {schema_version}"
+            f"{artifact_name}.schema_version expected {expected_schema}, got {schema_version}"
         )
 
     if not isinstance(raw["generated_at"], str) or not raw["generated_at"].strip():
@@ -164,10 +159,6 @@ def _validate_plane_snapshot(
     unknown_warnings: list[str],
     reject_unknown: bool,
 ) -> None:
-    # Governance-first plane schema: do NOT require nor consume deprecated PlaneDef internals.
-    #
-    # We still *tolerate* legacy keys (mount_flag/evidence/required_route_invariants) by
-    # including them in `plane_allowed`, but they are not used for inventory decisions.
     plane_allowed = {
         "allowed_dependency_categories",
         "auth_class",
@@ -181,7 +172,6 @@ def _validate_plane_snapshot(
         "required_ci_gates",
         "required_make_targets",
         "route_prefixes",
-        # tolerated legacy keys (compat-only, not consumed):
         "mount_flag",
         "evidence",
         "required_route_invariants",
@@ -315,13 +305,19 @@ def _load_governance_inputs(
     raw_contract = load_json(GOVERNANCE_INPUTS["contract_routes"])
 
     plane_snapshot, plane_schema = _extract_v1_data(
-        raw_plane, artifact_name="plane_registry"
+        raw_plane,
+        artifact_name="plane_registry",
+        expected_schema=SCHEMA_EXPECTED["plane_registry"],
     )
     route_inventory, runtime_schema = _extract_v1_data(
-        raw_runtime, artifact_name="route_inventory"
+        raw_runtime,
+        artifact_name="route_inventory",
+        expected_schema=SCHEMA_EXPECTED["route_inventory"],
     )
     contract_routes, contract_schema = _extract_v1_data(
-        raw_contract, artifact_name="contract_routes"
+        raw_contract,
+        artifact_name="contract_routes",
+        expected_schema=SCHEMA_EXPECTED["contract_routes"],
     )
 
     _validate_plane_snapshot(
@@ -347,11 +343,12 @@ def _load_governance_inputs(
         attestation_sha = read_sha256(OPTIONAL_INPUTS["attestation_hash"])
 
     build_meta = None
-    build_meta_schema = "absent"
     if OPTIONAL_INPUTS["build_meta"].exists():
         raw_build_meta = load_json(OPTIONAL_INPUTS["build_meta"])
-        build_meta_data, build_meta_schema = _extract_v1_data(
-            raw_build_meta, artifact_name="build_meta"
+        build_meta_data, _build_meta_schema = _extract_v1_data(
+            raw_build_meta,
+            artifact_name="build_meta",
+            expected_schema=BUILD_META_SCHEMA_EXPECTED,
         )
         build_meta = build_meta_data[0] if build_meta_data else None
 
@@ -371,7 +368,6 @@ def _load_governance_inputs(
             "plane_registry": plane_schema,
             "route_inventory": runtime_schema,
             "contract_routes": contract_schema,
-            "build_meta": build_meta_schema,
         },
         unknown_warnings,
     )
@@ -403,11 +399,6 @@ def _sorted_route_signatures(routes: list[dict[str, Any]]) -> list[str]:
 
 
 def _deterministic_git_sha(build_meta: dict[str, Any] | None) -> str:
-    """
-    Auditor-friendly default:
-    - Prefer build_meta.git_sha (governance evidence)
-    - Fallback to git rev-parse HEAD (best effort)
-    """
     if isinstance(build_meta, dict):
         v = build_meta.get("git_sha")
         if isinstance(v, str) and v.strip():
@@ -504,7 +495,6 @@ def main(argv: list[str] | None = None) -> int:
                 }
             )
 
-        # Governance-first: do NOT consume deprecated PlaneDef internals.
         compat = {
             "deprecation_notice": (
                 "platform inventory is derived from canonical governance artifacts. "
@@ -523,7 +513,6 @@ def main(argv: list[str] | None = None) -> int:
             }
         )
 
-    # Build plane route map from stamped plane_id first; fallback to prefix mapping.
     for route in sorted(route_inventory, key=_route_sort_key):
         pid = str(route.get("plane_id", "")).strip()
         if pid in route_records_by_plane:
@@ -597,9 +586,6 @@ def main(argv: list[str] | None = None) -> int:
         ).exists(),
     }
 
-    # -----------------------------
-    # Deterministic payload (tracked)
-    # -----------------------------
     det_payload: dict[str, Any] = {
         "governance_fingerprint": gov_fp,
         "planes": sorted(planes, key=lambda x: x["plane_id"]),
@@ -628,14 +614,12 @@ def main(argv: list[str] | None = None) -> int:
         },
     }
 
-    # -----------------------------
-    # Volatile payload (evidence)
-    # -----------------------------
     vol_payload: dict[str, Any] | None = None
     if args.include_volatile:
         payload_git_sha = _deterministic_git_sha(build_meta)
         vol_payload = dict(det_payload)
         vol_payload["git_sha"] = payload_git_sha
+        vol_payload["build_meta"] = build_meta
         vol_payload["governance"] = dict(det_payload["governance"])
         vol_payload["governance"].update(
             {
@@ -645,13 +629,9 @@ def main(argv: list[str] | None = None) -> int:
                     "contract_routes.json."
                 ),
                 "attestation_sha256": attestation_sha,
-                "build_meta": build_meta,
             }
         )
 
-    # -----------------------------
-    # Write artifacts
-    # -----------------------------
     art = REPO / "artifacts"
     art.mkdir(exist_ok=True)
 
@@ -683,14 +663,29 @@ def main(argv: list[str] | None = None) -> int:
         "\n".join(gap_md) + "\n", encoding="utf-8"
     )
 
+    # REQUIRED SUMMARY ARTIFACTS (CI CONTRACT)
+
+    # Mirror deterministic JSON -> summary JSON
+    (art / "platform_inventory.json").write_text(
+        _dump_json(det_payload), encoding="utf-8"
+    )
+
+    # Mirror markdown summaries
+    (art / "PLATFORM_INVENTORY.md").write_text(
+        (art / "PLATFORM_INVENTORY.det.md").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+
+    (art / "PLATFORM_GAPS.md").write_text(
+        (art / "PLATFORM_GAPS.det.md").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+
     if vol_payload is not None:
         (art / "platform_inventory.json").write_text(
             _dump_json(vol_payload), encoding="utf-8"
         )
 
-    # -----------------------------
-    # Semantic integrity enforcement
-    # -----------------------------
     if failures and not (
         args.allow_gaps or os.getenv("FG_PLATFORM_INVENTORY_ALLOW_GAPS") == "1"
     ):

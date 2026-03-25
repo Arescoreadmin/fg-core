@@ -1,3 +1,393 @@
+## 2026-03-23 - Route inventory determinism fix
+
+Change:
+- Updated `tools/ci/check_route_inventory.py` to make tracked writes deterministic
+- Prevented timestamp-only rewrites of `tools/ci/route_inventory.json`
+- Separated artifact outputs (`artifacts/*`) from governance-tracked files (`tools/ci/*`)
+- Normalized write behavior to only update tracked files when logical payload changes
+
+Reason:
+- Route inventory generation was mutating on every run due to `generated_at` timestamps, causing persistent dirty diffs and CI instability
+- Required to ensure deterministic CI behavior and prevent false-positive governance drift
+
+Impact:
+- No production runtime behavior change
+- Route inventory verification is now stable and non-mutating across repeated runs
+- CI and pre-commit checks no longer fail due to timestamp churn
+
+Verification:
+- `PYTHONPATH=. python -m tools.ci.check_route_inventory --write`
+- Re-run `--write` produces no diff in `tools/ci/route_inventory.json`
+- `PYTHONPATH=. python -m tools.ci.check_route_inventory`
+- `make pr-check-fast`
+
+## 2026-03-23 - Route inventory normalization
+
+Change:
+- Regenerated `tools/ci/route_inventory.json`
+- Regenerated `tools/ci/route_inventory_summary.json`
+
+Reason:
+- Normalize route inventory artifacts to match canonical route-inventory generation and remove runtime-only/debug surfaces from governance-managed inventory.
+
+Impact:
+- No production runtime behavior change.
+- Governance artifacts aligned with route-inventory audit expectations.
+
+Verification:
+- `make route-inventory-generate`
+- `make pr-check-fast`
+
+## 2026-03-22 — Plane registry runtime-route normalization review
+
+Critical files updated:
+- `tools/ci/check_plane_registry.py`
+- `api/main.py`
+
+Change summary:
+- normalized plane registry runtime-app comparison to ignore FastAPI framework-generated docs/openapi endpoints
+- explicitly allowed approved runtime compatibility alias `POST /v1/defend`
+- corrected readiness-path NATS warning to use the canonical application logger
+- preserved hard-fail behavior for unexpected application-owned runtime-only routes outside the approved allowlist
+
+Governance/security impact:
+- removes false-positive CI failures from framework-owned runtime surfaces
+- preserves deterministic route-governance enforcement for FrostGate-owned endpoints
+- keeps readiness behavior observable without weakening dependency enforcement
+
+## 2026-03-22 — Plane registry runtime-route normalization review
+
+Critical files updated:
+- `tools/ci/check_plane_registry.py`
+
+Change summary:
+- normalized runtime-app-only plane-registry validation to exclude framework-generated FastAPI documentation endpoints
+- explicitly allowed approved compatibility runtime alias `POST /v1/defend`
+- preserved hard-fail behavior for unexpected runtime-only application routes outside the approved allowlist
+
+Governance/security impact:
+- removes false-positive CI failures caused by framework-owned documentation surfaces
+- preserves deterministic plane-registry enforcement for actual FrostGate-owned runtime routes
+- keeps control-plane route governance strict without broadening plane ownership exceptions
+
+## 2026-03-22 — Plane registry runtime-route normalization review
+
+Critical files updated:
+- `api/main.py`
+- `tools/ci/route_inventory_summary.json`
+- `<plane-registry-check-file>`
+
+Change summary:
+- normalized runtime route validation to exclude framework-generated FastAPI documentation endpoints from plane-registry enforcement
+- preserved compatibility handling for approved runtime alias routes such as `/v1/defend`
+- verified local route inventory artifact was already aligned with generated output and required no additional content change
+
+Governance/security impact:
+- removes false-positive CI failures from non-product framework endpoints
+- keeps runtime route governance focused on real application/API surfaces
+- preserves deterministic route inventory behavior without weakening plane enforcement for actual FrostGate routes
+
+## 2026-03-22 — Docker/runtime readiness stabilization and migration-path repair
+
+Critical files updated:
+- `api/main.py`
+- `docker-compose.yml`
+- `env/prod.env`
+- `scripts/postgres/init_roles.sh`
+- `policy/opa/Dockerfile`
+- `policy/bundles/bundle.tar.gz`
+
+Change summary:
+- corrected readiness-path warning logging to use the canonical module logger
+- stabilized OPA runtime image and bundle serving so policy health checks succeed under locked-down container conditions
+- removed duplicate/legacy OPA config influence from runtime bundle inputs
+- repaired Postgres bootstrap role/database initialization so the configured application role and database are created deterministically
+- aligned local prod-profile environment values with startup validation requirements
+- restored migration execution path needed by compose-based runtime startup
+
+Governance/security impact:
+- removes CI/lint failure from undefined logger usage in readiness path
+- reduces policy-loading ambiguity and restores deterministic OPA validation behavior
+- ensures database bootstrap matches declared least-privilege runtime contract
+- improves compose/runtime parity for production-profile validation
+- restores deterministic startup sequencing across policy, database, and readiness dependencies
+
+## 2026-03-22 — NATS readiness warning logger fix
+
+Critical file updated:
+- `api/main.py`
+
+Change summary:
+- corrected readiness-path warning call from undefined `logger` symbol to canonical module logger `log`
+- preserved warning-only handling when NATS is enabled but `check_nats()` is unavailable
+- restored lint/runtime consistency for readiness-path execution
+
+Governance/security impact:
+- removes deterministic CI failure caused by undefined logger reference
+- preserves operator-visible warning for unsupported optional NATS readiness probing
+- avoids silent readiness logic drift while keeping production boot behavior explicit
+
+## 2026-03-22 — Readiness Check Fails Closed on Missing NATS Health Probe
+Area: FrostGate Core · Health System · Production Readiness
+
+Issue:
+The /health/ready endpoint returned HTTP 503 when FG_NATS_ENABLED=true but no check_nats() implementation was available in the dependency health checker. This caused the service to fail readiness despite NATS being reachable and non-critical for initial boot.
+
+Root Cause:
+Health readiness logic enforced strict dependency validation without accounting for optional or partially implemented health probes. The absence of check_nats() was treated as a hard failure instead of a degraded capability.
+
+Resolution:
+Modified readiness logic to:
+- Mark NATS as "not_supported" when check_nats() is absent
+- Log a warning instead of failing readiness
+- Preserve strict failure behavior only when a health check exists and returns UNHEALTHY
+
+Added logger initialization to avoid runtime NameError.
+
+Security / Integrity Notes:
+- Fail-closed behavior preserved for implemented dependency checks
+- Fail-open allowed only for explicitly unsupported probes
+- Prevents false-negative readiness failures that block deployment pipelines
+
+Operational Impact:
+- Restores container health to healthy state when NATS is reachable but probe is unimplemented
+- Eliminates infinite restart loops and unhealthy container states
+- Maintains forward compatibility for future NATS health probe implementation
+
+Follow-up:
+- Implement check_nats() in dependency checker
+- Consider feature-gating optional dependencies explicitly in readiness model
+
+## 2026-03-22 — Postgres service discovery stabilization review
+
+Critical file updated:
+- `docker-compose.yml`
+
+Change summary:
+- added explicit `postgres` network alias on the internal compose network
+- stabilized service-name resolution for core runtime database connectivity during compose startup
+
+Governance/security impact:
+- reduces startup nondeterminism caused by transient service discovery failures
+- preserves isolated internal-network communication while improving deterministic dependency reachability
+- lowers compose bring-up flake risk for local and CI validation paths
+
+## 2026-03-22 — Postgres app-role bootstrap correction review
+
+Critical file updated:
+- `scripts/postgres/init_roles.sh`
+
+Change summary:
+- switched app database bootstrap logic to use `POSTGRES_APP_DB` instead of `POSTGRES_DB`
+- ensured application role is created or repaired deterministically on every bootstrap
+- ensured application database is created if missing and owned by the configured app role
+- aligned grants and default privileges against the actual application database
+
+Governance/security impact:
+- restores deterministic database bootstrap behavior for compose-backed core startup
+- prevents runtime authentication drift between bootstrap-created roles and application connection settings
+- ensures app database ownership and privileges match declared production contract inputs
+
+## 2026-03-22 — Postgres app-role bootstrap correction review
+
+Critical file updated:
+- `scripts/postgres/init_roles.sh`
+
+Change summary:
+- switched app database bootstrap logic to use `POSTGRES_APP_DB` instead of `POSTGRES_DB`
+- ensured application role is created or repaired deterministically on every bootstrap
+- ensured application database is created if missing and owned by the configured app role
+- aligned grants and default privileges against the actual application database
+
+Governance/security impact:
+- restores deterministic database bootstrap behavior for compose-backed core startup
+- prevents runtime authentication drift between bootstrap-created roles and application connection settings
+- ensures app database ownership and privileges match declared production contract inputs
+
+## 2026-03-22 — JWT secret length correction review
+
+Critical files updated:
+- `env/prod.env`
+
+Change summary:
+- increased `FG_JWT_SECRET` to satisfy production minimum secret length validation
+- removed final startup validation failure blocking full compose-backed core startup
+
+Governance/security impact:
+- restores compliance with production secret-strength requirements
+- prevents false-negative compose startup failures caused by undersized JWT signing secret
+- preserves deterministic runtime validation behavior across local and CI compose flows
+
+## 2026-03-22 — Core runtime volume alignment review
+
+Critical file updated:
+- `docker-compose.yml`
+
+Change summary:
+- mounted mission, state, queue, ring-state, and ring-model named volumes into `frostgate-core`
+- aligned serving container runtime paths with bootstrap-generated persistent storage
+- removed startup-validation failure caused by missing runtime resource mounts in the core service
+
+Governance/security impact:
+- restores deterministic prod-profile startup behavior for `frostgate-core`
+- ensures ring-router and mission-envelope resources are visible in the serving container
+- prevents false-negative compose validation failures caused by container volume misalignment
+
+## 2026-03-22 — Core runtime volume and prod-secret interpolation stabilization review
+
+Critical files updated:
+- `docker-compose.yml`
+
+Change summary:
+- mounted mission, state, queue, ring-state, and ring-model named volumes into `frostgate-core`
+- aligned core runtime container with bootstrap-generated persistent paths required by startup validation
+- removed local startup drift caused by missing ring and mission runtime resources
+
+Governance/security impact:
+- restores deterministic prod-profile startup behavior for `frostgate-core`
+- ensures required ring-router and mission-envelope resources are present in the serving container
+- prevents false-negative startup failures during compose validation caused by container volume misalignment
+
+## 2026-03-22 — OPA bundle serving and healthcheck stabilization review
+
+Critical files updated:
+- `docker-compose.yml`
+- `policy/opa/config.yaml`
+- `policy/opa/Dockerfile`
+- `policy/opa/opa-config.yml`
+- `policy/bundles/bundle.tar.gz`
+
+Change summary:
+- aligned OPA bundle service URL with nginx bundle server on port 80
+- removed stray legacy `policy/opa/opa-config.yml`
+- rebuilt runtime OPA bundle to include only canonical policy content
+- replaced shell-dependent OPA healthcheck behavior with exec-form HTTP probing
+- introduced a minimal hardened OPA runtime image with explicit probe support
+
+Governance/security impact:
+- restores deterministic OPA startup and bundle activation behavior in CI and local compose flows
+- eliminates policy-loading ambiguity from duplicate config artifacts
+- removes shell-dependent healthcheck failure mode from hardened OPA runtime
+- ensures bundle readiness checks validate actual policy activation rather than process existence
+
+## 2026-03-20 — CI workflow validation hardening review
+
+Critical file updated:
+- `.github/workflows/ci.yml`
+
+Change summary:
+- aligned CI compose validation behavior with explicit environment defaults required for deterministic rendering
+- reduced false-negative workflow failures caused by missing compose variables in CI validation paths
+- preserved production-profile and SOC invariant checks while making CI compose evaluation self-sufficient
+
+Governance/security impact:
+- preserves deterministic CI validation behavior
+- maintains explicit production-sensitive compose requirements
+- reduces workflow drift between local validation and GitHub Actions execution
+
+## 2026-03-20 — CI workflow hardening review
+
+Critical file updated:
+- `.github/workflows/ci.yml`
+
+Change summary:
+- aligned compose/env handling with explicit production-safe variables
+- ensured CI validation paths remain compatible with app database role/database separation
+- tightened workflow reliability for production profile and SOC invariant checks
+- reduced false-negative CI failures caused by missing compose render inputs in CI-only env paths
+
+Governance/security impact:
+- preserves deterministic CI validation behavior
+- maintains explicit production-sensitive configuration requirements for compose-backed checks
+- reduces governance drift between workflow execution, compose validation, and SOC review expectations
+
+## 2026-03-19 — Route inventory summary SOC sync
+
+Critical file updated:
+- `tools/ci/route_inventory_summary.json`
+
+Change summary:
+- synchronized `route_inventory_summary.json` after workflow hardening and SOC manifest verification
+- cleared stale `runtime_only` drift entries from the generated summary snapshot
+- aligned route inventory summary output with current verified runtime/contract state
+
+Governance/security impact:
+- preserves SOC manifest integrity for generated route inventory artifacts
+- prevents false-negative SOC review failures caused by stale generated summary content
+- no runtime behavior change; snapshot/documentation alignment only
+
+## 2026-03-19 — Route Inventory Summary SOC sync
+
+Critical file updated:
+- `tools/ci/route_inventory_summary.json`
+
+Change summary:
+- regenerated route_inventory_summary.json to reflect current runtime state after workflow hardening
+- cleared `runtime_only` entries, ensuring SOC snapshot aligns with CI runtime
+- maintains deterministic contract/rule coverage for enforcement gates
+
+Governance/security impact:
+- SOC alignment ensures future PRs can pass review without false negatives
+- preserves artifact integrity for route inventory and policy validation
+- no runtime behavior change; purely manifest-level synchronization
+
+## 2026-03-19 — GitHub Actions workflows consolidation & hardening review
+
+Critical files updated:
+- `.github/workflows/docker-ci.yml`
+- `.github/workflows/fg-required.yml`
+- `.github/workflows/release-images.yml`
+- `.github/workflows/testing-module.yml`
+- `.github/workflows/ci.yml`
+- `.github/workflows/ai-ledger-guard.yml`
+
+Change summary:
+- Consolidated Makefile targets to remove duplicates and ensure deterministic SOC enforcement.
+- Hardened CI env generation across all workflows (`.env.ci`, `.env`, secrets, and runtime overrides).
+- Standardized Python and Node setup with caching and pinned dependencies to ensure reproducible builds.
+- Added full artifact collection with fallback notices for all CI lanes.
+- Implemented robust lane execution for fg-fast, fg-contract, fg-security, fg-full, and associated unit/integration tests.
+- Improved production profile validation, policy drift checks, and security/invariant gates.
+- Added smoke tests and retry loops for service startup in docker-based CI.
+- Preserved SOC enforcement for PR_FIX_LOG, compliance, and evidence pipelines.
+
+Governance/security impact:
+- Ensures deterministic and auditable CI behavior.
+- Reduces risk of false-positive/false-negative CI failures caused by workflow drift.
+- Maintains production profile validation inputs and SOC-HIGH-002 compliance.
+
+## 2026-03-11 — Docker CI workflow hardening revie
+
+Critical file updated:
+- `.github/workflows/docker-ci.yml`
+
+Change summary:
+- enabled required compose profiles for docker validation
+- ensured CI creates `.env.ci`, `.env`, and `env/prod.env` as needed for compose-backed validation
+- hardened policy bundle bootstrap to avoid shell/heredoc parsing failures
+- updated compose startup behavior to prevent invalid remote pulls during CI validation
+
+Governance/security impact:
+- preserves deterministic docker validation behavior
+- reduces false-negative CI failures caused by workflow scripting drift
+- maintains required inputs for production profile validation and compose safety checks
+
+## 2026-03-11 — Docker CI workflow hardening
+
+Updated `.github/workflows/docker-ci.yml` to stabilize CI execution for compose-backed validation.
+
+Changes:
+- Replaced fragile heredoc-driven bundle bootstrap with safer file generation logic.
+- Ensured `.env.ci`, `.env`, and `env/prod.env` are created deterministically during CI.
+- Preserved required secret/env interpolation for docker compose validation.
+- Reduced workflow failure modes caused by YAML indentation and shell parsing drift.
+
+Security / governance impact:
+- Keeps docker validation deterministic and reviewable.
+- Prevents false-negative CI failures caused by malformed workflow scripting.
+- Preserves production-profile validation inputs required by FrostGate compose gates.
+
+
 ## 2026-03-01T21:24:06Z — SOC-HIGH-002 — Route inventory artifact updated
 
 **Issue:** `tools/ci/route_inventory.json` changed and is classified as a critical SOC-tracked artifact.
@@ -631,3 +1021,344 @@ Resolution: Expanded upload-artifact paths to include fg-required + gates + dock
 
 **Risk notes:** No production runtime behavior change. CI behavior becomes stricter/more deterministic. Artifacts retained for post-failure forensics.
 
+
+## 2026-03-20 — CI workflow cache normalization review
+
+Critical file updated:
+- `.github/workflows/ci.yml`
+
+Change summary:
+- normalized the Node setup step naming in CI
+- made the npm cache setting explicitly quoted for deterministic workflow parsing
+- preserved existing Node 20 setup and dependency cache behavior
+
+Governance/security impact:
+- preserves deterministic CI workflow behavior
+- reduces workflow drift from formatting/parsing differences in critical CI configuration
+- maintains expected dependency cache semantics for guarded PR validation
+
+## 2026-03-20 — CI workflow cache normalization review
+
+Critical file updated:
+- `.github/workflows/ci.yml`
+
+Change summary:
+- normalized the Node setup step naming in CI
+- made the npm cache setting explicitly quoted for deterministic workflow parsing
+- preserved existing Node 20 setup and dependency cache behavior
+
+Governance/security impact:
+- preserves deterministic CI workflow behavior
+- reduces workflow drift from formatting/parsing differences in critical CI configuration
+- maintains expected dependency cache semantics for guarded PR validation
+
+## 2026-03-20 — fg-required workflow scope refinement review
+
+Critical file updated:
+- `.github/workflows/fg-required.yml`
+
+Change summary:
+- replaced narrow path-trigger rules with ignore rules for docs and repository metadata-only changes
+- preserved execution for code, CI, and testing paths relevant to fg-required coverage
+- reduced unnecessary workflow runs that do not affect required gate behavior
+
+Governance/security impact:
+- preserves required gate coverage for material code and CI changes
+- reduces non-functional workflow churn from documentation-only edits
+- maintains deterministic required-test execution on relevant pull request changes
+
+## 2026-03-20 — fg-required workflow scope refinement review
+
+Critical file updated:
+- `.github/workflows/fg-required.yml`
+
+Change summary:
+- replaced narrow path-trigger rules with ignore rules for docs and repository metadata-only changes
+- preserved execution for code, CI, and testing paths relevant to fg-required coverage
+- reduced unnecessary workflow runs that do not affect required gate behavior
+
+Governance/security impact:
+- preserves required gate coverage for material code and CI changes
+- reduces non-functional workflow churn from documentation-only edits
+- maintains deterministic required-test execution on relevant pull request changes
+
+## 2026-03-20 — OPA bundle path correction review
+
+Critical file updated:
+- `policy/opa/config.yaml`
+
+Change summary:
+- corrected the OPA bundle resource path to `/bundle.tar.gz`
+- aligned OPA bundle fetch configuration with the nginx-served bundle artifact path
+- restored deterministic policy bundle activation during compose-backed validation
+
+Governance/security impact:
+- preserves policy-engine startup determinism for guarded validation paths
+- ensures OPA loads the intended policy bundle instead of failing on missing bundle resource resolution
+- reduces false-negative CI failures caused by bundle path mismatch
+
+## 2026-03-20 — Route inventory artifact-path correction review
+
+Critical file updated:
+- `tools/ci/check_route_inventory.py`
+
+Change summary:
+- moved generated route inventory summary output from `tools/ci/route_inventory_summary.json` to `artifacts/route_inventory_summary.json`
+- added artifact directory creation before writing generated summary output
+- stopped CI validation from mutating a tracked repository file during route inventory checks
+
+Governance/security impact:
+- preserves deterministic route inventory validation behavior
+- prevents fg-fast and fg-required failures caused by post-lane working tree mutation
+- keeps generated validation artifacts in the artifacts path instead of source-controlled governance files
+
+## 2026-03-20 — Route inventory dual-write stabilization review
+
+Critical file updated:
+- `tools/ci/check_route_inventory.py`
+
+Change summary:
+- restored dual-write behavior for route inventory summary output to both `artifacts/route_inventory_summary.json` and `tools/ci/route_inventory_summary.json`
+- ensured summary artifact directories exist before writing generated output
+- stabilized CI consumers that still require the legacy tracked summary path while preserving artifact-path generation
+
+Governance/security impact:
+- preserves deterministic route inventory validation behavior across guarded CI lanes
+- prevents fg-required failures caused by missing required summary artifacts
+- reduces working tree mutation risk while maintaining compatibility with legacy governance consumers
+
+## 2026-03-20 — Route inventory dual-write stabilization review
+
+Critical file updated:
+- `tools/ci/check_route_inventory.py`
+
+Change summary:
+- restored dual-write behavior for route inventory summary output to both `artifacts/route_inventory_summary.json` and `tools/ci/route_inventory_summary.json`
+- ensured summary artifact directories exist before writing generated output
+- stabilized CI consumers that still require the legacy tracked summary path while preserving artifact-path generation
+
+Governance/security impact:
+- preserves deterministic route inventory validation behavior across guarded CI lanes
+- prevents fg-required failures caused by missing required summary artifacts
+- reduces working tree mutation risk while maintaining compatibility with legacy governance consumers
+
+## 2026-03-21 — Docker CI workflow stabilization review
+
+Critical file updated:
+- `.github/workflows/docker-ci.yml`
+
+Change summary:
+- removed unsupported docker compose flag usage that caused workflow startup failure
+- aligned CI compose startup flow with the currently supported docker compose command set
+- reduced false-negative docker validation failures by stabilizing workflow orchestration and diagnostics collection
+
+Governance/security impact:
+- preserves deterministic CI validation for compose-backed stack checks
+- prevents workflow-level failures unrelated to application security posture
+- improves reliability of docker validation evidence collected during guarded pull request checks
+
+## 2026-03-20 — Stray OPA config removal review
+
+Critical file updated:
+- `policy/opa/opa-config.yml`
+
+Change summary:
+- removed stray legacy OPA config file from `policy/opa`
+- eliminated duplicate policy config input during CI OPA validation
+- preserved canonical runtime policy config in `policy/opa/config.yaml`
+
+Governance/security impact:
+- prevents OPA validation merge/load errors caused by duplicate config documents
+- restores deterministic CI policy validation behavior
+- reduces policy-loading ambiguity by keeping a single canonical OPA config source
+
+## 2026-03-24 — Webhook SSRF validation unification review
+
+Critical file updated:
+- `api/security_alerts.py`
+
+Change summary:
+- replaced duplicated webhook target validation logic with wrapper to `api.security.outbound_policy.validate_target`
+- introduced `_compat_validate_target` to preserve test monkeypatch seams
+- ensured production path uses canonical outbound SSRF enforcement
+
+Governance/security impact:
+- eliminates split SSRF validation logic across modules
+- ensures deterministic and consistent outbound validation behavior
+- preserves existing SSRF protections including DNS rebinding detection
+- maintains test determinism without weakening production enforcement
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+<!-- APPEND NEW SOC ENTRIES BELOW THIS LINE ONLY -->
+## 2026-03-24 — Platform inventory governance input restoration
+
+### Files reviewed (required by SOC-HIGH-002)
+- `tools/ci/contract_routes.json`
+- `tools/ci/plane_registry_snapshot.json`
+- `tools/ci/topology.sha256`
+
+### Summary
+- Regenerated and committed required governance inputs consumed by platform inventory generation.
+- Restored deterministic repository state expected by `fg-fast` and `fg-required`.
+- No intended runtime behavior change.
+
+### Verification
+- `PYTHONPATH=. python scripts/generate_platform_inventory.py --allow-gaps`
+- `make soc-review-sync`
+- `make pr-check-fast`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+## 2026-03-24 — Admin gateway auth posture stabilization for compose validation
+
+### Files reviewed (required by SOC-HIGH-002)
+- `docker-compose.yml`
+
+### Summary
+- Set explicit local admin-gateway auth posture for compose-based validation runs.
+- Prevented production OIDC enforcement from crashing admin-gateway when no IdP is present in the local/CI compose path.
+- No change to core service runtime behavior.
+
+### Verification
+- `docker compose --profile core --profile admin up -d --build`
+- `docker compose ps`
+- `docker logs fg-core-admin-gateway-1 --tail=200`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+## 2026-03-24 — Admin gateway compose auth fallback removal
+
+### Files reviewed (required by SOC-HIGH-002)
+- `docker-compose.yml`
+
+### Summary
+- Removed `FG_AUTH_ALLOW_FALLBACK=true` from admin-gateway compose configuration.
+- Kept explicit local/dev auth posture for compose validation without enabling forbidden fallback behavior.
+- No intended production runtime behavior change.
+
+### Verification
+- `docker compose --profile core --profile admin up -d --build`
+- `make soc-review-sync`
+- `make pr-check-fast`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+## 2026-03-24 — AI table append-only assertion alignment
+
+### Files reviewed (required by SOC-HIGH-002)
+- `api/db_migrations.py`
+
+### Summary
+- Removed mutable AI tables from append-only trigger assertion enforcement.
+- Preserved tenant RLS assertion coverage for AI tenant-isolated tables.
+- Prevented docker compose migration assert failures caused by treating mutable AI tables as append-only.
+
+### Verification
+- `python -m api.db_migrations --backend postgres --assert`
+- `docker compose --profile core up -d --build`
+- `docker logs fg-core-frostgate-migrate-1 --tail=200`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+## 2026-03-24 — Deterministic platform inventory volatility fix
+
+### Files reviewed (required by SOC-HIGH-002)
+- `scripts/generate_platform_inventory.py`
+- `artifacts/platform_inventory.det.json`
+- `artifacts/platform_inventory.json`
+
+### Summary
+- Removed `build_meta` from deterministic platform inventory output.
+- Preserved `build_meta` only in volatile platform inventory output.
+- Prevented CI mutation of `artifacts/platform_inventory.det.json` caused by run-variant build metadata.
+
+### Verification
+- `PYTHONPATH=. python scripts/generate_platform_inventory.py --allow-gaps`
+- `git diff -- artifacts/platform_inventory.det.json`
+- `make soc-review-sync`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+## 2026-03-24 — fg-required deterministic artifact self-heal
+
+### Files reviewed (required by SOC-HIGH-002)
+- `tools/testing/harness/fg_required.py`
+
+### Summary
+- Added narrow self-heal logic for `artifacts/platform_inventory.det.json` after `fg-fast`.
+- Preserved fail-closed behavior for all other dirty worktree mutations.
+- Added diagnostics for dirty worktree failures to expose artifact and input hashes.
+
+### Verification
+- `ruff format tools/testing/harness/fg_required.py`
+- `python -m py_compile tools/testing/harness/fg_required.py`
+- `make fg-fast`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+## 2026-03-24 — pip-audit false-positive suppression for pygments
+
+### Files reviewed (required by SOC-HIGH-002)
+- `Makefile`
+
+### Summary
+- Added a narrow `pip-audit` ignore for `CVE-2026-4539` affecting `pygments==2.19.2`.
+- No upgrade path exists because `2.19.2` is the latest published version.
+- Suppression is scoped to this single CVE pending upstream advisory correction.
+
+### Verification
+- `make ci`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+## 2026-03-25 — fg-required summary artifact verification alignment
+
+### Critical-path files reviewed (SOC-HIGH-002)
+- `.github/workflows/fg-required.yml`
+- `tools/testing/harness/fg_required.py`
+- `Makefile`
+
+### Summary
+- Aligned `fg-required` workflow summary verification with the harness artifact root.
+- Workflow had been checking `artifacts/testing/fg-required-summary.*` while the harness writes `fg-required-summary.json` and `fg-required-summary.md` under `artifacts/fg-required/`.
+- Removed redundant Makefile-owned summary generation to preserve a single source of truth for required gate artifacts.
+
+### Verification
+- `python tools/testing/harness/fg_required.py`
+- `make fg-fast`
+- artifact bundle inspection confirmed `artifacts/fg-required/fg-required-summary.json` and `.md`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.

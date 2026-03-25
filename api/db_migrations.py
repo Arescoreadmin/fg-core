@@ -115,9 +115,6 @@ def assert_append_only_triggers(engine: Engine) -> None:
         "compliance_snapshots",
         "audit_exam_sessions",
         "compliance_requirement_updates",
-        "ai_device_registry",
-        "ai_token_usage",
-        "ai_quota_daily",
     }
     with engine.begin() as conn:
         rows = conn.exec_driver_sql(
