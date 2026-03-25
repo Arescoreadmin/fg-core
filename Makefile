@@ -659,7 +659,7 @@ exam-reproduce-test: venv _require-pytest-venv
 	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/test_audit_engine.py -k "exam_reproduce"
 
 
-.PHONY: fg-fast fg-fast-ci fg-fast-full connectors-gate g-fast
+.PHONY: fg-fast fg-fast-ci fg-fast-full fg-full connectors-gate g-fast
 
 connectors-gate: venv _require-pytest-venv
 	@$(MAKE) -s validate-connector-contracts
@@ -687,7 +687,9 @@ g-fast: fg-fast
 
 fg-fast-ci: fg-fast billing-ledger-verify billing-invoice-verify opa-check control-plane-check
 
-fg-fast-full: fg-fast-ci audit-chain-verify compliance-chain-verify canonicalization-guard \
+fg-fast-full: fg-fast-ci audit-chain-verify compliance-chain-verify canonicalization-guard
+
+fg-full: fg-fast-full \
 	audit-export-test audit-repro-test compliance-registry-test exam-export-test exam-reproduce-test
 
 # =============================================================================
