@@ -36,9 +36,6 @@ BUILD_META_SCHEMA_EXPECTED = "v1"
 SHA_LINE_RE = re.compile(r"^[0-9a-f]{64}\s{2}[^\s].+$")
 
 
-# -----------------------------
-# Deterministic helpers
-# -----------------------------
 def _dump_json(payload: Any) -> str:
     return (
         json.dumps(
@@ -73,9 +70,6 @@ def _governance_fingerprint(
     return _sha256_text(blob)
 
 
-# -----------------------------
-# IO / Validation primitives
-# -----------------------------
 def require_file(path: Path) -> None:
     if not path.exists() or not path.is_file():
         raise FileNotFoundError(str(path.relative_to(REPO)))
@@ -667,6 +661,24 @@ def main(argv: list[str] | None = None) -> int:
         gap_md.append("- none")
     (art / "PLATFORM_GAPS.det.md").write_text(
         "\n".join(gap_md) + "\n", encoding="utf-8"
+    )
+
+    # REQUIRED SUMMARY ARTIFACTS (CI CONTRACT)
+
+    # Mirror deterministic JSON -> summary JSON
+    (art / "platform_inventory.json").write_text(
+        _dump_json(det_payload), encoding="utf-8"
+    )
+
+    # Mirror markdown summaries
+    (art / "PLATFORM_INVENTORY.md").write_text(
+        (art / "PLATFORM_INVENTORY.det.md").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+
+    (art / "PLATFORM_GAPS.md").write_text(
+        (art / "PLATFORM_GAPS.det.md").read_text(encoding="utf-8"),
+        encoding="utf-8",
     )
 
     if vol_payload is not None:

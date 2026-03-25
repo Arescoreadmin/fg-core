@@ -1320,3 +1320,22 @@ SOC review outcome:
 
 SOC review outcome:
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+## 2026-03-24 — pip-audit false-positive suppression for pygments
+
+### Files reviewed (required by SOC-HIGH-002)
+- `Makefile`
+
+### Summary
+- Added a narrow `pip-audit` ignore for `CVE-2026-4539` affecting `pygments==2.19.2`.
+- No upgrade path exists because `2.19.2` is the latest published version.
+- Suppression is scoped to this single CVE pending upstream advisory correction.
+
+### Verification
+- `make ci`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
