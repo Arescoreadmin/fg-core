@@ -98,6 +98,11 @@ def _filter_contract_ctx_config_errors(errors: list[str]) -> list[str]:
             continue
         if "missing oidc configuration in production" in msg:
             continue
+        # Also allow the prod_like variant (staging) during contract-gen.
+        if "oidc must be configured in production/staging" in msg:
+            continue
+        if "fg_oidc_scopes must be explicitly set in production/staging" in msg:
+            continue
         filtered.append(e)
     return filtered
 
@@ -153,19 +158,19 @@ def build_app() -> FastAPI:
         log.error("Configuration validation failed: %s", error_msg)
         raise RuntimeError(f"Configuration validation failed: {error_msg}")
 
-    if config.is_prod and config.dev_auth_bypass:
-        raise RuntimeError("FG_DEV_AUTH_BYPASS cannot be enabled in production.")
+    if config.is_prod_like and config.dev_auth_bypass:
+        raise RuntimeError("FG_DEV_AUTH_BYPASS cannot be enabled in production/staging.")
 
-    # Strict runtime rule: prod requires OIDC.
+    # Strict runtime rule: prod/staging requires OIDC.
     # But contract generation should not require real auth wiring.
-    if config.is_prod and not config.oidc_enabled:
+    if config.is_prod_like and not config.oidc_enabled:
         if contract_ctx:
             log.warning(
                 "Contract generation context detected: allowing missing OIDC configuration "
-                "to build OpenAPI/contracts. NOT allowed for runtime prod deployments."
+                "to build OpenAPI/contracts. NOT allowed for runtime prod/staging deployments."
             )
         else:
-            raise RuntimeError("Missing OIDC configuration in production.")
+            raise RuntimeError("Missing OIDC configuration in production/staging.")
 
     # ---- Middleware ----
     #

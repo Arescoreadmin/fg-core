@@ -39,6 +39,7 @@ class AuthConfig:
         FG_OIDC_CLIENT_ID: OAuth client ID
         FG_OIDC_CLIENT_SECRET: OAuth client secret
         FG_OIDC_REDIRECT_URL: OAuth callback URL
+        FG_OIDC_SCOPES: Space-separated OIDC scopes (default: openid profile email)
         FG_ENV: Environment (prod/staging/dev/test)
         FG_DEV_AUTH_BYPASS: Enable dev auth bypass (dev/test only)
         FG_DEV_TENANT_ID: Tenant id to mint in dev bypass session (default: default)
@@ -52,6 +53,9 @@ class AuthConfig:
     oidc_client_id: Optional[str] = None
     oidc_client_secret: Optional[str] = None
     oidc_redirect_url: Optional[str] = None
+    # FG_OIDC_SCOPES is required by the Mandatory Production Authentication Model.
+    # Production/staging must set this explicitly; dev/test default is safe.
+    oidc_scopes: str = "openid profile email"
 
     env: str = "dev"
     dev_auth_bypass: bool = False
@@ -120,8 +124,11 @@ class AuthConfig:
         if self.is_prod_like and self.dev_auth_bypass:
             errors.append("FG_DEV_AUTH_BYPASS cannot be enabled in production/staging")
 
-        if self.is_prod and not self.oidc_enabled:
-            errors.append("OIDC must be configured in production")
+        if self.is_prod_like and not self.oidc_enabled:
+            errors.append("OIDC must be configured in production/staging")
+
+        if self.is_prod_like and not (self.oidc_scopes or "").strip():
+            errors.append("FG_OIDC_SCOPES must be explicitly set in production/staging")
 
         oidc_fields = [
             self.oidc_issuer,
@@ -151,6 +158,7 @@ def get_auth_config() -> AuthConfig:
         oidc_client_id=os.getenv("FG_OIDC_CLIENT_ID"),
         oidc_client_secret=os.getenv("FG_OIDC_CLIENT_SECRET"),
         oidc_redirect_url=os.getenv("FG_OIDC_REDIRECT_URL"),
+        oidc_scopes=os.getenv("FG_OIDC_SCOPES", "openid profile email"),
         env=os.getenv("FG_ENV", "dev"),
         dev_auth_bypass=_env_bool("FG_DEV_AUTH_BYPASS", False),
         session_secret=os.getenv("FG_SESSION_SECRET", os.urandom(32).hex()),

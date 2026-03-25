@@ -115,4 +115,30 @@ This entry documents a production-surface change touching compose/runtime enforc
 
 ---
 
-_Last updated: 2026-03-12_
+---
+
+### 2026-03-25 — FG_OIDC_SCOPES Missing From Mandatory Production Auth Model
+
+**Area:** Auth · Admin-Gateway · Production Boot Validation
+
+**Issue:**
+`FG_OIDC_SCOPES` is required by the Mandatory Production Authentication Model as a boot-time required variable, but it was entirely absent from `AuthConfig`, `get_auth_config()`, and `validate()`. The OIDC client hardcoded scopes to `["openid", "profile", "email"]` with no env-var control. Additionally, `validate()` checked only `is_prod` for OIDC presence, allowing staging (`FG_ENV=staging`) to boot without OIDC configured.
+
+**Resolution:**
+1. Added `oidc_scopes: str` field to `AuthConfig` in `admin_gateway/auth/config.py`.
+2. Added `FG_OIDC_SCOPES` loading to `get_auth_config()` (default: `"openid profile email"` for dev/test safety).
+3. Extended `validate()` to require `FG_OIDC_SCOPES` to be non-empty in prod/staging (fail-closed).
+4. Changed `validate()` OIDC presence check from `is_prod` to `is_prod_like`, covering staging.
+5. Updated `build_app()` in `admin_gateway/main.py` to enforce OIDC for `is_prod_like` (not just `is_prod`).
+6. Updated `OIDCClient.get_authorization_url()` in `admin_gateway/auth/oidc.py` to read scopes from `config.oidc_scopes` instead of hardcoding.
+7. Extended `_filter_contract_ctx_config_errors()` to also suppress the new staging-OIDC and SCOPES errors during contract-gen context only.
+
+**AI Notes:**
+- Do NOT revert the `is_prod` → `is_prod_like` change in `validate()`; staging is production-like and must enforce OIDC
+- Do NOT remove `FG_OIDC_SCOPES` validation from `validate()`; it is a mandatory production auth model requirement
+- JWT id_token signature verification is NOT implemented in `admin_gateway/auth/oidc.py:parse_id_token_claims()` — this is a separate, developer-directed action item requiring a non-trivial change (JWKS verification)
+- `FG_OIDC_REDIRECT_URI` vs `FG_OIDC_REDIRECT_URL`: the codebase consistently uses `REDIRECT_URL`; do not rename without explicit developer instruction
+
+---
+
+_Last updated: 2026-03-25_

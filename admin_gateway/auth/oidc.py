@@ -145,9 +145,10 @@ class OIDCClient:
         # Clean up old states
         self._cleanup_old_states()
 
-        # Default scopes
+        # Use scopes from config (FG_OIDC_SCOPES); caller may override.
         if scopes is None:
-            scopes = ["openid", "profile", "email"]
+            raw = (self.config.oidc_scopes or "").strip()
+            scopes = raw.split() if raw else ["openid", "profile", "email"]
 
         # Build authorization URL
         params = {
