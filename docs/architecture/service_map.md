@@ -6,7 +6,26 @@ This map defines responsibility and trust boundaries for the multi-tenant AI pla
 
 ## 2) Services
 
-### A) admin-gateway
+### A) console/BFF
+**Responsibility**
+- Presentation and browser-facing request mediation layer.
+- UX orchestration and request shaping.
+- Allowlist enforcement for browser-originated calls.
+
+**Inputs**
+- Browser requests and user interaction flows.
+
+**Outputs**
+- Mediated, allowlisted requests to admin-gateway.
+- No direct trust assertions to core.
+
+**Trust boundary**
+- Internet-facing presentation boundary.
+- Not a human authentication authority.
+
+---
+
+### B) admin-gateway
 **Responsibility**
 - Human authentication + session boundary.
 - Tenant/actor context establishment.
@@ -26,7 +45,7 @@ This map defines responsibility and trust boundaries for the multi-tenant AI pla
 
 ---
 
-### B) core-api
+### C) core-api
 **Responsibility**
 - Business logic, tenant-scoped data access, policy enforcement.
 - No human authentication.
@@ -45,7 +64,7 @@ This map defines responsibility and trust boundaries for the multi-tenant AI pla
 
 ---
 
-### C) ingestion workers
+### D) ingestion workers
 **Responsibility**
 - Process ingest jobs and normalize artifacts per tenant.
 
@@ -61,7 +80,7 @@ This map defines responsibility and trust boundaries for the multi-tenant AI pla
 
 ---
 
-### D) connector workers
+### E) connector workers
 **Responsibility**
 - Execute outbound connector sync/fetch/push workflows per tenant policy.
 
@@ -77,7 +96,7 @@ This map defines responsibility and trust boundaries for the multi-tenant AI pla
 
 ---
 
-### E) agent control
+### F) agent control
 **Responsibility**
 - Agent enrollment, command/control lifecycle, receipts, policy fetch/ack state.
 
@@ -95,7 +114,7 @@ This map defines responsibility and trust boundaries for the multi-tenant AI pla
 
 ---
 
-### F) audit pipeline
+### G) audit pipeline
 **Responsibility**
 - Collect, normalize, persist, and export immutable/tamper-evident audit records.
 
@@ -113,7 +132,15 @@ This map defines responsibility and trust boundaries for the multi-tenant AI pla
 
 ## 3) Inter-Service Flow Rules
 
-1. Human-originated admin actions: `console -> admin-gateway -> core-api -> workers/services`.
+1. Human-originated admin actions: `browser -> console/BFF -> admin-gateway -> core-api -> workers/services`.
 2. Workers call core/internal services with service identity, never human credentials.
 3. Every service boundary handoff must carry `tenant_id`, `actor_id`, `request_id`.
 4. Any service receiving unscoped tenant-owned operation must reject (fail closed).
+
+---
+
+## 4) Explicit Boundary Separation
+
+- **Console/BFF** = presentation/request mediation layer.
+- **Admin-Gateway** = authentication/authorization/policy boundary.
+- **Core** = machine-service execution boundary only.

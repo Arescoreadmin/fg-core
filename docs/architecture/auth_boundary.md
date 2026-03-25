@@ -14,13 +14,14 @@
 
 Canonical flow:
 
-`console -> admin-gateway -> core`
+`browser -> console/BFF -> admin-gateway -> core`
 
 **Meaning**
-1. Browser/console sends requests only to Admin-Gateway-facing endpoints.
-2. Admin-Gateway authenticates human actor and establishes tenant-scoped identity context.
-3. Admin-Gateway forwards authorized calls to core with signed/trusted service identity headers/tokens.
-4. Core performs authorization + tenant enforcement using forwarded trusted context.
+1. Browser traffic terminates at the Console/BFF presentation layer.
+2. Console/BFF forwards only allowlisted operations to Admin-Gateway.
+3. Admin-Gateway authenticates human actor and establishes tenant-scoped identity context.
+4. Admin-Gateway forwards authorized calls to core with signed/trusted service identity headers/tokens.
+5. Core performs authorization + tenant enforcement using forwarded trusted context.
 
 ---
 
@@ -54,7 +55,26 @@ Canonical flow:
 
 ---
 
-## 6) Request Context Contract (Gateway to Core)
+## 6) Role Separation (Console/BFF vs Admin-Gateway vs Core)
+
+### Console/BFF
+- Browser-facing application layer.
+- Request shaping / allowlist / UX boundary.
+- Must not independently become the trust authority.
+
+### Admin-Gateway
+- Sole human authentication and authorization authority.
+- Session validation.
+- Tenant and role enforcement.
+- Policy checks.
+
+### Core
+- Machine-only service boundary.
+- No direct human auth.
+
+---
+
+## 7) Request Context Contract (Gateway to Core)
 
 Every forwarded admin/core call must contain:
 - `tenant_id` (required unless explicit global-admin control operation)
@@ -65,3 +85,11 @@ Every forwarded admin/core call must contain:
 - issued-at timestamp or equivalent replay-control metadata
 
 Core must fail closed when this context is incomplete or invalid.
+
+---
+
+## 8) Explicit Scoping Note
+
+The Console BFF may remain the browser-facing entrypoint.  
+This does not make it the human authentication authority.  
+Admin-Gateway remains the sole authority for human identity, session validation, and access control decisions.
