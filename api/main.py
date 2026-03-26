@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -33,7 +34,13 @@ from api.keys import router as keys_router
 from api.stats import router as stats_router
 from api.attestation import router as attestation_router
 from api.config_control import router as config_control_router
+from api.ui import router as ui_router
+from api.ui_dashboards import router as ui_dashboards_router
 from api.audit import router as audit_router
+from api.ui_audit_dashboard import router as ui_audit_dashboard_router
+from api.ui_compliance_dashboard import router as ui_compliance_dashboard_router
+from api.ui_ai_console import admin_router as ui_ai_admin_router
+from api.ui_ai_console import router as ui_ai_router
 from api.compliance import router as compliance_router
 from api.billing import router as billing_router
 from api.compliance_cp_extension import router as compliance_cp_extension_router
@@ -53,6 +60,7 @@ from api.control_plane import router as control_plane_router
 from api.control_plane_v2 import router as control_plane_v2_router
 from api.testing_control_tower import router as testing_control_tower_router
 from api.control_tower_snapshot import router as control_tower_snapshot_router
+from api.ui_testing_control_tower import router as ui_testing_control_tower_router
 from services.ai_plane_extension import ai_external_provider_enabled, ai_plane_enabled
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
@@ -154,6 +162,15 @@ def _global_expected_api_key() -> str:
 
 def _dev_enabled() -> bool:
     return (os.getenv("FG_DEV_EVENTS_ENABLED") or "0").strip() == "1"
+
+
+def _is_test_context() -> bool:
+    env = (os.getenv("FG_ENV") or "").strip().lower()
+    return (
+        env == "test"
+        or "pytest" in sys.modules
+        or bool(os.getenv("PYTEST_CURRENT_TEST"))
+    )
 
 
 def _sqlite_path_from_env() -> str:
@@ -515,6 +532,16 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         app.include_router(ai_plane_extension_router)
     app.include_router(planes_router)
     app.include_router(evidence_index_router)
+
+    if _is_test_context():
+        app.include_router(ui_router)
+        app.include_router(ui_dashboards_router)
+        app.include_router(ui_audit_dashboard_router)
+        app.include_router(ui_compliance_dashboard_router)
+        app.include_router(ui_ai_router)
+        app.include_router(ui_ai_admin_router)
+        if _testing_control_tower_enabled():
+            app.include_router(ui_testing_control_tower_router)
 
     app.include_router(keys_router)
     app.include_router(forensics_router)
