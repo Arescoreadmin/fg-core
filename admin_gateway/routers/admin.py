@@ -29,6 +29,15 @@ log = logging.getLogger("admin-gateway.admin-router")
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
+_PROD_ENVS = {"prod", "production", "staging"}
+_CORE_INTERNAL_HEADER = "X-Admin-Gateway-Internal"
+_CORE_INTERNAL_HEADER_VALUE = "true"
+
+
+def _is_prod_like_env() -> bool:
+    env = (os.getenv("FG_ENV") or "").strip().lower()
+    return env in _PROD_ENVS
+
 
 class UserInfo(BaseModel):
     """User information response."""
@@ -96,14 +105,44 @@ def _core_base_url() -> str:
     return base_url.rstrip("/")
 
 
-def _core_api_key() -> str:
-    api_key = (os.getenv("AG_CORE_API_KEY") or "").strip()
-    if not api_key:
+def _core_api_key() -> tuple[str, bool]:
+    internal_token = (os.getenv("AG_CORE_INTERNAL_TOKEN") or "").strip()
+    if _is_prod_like_env():
+        if internal_token:
+            return internal_token, True
         raise HTTPException(
             status_code=503,
-            detail="Core service unavailable: AG_CORE_API_KEY not configured",
+            detail=(
+                "Core service unavailable: "
+                "AG_CORE_INTERNAL_TOKEN not configured for production"
+            ),
         )
-    return api_key
+
+    if internal_token:
+        return internal_token, True
+
+    api_key = (os.getenv("AG_CORE_API_KEY") or "").strip()
+    if api_key:
+        return api_key, False
+
+    raise HTTPException(
+        status_code=503,
+        detail=(
+            "Core service unavailable: AG_CORE_INTERNAL_TOKEN "
+            "(or AG_CORE_API_KEY in non-production) not configured"
+        ),
+    )
+
+
+def _core_proxy_headers(request: Request) -> dict[str, str]:
+    token, is_internal = _core_api_key()
+    headers = {
+        "X-API-Key": token,
+        "X-Request-Id": getattr(request.state, "request_id", ""),
+    }
+    if is_internal:
+        headers[_CORE_INTERNAL_HEADER] = _CORE_INTERNAL_HEADER_VALUE
+    return headers
 
 
 async def _proxy_to_core(
@@ -115,10 +154,7 @@ async def _proxy_to_core(
     json_body: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     base_url = _core_base_url()
-    headers = {
-        "X-API-Key": _core_api_key(),
-        "X-Request-Id": getattr(request.state, "request_id", ""),
-    }
+    headers = _core_proxy_headers(request)
 
     async with httpx.AsyncClient(base_url=base_url, timeout=15.0) as client:
         response = await client.request(
@@ -148,10 +184,7 @@ async def _proxy_to_core_raw(
     json_body: Optional[dict[str, Any]] = None,
 ) -> Response:
     base_url = _core_base_url()
-    headers = {
-        "X-API-Key": _core_api_key(),
-        "X-Request-Id": getattr(request.state, "request_id", ""),
-    }
+    headers = _core_proxy_headers(request)
 
     async with httpx.AsyncClient(base_url=base_url, timeout=None) as client:
         async with client.stream(

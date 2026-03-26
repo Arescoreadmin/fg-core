@@ -1,5 +1,6 @@
 """Tests for admin key proxy endpoints."""
 
+import pytest
 from fastapi.testclient import TestClient
 
 from admin_gateway.auth.session import Session
@@ -50,3 +51,44 @@ def test_admin_keys_scope_enforced(app, monkeypatch):
     with TestClient(app) as test_client:
         response = test_client.get("/admin/keys", params={"tenant_id": "tenant-dev"})
     assert response.status_code == 403
+
+
+def test_core_api_key_prod_requires_internal_token(monkeypatch):
+    """Production must not fall back to AG_CORE_API_KEY."""
+    from admin_gateway.routers import admin as admin_router
+    from fastapi import HTTPException
+
+    monkeypatch.setenv("FG_ENV", "production")
+    monkeypatch.delenv("AG_CORE_INTERNAL_TOKEN", raising=False)
+    monkeypatch.setenv("AG_CORE_API_KEY", "legacy-shared-key")
+
+    with pytest.raises(HTTPException) as exc:
+        admin_router._core_api_key()
+    assert exc.value.status_code == 503
+    assert "AG_CORE_INTERNAL_TOKEN not configured" in str(exc.value.detail)
+
+
+def test_core_api_key_non_prod_falls_back_to_legacy(monkeypatch):
+    """Non-production may use AG_CORE_API_KEY compatibility fallback."""
+    from admin_gateway.routers import admin as admin_router
+
+    monkeypatch.setenv("FG_ENV", "dev")
+    monkeypatch.delenv("AG_CORE_INTERNAL_TOKEN", raising=False)
+    monkeypatch.setenv("AG_CORE_API_KEY", "legacy-shared-key")
+
+    token, is_internal = admin_router._core_api_key()
+    assert token == "legacy-shared-key"
+    assert not is_internal
+
+
+def test_core_api_key_non_prod_prefers_internal_token(monkeypatch):
+    """Non-production should exercise internal-token path when configured."""
+    from admin_gateway.routers import admin as admin_router
+
+    monkeypatch.setenv("FG_ENV", "dev")
+    monkeypatch.setenv("AG_CORE_INTERNAL_TOKEN", "internal-token")
+    monkeypatch.setenv("AG_CORE_API_KEY", "legacy-shared-key")
+
+    token, is_internal = admin_router._core_api_key()
+    assert token == "internal-token"
+    assert is_internal
