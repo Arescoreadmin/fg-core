@@ -21,6 +21,7 @@ def _init_git_repo(repo: Path) -> None:
         ["git", "config", "user.email", "test@example.com"], cwd=repo, check=True
     )
     subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=repo, check=True)
 
 
 def _run(repo: Path) -> subprocess.CompletedProcess[str]:

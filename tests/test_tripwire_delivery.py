@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+import api.security_alerts as security_alerts
 from api.tripwires import (
     DeliveryResult,
     TripwireAlert,
@@ -23,6 +24,14 @@ from api.tripwires import (
     check_canary_key,
     check_honeypot_path,
 )
+
+
+@pytest.fixture(autouse=True)
+def _stub_dns(monkeypatch):
+    def _resolve(host: str) -> list[str]:
+        return ["93.184.216.34"]
+
+    monkeypatch.setattr(security_alerts, "resolve_host", _resolve)
 
 
 class MockResponse:

@@ -147,4 +147,36 @@ Internal-token path now enforces `required_scopes` before successful auth return
 
 ---
 
+### 2026-03-26 — FG_OIDC_SCOPES Production Boot Enforcement
+
+**Area:** Auth Boundary · Admin-Gateway · Production Boot
+
+**Issue:**
+`FG_OIDC_SCOPES` was listed as a mandatory production boot variable but was not validated at startup. Admin-gateway production boot did not fail when `FG_OIDC_SCOPES` was absent. The OIDC scope used in authorization requests was hardcoded, bypassing the environment-configured value.
+
+**Resolution:**
+Added `oidc_scopes` field to `AuthConfig` in `admin_gateway/auth/config.py`, with production boot validation that fails if `FG_OIDC_SCOPES` is not set. Added `FG_OIDC_SCOPES` to `OIDC_ENV_VARS` in `admin_gateway/auth.py` so `require_oidc_env()` checks it. Updated `build_login_redirect` to read the scope from `FG_OIDC_SCOPES` environment variable instead of hardcoded string.
+
+**AI Notes:**
+- Do NOT remove `FG_OIDC_SCOPES` from the production boot validation check
+- Do NOT revert to hardcoded scope string in `build_login_redirect`
+
+---
+
+### 2026-03-26 — CI Gate Fix: Test Repo Git Signing + SSRF DNS Stub
+
+**Area:** CI · Test Infrastructure
+
+**Issue:**
+Two test suites failed due to CI environment constraints unrelated to production behavior: (1) `test_bp_c_002_gate.py` failed because temporary git repos inherited the global git signing configuration, causing `git commit` to fail with exit 128; (2) `test_tripwire_delivery.py` failed because `WebhookDeliveryService._safe_post` calls `validate_target` before using the injected mock client, and DNS resolution for `example.com` fails in network-isolated CI.
+
+**Resolution:**
+Added `git config commit.gpgsign false` to `_init_git_repo` in `test_bp_c_002_gate.py`. Added `_stub_dns` autouse fixture in `test_tripwire_delivery.py` that patches `api.security_alerts.resolve_host` to return a non-blocked public IP, consistent with the existing pattern in `test_webhook_ssrf_hardening.py`.
+
+**AI Notes:**
+- Do NOT remove `commit.gpgsign false` config from `_init_git_repo`; global signing must be overridden in test repos
+- Do NOT remove the `_stub_dns` fixture; SSRF validation requires DNS resolution which is unavailable in network-isolated CI
+
+---
+
 _Last updated: 2026-03-26_

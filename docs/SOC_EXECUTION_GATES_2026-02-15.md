@@ -1418,3 +1418,28 @@ SOC review outcome:
 
 SOC review outcome:
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+## 2026-03-26 — FG_OIDC_SCOPES Production Boot Enforcement + CI Test Gate Fixes
+
+### Critical-path files reviewed (SOC-HIGH-002)
+- `admin_gateway/auth/config.py`
+- `admin_gateway/auth.py`
+- `admin_gateway/main.py`
+
+### Summary
+- Added `FG_OIDC_SCOPES` as a required production boot variable in `admin_gateway/auth/config.py`. Production boot now fails if `FG_OIDC_SCOPES` is absent, satisfying the Mandatory Production Boot Guarantee invariant.
+- Added `FG_OIDC_SCOPES` to `OIDC_ENV_VARS` in `admin_gateway/auth.py` so `require_oidc_env()` enforces it. Updated `build_login_redirect` to read scope from `FG_OIDC_SCOPES` env var instead of hardcoded string.
+- Updated `_filter_contract_ctx_config_errors` in `admin_gateway/main.py` to suppress the new `FG_OIDC_SCOPES` error in contract-gen context only, consistent with existing OIDC error suppression policy for contract builds.
+- Fixed `tests/test_bp_c_002_gate.py`: added `commit.gpgsign false` to temp repo init to prevent global git signing from breaking test repo commits.
+- Fixed `tests/test_tripwire_delivery.py`: added `_stub_dns` autouse fixture to patch `api.security_alerts.resolve_host`, preventing DNS resolution failures in network-isolated CI environments when testing webhook delivery with mock HTTP clients.
+
+### Verification
+- `ADMIN_SKIP_PIP_INSTALL=1 make ci-admin`
+- `make fg-fast`
+- `python -m py_compile admin_gateway/auth/config.py admin_gateway/auth.py admin_gateway/main.py`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
