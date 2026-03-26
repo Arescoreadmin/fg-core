@@ -543,6 +543,11 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     if _dev_enabled():
         app.include_router(dev_events_router)
 
+    # ---- Admin router ----
+    admin_router = getattr(spine_modules, "admin_router", None)
+    if admin_router is not None and _should_mount_admin_routes():
+        app.include_router(admin_router)
+
     # ---- Health / Status ----
     @app.get("/health")
     async def health(request: Request) -> dict:
