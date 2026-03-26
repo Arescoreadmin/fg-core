@@ -179,4 +179,21 @@ Added `oidc_scopes` field to `AuthConfig` in `admin_gateway/auth/config.py`, wit
 
 ---
 
+### 2026-03-26 — Audit Engine Tenant Isolation Hardening
+
+**Area:** Tenant Isolation · Audit Layer
+
+**Issue:**
+Four `AuditEngine` methods accepted `tenant_id` as optional or omitted it entirely, allowing cross-tenant access via UUID-guessing on `export_exam_bundle`, `reproduce_exam`, `reproduce_session`, and env-var fallback in `export_bundle`. Route handlers `export_exam`, `audit_reproduce`, and `reproduce_exam` discarded the bound-tenant value and did not pass it to the engine.
+
+**Resolution:**
+Made `tenant_id` a required positional argument on all four engine methods. Added fail-closed guards (`AuditTamperDetected("tenant_context_required")`) for empty/whitespace values. All DB queries now filter by both primary key and `tenant_id`. Route handlers extract `require_bound_tenant(request)` and pass it through. Existing tests updated to supply `tenant_id`; new isolation tests added proving cross-tenant denial, missing-tenant failure, and correct-tenant success for each surface.
+
+**AI Notes:**
+- Do NOT make `tenant_id` optional on `export_bundle`, `export_exam_bundle`, `reproduce_session`, or `reproduce_exam`
+- Do NOT remove the fail-closed `AuditTamperDetected("tenant_context_required")` guards
+- Do NOT query `AuditExamSession` or `AuditLedgerRecord` by `exam_id`/`session_id` alone without a `tenant_id` filter
+
+---
+
 _Last updated: 2026-03-26_

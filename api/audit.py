@@ -87,9 +87,10 @@ def audit_export(
         Depends(require_bound_tenant),
     ],
 )
-def audit_reproduce(body: ReproduceRequest) -> dict[str, object]:
+def audit_reproduce(body: ReproduceRequest, request: Request) -> dict[str, object]:
+    tenant_id = require_bound_tenant(request)
     engine = AuditEngine()
-    result = engine.reproduce_session(body.session_id)
+    result = engine.reproduce_session(body.session_id, tenant_id=tenant_id)
     if not result.get("ok"):
         raise HTTPException(
             status_code=409,
@@ -149,8 +150,9 @@ def run_exam(request: Request, body: ExamRunRequest) -> dict[str, str]:
     ],
 )
 def export_exam(exam_id: str, request: Request) -> dict[str, object]:
+    tenant_id = require_bound_tenant(request)
     return AuditEngine().export_exam_bundle(
-        exam_id=exam_id, app_openapi=request.app.openapi()
+        exam_id=exam_id, app_openapi=request.app.openapi(), tenant_id=tenant_id
     )
 
 
@@ -161,8 +163,9 @@ def export_exam(exam_id: str, request: Request) -> dict[str, object]:
         Depends(require_bound_tenant),
     ],
 )
-def reproduce_exam(exam_id: str) -> dict[str, object]:
-    result = AuditEngine().reproduce_exam(exam_id)
+def reproduce_exam(exam_id: str, request: Request) -> dict[str, object]:
+    tenant_id = require_bound_tenant(request)
+    result = AuditEngine().reproduce_exam(exam_id, tenant_id=tenant_id)
     if not result.get("ok"):
         raise HTTPException(
             status_code=409,

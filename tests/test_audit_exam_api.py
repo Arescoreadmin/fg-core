@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from fastapi import HTTPException
 
 from api.audit import ReproduceRequest, audit_reproduce
 from api.db import init_db, reset_engine_cache
 from services.audit_engine.engine import InvariantResult
+
+
+def _bound_request(tenant_id: str) -> object:
+    return SimpleNamespace(
+        state=SimpleNamespace(tenant_id=tenant_id, tenant_is_key_bound=True),
+        app=SimpleNamespace(openapi=lambda: {"openapi": "3.1.0"}),
+    )
 
 
 @pytest.fixture
@@ -40,7 +49,7 @@ def test_reproduce_mismatch_returns_non_200(monkeypatch, isolated_audit_env):
     monkeypatch.setattr("api.audit.AuditEngine", lambda: eng)
 
     with pytest.raises(HTTPException) as exc:
-        audit_reproduce(ReproduceRequest(session_id=sid))
+        audit_reproduce(ReproduceRequest(session_id=sid), _bound_request("tenant-a"))
     assert exc.value.status_code == 409
 
 
