@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import sys
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -164,13 +163,9 @@ def _dev_enabled() -> bool:
     return (os.getenv("FG_DEV_EVENTS_ENABLED") or "0").strip() == "1"
 
 
-def _is_test_context() -> bool:
+def _is_production_runtime() -> bool:
     env = (os.getenv("FG_ENV") or "").strip().lower()
-    return (
-        env == "test"
-        or "pytest" in sys.modules
-        or bool(os.getenv("PYTEST_CURRENT_TEST"))
-    )
+    return env in {"prod", "production"}
 
 
 def _sqlite_path_from_env() -> str:
@@ -533,7 +528,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(planes_router)
     app.include_router(evidence_index_router)
 
-    if _is_test_context():
+    if not _is_production_runtime():
         app.include_router(ui_router)
         app.include_router(ui_dashboards_router)
         app.include_router(ui_audit_dashboard_router)

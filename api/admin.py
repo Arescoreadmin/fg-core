@@ -20,7 +20,6 @@ import json
 import logging
 import os
 import re
-import sys
 import time
 import uuid
 from pathlib import Path
@@ -64,7 +63,7 @@ log = logging.getLogger("frostgate.admin")
 def require_internal_admin_gateway(request: Request) -> None:
     """Allow core /admin routes only for trusted internal gateway calls."""
     fg_env = (os.getenv("FG_ENV") or "").strip().lower()
-    if fg_env == "test" or "pytest" in sys.modules or os.getenv("PYTEST_CURRENT_TEST"):
+    if fg_env not in {"prod", "production"}:
         return
 
     expected = (
