@@ -82,6 +82,111 @@ class TestINV001_NoUnauthenticatedAccess:
             assert not result.valid
             assert result.reason == "env_key_disabled_production"
 
+    def test_admin_path_requires_dedicated_internal_token_in_production(self):
+        """Production /admin path must fail closed without dedicated token."""
+        from api.auth_scopes import verify_api_key_detailed
+
+        mock_request = MagicMock()
+        mock_request.url.path = "/admin/keys"
+        mock_request.headers = {"X-Admin-Gateway-Internal": "true"}
+        mock_request.client = None
+
+        with patch.dict(
+            os.environ,
+            {
+                "FG_ENV": "production",
+                "FG_ADMIN_GATEWAY_INTERNAL_TOKEN": "",
+                "FG_API_KEY": "broad-shared-key",
+            },
+        ):
+            result = verify_api_key_detailed(
+                raw="broad-shared-key",
+                required_scopes=None,
+                request=mock_request,
+            )
+            assert not result.valid
+            assert result.reason == "missing_internal_token_config"
+
+    def test_admin_path_rejects_non_dedicated_token_in_production(self):
+        """Production /admin path must reject token mismatch."""
+        from api.auth_scopes import verify_api_key_detailed
+
+        mock_request = MagicMock()
+        mock_request.url.path = "/admin/keys"
+        mock_request.headers = {"X-Admin-Gateway-Internal": "true"}
+        mock_request.client = None
+
+        with patch.dict(
+            os.environ,
+            {
+                "FG_ENV": "production",
+                "FG_ADMIN_GATEWAY_INTERNAL_TOKEN": "dedicated-admin-token",
+                "FG_API_KEY": "broad-shared-key",
+            },
+        ):
+            broad_result = verify_api_key_detailed(
+                raw="broad-shared-key",
+                required_scopes=None,
+                request=mock_request,
+            )
+            assert not broad_result.valid
+            assert broad_result.reason == "invalid_internal_token"
+
+            dedicated_result = verify_api_key_detailed(
+                raw="dedicated-admin-token",
+                required_scopes=None,
+                request=mock_request,
+            )
+            assert dedicated_result.valid
+            assert dedicated_result.reason == "admin_internal_token"
+            assert "admin:read" in dedicated_result.scopes
+
+    def test_admin_internal_token_can_bind_requested_tenant(self):
+        """Internal admin token should preserve downstream tenant binding context."""
+        from api.auth_scopes import bind_tenant_id
+
+        mock_request = MagicMock()
+        mock_request.state = MagicMock()
+        mock_auth = MagicMock()
+        mock_auth.reason = "admin_internal_token"
+        mock_auth.tenant_id = None
+        mock_auth.key_prefix = "ag_internal"
+        mock_auth.scopes = {"admin:read", "keys:read"}
+        mock_request.state.auth = mock_auth
+        mock_request.state.tenant_id = None
+        mock_request.state.tenant_is_key_bound = False
+        mock_request.state.db_session = None
+
+        result = bind_tenant_id(mock_request, "tenant-a")
+        assert result == "tenant-a"
+        assert mock_request.state.tenant_id == "tenant-a"
+        assert mock_request.state.tenant_is_key_bound
+
+    def test_admin_path_non_gateway_request_unchanged(self):
+        """Non-gateway /admin requests should not trigger dedicated-token path."""
+        from api.auth_scopes import verify_api_key_detailed
+
+        mock_request = MagicMock()
+        mock_request.url.path = "/admin/keys"
+        mock_request.headers = {}
+        mock_request.client = None
+
+        with patch.dict(
+            os.environ,
+            {
+                "FG_ENV": "production",
+                "FG_ADMIN_GATEWAY_INTERNAL_TOKEN": "",
+            },
+            clear=False,
+        ):
+            result = verify_api_key_detailed(
+                raw=None,
+                required_scopes=None,
+                request=mock_request,
+            )
+            assert not result.valid
+            assert result.reason == "no_key_provided"
+
     def test_protected_routes_list_is_comprehensive(self):
         """All non-health routes must require authentication."""
         from api.middleware.auth_gate import AuthGateConfig
