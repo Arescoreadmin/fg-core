@@ -163,4 +163,20 @@ Added `git config commit.gpgsign false` to `_init_git_repo` in `test_bp_c_002_ga
 
 ---
 
+### 2026-03-26 — FG_OIDC_SCOPES Production Boot Enforcement
+
+**Area:** Auth Boundary · Admin-Gateway · Production Boot
+
+**Issue:**
+`FG_OIDC_SCOPES` was listed as a mandatory production boot variable but was not validated at startup. Admin-gateway production boot did not fail when `FG_OIDC_SCOPES` was absent. The OIDC scope used in authorization requests was hardcoded, bypassing the environment-configured value.
+
+**Resolution:**
+Added `oidc_scopes` field to `AuthConfig` in `admin_gateway/auth/config.py`, with production boot validation that fails if `FG_OIDC_SCOPES` is not set. Added `FG_OIDC_SCOPES` to `OIDC_ENV_VARS` in `admin_gateway/auth.py` so `require_oidc_env()` checks it. Updated `build_login_redirect` to read the scope from `FG_OIDC_SCOPES` environment variable instead of hardcoded string.
+
+**AI Notes:**
+- Do NOT remove `FG_OIDC_SCOPES` from the production boot validation check
+- Do NOT revert to hardcoded scope string in `build_login_redirect`
+
+---
+
 _Last updated: 2026-03-26_
