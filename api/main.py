@@ -22,7 +22,6 @@ from api.config.startup_validation import (
     compliance_module_enabled,
     validate_startup_config,
 )
-from api.config.ui import ui_enabled
 from api.db import init_db
 from api.decisions import router as decisions_router
 from api.defend import router as defend_router
@@ -162,6 +161,11 @@ def _global_expected_api_key() -> str:
 
 def _dev_enabled() -> bool:
     return (os.getenv("FG_DEV_EVENTS_ENABLED") or "0").strip() == "1"
+
+
+def _is_production_runtime() -> bool:
+    env = (os.getenv("FG_ENV") or "").strip().lower()
+    return env in {"prod", "production"}
 
 
 def _sqlite_path_from_env() -> str:
@@ -524,7 +528,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(planes_router)
     app.include_router(evidence_index_router)
 
-    if ui_enabled():
+    if not _is_production_runtime():
         app.include_router(ui_router)
         app.include_router(ui_dashboards_router)
         app.include_router(ui_audit_dashboard_router)
