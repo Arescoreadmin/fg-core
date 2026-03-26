@@ -78,7 +78,7 @@ def main() -> int:
     if a["manifest"]["bundle_sha256"] != b["manifest"]["bundle_sha256"]:
         raise SystemExit("nondeterministic export hash")
 
-    repro = engine.reproduce_session(sid)
+    repro = engine.reproduce_session(sid, tenant_id=os.environ["FG_AUDIT_TENANT_ID"])
     if not repro.get("ok"):
         raise SystemExit(f"reproducibility mismatch: {repro}")
 
