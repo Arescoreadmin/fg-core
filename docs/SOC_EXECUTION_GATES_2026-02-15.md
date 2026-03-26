@@ -1394,3 +1394,27 @@ SOC review outcome:
 
 SOC review outcome:
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+## 2026-03-26 — Admin-Gateway proxy-path restoration with internal-only core admin enforcement
+
+### Critical-path files reviewed (SOC-HIGH-002)
+- `api/main.py`
+- `api/admin.py`
+- `admin_gateway/routers/admin.py`
+
+### Summary
+- Restored core admin router mounting required for existing `Admin-Gateway -> Core` proxy execution path continuity.
+- Added internal-only enforcement for core `/admin` routes using `x-fg-internal-token` validation at router dependency boundary.
+- Kept browser-facing `/ui*` routes unmounted in core runtime composition.
+- Preserved the current-state auth boundary: Admin-Gateway remains the sole human auth/authz authority while core admin routes remain service-to-service only.
+
+### Verification
+- `python -m ruff format admin_gateway/routers/admin.py`
+- `python -m ruff format --check admin_gateway/routers/admin.py`
+- `python -m py_compile api/main.py api/admin.py admin_gateway/routers/admin.py`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
