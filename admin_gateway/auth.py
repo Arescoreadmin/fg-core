@@ -19,6 +19,7 @@ OIDC_ENV_VARS = (
     "FG_OIDC_CLIENT_ID",
     "FG_OIDC_CLIENT_SECRET",
     "FG_OIDC_REDIRECT_URL",
+    "FG_OIDC_SCOPES",
 )
 
 REQUIRED_SCOPES = {
@@ -247,7 +248,7 @@ async def build_login_redirect(request: Request) -> str:
     params = {
         "client_id": client_id,
         "response_type": "code",
-        "scope": "openid email profile",
+        "scope": os.getenv("FG_OIDC_SCOPES", "openid email profile"),
         "redirect_uri": redirect_uri,
         "state": state,
         "nonce": nonce,

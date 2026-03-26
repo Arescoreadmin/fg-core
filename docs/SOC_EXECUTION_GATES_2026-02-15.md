@@ -1418,3 +1418,32 @@ SOC review outcome:
 
 SOC review outcome:
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+## 2026-03-26 — FG_OIDC_SCOPES Production Boot Enforcement
+
+### Critical-path files reviewed (SOC-HIGH-002)
+- `admin_gateway/auth/config.py`
+- `admin_gateway/auth.py`
+- `admin_gateway/main.py`
+
+### Summary
+- Added `FG_OIDC_SCOPES` as a required production boot variable in `admin_gateway/auth/config.py`. Production boot now fails if `FG_OIDC_SCOPES` is absent.
+- Added `FG_OIDC_SCOPES` to `OIDC_ENV_VARS` in `admin_gateway/auth.py` so `require_oidc_env()` enforces it. Updated `build_login_redirect` to read scope from `FG_OIDC_SCOPES` env var instead of hardcoded string.
+- Updated `_filter_contract_ctx_config_errors` in `admin_gateway/main.py` to suppress the new `FG_OIDC_SCOPES` error in contract-gen context only, consistent with existing OIDC error suppression policy for contract builds.
+
+### Operational Impact
+- **New required env var:** `FG_OIDC_SCOPES`
+- **Startup behavior change:** Production/staging admin-gateway boot fails if `FG_OIDC_SCOPES` is absent
+- **Request-path behavior change:** `build_login_redirect` reads scope from env; falls back to `"openid email profile"` if unset in non-prod
+- **Deployment requirement:** `FG_OIDC_SCOPES` must be configured in all production/staging deployments before merge
+
+### Verification
+- `ADMIN_SKIP_PIP_INSTALL=1 make ci-admin`
+- `make fg-fast`
+- `python -m py_compile admin_gateway/auth/config.py admin_gateway/auth.py admin_gateway/main.py`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
