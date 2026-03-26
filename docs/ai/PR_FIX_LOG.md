@@ -115,4 +115,20 @@ This entry documents a production-surface change touching compose/runtime enforc
 
 ---
 
-_Last updated: 2026-03-12_
+### 2026-03-26 — Dedicated Admin-Gateway Internal Token Enforcement (Scoped)
+
+**Area:** Auth Boundary · Admin-Gateway → Core
+
+**Issue:**  
+Production/staging admin boundary hardening required a dedicated gateway-to-core credential, but initial enforcement scope on all `/admin/*` requests risked breaking non-gateway admin clients and the change was missing structured fix-log tracking.
+
+**Resolution:**  
+Scoped dedicated-token enforcement to gateway-internal admin requests in production/staging. Core now requires `FG_ADMIN_GATEWAY_INTERNAL_TOKEN` only when request classification indicates Admin-Gateway internal caller; non-gateway `/admin` clients continue through existing scoped DB/API-key paths. Admin-Gateway production/staging outbound admin proxy calls require `AG_CORE_INTERNAL_TOKEN` without fallback to broad/shared credentials.
+
+**AI Notes:**  
+- Do NOT expand dedicated-token enforcement back to all `/admin` callers; keep it scoped to gateway-internal trust path
+- Do NOT reintroduce production fallback from dedicated internal token to broad/shared credentials for gateway-internal `/admin` requests
+
+---
+
+_Last updated: 2026-03-26_

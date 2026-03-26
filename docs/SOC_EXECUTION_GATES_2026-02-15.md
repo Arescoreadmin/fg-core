@@ -1191,6 +1191,20 @@ Governance/security impact:
 SOC review outcome:
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
 
+## 2026-03-26 — Dedicated Admin-Gateway Internal Token Enforcement (Scoped)
+
+### Area
+Core Auth · Admin Boundary · Gateway Integration
+
+### Issue
+Core `/admin` routes previously relied on broad DB-backed API key authentication, allowing Admin-Gateway → Core control-plane calls to use shared credentials instead of a dedicated internal trust mechanism. Initial hardening applied token enforcement to all `/admin/*` routes, unintentionally breaking existing scoped admin clients.
+
+### Resolution
+Introduced scoped enforcement of a dedicated internal token for Admin-Gateway → Core requests. Core now requires `FG_ADMIN_GATEWAY_INTERNAL_TOKEN` only for gateway-internal admin requests in production/staging, failing closed when missing or mismatched. Existing scoped DB/API-key auth paths remain valid for non-gateway admin clients. Admin-Gateway updated to use `AG_CORE_INTERNAL_TOKEN` in production/staging with no fallback to shared credentials.
+
+### AI Notes
+Auth boundary refined without widening blast radius. Gateway-internal trust path now uses a dedicated credential while preserving backward compatibility for non-gateway admin consumers. This maintains strict separation between human-auth boundary (Admin-Gateway) and machine control-plane (Core).
+
 <!-- APPEND NEW SOC ENTRIES BELOW THIS LINE ONLY -->
 ## 2026-03-24 — Platform inventory governance input restoration
 

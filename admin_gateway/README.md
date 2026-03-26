@@ -8,6 +8,15 @@ Create the admin gateway virtualenv and install dependencies:
 make admin-venv
 ```
 
+## Core admin credential configuration
+
+- `AG_CORE_INTERNAL_TOKEN`: dedicated credential used by Admin-Gateway when proxying
+  `/admin/*` calls to Core.
+- In `prod|production|staging`, this variable is required and Admin-Gateway will not
+  fall back to `AG_CORE_API_KEY`.
+- In non-production environments, `AG_CORE_API_KEY` remains as compatibility fallback
+  if `AG_CORE_INTERNAL_TOKEN` is unset.
+
 ## Offline or mirrored installs
 
 If PyPI access is unavailable, set a mirror index URL and/or point pip at a local

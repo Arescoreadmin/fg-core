@@ -36,6 +36,23 @@ log = logging.getLogger("frostgate")
 _security_log = logging.getLogger("frostgate.security")
 
 
+def _is_admin_route_path(request_path: Optional[str]) -> bool:
+    if not request_path:
+        return False
+    return request_path == "/admin" or request_path.startswith("/admin/")
+
+
+def _admin_gateway_internal_token() -> str:
+    return (os.getenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN") or "").strip()
+
+
+def _is_gateway_internal_admin_request(request: Optional[Request]) -> bool:
+    if request is None:
+        return False
+    caller = (request.headers.get("X-FG-Internal-Caller") or "").strip().lower()
+    return caller == "admin-gateway"
+
+
 def is_prod_like_env() -> bool:
     env = (os.getenv("FG_ENV") or "").strip().lower()
     return env in {"prod", "production", "staging"}
@@ -253,6 +270,46 @@ def verify_api_key_detailed(
             client_ip = request.client.host
 
     raw = (raw or raw_key or "").strip()
+
+    # Dedicated admin-gateway -> core token enforcement for production admin paths.
+    if (
+        _is_production_env()
+        and _is_admin_route_path(request_path)
+        and _is_gateway_internal_admin_request(request)
+    ):
+        required_internal = _admin_gateway_internal_token()
+        if not required_internal:
+            _log_auth_event(
+                "admin_internal_auth",
+                success=False,
+                reason="missing_internal_token_config",
+                request_path=request_path,
+                client_ip=client_ip,
+            )
+            return AuthResult(
+                valid=False,
+                reason="missing_internal_token_config",
+            )
+        if not (raw and _constant_time_compare(raw, required_internal)):
+            _log_auth_event(
+                "admin_internal_auth",
+                success=False,
+                reason="invalid_internal_token",
+                request_path=request_path,
+                client_ip=client_ip,
+            )
+            return AuthResult(
+                valid=False,
+                reason="invalid_internal_token",
+            )
+        _log_auth_event(
+            "admin_internal_auth",
+            success=True,
+            reason="valid_internal_token",
+            request_path=request_path,
+            client_ip=client_ip,
+        )
+        return AuthResult(valid=True, reason="admin_internal_token")
 
     # 1) global key bypass (constant-time comparison)
     global_key = (os.getenv("FG_API_KEY") or "").strip()
