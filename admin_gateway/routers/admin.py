@@ -131,6 +131,16 @@ def _core_api_key() -> str:
     return api_key
 
 
+def _core_internal_token() -> str:
+    token = (os.getenv("AG_CORE_INTERNAL_TOKEN") or "").strip() or _core_api_key()
+    if not token:
+        raise HTTPException(
+            status_code=503,
+            detail="Core service unavailable: AG_CORE_INTERNAL_TOKEN not configured",
+        )
+    return token
+
+
 async def _proxy_to_core(
     request: Request,
     method: str,
@@ -142,6 +152,7 @@ async def _proxy_to_core(
     base_url = _core_base_url()
     headers = {
         "X-API-Key": _core_api_key(),
+        "X-FG-Internal-Token": _core_internal_token(),
         "X-Request-Id": getattr(request.state, "request_id", ""),
         _CORE_INTERNAL_CALLER_HEADER: _CORE_INTERNAL_CALLER_VALUE,
     }
@@ -176,6 +187,7 @@ async def _proxy_to_core_raw(
     base_url = _core_base_url()
     headers = {
         "X-API-Key": _core_api_key(),
+        "X-FG-Internal-Token": _core_internal_token(),
         "X-Request-Id": getattr(request.state, "request_id", ""),
         _CORE_INTERNAL_CALLER_HEADER: _CORE_INTERNAL_CALLER_VALUE,
     }
