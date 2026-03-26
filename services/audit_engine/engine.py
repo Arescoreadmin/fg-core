@@ -281,21 +281,22 @@ class AuditEngine:
         start: str,
         end: str,
         app_openapi: dict[str, Any],
-        tenant_id: str | None = None,
+        tenant_id: str,
     ) -> dict[str, Any]:
-        tenant = tenant_id or os.getenv("FG_AUDIT_TENANT_ID", socket.gethostname())
+        if not tenant_id or not tenant_id.strip():
+            raise AuditTamperDetected("tenant_context_required")
         with Session(self.engine) as session:
             rows = (
                 session.query(AuditLedgerRecord)
                 .filter(AuditLedgerRecord.timestamp_utc >= start)
                 .filter(AuditLedgerRecord.timestamp_utc <= end)
-                .filter(AuditLedgerRecord.tenant_id == tenant)
+                .filter(AuditLedgerRecord.tenant_id == tenant_id)
                 .order_by(AuditLedgerRecord.id.asc())
                 .all()
             )
             snapshots = (
                 session.query(ComplianceSnapshotRecord)
-                .filter(ComplianceSnapshotRecord.tenant_id == tenant)
+                .filter(ComplianceSnapshotRecord.tenant_id == tenant_id)
                 .order_by(ComplianceSnapshotRecord.id.asc())
                 .all()
             )
@@ -350,7 +351,9 @@ class AuditEngine:
         self.atomic_write(path, deterministic_json_bytes(out))
         return {"path": str(path), "manifest": manifest}
 
-    def reproduce_session(self, session_id: str) -> dict[str, Any]:
+    def reproduce_session(self, session_id: str, tenant_id: str) -> dict[str, Any]:
+        if not tenant_id or not tenant_id.strip():
+            raise AuditTamperDetected("tenant_context_required")
         with Session(self.engine) as session:
             if not self.verify_chain_integrity(session):
                 return {
@@ -360,7 +363,10 @@ class AuditEngine:
                 }
             rows = (
                 session.query(AuditLedgerRecord)
-                .filter(AuditLedgerRecord.session_id == session_id)
+                .filter(
+                    AuditLedgerRecord.session_id == session_id,
+                    AuditLedgerRecord.tenant_id == tenant_id,
+                )
                 .order_by(AuditLedgerRecord.id.asc())
                 .all()
             )
@@ -446,12 +452,17 @@ class AuditEngine:
         ]
 
     def export_exam_bundle(
-        self, exam_id: str, app_openapi: dict[str, Any]
+        self, exam_id: str, app_openapi: dict[str, Any], tenant_id: str
     ) -> dict[str, Any]:
+        if not tenant_id or not tenant_id.strip():
+            raise AuditTamperDetected("tenant_context_required")
         with Session(self.engine) as session:
             exam = (
                 session.query(AuditExamSession)
-                .filter(AuditExamSession.exam_id == exam_id)
+                .filter(
+                    AuditExamSession.exam_id == exam_id,
+                    AuditExamSession.tenant_id == tenant_id,
+                )
                 .one_or_none()
             )
             if exam is None:
@@ -483,11 +494,16 @@ class AuditEngine:
             "manifest": payload["manifest"],
         }
 
-    def reproduce_exam(self, exam_id: str) -> dict[str, Any]:
+    def reproduce_exam(self, exam_id: str, tenant_id: str) -> dict[str, Any]:
+        if not tenant_id or not tenant_id.strip():
+            raise AuditTamperDetected("tenant_context_required")
         with Session(self.engine) as session:
             exam = (
                 session.query(AuditExamSession)
-                .filter(AuditExamSession.exam_id == exam_id)
+                .filter(
+                    AuditExamSession.exam_id == exam_id,
+                    AuditExamSession.tenant_id == tenant_id,
+                )
                 .one_or_none()
             )
             if exam is None:
@@ -496,13 +512,13 @@ class AuditEngine:
                 session.query(AuditLedgerRecord)
                 .filter(AuditLedgerRecord.timestamp_utc >= exam.window_start_utc)
                 .filter(AuditLedgerRecord.timestamp_utc <= exam.window_end_utc)
-                .filter(AuditLedgerRecord.tenant_id == exam.tenant_id)
+                .filter(AuditLedgerRecord.tenant_id == tenant_id)
                 .order_by(AuditLedgerRecord.id.asc())
                 .all()
             )
         if not rows:
             return {"ok": False, "reason": "exam_window_empty"}
-        result = self.reproduce_session(rows[-1].session_id)
+        result = self.reproduce_session(rows[-1].session_id, tenant_id=tenant_id)
         return result
 
     def _write_deterministic_archive(self, path: Path, files: dict[str, bytes]) -> None:

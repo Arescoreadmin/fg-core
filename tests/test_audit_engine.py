@@ -82,7 +82,7 @@ def test_reproducibility_mismatch_detected(
         "_invariants",
         lambda: [InvariantResult("soc-invariants", "fail", "changed")],
     )
-    result = audit_engine.reproduce_session(sid)
+    result = audit_engine.reproduce_session(sid, tenant_id="tenant-a")
     assert not result["ok"]
     assert result["reason"] == "reproducibility_mismatch"
     assert result["critical_alert"] is True
@@ -116,9 +116,13 @@ def test_exam_export_is_deterministic(audit_engine: AuditEngine) -> None:
         window_start="1970-01-01T00:00:00Z",
         window_end="9999-12-31T23:59:59Z",
     )
-    a = audit_engine.export_exam_bundle(exam_id, app_openapi={"openapi": "3.1.0"})
+    a = audit_engine.export_exam_bundle(
+        exam_id, app_openapi={"openapi": "3.1.0"}, tenant_id="tenant-a"
+    )
     first_bytes = Path(a["archive_path"]).read_bytes()
-    b = audit_engine.export_exam_bundle(exam_id, app_openapi={"openapi": "3.1.0"})
+    b = audit_engine.export_exam_bundle(
+        exam_id, app_openapi={"openapi": "3.1.0"}, tenant_id="tenant-a"
+    )
     second_bytes = Path(b["archive_path"]).read_bytes()
     assert (
         hashlib.sha256(first_bytes).hexdigest()
@@ -135,7 +139,7 @@ def test_exam_reproduce(audit_engine: AuditEngine) -> None:
         window_start="1970-01-01T00:00:00Z",
         window_end="9999-12-31T23:59:59Z",
     )
-    result = audit_engine.reproduce_exam(exam_id)
+    result = audit_engine.reproduce_exam(exam_id, tenant_id="tenant-a")
     assert result["ok"] is True
     assert set(result["hashes"]) == {"expected", "actual"}
 
