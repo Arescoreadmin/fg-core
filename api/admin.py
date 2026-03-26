@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import hmac
 import io
 import json
 import logging
@@ -58,7 +59,28 @@ from api.security_audit import (
 
 log = logging.getLogger("frostgate.admin")
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+
+def require_internal_admin_gateway(request: Request) -> None:
+    """Allow core /admin routes only for trusted internal gateway calls."""
+    fg_env = (os.getenv("FG_ENV") or "").strip().lower()
+    if fg_env not in {"prod", "production"}:
+        return
+
+    expected = (
+        (os.getenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN") or "").strip()
+        or (os.getenv("FG_INTERNAL_TOKEN") or "").strip()
+        or (os.getenv("FG_API_KEY") or "").strip()
+    )
+    provided = (request.headers.get("x-fg-internal-token") or "").strip()
+    if not expected or not provided or not hmac.compare_digest(provided, expected):
+        raise HTTPException(status_code=403, detail="admin_gateway_internal_required")
+
+
+router = APIRouter(
+    prefix="/admin",
+    tags=["admin"],
+    dependencies=[Depends(require_internal_admin_gateway)],
+)
 
 
 # =============================================================================
