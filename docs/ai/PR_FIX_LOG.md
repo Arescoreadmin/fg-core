@@ -147,4 +147,20 @@ Internal-token path now enforces `required_scopes` before successful auth return
 
 ---
 
+### 2026-03-26 — CI Test Gate Determinism Fixes
+
+**Area:** CI · Test Infrastructure
+
+**Issue:**
+Two test suites produced non-deterministic failures in network-isolated and signing-enforced CI environments. (1) `test_bp_c_002_gate.py` temporary git repos inherited the host global signing config, causing `git commit` to exit 128. (2) `test_tripwire_delivery.py` failed with `dns_resolution_failed` because `WebhookDeliveryService._safe_post` calls `validate_target` (live DNS) before the injected mock client is used.
+
+**Resolution:**
+Added `git config commit.gpgsign false` to `_init_git_repo` in `test_bp_c_002_gate.py`. Added `_stub_dns` autouse fixture in `test_tripwire_delivery.py` patching `api.security_alerts.resolve_host`, consistent with the existing pattern in `tests/security/test_webhook_ssrf_hardening.py`.
+
+**AI Notes:**
+- Do NOT remove `commit.gpgsign false` from `_init_git_repo`; host signing config must be isolated in test repos
+- Do NOT remove the `_stub_dns` fixture; live DNS is unavailable in network-isolated CI
+
+---
+
 _Last updated: 2026-03-26_
