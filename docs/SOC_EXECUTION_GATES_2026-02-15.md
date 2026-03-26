@@ -1191,6 +1191,38 @@ Governance/security impact:
 SOC review outcome:
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
 
+## 2026-03-26 — Admin-Gateway Internal-Token Auth Boundary Hardening (Scope + Authorization)
+
+### Area
+Core Auth · Admin Boundary · Gateway Integration
+
+### Issue
+Admin-Gateway → Core `/admin` hardening needed explicit SOC traceability for the final scoped behavior: dedicated internal-token enforcement for gateway-internal production/staging admin proxy calls, no production fallback to shared credentials on that path, preserved non-gateway admin client compatibility, and explicit required-scope checks in the internal-token auth path.
+
+### Resolution
+Documented the finalized boundary behavior and authorization safeguards:
+- production/staging gateway-internal `/admin` requests require dedicated internal token
+- no production fallback to legacy/shared credential path for that gateway-internal flow
+- non-gateway admin clients continue existing scoped API-key compatibility paths
+- internal-token auth path enforces `required_scopes` before success return
+
+### AI Notes
+Do not widen internal-token enforcement to unrelated callers. Preserve scoped compatibility while maintaining strict production gateway-internal credential and scope enforcement.
+
+## 2026-03-26 — Dedicated Admin-Gateway Internal Token Enforcement (Scoped)
+
+### Area
+Core Auth · Admin Boundary · Gateway Integration
+
+### Issue
+Core `/admin` routes previously relied on broad DB-backed API key authentication, allowing Admin-Gateway → Core control-plane calls to use shared credentials instead of a dedicated internal trust mechanism. Initial hardening applied token enforcement to all `/admin/*` routes, unintentionally breaking existing scoped admin clients.
+
+### Resolution
+Introduced scoped enforcement of a dedicated internal token for Admin-Gateway → Core requests. Core now requires `FG_ADMIN_GATEWAY_INTERNAL_TOKEN` only for gateway-internal admin requests in production/staging, failing closed when missing or mismatched. Existing scoped DB/API-key auth paths remain valid for non-gateway admin clients. Admin-Gateway updated to use `AG_CORE_INTERNAL_TOKEN` in production/staging with no fallback to shared credentials.
+
+### AI Notes
+Auth boundary refined without widening blast radius. Gateway-internal trust path now uses a dedicated credential while preserving backward compatibility for non-gateway admin consumers. This maintains strict separation between human-auth boundary (Admin-Gateway) and machine control-plane (Core).
+
 <!-- APPEND NEW SOC ENTRIES BELOW THIS LINE ONLY -->
 ## 2026-03-24 — Platform inventory governance input restoration
 

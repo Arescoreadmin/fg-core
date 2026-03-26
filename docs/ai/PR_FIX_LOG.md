@@ -115,4 +115,36 @@ This entry documents a production-surface change touching compose/runtime enforc
 
 ---
 
-_Last updated: 2026-03-12_
+### 2026-03-26 — Dedicated Admin-Gateway Internal Token Enforcement (Scoped)
+
+**Area:** Auth Boundary · Admin-Gateway → Core
+
+**Issue:**  
+Production/staging admin boundary hardening required a dedicated gateway-to-core credential, but initial enforcement scope on all `/admin/*` requests risked breaking non-gateway admin clients and the change was missing structured fix-log tracking.
+
+**Resolution:**  
+Scoped dedicated-token enforcement to gateway-internal admin requests in production/staging. Core now requires `FG_ADMIN_GATEWAY_INTERNAL_TOKEN` only when request classification indicates Admin-Gateway internal caller; non-gateway `/admin` clients continue through existing scoped DB/API-key paths. Admin-Gateway production/staging outbound admin proxy calls require `AG_CORE_INTERNAL_TOKEN` without fallback to broad/shared credentials.
+
+**AI Notes:**  
+- Do NOT expand dedicated-token enforcement back to all `/admin` callers; keep it scoped to gateway-internal trust path
+- Do NOT reintroduce production fallback from dedicated internal token to broad/shared credentials for gateway-internal `/admin` requests
+
+---
+
+### 2026-03-26 — Internal-Token Required-Scope Enforcement + CI Governance Sync
+
+**Area:** Auth Boundary · Admin-Gateway → Core · CI Governance
+
+**Issue:**  
+Gateway-internal admin internal-token auth path could return success before `required_scopes` checks, and CI governance lanes required synchronized SOC/fix-log documentation updates for this hardening series.
+
+**Resolution:**  
+Internal-token path now enforces `required_scopes` before successful auth return and records `missing_required_scopes` when unmet. SOC execution gates were updated to reflect scoped production enforcement, compatibility boundaries, and required-scope behavior.
+
+**AI Notes:**  
+- Do NOT bypass `required_scopes` for internal-token auth success paths
+- Keep SOC and PR fix-log entries append-only and aligned for auth-boundary hardening changes
+
+---
+
+_Last updated: 2026-03-26_
