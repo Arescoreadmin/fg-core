@@ -29,6 +29,13 @@ log = logging.getLogger("admin-gateway.admin-router")
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
+_PROD_ENVS = {"prod", "production", "staging"}
+
+
+def _is_prod_like_env() -> bool:
+    env = (os.getenv("FG_ENV") or "").strip().lower()
+    return env in _PROD_ENVS
+
 
 class UserInfo(BaseModel):
     """User information response."""
@@ -97,11 +104,27 @@ def _core_base_url() -> str:
 
 
 def _core_api_key() -> str:
+    internal_token = (os.getenv("AG_CORE_INTERNAL_TOKEN") or "").strip()
+    if internal_token:
+        return internal_token
+
+    if _is_prod_like_env():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Core service unavailable: "
+                "AG_CORE_INTERNAL_TOKEN not configured for production"
+            ),
+        )
+
     api_key = (os.getenv("AG_CORE_API_KEY") or "").strip()
     if not api_key:
         raise HTTPException(
             status_code=503,
-            detail="Core service unavailable: AG_CORE_API_KEY not configured",
+            detail=(
+                "Core service unavailable: AG_CORE_INTERNAL_TOKEN "
+                "(or AG_CORE_API_KEY in non-production) not configured"
+            ),
         )
     return api_key
 
