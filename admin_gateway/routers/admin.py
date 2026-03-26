@@ -107,7 +107,7 @@ def _core_api_key() -> str:
 
 
 def _core_internal_token() -> str:
-    token = ((os.getenv("AG_CORE_INTERNAL_TOKEN") or "").strip() or _core_api_key())
+    token = (os.getenv("AG_CORE_INTERNAL_TOKEN") or "").strip() or _core_api_key()
     if not token:
         raise HTTPException(
             status_code=503,
