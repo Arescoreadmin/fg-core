@@ -115,4 +115,20 @@ This entry documents a production-surface change touching compose/runtime enforc
 
 ---
 
-_Last updated: 2026-03-12_
+### 2026-03-26 — Dedicated Admin-Gateway Internal Token Enforcement
+
+**Area:** Auth Boundary · Admin-Gateway → Core
+
+**Issue:**  
+Production/staging `/admin` auth boundary hardening introduced dedicated token enforcement, but no matching PR fix log entry was added, causing `pr-fix-log-guard` to fail.
+
+**Resolution:**  
+Added this entry documenting the dedicated token enforcement change: Core production/staging `/admin` requires `FG_ADMIN_GATEWAY_INTERNAL_TOKEN` and fails closed without it; Admin-Gateway production/staging outbound admin proxy calls require `AG_CORE_INTERNAL_TOKEN` without fallback to broad/shared credentials.
+
+**AI Notes:**  
+- Do NOT remove this entry while dedicated production `/admin` token enforcement remains active
+- Do NOT reintroduce production fallback from dedicated internal token to broad/shared credentials for `/admin` paths
+
+---
+
+_Last updated: 2026-03-26_
