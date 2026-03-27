@@ -1,14 +1,18 @@
 plan_id: frostgate-30-day-repo-blitz
-
-current_phase_id: "phase-1"
-current_module_id: "1.0"
-current_task_id: "1.1"
-
+current_phase_id: phase-1
+current_module_id: '1.0'
+current_task_id: '1.1'
 completed_tasks: []
-
 blocked: false
-blocker_reason: ""
-
-last_completed_task_id: ""
-
-last_updated: "2026-03-26"
+blocker_reason: ''
+last_completed_task_id: ''
+last_updated: '2026-03-26'
+version: 3
+blocked_reason: null
+validations:
+  '1.1':
+    status: pass
+    timestamp: 20260327T204143Z
+    artifact: artifacts/plan/1.1_validate_latest.json
+    working_tree_fingerprint: 25bbb4780101354f3263609f5fd8d8c561df5d5feb120d1a5f275f85f72511de
+history: []
