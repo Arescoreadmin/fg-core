@@ -7,7 +7,6 @@ import datetime as dt
 import fnmatch
 import hashlib
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +18,14 @@ ROOT = Path(__file__).resolve().parents[2]
 PLAN_PATH = ROOT / "plans" / "30_day_repo_blitz.yaml"
 STATE_PATH = ROOT / "plans" / "30_day_repo_blitz.state.yaml"
 ARTIFACTS_DIR = ROOT / "artifacts" / "plan"
+
+IGNORE_FINGERPRINT_PATTERNS = [
+    "artifacts/plan/*",
+    "plans/30_day_repo_blitz.state.yaml",
+    ".pytest_cache/*",
+    "**/__pycache__/*",
+    "__pycache__/*",
+]
 
 
 def utc_now_stamp() -> str:
@@ -155,6 +162,14 @@ def ensure_dependencies_done(ref: TaskRef, state: dict[str, Any]) -> None:
         )
 
 
+def path_matches_any(path: str, patterns: list[str]) -> bool:
+    return any(fnmatch.fnmatch(path, pat) for pat in patterns)
+
+
+def should_ignore_for_fingerprint(path: str) -> bool:
+    return path_matches_any(path, IGNORE_FINGERPRINT_PATTERNS)
+
+
 def git_changed_files() -> list[str]:
     files: set[str] = set()
 
@@ -170,7 +185,7 @@ def git_changed_files() -> list[str]:
             continue
         for line in cp.stdout.splitlines():
             line = line.strip()
-            if line:
+            if line and not should_ignore_for_fingerprint(line):
                 files.add(line)
 
     return sorted(files)
@@ -192,10 +207,6 @@ def working_tree_fingerprint() -> str:
             h.update(b"<missing>")
         h.update(b"\0")
     return h.hexdigest()
-
-
-def path_matches_any(path: str, patterns: list[str]) -> bool:
-    return any(fnmatch.fnmatch(path, pat) for pat in patterns)
 
 
 def enforce_file_guards(ref: TaskRef) -> dict[str, Any]:
@@ -239,6 +250,15 @@ def enforce_file_guards(ref: TaskRef) -> dict[str, Any]:
     }
 
 
+def write_validation_artifacts(task_id: str, result: dict[str, Any]) -> None:
+    ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+    latest = ARTIFACTS_DIR / f"{task_id}_validate_latest.json"
+    stamped = ARTIFACTS_DIR / f"{task_id}_validate_{result['timestamp']}.json"
+    payload = json.dumps(result, indent=2, sort_keys=False)
+    latest.write_text(payload + "\n", encoding="utf-8")
+    stamped.write_text(payload + "\n", encoding="utf-8")
+
+
 def run_validation(ref: TaskRef, state: dict[str, Any]) -> dict[str, Any]:
     ensure_dependencies_done(ref, state)
 
@@ -263,7 +283,9 @@ def run_validation(ref: TaskRef, state: dict[str, Any]) -> dict[str, Any]:
             "status": result["status"],
             "timestamp": result["timestamp"],
             "artifact": str(
-                (ARTIFACTS_DIR / f"{ref.task_id}_validate_latest.json").relative_to(ROOT)
+                (ARTIFACTS_DIR / f"{ref.task_id}_validate_latest.json").relative_to(
+                    ROOT
+                )
             ),
             "working_tree_fingerprint": result["working_tree_fingerprint"],
         }
@@ -329,15 +351,6 @@ def run_validation(ref: TaskRef, state: dict[str, Any]) -> dict[str, Any]:
         )
 
     return result
-
-
-def write_validation_artifacts(task_id: str, result: dict[str, Any]) -> None:
-    ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
-    latest = ARTIFACTS_DIR / f"{task_id}_validate_latest.json"
-    stamped = ARTIFACTS_DIR / f"{task_id}_validate_{result['timestamp']}.json"
-    payload = json.dumps(result, indent=2, sort_keys=False)
-    latest.write_text(payload + "\n", encoding="utf-8")
-    stamped.write_text(payload + "\n", encoding="utf-8")
 
 
 def next_incomplete_task(plan: dict[str, Any], state: dict[str, Any]) -> str | None:
