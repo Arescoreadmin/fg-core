@@ -36,7 +36,7 @@ def _is_key_expired(payload: Optional[dict], now: Optional[int] = None) -> bool:
     return now_ts > int(exp)
 
 
-def _validate_tenant_id(tenant_id: Optional[str]) -> Tuple[bool, str]:
+def _validate_tenant_id(tenant_id: str) -> Tuple[bool, str]:
     """
     Validate tenant_id format for security.
     Returns (is_valid, error_message).

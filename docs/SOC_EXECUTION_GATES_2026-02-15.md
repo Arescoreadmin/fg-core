@@ -1447,3 +1447,41 @@ SOC review outcome:
 
 SOC review outcome:
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+### 2026-03-27 — Internal auth-scope tenant enforcement correction
+
+**Area:** Auth Scopes · Tenant Isolation · Internal Execution Paths
+
+**Issue:**
+`api/auth_scopes/mapping.py` allowed optional `tenant_id` across internal key-management and tenant-scoped helper flows. This weakened tenant enforcement in internal execution paths and conflicted with the tenant isolation hardening objective.
+
+**Resolution:**
+Updated internal auth-scope mapping helpers to require `tenant_id` where tenant-scoped execution is mandatory:
+- `_ensure_default_config_for_tenant(sqlite_path, tenant_id)`
+- `mint_key(..., tenant_id, ...)`
+- `revoke_api_key(key_prefix, tenant_id, ...)`
+- `rotate_api_key_by_prefix(key_prefix, tenant_id, ...)`
+- `list_api_keys(tenant_id, ...)`
+
+Request-layer `tenant_id` requirements that caused FastAPI 422 regressions were reverted in API entrypoints. Tenant enforcement remains at auth resolution and internal execution boundaries rather than HTTP parsing.
+
+**Security Effect:**
+Preserves auth-derived tenant binding behavior for scoped keys while removing optional tenant handling from internal tenant-scoped auth operations.
+
+2026-03-27 — Tenant enforcement + auth scope corrections
+
+Area: Auth Scopes / Security / Middleware
+
+Changes:
+- Fixed tenant_id optional handling in mapping + rotation
+- Restored compatibility for unscoped keys
+- Adjusted validation + resolution logic to align with runtime behavior
+
+Reason:
+Prevent CI breakage and ensure compatibility with existing lifecycle tests while preserving tenant enforcement where applicable.
+
+Risk:
+Low — behavior aligns with existing production expectations.
+
+Notes:
+No change to external API contracts. Internal enforcement consistency improved.

@@ -45,7 +45,9 @@ def ensure_tables() -> None:
         )
         cols = {r[1] for r in con.execute("PRAGMA table_info(testing_runs)").fetchall()}
         if "canonical_payload_hash" not in cols:
-            con.execute("ALTER TABLE testing_runs ADD COLUMN canonical_payload_hash TEXT NOT NULL DEFAULT ''")
+            con.execute(
+                "ALTER TABLE testing_runs ADD COLUMN canonical_payload_hash TEXT NOT NULL DEFAULT ''"
+            )
 
         con.execute(
             """
@@ -98,7 +100,9 @@ def ensure_tables() -> None:
         con.close()
 
 
-def register_run(payload: dict[str, Any], *, actor: str, policy_change_event: bool = False) -> None:
+def register_run(
+    payload: dict[str, Any], *, actor: str, policy_change_event: bool = False
+) -> None:
     ensure_tables()
     con = _connect()
     try:
@@ -138,7 +142,13 @@ def register_run(payload: dict[str, Any], *, actor: str, policy_change_event: bo
         }
         con.execute(
             "INSERT INTO testing_run_audit (run_id, tenant_id, action, actor, details) VALUES (?, ?, ?, ?, ?)",
-            (payload["run_id"], payload["tenant_id"], "register", actor, json.dumps(audit_details, sort_keys=True)),
+            (
+                payload["run_id"],
+                payload["tenant_id"],
+                "register",
+                actor,
+                json.dumps(audit_details, sort_keys=True),
+            ),
         )
         _write_health_snapshot(con, payload["tenant_id"], payload["lane"])
         con.commit()
@@ -160,7 +170,9 @@ def _write_health_snapshot(con: sqlite3.Connection, tenant_id: str, lane: str) -
     for row in rows:
         triage = json.loads(row["triage_category_counts"])
         for cat, count in triage.items():
-            category_frequency[str(cat)] = category_frequency.get(str(cat), 0) + int(count)
+            category_frequency[str(cat)] = category_frequency.get(str(cat), 0) + int(
+                count
+            )
 
     con.execute(
         """

@@ -43,10 +43,14 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 
 def _run_git(args: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(args, cwd=REPO_ROOT, check=False, text=True, capture_output=True)
+    return subprocess.run(
+        args, cwd=REPO_ROOT, check=False, text=True, capture_output=True
+    )
 
 
-def _resolve_diff_range(base_ref: str | None, base_sha: str | None, head_sha: str | None) -> tuple[str, str]:
+def _resolve_diff_range(
+    base_ref: str | None, base_sha: str | None, head_sha: str | None
+) -> tuple[str, str]:
     if base_sha and head_sha:
         return base_sha, head_sha
 
@@ -75,8 +79,12 @@ def _event_pr_shas() -> tuple[str | None, str | None]:
     pr = payload.get("pull_request")
     if not isinstance(pr, dict):
         return None, None
-    base_sha = pr.get("base", {}).get("sha") if isinstance(pr.get("base"), dict) else None
-    head_sha = pr.get("head", {}).get("sha") if isinstance(pr.get("head"), dict) else None
+    base_sha = (
+        pr.get("base", {}).get("sha") if isinstance(pr.get("base"), dict) else None
+    )
+    head_sha = (
+        pr.get("head", {}).get("sha") if isinstance(pr.get("head"), dict) else None
+    )
     if isinstance(base_sha, str) and isinstance(head_sha, str):
         return base_sha, head_sha
     return None, None
@@ -92,7 +100,9 @@ def _parse_name_status(diff_text: str) -> list[ChangedFile]:
         status = parts[0]
         code = status[0]
         if code == "R" and len(parts) >= 3:
-            changed.append(ChangedFile(status=status, path=parts[2], previous_path=parts[1]))
+            changed.append(
+                ChangedFile(status=status, path=parts[2], previous_path=parts[1])
+            )
         elif code in {"A", "M", "T", "C"} and len(parts) >= 2:
             changed.append(ChangedFile(status=status, path=parts[1]))
         elif code == "D" and len(parts) >= 2:
@@ -105,9 +115,13 @@ def _changed_files(base_ref: str | None) -> list[ChangedFile]:
     event_base_sha, event_head_sha = _event_pr_shas()
     base, head = _resolve_diff_range(base_ref, event_base_sha, event_head_sha)
 
-    result = _run_git(["git", "diff", "--name-status", "--find-renames", f"{base}...{head}"])
+    result = _run_git(
+        ["git", "diff", "--name-status", "--find-renames", f"{base}...{head}"]
+    )
     if result.returncode != 0:
-        raise SystemExit("unable to compute changed files with --name-status; fail-closed")
+        raise SystemExit(
+            "unable to compute changed files with --name-status; fail-closed"
+        )
     return _parse_name_status(result.stdout)
 
 
@@ -127,7 +141,9 @@ def _category_input_paths(changed: list[ChangedFile]) -> list[str]:
     return sorted(set(paths))
 
 
-def _required_categories(changed_paths: list[str], ownership: dict[str, Any]) -> set[str]:
+def _required_categories(
+    changed_paths: list[str], ownership: dict[str, Any]
+) -> set[str]:
     required: set[str] = set()
     for owner in ownership.get("owners", []):
         path_globs = owner.get("path_globs", [])
@@ -140,12 +156,18 @@ def _detect_new_modules(changed_paths: list[str]) -> list[str]:
     modules: list[str] = []
     for path in changed_paths:
         p = Path(path)
-        if len(p.parts) >= 2 and p.parts[0] == "services" and p.parts[1].endswith("_extension"):
+        if (
+            len(p.parts) >= 2
+            and p.parts[0] == "services"
+            and p.parts[1].endswith("_extension")
+        ):
             modules.append(p.parts[1])
     return sorted(set(modules))
 
 
-def _verify_required_tests_changed(changed_paths: list[str], required: set[str], policy: dict[str, Any]) -> list[GateFailure]:
+def _verify_required_tests_changed(
+    changed_paths: list[str], required: set[str], policy: dict[str, Any]
+) -> list[GateFailure]:
     failures: list[GateFailure] = []
     categories = policy.get("categories", {})
     for category in sorted(required):
@@ -170,7 +192,9 @@ def _verify_required_tests_changed(changed_paths: list[str], required: set[str],
     return failures
 
 
-def _verify_module_registration(changed_paths: list[str], new_modules: list[str], policy: dict[str, Any]) -> list[GateFailure]:
+def _verify_module_registration(
+    changed_paths: list[str], new_modules: list[str], policy: dict[str, Any]
+) -> list[GateFailure]:
     failures: list[GateFailure] = []
     registration = policy.get("module_registration", {})
     required_registry = registration.get("registry_files", [])
@@ -219,11 +243,18 @@ def main() -> int:
     new_modules = _detect_new_modules(changed_paths)
 
     failures = []
-    failures.extend(_verify_required_tests_changed(changed_paths, categories, required_tests))
-    failures.extend(_verify_module_registration(changed_paths, new_modules, required_tests))
+    failures.extend(
+        _verify_required_tests_changed(changed_paths, categories, required_tests)
+    )
+    failures.extend(
+        _verify_module_registration(changed_paths, new_modules, required_tests)
+    )
 
     report = {
-        "changed_files": [{"status": c.status, "path": c.path, "previous_path": c.previous_path} for c in changed],
+        "changed_files": [
+            {"status": c.status, "path": c.path, "previous_path": c.previous_path}
+            for c in changed
+        ],
         "required_categories": sorted(categories),
         "new_modules": new_modules,
         "failures": [failure.__dict__ for failure in failures],

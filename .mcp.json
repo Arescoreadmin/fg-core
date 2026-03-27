@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "repo-tools": {
+      "type": "stdio",
+      "command": "/home/jcosat/Projects/fg-core/.venv/bin/python",
+      "args": [
+        "/home/jcosat/Projects/fg-core/tools/mcp/repo_tools_server.py"
+      ]
+    }
+  }
+}

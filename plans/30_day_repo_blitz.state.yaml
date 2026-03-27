@@ -1,0 +1,14 @@
+plan_id: frostgate-30-day-repo-blitz
+
+current_phase_id: "phase-1"
+current_module_id: "1.0"
+current_task_id: "1.1"
+
+completed_tasks: []
+
+blocked: false
+blocker_reason: ""
+
+last_completed_task_id: ""
+
+last_updated: "2026-03-26"

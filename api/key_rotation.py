@@ -261,9 +261,9 @@ class KeyRotationManager:
     def rotate_key(
         self,
         old_key_prefix: str,
+        tenant_id: str,
         new_scopes: Optional[List[str]] = None,
         new_ttl_seconds: Optional[int] = None,
-        tenant_id: Optional[str] = None,
     ) -> RotationResult:
         """
         Rotate an API key.

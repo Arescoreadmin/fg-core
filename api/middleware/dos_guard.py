@@ -355,7 +355,7 @@ class DoSGuardMiddleware:
         reject: _RejectRequest,
         request_id: str,
         client_ip: str,
-        tenant_id: Optional[str],
+        tenant_id: str,
     ) -> None:
         log.warning(
             "security_event: dos_guard_reject",
