@@ -20,7 +20,7 @@ phases:
               - "Search shows no Optional tenant_id in production code paths"
               - "Fast lane passes"
             validation_commands:
-              - "rg -n 'Optional\\[.*tenant_id|tenant_id:\\s*Optional' api tests tools || true"
+              - "rg -n 'Optional\\[.*tenant_id|tenant_id:\\s*Optional' api || true"
               - "make fg-fast"
 
           - id: "1.2"

@@ -8,7 +8,9 @@ from typing import Iterable
 
 import yaml
 
-from tools.testing.harness.quarantine_policy import ensure_new_suspects_have_policy_entries
+from tools.testing.harness.quarantine_policy import (
+    ensure_new_suspects_have_policy_entries,
+)
 
 
 def _load_quarantine(path: Path) -> dict[str, dict[str, object]]:
@@ -23,22 +25,32 @@ def _parse_failures(junit_path: Path) -> list[str]:
     nodeids: set[str] = set()
     for line in text.splitlines():
         if "classname=" in line and "name=" in line:
-            cls = line.split("classname=\"")[1].split("\"")[0]
-            name = line.split("name=\"")[1].split("\"")[0]
+            cls = line.split('classname="')[1].split('"')[0]
+            name = line.split('name="')[1].split('"')[0]
             nodeids.add(f"{cls}::{name}")
     return sorted(nodeids)
 
 
-def detect_flakes(nodeids: Iterable[str], outcomes: dict[str, list[str]]) -> list[dict[str, object]]:
+def detect_flakes(
+    nodeids: Iterable[str], outcomes: dict[str, list[str]]
+) -> list[dict[str, object]]:
     findings: list[dict[str, object]] = []
     for nodeid in sorted(set(nodeids)):
         series = outcomes.get(nodeid, [])
         if {"pass", "fail"}.issubset(set(series)):
-            findings.append({"nodeid": nodeid, "outcomes": series, "classification": "flake-suspected"})
+            findings.append(
+                {
+                    "nodeid": nodeid,
+                    "outcomes": series,
+                    "classification": "flake-suspected",
+                }
+            )
     return findings
 
 
-def build_report(new_flakes: list[dict[str, object]], quarantine: dict[str, dict[str, object]]) -> dict[str, object]:
+def build_report(
+    new_flakes: list[dict[str, object]], quarantine: dict[str, dict[str, object]]
+) -> dict[str, object]:
     return {
         "newly_suspected": new_flakes,
         "quarantined": [quarantine[k] for k in sorted(quarantine)],
@@ -64,7 +76,9 @@ def main() -> int:
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    out_path.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     ensure_new_suspects_have_policy_entries(out_path, Path(args.quarantine))
     print(json.dumps(report, sort_keys=True))
     return 0

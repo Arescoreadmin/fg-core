@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(make lint)",
+      "Bash(make typecheck)",
+      "Bash(make test-fast)",
+      "Bash(make compose-ps)",
+      "Bash(make compose-logs)",
+      "Bash(./scripts/*)"
+    ],
+    "deny": [
+      "Bash(sudo *)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(rm -rf *)",
+      "Bash(terraform apply *)",
+      "Bash(kubectl apply *)",
+      "Bash(kubectl delete *)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Read(./config/credentials.json)"
+    ],
+    "hooks": {
+      "PreToolUse": [
+        {
+          "matcher": "Bash",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "./.claude/hooks/pre_bash_guard.sh"
+            }
+          ]
+        }
+      ],
+      "PostToolUse": [
+        {
+          "matcher": "Edit|Write",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "./.claude/hooks/post_edit_guard.sh"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -11,7 +11,7 @@ from typing import Any
 
 try:
     import yaml
-except Exception as e:  # pragma: no cover
+except Exception:
     print(
         "ERROR: PyYAML is required. Install with: pip install pyyaml", file=sys.stderr
     )
