@@ -310,7 +310,7 @@ def get_usage_tracker() -> TenantUsageTracker:
     return _usage_tracker
 
 
-def check_tenant_quota(tenant_id: Optional[str]) -> Tuple[bool, Optional[str]]:
+def check_tenant_quota(tenant_id: str) -> Tuple[bool, Optional[str]]:
     """
     Convenience function to check tenant quota.
 
@@ -330,7 +330,7 @@ def check_tenant_quota(tenant_id: Optional[str]) -> Tuple[bool, Optional[str]]:
 
 
 def record_tenant_request(
-    tenant_id: Optional[str],
+    tenant_id: str,
     decision_count: int = 0,
     bytes_processed: int = 0,
 ) -> Optional[UsageRecord]:

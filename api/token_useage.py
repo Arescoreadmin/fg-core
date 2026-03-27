@@ -54,7 +54,7 @@ class TokenUsageStats:
         path: str,
         status_code: int,
         latency_ms: float,
-        tenant_id: Optional[str],
+        tenant_id: str,
     ) -> None:
         self.calls += 1
         if status_code < 400:
@@ -94,7 +94,7 @@ class TokenUsageTracker:
         path: str,
         status_code: int,
         latency_ms: float,
-        tenant_id: Optional[str],
+        tenant_id: str,
     ) -> str:
         token_fp = self.fingerprint(token) if token else "missing"
         status_family = f"{status_code // 100}xx"

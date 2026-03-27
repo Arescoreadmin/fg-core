@@ -263,7 +263,7 @@ class KeyRotationManager:
         old_key_prefix: str,
         new_scopes: Optional[List[str]] = None,
         new_ttl_seconds: Optional[int] = None,
-        tenant_id: Optional[str] = None,
+        tenant_id: str,
     ) -> RotationResult:
         """
         Rotate an API key.

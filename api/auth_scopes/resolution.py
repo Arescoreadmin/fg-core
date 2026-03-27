@@ -847,7 +847,7 @@ def require_bound_tenant(request: Request) -> str:
     )
 
 
-def _apply_tenant_context(request: Request, tenant_id: Optional[str]) -> None:
+def _apply_tenant_context(request: Request, tenant_id: str) -> None:
     if not tenant_id:
         return
     mode = (os.getenv("FG_TENANT_CONTEXT_MODE") or "db_session").strip().lower()

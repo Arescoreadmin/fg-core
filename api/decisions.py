@@ -68,7 +68,7 @@ class DecisionOut(BaseModel):
     id: int
     created_at: Optional[str] = None
 
-    tenant_id: Optional[str]
+    tenant_id: str
     source: str
     event_id: str
     event_type: str
@@ -113,7 +113,7 @@ def list_decisions(
     include_raw: bool = Query(
         False, description="Include request/response JSON blobs (slower)"
     ),
-    tenant_id: Optional[str] = Query(None, min_length=1),
+    tenant_id: str = Query(..., min_length=1),
     event_type: Optional[str] = Query(None, min_length=1),
     threat_level: Optional[str] = Query(None, min_length=1),
 ) -> DecisionsPage:
@@ -198,7 +198,7 @@ def get_decision(
     request: Request,
     db: Session = Depends(tenant_db_required),
     include_raw: bool = Query(True, description="Include request/response JSON blobs"),
-    tenant_id: Optional[str] = Query(None, min_length=1),
+    tenant_id: str = Query(..., min_length=1),
 ) -> DecisionOut:
     try:
         # P0: Require tenant_id for all requests - no cross-tenant access allowed
