@@ -195,5 +195,19 @@ Made `tenant_id` a required positional argument on all four engine methods. Adde
 - Do NOT query `AuditExamSession` or `AuditLedgerRecord` by `exam_id`/`session_id` alone without a `tenant_id` filter
 
 ---
+### 2026-03-27 — Plan Runner Enforcement System (Execution Discipline Layer)
+Area: DevTools · Execution Control · CI Governance
 
-_Last updated: 2026-03-26_
+Issue:
+Repository lacked a deterministic execution workflow to enforce ordered task completion and prevent premature commits before validation. This resulted in context drift, inconsistent progress, and CI instability.
+
+Resolution:
+Introduced a plan-driven execution system:
+- Added tools/plan/taskctl.py for task tracking, validation, and progression
+- Added pre-commit-plan-guard.sh to block commits when tasks are incomplete or validation fails
+- Added install.sh to enforce hook installation
+- Introduced plans/30_day_repo_blitz.yaml and state tracking
+- Added CLAUDE.md + execution contract files to enforce agent behavior
+
+AI Notes:
+Execution is now stateful and enforced. Work must follow ordered tasks with validation gates, eliminating arbitrary development flow and reducing CI breakage risk.
