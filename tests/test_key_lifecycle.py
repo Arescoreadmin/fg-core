@@ -183,6 +183,15 @@ class TestUsageTracking:
         assert use_count == 1
         assert last_used_at is not None
 
+    def test_mint_key_allows_unscoped_keys(self, fresh_db):
+        """mint_key should allow keys without tenant_id for unscoped flows."""
+        key = mint_key("read", ttl_seconds=86400)
+
+        result = verify_api_key_detailed(raw=key)
+
+        assert result.valid
+        assert result.tenant_id is None
+
 
 class TestKeyRotation:
     """Test key rotation behavior."""
@@ -200,6 +209,25 @@ class TestKeyRotation:
 
         new_result = verify_api_key_detailed(raw=new_key)
         assert new_result.valid
+
+        old_result = verify_api_key_detailed(raw=key)
+        assert not old_result.valid
+
+    def test_rotate_key_without_explicit_tenant_uses_db_bound_tenant(self, fresh_db):
+        """Rotation should work without explicit tenant_id for compatibility flows."""
+        key = mint_key("read", ttl_seconds=86400, tenant_id="tenant-a")
+        prefix = key.split(".")[0]
+
+        result = rotate_api_key_by_prefix(prefix, ttl_seconds=3600)
+
+        assert result["old_prefix"] == prefix
+        assert result["tenant_id"] == "tenant-a"
+        assert result["old_key_revoked"] is True
+
+        new_key = result["new_key"]
+        new_result = verify_api_key_detailed(raw=new_key)
+        assert new_result.valid
+        assert new_result.tenant_id == "tenant-a"
 
         old_result = verify_api_key_detailed(raw=key)
         assert not old_result.valid
