@@ -36,7 +36,7 @@ phases:
               - Fast lane passes
 
             validation_commands:
-              - pytest -q tests/security/test_tenant_binding.py tests/security/test_tenant_contract_endpoints.py || true
+              - pytest -q tests/test_tenant_binding.py tests/security/test_tenant_contract_endpoints.py || true
               - make fg-fast
 
             allowed_files:

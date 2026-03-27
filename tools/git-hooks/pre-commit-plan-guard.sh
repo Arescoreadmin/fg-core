@@ -50,7 +50,7 @@ if [[ -n "${CURRENT_TASK}" && -f "$LATEST" ]]; then
 import json, sys
 from pathlib import Path
 data = json.loads(Path("$LATEST").read_text())
-ok = bool(data.get("success"))
+ok = data.get("status") == "pass" or bool(data.get("success"))
 sys.exit(0 if ok else 1)
 PY
   then

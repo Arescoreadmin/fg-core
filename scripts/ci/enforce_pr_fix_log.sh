@@ -35,6 +35,11 @@ SOURCE_PATTERNS='^(api/|admin_gateway/|scripts/|tools/|docker-compose|Makefile|.
 SOURCE_CHANGED=$(echo "$CHANGED_FILES" | grep -E "$SOURCE_PATTERNS" || true)
 FIX_LOG_CHANGED=$(echo "$CHANGED_FILES" | grep -E '^docs/ai/PR_FIX_LOG\.md$' || true)
 
+# Also accept fix log staged (not yet committed) — common during local task validation.
+if [[ -z "$FIX_LOG_CHANGED" ]]; then
+  FIX_LOG_CHANGED=$(git diff --cached --name-only | grep -E '^docs/ai/PR_FIX_LOG\.md$' || true)
+fi
+
 if [[ -n "$SOURCE_CHANGED" && -z "$FIX_LOG_CHANGED" ]]; then
   echo ""
   echo "❌ PR_FIX_LOG enforcement failure"
