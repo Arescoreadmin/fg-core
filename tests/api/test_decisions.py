@@ -1,3 +1,6 @@
-def test_import():
-    import api.decisions  # change per file
-    assert True
+import importlib
+
+
+def test_import() -> None:
+    module = importlib.import_module("api.decisions")
+    assert module is not None

@@ -1,3 +1,6 @@
-def test_import():
-    import api.control_plane_v2  # change per file
-    assert True
+import importlib
+
+
+def test_import() -> None:
+    module = importlib.import_module("api.control_plane_v2")
+    assert module is not None

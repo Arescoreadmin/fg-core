@@ -1,16 +1,19 @@
-def test_api_surface_smoke_imports():
-    """
-    Ensures modified API modules import correctly after tenant/auth changes.
-    Acts as coverage signal for unit gate mapping.
-    """
-    import api.admin
-    import api.control_plane_v2
-    import api.decisions
-    import api.dev_events
-    import api.ingest
-    import api.keys
-    import api.schemas
-    import api.stats
-    import api.ui_dashboards
+import importlib
 
-    assert True
+
+def test_api_surface_smoke_imports() -> None:
+    modules = [
+        "api.admin",
+        "api.control_plane_v2",
+        "api.decisions",
+        "api.dev_events",
+        "api.ingest",
+        "api.keys",
+        "api.schemas",
+        "api.stats",
+        "api.ui_dashboards",
+    ]
+
+    loaded = [importlib.import_module(name) for name in modules]
+
+    assert all(module is not None for module in loaded)
