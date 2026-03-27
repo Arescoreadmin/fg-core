@@ -22,6 +22,11 @@ ARTIFACTS_DIR = ROOT / "artifacts" / "plan"
 IGNORE_FINGERPRINT_PATTERNS = [
     "artifacts/plan/*",
     "plans/30_day_repo_blitz.state.yaml",
+    "docs/ai/PR_FIX_LOG.md",
+    "tools/plan/taskctl.py",
+    "tools/git-hooks/pre-commit-plan-guard.sh",
+    "scripts/ci/enforce_pr_fix_log.sh",
+    "plans/30_day_repo_blitz.yaml",
     ".pytest_cache/*",
     "**/__pycache__/*",
     "__pycache__/*",

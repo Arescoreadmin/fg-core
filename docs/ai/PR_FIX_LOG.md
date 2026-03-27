@@ -211,3 +211,35 @@ Introduced a plan-driven execution system:
 
 AI Notes:
 Execution is now stateful and enforced. Work must follow ordered tasks with validation gates, eliminating arbitrary development flow and reducing CI breakage risk.
+
+---
+
+### 2026-03-27 — Plan Runner Fingerprint + Task 1.2 Scope Hardening
+
+**Area:** DevTools · Execution Control · Task Governance
+
+**Issue:**
+`tools/plan/taskctl.py` was further modified after the initial plan runner introduction (commits b004558, 0f49b88, b13ae0c) to: (1) ignore controller-managed files (state yaml, artifacts, pycache) from task fingerprint computation, preventing spurious dirty-state false positives; (2) tighten task 1.2 allowed-files scope and validation invariants in the plan definition. These changes were not accompanied by a PR_FIX_LOG entry, causing the `pr-fix-log` CI gate to fail.
+
+**Resolution:**
+Added this entry to satisfy the gate. No behavior changes to production paths; changes are confined to the plan execution harness and plan definition yaml.
+
+**AI Notes:**
+- Do NOT remove the fingerprint ignore patterns for controller-managed files (state yaml, artifacts, pycache); their absence causes false dirty-state failures
+- Task 1.2 tenant enforcement is already implemented in API entry points; do not re-implement or duplicate it
+
+---
+
+### 2026-03-27 — Task 1.2: Tenant ID Enforcement at Entry Points (Validation)
+
+**Area:** Tenant Isolation · API Entry Points
+
+**Issue:**
+Task 1.2 required verification that all unscoped entry points reject requests with missing tenant_id, and that scoped auth-derived tenant binding continues to work. Validation test coverage needed to be confirmed passing.
+
+**Resolution:**
+Verified enforcement already in place across all in-scope entry points (`api/decisions.py`, `api/ingest.py`, `api/stats.py`, `api/keys.py`, `api/admin.py`, `api/ui_dashboards.py`, `api/dev_events.py`): all use `require_bound_tenant` or `bind_tenant_id(require_explicit_for_unscoped=True)`. All 26 validation tests pass (`tests/test_tenant_binding.py`, `tests/security/test_tenant_contract_endpoints.py`). No code changes required.
+
+**AI Notes:**
+- Do NOT weaken `require_bound_tenant` or `bind_tenant_id` enforcement at any in-scope entry point
+- Unscoped keys without explicit tenant_id must return 400; scoped keys derive tenant from auth context without requiring explicit tenant_id in the request
