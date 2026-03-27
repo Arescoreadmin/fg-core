@@ -86,7 +86,9 @@ def _safe_json(obj: Any) -> str:
         return json.dumps({"_unserializable": str(obj)}, separators=(",", ":"))
 
 
-def _resolve_tenant_id(req: TelemetryInput, x_tenant_id: str, request: Request) -> str:
+def _resolve_tenant_id(
+    req: TelemetryInput, x_tenant_id: Optional[str], request: Request
+) -> str:
     """
     INV-002: Reject silent 'unknown' tenant writes for unscoped keys unless tenant_id is explicit.
     Prefer header X-Tenant-Id, then body tenant_id.
@@ -258,7 +260,7 @@ async def ingest(
     request: Request,
     response: Response,
     db: Session = Depends(tenant_db_session),
-    x_tenant_id: str = Header(..., alias="X-Tenant-Id"),
+    x_tenant_id: Optional[str] = Header(default=None, alias="X-Tenant-Id"),
     x_config_hash: Optional[str] = Header(default=None, alias="X-Config-Hash"),
 ) -> IngestResponse:
     """

@@ -116,7 +116,7 @@ _RL_HEARTBEAT = (20.0, 100)
 _RL_PLAYBOOK = (0.25, 3)
 
 
-def _rl_key(tenant_id: str, endpoint: str) -> str:
+def _rl_key(tenant_id: Optional[str], endpoint: str) -> str:
     t = tenant_id or "global"
     return f"cpv2:{endpoint}:{t}"
 
@@ -473,7 +473,7 @@ def list_commands(
     db: Session = Depends(auth_ctx_db_session),
     status: Optional[str] = Query(None, max_length=32),
     target_id: Optional[str] = Query(None, max_length=256),
-    tenant_id_param: str = Query(..., alias="tenant_id", max_length=128),
+    tenant_id_param: Optional[str] = Query(None, alias="tenant_id", max_length=128),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> Dict[str, Any]:
@@ -678,7 +678,7 @@ def query_ledger(
     since: Optional[str] = Query(None, description="ISO-8601 timestamp lower bound"),
     until: Optional[str] = Query(None, description="ISO-8601 timestamp upper bound"),
     event_type: Optional[str] = Query(None, max_length=64),
-    tenant_id_param: str = Query(..., alias="tenant_id", max_length=128),
+    tenant_id_param: Optional[str] = Query(None, alias="tenant_id", max_length=128),
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ) -> Dict[str, Any]:
@@ -730,7 +730,7 @@ def query_ledger(
 def verify_ledger(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
-    tenant_id_param: str = Query(..., alias="tenant_id", max_length=128),
+    tenant_id_param: Optional[str] = Query(None, alias="tenant_id", max_length=128),
 ) -> Dict[str, Any]:
     """
     Full chain verification — recomputes every hash and verifies linkage.
@@ -808,7 +808,7 @@ def verify_ledger(
 def export_ledger_anchor(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
-    tenant_id_param: str = Query(..., alias="tenant_id", max_length=128),
+    tenant_id_param: Optional[str] = Query(None, alias="tenant_id", max_length=128),
 ) -> Dict[str, Any]:
     trace = _trace_id(request)
     effective_tenant, _is_global = _resolve_msp_tenant(request, tenant_id_param)
@@ -916,7 +916,7 @@ def list_heartbeats(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
     entity_type: Optional[str] = Query(None, max_length=64),
-    tenant_id_param: str = Query(..., alias="tenant_id", max_length=128),
+    tenant_id_param: Optional[str] = Query(None, alias="tenant_id", max_length=128),
     stale_only: bool = Query(False),
 ) -> Dict[str, Any]:
     trace = _trace_id(request)
@@ -952,7 +952,7 @@ def list_heartbeats(
 def list_stale_heartbeats(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
-    tenant_id_param: str = Query(..., alias="tenant_id", max_length=128),
+    tenant_id_param: Optional[str] = Query(None, alias="tenant_id", max_length=128),
 ) -> Dict[str, Any]:
     trace = _trace_id(request)
     effective_tenant, is_global = _resolve_msp_tenant(request, tenant_id_param)
@@ -1078,7 +1078,7 @@ def trigger_playbook(
 def get_evidence_bundle(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
-    tenant_id_param: str = Query(..., alias="tenant_id", max_length=128),
+    tenant_id_param: Optional[str] = Query(None, alias="tenant_id", max_length=128),
     since: Optional[str] = Query(None, description="ISO-8601 lower bound"),
     until: Optional[str] = Query(None, description="ISO-8601 upper bound"),
     include_receipts: bool = Query(True),

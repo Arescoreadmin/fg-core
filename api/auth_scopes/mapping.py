@@ -23,13 +23,13 @@ from .helpers import (
 log = logging.getLogger("frostgate")
 
 
-def _ensure_default_config_for_tenant(
-    sqlite_path: str, tenant_id: Optional[str]
-) -> None:
+def _ensure_default_config_for_tenant(sqlite_path: str, tenant_id: str) -> None:
     if not tenant_id:
         return
+
     canonical = canonicalize_config({})
     config_hash = hash_config(canonical)
+
     con = sqlite3.connect(sqlite_path)
     try:
         con.execute(
@@ -183,7 +183,6 @@ def mint_key(
             values["created_at"] = now_i
         if "expires_at" in names:
             values["expires_at"] = exp_i
-
         if "version" in names:
             values["version"] = 1
         if "use_count" in names:
@@ -219,16 +218,16 @@ def mint_key(
     finally:
         con.close()
 
-    _ensure_default_config_for_tenant(sqlite_path, tenant_id)
+    if tenant_id:
+        _ensure_default_config_for_tenant(sqlite_path, tenant_id)
 
     return f"{prefix}.{token}.{secret}"
 
 
 def revoke_api_key(
     key_prefix: str,
-    key_hash: Optional[str] = None,
-    *,
     tenant_id: Optional[str] = None,
+    key_hash: Optional[str] = None,
 ) -> bool:
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
     if not sqlite_path:
@@ -240,22 +239,27 @@ def revoke_api_key(
         col_names = {r[1] for r in cols}
         if tenant_id and "tenant_id" not in col_names:
             return False
+
         if key_hash:
             query = "UPDATE api_keys SET enabled=0 WHERE prefix=? AND key_hash=?"
             params = [key_prefix, key_hash]
         else:
             query = "UPDATE api_keys SET enabled=0 WHERE prefix=?"
             params = [key_prefix]
+
         if tenant_id:
             query += " AND tenant_id=?"
             params.append(tenant_id)
+
         cur = con.execute(query, params)
         con.commit()
         revoked = cur.rowcount > 0
+
         if revoked:
             from .resolution import _log_auth_event
 
             _log_auth_event("key_revoked", success=True, key_prefix=key_prefix)
+
         return revoked
     except Exception:
         log.exception("Failed to revoke API key")
@@ -266,8 +270,8 @@ def revoke_api_key(
 
 def rotate_api_key_by_prefix(
     key_prefix: str,
-    ttl_seconds: int = DEFAULT_TTL_SECONDS,
     tenant_id: Optional[str] = None,
+    ttl_seconds: int = DEFAULT_TTL_SECONDS,
     revoke_old: bool = True,
 ) -> dict:
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
@@ -277,7 +281,12 @@ def rotate_api_key_by_prefix(
     con = sqlite3.connect(sqlite_path)
     try:
         row = con.execute(
-            "SELECT id, scopes_csv, enabled, tenant_id, key_hash FROM api_keys WHERE prefix=? LIMIT 1",
+            """
+            SELECT id, scopes_csv, enabled, tenant_id, key_hash
+            FROM api_keys
+            WHERE prefix=?
+            LIMIT 1
+            """,
             (key_prefix,),
         ).fetchone()
 
@@ -298,6 +307,7 @@ def rotate_api_key_by_prefix(
         parts = new_key.split(".")
         new_prefix = parts[0] if parts else "fgk"
         new_secret = parts[-1]
+
         try:
             new_lookup = _key_lookup_hash(new_secret, _get_key_pepper())
         except Exception:
@@ -319,8 +329,8 @@ def rotate_api_key_by_prefix(
 
         con.commit()
 
-        now = int(time.time())
-        expires_at = now + int(ttl_seconds)
+        now_ts = int(time.time())
+        expires_at = now_ts + int(ttl_seconds)
 
         return {
             "new_key": new_key,
@@ -364,7 +374,7 @@ def list_api_keys(
 
         query = f"SELECT {','.join(select_cols)} FROM api_keys"
         conditions = []
-        params = []
+        params: list[object] = []
 
         if not include_disabled:
             conditions.append("enabled=1")
@@ -386,6 +396,7 @@ def list_api_keys(
             for ts_field in ("created_at", "expires_at", "last_used_at"):
                 if ts_field in item and item[ts_field] is not None:
                     item[ts_field] = str(item[ts_field])
+
             scopes_csv = item.get("scopes_csv", "")
             item["scopes"] = [
                 s.strip() for s in (scopes_csv or "").split(",") if s.strip()

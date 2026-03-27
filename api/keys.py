@@ -54,7 +54,7 @@ class CreateKeyRequest(BaseModel):
         default_factory=list,
         description="List of scopes to grant to the key",
     )
-    tenant_id: str = Field(
+    tenant_id: Optional[str] = Field(
         default=None,
         max_length=128,
         description="Tenant ID to associate with the key",
@@ -102,7 +102,7 @@ class CreateKeyResponse(BaseModel):
     key: str = Field(description="The full API key (only shown once)")
     prefix: str = Field(description="Key prefix for identification")
     scopes: list[str] = Field(description="Scopes granted to the key")
-    tenant_id: str = Field(description="Associated tenant ID")
+    tenant_id: Optional[str] = Field(description="Associated tenant ID")
     ttl_seconds: int = Field(description="Time-to-live in seconds")
     expires_at: int = Field(description="Unix timestamp when key expires")
 
@@ -114,7 +114,7 @@ class KeyInfo(BaseModel):
     name: Optional[str] = None
     scopes: list[str] = Field(default_factory=list)
     enabled: bool = True
-    tenant_id: str = None
+    tenant_id: Optional[str] = None
     created_at: Optional[str] = None
     expires_at: Optional[str] = None
     last_used_at: Optional[str] = None
@@ -209,7 +209,7 @@ def create_key(req: CreateKeyRequest, request: Request) -> CreateKeyResponse:
 @router.get("", response_model=ListKeysResponse)
 def get_keys(
     request: Request,
-    tenant_id: str = Query(..., max_length=128),
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
     include_disabled: bool = Query(default=False),
 ) -> ListKeysResponse:
     """
@@ -242,7 +242,7 @@ def get_keys(
 def revoke_key(
     req: RevokeKeyRequest,
     request: Request,
-    tenant_id: str = Query(..., max_length=128),
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> RevokeKeyResponse:
     """
     Revoke (disable) an API key by prefix.
@@ -284,7 +284,7 @@ def delete_key(
     prefix: str,
     request: Request,
     _tenant_id: str = Depends(require_bound_tenant),
-    tenant_id: str = Query(..., max_length=128),
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> RevokeKeyResponse:
     """
     Delete (revoke) an API key by prefix.
@@ -330,7 +330,7 @@ class RotateKeyResponse(BaseModel):
     new_prefix: str = Field(description="New key prefix for identification")
     old_prefix: str = Field(description="Old key prefix (for reference)")
     scopes: list[str] = Field(description="Scopes inherited from old key")
-    tenant_id: str = Field(description="Associated tenant ID")
+    tenant_id: Optional[str] = Field(description="Associated tenant ID")
     expires_at: int = Field(description="Unix timestamp when new key expires")
     old_key_revoked: bool = Field(description="Whether the old key was revoked")
 
@@ -339,7 +339,7 @@ class RotateKeyResponse(BaseModel):
 def rotate_key(
     req: RotateKeyRequest,
     request: Request,
-    tenant_id: str = Query(..., max_length=128),
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> RotateKeyResponse:
     """
     Rotate an API key, creating a new key with the same scopes.
@@ -351,25 +351,26 @@ def rotate_key(
 
     Requires the current key to be valid and active.
     """
-    import os
     import sqlite3
-
+    import os
+    from api.db import _resolve_sqlite_path
     from api.auth_scopes import (
         _get_key_pepper,
         _key_lookup_hash,
         _parse_scopes_csv,
         _sha256_hex,
     )
-    from api.db import _resolve_sqlite_path
 
     current_key = req.current_key.strip()
     if not current_key:
         raise HTTPException(status_code=400, detail="Current key is required")
 
+    # Validate the current key exists and is active
     sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
     if not sqlite_path:
         sqlite_path = str(_resolve_sqlite_path())
 
+    # Parse the current key to extract components
     parts = current_key.split(".")
     if len(parts) < 3:
         raise HTTPException(status_code=400, detail="Invalid key format")
@@ -387,31 +388,19 @@ def rotate_key(
             tenant_id,
             require_explicit_for_unscoped=True,
         )
-
         con = sqlite3.connect(sqlite_path)
         try:
             cols = con.execute("PRAGMA table_info(api_keys)").fetchall()
             col_names = {r[1] for r in cols}
-
             if "key_lookup" in col_names and old_key_lookup:
                 row = con.execute(
-                    """
-                    SELECT id, scopes_csv, enabled, tenant_id, key_hash
-                    FROM api_keys
-                    WHERE prefix=? AND key_lookup=?
-                    LIMIT 1
-                    """,
+                    "SELECT id, scopes_csv, enabled, tenant_id, key_hash FROM api_keys WHERE prefix=? AND key_lookup=? LIMIT 1",
                     (old_prefix, old_key_lookup),
                 ).fetchone()
             else:
                 old_key_hash = _sha256_hex(secret_val)
                 row = con.execute(
-                    """
-                    SELECT id, scopes_csv, enabled, tenant_id, key_hash
-                    FROM api_keys
-                    WHERE prefix=? AND key_hash=?
-                    LIMIT 1
-                    """,
+                    "SELECT id, scopes_csv, enabled, tenant_id, key_hash FROM api_keys WHERE prefix=? AND key_hash=? LIMIT 1",
                     (old_prefix, old_key_hash),
                 ).fetchone()
 
@@ -429,8 +418,10 @@ def rotate_key(
                     detail=redact_detail("tenant mismatch", generic="forbidden"),
                 )
 
+            # Parse scopes from old key
             scopes = list(_parse_scopes_csv(scopes_csv))
 
+            # Create new key with same scopes
             new_key = mint_key(
                 *scopes,
                 ttl_seconds=req.ttl_seconds,
@@ -440,18 +431,19 @@ def rotate_key(
             new_parts = new_key.split(".")
             new_prefix = new_parts[0] if new_parts else "fgk"
 
+            # Link the new key to the old key for audit trail
             new_secret = new_parts[-1]
             try:
                 new_key_lookup = _key_lookup_hash(new_secret, _get_key_pepper())
             except Exception:
                 new_key_lookup = None
-
             if new_key_lookup and "key_lookup" in col_names:
                 con.execute(
                     "UPDATE api_keys SET rotated_from=? WHERE key_lookup=?",
                     (old_key_hash, new_key_lookup),
                 )
 
+            # Revoke old key if requested
             old_key_revoked = False
             if req.revoke_old:
                 con.execute(
@@ -475,6 +467,7 @@ def rotate_key(
                 },
             )
 
+            # Audit log the rotation
             audit_key_rotated(
                 old_prefix=old_prefix,
                 new_prefix=new_prefix,
@@ -492,6 +485,7 @@ def rotate_key(
                 expires_at=expires_at,
                 old_key_revoked=old_key_revoked,
             )
+
         finally:
             con.close()
 

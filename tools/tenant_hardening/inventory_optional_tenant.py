@@ -11,21 +11,27 @@ API_DIR = ROOT / "api"
 PATTERN = re.compile(r"Optional\[[^\]]*tenant_id|tenant_id:\s*Optional")
 
 BUCKETS = [
-    ("entrypoints", [
-        "admin.py",
-        "control_plane_v2.py",
-        "ui_dashboards.py",
-        "keys.py",
-        "stats.py",
-        "decisions.py",
-        "ingest.py",
-    ]),
-    ("helpers", [
-        "auth_scopes/resolution.py",
-        "auth_scopes/validation.py",
-        "control_plane_v2.py",
-        "ui_dashboards.py",
-    ]),
+    (
+        "entrypoints",
+        [
+            "admin.py",
+            "control_plane_v2.py",
+            "ui_dashboards.py",
+            "keys.py",
+            "stats.py",
+            "decisions.py",
+            "ingest.py",
+        ],
+    ),
+    (
+        "helpers",
+        [
+            "auth_scopes/resolution.py",
+            "auth_scopes/validation.py",
+            "control_plane_v2.py",
+            "ui_dashboards.py",
+        ],
+    ),
     ("internals", []),
 ]
 

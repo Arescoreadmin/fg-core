@@ -541,7 +541,7 @@ def _compute_stats(db: Session, tenant_id: str) -> _Computed:
 def get_stats(
     request: Request,
     db: Session = Depends(tenant_db_required),
-    tenant_id: str = Query(..., max_length=128),
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> StatsResponse:
     tenant_id = require_bound_tenant(request)
     c = _compute_stats(db, tenant_id=tenant_id)
@@ -565,7 +565,7 @@ def get_stats(
 def get_stats_summary(
     request: Request,
     db: Session = Depends(tenant_db_required),
-    tenant_id: str = Query(..., max_length=128),
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> StatsSummaryResponse:
     """
     Marketing-friendly summary payload for dashboard headers.

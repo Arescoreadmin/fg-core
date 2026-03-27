@@ -41,8 +41,11 @@ PATTERNS: list[tuple[re.Pattern[str], str]] = [
 # Leave these alone for now.
 IGNORE_LINE_PATTERNS = [
     re.compile(r"last_tenant_id:\s*Optional\[str\]\s*=\s*None"),
-    re.compile(r"Optional\[str\]\s*=\s*None,\s*$"),  # broad fallback for state-like lines
+    re.compile(
+        r"Optional\[str\]\s*=\s*None,\s*$"
+    ),  # broad fallback for state-like lines
 ]
+
 
 @dataclass
 class Change:
@@ -51,8 +54,10 @@ class Change:
     old: str
     new: str
 
+
 def should_ignore(line: str) -> bool:
     return any(p.search(line) for p in IGNORE_LINE_PATTERNS)
+
 
 def process_file(path: Path, apply: bool) -> list[Change]:
     original = path.read_text(encoding="utf-8").splitlines()
@@ -82,6 +87,7 @@ def process_file(path: Path, apply: bool) -> list[Change]:
         path.write_text("\n".join(updated) + "\n", encoding="utf-8")
 
     return changes
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Tenant hardening codemod v3")
@@ -121,6 +127,7 @@ def main() -> int:
     print(f"TOTAL_CHANGES={total_changes}")
     print(f"MODE={'APPLY' if args.apply else 'DRY_RUN'}")
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

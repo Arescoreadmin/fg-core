@@ -36,7 +36,9 @@ SKIP_TARGETS = [
 OPTIONAL_TYPE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # tenant_id: Optional[str] = None,  -> tenant_id: str,
     (
-        re.compile(r"(?P<indent>\s*)tenant_id:\s*Optional\[str\]\s*=\s*None(?P<tail>\s*,?)"),
+        re.compile(
+            r"(?P<indent>\s*)tenant_id:\s*Optional\[str\]\s*=\s*None(?P<tail>\s*,?)"
+        ),
         r"\g<indent>tenant_id: str\g<tail>",
     ),
     # tenant_id: Optional[str], -> tenant_id: str,
@@ -46,7 +48,9 @@ OPTIONAL_TYPE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     ),
     # x_tenant_id: Optional[str] = None, -> x_tenant_id: str,
     (
-        re.compile(r"(?P<indent>\s*)x_tenant_id:\s*Optional\[str\]\s*=\s*None(?P<tail>\s*,?)"),
+        re.compile(
+            r"(?P<indent>\s*)x_tenant_id:\s*Optional\[str\]\s*=\s*None(?P<tail>\s*,?)"
+        ),
         r"\g<indent>x_tenant_id: str\g<tail>",
     ),
     # x_tenant_id: Optional[str], -> x_tenant_id: str,
@@ -70,6 +74,7 @@ HELPER_SIGNATURE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         r"def _rl_key(tenant_id: str, endpoint: str) -> str:",
     ),
 ]
+
 
 @dataclass
 class FileResult:

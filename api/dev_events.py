@@ -78,7 +78,7 @@ def _make_record(
     now: datetime,
     kind: str,
     src: str,
-    tenant_id: str,
+    tenant_id: Optional[str],
     ip: str,
     severity: str,
     threat_level: str,
@@ -175,7 +175,7 @@ def _make_record(
 @router.post("/seed")
 def dev_seed(
     request: Request,
-    tenant_id: str,
+    tenant_id: Optional[str] = None,
     db: Session = Depends(tenant_db),
 ) -> Dict[str, Any]:
     """
@@ -292,7 +292,6 @@ def dev_seed(
 @router.post("/emit")
 def dev_emit(
     request: Request,
-    tenant_id: str,
     count: int = Query(10, ge=1, le=500),
     kind: Literal[
         "auth_attempt", "waf", "edge_gw", "collector", "info"
@@ -302,6 +301,7 @@ def dev_emit(
     action_taken: Literal[
         "blocked", "rate_limited", "quarantined", "log_only"
     ] = "log_only",
+    tenant_id: Optional[str] = None,
     source: Optional[str] = None,
     pq_fallback: bool = False,
     db: Session = Depends(tenant_db),

@@ -196,7 +196,7 @@ class TelemetryInput(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     source: str = Field(max_length=256)
-    tenant_id: str = Field(..., max_length=128)
+    tenant_id: Optional[str] = Field(default=None, max_length=128)
     timestamp: Optional[str] = Field(default=None, max_length=64)
 
     # Doctrine fields as strings

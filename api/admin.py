@@ -177,7 +177,7 @@ class AdminRotateKeyRequest(BaseModel):
         default=True,
         description="Whether to revoke the old key immediately",
     )
-    tenant_id: str = Field(
+    tenant_id: Optional[str] = Field(
         default=None,
         max_length=128,
         description="Optional tenant ID for validation",
@@ -408,7 +408,7 @@ def _audit_redaction_enabled() -> bool:
 
 def _audit_filters(
     *,
-    tenant_id: str,
+    tenant_id: Optional[str],
     action: Optional[str],
     actor: Optional[str],
     status: Optional[str],
@@ -759,7 +759,7 @@ async def activate_tenant(
 )
 async def admin_list_keys(
     request: Request,
-    tenant_id: str = Query(..., max_length=128),
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
     include_disabled: bool = Query(default=False),
 ) -> ListKeysResponse:
     """List API keys for admin usage."""
@@ -781,7 +781,7 @@ async def admin_list_keys(
 )
 async def search_audit_events(
     request: Request,
-    tenant_id: str = Query(..., description="Tenant filter"),
+    tenant_id: Optional[str] = Query(None, description="Tenant filter"),
     action: Optional[str] = Query(None, description="Filter by action"),
     actor: Optional[str] = Query(None, description="Filter by actor"),
     status: Optional[str] = Query(None, description="Filter by status"),
@@ -888,7 +888,7 @@ class AuditExportRequest(BaseModel):
     """Audit export request."""
 
     format: Literal["csv", "json"]
-    tenant_id: str
+    tenant_id: Optional[str] = None
     action: Optional[str] = None
     actor: Optional[str] = None
     status: Optional[str] = None
@@ -1080,7 +1080,7 @@ async def admin_create_key(
 async def admin_revoke_key(
     key_prefix: str,
     request: Request,
-    tenant_id: str = Query(..., max_length=128),
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> RevokeKeyResponse:
     """Revoke an API key by prefix."""
     bound_tenant = bind_tenant_id(

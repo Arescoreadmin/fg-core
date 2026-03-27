@@ -15,7 +15,7 @@ router = APIRouter(prefix="/config", tags=["config"])
 
 
 class ConfigWriteRequest(BaseModel):
-    tenant_id: str
+    tenant_id: Optional[str] = None
     config_payload: dict[str, Any] = Field(default_factory=dict)
     created_by: Optional[str] = None
     parent_hash: Optional[str] = None

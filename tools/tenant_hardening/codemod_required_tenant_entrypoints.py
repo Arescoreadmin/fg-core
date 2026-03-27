@@ -21,25 +21,26 @@ TARGET_FILES = [
 REPLACEMENTS = [
     (
         re.compile(r"tenant_id:\s*Optional\[str\]\s*=\s*Query\(default=None,"),
-        'tenant_id: str = Query(...,',
+        "tenant_id: str = Query(...,",
     ),
     (
         re.compile(r"tenant_id:\s*Optional\[str\]\s*=\s*Query\(None,"),
-        'tenant_id: str = Query(...,',
+        "tenant_id: str = Query(...,",
     ),
     (
         re.compile(r"tenant_id_param:\s*Optional\[str\]\s*=\s*Query\(None,"),
-        'tenant_id_param: str = Query(...,',
+        "tenant_id_param: str = Query(...,",
     ),
     (
         re.compile(r"x_tenant_id:\s*Optional\[str\]\s*=\s*Header\(default=None,"),
-        'x_tenant_id: str = Header(...,',
+        "x_tenant_id: str = Header(...,",
     ),
     (
         re.compile(r"tenant_id:\s*Optional\[str\]\s*=\s*Field\(default=None,"),
-        'tenant_id: str = Field(...,',
+        "tenant_id: str = Field(...,",
     ),
 ]
+
 
 def process_file(path: Path) -> tuple[int, bool]:
     text = path.read_text(encoding="utf-8")

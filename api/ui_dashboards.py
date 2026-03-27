@@ -115,7 +115,7 @@ class ChainVerifyResponse(BaseModel):
 
 
 class AuditPacketRequest(BaseModel):
-    tenant_id: str = Field(..., max_length=128)
+    tenant_id: Optional[str] = Field(default=None, max_length=128)
     from_ts: Optional[str] = None
     to_ts: Optional[str] = None
 
@@ -189,7 +189,7 @@ def _request_id(request: Request) -> Optional[str]:
     return getattr(getattr(request, "state", None), "request_id", None)
 
 
-def _resolve_tenant(request: Request, tenant_id: str) -> str:
+def _resolve_tenant(request: Request, tenant_id: Optional[str]) -> str:
     existing = getattr(getattr(request, "state", None), "tenant_id", None)
     if existing:
         if tenant_id and tenant_id != existing:
@@ -578,7 +578,7 @@ async def ui_csrf(request: Request):
 async def ui_posture(
     request: Request,
     db: Session = Depends(tenant_db_required),
-    tenant_id: str = Query(..., max_length=128),
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> PostureResponse:
     tenant_id = _resolve_tenant(request, tenant_id)
     stats = _compute_stats(db, tenant_id=tenant_id)
@@ -631,7 +631,7 @@ async def ui_decisions(
     db: Session = Depends(tenant_db_required),
     limit: int = Query(25, ge=1, le=200),
     offset: int = Query(0, ge=0, le=200000),
-    tenant_id: str = Query(..., max_length=128),
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
     event_type: Optional[str] = Query(default=None, min_length=1),
     threat_level: Optional[str] = Query(default=None, min_length=1),
     source: Optional[str] = Query(default=None, min_length=1),
@@ -701,7 +701,7 @@ async def ui_decision_detail(
     decision_id: int,
     request: Request,
     db: Session = Depends(tenant_db_required),
-    tenant_id: str = Query(..., max_length=128),
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> DecisionDetail:
     tenant_id = _resolve_tenant(request, tenant_id)
     record = db.get(DecisionRecord, decision_id)
@@ -749,7 +749,7 @@ async def ui_decision_detail(
 async def ui_chain_verify(
     request: Request,
     db: Session = Depends(tenant_db_required),
-    tenant_id: str = Query(..., max_length=128),
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> ChainVerifyResponse:
     tenant_id = _resolve_tenant(request, tenant_id)
     res = _verify_chain(db, tenant_id)
@@ -904,7 +904,7 @@ async def ui_audit_packet(
 async def ui_audit_packet_download(
     packet_id: str,
     request: Request,
-    tenant_id: str = Query(..., max_length=128),
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
     token: str = Query(..., min_length=8),
 ) -> FileResponse:
     tenant_id = _resolve_tenant(request, tenant_id)
@@ -950,7 +950,7 @@ async def ui_controls(
     request: Request,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0, le=1000),
-    tenant_id: str = Query(..., max_length=128),
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> ControlsPage:
     _resolve_tenant(request, tenant_id)
     matrix = _controls_matrix()
@@ -983,7 +983,7 @@ async def ui_controls(
 async def ui_control_detail(
     inv_id: str,
     request: Request,
-    tenant_id: str = Query(..., max_length=128),
+    tenant_id: Optional[str] = Query(default=None, max_length=128),
 ) -> ControlDetail:
     _resolve_tenant(request, tenant_id)
     matrix = {item["inv_id"]: item for item in _controls_matrix()}

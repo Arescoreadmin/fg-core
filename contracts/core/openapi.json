@@ -598,13 +598,17 @@
             "type": "boolean"
           },
           "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
           }
         },
-        "required": [
-          "tenant_id"
-        ],
         "title": "ConfigWriteRequest",
         "type": "object"
       },
@@ -747,10 +751,17 @@
             "type": "array"
           },
           "tenant_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "description": "Tenant ID to associate with the key",
-            "maxLength": 128,
-            "title": "Tenant Id",
-            "type": "string"
+            "title": "Tenant Id"
           },
           "ttl_seconds": {
             "default": 86400,
@@ -791,9 +802,16 @@
             "type": "array"
           },
           "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "description": "Associated tenant ID",
-            "title": "Tenant Id",
-            "type": "string"
+            "title": "Tenant Id"
           },
           "ttl_seconds": {
             "description": "Time-to-live in seconds",
@@ -1040,8 +1058,15 @@
             "type": "string"
           },
           "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
           },
           "threat_level": {
             "title": "Threat Level",
@@ -2287,9 +2312,16 @@
             "title": "Src Ip"
           },
           "tenant_id": {
-            "maxLength": 128,
-            "title": "Tenant Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
           },
           "timestamp": {
             "anyOf": [
@@ -2306,7 +2338,6 @@
         },
         "required": [
           "source",
-          "tenant_id",
           "event_id"
         ],
         "title": "IngestRequest",
@@ -2558,8 +2589,15 @@
             "type": "array"
           },
           "tenant_id": {
-            "title": "Tenant Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
           },
           "use_count": {
             "anyOf": [
@@ -3565,9 +3603,16 @@
             "type": "array"
           },
           "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "description": "Associated tenant ID",
-            "title": "Tenant Id",
-            "type": "string"
+            "title": "Tenant Id"
           }
         },
         "required": [
@@ -3791,9 +3836,16 @@
             "title": "Src Ip"
           },
           "tenant_id": {
-            "maxLength": 128,
-            "title": "Tenant Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
           },
           "timestamp": {
             "anyOf": [
@@ -3809,8 +3861,7 @@
           }
         },
         "required": [
-          "source",
-          "tenant_id"
+          "source"
         ],
         "title": "TelemetryInput",
         "type": "object"
@@ -8247,11 +8298,17 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "minLength": 1,
-              "title": "Tenant Id",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           },
           {
@@ -8361,11 +8418,17 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "minLength": 1,
-              "title": "Tenant Id",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           },
           {
@@ -10519,10 +10582,17 @@
           {
             "in": "header",
             "name": "X-Tenant-Id",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "X-Tenant-Id",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
             }
           },
           {
@@ -10753,11 +10823,18 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "maxLength": 128,
-              "title": "Tenant Id",
-              "type": "string"
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           },
           {
@@ -10881,11 +10958,18 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "maxLength": 128,
-              "title": "Tenant Id",
-              "type": "string"
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           },
           {
@@ -10951,11 +11035,18 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "maxLength": 128,
-              "title": "Tenant Id",
-              "type": "string"
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           },
           {
@@ -11030,11 +11121,18 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "maxLength": 128,
-              "title": "Tenant Id",
-              "type": "string"
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           },
           {
@@ -11701,11 +11799,17 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "maxLength": 128,
-              "title": "Tenant Id",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           },
           {
@@ -11761,11 +11865,17 @@
           {
             "in": "query",
             "name": "tenant_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "maxLength": 128,
-              "title": "Tenant Id",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
             }
           },
           {

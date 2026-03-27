@@ -9,6 +9,7 @@ API_DIR = ROOT / "api"
 
 PATTERN = re.compile(r"Optional\[[^\]]*tenant_id|tenant_id:\s*Optional")
 
+
 def main() -> int:
     remaining = []
     for path in sorted(API_DIR.rglob("*.py")):
