@@ -24,17 +24,38 @@ phases:
              - "rg -n 'Optional\\[.*tenant_id|tenant_id:\\s*Optional' api/auth_scopes/validation.py api/tenant_usage.py api/middleware/dos_guard.py api/key_rotation.py || true"
 
           - id: "1.2"
-            title: "Enforce tenant_id at entry points"
-            status: "pending"
-            depends_on: ["1.1"]
+            title: Enforce tenant_id at entry points
+
             definition_of_done:
-              - "All entry points reject missing tenant_id"
+              - Unscoped entry points reject missing tenant_id
+              - Scoped auth-derived tenant binding still works where intended
+
             validation:
-              - "Tests fail when tenant_id missing"
-              - "Fast lane passes"
+              - Unscoped requests fail when tenant_id is missing
+              - Scoped requests without explicit tenant_id still succeed where auth binding is intended
+              - Fast lane passes
+
             validation_commands:
-              - "pytest -q tests/security -k 'tenant and missing' || true"
-              - "make fg-fast"
+              - pytest -q tests/security/test_tenant_binding.py tests/security/test_tenant_contract_endpoints.py || true
+              - make fg-fast
+
+            allowed_files:
+              - api/admin.py
+              - api/control_plane_v2.py
+              - api/decisions.py
+              - api/dev_events.py
+              - api/ingest.py
+              - api/keys.py
+              - api/stats.py
+              - api/ui_dashboards.py
+              - tests/**
+
+            max_files_changed: 20
+
+            forbidden_files:
+              - contracts/**
+              - schemas/api/openapi.json
+              - .github/workflows/**
 
           - id: "1.3"
             title: "Audit read paths"
