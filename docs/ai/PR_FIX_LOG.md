@@ -243,3 +243,15 @@ Verified enforcement already in place across all in-scope entry points (`api/dec
 **AI Notes:**
 - Do NOT weaken `require_bound_tenant` or `bind_tenant_id` enforcement at any in-scope entry point
 - Unscoped keys without explicit tenant_id must return 400; scoped keys derive tenant from auth context without requiring explicit tenant_id in the request
+
+### 2026-03-28 — Cryptography CVE-2026-34073 Remediation (Admin Gateway)
+Area: Admin Gateway · Dependencies · Security
+
+Issue:
+cryptography was pinned to 46.0.5 in admin_gateway/requirements.txt, which is vulnerable to CVE-2026-34073. This caused pip-audit to fail in CI under the fg-fast guard lane.
+
+Resolution:
+Updated cryptography to 46.0.6 in admin_gateway/requirements.txt. Verified no remaining references to 46.0.5 across repository. Rebuilt environment and confirmed pip-audit passes locally.
+
+AI Notes:
+Dependency trees are audited separately for core and admin_gateway. Security fixes must be applied consistently across all requirement sets to satisfy CI enforcement.
