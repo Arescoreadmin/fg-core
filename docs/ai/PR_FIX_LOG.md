@@ -255,3 +255,20 @@ Updated cryptography to 46.0.6 in admin_gateway/requirements.txt. Verified no re
 
 AI Notes:
 Dependency trees are audited separately for core and admin_gateway. Security fixes must be applied consistently across all requirement sets to satisfy CI enforcement.
+
+---
+
+### 2026-03-28 — Task 1.3: Read-Path Tenant Isolation Audit and Regression Tests
+
+**Area:** Tenant Isolation · Read Paths · Security Tests
+
+**Issue:**
+Task 1.3 required audit of all read paths in allowed files to confirm every DB query is filtered by `tenant_id`. Validation target required proof that cross-tenant reads return empty or not-found. Only 1 test matched `pytest -q tests/security -k 'tenant and read'`, insufficient to prove the invariant across key read surfaces (`/decisions` list, `/admin/audit/search`).
+
+**Resolution:**
+Audited all read endpoints in `api/decisions.py`, `api/stats.py`, `api/keys.py`, `api/admin.py`, `api/ui_dashboards.py`, and `api/control_plane_v2.py`. All read paths confirmed compliant: `require_bound_tenant`, `bind_tenant_id`, and `_resolve_msp_tenant` are applied before every DB query, and `bind_tenant_id` always raises (400/403) or returns a non-empty string — it can never return None. Added `tests/security/test_read_path_tenant_isolation.py` with two regression tests proving that cross-tenant data does not leak through `/decisions` and `/admin/audit/search`.
+
+**AI Notes:**
+- Do NOT remove `test_decisions_tenant_read_isolation` or `test_audit_search_tenant_read_isolation`; they prove the cross-tenant read isolation invariant
+- `build_app()` must be called before `get_engine()` in tests so both use the same tmp_path SQLite DB
+- `bind_tenant_id` never returns None or empty string; all callers can safely use its return value as a filter key without null-checking
