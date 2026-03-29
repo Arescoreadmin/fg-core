@@ -9,7 +9,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-from api.db import get_engine, get_sessionmaker
+from api.auth_scopes import mint_key
+from api.db import get_engine, get_sessionmaker, reset_engine_cache
 from api.db_models import ApprovalLog
 from api.main import build_app
 from api.signed_artifacts import canonical_hash
@@ -38,11 +39,13 @@ def client(tmp_path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     db_path = tmp_path / "attestation.db"
     monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
     monkeypatch.setenv("FG_ENV", "test")
-    monkeypatch.setenv("FG_API_KEY", "test-api-key")
-    monkeypatch.setenv("FG_AUTH_ENABLED", "0")
+    monkeypatch.setenv("FG_AUTH_ENABLED", "1")
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
     _set_signing_env(monkeypatch)
-    app = build_app(auth_enabled=False)
-    return TestClient(app, headers={"X-API-Key": "test-api-key"})
+    reset_engine_cache()
+    app = build_app(auth_enabled=True)
+    key = mint_key("attestation:admin", tenant_id="t1")
+    return TestClient(app, headers={"X-API-Key": key})
 
 
 def test_bundle_sign_and_verify_ok(client: TestClient):

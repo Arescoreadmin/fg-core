@@ -448,3 +448,152 @@ Removed `import tempfile`. No semantic effect.
 - Do NOT remove `tenant_id` from `create_anchor_record()` — it is now part of the tamper-evident anchor hash
 - `tenant_id: null` in anchor records produced by legacy callers is intentional and distinguishable from tenant-scoped records
 - codex_gates.sh failures are in tools/testing/control_tower_trust_proof.py and tools/testing/harness/* — pre-existing, out of scope
+
+---
+
+### 2026-03-29 — Task 1.6: Tenant Context Integrity Enforcement
+
+**Area:** Tenant Isolation · Attestation Routes · Spoof Prevention
+
+**Issue:**
+Four routes in `api/attestation.py` accepted tenant context from untrusted request input without `bind_tenant_id` enforcement, creating tenant spoofing vulnerabilities:
+- `GET /approvals/{subject_type}/{subject_id}`: read `tenant_id` directly from `X-Tenant-Id` header → unscoped `attestation:admin` key could forge header to read any tenant's approval records
+- `POST /approvals`: read `tenant_id` from request body → unscoped key could write approvals for any tenant
+- `POST /approvals/verify`: read `tenant_id` from request body → unscoped key could verify approvals for any tenant
+- `GET /modules/enforce/{module_id}`: read `tenant_id` directly from `X-Tenant-Id` header → unscoped key could check module enforcement for any tenant
+
+The `AuthGateMiddleware` header check (X-Tenant-Id vs key-bound tenant) only fires when the key has a bound tenant_id. For unscoped `attestation:admin` keys (no tenant binding), the middleware check is skipped and the handler directly trusted the forged header/body value.
+
+**Spoofing Surfaces Audited:**
+- `api/attestation.py` — 4 routes: NON-COMPLIANT → fixed
+- `api/ingest.py` — COMPLIANT (uses `bind_tenant_id` via `_resolve_tenant_id`)
+- `api/control_tower_snapshot.py` — COMPLIANT (`requested_tenant_id` from query is metadata-only, never used for data access)
+- `api/middleware/auth_gate.py` — COMPLIANT (middleware-level protection for header conflicts on bound keys)
+- `api/token_useage.py` — NOT A SECURITY ISSUE (reads header for observability metrics only)
+- All other in-scope endpoints — COMPLIANT (use `require_bound_tenant` or `bind_tenant_id`)
+
+**Resolution:**
+- `list_approvals`: changed `tenant_id: str = Header(...)` to `x_tenant_id: Optional[str] = Header(default=None, ...)` + added `request: Request` + added `bind_tenant_id(request, x_tenant_id, require_explicit_for_unscoped=True)` call
+- `enforce_module`: same pattern
+- `create_approval`: added `request: Request` + added `bind_tenant_id(request, req.tenant_id, require_explicit_for_unscoped=True)` overwriting `req.tenant_id` with the verified value
+- `verify_approvals`: same pattern as `create_approval`
+- Updated `tests/test_attestation_signing.py` client fixture to use auth_enabled=True with tenant-bound key (required for the enforced auth context)
+- Added `tests/security/test_tenant_context_spoof.py` with 9 regression tests proving: header spoof rejected, body spoof rejected, unscoped key fails closed, mixed-input conflict rejected, no cross-tenant write side effect, baseline success case
+- Regenerated `tools/ci/route_inventory.json` (routes now correctly classified as `tenant_bound: True`)
+- Updated contract authority markers (OpenAPI schema: X-Tenant-Id changed from required to optional for two routes)
+- Updated `docs/SOC_EXECUTION_GATES_2026-02-15.md` for SOC review sync gate
+
+**Tests Added:**
+- `tests/security/test_tenant_context_spoof.py` (9 tests matching `tenant and spoof`)
+
+**Gate Results:**
+- `pytest -q tests/security -k 'tenant and spoof'`: 9 passed
+- `pytest -q tests/test_attestation_signing.py`: 15 passed (no regressions)
+- `make fg-fast`: pre-existing `ci-admin (timeout) → SOC-P0-007` only; all other gates pass
+
+**AI Notes:**
+- Do NOT revert `bind_tenant_id` calls in `list_approvals`, `enforce_module`, `create_approval`, or `verify_approvals`
+- The `X-Tenant-Id` header on attestation routes is no longer required (Optional) — callers with scoped keys do not need to send it
+- `tests/test_attestation_signing.py` now uses auth_enabled=True with tenant-bound key; do NOT revert to auth_enabled=False
+- SOC-P0-007 (ci-admin timeout) is pre-existing and unrelated to this task
+
+---
+
+### 2026-03-29 — Task 1.6 Gate Clarification: Contract Authority Resolved + SOC-P0-007 Exception
+
+**Area:** CI Gates · Contract Authority · Task 1.6 Completion Record
+
+**Gate Status (Canonical):**
+
+All Task 1.6 gate results are unambiguous as of this entry:
+
+1) `pytest -q tests/security -k 'tenant and spoof'` — **PASS** (9 tests)
+2) `make fg-fast` — **PASS** with one explicit allowed exception (see below)
+
+**Contract Authority (RESOLVED):**
+A contract authority alignment failure existed on the baseline prior to Task 1.6. Task 1.6 changes (changing `X-Tenant-Id` from required to optional on attestation routes) updated the OpenAPI contract. `make contract-authority-refresh` was run to write the correct `Contract-Authority-SHA256` marker into `BLUEPRINT_STAGED.md` and `CONTRACT.md`. The contract authority check now **passes**. This failure is **resolved** and is not active.
+
+**Pre-Existing Allowed Exception (SOC-P0-007):**
+- Gate: `ci-admin (timeout) → SOC-P0-007`
+- Status: pre-existing, unrelated to attestation tenant enforcement
+- Reproducible on baseline without Task 1.6 changes
+- NOT worsened by this task
+- This is the **only** remaining gate exception
+
+**No New Failures:**
+Task 1.6 introduced zero new gate failures. All task-scoped validations pass.
+
+**AI Notes:**
+- Do NOT describe contract authority as an active failure; it is resolved
+- The only active gate exception after Task 1.6 is SOC-P0-007 (ci-admin timeout)
+- Both the contract authority fix and the route inventory regeneration are in-scope consequences of the Task 1.6 attestation tenant enforcement changes
+
+---
+
+### 2026-03-29 — Platform Inventory Deterministic Artifact Drift (Task 1.6 Follow-up)
+
+**Area:** CI Artifacts · Platform Inventory · Governance Fingerprint
+
+**Issue:**
+`artifacts/platform_inventory.det.json` was out of sync with its upstream inputs after Task 1.6 regenerated `tools/ci/route_inventory.json` and `tools/ci/plane_registry_snapshot.json`. The `governance_fingerprint` in the committed artifact reflected the pre-Task-1.6 input state. The fg-required harness recomputes this fingerprint and detected the mismatch.
+
+**Root Cause:**
+Upstream input change (NOT a manual edit):
+- `tools/ci/route_inventory.json` regenerated in Task 1.6 (attestation routes now `tenant_bound: True`)
+- `tools/ci/plane_registry_snapshot.json` timestamp updated during Task 1.6 route inventory regeneration
+- These are legitimate inputs to `governance_fingerprint` computation
+
+**Resolution:**
+Ran canonical generation tool: `python scripts/generate_platform_inventory.py --allow-gaps`
+- `governance_fingerprint` updated from `cb3a2b04...` to `24e7c25a...`
+- Determinism verified: two consecutive runs produce identical SHA256 (`ce86c534...`)
+- No other files changed
+
+**Gate Results:**
+- `make fg-fast`: all gates pass; only pre-existing `ci-admin (timeout) → SOC-P0-007` remains
+- Artifact hash stable across runs: determinism confirmed
+
+**AI Notes:**
+- Do NOT manually edit `governance_fingerprint` in `platform_inventory.det.json`
+- Always regenerate via `python scripts/generate_platform_inventory.py --allow-gaps`
+- Artifact drift will recur whenever `tools/ci/route_inventory.json` or other upstream inputs change; regeneration is required after such changes
+
+---
+
+### 2026-03-29 — Working Tree Mutation After fg-fast Lane (Task 1.6 Addendum)
+
+**Area:** CI Harness · fg-required · Working Tree Integrity
+
+**Issue:**
+CI reported "working tree mutated at after-lane: fg-fast" targeting `artifacts/platform_inventory.det.json`. The fg-required harness enforces working tree cleanliness after each lane via `_check_working_tree_clean(f"after-lane:{lane}")`.
+
+**Root Cause (Class B — Stale Committed Artifact):**
+Root cause was a stale committed `governance_fingerprint` in `artifacts/platform_inventory.det.json`, **not** an implicit write during fg-fast execution. Specifically:
+
+- Task 1.6 updated `tools/ci/route_inventory.json` (a GOVERNANCE_INPUT) and `tools/ci/plane_registry_snapshot.json`
+- The committed `artifacts/platform_inventory.det.json` still carried the pre-Task-1.6 `governance_fingerprint`
+- When `generate_platform_inventory.py` ran (via self-heal or manual invocation), it produced content with the NEW fingerprint, making the committed version stale
+
+**Mutation Source (Confirmed Absent):**
+Full trace confirms: **nothing in `make fg-fast` writes to `artifacts/platform_inventory.det.json` or `artifacts/platform_inventory.json`**:
+- `route-inventory-audit` → `check_route_inventory.py` (no `--write`) → `_write_artifacts_only()` writes only: `route_inventory_summary.json`, `plane_registry_snapshot.json/.sha256`, `contract_routes.json`, `build_meta.json`, `attestation_bundle.sha256`, `topology.sha256` (all in `artifacts/`, all gitignored)
+- `fg-contract` → `contracts-gen` → `contracts_gen.py` / `contracts_gen_core.py`: do NOT write `tools/ci/contract_routes.json`
+- No other fg-fast step calls `generate_platform_inventory.py`
+- The sole writer of `platform_inventory.det.json` is `scripts/generate_platform_inventory.py`; it is called only by fg_required.py self-heal and `control_tower_doctor.py --regen-platform-inventory`
+
+**Resolution:**
+Committed `artifacts/platform_inventory.det.json` and `artifacts/platform_inventory.json` with correct `governance_fingerprint` in commit `03c9390` (see Platform Inventory Drift entry above). The committed artifact now matches the deterministic output of `generate_platform_inventory.py --allow-gaps`.
+
+**Determinism Proof:**
+Three consecutive runs of `python scripts/generate_platform_inventory.py --allow-gaps` all produce SHA256 `ce86c5341b5997386c0f16156806853b67fa179`. `git status --short` shows nothing dirty after each run.
+
+**Post-fg-fast Cleanliness:**
+After `route-inventory-audit` (the fg-fast step most likely to cause artifact drift): `git status --short` is empty. The force-tracked artifact files are not touched by any fg-fast step.
+
+**Self-Heal Note:**
+`fg_required.py` contains a self-heal mechanism at `after-lane:fg-fast`: if ONLY `artifacts/platform_inventory.det.json` is dirty, it re-runs `generate_platform_inventory.py --allow-gaps`. This guard handles future drift if upstream governance inputs change without a corresponding artifact regeneration. The self-heal is an appropriate fallback but must not be relied upon as a substitute for keeping the committed artifact current.
+
+**AI Notes:**
+- Do NOT add calls to `generate_platform_inventory.py` inside `make fg-fast` or its dependencies; generation must remain an explicit step
+- If `tools/ci/route_inventory.json`, `tools/ci/plane_registry_snapshot.json`, or `tools/ci/contract_routes.json` change, regenerate `artifacts/platform_inventory.det.json` via `make platform-inventory` or `python scripts/generate_platform_inventory.py --allow-gaps` and commit the result
+- The working tree mutation check is correctly designed; no changes to fg_required.py are required
