@@ -272,3 +272,39 @@ Audited all read endpoints in `api/decisions.py`, `api/stats.py`, `api/keys.py`,
 - Do NOT remove `test_decisions_tenant_read_isolation` or `test_audit_search_tenant_read_isolation`; they prove the cross-tenant read isolation invariant
 - `build_app()` must be called before `get_engine()` in tests so both use the same tmp_path SQLite DB
 - `bind_tenant_id` never returns None or empty string; all callers can safely use its return value as a filter key without null-checking
+
+---
+
+### 2026-03-29 — Task 1.4: Export Path Tenant Isolation Audit and Regression Tests
+
+**Area:** Tenant Isolation · Export Paths · Audit Logging
+
+**Issue:**
+Task 1.4 required audit of all export paths and proof that tenant boundary enforcement and auditability are satisfied. Three export endpoints lacked audit log entries for the export action itself:
+`GET /audit/export` and `GET /audit/exams/{exam_id}/export` (api/audit.py), and `POST /admin/audit/export` (api/admin.py). No `audit_admin_action` call was emitted, leaving no SecurityAuditLog record with actor_id and trace_id for these operations.
+
+**Resolution:**
+Added `audit_admin_action` calls to `audit_export` and `export_exam` in `api/audit.py` (with new import), and to `export_audit_events` in `api/admin.py`. Each call records action, tenant_id, actor_id (from request.state.auth), and correlation_id/trace_id (from request.state.request_id). Added `tests/security/test_export_path_tenant_isolation.py` with 5 regression tests proving: cross-tenant export fails, missing tenant context fails, and export action records a SecurityAuditLog entry with correct tenant_id and actor_id. All existing audit tests pass. `pytest -q tests/security -k 'tenant and export'` passes (10 tests). `make fg-fast` pre-existing SOC-P0-007 (ci-admin timeout) failure was present before this task and is not introduced here.
+
+**Audited export paths:**
+- `GET /audit/export` — COMPLIANT (tenant boundary); audit event added
+- `GET /audit/exams/{exam_id}/export` — COMPLIANT (tenant boundary); audit event added
+- `POST /admin/audit/export` — COMPLIANT (tenant boundary via bind_tenant_id); audit event added
+- `GET /ui/audit/export-link` — COMPLIANT (link pointer only, tenant scoped, no data export)
+- `GET /admin/evidence/export/{device_id}` — COMPLIANT (audit event via _audit_action already present)
+- `GET /control-plane/v2/ledger/anchor` — COMPLIANT (ledger.append_event with actor_id + trace_id)
+- `GET /control-plane/evidence/bundle` — COMPLIANT (ledger.append_event with actor_id + trace_id)
+- `POST /invoices/{invoice_id}/evidence` — COMPLIANT (tenant boundary); out of scope for audit event (billing surface, separate subsystem)
+- `POST /credits/{credit_note_id}/evidence` — COMPLIANT (tenant boundary); out of scope for audit event (billing surface, separate subsystem)
+
+**Tests added:**
+- `tests/security/test_export_path_tenant_isolation.py` (5 tests)
+
+**Gate results:**
+- `pytest -q tests/security -k 'tenant and export'`: 10 passed
+- `make fg-fast`: pre-existing SOC-P0-007 (ci-admin timeout) failure only; not introduced by this task
+
+**AI Notes:**
+- Do NOT remove `audit_admin_action` calls from `audit_export`, `export_exam` (api/audit.py), or `export_audit_events` (api/admin.py)
+- Do NOT remove tests in `test_export_path_tenant_isolation.py`; they prove export audit event recording
+- The SOC-P0-007 / ci-admin timeout failure in soc-manifest-verify is pre-existing and not related to this task

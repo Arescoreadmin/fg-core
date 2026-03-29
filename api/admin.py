@@ -915,6 +915,12 @@ async def export_audit_events(
     effective_tenant = bind_tenant_id(
         request, payload.tenant_id, require_explicit_for_unscoped=True
     )
+    audit_admin_action(
+        action="admin_audit_export",
+        tenant_id=effective_tenant,
+        request=request,
+        details={"format": payload.format, "page_size": payload.page_size},
+    )
     filters = _audit_filters(
         tenant_id=effective_tenant,
         action=payload.action,

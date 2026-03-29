@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from api.auth_scopes import require_bound_tenant, require_scopes
 from api.db import get_engine
 from api.db_models import AuditLedgerRecord
+from api.security_audit import audit_admin_action
 from services.audit_engine import AuditEngine
 from services.audit_engine.engine import AuditIntegrityError
 from services.compliance_registry import ComplianceRegistry
@@ -66,6 +67,12 @@ def audit_export(
     end: str = Query(...),
 ) -> dict[str, object]:
     tenant_id = require_bound_tenant(request)
+    audit_admin_action(
+        action="audit_bundle_export",
+        tenant_id=tenant_id,
+        request=request,
+        details={"start": start, "end": end},
+    )
     engine = AuditEngine()
     try:
         return engine.export_bundle(
@@ -151,6 +158,12 @@ def run_exam(request: Request, body: ExamRunRequest) -> dict[str, str]:
 )
 def export_exam(exam_id: str, request: Request) -> dict[str, object]:
     tenant_id = require_bound_tenant(request)
+    audit_admin_action(
+        action="audit_exam_export",
+        tenant_id=tenant_id,
+        request=request,
+        details={"exam_id": exam_id},
+    )
     return AuditEngine().export_exam_bundle(
         exam_id=exam_id, app_openapi=request.app.openapi(), tenant_id=tenant_id
     )
