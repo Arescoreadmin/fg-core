@@ -144,6 +144,111 @@ def test_audit_bundle_export_missing_tenant_context_fails(
     )
 
 
+# ---------------------------------------------------------------------------
+# Audit ordering: failed export must NOT produce a success audit record
+# ---------------------------------------------------------------------------
+
+
+def test_admin_audit_export_invalid_status_filter_no_success_record(
+    app_client: TestClient,
+) -> None:
+    """Invalid status filter (400) must not write a success audit event."""
+    suffix = _suffix()
+    tenant = f"export-order-{suffix}"
+    key = mint_key("audit:read", tenant_id=tenant)
+
+    resp = app_client.post(
+        "/admin/audit/export",
+        headers={"X-API-Key": key},
+        json={"format": "json", "status": "INVALID_STATUS"},
+    )
+    assert resp.status_code == 400
+
+    engine = get_engine()
+    with Session(engine) as session:
+        row = session.execute(
+            select(SecurityAuditLog)
+            .where(SecurityAuditLog.event_type == "admin_action")
+            .where(SecurityAuditLog.reason == "admin_audit_export")
+            .where(SecurityAuditLog.tenant_id == tenant)
+            .order_by(SecurityAuditLog.id.desc())
+        ).scalar_one_or_none()
+
+    assert row is None, (
+        "failed export request (400) must not produce a success audit record"
+    )
+
+
+def test_audit_bundle_export_chain_failure_no_success_record(
+    tmp_path, monkeypatch
+) -> None:
+    """Broken chain (409) must not produce a success audit record."""
+    from types import SimpleNamespace
+
+    from api.audit import audit_export
+    from api.db import init_db, reset_engine_cache
+    from api.db_models import SecurityAuditLog
+    from api.security_audit import reset_auditor
+    from fastapi import HTTPException
+    from services.audit_engine.engine import AuditEngine, InvariantResult
+    from sqlalchemy.orm import Session
+
+    db_path = str(tmp_path / "chain-fail-audit.db")
+    monkeypatch.setenv("FG_SQLITE_PATH", db_path)
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv(
+        "FG_AUDIT_HMAC_KEY_CURRENT", "api-audit-key-api-audit-key-api-0000"
+    )
+    monkeypatch.setenv("FG_AUDIT_HMAC_KEY_ID_CURRENT", "ak-api")
+    monkeypatch.setenv("FG_AUDIT_TENANT_ID", "tenant-chain")
+    reset_engine_cache()
+    reset_auditor()
+    init_db(sqlite_path=db_path)
+
+    eng = AuditEngine()
+    monkeypatch.setattr(
+        eng, "_invariants", lambda: [InvariantResult("s", "pass", "ok")]
+    )
+    eng.run_cycle("light")
+    # Rotate key so chain verification fails
+    monkeypatch.setenv(
+        "FG_AUDIT_HMAC_KEY_CURRENT", "different-key-different-key-diff-0000"
+    )
+    monkeypatch.setenv("FG_AUDIT_HMAC_KEY_ID_CURRENT", "ak-new")
+    monkeypatch.delenv("FG_AUDIT_HMAC_KEY_PREV", raising=False)
+    monkeypatch.setattr("api.audit.AuditEngine", lambda: eng)
+
+    class DummyReq:
+        state = SimpleNamespace(
+            tenant_id="tenant-chain",
+            tenant_is_key_bound=True,
+            auth=SimpleNamespace(key_prefix="test-key-chain", scopes={"audit:export"}),
+            request_id="test-req-chain-order-001",
+        )
+        app = SimpleNamespace(openapi=lambda: {"openapi": "3.1.0"})
+        headers: dict = {}
+        client = None
+        method = "GET"
+        url = SimpleNamespace(path="/audit/export")
+
+    with pytest.raises(HTTPException) as exc:
+        audit_export(DummyReq(), "1970-01-01T00:00:00Z", "9999-12-31T23:59:59Z")
+    assert exc.value.status_code == 409
+
+    from api.db import get_engine as _get_engine
+
+    with Session(_get_engine()) as session:
+        row = session.execute(
+            select(SecurityAuditLog)
+            .where(SecurityAuditLog.event_type == "admin_action")
+            .where(SecurityAuditLog.reason == "audit_bundle_export")
+        ).scalar_one_or_none()
+
+    assert row is None, (
+        "failed export (chain broken / 409) must not produce a success audit record"
+    )
+
+
 def test_audit_exam_export_cross_tenant_fails(tmp_path, monkeypatch) -> None:
     """AuditEngine.export_exam_bundle rejects a wrong-tenant request (engine layer)."""
     from api.db import init_db, reset_engine_cache

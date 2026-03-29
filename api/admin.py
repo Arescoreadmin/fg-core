@@ -915,12 +915,6 @@ async def export_audit_events(
     effective_tenant = bind_tenant_id(
         request, payload.tenant_id, require_explicit_for_unscoped=True
     )
-    audit_admin_action(
-        action="admin_audit_export",
-        tenant_id=effective_tenant,
-        request=request,
-        details={"format": payload.format, "page_size": payload.page_size},
-    )
     filters = _audit_filters(
         tenant_id=effective_tenant,
         action=payload.action,
@@ -1020,16 +1014,25 @@ async def export_audit_events(
         response.headers["Content-Disposition"] = (
             f'attachment; filename="{filename}.csv"'
         )
-        return response
+    else:
 
-    def _json_stream():
-        for event in _event_rows():
-            row = event.model_dump()
-            row["ts"] = event.ts.isoformat()
-            yield json.dumps(row) + "\n"
+        def _json_stream():
+            for event in _event_rows():
+                row = event.model_dump()
+                row["ts"] = event.ts.isoformat()
+                yield json.dumps(row) + "\n"
 
-    response = StreamingResponse(_json_stream(), media_type="application/x-ndjson")
-    response.headers["Content-Disposition"] = f'attachment; filename="{filename}.json"'
+        response = StreamingResponse(_json_stream(), media_type="application/x-ndjson")
+        response.headers["Content-Disposition"] = (
+            f'attachment; filename="{filename}.json"'
+        )
+
+    audit_admin_action(
+        action="admin_audit_export",
+        tenant_id=effective_tenant,
+        request=request,
+        details={"format": payload.format, "page_size": payload.page_size},
+    )
     return response
 
 

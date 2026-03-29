@@ -345,3 +345,36 @@ Ran `ruff format tests/security/test_export_path_tenant_isolation.py`. Two forma
 
 **AI Notes:**
 - Do NOT re-introduce multi-line wrapping on those two call sites; ruff will reformat them back to single-line
+
+---
+
+### 2026-03-29 — Task 1.4 Audit-Trail Correctness: Move Export Audit Events to Post-Success
+
+**Area:** Audit Logging · Export Paths · Correctness
+
+**Issue:**
+Review identified that the three `audit_admin_action` calls introduced in Task 1.4 were placed BEFORE the export operation completed, creating false-positive success audit records when requests failed:
+- `audit_export` (api/audit.py): logged before `engine.export_bundle()`, which can raise `AuditIntegrityError` (409). A broken-chain export wrote a success audit record.
+- `export_exam` (api/audit.py): logged before `export_exam_bundle()`, which raises `AuditTamperDetected` on cross-tenant. A cross-tenant export attempt wrote a success audit record.
+- `export_audit_events` (api/admin.py): logged before `_audit_filters()`, which raises `HTTPException(400)` on invalid `tenant_id` format or invalid `status` filter value. An invalid-request export wrote a success audit record.
+
+**Resolution:**
+- `audit_export`: moved `audit_admin_action` to after `engine.export_bundle()` returns successfully (capturing result into a local variable, then logging, then returning).
+- `export_exam`: moved `audit_admin_action` to after `export_exam_bundle()` returns successfully.
+- `export_audit_events`: removed early-return pattern for CSV branch; moved `audit_admin_action` to a single point after both response objects are constructed (after `_audit_filters` validation and generator setup), just before `return response`.
+No production audit invariants weakened; required fields remain enforced.
+
+**Tests added** (in `tests/security/test_export_path_tenant_isolation.py`):
+- `test_admin_audit_export_invalid_status_filter_no_success_record`: proves 400 on invalid status does not write a success audit record
+- `test_audit_bundle_export_chain_failure_no_success_record`: proves 409 on broken chain does not write a success audit record
+
+**Gate results:**
+- `pytest -q tests/security/test_export_path_tenant_isolation.py`: 7 passed
+- `pytest -q tests/security -k 'tenant and export'`: 12 passed
+- `pytest -q tests/test_audit_exam_api.py -k export`: 1 passed
+- `make fg-fast`: pre-existing SOC-P0-007 only
+
+**AI Notes:**
+- Do NOT move `audit_admin_action` back before the export operation in any of these three endpoints
+- `audit_bundle_export` and `audit_exam_export` events only appear when the export succeeds; failed exports produce no success record
+- `admin_audit_export` event only appears after `_audit_filters` validation passes and response is constructed
