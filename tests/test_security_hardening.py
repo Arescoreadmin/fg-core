@@ -69,7 +69,9 @@ class TestApiKeyExtraction:
         mock_request.url.path = "/ui/feed"
 
         with patch(
-            "api.auth_scopes.resolution.is_production_env", return_value=False, create=True
+            "api.auth_scopes.resolution.is_production_env",
+            return_value=False,
+            create=True,
         ):
             result = _extract_key(mock_request, x_api_key=None)
             assert result == "valid_cookie_key"
