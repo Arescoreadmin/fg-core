@@ -557,3 +557,43 @@ Ran canonical generation tool: `python scripts/generate_platform_inventory.py --
 - Do NOT manually edit `governance_fingerprint` in `platform_inventory.det.json`
 - Always regenerate via `python scripts/generate_platform_inventory.py --allow-gaps`
 - Artifact drift will recur whenever `tools/ci/route_inventory.json` or other upstream inputs change; regeneration is required after such changes
+
+---
+
+### 2026-03-29 — Working Tree Mutation After fg-fast Lane (Task 1.6 Addendum)
+
+**Area:** CI Harness · fg-required · Working Tree Integrity
+
+**Issue:**
+CI reported "working tree mutated at after-lane: fg-fast" targeting `artifacts/platform_inventory.det.json`. The fg-required harness enforces working tree cleanliness after each lane via `_check_working_tree_clean(f"after-lane:{lane}")`.
+
+**Root Cause (Class B — Stale Committed Artifact):**
+Root cause was a stale committed `governance_fingerprint` in `artifacts/platform_inventory.det.json`, **not** an implicit write during fg-fast execution. Specifically:
+
+- Task 1.6 updated `tools/ci/route_inventory.json` (a GOVERNANCE_INPUT) and `tools/ci/plane_registry_snapshot.json`
+- The committed `artifacts/platform_inventory.det.json` still carried the pre-Task-1.6 `governance_fingerprint`
+- When `generate_platform_inventory.py` ran (via self-heal or manual invocation), it produced content with the NEW fingerprint, making the committed version stale
+
+**Mutation Source (Confirmed Absent):**
+Full trace confirms: **nothing in `make fg-fast` writes to `artifacts/platform_inventory.det.json` or `artifacts/platform_inventory.json`**:
+- `route-inventory-audit` → `check_route_inventory.py` (no `--write`) → `_write_artifacts_only()` writes only: `route_inventory_summary.json`, `plane_registry_snapshot.json/.sha256`, `contract_routes.json`, `build_meta.json`, `attestation_bundle.sha256`, `topology.sha256` (all in `artifacts/`, all gitignored)
+- `fg-contract` → `contracts-gen` → `contracts_gen.py` / `contracts_gen_core.py`: do NOT write `tools/ci/contract_routes.json`
+- No other fg-fast step calls `generate_platform_inventory.py`
+- The sole writer of `platform_inventory.det.json` is `scripts/generate_platform_inventory.py`; it is called only by fg_required.py self-heal and `control_tower_doctor.py --regen-platform-inventory`
+
+**Resolution:**
+Committed `artifacts/platform_inventory.det.json` and `artifacts/platform_inventory.json` with correct `governance_fingerprint` in commit `03c9390` (see Platform Inventory Drift entry above). The committed artifact now matches the deterministic output of `generate_platform_inventory.py --allow-gaps`.
+
+**Determinism Proof:**
+Three consecutive runs of `python scripts/generate_platform_inventory.py --allow-gaps` all produce SHA256 `ce86c5341b5997386c0f16156806853b67fa179`. `git status --short` shows nothing dirty after each run.
+
+**Post-fg-fast Cleanliness:**
+After `route-inventory-audit` (the fg-fast step most likely to cause artifact drift): `git status --short` is empty. The force-tracked artifact files are not touched by any fg-fast step.
+
+**Self-Heal Note:**
+`fg_required.py` contains a self-heal mechanism at `after-lane:fg-fast`: if ONLY `artifacts/platform_inventory.det.json` is dirty, it re-runs `generate_platform_inventory.py --allow-gaps`. This guard handles future drift if upstream governance inputs change without a corresponding artifact regeneration. The self-heal is an appropriate fallback but must not be relied upon as a substitute for keeping the committed artifact current.
+
+**AI Notes:**
+- Do NOT add calls to `generate_platform_inventory.py` inside `make fg-fast` or its dependencies; generation must remain an explicit step
+- If `tools/ci/route_inventory.json`, `tools/ci/plane_registry_snapshot.json`, or `tools/ci/contract_routes.json` change, regenerate `artifacts/platform_inventory.det.json` via `make platform-inventory` or `python scripts/generate_platform_inventory.py --allow-gaps` and commit the result
+- The working tree mutation check is correctly designed; no changes to fg_required.py are required
