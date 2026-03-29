@@ -164,8 +164,7 @@ def _dev_enabled() -> bool:
 
 
 def _is_production_runtime() -> bool:
-    env = (os.getenv("FG_ENV") or "").strip().lower()
-    return env in {"prod", "production"}
+    return is_production_env()
 
 
 def _sqlite_path_from_env() -> str:

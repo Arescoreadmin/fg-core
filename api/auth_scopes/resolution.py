@@ -225,21 +225,12 @@ def _extract_key(request: Request, x_api_key: Optional[str]) -> Optional[str]:
     """
     Extract API key from request.
 
-    Security: Keys are ONLY accepted from:
-      1. X-API-Key header (preferred)
-      2. Cookie (for UI sessions)
+    Security: Keys are accepted only from X-API-Key header.
 
     Query parameters are NOT supported.
     """
     if x_api_key and str(x_api_key).strip():
         return str(x_api_key).strip()
-
-    cookie_name = (
-        os.getenv("FG_UI_COOKIE_NAME") or "fg_api_key"
-    ).strip() or "fg_api_key"
-    ck = (request.cookies.get(cookie_name) or "").strip()
-    if ck:
-        return ck
 
     return None
 

@@ -6,7 +6,7 @@ from api.auth_scopes import mint_key
 from api.main import build_app
 
 
-def test_auth_gate_accepts_cookie_when_header_missing(monkeypatch):
+def test_auth_gate_rejects_cookie_when_header_missing(monkeypatch):
     # Force auth ON
     monkeypatch.setenv("FG_AUTH_ENABLED", "1")
     api_key = mint_key("stats:read", tenant_id="test-tenant")
@@ -22,4 +22,8 @@ def test_auth_gate_accepts_cookie_when_header_missing(monkeypatch):
         # Hit a protected endpoint WITHOUT header, ONLY cookie
         r = client.get("/stats")
 
-        assert r.status_code == 200, r.text
+        assert r.status_code == 401, r.text
+
+        # Header-based auth path remains valid (service-to-service model)
+        r_ok = client.get("/stats", headers={"X-API-Key": api_key})
+        assert r_ok.status_code == 200, r_ok.text

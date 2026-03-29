@@ -597,3 +597,49 @@ After `route-inventory-audit` (the fg-fast step most likely to cause artifact dr
 - Do NOT add calls to `generate_platform_inventory.py` inside `make fg-fast` or its dependencies; generation must remain an explicit step
 - If `tools/ci/route_inventory.json`, `tools/ci/plane_registry_snapshot.json`, or `tools/ci/contract_routes.json` change, regenerate `artifacts/platform_inventory.det.json` via `make platform-inventory` or `python scripts/generate_platform_inventory.py --allow-gaps` and commit the result
 - The working tree mutation check is correctly designed; no changes to fg_required.py are required
+
+---
+
+### 2026-03-29 — Task 2.1 Core Human/Auth Surface Removal (Hosted Profiles + Cookie Path)
+
+**Area:** Auth Boundary · Core Runtime Exposure · Hosted Profiles
+
+**Issue:**
+Core still accepted browser-style cookie auth via `api.auth_scopes.resolution._extract_key` (cookie fallback) and still mounted `/ui/*` routes in `FG_ENV=staging` because `api.main._is_production_runtime()` treated only `prod|production` as hosted. This violated Task 2.1 by allowing direct human/browser auth behavior in core and exposing human-facing UI/auth paths in a supported hosted profile.
+
+**Resolution:**
+Applied minimal boundary hardening:
+- Updated `api.main._is_production_runtime()` to use canonical `is_production_env()` (covers `prod` and `staging`), so hosted profiles do not mount `/ui/*` routes.
+- Removed cookie fallback from `_extract_key`; core now accepts API keys only via `X-API-Key` header.
+- Added strict regression tests proving hosted profiles reject UI/browser paths and runtime route inventory for hosted profile has no `/ui` surface.
+- Updated cookie fallback test to assert rejection and retain positive header-auth verification (service path preserved).
+
+**Strict Validation Evidence:**
+- Hosted profile (`staging` and `prod`) requests to browser-oriented endpoints (`/ui`, `/ui/token`, `/ui/csrf`, `/ui/ai`, `/ui/ai/experience`) now return 404.
+- Runtime route inventory (from `app.router.routes`) in hosted profile contains no `/ui*` routes.
+- Direct cookie-only auth to protected core route returns 401; header-based key auth still returns 200.
+
+**AI Notes:**
+- Do NOT reintroduce cookie-based API-key extraction in core auth resolution.
+- Do NOT gate hosted UI exposure with ad-hoc env parsing that excludes `staging`; use canonical production-like env detection.
+
+---
+
+### 2026-03-29 — Task 2.1 Test Hardening Follow-up (No Startup-Bypass in Hosted-Profile Checks)
+
+**Area:** Auth Boundary · Security Tests · Hosted Profile Validation
+
+**Issue:**
+Initial Task 2.1 hosted-profile regression tests monkeypatched startup/invariant functions (`assert_prod_invariants`, `validate_startup_config`) to isolate route assertions. That weakened evidence quality by bypassing real hosted-profile startup enforcement during the test setup.
+
+**Resolution:**
+Reworked hosted-profile boundary tests to seed full production-like environment inputs and run through normal startup validation paths without bypassing invariant/startup validators. Tests now only stub DB init side effects and assert hosted (`staging`, `prod`) runtime still exposes no `/ui*` routes and rejects browser/UI entry paths.
+
+**Strict Validation Evidence:**
+- Hosted-profile test setup now uses production-like env seed values and canonical startup path.
+- `staging`/`prod` still return 404 for `/ui`, `/ui/token`, `/ui/csrf`, `/ui/ai`, `/ui/ai/experience`, `/ui/dash/testing-control-tower`.
+- Runtime route inventory assertion remains: hosted app route set contains no `/ui*` paths.
+
+**AI Notes:**
+- Do NOT bypass startup/invariant validation for hosted-profile auth-boundary tests unless unavoidable for deterministic isolation.
+- Keep boundary tests evidence-driven against real app assembly behavior.
