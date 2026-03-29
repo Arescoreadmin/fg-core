@@ -324,3 +324,24 @@ Extended `DummyReq` in `test_export_chain_failure_returns_non_200` to include `s
 **AI Notes:**
 - Do NOT revert the `DummyReq` back to a stub without `state.auth` and `state.request_id`; those fields are always present in real execution and the test must match that contract
 - Do NOT weaken `audit_admin_action` required-field validation to accommodate thin test stubs
+
+---
+
+### 2026-03-29 — Task 1.4 CI Format Repair: test_export_path_tenant_isolation.py
+
+**Area:** CI · Formatting · Test File
+
+**Issue:**
+`make fg-fast` failed with `would reformat: tests/security/test_export_path_tenant_isolation.py`. The new test file introduced in Task 1.4 had two call sites where ruff's line-length formatter expected the arguments to fit on a single line (a `monkeypatch.setenv(...)` call and an `engine.export_exam_bundle(...)` call), but they were written with multi-line wrapping that ruff would collapse.
+
+**Resolution:**
+Ran `ruff format tests/security/test_export_path_tenant_isolation.py`. Two formatting-only changes: collapsed a `monkeypatch.setenv(...)` and an `engine.export_exam_bundle(...)` call from multi-line to single-line. No semantic changes. All 5 tests in the file continue to pass.
+
+**Gate results:**
+- `ruff format --check tests/security/test_export_path_tenant_isolation.py`: clean
+- `pytest -q tests/security/test_export_path_tenant_isolation.py`: 5 passed
+- `pytest -q tests/security -k 'tenant and export'`: 10 passed
+- `make fg-fast`: pre-existing SOC-P0-007 only
+
+**AI Notes:**
+- Do NOT re-introduce multi-line wrapping on those two call sites; ruff will reformat them back to single-line

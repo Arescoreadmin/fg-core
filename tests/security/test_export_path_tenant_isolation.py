@@ -152,9 +152,7 @@ def test_audit_exam_export_cross_tenant_fails(tmp_path, monkeypatch) -> None:
     db_path = str(tmp_path / "exam-export-iso.db")
     monkeypatch.setenv("FG_SQLITE_PATH", db_path)
     monkeypatch.setenv("FG_ENV", "test")
-    monkeypatch.setenv(
-        "FG_AUDIT_HMAC_KEY_CURRENT", "test-audit-key-test-audit-key-te"
-    )
+    monkeypatch.setenv("FG_AUDIT_HMAC_KEY_CURRENT", "test-audit-key-test-audit-key-te")
     monkeypatch.setenv("FG_AUDIT_HMAC_KEY_ID_CURRENT", "ak-test")
     reset_engine_cache()
     init_db(sqlite_path=db_path)
@@ -168,6 +166,4 @@ def test_audit_exam_export_cross_tenant_fails(tmp_path, monkeypatch) -> None:
     )
 
     with pytest.raises(AuditTamperDetected):
-        engine.export_exam_bundle(
-            exam_id=exam_id, app_openapi={}, tenant_id="tenant-y"
-        )
+        engine.export_exam_bundle(exam_id=exam_id, app_openapi={}, tenant_id="tenant-y")
