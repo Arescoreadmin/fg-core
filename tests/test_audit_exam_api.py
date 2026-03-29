@@ -79,8 +79,20 @@ def test_export_chain_failure_returns_non_200(monkeypatch, isolated_audit_env):
         from types import SimpleNamespace
 
         class DummyReq:
-            state = SimpleNamespace(tenant_id="tenant-a", tenant_is_key_bound=True)
+            state = SimpleNamespace(
+                tenant_id="tenant-a",
+                tenant_is_key_bound=True,
+                auth=SimpleNamespace(
+                    key_prefix="test-key-audit-export",
+                    scopes={"audit:export"},
+                ),
+                request_id="test-req-chain-fail-001",
+            )
             app = SimpleNamespace(openapi=lambda: {"openapi": "3.1.0"})
+            headers: dict = {}
+            client = None
+            method = "GET"
+            url = SimpleNamespace(path="/audit/export")
 
         audit_export(DummyReq(), "1970-01-01T00:00:00Z", "9999-12-31T23:59:59Z")
     assert exc.value.status_code == 409

@@ -308,3 +308,19 @@ Added `audit_admin_action` calls to `audit_export` and `export_exam` in `api/aud
 - Do NOT remove `audit_admin_action` calls from `audit_export`, `export_exam` (api/audit.py), or `export_audit_events` (api/admin.py)
 - Do NOT remove tests in `test_export_path_tenant_isolation.py`; they prove export audit event recording
 - The SOC-P0-007 / ci-admin timeout failure in soc-manifest-verify is pre-existing and not related to this task
+
+---
+
+### 2026-03-29 — Task 1.4 CI Repair: test_audit_exam_api DummyReq Missing Auth/Request Metadata
+
+**Area:** Test Harness · Audit Export · CI Regression Fix
+
+**Issue:**
+`tests/test_audit_exam_api.py::test_export_chain_failure_returns_non_200` failed in CI with `AuditPersistenceError: FG-AUDIT-ADMIN-001: missing required admin audit fields: actor_id, scope, correlation_id`. Root cause: the test calls `audit_export()` directly (bypassing ASGI middleware) using a `DummyReq` stub that only provided `state.tenant_id` and `state.tenant_is_key_bound` — the minimal state `require_bound_tenant` needs. After Task 1.4 added `audit_admin_action` to `audit_export`, the stub lacked `state.auth` (for actor_id/scope) and `state.request_id` (for correlation_id), both of which `audit_admin_action` requires and which are always set by `AuthGateMiddleware` and `SecurityHeadersMiddleware` in production. No audit invariant was broken; the test stub was simply not updated to reflect what real middleware guarantees.
+
+**Resolution:**
+Extended `DummyReq` in `test_export_chain_failure_returns_non_200` to include `state.auth` (with `key_prefix` and `scopes`), `state.request_id`, and the HTTP-context attributes (`headers`, `client`, `method`, `url`) that `_extract_request_context` reads. The test still asserts the correct 409/AUDIT_CHAIN_BROKEN behavior and no production code was changed.
+
+**AI Notes:**
+- Do NOT revert the `DummyReq` back to a stub without `state.auth` and `state.request_id`; those fields are always present in real execution and the test must match that contract
+- Do NOT weaken `audit_admin_action` required-field validation to accommodate thin test stubs
