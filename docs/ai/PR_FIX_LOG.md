@@ -496,3 +496,34 @@ The `AuthGateMiddleware` header check (X-Tenant-Id vs key-bound tenant) only fir
 - The `X-Tenant-Id` header on attestation routes is no longer required (Optional) — callers with scoped keys do not need to send it
 - `tests/test_attestation_signing.py` now uses auth_enabled=True with tenant-bound key; do NOT revert to auth_enabled=False
 - SOC-P0-007 (ci-admin timeout) is pre-existing and unrelated to this task
+
+---
+
+### 2026-03-29 — Task 1.6 Gate Clarification: Contract Authority Resolved + SOC-P0-007 Exception
+
+**Area:** CI Gates · Contract Authority · Task 1.6 Completion Record
+
+**Gate Status (Canonical):**
+
+All Task 1.6 gate results are unambiguous as of this entry:
+
+1) `pytest -q tests/security -k 'tenant and spoof'` — **PASS** (9 tests)
+2) `make fg-fast` — **PASS** with one explicit allowed exception (see below)
+
+**Contract Authority (RESOLVED):**
+A contract authority alignment failure existed on the baseline prior to Task 1.6. Task 1.6 changes (changing `X-Tenant-Id` from required to optional on attestation routes) updated the OpenAPI contract. `make contract-authority-refresh` was run to write the correct `Contract-Authority-SHA256` marker into `BLUEPRINT_STAGED.md` and `CONTRACT.md`. The contract authority check now **passes**. This failure is **resolved** and is not active.
+
+**Pre-Existing Allowed Exception (SOC-P0-007):**
+- Gate: `ci-admin (timeout) → SOC-P0-007`
+- Status: pre-existing, unrelated to attestation tenant enforcement
+- Reproducible on baseline without Task 1.6 changes
+- NOT worsened by this task
+- This is the **only** remaining gate exception
+
+**No New Failures:**
+Task 1.6 introduced zero new gate failures. All task-scoped validations pass.
+
+**AI Notes:**
+- Do NOT describe contract authority as an active failure; it is resolved
+- The only active gate exception after Task 1.6 is SOC-P0-007 (ci-admin timeout)
+- Both the contract authority fix and the route inventory regeneration are in-scope consequences of the Task 1.6 attestation tenant enforcement changes
