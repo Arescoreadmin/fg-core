@@ -59,16 +59,18 @@ class TestApiKeyExtraction:
         result = _extract_key(mock_request, x_api_key="valid_header_key")
         assert result == "valid_header_key"
 
-    def test_cookie_key_extracted(self):
-        """Cookie-based API key should be extracted for UI sessions."""
+    def test_cookie_key_extracted_only_for_non_hosted_ui_path(self):
+        """Cookie key extraction is allowed only for non-hosted legacy /ui* flows."""
         from api.auth_scopes import _extract_key
 
         mock_request = MagicMock()
         mock_request.query_params = {}
+        mock_request.url.path = "/ui/feed"
         mock_request.cookies = {"fg_api_key": "valid_cookie_key"}
 
-        result = _extract_key(mock_request, x_api_key=None)
-        assert result == "valid_cookie_key"
+        with patch.dict(os.environ, {"FG_ENV": "test"}):
+            result = _extract_key(mock_request, x_api_key=None)
+            assert result == "valid_cookie_key"
 
     def test_header_takes_precedence_over_cookie(self):
         """Header should take precedence over cookie."""
@@ -76,10 +78,12 @@ class TestApiKeyExtraction:
 
         mock_request = MagicMock()
         mock_request.query_params = {}
+        mock_request.url.path = "/ui/feed"
         mock_request.cookies = {"fg_api_key": "cookie_key"}
 
-        result = _extract_key(mock_request, x_api_key="header_key")
-        assert result == "header_key"
+        with patch.dict(os.environ, {"FG_ENV": "test"}):
+            result = _extract_key(mock_request, x_api_key="header_key")
+            assert result == "header_key"
 
 
 class TestCanaryTokenDetection:

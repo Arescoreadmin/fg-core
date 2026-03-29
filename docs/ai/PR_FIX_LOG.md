@@ -679,3 +679,29 @@ Cookie fallback is **not permitted in hosted profiles** (`prod`/`staging`), but 
 - Do NOT re-enable cookie fallback for hosted profiles.
 - Keep cookie compatibility narrowly scoped to non-hosted `/ui*` only.
 - Any future change touching `api/auth_scopes/resolution.py` must include SOC review-sync doc updates.
+
+---
+
+### 2026-03-29 — Task 2.1 Addendum: Legacy Security-Hardening Test Alignment
+
+**Area:** Auth Boundary · Test Contract Alignment
+
+**Issue:**
+`tests/test_security_hardening.py::TestApiKeyExtraction::test_cookie_key_extracted` assumed global cookie fallback for `_extract_key`, expecting cookie extraction without simulating scoped conditions. After Task 2.1, cookie fallback is intentionally scoped (non-hosted + `/ui*` only), so the legacy assertion became stale.
+
+**Resolution:**
+Updated legacy test contract (no production auth logic changes):
+- Cookie extraction test now simulates valid scoped context (`FG_ENV=test`, request path `/ui/feed`, no header, cookie present).
+- Header-precedence test now uses the same `/ui*` non-hosted context.
+- Kept Task 2.1 production behavior unchanged: hosted profiles remain header-only; no global cookie fallback reintroduced.
+
+**Validation Results:**
+- `.venv/bin/pytest -q tests/test_security_hardening.py -k cookie_key_extracted` passes.
+- `.venv/bin/pytest -q tests/security/test_core_human_auth_boundary.py tests/test_auth_gate_cookie_fallback.py` passes.
+- `.venv/bin/pytest -q tests -k 'auth and core' || true` passes.
+- `make fg-fast` remains blocked by missing Docker binary at `prod-profile-check` (environment limitation).
+- `bash codex_gates.sh` still reports pre-existing unrelated ruff failures in `tools/testing/*`.
+
+**AI Notes:**
+- Do NOT widen cookie fallback beyond non-hosted `/ui*` compatibility path.
+- Do NOT treat this as a production regression; this was legacy test-contract drift.
