@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from api.agent_enrollment import (
@@ -295,8 +296,22 @@ def _consume_budget(
     window_seconds: int,
 ) -> bool:
     now = _utcnow()
+    window_floor = now - timedelta(seconds=window_seconds)
     slot = int(now.timestamp() // window_seconds) * window_seconds
     window_start = datetime.fromtimestamp(slot, tz=UTC)
+    used_in_window = (
+        session.query(func.coalesce(func.sum(AgentRateBudgetCounter.count), 0))
+        .filter(
+            AgentRateBudgetCounter.tenant_id == tenant_id,
+            AgentRateBudgetCounter.device_id == device_id,
+            AgentRateBudgetCounter.metric == metric,
+            AgentRateBudgetCounter.window_start > window_floor,
+        )
+        .scalar()
+        or 0
+    )
+    if int(used_in_window) >= limit:
+        return False
     row = (
         session.query(AgentRateBudgetCounter)
         .filter(
@@ -317,8 +332,6 @@ def _consume_budget(
         )
         session.add(row)
         session.flush()
-    if row.count >= limit:
-        return False
     row.count += 1
     session.commit()
     return True
