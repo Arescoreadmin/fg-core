@@ -226,6 +226,7 @@ def create_anchor_record(
     leaf_count: int,
     leaf_hashes: list[str],
     prev_anchor_hash: Optional[str],
+    tenant_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Create an anchor record that can be verified later.
@@ -234,6 +235,7 @@ def create_anchor_record(
     - Merkle root
     - Window metadata
     - Previous anchor hash (for chaining)
+    - tenant_id (for attribution; included in anchor_hash for tamper-evidence)
     - Computed anchor hash
     """
     anchor_time = datetime.now(timezone.utc)
@@ -247,6 +249,7 @@ def create_anchor_record(
         "merkle_root": merkle_root,
         "leaf_hashes": leaf_hashes,
         "prev_anchor_hash": prev_anchor_hash,
+        "tenant_id": tenant_id,
     }
 
     # Compute anchor hash over the record (excluding anchor_hash itself)
@@ -417,7 +420,7 @@ async def job(tenant_id: str) -> dict[str, Any]:
     chain_state = load_anchor_chain()
     prev_anchor_hash = chain_state.get("prev_anchor_hash")
 
-    # Create anchor record
+    # Create anchor record (tenant_id is included in the durable record and its hash)
     anchor_record = create_anchor_record(
         merkle_root=merkle_root,
         window_start=window_start,
@@ -425,6 +428,7 @@ async def job(tenant_id: str) -> dict[str, Any]:
         leaf_count=len(entries),
         leaf_hashes=leaf_hashes,
         prev_anchor_hash=prev_anchor_hash,
+        tenant_id=tenant_id,
     )
 
     # Append to log

@@ -409,3 +409,42 @@ No production audit invariants weakened; required fields remain enforced.
 - Do NOT revert tenant_id requirement from `get_audit_entries_in_window()` — this was the cross-tenant data leak
 - The Merkle Anchor job is now per-tenant; system-level callers must supply an explicit tenant_id
 - soc-manifest-verify failure is pre-existing and unrelated to this task
+
+---
+
+### 2026-03-29 — Task 1.5 Addendum: Lint Fix + Persisted Anchor Tenant Attribution
+
+**Area:** Background Jobs · Tenant Isolation · CI Lint
+
+**Issue 1:**
+`tests/test_job_tenant_isolation.py` imported `tempfile` (line 12) but never used it. The `_make_db` fixture uses pytest's built-in `tmp_path` fixture (`pathlib.Path`), not `tempfile`. This caused a ruff F401 lint failure in CI.
+
+**Resolution 1:**
+Removed `import tempfile`. No semantic effect.
+
+**Issue 2:**
+`jobs/merkle_anchor/job.py` — `create_anchor_record()` did not include `tenant_id` in the durable record dict persisted to `ANCHOR_LOG_FILE` (the append-only `.jsonl` log). The `tenant_id` added in Task 1.5 was only present in the transient `status` dict returned by `job()`, not in the `anchor_record` written to the tamper-evident chain. This means anchor artifacts on disk could not be attributed to their originating tenant.
+
+**Resolution 2:**
+- Added `tenant_id: Optional[str] = None` parameter to `create_anchor_record()`
+- `tenant_id` is now included in the record dict and therefore covered by the computed `anchor_hash` (tamper-evident)
+- `job()` passes `tenant_id=tenant_id` to `create_anchor_record()`
+- `create_anchor_record` export unchanged; backward-compatible (existing callers without `tenant_id` store `null`)
+- Added 3 tests in `TestMerkleAnchorDurableTenantAttribution`:
+  - `test_create_anchor_record_includes_tenant_id`: record field present and correct
+  - `test_anchor_records_for_different_tenants_are_distinct`: records and hashes differ per tenant
+  - `test_job_durable_record_carries_tenant_id`: verifies the `.jsonl` log file content after `job()` runs
+
+**Validation Results:**
+- `ruff check` (task files): All checks passed
+- `ruff format --check` (task files): All checks passed after auto-format
+- `pytest -q tests/test_job_tenant_isolation.py`: 16 passed
+- `pytest -q tests -k 'tenant and job'`: 16 passed, 1530 deselected
+- `pytest -q tests/test_merkle_anchor.py`: 34 passed (no regressions)
+- `make fg-fast`: pre-existing soc-manifest-verify timeout (ci-admin → SOC-P0-007); confirmed pre-existing on baseline
+- `codex_gates.sh`: 3 pre-existing ruff errors in tools/testing/ files (baseline had 4; this change reduced by 1 by removing tempfile import)
+
+**AI Notes:**
+- Do NOT remove `tenant_id` from `create_anchor_record()` — it is now part of the tamper-evident anchor hash
+- `tenant_id: null` in anchor records produced by legacy callers is intentional and distinguishable from tenant-scoped records
+- codex_gates.sh failures are in tools/testing/control_tower_trust_proof.py and tools/testing/harness/* — pre-existing, out of scope

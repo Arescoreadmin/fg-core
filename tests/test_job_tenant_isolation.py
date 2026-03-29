@@ -9,7 +9,6 @@ Proves that:
 """
 
 import sqlite3
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -25,6 +24,7 @@ from jobs.sim_validator.job import SIMULATION_INPUTS, SimulationInput
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 def _make_db(tmp_path: Path) -> str:
     """Create a minimal SQLite DB with security_audit_log rows for two tenants."""
@@ -68,6 +68,7 @@ def _make_db(tmp_path: Path) -> str:
 # merkle_anchor: get_audit_entries_in_window
 # ---------------------------------------------------------------------------
 
+
 class TestGetAuditEntriesInWindowTenantIsolation:
     """get_audit_entries_in_window must require tenant_id and filter by it."""
 
@@ -76,6 +77,7 @@ class TestGetAuditEntriesInWindowTenantIsolation:
         db_path = _make_db(tmp_path)
         window_end = datetime.now(timezone.utc)
         from datetime import timedelta
+
         window_start = window_end - timedelta(hours=1)
 
         with pytest.raises(ValueError, match="tenant_id is required"):
@@ -86,6 +88,7 @@ class TestGetAuditEntriesInWindowTenantIsolation:
         db_path = _make_db(tmp_path)
         window_end = datetime.now(timezone.utc)
         from datetime import timedelta
+
         window_start = window_end - timedelta(hours=1)
 
         with pytest.raises(ValueError, match="tenant_id is required"):
@@ -98,6 +101,7 @@ class TestGetAuditEntriesInWindowTenantIsolation:
         db_path = _make_db(tmp_path)
         window_end = datetime.now(timezone.utc)
         from datetime import timedelta
+
         window_start = window_end - timedelta(hours=1)
 
         entries = get_audit_entries_in_window(
@@ -113,6 +117,7 @@ class TestGetAuditEntriesInWindowTenantIsolation:
         db_path = _make_db(tmp_path)
         window_end = datetime.now(timezone.utc)
         from datetime import timedelta
+
         window_start = window_end - timedelta(hours=1)
 
         entries = get_audit_entries_in_window(
@@ -127,6 +132,7 @@ class TestGetAuditEntriesInWindowTenantIsolation:
         db_path = _make_db(tmp_path)
         window_end = datetime.now(timezone.utc)
         from datetime import timedelta
+
         window_start = window_end - timedelta(hours=1)
 
         entries = get_audit_entries_in_window(
@@ -141,6 +147,7 @@ class TestGetAuditEntriesInWindowTenantIsolation:
         db_path = _make_db(tmp_path)
         window_end = datetime.now(timezone.utc)
         from datetime import timedelta
+
         window_start = window_end - timedelta(hours=1)
 
         entries = get_audit_entries_in_window(
@@ -151,8 +158,89 @@ class TestGetAuditEntriesInWindowTenantIsolation:
 
 
 # ---------------------------------------------------------------------------
+# merkle_anchor: create_anchor_record durable attribution
+# ---------------------------------------------------------------------------
+
+
+class TestMerkleAnchorDurableTenantAttribution:
+    """The durable anchor record (written to the append-only log) must carry tenant_id."""
+
+    def test_create_anchor_record_includes_tenant_id(self):
+        """tenant_id is persisted in the durable record, not just transient status."""
+        from jobs.merkle_anchor.job import create_anchor_record, sha256_hex
+        from datetime import timedelta
+
+        window_end = datetime.now(timezone.utc)
+        window_start = window_end - timedelta(hours=1)
+        leaf = sha256_hex("entry")
+
+        record = create_anchor_record(
+            merkle_root=sha256_hex(leaf + leaf),
+            window_start=window_start,
+            window_end=window_end,
+            leaf_count=1,
+            leaf_hashes=[leaf],
+            prev_anchor_hash=None,
+            tenant_id="tenant-job-A",
+        )
+
+        assert record["tenant_id"] == "tenant-job-A"
+
+    def test_anchor_records_for_different_tenants_are_distinct(self):
+        """
+        Records for two tenants differ in tenant_id and in anchor_hash,
+        so anchors remain distinguishable even with identical payloads.
+        """
+        from jobs.merkle_anchor.job import create_anchor_record, sha256_hex
+        from datetime import timedelta
+
+        window_end = datetime.now(timezone.utc)
+        window_start = window_end - timedelta(hours=1)
+        leaf = sha256_hex("entry")
+        kwargs = dict(
+            merkle_root=sha256_hex(leaf + leaf),
+            window_start=window_start,
+            window_end=window_end,
+            leaf_count=1,
+            leaf_hashes=[leaf],
+            prev_anchor_hash=None,
+        )
+
+        record_a = create_anchor_record(**kwargs, tenant_id="tenant-job-A")
+        record_b = create_anchor_record(**kwargs, tenant_id="tenant-job-B")
+
+        assert record_a["tenant_id"] != record_b["tenant_id"]
+        assert record_a["anchor_hash"] != record_b["anchor_hash"]
+
+    def test_job_durable_record_carries_tenant_id(self, tmp_path, monkeypatch):
+        """
+        After job() runs, the record appended to the anchor log includes tenant_id.
+        This is the durable artifact — not just the returned status dict.
+        """
+        import asyncio
+        import json
+
+        import jobs.merkle_anchor.job as ma_mod
+
+        log_file = tmp_path / "anchor_log.jsonl"
+        monkeypatch.setattr(ma_mod, "STATE_DIR", tmp_path)
+        monkeypatch.setattr(ma_mod, "ANCHOR_STATE_FILE", tmp_path / "status.json")
+        monkeypatch.setattr(ma_mod, "ANCHOR_LOG_FILE", log_file)
+        monkeypatch.setattr(ma_mod, "ANCHOR_CHAIN_FILE", tmp_path / "chain.json")
+
+        asyncio.run(merkle_anchor_job(tenant_id="tenant-job-A"))
+
+        records = [
+            json.loads(line) for line in log_file.read_text().splitlines() if line
+        ]
+        assert len(records) == 1
+        assert records[0]["tenant_id"] == "tenant-job-A"
+
+
+# ---------------------------------------------------------------------------
 # merkle_anchor: job() entry point
 # ---------------------------------------------------------------------------
+
 
 class TestMerkleAnchorJobTenantIsolation:
     """The top-level job() function must require tenant_id."""
@@ -180,6 +268,7 @@ class TestMerkleAnchorJobTenantIsolation:
         monkeypatch.setenv("FG_STATE_DIR", str(tmp_path))
         # Redirect state files to tmp_path
         import jobs.merkle_anchor.job as ma_mod
+
         monkeypatch.setattr(ma_mod, "STATE_DIR", tmp_path)
         monkeypatch.setattr(ma_mod, "ANCHOR_STATE_FILE", tmp_path / "status.json")
         monkeypatch.setattr(ma_mod, "ANCHOR_LOG_FILE", tmp_path / "log.jsonl")
@@ -195,6 +284,7 @@ class TestMerkleAnchorJobTenantIsolation:
         import asyncio
 
         import jobs.merkle_anchor.job as ma_mod
+
         monkeypatch.setattr(ma_mod, "STATE_DIR", tmp_path)
         monkeypatch.setattr(ma_mod, "ANCHOR_STATE_FILE", tmp_path / "status.json")
         monkeypatch.setattr(ma_mod, "ANCHOR_LOG_FILE", tmp_path / "log.jsonl")
@@ -210,6 +300,7 @@ class TestMerkleAnchorJobTenantIsolation:
 # ---------------------------------------------------------------------------
 # sim_validator: every simulation carries explicit tenant_id
 # ---------------------------------------------------------------------------
+
 
 class TestSimValidatorJobTenantBinding:
     """Every simulation input must carry an explicit, non-empty tenant_id."""
