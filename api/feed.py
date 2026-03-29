@@ -10,11 +10,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import require_bound_tenant, require_scopes
+from api.auth_scopes import require_scopes
 from api.deps import tenant_db_required
 from api.db_models import DecisionRecord
 from api.decisions import _loads_json_text
 from api.ratelimit import rate_limit_guard
+from api.ui_auth import resolve_ui_principal
 
 # -----------------------------------------------------------------------------
 # Query-param normalization helpers
@@ -408,7 +409,7 @@ def feed_live(
 
 @router.head("/stream")
 def feed_stream_head(
-    _tenant_id: str = Depends(require_bound_tenant),
+    _tenant_id: str = Depends(resolve_ui_principal),
 ) -> Response:
     # Headers-only probe for smoke tests / health checks
     return Response(content=b"", media_type="text/event-stream")
@@ -417,6 +418,7 @@ def feed_stream_head(
 @router.get("/stream")
 async def feed_stream(
     request: Request,
+    ui_principal_tenant_id: str = Depends(resolve_ui_principal),
     db: Session = Depends(tenant_db_required),
     # pacing
     interval: float = Query(default=1.0, ge=0.2, le=10.0),
@@ -455,8 +457,8 @@ async def feed_stream(
     if severity and not threat_level:
         threat_level = severity
 
-    # P0: Require tenant_id for all requests - no cross-tenant access allowed
-    tenant_id = require_bound_tenant(request)
+    # Tenant binding comes from shared UI principal resolver dependency.
+    tenant_id = ui_principal_tenant_id
 
     # normalize ints/bools
     since_id_n = _fg_norm_int(since_id)
@@ -467,6 +469,7 @@ async def feed_stream(
     async def gen():
         last_id = since_id_n
         last_hb = time.monotonic()
+        yield "event: ready\ndata: ok\n\n"
         yield ": connected\n\n"
 
         while True:
@@ -523,7 +526,15 @@ async def feed_stream(
 
             await asyncio.sleep(interval)
 
-    return StreamingResponse(gen(), media_type="text/event-stream")
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # === STREAM END ===

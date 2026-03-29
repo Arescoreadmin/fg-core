@@ -8,8 +8,9 @@ from fastapi.responses import HTMLResponse
 
 from api.auth_scopes import require_scopes
 from api.config.env import is_production_env
-from api.ui_guard import ui_enabled_guard
 from api.ratelimit import rate_limit_guard
+from api.ui_auth import resolve_ui_principal
+from api.ui_guard import ui_enabled_guard
 
 router = APIRouter(
     prefix="/ui",
@@ -263,8 +264,10 @@ applyScopes();
     operation_id="ui_feed_page",
     dependencies=[Depends(rate_limit_guard)],
 )
-def ui_feed(request: Request) -> HTMLResponse:
-    _require_ui_key(request)
+def ui_feed(
+    request: Request,
+    _tenant_id: str = Depends(resolve_ui_principal),
+) -> HTMLResponse:
     # Canonical UI feed: SSE + polling fallback + watchdog. Single source of truth.
     return HTMLResponse(r"""\
 <!doctype html>

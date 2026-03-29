@@ -241,7 +241,9 @@ def _extract_key(request: Request, x_api_key: Optional[str]) -> Optional[str]:
     except Exception:
         request_path = ""
 
-    if not is_prod_like_env() and request_path.startswith("/ui"):
+    if not is_prod_like_env() and (
+        request_path.startswith("/ui") or request_path.startswith("/feed/stream")
+    ):
         cookie_name = (
             os.getenv("FG_UI_COOKIE_NAME") or "fg_api_key"
         ).strip() or "fg_api_key"
