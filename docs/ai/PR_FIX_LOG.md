@@ -527,3 +527,33 @@ Task 1.6 introduced zero new gate failures. All task-scoped validations pass.
 - Do NOT describe contract authority as an active failure; it is resolved
 - The only active gate exception after Task 1.6 is SOC-P0-007 (ci-admin timeout)
 - Both the contract authority fix and the route inventory regeneration are in-scope consequences of the Task 1.6 attestation tenant enforcement changes
+
+---
+
+### 2026-03-29 — Platform Inventory Deterministic Artifact Drift (Task 1.6 Follow-up)
+
+**Area:** CI Artifacts · Platform Inventory · Governance Fingerprint
+
+**Issue:**
+`artifacts/platform_inventory.det.json` was out of sync with its upstream inputs after Task 1.6 regenerated `tools/ci/route_inventory.json` and `tools/ci/plane_registry_snapshot.json`. The `governance_fingerprint` in the committed artifact reflected the pre-Task-1.6 input state. The fg-required harness recomputes this fingerprint and detected the mismatch.
+
+**Root Cause:**
+Upstream input change (NOT a manual edit):
+- `tools/ci/route_inventory.json` regenerated in Task 1.6 (attestation routes now `tenant_bound: True`)
+- `tools/ci/plane_registry_snapshot.json` timestamp updated during Task 1.6 route inventory regeneration
+- These are legitimate inputs to `governance_fingerprint` computation
+
+**Resolution:**
+Ran canonical generation tool: `python scripts/generate_platform_inventory.py --allow-gaps`
+- `governance_fingerprint` updated from `cb3a2b04...` to `24e7c25a...`
+- Determinism verified: two consecutive runs produce identical SHA256 (`ce86c534...`)
+- No other files changed
+
+**Gate Results:**
+- `make fg-fast`: all gates pass; only pre-existing `ci-admin (timeout) → SOC-P0-007` remains
+- Artifact hash stable across runs: determinism confirmed
+
+**AI Notes:**
+- Do NOT manually edit `governance_fingerprint` in `platform_inventory.det.json`
+- Always regenerate via `python scripts/generate_platform_inventory.py --allow-gaps`
+- Artifact drift will recur whenever `tools/ci/route_inventory.json` or other upstream inputs change; regeneration is required after such changes
