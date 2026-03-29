@@ -597,3 +597,57 @@ After `route-inventory-audit` (the fg-fast step most likely to cause artifact dr
 - Do NOT add calls to `generate_platform_inventory.py` inside `make fg-fast` or its dependencies; generation must remain an explicit step
 - If `tools/ci/route_inventory.json`, `tools/ci/plane_registry_snapshot.json`, or `tools/ci/contract_routes.json` change, regenerate `artifacts/platform_inventory.det.json` via `make platform-inventory` or `python scripts/generate_platform_inventory.py --allow-gaps` and commit the result
 - The working tree mutation check is correctly designed; no changes to fg_required.py are required
+
+---
+
+### 2026-03-29 — Task 2.1: Remove Human Auth from Core
+
+**Area:** Auth Boundary · Core Runtime · Hosted Profile Enforcement
+
+**Issue:**
+Three human/browser auth surfaces were present in the core runtime:
+
+1. `api/main.py:_is_production_runtime()` only checked `prod` and `production`, NOT `staging`. Since `is_production_env()` (and `_is_production_like()`) treat `staging` as a hosted profile, UI routes were being mounted in staging environments (the `not _is_production_runtime()` guard failed to cover staging).
+
+2. `api/auth_scopes/resolution.py:_extract_key()` accepted cookie-based auth in all environments including hosted profiles (`prod`, `staging`). This is a browser/human auth path: browsers silently send cookies, which is not permitted at core in hosted runtime.
+
+3. `api/main.py:check_tenant_if_present()` and `require_status_auth()` contained cookie fallbacks that applied in all environments, including hosted profiles.
+
+**Production code changed:** Yes — three targeted runtime behavior changes.
+
+**Human/browser auth surfaces audited:**
+- `_is_production_runtime()` — UI route gating (NEEDS HARDENING → FIXED)
+- `_extract_key()` — Cookie key extraction path (NEEDS HARDENING → FIXED)
+- `check_tenant_if_present()` cookie fallback — (NEEDS HARDENING → FIXED)
+- `require_status_auth()` cookie fallback — (NEEDS HARDENING → FIXED)
+- `PUBLIC_PATHS_PREFIX` `/ui` entry — COMPLIANT (routes not mounted in hosted, 404 from router regardless)
+- `AuthGateConfig.public_paths` property — COMPLIANT (not used by `_is_public()` dispatch path)
+
+**Resolution:**
+1. `api/main.py:_is_production_runtime()`: Added `"staging"` to the set `{"prod", "production", "staging"}`. UI routes are no longer mounted when `FG_ENV=staging`.
+2. `api/auth_scopes/resolution.py:_extract_key()`: Added `if is_prod_like_env(): return None` guard before cookie extraction. Cookie auth is rejected in prod/staging hosted profiles; header-based X-API-Key auth continues to work.
+3. `api/main.py:check_tenant_if_present()` and `require_status_auth()`: Cookie fallback conditioned on `not _is_production_runtime()`. Cookie path unreachable in hosted profiles.
+
+**Tests added:**
+- `tests/security/test_core_human_auth_boundary.py` (new file)
+  - `TestExtractKeyHostedRejectsCookie`: staging/prod/production cookie-only auth returns None (5 tests)
+  - `TestExtractKeyNonHostedAllowsCookie`: dev/test cookie auth still works (2 tests)
+  - `TestHostedProfileRouteInventory`: staging/prod build_app() route inventory has no /ui* paths; dev has them (3 tests)
+  - `TestIsProductionRuntime`: parametrized env classification checks (8 tests)
+  - `TestIsProdLikeEnvConsistency`: is_prod_like_env() boundary checks (6 tests)
+
+**Hosted vs non-hosted behavior after fix:**
+- Hosted (prod, staging): cookie auth rejected at `_extract_key`; UI routes not mounted; no browser auth surface
+- Non-hosted (dev, test): cookie auth accepted; UI routes mounted; browser UI flow functional
+
+**Gate results:**
+- `pytest -q tests -k 'auth and core'`: see validation run
+- `make fg-fast`: pre-existing SOC-P0-007 (ci-admin timeout) failure only; not introduced by this task
+
+**AI Notes:**
+- Do NOT remove `"staging"` from `_is_production_runtime()` set; staging is a hosted profile
+- Do NOT remove the `is_prod_like_env()` guard in `_extract_key()`; cookie auth must be rejected in hosted profiles
+- Do NOT restore cookie fallback in `check_tenant_if_present()` or `require_status_auth()` without conditioning on non-hosted
+- Internal service auth via X-API-Key header continues to work in all profiles
+
+---
