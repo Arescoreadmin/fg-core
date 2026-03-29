@@ -125,12 +125,17 @@ def get_audit_entries_in_window(
     window_start: datetime,
     window_end: datetime,
     db_path: Optional[str] = None,
+    tenant_id: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     """
     Fetch audit log entries from the database for the given time window.
 
+    tenant_id is required. Raises ValueError if not provided (fail closed).
     Returns entries sorted deterministically by (created_at, id).
     """
+    if not tenant_id:
+        raise ValueError("tenant_id is required for audit entry access")
+
     import sqlite3
 
     db_path = db_path or os.getenv("FG_SQLITE_PATH", str(STATE_DIR / "frostgate.db"))
@@ -161,9 +166,10 @@ def get_audit_entries_in_window(
                            rules_triggered_json, request_json, response_json
                     FROM decisions
                     WHERE created_at >= ? AND created_at < ?
+                      AND tenant_id = ?
                     ORDER BY created_at ASC, id ASC
                     """,
-                    (window_start.isoformat(), window_end.isoformat()),
+                    (window_start.isoformat(), window_end.isoformat(), tenant_id),
                 )
                 for row in cursor.fetchall():
                     entries.append(dict(row))
@@ -177,9 +183,10 @@ def get_audit_entries_in_window(
                    request_method, success, reason, details_json
             FROM security_audit_log
             WHERE created_at >= ? AND created_at < ?
+              AND tenant_id = ?
             ORDER BY created_at ASC, id ASC
             """,
-            (window_start.isoformat(), window_end.isoformat()),
+            (window_start.isoformat(), window_end.isoformat(), tenant_id),
         )
 
         for row in cursor.fetchall():
@@ -219,6 +226,7 @@ def create_anchor_record(
     leaf_count: int,
     leaf_hashes: list[str],
     prev_anchor_hash: Optional[str],
+    tenant_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Create an anchor record that can be verified later.
@@ -227,6 +235,7 @@ def create_anchor_record(
     - Merkle root
     - Window metadata
     - Previous anchor hash (for chaining)
+    - tenant_id (for attribution; included in anchor_hash for tamper-evidence)
     - Computed anchor hash
     """
     anchor_time = datetime.now(timezone.utc)
@@ -240,6 +249,7 @@ def create_anchor_record(
         "merkle_root": merkle_root,
         "leaf_hashes": leaf_hashes,
         "prev_anchor_hash": prev_anchor_hash,
+        "tenant_id": tenant_id,
     }
 
     # Compute anchor hash over the record (excluding anchor_hash itself)
@@ -367,13 +377,15 @@ def verify_entry_in_anchor(
     return True, "Verified"
 
 
-async def job() -> dict[str, Any]:
+async def job(tenant_id: str) -> dict[str, Any]:
     """
-    Merkle anchor job - computes and anchors audit entries.
+    Merkle anchor job - computes and anchors audit entries for a single tenant.
+
+    tenant_id is required. Job will not execute without a bound tenant context.
 
     Workflow:
     1. Determine time window (last N hours)
-    2. Fetch audit entries from database
+    2. Fetch audit entries from database (tenant-scoped)
     3. Compute leaf hashes and Merkle root
     4. Create anchor record with chain linkage
     5. Append to anchor log
@@ -381,16 +393,20 @@ async def job() -> dict[str, Any]:
 
     Returns job result dict.
     """
+    if not tenant_id:
+        raise ValueError("tenant_id is required to run the merkle anchor job")
+
     window_hours = DEFAULT_WINDOW_HOURS
     window_end = datetime.now(timezone.utc)
     window_start = window_end - timedelta(hours=window_hours)
 
     logger.info(
-        f"merkle_anchor.job: starting window {window_start.isoformat()} to {window_end.isoformat()}"
+        f"merkle_anchor.job: starting window {window_start.isoformat()} to {window_end.isoformat()} "
+        f"for tenant {tenant_id}"
     )
 
-    # Fetch audit entries
-    entries = get_audit_entries_in_window(window_start, window_end)
+    # Fetch audit entries (tenant-scoped)
+    entries = get_audit_entries_in_window(window_start, window_end, tenant_id=tenant_id)
     logger.info(f"merkle_anchor.job: found {len(entries)} entries in window")
 
     # Compute leaf hashes
@@ -404,7 +420,7 @@ async def job() -> dict[str, Any]:
     chain_state = load_anchor_chain()
     prev_anchor_hash = chain_state.get("prev_anchor_hash")
 
-    # Create anchor record
+    # Create anchor record (tenant_id is included in the durable record and its hash)
     anchor_record = create_anchor_record(
         merkle_root=merkle_root,
         window_start=window_start,
@@ -412,6 +428,7 @@ async def job() -> dict[str, Any]:
         leaf_count=len(entries),
         leaf_hashes=leaf_hashes,
         prev_anchor_hash=prev_anchor_hash,
+        tenant_id=tenant_id,
     )
 
     # Append to log
@@ -425,6 +442,7 @@ async def job() -> dict[str, Any]:
     # Write status file
     status = {
         "status": "ok",
+        "tenant_id": tenant_id,
         "anchored_at": anchor_record["anchor_time"],
         "window_start": window_start.isoformat(),
         "window_end": window_end.isoformat(),
