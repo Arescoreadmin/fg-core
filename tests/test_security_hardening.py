@@ -68,7 +68,7 @@ class TestApiKeyExtraction:
         mock_request.url.path = "/ui/feed"
         mock_request.cookies = {"fg_api_key": "valid_cookie_key"}
 
-        with patch.dict(os.environ, {"FG_ENV": "test"}):
+        with patch("api.auth_scopes.resolution.is_prod_like_env", return_value=False):
             result = _extract_key(mock_request, x_api_key=None)
             assert result == "valid_cookie_key"
 
@@ -81,7 +81,7 @@ class TestApiKeyExtraction:
         mock_request.url.path = "/ui/feed"
         mock_request.cookies = {"fg_api_key": "cookie_key"}
 
-        with patch.dict(os.environ, {"FG_ENV": "test"}):
+        with patch("api.auth_scopes.resolution.is_prod_like_env", return_value=False):
             result = _extract_key(mock_request, x_api_key="header_key")
             assert result == "header_key"
 

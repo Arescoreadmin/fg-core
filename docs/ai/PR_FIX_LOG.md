@@ -705,3 +705,24 @@ Updated legacy test contract (no production auth logic changes):
 **AI Notes:**
 - Do NOT widen cookie fallback beyond non-hosted `/ui*` compatibility path.
 - Do NOT treat this as a production regression; this was legacy test-contract drift.
+
+---
+
+### 2026-03-29 — Task 2.1 Addendum: Legacy Cookie Extraction Test Uses Explicit Non-Hosted Patch
+
+**Area:** Auth Boundary · Test Determinism
+
+**Issue:**
+Legacy extraction test alignment still relied on env mutation (`FG_ENV=test`) to represent non-hosted behavior. Review requested an explicit non-hosted condition patch in test setup to avoid implicit environment coupling.
+
+**Resolution:**
+Updated `tests/test_security_hardening.py` cookie-scoped tests to patch `api.auth_scopes.resolution.is_prod_like_env` to `False` while using `/ui/feed` request path. No production auth logic changed.
+
+**Validation Results:**
+- `pytest -q tests/test_security_hardening.py -k cookie_key_extracted` passes.
+- `pytest -q tests -k 'auth and core'` passes.
+- `make fg-fast` remains blocked by missing Docker binary at `prod-profile-check` (environment limitation).
+
+**AI Notes:**
+- Keep production auth behavior unchanged; this is test-only contract alignment.
+- Do NOT widen cookie fallback scope beyond non-hosted `/ui*` compatibility.
