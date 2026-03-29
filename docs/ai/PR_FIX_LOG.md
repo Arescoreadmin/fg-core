@@ -448,3 +448,51 @@ Removed `import tempfile`. No semantic effect.
 - Do NOT remove `tenant_id` from `create_anchor_record()` — it is now part of the tamper-evident anchor hash
 - `tenant_id: null` in anchor records produced by legacy callers is intentional and distinguishable from tenant-scoped records
 - codex_gates.sh failures are in tools/testing/control_tower_trust_proof.py and tools/testing/harness/* — pre-existing, out of scope
+
+---
+
+### 2026-03-29 — Task 1.6: Tenant Context Integrity Enforcement
+
+**Area:** Tenant Isolation · Attestation Routes · Spoof Prevention
+
+**Issue:**
+Four routes in `api/attestation.py` accepted tenant context from untrusted request input without `bind_tenant_id` enforcement, creating tenant spoofing vulnerabilities:
+- `GET /approvals/{subject_type}/{subject_id}`: read `tenant_id` directly from `X-Tenant-Id` header → unscoped `attestation:admin` key could forge header to read any tenant's approval records
+- `POST /approvals`: read `tenant_id` from request body → unscoped key could write approvals for any tenant
+- `POST /approvals/verify`: read `tenant_id` from request body → unscoped key could verify approvals for any tenant
+- `GET /modules/enforce/{module_id}`: read `tenant_id` directly from `X-Tenant-Id` header → unscoped key could check module enforcement for any tenant
+
+The `AuthGateMiddleware` header check (X-Tenant-Id vs key-bound tenant) only fires when the key has a bound tenant_id. For unscoped `attestation:admin` keys (no tenant binding), the middleware check is skipped and the handler directly trusted the forged header/body value.
+
+**Spoofing Surfaces Audited:**
+- `api/attestation.py` — 4 routes: NON-COMPLIANT → fixed
+- `api/ingest.py` — COMPLIANT (uses `bind_tenant_id` via `_resolve_tenant_id`)
+- `api/control_tower_snapshot.py` — COMPLIANT (`requested_tenant_id` from query is metadata-only, never used for data access)
+- `api/middleware/auth_gate.py` — COMPLIANT (middleware-level protection for header conflicts on bound keys)
+- `api/token_useage.py` — NOT A SECURITY ISSUE (reads header for observability metrics only)
+- All other in-scope endpoints — COMPLIANT (use `require_bound_tenant` or `bind_tenant_id`)
+
+**Resolution:**
+- `list_approvals`: changed `tenant_id: str = Header(...)` to `x_tenant_id: Optional[str] = Header(default=None, ...)` + added `request: Request` + added `bind_tenant_id(request, x_tenant_id, require_explicit_for_unscoped=True)` call
+- `enforce_module`: same pattern
+- `create_approval`: added `request: Request` + added `bind_tenant_id(request, req.tenant_id, require_explicit_for_unscoped=True)` overwriting `req.tenant_id` with the verified value
+- `verify_approvals`: same pattern as `create_approval`
+- Updated `tests/test_attestation_signing.py` client fixture to use auth_enabled=True with tenant-bound key (required for the enforced auth context)
+- Added `tests/security/test_tenant_context_spoof.py` with 9 regression tests proving: header spoof rejected, body spoof rejected, unscoped key fails closed, mixed-input conflict rejected, no cross-tenant write side effect, baseline success case
+- Regenerated `tools/ci/route_inventory.json` (routes now correctly classified as `tenant_bound: True`)
+- Updated contract authority markers (OpenAPI schema: X-Tenant-Id changed from required to optional for two routes)
+- Updated `docs/SOC_EXECUTION_GATES_2026-02-15.md` for SOC review sync gate
+
+**Tests Added:**
+- `tests/security/test_tenant_context_spoof.py` (9 tests matching `tenant and spoof`)
+
+**Gate Results:**
+- `pytest -q tests/security -k 'tenant and spoof'`: 9 passed
+- `pytest -q tests/test_attestation_signing.py`: 15 passed (no regressions)
+- `make fg-fast`: pre-existing `ci-admin (timeout) → SOC-P0-007` only; all other gates pass
+
+**AI Notes:**
+- Do NOT revert `bind_tenant_id` calls in `list_approvals`, `enforce_module`, `create_approval`, or `verify_approvals`
+- The `X-Tenant-Id` header on attestation routes is no longer required (Optional) — callers with scoped keys do not need to send it
+- `tests/test_attestation_signing.py` now uses auth_enabled=True with tenant-bound key; do NOT revert to auth_enabled=False
+- SOC-P0-007 (ci-admin timeout) is pre-existing and unrelated to this task

@@ -846,7 +846,8 @@
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/attestation.py",
       "method": "POST",
@@ -858,12 +859,13 @@
         "attestation:admin"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/attestation.py",
       "method": "POST",
@@ -875,12 +877,13 @@
         "attestation:admin"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/attestation.py",
       "method": "GET",
@@ -892,7 +895,7 @@
         "attestation:admin"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
@@ -3094,7 +3097,8 @@
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/attestation.py",
       "method": "GET",
@@ -3106,7 +3110,7 @@
         "attestation:admin"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
@@ -3814,7 +3818,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-03-23T23:09:15.482481+00:00",
+  "generated_at": "2026-03-29T16:10:55.430115+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

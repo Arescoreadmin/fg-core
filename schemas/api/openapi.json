@@ -4763,10 +4763,17 @@
           {
             "in": "header",
             "name": "X-Tenant-Id",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "X-Tenant-Id",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
             }
           },
           {
@@ -11387,10 +11394,17 @@
           {
             "in": "header",
             "name": "X-Tenant-Id",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "X-Tenant-Id",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
             }
           },
           {

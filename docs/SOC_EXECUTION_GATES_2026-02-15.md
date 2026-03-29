@@ -1485,3 +1485,24 @@ Low — behavior aligns with existing production expectations.
 
 Notes:
 No change to external API contracts. Internal enforcement consistency improved.
+
+2026-03-29 — Task 1.6: Tenant Context Integrity Enforcement — Route Inventory Update
+
+Area: Attestation Routes / Tenant Binding / CI Route Inventory
+
+Changes:
+- Four attestation routes now have tenant_bound=True in route_inventory.json:
+  GET /approvals/{subject_type}/{subject_id}, POST /approvals, POST /approvals/verify, GET /modules/enforce/{module_id}
+- route_inventory.json regenerated to reflect new tenant_bound classification
+- plane_registry_snapshot.json generated_at timestamp updated (content unchanged)
+- topology.sha256 updated to reflect new inventory hashes
+- BLUEPRINT_STAGED.md and CONTRACT.md authority markers updated for contract schema drift
+
+Reason:
+Task 1.6 enforced tenant context integrity on attestation protected paths. Four routes previously
+accepted tenant_id from untrusted headers/body without bind_tenant_id enforcement. Production fix
+added bind_tenant_id to all four routes. Route inventory regeneration correctly classifies them
+as tenant_bound.
+
+Risk:
+Low — security posture improved, no production behavior change for correctly-bound callers.

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Optional
 
 from collections.abc import Iterator
 
@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import require_scopes
+from api.auth_scopes import bind_tenant_id, require_scopes
 from api.db import get_sessionmaker, set_tenant_context
 from api.db_models import ApprovalLog, EvidenceBundle, ModuleRegistry
 from api.signed_artifacts import (
@@ -173,8 +173,11 @@ class ApprovalVerifyRequest(BaseModel):
 
 @router.post("/approvals")
 def create_approval(
-    req: ApprovalCreateRequest, db: Session = Depends(_attestation_db)
+    req: ApprovalCreateRequest, request: Request, db: Session = Depends(_attestation_db)
 ) -> dict[str, Any]:
+    req.tenant_id = bind_tenant_id(
+        request, req.tenant_id, require_explicit_for_unscoped=True
+    )
     max_seq = (
         db.query(func.max(ApprovalLog.seq))
         .filter(
@@ -247,9 +250,11 @@ def create_approval(
 def list_approvals(
     subject_type: str,
     subject_id: str,
-    tenant_id: str = Header(..., alias="X-Tenant-Id"),
+    request: Request,
+    x_tenant_id: Optional[str] = Header(default=None, alias="X-Tenant-Id"),
     db: Session = Depends(_attestation_db),
 ) -> list[dict[str, Any]]:
+    tenant_id = bind_tenant_id(request, x_tenant_id, require_explicit_for_unscoped=True)
     rows = (
         db.query(ApprovalLog)
         .filter(
@@ -279,8 +284,11 @@ def list_approvals(
 
 @router.post("/approvals/verify")
 def verify_approvals(
-    req: ApprovalVerifyRequest, db: Session = Depends(_attestation_db)
+    req: ApprovalVerifyRequest, request: Request, db: Session = Depends(_attestation_db)
 ) -> dict[str, Any]:
+    req.tenant_id = bind_tenant_id(
+        request, req.tenant_id, require_explicit_for_unscoped=True
+    )
     rows = (
         db.query(ApprovalLog)
         .filter(
@@ -423,9 +431,11 @@ def list_modules(
 def enforce_module(
     module_id: str,
     version: str,
-    tenant_id: str = Header(..., alias="X-Tenant-Id"),
+    request: Request,
+    x_tenant_id: Optional[str] = Header(default=None, alias="X-Tenant-Id"),
     db: Session = Depends(_attestation_db),
 ) -> dict[str, Any]:
+    tenant_id = bind_tenant_id(request, x_tenant_id, require_explicit_for_unscoped=True)
     row = (
         db.query(ModuleRegistry)
         .filter(
