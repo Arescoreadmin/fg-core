@@ -378,3 +378,34 @@ No production audit invariants weakened; required fields remain enforced.
 - Do NOT move `audit_admin_action` back before the export operation in any of these three endpoints
 - `audit_bundle_export` and `audit_exam_export` events only appear when the export succeeds; failed exports produce no success record
 - `admin_audit_export` event only appears after `_audit_filters` validation passes and response is constructed
+
+---
+
+### 2026-03-29 — Task 1.5: Background Job Tenant Isolation
+
+**Area:** Background Jobs · Tenant Isolation
+
+**Issue:**
+`jobs/merkle_anchor/job.py` — `get_audit_entries_in_window()` fetched audit log entries for ALL tenants with no tenant_id filter. The top-level `job()` function accepted no tenant_id, making it impossible to enforce per-tenant anchoring and allowing cross-tenant data to be mixed into a single Merkle tree.
+
+**Resolution:**
+- Added required `tenant_id` parameter to `get_audit_entries_in_window()`; raises `ValueError("tenant_id is required")` when missing or empty (fail closed)
+- Added `AND tenant_id = ?` filter to both SQL query paths (security_audit_log, decisions fallback)
+- Changed `job(tenant_id: str)` to require tenant_id; raises `ValueError` if empty, `TypeError` if omitted
+- Added `tenant_id` to job result dict for caller verification
+- Added `tests/test_job_tenant_isolation.py` with 13 tests proving: missing tenant_id raises, cross-tenant rows excluded, per-tenant result isolation, sim_validator inputs all carry explicit tenant_id
+
+**Job Surfaces Audited:**
+- `jobs/merkle_anchor/job.py` — NON-COMPLIANT → fixed
+- `jobs/sim_validator/job.py` — COMPLIANT (each SimulationInput carries tenant_id, passed to evaluate())
+- `jobs/chaos/job.py` — N/A placeholder stub, no data access
+
+**Validation Results:**
+- `pytest -q tests -k 'tenant and job'`: 13 passed, 1530 deselected
+- `pytest -q -m "not postgres"`: 1529 passed, 24 skipped (no regressions)
+- `make fg-fast`: pre-existing failure at soc-manifest-verify (ci-admin timeout → SOC-P0-007); confirmed present on baseline before this change
+
+**AI Notes:**
+- Do NOT revert tenant_id requirement from `get_audit_entries_in_window()` — this was the cross-tenant data leak
+- The Merkle Anchor job is now per-tenant; system-level callers must supply an explicit tenant_id
+- soc-manifest-verify failure is pre-existing and unrelated to this task
