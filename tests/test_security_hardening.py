@@ -65,10 +65,12 @@ class TestApiKeyExtraction:
 
         mock_request = MagicMock()
         mock_request.query_params = {}
-        mock_request.url.path = "/ui/feed"
         mock_request.cookies = {"fg_api_key": "valid_cookie_key"}
+        mock_request.url.path = "/ui/feed"
 
-        with patch("api.auth_scopes.resolution.is_prod_like_env", return_value=False):
+        with patch(
+            "api.auth_scopes.resolution.is_production_env", return_value=False, create=True
+        ):
             result = _extract_key(mock_request, x_api_key=None)
             assert result == "valid_cookie_key"
 
