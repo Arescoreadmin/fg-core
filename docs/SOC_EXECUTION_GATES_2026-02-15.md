@@ -1506,3 +1506,29 @@ as tenant_bound.
 
 Risk:
 Low — security posture improved, no production behavior change for correctly-bound callers.
+
+## 2026-03-29 — Task 2.1 follow-up: profile-scoped cookie fallback + hosted strictness
+
+### Critical-path files reviewed (SOC-HIGH-002)
+- `api/auth_scopes/resolution.py`
+- `tests/security/test_core_human_auth_boundary.py`
+- `tests/test_auth_gate_cookie_fallback.py`
+
+### Summary
+- Reviewed auth-boundary follow-up for cookie API-key extraction scope.
+- Implemented profile-scoped behavior in `api/auth_scopes/resolution.py`:
+  - Hosted profiles (`prod`, `staging`): cookie fallback disabled (header-only auth).
+  - Non-hosted compatibility: cookie fallback allowed only for legacy `/ui*` requests.
+- Preserved Task 2.1 hosted invariant: direct cookie-only auth remains rejected in hosted profiles.
+
+### Verification
+- `.venv/bin/pytest -q tests/security/test_core_human_auth_boundary.py tests/test_auth_gate_cookie_fallback.py`
+- `.venv/bin/pytest -q tests -k 'auth and core' || true`
+- `make soc-review-sync`
+- `make soc-manifest-verify`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.

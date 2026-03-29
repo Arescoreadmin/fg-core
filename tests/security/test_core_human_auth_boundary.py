@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from api.auth_scopes import mint_key
 from api.main import build_app
 
 
@@ -90,3 +91,13 @@ def test_hosted_runtime_route_inventory_has_no_ui_surface(
             }
         )
     assert not [path for path in route_paths if path.startswith("/ui")]
+
+
+def test_hosted_profiles_reject_cookie_only_auth(monkeypatch, tmp_path: Path) -> None:
+    for env in ("staging", "prod"):
+        with _build_hosted_core(monkeypatch, tmp_path, env) as client:
+            key = mint_key("stats:read", tenant_id="tenant-a")
+            cookie_name = "fg_api_key"
+            client.cookies.set(cookie_name, key)
+            resp = client.get("/stats")
+            assert resp.status_code == 401, (env, resp.status_code, resp.text)

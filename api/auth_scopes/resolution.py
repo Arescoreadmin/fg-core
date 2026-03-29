@@ -225,12 +225,29 @@ def _extract_key(request: Request, x_api_key: Optional[str]) -> Optional[str]:
     """
     Extract API key from request.
 
-    Security: Keys are accepted only from X-API-Key header.
+    Security:
+      - Hosted profiles (prod/staging): header-only.
+      - Non-hosted compatibility: cookie fallback is allowed only for legacy /ui/*
+        routes to support internal embedded UI sessions.
 
     Query parameters are NOT supported.
     """
     if x_api_key and str(x_api_key).strip():
         return str(x_api_key).strip()
+
+    request_path = ""
+    try:
+        request_path = str(request.url.path or "")
+    except Exception:
+        request_path = ""
+
+    if not is_prod_like_env() and request_path.startswith("/ui"):
+        cookie_name = (
+            os.getenv("FG_UI_COOKIE_NAME") or "fg_api_key"
+        ).strip() or "fg_api_key"
+        ck = (request.cookies.get(cookie_name) or "").strip()
+        if ck:
+            return ck
 
     return None
 

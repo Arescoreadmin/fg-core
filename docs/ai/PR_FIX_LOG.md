@@ -643,3 +643,39 @@ Reworked hosted-profile boundary tests to seed full production-like environment 
 **AI Notes:**
 - Do NOT bypass startup/invariant validation for hosted-profile auth-boundary tests unless unavoidable for deterministic isolation.
 - Keep boundary tests evidence-driven against real app assembly behavior.
+
+---
+
+### 2026-03-29 — Task 2.1 Addendum: Cookie Fallback Scope + SOC Review Sync Repair
+
+**Area:** Auth Boundary · Hosted Profiles · SOC-HIGH-002 Governance
+
+**Issue:**
+Review feedback flagged that removing cookie fallback globally could break explicitly tolerated non-prod legacy UI compatibility (`/ui/token` -> cookie -> `/ui/*`). In parallel, `soc-review-sync` failed because a critical auth file (`api/auth_scopes/resolution.py`) changed without a SOC review-doc update.
+
+**Decision (evidence-based):**
+Cookie fallback is **not permitted in hosted profiles** (`prod`/`staging`), but **is permitted for non-hosted legacy UI compatibility** on `/ui*` only. This aligns with repository evidence:
+- Auth boundary forbids human/browser auth in hosted core.
+- Legacy `/ui/*` is internal/deprecated compatibility with non-prod toggle policy.
+
+**Resolution:**
+- Updated `_extract_key` to enforce profile-scoped behavior:
+  - Hosted (`prod`,`staging`): header-only (`X-API-Key`) — no cookie fallback.
+  - Non-hosted: allow cookie fallback only when request path starts with `/ui`.
+- Added/updated tests proving both sides:
+  - Hosted profiles reject cookie-only auth and expose no `/ui*` routes.
+  - Non-hosted legacy UI cookie flow remains functional.
+- Repaired SOC review-sync by appending a SOC-HIGH-002 update entry to `docs/SOC_EXECUTION_GATES_2026-02-15.md` covering `api/auth_scopes/resolution.py`.
+
+**Validation Results:**
+- `.venv/bin/pytest -q tests/security/test_core_human_auth_boundary.py tests/test_auth_gate_cookie_fallback.py` passes.
+- `.venv/bin/pytest -q tests -k 'auth and core' || true` passes.
+- `make fg-fast` remains blocked by environment missing Docker binary at `prod-profile-check` (pre-existing environment limitation).
+- `bash codex_gates.sh` still reports pre-existing unrelated ruff findings under `tools/testing/*`.
+- `make soc-review-sync` passes after SOC doc update.
+- `make soc-manifest-verify` status recorded with current environment limitations.
+
+**AI Notes:**
+- Do NOT re-enable cookie fallback for hosted profiles.
+- Keep cookie compatibility narrowly scoped to non-hosted `/ui*` only.
+- Any future change touching `api/auth_scopes/resolution.py` must include SOC review-sync doc updates.
