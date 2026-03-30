@@ -695,6 +695,27 @@ def require_api_key_always(
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
     required_scopes: Set[str] | None = None,
 ) -> str:
+    # Signed-context fast path: if SignedContextGateMiddleware already verified
+    # a gateway-signed context, use its trust fields instead of requiring an API key.
+    signed_ctx = getattr(getattr(request, "state", None), "signed_ctx", None)
+    if signed_ctx is not None:
+        if required_scopes:
+            have: Set[str] = set(getattr(signed_ctx, "scopes", frozenset()))
+            needed: Set[str] = set(required_scopes)
+            if needed and not needed.issubset(have):
+                raise HTTPException(status_code=403, detail=ERR_INVALID)
+        if not getattr(getattr(request, "state", None), "auth", None):
+            from api.auth_scopes.definitions import AuthResult
+
+            request.state.auth = AuthResult(
+                valid=True,
+                reason="signed_context",
+                key_prefix=(signed_ctx.actor_id or "")[:16],
+                tenant_id=signed_ctx.tenant_id,
+                scopes=set(getattr(signed_ctx, "scopes", frozenset())),
+            )
+        return signed_ctx.actor_id
+
     got = _extract_key(request, x_api_key)
     if not got:
         raise HTTPException(status_code=401, detail=ERR_INVALID)

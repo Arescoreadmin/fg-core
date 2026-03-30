@@ -1522,3 +1522,32 @@ Core must not accept human/browser auth flows in hosted profiles. Cookie-based a
 
 Risk:
 Low — service header auth (X-API-Key) unaffected. Non-hosted behavior unchanged. Staging now correctly enforces hosted boundary.
+
+2026-03-30 — Task 2.3: Signed Gateway-to-Core Context
+
+Area: Auth Boundary / Signed Internal Context / Gateway Trust
+
+Changes:
+- api/security/signed_context.py: HMAC-SHA256 signed internal context primitives
+  (sign_context, verify_signed_context, SignedContextPayload, SignedContextError)
+- api/middleware/signed_context_gate.py: SignedContextGateMiddleware enforces
+  X-FG-Signed-Context on all non-public protected routes when enforcement is active
+- api/main.py: SignedContextGateMiddleware registered as innermost middleware
+- api/auth_scopes/resolution.py: require_api_key_always gains signed-context fast path
+  (trusts verified signed_ctx from middleware for scope checks and tenant binding)
+- tests/security/test_signed_context.py: 55 regression tests covering all failure modes
+
+Reason:
+Gateway must send cryptographically signed internal context (tenant_id, actor_id, scopes,
+request_id, trace_id, iat). Core enforces HMAC-SHA256 signature verification on all
+protected routes when FG_GATEWAY_SIGNED_CONTEXT_REQUIRED=1 or in prod/staging.
+Raw request-derived identity is untrusted; all trust fields source exclusively from
+verified signed context.
+
+Failure modes enforced: missing context (401), invalid signature (401), tampered fields
+(401), expired context (401), missing required fields (401), missing signing secret (503).
+
+Risk:
+Low — enforcement gated behind FG_GATEWAY_SIGNED_CONTEXT_REQUIRED or prod/staging env.
+Non-enforcement path is a pass-through (no behavioral change for dev/test without flag).
+API key auth path unchanged; signed context is an additive trust layer.

@@ -62,6 +62,10 @@ from api.control_tower_snapshot import router as control_tower_snapshot_router
 from api.ui_testing_control_tower import router as ui_testing_control_tower_router
 from services.ai_plane_extension import ai_external_provider_enabled, ai_plane_enabled
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
+from api.middleware.signed_context_gate import (
+    SignedContextGateConfig,
+    SignedContextGateMiddleware,
+)
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
 from api.middleware.request_validation import (
     RequestValidationConfig,
@@ -504,6 +508,13 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         AuthGateMiddleware,
         require_status_auth=require_status_auth,
         config=AuthGateConfig(),
+    )
+
+    # Signed gateway-to-core context enforcement (innermost — runs just before routes).
+    # Verifies X-FG-Signed-Context on all protected routes when enforcement is active.
+    app.add_middleware(
+        SignedContextGateMiddleware,
+        config=SignedContextGateConfig(),
     )
 
     # ---- Routers (core) ----

@@ -690,3 +690,71 @@ This was the same structural gap as Task 2.1 (`_is_production_runtime()` also om
 - Gateway token check is enforced at the FastAPI dependency level; all admin router endpoints depend on it
 
 ---
+
+### 2026-03-30 — Task 2.3: Signed Gateway-to-Core Internal Context
+
+**Area:** Auth Boundary · Gateway Trust · Signed Context
+
+**Trust-bearing surfaces audited:**
+- `api/auth_scopes/resolution.py` — `require_api_key_always`, `verify_api_key_detailed`, `_extract_key`
+- `api/middleware/auth_gate.py` — `AuthGateMiddleware` (existing API-key enforcement)
+- `api/deps.py` — `tenant_db_required`, `bind_tenant_id` (tenant propagation)
+- `api/decisions.py`, `api/stats.py`, `api/keys.py` — representative protected routes with `require_scopes`
+
+**Cryptographic trust contract implemented:**
+- Algorithm: HMAC-SHA256
+- Header: `X-FG-Signed-Context`
+- Format: `base64url(canonical_json_payload).<hmac_sha256_hex>`
+- Canonical form: `json.dumps(payload, separators=(",",":"), sort_keys=True)`
+- Required fields: `tenant_id`, `actor_id`, `scopes` (list), `request_id`, `trace_id`, `iat` (Unix int)
+- Expiry: 60 seconds (configurable via `SignedContextGateConfig.max_age_seconds`)
+- Secret: `FG_GATEWAY_SIGNING_SECRET` env var
+
+**Failure modes enforced (fail-closed):**
+- Missing `X-FG-Signed-Context` header → 401 `signed_context_required`
+- Invalid HMAC signature (tampered or wrong secret) → 401 `signed_context_invalid:invalid_signature`
+- Malformed header or JSON payload → 401 `signed_context_invalid:malformed_*`
+- Missing required trust field → 401 `signed_context_invalid:missing_fields:...`
+- Expired context (`iat` older than max_age_seconds) → 401 `signed_context_invalid:expired_context`
+- Future `iat` (clock skew > 5s) → 401 `signed_context_invalid:future_iat`
+- Enforcement active but `FG_GATEWAY_SIGNING_SECRET` not configured → 503
+
+**Enforcement scope:**
+- Active when `FG_ENV in {prod, production, staging}` OR `FG_GATEWAY_SIGNED_CONTEXT_REQUIRED=1`
+- Pass-through (no-op) in dev/test without explicit flag (preserves existing test suite)
+- Public paths (`/health`, `/health/live`, etc.) bypass signing requirement
+
+**Files changed:**
+- `api/security/signed_context.py` (new): HMAC-SHA256 signing/verification primitives
+- `api/middleware/signed_context_gate.py` (new): `SignedContextGateMiddleware` (innermost, enforces before routes)
+- `api/main.py`: imports and registers `SignedContextGateMiddleware`
+- `api/auth_scopes/resolution.py`: `require_api_key_always` gains signed-context fast path (trusts `request.state.signed_ctx` for scope checks and tenant binding; sets `request.state.auth` from signed context)
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md`: SOC entry appended for critical file changes
+- `tests/security/test_signed_context.py` (new): 55 tests
+
+**Tests added:**
+- `tests/security/test_signed_context.py`: 55 tests covering all 9 validation requirements:
+  A) Unsigned protected request → 401
+  B) Tampered tenant_id/scopes/actor_id → 401 (invalid_signature)
+  C) Wrong secret → 401 (invalid_signature)
+  D) Missing required field (all 6 fields parameterized) → 401
+  E) Expired context → 401 (expired_context)
+  F) Valid signed request succeeds (decisions, stats)
+  G) Raw X-Tenant-Id header does not override signed context
+  H) Raw tenant_id header/query without signed context rejected (401)
+  I) Public paths bypass; enforcement-off in plain test env (regression guard)
+  Unit: sign_context determinism, all failure modes, helper isolation
+
+**Gate results:**
+- `pytest -q tests/security/test_signed_context.py`: 55 passed
+- `pytest -q tests/security -k "signed_context"`: 55 passed
+- `pytest -q tests -k "auth and core"`: 36 passed
+- `make fg-fast`: SOC-P0-007 (ci-admin timeout) pre-existing only; not introduced by this task
+
+**AI Notes:**
+- Do NOT remove `signed_ctx` fast path from `require_api_key_always`; gateway-authenticated requests rely on it for scope checks
+- Do NOT make `SignedContextGateMiddleware` enforce in dev/test by default; enforcement requires explicit flag or prod env
+- Do NOT remove `FG_GATEWAY_SIGNING_SECRET` requirement; missing secret with enforcement active must return 503
+- SOC-P0-007 (ci-admin timeout) is pre-existing and not related to this task
+
+---
