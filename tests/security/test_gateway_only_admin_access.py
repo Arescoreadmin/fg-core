@@ -7,6 +7,7 @@ B) Hosted profiles accept /admin access with valid gateway token
 C) Non-hosted profiles do not enforce gateway token (dev/test convenience preserved)
 D) require_internal_admin_gateway correctly classifies all hosted profiles
 """
+
 from __future__ import annotations
 
 import pytest
@@ -159,6 +160,4 @@ class TestGatewayHostedClassificationConsistency:
         monkeypatch.setenv("FG_ENV", env)
         from api.config.env import is_production_env
 
-        assert not is_production_env(), (
-            f"FG_ENV={env!r} must NOT be a production env."
-        )
+        assert not is_production_env(), f"FG_ENV={env!r} must NOT be a production env."

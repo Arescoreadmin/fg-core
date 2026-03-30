@@ -8,6 +8,7 @@ C) Hosted profile rejects direct human-facing /ui paths
 D) Service header auth (X-API-Key) still works in non-hosted
 E) Non-hosted cookie auth is explicitly gated and absent from hosted runtime
 """
+
 from __future__ import annotations
 
 import pytest
@@ -132,9 +133,7 @@ class TestHostedProfileRouteInventory:
     def _get_routes_for_env(self, env: str, monkeypatch) -> set[str]:
         monkeypatch.setenv("FG_ENV", env)
         monkeypatch.setenv("FG_SQLITE_PATH", "/tmp/fg-route-inventory-test.db")
-        monkeypatch.setenv(
-            "FG_API_KEY", "ci-test-key-00000000000000000000000000000000"
-        )
+        monkeypatch.setenv("FG_API_KEY", "ci-test-key-00000000000000000000000000000000")
         monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
         monkeypatch.setenv("FG_DEVICE_KEY_KEK_CURRENT_VERSION", "v1")
         monkeypatch.setenv(
@@ -158,8 +157,7 @@ class TestHostedProfileRouteInventory:
         paths = self._get_routes_for_env("prod", monkeypatch)
         ui_paths = {p for p in paths if p.startswith("/ui")}
         assert not ui_paths, (
-            f"Hosted prod profile MUST NOT mount /ui routes. "
-            f"Found: {sorted(ui_paths)}"
+            f"Hosted prod profile MUST NOT mount /ui routes. Found: {sorted(ui_paths)}"
         )
 
     def test_dev_mounts_ui_routes(self, monkeypatch):
