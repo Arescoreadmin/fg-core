@@ -651,3 +651,42 @@ Three human/browser auth surfaces were present in the core runtime:
 - Internal service auth via X-API-Key header continues to work in all profiles
 
 ---
+
+### 2026-03-30 — Task 2.2: Enforce Gateway-Only Admin Access
+
+**Area:** Admin Route Enforcement · Hosted Profile Enforcement
+
+**Issue:**
+`api/admin.py:require_internal_admin_gateway()` only enforced the internal gateway token check for `{"prod", "production"}`. The `staging` profile was not included in the hosted enforcement set, meaning direct `/admin` access without a gateway token was permitted in staging — bypassing the gateway-only invariant.
+
+This was the same structural gap as Task 2.1 (`_is_production_runtime()` also omitted `staging`): all hosted-profile enforcement sets were initialized before `staging` was formally designated as a hosted profile.
+
+**Production code changed:** Yes — one targeted change to `require_internal_admin_gateway()`.
+
+**Admin gateway surfaces audited:**
+- `require_internal_admin_gateway()` — Gateway token enforcement (NEEDS HARDENING → FIXED)
+
+**Resolution:**
+`api/admin.py:require_internal_admin_gateway()`: Added `"staging"` to the hosted enforcement set `{"prod", "production", "staging"}`. Staging admin routes now require the `x-fg-internal-token` header to match `FG_ADMIN_GATEWAY_INTERNAL_TOKEN` (fail-closed if not configured).
+
+**Tests added:**
+- `tests/security/test_gateway_only_admin_access.py` (new file)
+  - `TestRequireInternalAdminGateway`: hosted profiles reject direct /admin without token (3 envs × 4 tests); accept correct token; reject wrong token; fail-closed when unconfigured
+  - `TestNonHostedAdminGatewayNotEnforced`: dev/test/development/local pass without token (4 tests)
+  - `TestGatewayHostedClassificationConsistency`: is_production_env() boundary alignment (7 tests)
+
+**Hosted vs non-hosted behavior after fix:**
+- Hosted (prod, staging): `/admin` requires `x-fg-internal-token` matching `FG_ADMIN_GATEWAY_INTERNAL_TOKEN`; direct access without token → 403 `admin_gateway_internal_required`
+- Non-hosted (dev, test): no enforcement; direct `/admin` access allowed for development convenience
+
+**Gate results:**
+- `pytest -q tests/security/test_gateway_only_admin_access.py`: 23 passed
+- `soc-review-sync`: OK (api/admin.py does not match critical path prefixes)
+- `make fg-fast`: pre-existing SOC-P0-007 (ci-admin timeout) failure only; not introduced by this task
+
+**AI Notes:**
+- Do NOT remove `"staging"` from the `require_internal_admin_gateway()` enforcement set
+- Do NOT bypass the fail-closed behavior (unconfigured token must reject all requests)
+- Gateway token check is enforced at the FastAPI dependency level; all admin router endpoints depend on it
+
+---
