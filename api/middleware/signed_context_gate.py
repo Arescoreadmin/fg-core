@@ -2,12 +2,16 @@
 SignedContextGateMiddleware — enforce cryptographically signed gateway-to-core
 internal context on all protected (non-public) routes.
 
-Enabled when:
+Enabled when (evaluated once at middleware init / app-build time):
   - FG_ENV is prod / production / staging, OR
   - FG_GATEWAY_SIGNED_CONTEXT_REQUIRED=1
 
-Required env:
-  - FG_GATEWAY_SIGNING_SECRET  (fail-closed with 503 if missing and enforcement is on)
+Enforcement state is snapshotted at __init__ time, NOT re-evaluated per request.
+This ensures that tests which monkeypatch FG_ENV after build_app() do not
+inadvertently activate enforcement.
+
+Required env (when enforcement is active):
+  - FG_GATEWAY_SIGNING_SECRET  (RuntimeError at middleware-stack build time if absent)
 
 Header expected:  X-FG-Signed-Context   (value produced by sign_context())
 
@@ -19,7 +23,6 @@ On success:
 
 On failure:
   - 401  missing / invalid / tampered / expired signed context
-  - 503  enforcement active but FG_GATEWAY_SIGNING_SECRET is not configured
 """
 
 from __future__ import annotations
@@ -48,6 +51,8 @@ def _is_enforcement_active() -> bool:
     """
     Signed-context enforcement is active in production/staging OR when
     explicitly enabled via FG_GATEWAY_SIGNED_CONTEXT_REQUIRED=1.
+
+    Used by the middleware at init time and by unit tests directly.
     """
     env = (os.getenv("FG_ENV") or "").strip().lower()
     if env in {"prod", "production", "staging"}:
@@ -71,6 +76,10 @@ class SignedContextGateMiddleware(BaseHTTPMiddleware):
     """
     Enforce signed gateway context on all non-public protected routes.
 
+    Enforcement state and signing secret are snapshotted at __init__ time so that
+    post-build environment changes (e.g. test monkeypatching) do not affect
+    an already-constructed app's enforcement posture.
+
     When enforcement is NOT active (dev/test without explicit flag), the
     middleware is a pass-through so existing tests are unaffected.
     """
@@ -79,12 +88,32 @@ class SignedContextGateMiddleware(BaseHTTPMiddleware):
         self,
         app,
         config: Optional[SignedContextGateConfig] = None,
+        enforcement_active: Optional[bool] = None,
     ) -> None:
         super().__init__(app)
         self.config = config or SignedContextGateConfig()
 
+        # Use caller-supplied value when available (passed from build_app() at
+        # add_middleware() time, before Starlette's lazy stack construction).
+        # Fall back to env read when instantiated directly (e.g. in tests).
+        self._enforcement_active: bool = (
+            enforcement_active if enforcement_active is not None else _is_enforcement_active()
+        )
+
+        if self._enforcement_active:
+            secret = get_signing_secret()
+            if not secret:
+                raise RuntimeError(
+                    "SignedContextGateMiddleware: FG_GATEWAY_SIGNING_SECRET is required "
+                    "when signed-context enforcement is active "
+                    "(FG_ENV=prod/staging or FG_GATEWAY_SIGNED_CONTEXT_REQUIRED=1)"
+                )
+            self._secret: str = secret
+        else:
+            self._secret = ""
+
     async def dispatch(self, request: Request, call_next) -> Response:
-        if not _is_enforcement_active():
+        if not self._enforcement_active:
             return await call_next(request)
 
         path = request.url.path
@@ -92,17 +121,6 @@ class SignedContextGateMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         header_val = (request.headers.get(HEADER_NAME) or "").strip()
-        secret = get_signing_secret()
-
-        if not secret:
-            log.error(
-                "signed_context_secret_missing",
-                extra={"path": path, "method": request.method},
-            )
-            return JSONResponse(
-                status_code=503,
-                content={"detail": "gateway_signing_not_configured"},
-            )
 
         if not header_val:
             log.warning(
@@ -116,7 +134,7 @@ class SignedContextGateMiddleware(BaseHTTPMiddleware):
 
         try:
             ctx = verify_signed_context(
-                header_val, secret, self.config.max_age_seconds
+                header_val, self._secret, self.config.max_age_seconds
             )
         except SignedContextError as exc:
             log.warning(

@@ -702,7 +702,8 @@ def require_api_key_always(
         if required_scopes:
             have: Set[str] = set(getattr(signed_ctx, "scopes", frozenset()))
             needed: Set[str] = set(required_scopes)
-            if needed and not needed.issubset(have):
+            # Preserve existing wildcard semantics: "*" in scopes grants all access.
+            if needed and "*" not in have and not needed.issubset(have):
                 raise HTTPException(status_code=403, detail=ERR_INVALID)
         if not getattr(getattr(request, "state", None), "auth", None):
             from api.auth_scopes.definitions import AuthResult

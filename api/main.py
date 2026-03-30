@@ -65,6 +65,7 @@ from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.signed_context_gate import (
     SignedContextGateConfig,
     SignedContextGateMiddleware,
+    _is_enforcement_active as _signed_ctx_enforcement_active,
 )
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
 from api.middleware.request_validation import (
@@ -515,6 +516,10 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.add_middleware(
         SignedContextGateMiddleware,
         config=SignedContextGateConfig(),
+        # Evaluate enforcement NOW (at build_app() time), not lazily at first request.
+        # Starlette constructs the middleware stack on the first request, so passing
+        # the decision as a parameter ensures it is captured at build time.
+        enforcement_active=_signed_ctx_enforcement_active(),
     )
 
     # ---- Routers (core) ----

@@ -503,3 +503,117 @@ class TestSignedContextGateHelpers:
         assert not _is_public("/decisions")
         assert not _is_public("/stats")
         assert not _is_public("/keys")
+
+
+# ---------------------------------------------------------------------------
+# Regression tests: wildcard scope semantics + init-caching invariant
+# ---------------------------------------------------------------------------
+
+
+class TestSignedContextRegressions:
+    """
+    Regression tests added after repair of:
+    1) Wildcard scope regression: signed-context fast path must honour "*" scope.
+    2) Status-code regression: enforcement must be snapshotted at init, not re-read
+       per-request, so tests that monkeypatch FG_ENV after build_app() do not
+       inadvertently activate enforcement and return 503.
+    """
+
+    # --- Wildcard scope regression ---
+
+    def test_wildcard_scope_authorises_any_required_scope(self, signed_ctx_app):
+        """
+        A signed context carrying scopes=["*"] must pass any route-level scope
+        requirement, matching the existing API-key wildcard semantics:
+          if needed and "*" not in have and not needed.issubset(have): deny
+        """
+        hdr = _make_signed_header(payload=_make_payload(scopes=["*"]))
+        from fastapi.testclient import TestClient
+
+        client = TestClient(signed_ctx_app, raise_server_exceptions=False)
+        resp = client.get("/decisions", headers={"X-FG-Signed-Context": hdr})
+        assert resp.status_code not in (401, 403), (
+            "Signed context with scopes=['*'] must pass decisions:read scope check. "
+            f"Got {resp.status_code}. "
+            "If this fails, wildcard scope semantics are missing from the fast path."
+        )
+
+    def test_wildcard_scope_in_signed_context_authorises_stats_route(self, signed_ctx_app):
+        """Same wildcard semantics apply to stats:read gated routes."""
+        hdr = _make_signed_header(payload=_make_payload(scopes=["*"]))
+        from fastapi.testclient import TestClient
+
+        client = TestClient(signed_ctx_app, raise_server_exceptions=False)
+        resp = client.get("/stats", headers={"X-FG-Signed-Context": hdr})
+        assert resp.status_code not in (401, 403), (
+            f"Wildcard scope must pass stats:read gate. Got {resp.status_code}."
+        )
+
+    def test_insufficient_specific_scope_still_denied(self, signed_ctx_app):
+        """A signed context without the required scope and without '*' must be 403."""
+        hdr = _make_signed_header(payload=_make_payload(scopes=["ingest:write"]))
+        from fastapi.testclient import TestClient
+
+        client = TestClient(signed_ctx_app, raise_server_exceptions=False)
+        resp = client.get("/decisions", headers={"X-FG-Signed-Context": hdr})
+        assert resp.status_code == 403, (
+            "Signed context missing decisions:read (and no '*') must return 403. "
+            f"Got {resp.status_code}."
+        )
+
+    # --- Init-caching / status-code regression ---
+
+    def test_post_build_env_monkeypatch_does_not_activate_enforcement(
+        self, monkeypatch
+    ):
+        """
+        If FG_GATEWAY_SIGNED_CONTEXT_REQUIRED is monkeypatched to '1' AFTER
+        build_app(), the middleware must NOT activate enforcement because the
+        enforcement decision is snapshotted via enforcement_active= kwarg passed
+        to add_middleware() at build_app() time (before Starlette's lazy
+        middleware-stack construction on first request).
+
+        Note: FG_ENV=production is intentionally NOT used here because it also
+        triggers assert_prod_invariants() in the lifespan (FG-PROD-001 etc.),
+        causing an unrelated 500. FG_GATEWAY_SIGNED_CONTEXT_REQUIRED isolates
+        the enforcement-snapshot behaviour without conflating other prod checks.
+        """
+        # Build app in test mode (no enforcement)
+        monkeypatch.setenv("FG_ENV", "test")
+        monkeypatch.delenv("FG_GATEWAY_SIGNED_CONTEXT_REQUIRED", raising=False)
+        monkeypatch.delenv("FG_GATEWAY_SIGNING_SECRET", raising=False)
+        monkeypatch.setenv("FG_AUTH_ENABLED", "0")
+        monkeypatch.setenv("FG_SQLITE_PATH", "/tmp/fg-init-cache-test.db")
+
+        import importlib
+
+        import api.main as main_mod
+        import api.middleware.signed_context_gate as gate_mod
+
+        importlib.reload(gate_mod)
+        importlib.reload(main_mod)
+        app = main_mod.build_app(auth_enabled=False)
+
+        # Flip the signed-context flag ON post-build (no secret set).
+        # Starlette builds the middleware stack lazily on first request, so
+        # without the enforcement_active= snapshot this would activate
+        # enforcement and raise RuntimeError → 500.
+        monkeypatch.setenv("FG_GATEWAY_SIGNED_CONTEXT_REQUIRED", "1")
+
+        from fastapi.testclient import TestClient
+
+        client = TestClient(app, raise_server_exceptions=False)
+        # Enforcement was snapshotted as False at build_app() time → no 401/503.
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        resp2 = client.get("/decisions")
+        assert resp2.status_code != 503, (
+            "Post-build env monkeypatching must not produce 503 from signed-context "
+            "middleware. Enforcement is snapshotted at build_app() time. "
+            f"Got {resp2.status_code}."
+        )
+        detail = (resp2.json().get("detail") or "") if resp2.status_code != 200 else ""
+        assert "signed_context" not in detail, (
+            "Post-build env monkeypatching must not activate signed-context "
+            f"enforcement. detail={detail!r}"
+        )

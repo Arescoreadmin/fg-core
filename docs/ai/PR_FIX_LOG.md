@@ -758,3 +758,29 @@ This was the same structural gap as Task 2.1 (`_is_production_runtime()` also om
 - SOC-P0-007 (ci-admin timeout) is pre-existing and not related to this task
 
 ---
+
+---
+
+## Task 2.3 — Regression Repair R2 (Starlette lazy-init / enforcement-snapshot)
+
+**Date:** 2026-03-30  
+**Branch:** `claude/frostgate-gateway-core-vMueh`  
+**Files changed:**
+- `api/middleware/signed_context_gate.py` — `__init__` now accepts `enforcement_active: Optional[bool]` parameter; uses caller-supplied value when provided, falls back to env read for direct test instantiation
+- `api/main.py` — passes `enforcement_active=_signed_ctx_enforcement_active()` to `add_middleware()`, evaluated at `build_app()` call time
+- `tests/security/test_signed_context.py` — `test_post_build_env_monkeypatch_does_not_activate_enforcement` updated to monkeypatch `FG_GATEWAY_SIGNED_CONTEXT_REQUIRED=1` (not `FG_ENV=production`) to avoid triggering `assert_prod_invariants()` lifespan check which caused an unrelated 500
+
+**Root cause:**  
+Starlette builds the middleware stack LAZILY on the first request, not at `add_middleware()` call time. Original `__init__` called `_is_enforcement_active()` internally, so the enforcement decision was made at first-request time, not at `build_app()` time. Tests monkeypatching `FG_GATEWAY_SIGNED_CONTEXT_REQUIRED=1` (or `FG_ENV=production`) after `build_app()` but before first request would inadvertently activate enforcement.
+
+**Fix:**  
+Pass `enforcement_active` as an explicit Python value (bool) to `add_middleware()` in `build_app()`. Starlette stores kwargs as a plain dict; the evaluated bool is frozen at `build_app()` time and used when `__init__` is called on first request. This decouples enforcement state from env reads at request time.
+
+**Secondary root cause (test):**  
+Original test used `FG_ENV=production` as the post-build env change. This triggered `assert_prod_invariants()` → `FG-PROD-001` (FG_AUTH_ENABLED must be true in prod) because test set `FG_AUTH_ENABLED=0`. Changed test to use `FG_GATEWAY_SIGNED_CONTEXT_REQUIRED=1`, which only affects signed-context enforcement and does not affect any lifespan prod-invariant checks.
+
+**Gate results after repair:**
+- `pytest -q tests/security/test_signed_context.py`: 59 passed
+
+**Trust contract unchanged:**  
+No changes to enforcement logic, scope semantics, or public-path bypass. Only the mechanism for capturing the enforcement decision at build time was hardened.
