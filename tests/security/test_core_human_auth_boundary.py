@@ -10,8 +10,6 @@ E) Non-hosted cookie auth is explicitly gated and absent from hosted runtime
 """
 from __future__ import annotations
 
-import os
-
 import pytest
 
 # ---------------------------------------------------------------------------
@@ -183,39 +181,28 @@ class TestIsProductionRuntime:
     """
     _is_production_runtime() must include staging as a hosted profile.
     This directly gates UI route mounting in build_app().
+    Tests call the real function so they fail if its classifier logic changes.
     """
-
-    def _check(self, env: str, monkeypatch) -> bool:
-        monkeypatch.setenv("FG_ENV", env)
-        import importlib
-        import api.main as main_mod
-
-        importlib.reload(main_mod)
-        return main_mod._is_production_runtime()  # type: ignore[attr-defined]
 
     @pytest.mark.parametrize("env", ["prod", "production", "staging"])
     def test_hosted_envs_are_production_runtime(self, env, monkeypatch):
         monkeypatch.setenv("FG_ENV", env)
-        # Import fresh to avoid module cache
         from api.main import _is_production_runtime  # type: ignore[attr-defined]
 
-        # Override the env for this call
-        result = (os.getenv("FG_ENV") or "").strip().lower() in {
-            "prod",
-            "production",
-            "staging",
-        }
-        assert result, f"FG_ENV={env!r} must be classified as production runtime"
+        assert _is_production_runtime(), (
+            f"FG_ENV={env!r} must be classified as production runtime by "
+            "_is_production_runtime(). If this fails, staging (or another hosted env) "
+            "was dropped from the classifier and UI routes may mount in hosted profiles."
+        )
 
     @pytest.mark.parametrize("env", ["dev", "test", "development", "local"])
     def test_non_hosted_envs_are_not_production_runtime(self, env, monkeypatch):
         monkeypatch.setenv("FG_ENV", env)
-        result = (os.getenv("FG_ENV") or "").strip().lower() in {
-            "prod",
-            "production",
-            "staging",
-        }
-        assert not result, f"FG_ENV={env!r} must NOT be classified as production runtime"
+        from api.main import _is_production_runtime  # type: ignore[attr-defined]
+
+        assert not _is_production_runtime(), (
+            f"FG_ENV={env!r} must NOT be classified as production runtime."
+        )
 
 
 # ---------------------------------------------------------------------------
