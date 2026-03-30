@@ -73,6 +73,10 @@ def signed_ctx_app(monkeypatch):
     Build a real app with signed-context enforcement active.
     Uses FG_GATEWAY_SIGNED_CONTEXT_REQUIRED=1 and a deterministic test secret.
     Auth is disabled (FG_AUTH_ENABLED=0) so API-key auth does not interfere.
+
+    No importlib.reload() needed: _is_enforcement_active() reads os.getenv()
+    dynamically, and build_app() evaluates enforcement_active= at add_middleware()
+    call time — so env vars set before build_app() are picked up directly.
     """
     monkeypatch.setenv("FG_GATEWAY_SIGNED_CONTEXT_REQUIRED", "1")
     monkeypatch.setenv("FG_GATEWAY_SIGNING_SECRET", _TEST_SECRET)
@@ -80,14 +84,9 @@ def signed_ctx_app(monkeypatch):
     monkeypatch.setenv("FG_ENV", "test")
     monkeypatch.setenv("FG_SQLITE_PATH", "/tmp/fg-signed-ctx-test.db")
 
-    import importlib
+    from api.main import build_app
 
-    import api.main as main_mod
-    import api.middleware.signed_context_gate as gate_mod
-
-    importlib.reload(gate_mod)
-    importlib.reload(main_mod)
-    app = main_mod.build_app(auth_enabled=False)
+    app = build_app(auth_enabled=False)
     return app
 
 

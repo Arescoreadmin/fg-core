@@ -856,3 +856,20 @@ Protected-route security is fully preserved: when enforcement is active and `FG_
 **Artifacts impacted:** None. All contracts, schemas, route inventory, and security artifacts are current and valid.
 
 **Repair applied:** None required. Pre-existing documented failure; no Task 2.3 regression.
+
+---
+
+### 2026-03-30 — Task 2.3 R5: fg-fast Lane Timeout — Remove importlib.reload from signed_ctx_app Fixture
+
+**Area:** Security · Tests · CI Performance
+
+**Issue:**
+`fg_required.py` reported `lane=fg-fast error=lane_timeout`. The `signed_ctx_app` pytest fixture in `tests/security/test_signed_context.py` was calling `importlib.reload(gate_mod)` and `importlib.reload(main_mod)` for every test (~28 tests). Reloading `api.main` forces re-import of all 60+ routers per test, adding several seconds of overhead per test in CI.
+
+**Resolution:**
+Removed `importlib.reload()` calls from `signed_ctx_app`. With R2's fix (`enforcement_active=` evaluated at `build_app()` call time via `_is_enforcement_active()` reading `os.getenv()` dynamically), module reloads are unnecessary. The fixture now sets env vars via `monkeypatch.setenv` and calls `build_app(auth_enabled=False)` directly. The `test_post_build_env_monkeypatch_does_not_activate_enforcement` test retains its own explicit reloads (it specifically tests snapshot semantics).
+
+**AI Notes:**
+- Do NOT re-add `importlib.reload()` to `signed_ctx_app`; the reload was only needed before R2's enforcement snapshot fix
+- `test_post_build_env_monkeypatch_does_not_activate_enforcement` intentionally keeps its own reloads — do not remove them
+- Security assertions are unchanged; only test infrastructure overhead was reduced
