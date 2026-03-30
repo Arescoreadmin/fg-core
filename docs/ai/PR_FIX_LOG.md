@@ -830,3 +830,29 @@ Protected-route security is fully preserved: when enforcement is active and `FG_
 **Validation:**
 - `ruff format --check`: 2 files already formatted
 - `pytest -q tests/security/test_signed_context.py ...`: 61 passed
+
+---
+
+## Task 2.3 — fg-required investigation (ci-admin pre-existing failure)
+
+**Date:** 2026-03-30
+**Branch:** `claude/frostgate-gateway-core-vMueh`
+
+**Failing gate:** `fg_required.py` lane=`fg-fast`
+**Root cause:** `make fg-fast` → `soc-manifest-verify` runs `ci-admin` gate, which times out. This maps to SOC-P0-007.
+
+**Is this introduced by Task 2.3?** NO.
+- SOC-P0-007 has been in `tools/ci/soc_findings_manifest.json` with `"status": "mitigated"` since PR #119 (merged to origin/main before Task 2.3 branch was created)
+- `fg_required.py` and `soc_findings_manifest.json` are unchanged by any Task 2.3 commit
+- `git log -- tools/testing/harness/fg_required.py` shows no Task 2.3 commits
+
+**Other lanes:**
+- `policy-validate`: PASS
+- `required-tests-gate`: PASS
+- `fg-contract`: PASS (contracts, schemas, drift, alignment score 100%)
+- `fg-security`: PASS
+- `fg-fast openapi security diff`: `checked_changed_ops=27 violations=0`
+
+**Artifacts impacted:** None. All contracts, schemas, route inventory, and security artifacts are current and valid.
+
+**Repair applied:** None required. Pre-existing documented failure; no Task 2.3 regression.
