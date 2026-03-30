@@ -1551,3 +1551,26 @@ Risk:
 Low — enforcement gated behind FG_GATEWAY_SIGNED_CONTEXT_REQUIRED or prod/staging env.
 Non-enforcement path is a pass-through (no behavioral change for dev/test without flag).
 API key auth path unchanged; signed context is an additive trust layer.
+
+2026-03-30 — Task 2.3 R3: Startup contract repair for signed-context gate
+
+Area: Auth Boundary / Signed Internal Context / Startup Semantics
+
+Changes:
+- api/middleware/signed_context_gate.py: moved missing-secret enforcement from
+  RuntimeError in __init__ (startup crash) to 503 in dispatch (request-time fail-closed).
+  Startup-crash semantics for missing production secrets belong in assert_prod_invariants(),
+  not in middleware __init__.
+- tests/security/test_signed_context.py: removed unused import; test for post-build
+  env-snapshot regression updated
+
+Reason:
+The startup RuntimeError broke existing hosted-profile tests (test_ui_disabled_by_default_in_prod_returns_404)
+and prod-startup-crash tests that expect ProdInvariantViolation from the lifespan gate,
+not from middleware init. Fail-closed protected-route behavior is fully preserved: protected
+routes return 503 signed_context_misconfigured when enforcement is active and secret is absent.
+
+Risk:
+Low — no change to enforcement logic or trust semantics. Protected routes still reject
+all unsigned/invalid/tampered requests. Only the failure mode for missing secret changed:
+503 at request time instead of RuntimeError at app-construction time.
