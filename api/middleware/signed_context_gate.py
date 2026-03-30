@@ -11,7 +11,8 @@ This ensures that tests which monkeypatch FG_ENV after build_app() do not
 inadvertently activate enforcement.
 
 Required env (when enforcement is active):
-  - FG_GATEWAY_SIGNING_SECRET  (RuntimeError at middleware-stack build time if absent)
+  - FG_GATEWAY_SIGNING_SECRET  (503 on protected routes if absent; startup not crashed —
+    startup-crash semantics for missing production secrets live in assert_prod_invariants())
 
 Header expected:  X-FG-Signed-Context   (value produced by sign_context())
 
@@ -100,17 +101,21 @@ class SignedContextGateMiddleware(BaseHTTPMiddleware):
             enforcement_active if enforcement_active is not None else _is_enforcement_active()
         )
 
-        if self._enforcement_active:
-            secret = get_signing_secret()
-            if not secret:
-                raise RuntimeError(
-                    "SignedContextGateMiddleware: FG_GATEWAY_SIGNING_SECRET is required "
-                    "when signed-context enforcement is active "
-                    "(FG_ENV=prod/staging or FG_GATEWAY_SIGNED_CONTEXT_REQUIRED=1)"
-                )
-            self._secret: str = secret
-        else:
-            self._secret = ""
+        # Read the secret at init time so we don't re-read on every request.
+        # A missing secret under active enforcement is handled fail-closed in
+        # dispatch (returns 503 for protected routes) rather than crashing
+        # app startup — startup crash semantics belong in assert_prod_invariants().
+        self._secret: str = get_signing_secret() if self._enforcement_active else ""
+        if self._enforcement_active and not self._secret:
+            log.warning(
+                "signed_context_secret_missing",
+                extra={
+                    "detail": (
+                        "FG_GATEWAY_SIGNING_SECRET is not set but signed-context "
+                        "enforcement is active; all protected routes will return 503"
+                    )
+                },
+            )
 
     async def dispatch(self, request: Request, call_next) -> Response:
         if not self._enforcement_active:
@@ -119,6 +124,16 @@ class SignedContextGateMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if _is_public(path):
             return await call_next(request)
+
+        if not self._secret:
+            log.error(
+                "signed_context_secret_missing_at_request_time",
+                extra={"path": path, "method": request.method},
+            )
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "signed_context_misconfigured"},
+            )
 
         header_val = (request.headers.get(HEADER_NAME) or "").strip()
 

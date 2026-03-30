@@ -28,7 +28,6 @@ from api.security.signed_context import (
     SignedContextPayload,
     _b64url_decode,
     _b64url_encode,
-    get_signing_secret,
     sign_context,
     verify_signed_context,
 )

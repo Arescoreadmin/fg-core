@@ -784,3 +784,29 @@ Original test used `FG_ENV=production` as the post-build env change. This trigge
 
 **Trust contract unchanged:**  
 No changes to enforcement logic, scope semantics, or public-path bypass. Only the mechanism for capturing the enforcement decision at build time was hardened.
+
+---
+
+## Task 2.3 — Regression Repair R3 (Startup crash / hosted-profile / compose-health)
+
+**Date:** 2026-03-30
+**Branch:** `claude/frostgate-gateway-core-vMueh`
+**Files changed:**
+- `api/middleware/signed_context_gate.py` — moved missing-secret enforcement from `__init__` (startup crash) to `dispatch` (request-time 503 fail-closed)
+
+**Root cause:**
+`SignedContextGateMiddleware.__init__()` raised `RuntimeError` when `FG_GATEWAY_SIGNING_SECRET` was absent under active enforcement. This crashed app construction in any test or compose environment that sets `FG_ENV=prod/staging` without wiring `FG_GATEWAY_SIGNING_SECRET`. Affected:
+- `test_ui_disabled_by_default_in_prod_returns_404` — builds app in prod profile, expects 404 for /ui (public path), not startup crash
+- `test_prod_startup_crashes_on_unsafe_flags` — expects `ProdInvariantViolation` from lifespan for unsafe flags, but was getting `RuntimeError` from middleware __init__ first (wrong exception type)
+- docker-compose compose validation — frostgate-core uses `FG_ENV: local` (enforcement not active, no crash expected)
+
+**Decision: startup crash vs request-time fail-closed**
+Startup-crash semantics for missing production secrets belong in `assert_prod_invariants()` (the designated production validation gate in this repository). Middleware `__init__` is not the correct location for startup enforcement of required env vars. The correct pattern for middleware is: fail-closed at request time (return 503) rather than crashing the process.
+
+Protected-route security is fully preserved: when enforcement is active and `FG_GATEWAY_SIGNING_SECRET` is missing, all requests to non-public protected routes return `503 signed_context_misconfigured`. Unsigned/tampered requests still never succeed.
+
+**Compose validation impact:**
+`frostgate-core` uses `FG_ENV: local` in compose. Enforcement is NOT active for `local` env. No crash. No impact on compose health.
+
+**Validation after repair:**
+- `pytest -q tests/security/test_signed_context.py tests/security/test_compliance_modules.py::test_ui_disabled_by_default_in_prod_returns_404 tests/security/test_prod_invariants.py::test_prod_startup_crashes_on_unsafe_flags`: 61 passed
