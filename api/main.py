@@ -165,7 +165,7 @@ def _dev_enabled() -> bool:
 
 def _is_production_runtime() -> bool:
     env = (os.getenv("FG_ENV") or "").strip().lower()
-    return env in {"prod", "production"}
+    return env in {"prod", "production", "staging"}
 
 
 def _sqlite_path_from_env() -> str:
@@ -448,7 +448,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             return
 
         api_key = _hdr(req, "X-API-Key")
-        if not api_key:
+        if not api_key and not _is_production_runtime():
             ck = req.cookies.get(UI_COOKIE_NAME)
             api_key = str(ck).strip() if ck and str(ck).strip() else None
         if not api_key:
@@ -482,7 +482,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             return
 
         api_key = _hdr(req, "X-API-Key")
-        if not api_key:
+        if not api_key and not _is_production_runtime():
             ck = req.cookies.get(UI_COOKIE_NAME)
             api_key = str(ck).strip() if ck and str(ck).strip() else None
         if not api_key:

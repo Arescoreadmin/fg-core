@@ -63,7 +63,7 @@ log = logging.getLogger("frostgate.admin")
 def require_internal_admin_gateway(request: Request) -> None:
     """Allow core /admin routes only for trusted internal gateway calls."""
     fg_env = (os.getenv("FG_ENV") or "").strip().lower()
-    if fg_env not in {"prod", "production"}:
+    if fg_env not in {"prod", "production", "staging"}:
         return
 
     expected = (

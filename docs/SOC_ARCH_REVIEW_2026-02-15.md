@@ -347,3 +347,25 @@ Format: `Risk | File | Description | Exploit Path | Fix Strategy`
     - plane_registry_snapshot.json: 090eec7430a6a27ba18f6043a396e108292ec72eda78da6478e52ceee034aaea
     - route_inventory.json: e5c637c65d3248e20ff4a34950f03bbe9494fcabca2a246ed9af346c433f8630
     - contract_routes.json: 53b62b172162b69baa75348306371186f5e6d32d0663854c6c97d2d327a98b63
+## 2026-03-29 — Task 2.1: Remove Human Auth from Core (Auth Boundary Hardening)
+
+### What changed
+- `api/auth_scopes/resolution.py`: `_extract_key()` now rejects cookie-based auth in hosted profiles (prod, production, staging). Cookie extraction returns `None` when `is_prod_like_env()` is true.
+- `api/main.py`: `_is_production_runtime()` extended to include `"staging"` in the hosted set. UI routes (`/ui*`) are no longer mounted when `FG_ENV=staging`.
+- `api/main.py`: Cookie fallback in `check_tenant_if_present()` and `require_status_auth()` conditioned on `not _is_production_runtime()`.
+
+### Why
+- `staging` is treated as a hosted profile by `is_production_env()` and `_is_production_like()`, but `_is_production_runtime()` previously excluded it, causing UI routes to mount in staging.
+- Cookie-based auth is a browser/human auth path; core must not accept it in hosted (prod/staging) profiles. Only X-API-Key header auth is permitted at hosted core runtime.
+
+### Risk
+- **Low.** Non-hosted (dev/test) behavior unchanged. Service-to-service header auth unaffected. Cookie auth is narrowly removed from hosted runtime only.
+- Staging UI users must use X-API-Key header (or go through gateway) — consistent with the hosted auth boundary.
+
+### Validation performed
+- `pytest -q tests -k 'auth and core'`: 36 passed
+- `pytest -q tests/security/test_core_human_auth_boundary.py`: 23 passed
+- `make fg-fast`: clean except pre-existing SOC-P0-007 (ci-admin timeout)
+
+### Rollback
+- Revert `api/auth_scopes/resolution.py` and `api/main.py` changes if unexpected service auth issues arise.

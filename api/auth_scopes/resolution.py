@@ -227,12 +227,19 @@ def _extract_key(request: Request, x_api_key: Optional[str]) -> Optional[str]:
 
     Security: Keys are ONLY accepted from:
       1. X-API-Key header (preferred)
-      2. Cookie (for UI sessions)
+      2. Cookie (for UI sessions — non-hosted profiles only)
 
+    Cookie auth is a browser/human auth path and is rejected in hosted profiles
+    (prod, production, staging) to enforce service-only auth at core.
     Query parameters are NOT supported.
     """
     if x_api_key and str(x_api_key).strip():
         return str(x_api_key).strip()
+
+    # Reject cookie-based auth in hosted profiles (prod/staging).
+    # Cookie auth is a human/browser auth path not permitted at core in hosted runtime.
+    if is_prod_like_env():
+        return None
 
     cookie_name = (
         os.getenv("FG_UI_COOKIE_NAME") or "fg_api_key"

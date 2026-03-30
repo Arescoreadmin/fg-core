@@ -1506,3 +1506,19 @@ as tenant_bound.
 
 Risk:
 Low — security posture improved, no production behavior change for correctly-bound callers.
+
+2026-03-29 — Task 2.1: Remove Human Auth from Core
+
+Area: Auth Boundary / Core Runtime / Hosted Profile Enforcement
+
+Changes:
+- api/auth_scopes/resolution.py: _extract_key() rejects cookie auth in hosted profiles (is_prod_like_env() guard added)
+- api/main.py: _is_production_runtime() now includes "staging"; UI routes not mounted in staging
+- api/main.py: cookie fallback in check_tenant_if_present() and require_status_auth() gated on not _is_production_runtime()
+- tests/security/test_core_human_auth_boundary.py: 23 new regression tests added
+
+Reason:
+Core must not accept human/browser auth flows in hosted profiles. Cookie-based auth is a browser auth path. UI routes must not be exposed at hosted core runtime.
+
+Risk:
+Low — service header auth (X-API-Key) unaffected. Non-hosted behavior unchanged. Staging now correctly enforces hosted boundary.
