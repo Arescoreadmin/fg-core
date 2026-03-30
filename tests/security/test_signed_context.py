@@ -101,7 +101,9 @@ class TestSignContextPrimitives:
 
     def test_sign_produces_two_segment_string(self):
         hdr = sign_context(_make_payload(), _TEST_SECRET)
-        assert hdr.count(".") == 1, "Signed header must be exactly two dot-separated segments"
+        assert hdr.count(".") == 1, (
+            "Signed header must be exactly two dot-separated segments"
+        )
 
     def test_verify_valid_payload_succeeds(self):
         payload = _make_payload()
@@ -191,7 +193,9 @@ class TestSignContextPrimitives:
         hdr = sign_context(payload, _TEST_SECRET)
         with pytest.raises(SignedContextError) as exc:
             verify_signed_context(hdr, _TEST_SECRET)
-        assert "missing_fields" in exc.value.reason or f"empty_{field}" in exc.value.reason
+        assert (
+            "missing_fields" in exc.value.reason or f"empty_{field}" in exc.value.reason
+        )
 
     def test_verify_raises_on_empty_tenant_id(self):
         payload = _make_payload(tenant_id="")
@@ -241,8 +245,22 @@ class TestSignContextPrimitives:
 
     def test_canonical_json_is_deterministic(self):
         """sign_context must produce identical output for the same payload regardless of dict insertion order."""
-        p1 = {"tenant_id": "t1", "actor_id": "a1", "scopes": ["r"], "request_id": "r1", "trace_id": "t1", "iat": 100}
-        p2 = {"iat": 100, "scopes": ["r"], "trace_id": "t1", "actor_id": "a1", "request_id": "r1", "tenant_id": "t1"}
+        p1 = {
+            "tenant_id": "t1",
+            "actor_id": "a1",
+            "scopes": ["r"],
+            "request_id": "r1",
+            "trace_id": "t1",
+            "iat": 100,
+        }
+        p2 = {
+            "iat": 100,
+            "scopes": ["r"],
+            "trace_id": "t1",
+            "actor_id": "a1",
+            "request_id": "r1",
+            "tenant_id": "t1",
+        }
         assert sign_context(p1, _TEST_SECRET) == sign_context(p2, _TEST_SECRET)
 
 
@@ -322,11 +340,15 @@ class TestSignedContextHTTPEnforcement:
 
     def test_malformed_header_rejected(self, signed_ctx_app):
         client = self._client(signed_ctx_app)
-        resp = client.get("/decisions", headers={"X-FG-Signed-Context": "not.valid.three.segments"})
+        resp = client.get(
+            "/decisions", headers={"X-FG-Signed-Context": "not.valid.three.segments"}
+        )
         assert resp.status_code == 401
 
     # D) Missing required trust field rejected
-    @pytest.mark.parametrize("field", ["tenant_id", "actor_id", "scopes", "request_id", "trace_id", "iat"])
+    @pytest.mark.parametrize(
+        "field", ["tenant_id", "actor_id", "scopes", "request_id", "trace_id", "iat"]
+    )
     def test_missing_required_field_rejected(self, field: str, signed_ctx_app):
         payload = _make_payload()
         del payload[field]
@@ -392,7 +414,9 @@ class TestSignedContextHTTPEnforcement:
         assert resp.status_code not in (401, 403)
 
     # H) Raw tenant_id without signed context is not accepted on protected routes
-    def test_raw_tenant_id_header_alone_rejected_on_protected_route(self, signed_ctx_app):
+    def test_raw_tenant_id_header_alone_rejected_on_protected_route(
+        self, signed_ctx_app
+    ):
         """Protected route must not accept raw X-Tenant-Id header without signed context."""
         client = self._client(signed_ctx_app)
         resp = client.get(
@@ -537,7 +561,9 @@ class TestSignedContextRegressions:
             "If this fails, wildcard scope semantics are missing from the fast path."
         )
 
-    def test_wildcard_scope_in_signed_context_authorises_stats_route(self, signed_ctx_app):
+    def test_wildcard_scope_in_signed_context_authorises_stats_route(
+        self, signed_ctx_app
+    ):
         """Same wildcard semantics apply to stats:read gated routes."""
         hdr = _make_signed_header(payload=_make_payload(scopes=["*"]))
         from fastapi.testclient import TestClient

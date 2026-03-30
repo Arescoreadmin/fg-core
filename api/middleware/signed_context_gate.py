@@ -98,7 +98,9 @@ class SignedContextGateMiddleware(BaseHTTPMiddleware):
         # add_middleware() time, before Starlette's lazy stack construction).
         # Fall back to env read when instantiated directly (e.g. in tests).
         self._enforcement_active: bool = (
-            enforcement_active if enforcement_active is not None else _is_enforcement_active()
+            enforcement_active
+            if enforcement_active is not None
+            else _is_enforcement_active()
         )
 
         # Read the secret at init time so we don't re-read on every request.

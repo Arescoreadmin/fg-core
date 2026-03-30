@@ -810,3 +810,23 @@ Protected-route security is fully preserved: when enforcement is active and `FG_
 
 **Validation after repair:**
 - `pytest -q tests/security/test_signed_context.py tests/security/test_compliance_modules.py::test_ui_disabled_by_default_in_prod_returns_404 tests/security/test_prod_invariants.py::test_prod_startup_crashes_on_unsafe_flags`: 61 passed
+
+---
+
+## Task 2.3 — Format-only CI repair (ruff fmt)
+
+**Date:** 2026-03-30
+**Branch:** `claude/frostgate-gateway-core-vMueh`
+**Files changed:**
+- `api/middleware/signed_context_gate.py` — formatting only
+- `tests/security/test_signed_context.py` — formatting only
+
+**Cause:**
+`ruff format --check` failed on both files; no logic was changed in this commit.
+
+**Repair:**
+`ruff format api/middleware/signed_context_gate.py tests/security/test_signed_context.py`
+
+**Validation:**
+- `ruff format --check`: 2 files already formatted
+- `pytest -q tests/security/test_signed_context.py ...`: 61 passed
