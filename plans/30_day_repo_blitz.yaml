@@ -175,10 +175,17 @@ phases:
             depends_on: ["3.3"]
             definition_of_done:
               - "Startup fails when required production env vars are missing"
+              - "Required production env vars are defined in one authoritative place"
+              - "CI and runtime startup use the same source of truth"
             validation:
               - "Production validation checks fail closed"
+              - "Prod-like startup fails when required env vars are missing"
+              - "Prod-like startup succeeds when required env vars are present"
             validation_commands:
-              - "make prod-check || true"
+              - "python tools/ci/check_required_env.py"
+              - "env FG_ENV=production python tools/ci/check_required_env.py || true"
+              - "env FG_ENV=production DATABASE_URL=postgresql://example FG_SIGNING_SECRET=test-signing-secret FG_INTERNAL_AUTH_SECRET=test-internal-secret python tools/ci/check_required_env.py"
+              - ".venv/bin/pytest -q tests -k 'required_env or prod_startup or startup_config'"
               - "make fg-fast"
 
           - id: "4.2"

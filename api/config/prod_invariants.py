@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass
 from typing import Mapping
 
+from api.config.required_env import enforce_required_env
+
 _PROD_ENVS = {"prod", "production", "staging"}
 _TRUE = {"1", "true", "yes", "y", "on"}
 
@@ -74,3 +76,6 @@ def assert_prod_invariants(settings: Mapping[str, str] | None = None) -> None:
         raise ProdInvariantViolation(
             "FG-PROD-007", "FG_ENFORCEMENT_MODE must be enforce in prod/staging"
         )
+
+    # Enforce the shared required-env list (single source of truth).
+    enforce_required_env(env)

@@ -165,6 +165,9 @@ def _check_runtime_enforcement_mode(failures: list[str]) -> None:
             "FG_DB_URL": "postgresql://example",
             "FG_DB_BACKEND": "postgres",
             "FG_ENFORCEMENT_MODE": "enforce",
+            "DATABASE_URL": "postgresql://example",
+            "FG_SIGNING_SECRET": "test-signing-secret",
+            "FG_INTERNAL_AUTH_SECRET": "test-internal-secret",
         }
         try:
             assert_prod_invariants(valid)

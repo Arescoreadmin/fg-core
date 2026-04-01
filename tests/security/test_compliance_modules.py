@@ -50,6 +50,9 @@ def _seed_prod_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         "FG_MISSION_ENVELOPE_PATH": str(mission_path),
         "FG_RING_STATE_DIR": str(ring_state),
         "FG_RING_MODEL_DIR": str(ring_model),
+        "DATABASE_URL": "postgresql://user:pass@localhost:5432/frostgate",
+        "FG_SIGNING_SECRET": "test-signing-secret",
+        "FG_INTERNAL_AUTH_SECRET": "test-internal-secret",
     }
     for key, value in env.items():
         monkeypatch.setenv(key, value)

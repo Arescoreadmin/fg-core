@@ -1522,3 +1522,22 @@ Core must not accept human/browser auth flows in hosted profiles. Cookie-based a
 
 Risk:
 Low — service header auth (X-API-Key) unaffected. Non-hosted behavior unchanged. Staging now correctly enforces hosted boundary.
+
+2026-03-28 — Task 4.1: Enforce Required Env Vars
+
+Area: Production Validation / CI Gates / Config Enforcement
+
+Changes:
+- api/config/required_env.py: new authoritative source of truth for required prod env vars (REQUIRED_PROD_ENV_VARS, get_missing_required_env, enforce_required_env)
+- api/config/prod_invariants.py: assert_prod_invariants() now calls enforce_required_env(env) as final check
+- tools/ci/check_required_env.py: rewritten to import from api.config.required_env (no duplicate list)
+- tools/ci/check_soc_invariants.py: _check_runtime_enforcement_mode valid dict updated with required vars
+- tools/ci/check_enforcement_mode_matrix.py: run_case env updated with required vars for success cases
+- tests/security/test_required_env_enforcement.py: 13 regression tests covering non-prod skip, per-var failure, blank values, all prod envs, startup path, and source drift guard
+
+Reason:
+Required production env vars were not validated at startup or in CI, allowing silent misconfiguration.
+Single source of truth established in api/config/required_env.py; CI and runtime startup now share the same enforcement list.
+
+Risk:
+Low — adds fail-closed enforcement for missing required vars. Non-prod environments are unaffected (FG_ENV check gates all enforcement).

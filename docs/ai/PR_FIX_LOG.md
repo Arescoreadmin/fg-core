@@ -690,3 +690,33 @@ This was the same structural gap as Task 2.1 (`_is_production_runtime()` also om
 - Gateway token check is enforced at the FastAPI dependency level; all admin router endpoints depend on it
 
 ---
+
+## Task 4.1 — Enforce Required Env Vars
+
+**Branch:** `blitz/4.1-enforce-required-env-vars`
+
+**Problem:** Required production env vars (`DATABASE_URL`, `FG_SIGNING_SECRET`, `FG_INTERNAL_AUTH_SECRET`) were not validated at startup or in CI. Misconfigured prod deployments could start silently.
+
+**Files changed:**
+- `api/config/required_env.py` (NEW): authoritative source of truth — `REQUIRED_PROD_ENV_VARS`, `get_missing_required_env()`, `enforce_required_env()`
+- `api/config/prod_invariants.py`: added `enforce_required_env(env)` as final check in `assert_prod_invariants()`
+- `tools/ci/check_required_env.py`: rewritten to import from `api.config.required_env` (no duplicate list); added `sys.path.insert` for direct invocation
+- `tools/ci/check_soc_invariants.py`: `_check_runtime_enforcement_mode` valid dict updated with required vars
+- `tools/ci/check_enforcement_mode_matrix.py`: `run_case` env updated with required vars for success cases
+- `tests/security/test_required_env_enforcement.py` (NEW): 23 tests — non-prod skip, per-var failure, blank value treatment, all prod env names, startup path failure/success, list non-empty guard, source drift check
+- `tests/security/test_compliance_modules.py`: `_seed_prod_env` updated with required vars
+- `tests/security/test_prod_invariants.py`: `test_prod_invariants_allow_enforcement_mode_enforce` updated with required vars
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md`: SOC review entry added for Task 4.1
+
+**Validation:**
+- `python tools/ci/check_required_env.py`: `Skipping prod-check (non-prod environment)` ✓
+- `env FG_ENV=production python tools/ci/check_required_env.py`: exits 1, reports missing vars ✓
+- `env FG_ENV=production DATABASE_URL=... FG_SIGNING_SECRET=... FG_INTERNAL_AUTH_SECRET=... python tools/ci/check_required_env.py`: `prod-check passed` ✓
+- `make fg-fast`: 1610 passed, 24 skipped ✓
+
+**AI Notes:**
+- `enforce_required_env(env)` is placed LAST in `assert_prod_invariants()` — earlier FG-PROD-00x checks must not be broken
+- The `_PROD_ENVS` set is intentionally duplicated in `required_env.py` to avoid importing `api.config.env` (which has side effects)
+- CI scripts need `sys.path.insert` for direct invocation; `PYTHONPATH=.` is only set via Makefile
+
+---
