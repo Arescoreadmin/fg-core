@@ -720,3 +720,29 @@ This was the same structural gap as Task 2.1 (`_is_production_runtime()` also om
 - CI scripts need `sys.path.insert` for direct invocation; `PYTHONPATH=.` is only set via Makefile
 
 ---
+
+## Task 4.1 Addendum — Docker Compose Regression Repair
+
+**Branch:** `blitz/4.1-enforce-required-env-vars` (same PR, Arescoreadmin/fg-core#190)
+
+**Root cause:**
+`frostgate-core` starts with `FG_ENV=prod` (default in `docker-compose.yml`: `FG_ENV: ${FG_ENV:-prod}`). The Task 4.1 enforcement added to `assert_prod_invariants()` calls `enforce_required_env()` on startup, which requires `DATABASE_URL`, `FG_SIGNING_SECRET`, and `FG_INTERNAL_AUTH_SECRET`. These three vars were absent from `env/prod.env` — the env file loaded by `frostgate-core` at startup via its `env_file:` block. The container raised `RuntimeError` during lifespan startup, failed its health check, and became unhealthy.
+
+**Affected service:** `frostgate-core` only. `frostgate-migrate` runs `api.db_migrations` (not `api.main`) — does not call `assert_prod_invariants()`. `frostgate-bootstrap` is Alpine shell — no Python startup.
+
+**Files changed:**
+- `env/prod.env`: added three missing vars under existing sections:
+  - `DATABASE_URL=postgresql+psycopg://fg_user:VD_6zx6nD4JJg3APEhNVAIBPSlqlGQao@postgres:5432/frostgate` (adjacent to `FG_DB_URL` — same connection, standard platform alias)
+  - `FG_SIGNING_SECRET=dev-signing-secret-32-bytes-minimum` (in existing CI-secrets section)
+  - `FG_INTERNAL_AUTH_SECRET=dev-internal-auth-secret-32-bytes` (in existing CI-secrets section)
+
+**No enforcement was weakened.** The values satisfy the enforcement contract. Missing-var enforcement still fails closed when vars are truly absent.
+
+**Validation:**
+- `python tools/ci/check_required_env.py`: `Skipping prod-check (non-prod environment)` ✓
+- `env FG_ENV=production python tools/ci/check_required_env.py`: exits 1, reports missing vars ✓
+- `env FG_ENV=production DATABASE_URL=... FG_SIGNING_SECRET=... FG_INTERNAL_AUTH_SECRET=... python tools/ci/check_required_env.py`: `prod-check passed` ✓
+- `docker compose --profile core config`: all three vars present in rendered `frostgate-core` environment ✓
+- `make fg-fast`: 1610 passed, 24 skipped, all gates OK ✓
+
+---
