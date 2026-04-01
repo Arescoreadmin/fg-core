@@ -1309,3 +1309,9 @@ compliance-cis:
 compliance-scap:
 	@echo "compliance-scap: OK (no-op placeholder)"
 
+# =============================================================================
+# Prod Check: OPA + prod profile + unsafe config
+# =============================================================================		
+prod-check:
+	python tools/ci/check_required_env.py
+

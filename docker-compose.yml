@@ -291,6 +291,9 @@ services:
       AG_CORE_BASE_URL: http://frostgate-core:8080
       FG_AUTH_ALLOW_FALLBACK: ${FG_AUTH_ALLOW_FALLBACK:-false}
       FG_RL_FAIL_OPEN: ${FG_RL_FAIL_OPEN:-false}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/frostgate}
+      FG_SIGNING_SECRET: ${FG_SIGNING_SECRET:-dev-signing-secret}
+      FG_INTERNAL_AUTH_SECRET: ${FG_INTERNAL_AUTH_SECRET:-dev-internal-secret}
     volumes:
       - fg_mission:/var/lib/frostgate/mission
       - fg_state:/var/lib/frostgate/state

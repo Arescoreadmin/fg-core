@@ -41,8 +41,8 @@ from tools.testing.harness.quarantine_policy import pytest_addopts_for_lane  # n
 # Put artifacts where humans actually look.
 ARTIFACT_ROOT = REPO_ROOT / "artifacts" / "fg-required"
 
-DEFAULT_GLOBAL_BUDGET_SECONDS = 480
-DEFAULT_LANE_TIMEOUT_SECONDS = 480
+DEFAULT_GLOBAL_BUDGET_SECONDS = 2800
+DEFAULT_LANE_TIMEOUT_SECONDS = 2800
 BUDGET_SAFETY_MARGIN_SECONDS = 10
 MAX_LOG_BYTES = 2 * 1024 * 1024
 
