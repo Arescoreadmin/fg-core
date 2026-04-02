@@ -746,3 +746,34 @@ This was the same structural gap as Task 2.1 (`_is_production_runtime()` also om
 - `make fg-fast`: 1610 passed, 24 skipped, all gates OK ✓
 
 ---
+
+## Task 5.1 — Docker Compose Cleanup
+
+**Branch:** `blitz/5.1-docker-compose-cleanup`
+
+**Root cause / what was wrong:**
+- `docker-compose.yml` used `:-` (silent defaults) for `DATABASE_URL`, `FG_SIGNING_SECRET`, `FG_INTERNAL_AUTH_SECRET` in the `frostgate-core` `environment:` block — masking missing required config at compose-render time
+- `FG_DB_URL` in both `frostgate-core` and `frostgate-migrate` used `:-` defaults that could silently connect to a wrong postgres endpoint
+
+**Files changed:**
+- `docker-compose.yml`: changed three required-secret vars from `:-` (silent default) to `:?` (fail loudly if unset); changed `FG_DB_URL` to use explicit `${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@postgres:5432/${POSTGRES_APP_DB}` without fallback defaults for both `frostgate-core` and `frostgate-migrate`
+
+**Services affected:** `frostgate-core`, `frostgate-migrate`
+
+**Validation commands executed:**
+- `docker compose --env-file .env.ci --profile core -f docker-compose.yml -f docker-compose.lockdown.yml config` → RENDER OK
+- `docker compose --env-file .env.ci --profile core down -v` → volumes removed cleanly
+- `docker compose --env-file .env.ci --profile core up -d --build` → stack built and started (×2 for reproducibility)
+- `docker compose --env-file .env.ci --profile core ps` → all services healthy
+- `docker compose logs frostgate-migrate --tail=200` → captured to `/tmp/fg.migrate.log`
+- `docker compose logs frostgate-core --tail=200` → captured to `/tmp/fg.core.log`
+- `docker inspect` migrate exit code → `0` ✓
+- `docker inspect` core health → `healthy` ✓
+- Reproducibility (down -v + up again): migrate exit `0`, core `healthy` ✓
+
+**Migrate exit code:** `0`
+**Core health:** `healthy`
+**Reproducibility:** PASS (second run identical)
+**make fg-fast:** 1610 passed, 24 skipped, all gates OK ✓
+
+---
