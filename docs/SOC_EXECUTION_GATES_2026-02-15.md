@@ -1570,3 +1570,33 @@ Validation:
 - Render with env injected: PASS
 - Render without env (empty env source): exit 125 — enforcement active
 - make fg-fast: all gates OK
+
+---
+
+## SOC Review Entry — Task 5.1 Addendum 3: CI Compose Teardown Env Fix
+
+Date: 2026-04-02
+Branch: blitz/5.1-docker-compose-cleanup
+
+Issue:
+CI step "Tear down stack" failed: required variable FG_SIGNING_SECRET is missing a value.
+
+Root Cause:
+GitHub Actions step-level `env:` blocks are not inherited by subsequent steps. The teardown step ran `docker compose down` without required vars in scope. Compose re-runs interpolation on teardown and enforces `:?` variables, causing failure.
+
+Fix:
+Added `env:` block to the "Tear down stack" step in `.github/workflows/docker-ci.yml` with CI-safe placeholder values for DATABASE_URL, FG_SIGNING_SECRET, and FG_INTERNAL_AUTH_SECRET.
+
+Files Changed:
+- .github/workflows/docker-ci.yml (teardown step only)
+- docs/ai/PR_FIX_LOG.md
+- docs/SOC_EXECUTION_GATES_2026-02-15.md
+
+Security Note:
+Strict :? enforcement in docker-compose.yml unchanged.
+No silent defaults reintroduced.
+Enforcement verified: compose interpolation fails without env present.
+
+Validation:
+- Teardown with env wiring: PASS
+- Compose interpolation without env: fails (enforcement active)

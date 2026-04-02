@@ -820,3 +820,28 @@ This was the same structural gap as Task 2.1 (`_is_production_runtime()` also om
 - `make fg-fast`: all gates OK
 
 ---
+## Task 5.1 Addendum 3 — CI Compose Teardown Missing FG_SIGNING_SECRET
+
+**Date:** 2026-04-02
+**Branch:** blitz/5.1-docker-compose-cleanup
+
+**Issue:** CI step "Tear down stack" failed with:
+`required variable FG_SIGNING_SECRET is missing a value`
+
+**Root Cause:** `docker compose down` re-runs compose interpolation and hits `:?` enforcement. The step-level `env:` block added to "Show effective compose files" does not propagate to subsequent steps in GitHub Actions. The teardown step ran without the required vars in its environment.
+
+**Fix:** Added the same `env:` block to the "Tear down stack" step with CI-safe placeholder values for all three `:?` required vars (`DATABASE_URL`, `FG_SIGNING_SECRET`, `FG_INTERNAL_AUTH_SECRET`).
+
+**Files Changed:**
+- `.github/workflows/docker-ci.yml` (teardown step env injection only)
+
+**Security Note:**
+- No weakening of `:?` enforcement in `docker-compose.yml`
+- No defaults reintroduced anywhere
+- Enforcement confirmed active: compose fails without env (exit non-zero)
+
+**Validation:**
+- Teardown with env: PASS
+- Render without env (`--env-file /dev/null`, empty environment): fails with missing variable error — enforcement active
+
+---
