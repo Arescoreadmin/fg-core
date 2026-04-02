@@ -371,6 +371,10 @@ jobs:
 
       - name: Start opa-bundles first
         shell: bash
+        env:
+          DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+          FG_SIGNING_SECRET: ci-signing-secret-32-bytes-minimum
+          FG_INTERNAL_AUTH_SECRET: ci-internal-auth-secret-32-bytes
         run: |
           set -euo pipefail
           docker compose --env-file .env.ci up -d --force-recreate opa-bundles

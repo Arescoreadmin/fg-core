@@ -1650,3 +1650,33 @@ Files Changed:
 Security Note:
 Strict :? enforcement in docker-compose.yml unchanged.
 No defaults reintroduced.
+
+---
+
+## SOC Review Entry — Task 5.1 Addendum 6: CI "Start opa-bundles first" Env Fix
+
+Date: 2026-04-02
+Branch: blitz/5.1-docker-compose-cleanup
+
+Issue:
+CI step "Start opa-bundles first" failed: required variable FG_INTERNAL_AUTH_SECRET is missing a value.
+
+Root Cause:
+Step-level env: blocks are not inherited between steps in GitHub Actions. This step ran docker compose up without required vars, triggering :? enforcement in docker-compose.yml.
+
+Fix:
+Added env: block to "Start opa-bundles first" step with CI-safe placeholder values for DATABASE_URL, FG_SIGNING_SECRET, and FG_INTERNAL_AUTH_SECRET. Identical pattern to all prior passing compose steps.
+
+Files Changed:
+- .github/workflows/docker-ci.yml (opa-bundles step only)
+- docs/ai/PR_FIX_LOG.md
+- docs/SOC_EXECUTION_GATES_2026-02-15.md
+
+Security Note:
+Strict :? enforcement in docker-compose.yml unchanged.
+No defaults reintroduced.
+
+Validation:
+"Start opa-bundles first" step passes with env propagation.
+Failure reproducible when env block is removed.
+All prior steps unaffected.
