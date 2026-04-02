@@ -192,43 +192,56 @@ phases:
             title: "Remove silent defaults"
             status: "pending"
             depends_on: ["4.1"]
+
             definition_of_done:
               - "Production does not silently supply critical defaults"
+              - "Critical production secrets/config must be explicitly provided"
+              - "Compose/runtime paths do not hide missing critical config with fallback defaults"
+
             validation:
               - "Missing critical config causes explicit failure"
+              - "Blank critical config causes explicit failure"
+              - "Prod-like startup/compose path does not silently backfill critical defaults"
+              - "Fast lane passes"
+
             validation_commands:
-              - "make prod-check || true"
-              - "make fg-fast"
+              - "! env FG_ENV=production python tools/ci/check_required_env.py"
+              - pytest -q tests -k "required_env or prod_startup or startup_config or silent_default"
+              - docker compose --env-file .env.ci -f docker-compose.yml -f docker-compose.lockdown.yml config >/tmp/fg.compose.rendered.yml
+              - "! rg -n 'FG_API_KEY:.*:-|FG_WEBHOOK_SECRET:.*:-|FG_SIGNING_SECRET:.*:-|FG_INTERNAL_AUTH_SECRET:.*:-|DATABASE_URL:.*:-' docker-compose.yml docker-compose.lockdown.yml"
+              - make fg-fast
 
-  - id: "phase-2"
-    name: "Deployability"
-
-    modules:
-      - id: "5.0"
-        name: "Infrastructure"
-
-        tasks:
           - id: "5.1"
             title: "Docker compose cleanup"
             status: "pending"
             depends_on: ["4.2"]
-            definition_of_done:
-              - "Compose stack is reproducible and boots expected services"
-            validation:
-              - "Compose config renders cleanly"
-            validation_commands:
-              - "docker compose config >/tmp/fg.compose.rendered.yml"
 
-          - id: "5.2"
-            title: "Service networking"
-            status: "pending"
-            depends_on: ["5.1"]
             definition_of_done:
-              - "Services resolve each other through compose service names"
+              - "Compose stack is reproducible and boots expected core services"
+              - "Core profile renders and starts with explicit required config"
+              - "Bootstrap and migration steps complete successfully"
+              - "frostgate-core reaches healthy status under the CI-like compose path"
+
             validation:
-              - "No localhost-only container assumptions remain"
+              - "Compose config renders cleanly with the CI env file"
+              - "Core profile can be torn down and brought back up reproducibly"
+              - "Bootstrap exits successfully"
+              - "Migration exits successfully"
+              - "frostgate-core reaches healthy status"
+              - "Compose service state is stable after startup"
+
             validation_commands:
-              - "docker compose config >/tmp/fg.compose.rendered.yml"
+              - "docker compose --env-file .env.ci --profile core -f docker-compose.yml -f docker-compose.lockdown.yml config >/tmp/fg.compose.rendered.yml"
+              - "docker compose --env-file .env.ci --profile core down -v"
+              - "docker compose --env-file .env.ci --profile core up -d --build"
+              - "timeout 120 sh -c 'until docker ps --filter name=fg-core-frostgate-core-1 --filter health=healthy --format \"{{.Names}}\" | grep -q frostgate-core; do sleep 3; done'"
+              - "docker compose --env-file .env.ci --profile core ps >/tmp/fg.compose.ps.txt"
+              - "docker compose --env-file .env.ci --profile core logs frostgate-migrate --tail=200 >/tmp/fg.migrate.log"
+              - "docker compose --env-file .env.ci --profile core logs frostgate-core --tail=200 >/tmp/fg.core.log"
+              - "docker inspect $(docker compose --env-file .env.ci --profile core ps -qa frostgate-migrate) --format '{{.State.ExitCode}}' >/tmp/fg.migrate.exit"
+              - "docker inspect $(docker compose --env-file .env.ci --profile core ps -q frostgate-core) --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' >/tmp/fg.core.health"
+              - "test \"$(cat /tmp/fg.migrate.exit)\" = \"0\""
+              - "test \"$(cat /tmp/fg.core.health)\" = \"healthy\""
 
       - id: "6.0"
         name: "Auth Flow"

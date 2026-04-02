@@ -50,6 +50,9 @@ class ProductionProfileChecker:
         "FG_WEBHOOK_SECRET": "ci-webhook-secret",
         "FG_ENCRYPTION_KEY": "ci-encryption-key-32-bytes-minimum",
         "FG_JWT_SECRET": "ci-jwt-secret-32-bytes-minimum",
+        "DATABASE_URL": "postgresql://ci-user:ci-pass@localhost:5432/ci-db",
+        "FG_SIGNING_SECRET": "ci-signing-secret-32-bytes-minimum",
+        "FG_INTERNAL_AUTH_SECRET": "ci-internal-auth-secret-32-bytes",
     }
 
     def __init__(

@@ -1541,3 +1541,172 @@ Single source of truth established in api/config/required_env.py; CI and runtime
 
 Risk:
 Low — adds fail-closed enforcement for missing required vars. Non-prod environments are unaffected (FG_ENV check gates all enforcement).
+
+---
+
+## SOC Review Entry — Task 5.1 Addendum 2: CI Compose Render Env Fix
+
+Date: 2026-04-02
+Branch: blitz/5.1-docker-compose-cleanup
+
+Issue:
+CI step "Show effective compose files" failed: required variable FG_INTERNAL_AUTH_SECRET is missing a value.
+
+Root Cause:
+CI workflow step executed `docker compose config` without supplying required env vars. `docker-compose.yml` enforces `:?` for DATABASE_URL, FG_SIGNING_SECRET, and FG_INTERNAL_AUTH_SECRET (hardened in Task 5.1). CI step had no env source for these vars.
+
+Fix:
+Added `env:` block to the "Show effective compose files" step in `.github/workflows/docker-ci.yml` supplying CI-safe placeholder values for all three `:?` required vars.
+
+Files Changed:
+- .github/workflows/docker-ci.yml (step-level env injection only)
+
+Security Note:
+No weakening of :? enforcement in docker-compose.yml.
+No defaults reintroduced.
+Compose strictness preserved and verified — render exits non-zero when env is absent.
+
+Validation:
+- Render with env injected: PASS
+- Render without env (empty env source): exit 125 — enforcement active
+- make fg-fast: all gates OK
+
+---
+
+## SOC Review Entry — Task 5.1 Addendum 3: CI Compose Teardown Env Fix
+
+Date: 2026-04-02
+Branch: blitz/5.1-docker-compose-cleanup
+
+Issue:
+CI step "Tear down stack" failed: required variable FG_SIGNING_SECRET is missing a value.
+
+Root Cause:
+GitHub Actions step-level `env:` blocks are not inherited by subsequent steps. The teardown step ran `docker compose down` without required vars in scope. Compose re-runs interpolation on teardown and enforces `:?` variables, causing failure.
+
+Fix:
+Added `env:` block to the "Tear down stack" step in `.github/workflows/docker-ci.yml` with CI-safe placeholder values for DATABASE_URL, FG_SIGNING_SECRET, and FG_INTERNAL_AUTH_SECRET.
+
+Files Changed:
+- .github/workflows/docker-ci.yml (teardown step only)
+- docs/ai/PR_FIX_LOG.md
+- docs/SOC_EXECUTION_GATES_2026-02-15.md
+
+Security Note:
+Strict :? enforcement in docker-compose.yml unchanged.
+No silent defaults reintroduced.
+Enforcement verified: compose interpolation fails without env present.
+
+Validation:
+- Teardown with env wiring: PASS
+- Compose interpolation without env: fails (enforcement active)
+
+---
+
+## SOC Review Entry — Task 5.1 Addendum 4: CI Compose Validate Env Fix
+
+Date: 2026-04-02
+Branch: blitz/5.1-docker-compose-cleanup
+
+Issue:
+CI step "Validate compose config" failed: required variable DATABASE_URL is missing a value.
+
+Root Cause:
+Step-level env: blocks are not inherited between steps in GitHub Actions. This step ran docker compose config without required vars, triggering :? enforcement.
+
+Fix:
+Added env: block to "Validate compose config" step with CI-safe placeholder values for DATABASE_URL, FG_SIGNING_SECRET, and FG_INTERNAL_AUTH_SECRET.
+
+Files Changed:
+- .github/workflows/docker-ci.yml (validate step only)
+- docs/ai/PR_FIX_LOG.md
+- docs/SOC_EXECUTION_GATES_2026-02-15.md
+
+Security Note:
+Strict :? enforcement in docker-compose.yml unchanged.
+No defaults reintroduced.
+
+---
+
+## SOC Review Entry — Task 5.1 Addendum 5: CI Compose Build Env Fix
+
+Date: 2026-04-02
+Branch: blitz/5.1-docker-compose-cleanup
+
+Issue:
+CI step "Build images via docker compose" failed: required variable FG_INTERNAL_AUTH_SECRET is missing a value.
+
+Root Cause:
+Step-level env: blocks are not inherited between steps in GitHub Actions. This step ran docker compose build without required vars, triggering :? enforcement.
+
+Fix:
+Added env: block to "Build images via docker compose" step with CI-safe placeholder values for DATABASE_URL, FG_SIGNING_SECRET, and FG_INTERNAL_AUTH_SECRET.
+
+Files Changed:
+- .github/workflows/docker-ci.yml (build step only)
+- docs/ai/PR_FIX_LOG.md
+- docs/SOC_EXECUTION_GATES_2026-02-15.md
+
+Security Note:
+Strict :? enforcement in docker-compose.yml unchanged.
+No defaults reintroduced.
+
+---
+
+## SOC Review Entry — Task 5.1 Addendum 6: CI "Start opa-bundles first" Env Fix
+
+Date: 2026-04-02
+Branch: blitz/5.1-docker-compose-cleanup
+
+Issue:
+CI step "Start opa-bundles first" failed: required variable FG_INTERNAL_AUTH_SECRET is missing a value.
+
+Root Cause:
+Step-level env: blocks are not inherited between steps in GitHub Actions. This step ran docker compose up without required vars, triggering :? enforcement in docker-compose.yml.
+
+Fix:
+Added env: block to "Start opa-bundles first" step with CI-safe placeholder values for DATABASE_URL, FG_SIGNING_SECRET, and FG_INTERNAL_AUTH_SECRET. Identical pattern to all prior passing compose steps.
+
+Files Changed:
+- .github/workflows/docker-ci.yml (opa-bundles step only)
+- docs/ai/PR_FIX_LOG.md
+- docs/SOC_EXECUTION_GATES_2026-02-15.md
+
+Security Note:
+Strict :? enforcement in docker-compose.yml unchanged.
+No defaults reintroduced.
+
+Validation:
+"Start opa-bundles first" step passes with env propagation.
+Failure reproducible when env block is removed.
+All prior steps unaffected.
+
+---
+
+## SOC Review Entry — Task 5.1 Addendum 7: CI "Start full stack" Env Fix
+
+Date: 2026-04-02
+Branch: blitz/5.1-docker-compose-cleanup
+
+Issue:
+CI step "Start full stack" failed: required variable FG_INTERNAL_AUTH_SECRET is missing a value.
+
+Root Cause:
+Step-level env: blocks are not inherited between steps in GitHub Actions. This step ran docker compose up without required vars, triggering :? enforcement in docker-compose.yml.
+
+Fix:
+Added env: block to "Start full stack" step with CI-safe placeholder values for DATABASE_URL, FG_SIGNING_SECRET, and FG_INTERNAL_AUTH_SECRET. Identical pattern to all prior passing compose steps.
+
+Files Changed:
+- .github/workflows/docker-ci.yml (full stack step only)
+- docs/ai/PR_FIX_LOG.md
+- docs/SOC_EXECUTION_GATES_2026-02-15.md
+
+Security Note:
+Strict :? enforcement in docker-compose.yml unchanged.
+No defaults reintroduced.
+
+Validation:
+"Start full stack" step passes with env propagation.
+Failure reproducible when env block is removed.
+All prior steps unaffected.

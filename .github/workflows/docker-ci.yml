@@ -340,6 +340,10 @@ jobs:
 
       - name: Show effective compose files
         shell: bash
+        env:
+          DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+          FG_SIGNING_SECRET: ci-signing-secret-32-bytes-minimum
+          FG_INTERNAL_AUTH_SECRET: ci-internal-auth-secret-32-bytes
         run: |
           set -euo pipefail
           docker compose --env-file .env.ci config > /tmp/fg.compose.rendered.yml
@@ -347,18 +351,30 @@ jobs:
 
       - name: Validate compose config
         shell: bash
+        env:
+          DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+          FG_SIGNING_SECRET: ci-signing-secret-32-bytes-minimum
+          FG_INTERNAL_AUTH_SECRET: ci-internal-auth-secret-32-bytes
         run: |
           set -euo pipefail
           docker compose --env-file .env.ci config >/dev/null
 
       - name: Build images via docker compose
         shell: bash
+        env:
+          DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+          FG_SIGNING_SECRET: ci-signing-secret-32-bytes-minimum
+          FG_INTERNAL_AUTH_SECRET: ci-internal-auth-secret-32-bytes
         run: |
           set -euo pipefail
           docker compose --env-file .env.ci build --pull
 
       - name: Start opa-bundles first
         shell: bash
+        env:
+          DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+          FG_SIGNING_SECRET: ci-signing-secret-32-bytes-minimum
+          FG_INTERNAL_AUTH_SECRET: ci-internal-auth-secret-32-bytes
         run: |
           set -euo pipefail
           docker compose --env-file .env.ci up -d --force-recreate opa-bundles
@@ -376,6 +392,10 @@ jobs:
 
       - name: Start full stack
         shell: bash
+        env:
+          DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+          FG_SIGNING_SECRET: ci-signing-secret-32-bytes-minimum
+          FG_INTERNAL_AUTH_SECRET: ci-internal-auth-secret-32-bytes
         run: |
           set -euo pipefail
           docker compose --env-file .env.ci up -d --force-recreate
@@ -442,6 +462,10 @@ jobs:
       - name: Tear down stack
         if: always()
         shell: bash
+        env:
+          DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+          FG_SIGNING_SECRET: ci-signing-secret-32-bytes-minimum
+          FG_INTERNAL_AUTH_SECRET: ci-internal-auth-secret-32-bytes
         run: |
           set +e
           docker compose --env-file .env.ci down -v --remove-orphans

@@ -220,7 +220,7 @@ services:
         required: true
     environment:
       FG_DB_BACKEND: ${FG_DB_BACKEND:-postgres}
-      FG_DB_URL: ${FG_DB_URL:-postgresql+psycopg://${POSTGRES_APP_USER:-fg_user}:${POSTGRES_APP_PASSWORD:-postgres}@postgres:5432/${POSTGRES_APP_DB:-frostgate}}
+      FG_DB_URL: postgresql+psycopg://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@postgres:5432/${POSTGRES_APP_DB}
     depends_on:
       postgres:
         condition: service_healthy
@@ -282,7 +282,7 @@ services:
       FG_DEBUG: ${FG_DEBUG:-false}
       FG_LOG_LEVEL: ${FG_LOG_LEVEL:-info}
       FG_DB_BACKEND: ${FG_DB_BACKEND:-postgres}
-      FG_DB_URL: ${FG_DB_URL:-postgresql+psycopg://fg_user:postgres@postgres:5432/frostgate}
+      FG_DB_URL: postgresql+psycopg://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@postgres:5432/${POSTGRES_APP_DB}
       FG_WEBHOOK_SECRET: ${FG_WEBHOOK_SECRET:?set FG_WEBHOOK_SECRET in .env or env/prod.env}
       FG_API_KEY: ${FG_API_KEY:?set FG_API_KEY in .env or env/prod.env}
       FG_REDIS_URL: ${FG_REDIS_URL:-redis://:ci-redis-password@redis:6379/0}
@@ -291,9 +291,9 @@ services:
       AG_CORE_BASE_URL: http://frostgate-core:8080
       FG_AUTH_ALLOW_FALLBACK: ${FG_AUTH_ALLOW_FALLBACK:-false}
       FG_RL_FAIL_OPEN: ${FG_RL_FAIL_OPEN:-false}
-      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/frostgate}
-      FG_SIGNING_SECRET: ${FG_SIGNING_SECRET:-dev-signing-secret}
-      FG_INTERNAL_AUTH_SECRET: ${FG_INTERNAL_AUTH_SECRET:-dev-internal-secret}
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env or env/prod.env}
+      FG_SIGNING_SECRET: ${FG_SIGNING_SECRET:?set FG_SIGNING_SECRET in .env or env/prod.env}
+      FG_INTERNAL_AUTH_SECRET: ${FG_INTERNAL_AUTH_SECRET:?set FG_INTERNAL_AUTH_SECRET in .env or env/prod.env}
     volumes:
       - fg_mission:/var/lib/frostgate/mission
       - fg_state:/var/lib/frostgate/state
