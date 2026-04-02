@@ -794,3 +794,29 @@ This was the same structural gap as Task 2.1 (`_is_production_runtime()` also om
 - `docker-compose.yml` retains `:?` enforcement unchanged
 
 ---
+## Task 5.1 Addendum 2 — CI Compose Render Missing FG_INTERNAL_AUTH_SECRET
+
+**Date:** 2026-04-02
+**Branch:** blitz/5.1-docker-compose-cleanup
+
+**Issue:** CI step "Show effective compose files" failed with:
+`required variable FG_INTERNAL_AUTH_SECRET is missing a value`
+
+**Root Cause:** `docker compose config` executed in CI without required env vars present. `docker-compose.yml` correctly enforces `:?` for `DATABASE_URL`, `FG_SIGNING_SECRET`, and `FG_INTERNAL_AUTH_SECRET`. CI step did not supply these via env or an env-file that contained them.
+
+**Fix:** Added `env:` block to the "Show effective compose files" workflow step with CI-safe placeholder values for all three `:?` required vars.
+
+**Files Changed:**
+- `.github/workflows/docker-ci.yml` (step env injection only)
+
+**Security Note:**
+- No weakening of `:?` enforcement in `docker-compose.yml`
+- No defaults reintroduced anywhere
+- Compose strictness preserved — render still fails with exit 125 when env is absent
+
+**Validation:**
+- Render with env: PASS
+- Render without env (`--env-file /dev/null`, no inherited env): exit 125 (FAIL — enforcement active)
+- `make fg-fast`: all gates OK
+
+---

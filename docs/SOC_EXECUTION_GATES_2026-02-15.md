@@ -1541,3 +1541,32 @@ Single source of truth established in api/config/required_env.py; CI and runtime
 
 Risk:
 Low — adds fail-closed enforcement for missing required vars. Non-prod environments are unaffected (FG_ENV check gates all enforcement).
+
+---
+
+## SOC Review Entry — Task 5.1 Addendum 2: CI Compose Render Env Fix
+
+Date: 2026-04-02
+Branch: blitz/5.1-docker-compose-cleanup
+
+Issue:
+CI step "Show effective compose files" failed: required variable FG_INTERNAL_AUTH_SECRET is missing a value.
+
+Root Cause:
+CI workflow step executed `docker compose config` without supplying required env vars. `docker-compose.yml` enforces `:?` for DATABASE_URL, FG_SIGNING_SECRET, and FG_INTERNAL_AUTH_SECRET (hardened in Task 5.1). CI step had no env source for these vars.
+
+Fix:
+Added `env:` block to the "Show effective compose files" step in `.github/workflows/docker-ci.yml` supplying CI-safe placeholder values for all three `:?` required vars.
+
+Files Changed:
+- .github/workflows/docker-ci.yml (step-level env injection only)
+
+Security Note:
+No weakening of :? enforcement in docker-compose.yml.
+No defaults reintroduced.
+Compose strictness preserved and verified — render exits non-zero when env is absent.
+
+Validation:
+- Render with env injected: PASS
+- Render without env (empty env source): exit 125 — enforcement active
+- make fg-fast: all gates OK
