@@ -870,3 +870,28 @@ This was the same structural gap as Task 2.1 (`_is_production_runtime()` also om
 - Compose without env: fails (enforcement active)
 
 ---
+## Task 5.1 Addendum 5 — CI Compose Build Missing FG_INTERNAL_AUTH_SECRET
+
+**Date:** 2026-04-02
+**Branch:** blitz/5.1-docker-compose-cleanup
+
+**Issue:** CI step "Build images via docker compose" failed with:
+`required variable FG_INTERNAL_AUTH_SECRET is missing a value`
+
+**Root Cause:** Same class as addenda 2–4. Step-level `env:` blocks are not inherited between GitHub Actions steps. The build step ran `docker compose build` without required vars in scope.
+
+**Fix:** Added `env:` block to "Build images via docker compose" with CI-safe placeholder values for all three `:?` required vars.
+
+**Files Changed:**
+- `.github/workflows/docker-ci.yml` (build step env injection only)
+
+**Security Note:**
+- `:?` enforcement in `docker-compose.yml` unchanged
+- No defaults reintroduced
+- Enforcement verified active: compose fails without env
+
+**Validation:**
+- Build step with env: PASS
+- Compose without env: fails (enforcement active)
+
+---

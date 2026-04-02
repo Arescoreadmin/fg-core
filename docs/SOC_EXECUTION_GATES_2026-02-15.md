@@ -1625,3 +1625,28 @@ Files Changed:
 Security Note:
 Strict :? enforcement in docker-compose.yml unchanged.
 No defaults reintroduced.
+
+---
+
+## SOC Review Entry — Task 5.1 Addendum 5: CI Compose Build Env Fix
+
+Date: 2026-04-02
+Branch: blitz/5.1-docker-compose-cleanup
+
+Issue:
+CI step "Build images via docker compose" failed: required variable FG_INTERNAL_AUTH_SECRET is missing a value.
+
+Root Cause:
+Step-level env: blocks are not inherited between steps in GitHub Actions. This step ran docker compose build without required vars, triggering :? enforcement.
+
+Fix:
+Added env: block to "Build images via docker compose" step with CI-safe placeholder values for DATABASE_URL, FG_SIGNING_SECRET, and FG_INTERNAL_AUTH_SECRET.
+
+Files Changed:
+- .github/workflows/docker-ci.yml (build step only)
+- docs/ai/PR_FIX_LOG.md
+- docs/SOC_EXECUTION_GATES_2026-02-15.md
+
+Security Note:
+Strict :? enforcement in docker-compose.yml unchanged.
+No defaults reintroduced.
