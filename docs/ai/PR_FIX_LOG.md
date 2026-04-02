@@ -924,3 +924,31 @@ This was the same structural gap as Task 2.1 (`_is_production_runtime()` also om
 - Compose without env: fails (enforcement active)
 
 ---
+## Task 5.1 Addendum 7 — CI "Start full stack" Missing FG_INTERNAL_AUTH_SECRET
+
+**Date:** 2026-04-02
+**Branch:** blitz/5.1-docker-compose-cleanup
+
+**Issue:** CI step "Start full stack" failed with:
+`required variable FG_INTERNAL_AUTH_SECRET is missing a value`
+
+**Root Cause:** Same class as addenda 2–6. Step-level `env:` blocks are not inherited between GitHub Actions steps. This step invoked `docker compose up` without required vars in scope, triggering `:?` enforcement in docker-compose.yml.
+
+**Fix:** Added `env:` block to "Start full stack" step with CI-safe placeholder values for `DATABASE_URL`, `FG_SIGNING_SECRET`, and `FG_INTERNAL_AUTH_SECRET` — matching the identical block on all prior passing compose steps.
+
+**Files Changed:**
+- `.github/workflows/docker-ci.yml` (full stack step env injection only)
+- `docs/ai/PR_FIX_LOG.md`
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md`
+
+**Security Note:**
+- `:?` enforcement in `docker-compose.yml` unchanged
+- No defaults reintroduced
+- Enforcement verified active: compose fails without env
+
+**Validation:**
+- "Start full stack" step with env: PASS
+- All prior steps unaffected
+- Compose without env: fails (enforcement active)
+
+---
