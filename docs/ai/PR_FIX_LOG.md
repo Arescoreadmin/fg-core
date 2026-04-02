@@ -777,3 +777,20 @@ This was the same structural gap as Task 2.1 (`_is_production_runtime()` also om
 **make fg-fast:** 1610 passed, 24 skipped, all gates OK ✓
 
 ---
+## Task 5.1 Addendum — CI Guard Compose Render Fix
+
+**Date:** 2026-04-01
+**Branch:** blitz/5.1-docker-compose-cleanup
+**Root cause:** `scripts/prod_profile_check.py` builds a subprocess env via `_COMPOSE_PLACEHOLDER_ENV` to satisfy `:?` vars during static compose render. After Task 5.1 added `:?` enforcement for `DATABASE_URL`, `FG_SIGNING_SECRET`, and `FG_INTERNAL_AUTH_SECRET`, those three vars were not in the placeholder dict — causing `docker compose config` to exit non-zero.
+
+**Fix:** Added the three vars to `_COMPOSE_PLACEHOLDER_ENV` with CI-safe placeholder values:
+- `DATABASE_URL` → `postgresql://ci-user:ci-pass@localhost:5432/ci-db`
+- `FG_SIGNING_SECRET` → `ci-signing-secret-32-bytes-minimum`
+- `FG_INTERNAL_AUTH_SECRET` → `ci-internal-auth-secret-32-bytes`
+
+**Verification:**
+- `python scripts/prod_profile_check.py` → `PRODUCTION PROFILE CHECK: PASSED`
+- `make fg-fast` → all gates OK
+- `docker-compose.yml` retains `:?` enforcement unchanged
+
+---
