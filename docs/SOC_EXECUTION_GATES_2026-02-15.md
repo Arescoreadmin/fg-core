@@ -1600,3 +1600,28 @@ Enforcement verified: compose interpolation fails without env present.
 Validation:
 - Teardown with env wiring: PASS
 - Compose interpolation without env: fails (enforcement active)
+
+---
+
+## SOC Review Entry — Task 5.1 Addendum 4: CI Compose Validate Env Fix
+
+Date: 2026-04-02
+Branch: blitz/5.1-docker-compose-cleanup
+
+Issue:
+CI step "Validate compose config" failed: required variable DATABASE_URL is missing a value.
+
+Root Cause:
+Step-level env: blocks are not inherited between steps in GitHub Actions. This step ran docker compose config without required vars, triggering :? enforcement.
+
+Fix:
+Added env: block to "Validate compose config" step with CI-safe placeholder values for DATABASE_URL, FG_SIGNING_SECRET, and FG_INTERNAL_AUTH_SECRET.
+
+Files Changed:
+- .github/workflows/docker-ci.yml (validate step only)
+- docs/ai/PR_FIX_LOG.md
+- docs/SOC_EXECUTION_GATES_2026-02-15.md
+
+Security Note:
+Strict :? enforcement in docker-compose.yml unchanged.
+No defaults reintroduced.

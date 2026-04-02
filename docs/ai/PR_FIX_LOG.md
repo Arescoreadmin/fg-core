@@ -845,3 +845,28 @@ This was the same structural gap as Task 2.1 (`_is_production_runtime()` also om
 - Render without env (`--env-file /dev/null`, empty environment): fails with missing variable error — enforcement active
 
 ---
+## Task 5.1 Addendum 4 — CI Compose Validate Missing DATABASE_URL
+
+**Date:** 2026-04-02
+**Branch:** blitz/5.1-docker-compose-cleanup
+
+**Issue:** CI step "Validate compose config" failed with:
+`required variable DATABASE_URL is missing a value`
+
+**Root Cause:** Same class as addenda 2 & 3 — GitHub Actions `env:` blocks are step-scoped and do not propagate. This step ran `docker compose config` without the required env vars in scope.
+
+**Fix:** Added `env:` block to "Validate compose config" with CI-safe placeholder values for all three `:?` required vars.
+
+**Files Changed:**
+- `.github/workflows/docker-ci.yml` (validate step env injection only)
+
+**Security Note:**
+- `:?` enforcement in `docker-compose.yml` unchanged
+- No defaults reintroduced
+- Enforcement verified active: compose fails without env
+
+**Validation:**
+- Validate step with env: PASS
+- Compose without env: fails (enforcement active)
+
+---
