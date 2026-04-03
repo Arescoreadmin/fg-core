@@ -1241,7 +1241,7 @@ all four required categories simultaneously.
 **Root cause:**
 `bash codex_gates.sh` exited at the secret scan step with two false positives:
 - `codex_gates.sh:51` — `rg` matched the pattern string inside its own command
-- `services/ai_plane_extension/policy_engine.py:14` — `re.compile(r"(?i)BEGIN PRIVATE KEY")` is a deny-list pattern, not an actual key
+- `services/ai_plane_extension/policy_engine.py:14` — a `re.compile` deny-list pattern for AI output filtering, not an actual key
 
 **Fix:**
 Added `--glob '!codex_gates.sh'` and `--glob '!services/ai_plane_extension/policy_engine.py'` to the `rg` command, with explanatory comments. Pre-existing issue exposed when `codex_gates.sh` was first successfully run past the ruff gate.
