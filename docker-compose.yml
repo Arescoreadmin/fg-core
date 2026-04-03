@@ -356,6 +356,32 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m,mode=700
 
+  # fg-idp — Keycloak identity provider (Task 6.1)
+  # Profile: idp — start explicitly with: docker compose --profile idp up -d
+  # Requires /etc/hosts entry: 127.0.0.1 fg-idp.local
+  fg-idp:
+    profiles: ["idp"]
+    image: quay.io/keycloak/keycloak:24.0
+    command: ["start-dev", "--import-realm"]
+    networks:
+      - internal
+      - public
+    ports:
+      - "127.0.0.1:8081:8080"
+    volumes:
+      - ./keycloak/realms:/opt/keycloak/data/import:ro
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/realms/FrostGate/.well-known/openid-configuration >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+
   console:
     profiles: ["admin"]
     build:

@@ -952,3 +952,46 @@ This was the same structural gap as Task 2.1 (`_is_production_runtime()` also om
 - Compose without env: fails (enforcement active)
 
 ---
+
+## Task 6.1 — Keycloak OIDC Integration
+
+**Date:** 2026-04-02
+**Branch:** blitz/6.1-keycloak-integration
+
+**Issue:**
+Keycloak realm/client integration not wired. No fg-idp service in compose. No FG_KEYCLOAK_* env support in admin_gateway. No keycloak/oidc tests.
+
+**Root Cause:**
+Task 6.1 prerequisite — Keycloak integration had never been implemented.
+
+**Fix:**
+1. Added `fg-idp` Keycloak service to docker-compose.yml (profile: idp, port 8081, realm import from keycloak/realms/).
+2. Created keycloak/realms/frostgate-realm.json — FrostGate realm with fg-service client (serviceAccountsEnabled, client_credentials grant).
+3. Added FG_KEYCLOAK_* derivation in admin_gateway/auth/config.py:get_auth_config():
+   - FG_KEYCLOAK_BASE_URL + FG_KEYCLOAK_REALM → FG_OIDC_ISSUER (when not explicitly set)
+   - FG_KEYCLOAK_CLIENT_ID → fallback for FG_OIDC_CLIENT_ID
+   - FG_KEYCLOAK_CLIENT_SECRET → fallback for FG_OIDC_CLIENT_SECRET
+   - Existing FG_OIDC_* vars take precedence; no behavior change for existing deployments.
+4. Created tests/test_keycloak_oidc.py — 14 tests covering env wiring, negative-path, auth_flow config.
+
+**Files Changed:**
+- docker-compose.yml
+- keycloak/realms/frostgate-realm.json (new)
+- admin_gateway/auth/config.py
+- tests/test_keycloak_oidc.py (new)
+- docs/ai/PR_FIX_LOG.md
+- docs/SOC_EXECUTION_GATES_2026-02-15.md
+
+**Security Note:**
+- oidc_enabled remains False without full OIDC config (fail-closed)
+- Production gate unchanged: missing OIDC in prod → explicit error
+- No default secrets; FG_KEYCLOAK_CLIENT_SECRET must be explicitly set
+- Dev bypass unchanged
+
+**Validation:**
+- 14 keycloak/oidc/auth_flow tests: PASS
+- pytest -k 'keycloak or oidc or auth_flow': 15 passed
+- Discovery/token validation require running fg-idp: `docker compose --profile idp up -d` + /etc/hosts: 127.0.0.1 fg-idp.local
+- fg-fast: PASS (after SOC doc update)
+
+---
