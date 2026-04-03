@@ -19,6 +19,8 @@ services:
       FG_KEYCLOAK_CLIENT_SECRET: "${FG_KEYCLOAK_CLIENT_SECRET:?set FG_KEYCLOAK_CLIENT_SECRET}"
       FG_OIDC_REDIRECT_URL: "${FG_OIDC_REDIRECT_URL:-http://localhost:18080/auth/callback}"
       FG_OIDC_SCOPES: "openid profile email"
+      # Core API key for gateway→core proxying in dev/OIDC mode (Task 6.2).
+      AG_CORE_API_KEY: "${FG_API_KEY}"
     depends_on:
       fg-idp:
         condition: service_healthy

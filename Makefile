@@ -1246,6 +1246,15 @@ spine-wait:
 fg-idp-validate:
 	@bash tools/auth/validate_keycloak_runtime.sh
 
+.PHONY: fg-auth-e2e-validate
+
+## fg-auth-e2e-validate: prove full IdP→gateway auth chain (Task 6.2)
+##   Starts fg-idp + admin-gateway locally, runs token exchange and /admin/me,
+##   and verifies proxy header structure. Requires Docker + make venv.
+##   Env: FG_KEYCLOAK_CLIENT_ID, FG_KEYCLOAK_CLIENT_SECRET, FG_KEYCLOAK_REALM
+fg-auth-e2e-validate: venv
+	@bash tools/auth/validate_gateway_core_e2e.sh
+
 # =============================================================================
 # AI PR Fix Log Guard
 # =============================================================================

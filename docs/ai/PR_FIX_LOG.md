@@ -1038,3 +1038,57 @@ Task 6.1 prerequisite — Keycloak integration had never been implemented.
 - `docs/ai/PR_FIX_LOG.md`
 
 ---
+
+---
+
+## TASK 6.2 — End-to-End Auth Enforcement
+
+**Date:** 2026-04-02
+**Branch:** blitz/6.2-e2e-auth-enforcement
+
+**Problem:**
+1. **Header mismatch (bug):** `admin_gateway/routers/admin.py:_core_proxy_headers` sent `X-Admin-Gateway-Internal: true`
+   when in prod-like env, but core's `require_internal_admin_gateway` (in `api/admin.py`) checks `x-fg-internal-token`.
+   These are different headers — gateway→core proxying was silently failing in prod/staging.
+2. **No machine token path:** admin-gateway had no endpoint for machine-to-machine callers to exchange a Keycloak
+   client_credentials token for a session cookie. The e2e chain was unprovable at runtime.
+3. **Keycloak tokens lacked scopes:** fg-service client had no protocol mapper to emit `fg_scopes` in access tokens.
+4. **OIDC compose override lacked AG_CORE_API_KEY:** `docker-compose.oidc.yml` did not configure core API key,
+   so admin-gateway could not proxy to core in dev/OIDC mode.
+
+**Fixes:**
+1. `_core_proxy_headers` now adds `"X-FG-Internal-Token": token` when `is_internal=True` (prod-like env).
+   Both `X-Admin-Gateway-Internal` and `X-FG-Internal-Token` are set; core accepts the request.
+2. Added `POST /auth/token-exchange` to `admin_gateway/routers/auth.py`.
+   Accepts `Authorization: Bearer <access_token>`, decodes JWT claims, creates session cookie.
+3. Added `fg-scopes-mapper` protocol mapper to fg-service client in `keycloak/realms/frostgate-realm.json`.
+   Emits `fg_scopes: ["console:admin"]` in access tokens via OIDC hardcoded-claim mapper.
+4. Added `AG_CORE_API_KEY: "${FG_API_KEY}"` to `docker-compose.oidc.yml`.
+5. Regenerated `contracts/admin/openapi.json` after new `/auth/token-exchange` route.
+6. Created `tools/auth/validate_gateway_core_e2e.sh` — 4-step runtime e2e proof:
+   - A) Keycloak token issuance (client_credentials)
+   - B) Token exchange → session cookie (POST /auth/token-exchange)
+   - C) Protected endpoint access (GET /admin/me with session cookie)
+   - D) Structural header check (X-FG-Internal-Token present in prod proxy headers)
+7. Added `make fg-auth-e2e-validate` Makefile target.
+
+**Gates:**
+- `make fg-contract` ✓ (contracts regenerated and committed)
+- `make admin-lint` ✓ (ruff format clean)
+- `pytest admin_gateway/tests/ -q` → 141 passed ✓
+- `pytest tests/test_keycloak_oidc.py -q` → 14 passed ✓
+- `make soc-manifest-verify` ✓
+- `make prod-profile-check` ✓
+
+**Files changed:**
+- `admin_gateway/routers/admin.py` (X-FG-Internal-Token header fix)
+- `admin_gateway/routers/auth.py` (POST /auth/token-exchange endpoint)
+- `keycloak/realms/frostgate-realm.json` (fg-scopes-mapper protocol mapper)
+- `docker-compose.oidc.yml` (AG_CORE_API_KEY)
+- `contracts/admin/openapi.json` (regenerated — /auth/token-exchange route)
+- `tools/auth/validate_gateway_core_e2e.sh` (new — e2e validation script)
+- `Makefile` (fg-auth-e2e-validate target)
+- `docs/ai/PR_FIX_LOG.md`
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md`
+
+---

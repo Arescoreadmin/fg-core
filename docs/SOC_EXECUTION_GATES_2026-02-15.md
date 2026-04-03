@@ -1739,3 +1739,35 @@ Files Changed:
 - tests/test_keycloak_oidc.py (14 new tests: wiring, negative-path, auth_flow)
 - docs/ai/PR_FIX_LOG.md
 - docs/SOC_EXECUTION_GATES_2026-02-15.md
+
+## 2026-04-02 - Task 6.2 End-to-End Auth Enforcement
+
+Change:
+Added POST /auth/token-exchange to admin_gateway/routers/auth.py.
+This endpoint accepts a machine bearer token (Keycloak client_credentials access token)
+and issues a signed session cookie. It is gated behind oidc_enabled — no session is
+created unless a valid OIDC config is present.
+
+Also fixed: admin_gateway/routers/admin.py:_core_proxy_headers now sends
+X-FG-Internal-Token header (in addition to existing X-Admin-Gateway-Internal) when
+FG_ENV is prod/staging. This header is what core's require_internal_admin_gateway
+verifies. The prior code was sending the wrong header name.
+
+Security posture:
+- token-exchange requires valid JWT with sub claim; rejects malformed tokens
+- No OIDC config → HTTP 503 (not 401); fail-closed
+- Session expiry enforced by existing SessionManager TTL
+- No prod-like env changes: X-FG-Internal-Token matches AG_CORE_INTERNAL_TOKEN value
+- FG_DEV_AUTH_BYPASS guards unchanged
+- New endpoint appears in regenerated contracts/admin/openapi.json
+
+Files Changed:
+- admin_gateway/routers/admin.py (X-FG-Internal-Token header fix)
+- admin_gateway/routers/auth.py (POST /auth/token-exchange)
+- keycloak/realms/frostgate-realm.json (fg-scopes-mapper)
+- docker-compose.oidc.yml (AG_CORE_API_KEY)
+- contracts/admin/openapi.json (regenerated)
+- tools/auth/validate_gateway_core_e2e.sh (new)
+- Makefile (fg-auth-e2e-validate)
+- docs/ai/PR_FIX_LOG.md
+- docs/SOC_EXECUTION_GATES_2026-02-15.md
