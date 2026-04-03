@@ -1,0 +1,24 @@
+# docker-compose.oidc.yml — Compose override: wire admin-gateway to Keycloak IdP (Task 6.1)
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.oidc.yml \
+#     --profile admin --profile idp up -d
+#
+# admin-gateway reaches Keycloak over the internal compose network (fg-idp:8080).
+# FG_KEYCLOAK_BASE_URL uses the internal Docker DNS name, not the published host port.
+# FG_KEYCLOAK_CLIENT_SECRET must be provided via env or .env file in production.
+
+services:
+  admin-gateway:
+    environment:
+      FG_ENV: dev
+      FG_DEV_AUTH_BYPASS: "false"
+      FG_KEYCLOAK_BASE_URL: "http://fg-idp:8080"
+      FG_KEYCLOAK_REALM: "FrostGate"
+      FG_KEYCLOAK_CLIENT_ID: "${FG_KEYCLOAK_CLIENT_ID:-fg-service}"
+      FG_KEYCLOAK_CLIENT_SECRET: "${FG_KEYCLOAK_CLIENT_SECRET:?set FG_KEYCLOAK_CLIENT_SECRET}"
+      FG_OIDC_REDIRECT_URL: "${FG_OIDC_REDIRECT_URL:-http://localhost:18080/auth/callback}"
+      FG_OIDC_SCOPES: "openid profile email"
+    depends_on:
+      fg-idp:
+        condition: service_healthy

@@ -151,10 +151,23 @@ class AuthConfig:
 
 @lru_cache(maxsize=1)
 def get_auth_config() -> AuthConfig:
+    # Keycloak-specific env vars (Task 6.1): derive OIDC settings when not explicitly set.
+    kc_base = os.getenv("FG_KEYCLOAK_BASE_URL")
+    kc_realm = os.getenv("FG_KEYCLOAK_REALM")
+    kc_client_id = os.getenv("FG_KEYCLOAK_CLIENT_ID")
+    kc_client_secret = os.getenv("FG_KEYCLOAK_CLIENT_SECRET")
+
+    oidc_issuer = os.getenv("FG_OIDC_ISSUER")
+    if not oidc_issuer and kc_base and kc_realm:
+        oidc_issuer = f"{kc_base.rstrip('/')}/realms/{kc_realm}"
+
+    oidc_client_id = os.getenv("FG_OIDC_CLIENT_ID") or kc_client_id
+    oidc_client_secret = os.getenv("FG_OIDC_CLIENT_SECRET") or kc_client_secret
+
     return AuthConfig(
-        oidc_issuer=os.getenv("FG_OIDC_ISSUER"),
-        oidc_client_id=os.getenv("FG_OIDC_CLIENT_ID"),
-        oidc_client_secret=os.getenv("FG_OIDC_CLIENT_SECRET"),
+        oidc_issuer=oidc_issuer,
+        oidc_client_id=oidc_client_id,
+        oidc_client_secret=oidc_client_secret,
         oidc_redirect_url=os.getenv("FG_OIDC_REDIRECT_URL"),
         oidc_scopes=os.getenv("FG_OIDC_SCOPES"),
         env=os.getenv("FG_ENV", "dev"),

@@ -1,0 +1,43 @@
+{
+  "realm": "FrostGate",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "clients": [
+    {
+      "clientId": "fg-service",
+      "name": "FrostGate Service Account",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "fg-service-ci-secret",
+      "serviceAccountsEnabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "attributes": {
+        "access.token.lifespan": "300"
+      }
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "frostgate-admin",
+        "description": "FrostGate administrator role"
+      },
+      {
+        "name": "auditor",
+        "description": "FrostGate read-only auditor role"
+      }
+    ]
+  },
+  "scopeMappings": [],
+  "clientScopeMappings": {}
+}

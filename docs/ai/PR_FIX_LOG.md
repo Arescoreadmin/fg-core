@@ -952,3 +952,89 @@ This was the same structural gap as Task 2.1 (`_is_production_runtime()` also om
 - Compose without env: fails (enforcement active)
 
 ---
+
+## Task 6.1 — Keycloak OIDC Integration
+
+**Date:** 2026-04-02
+**Branch:** blitz/6.1-keycloak-integration
+
+**Issue:**
+Keycloak realm/client integration not wired. No fg-idp service in compose. No FG_KEYCLOAK_* env support in admin_gateway. No keycloak/oidc tests.
+
+**Root Cause:**
+Task 6.1 prerequisite — Keycloak integration had never been implemented.
+
+**Fix:**
+1. Added `fg-idp` Keycloak service to docker-compose.yml (profile: idp, port 8081, realm import from keycloak/realms/).
+2. Created keycloak/realms/frostgate-realm.json — FrostGate realm with fg-service client (serviceAccountsEnabled, client_credentials grant).
+3. Added FG_KEYCLOAK_* derivation in admin_gateway/auth/config.py:get_auth_config():
+   - FG_KEYCLOAK_BASE_URL + FG_KEYCLOAK_REALM → FG_OIDC_ISSUER (when not explicitly set)
+   - FG_KEYCLOAK_CLIENT_ID → fallback for FG_OIDC_CLIENT_ID
+   - FG_KEYCLOAK_CLIENT_SECRET → fallback for FG_OIDC_CLIENT_SECRET
+   - Existing FG_OIDC_* vars take precedence; no behavior change for existing deployments.
+4. Created tests/test_keycloak_oidc.py — 14 tests covering env wiring, negative-path, auth_flow config.
+
+**Files Changed:**
+- docker-compose.yml
+- keycloak/realms/frostgate-realm.json (new)
+- admin_gateway/auth/config.py
+- tests/test_keycloak_oidc.py (new)
+- docs/ai/PR_FIX_LOG.md
+- docs/SOC_EXECUTION_GATES_2026-02-15.md
+
+**Security Note:**
+- oidc_enabled remains False without full OIDC config (fail-closed)
+- Production gate unchanged: missing OIDC in prod → explicit error
+- No default secrets; FG_KEYCLOAK_CLIENT_SECRET must be explicitly set
+- Dev bypass unchanged
+
+**Validation:**
+- 14 keycloak/oidc/auth_flow tests: PASS
+- pytest -k 'keycloak or oidc or auth_flow': 15 passed
+- Discovery/token validation require running fg-idp: `docker compose --profile idp up -d` + /etc/hosts: 127.0.0.1 fg-idp.local
+- fg-fast: PASS (after SOC doc update)
+
+---
+
+## Task 6.1 Addendum — Runtime Auth Proof and Residual Gap Closure
+
+**Date:** 2026-04-03
+**Branch:** blitz/6.1-keycloak-integration
+
+**Residual gaps identified after initial 6.1 implementation:**
+1. No runtime proof: discovery, token, container-network reachability, and negative path were unproven.
+2. `plans/30_day_repo_blitz.yaml` had dangling `depends_on: ["5.2"]` — 5.2 does not exist. Corrected to `depends_on: ["5.1"]`.
+3. `fg-idp` healthcheck used `curl`, which is not present in quay.io/keycloak/keycloak:24.0. Fixed to use bash /dev/tcp.
+4. `fg-idp` network definition used list syntax (no explicit alias). Updated to explicit `internal: aliases: [fg-idp]` matching repo convention.
+5. No make target or script for runtime auth validation.
+
+**Runtime validation path added:**
+- `tools/auth/validate_keycloak_runtime.sh` — deterministic 4-step validation:
+  - A) Host-side discovery (`localhost:8081`): issuer contains `/realms/FrostGate` ✓
+  - B) Container-network proof (`docker run --network fg-core_internal curlimages/curl http://fg-idp:8080/...`): `issuer=http://fg-idp:8080/realms/FrostGate` ✓
+  - C) Token issuance (`client_credentials`, `client_id=fg-service`): `token_type=Bearer, access_token=<present>` ✓
+  - D) Negative path (wrong secret): `HTTP=401, error=unauthorized_client` ✓
+- `make fg-idp-validate` — Makefile target calling the script
+
+**Internal vs external hostname decision:**
+- Host access: `localhost:8081` (published port; `fg-idp.local:8081` requires /etc/hosts entry)
+- Container-to-container: `http://fg-idp:8080` (Docker compose DNS via `fg-core_internal` network)
+- Issuer is dynamic in Keycloak dev mode (`KC_HOSTNAME_STRICT=false`); both paths return `/realms/FrostGate` in issuer ✓
+
+**Compose override for OIDC-wired admin-gateway:**
+- `docker-compose.oidc.yml` created: wires `FG_KEYCLOAK_BASE_URL=http://fg-idp:8080` and related vars into admin-gateway when used as an overlay
+
+**Discovery proof:** `issuer=http://localhost:8081/realms/FrostGate`, all required keys present
+**Token issuance proof:** `token_type=Bearer`, `access_token` present
+**Negative path proof:** `HTTP 401 unauthorized_client` when wrong secret used
+**Regression:** fg-fast not affected (no critical files changed in this addendum)
+
+**Files changed:**
+- `plans/30_day_repo_blitz.yaml` (dangling dependency fix)
+- `docker-compose.yml` (healthcheck fix, explicit network alias)
+- `docker-compose.oidc.yml` (new — OIDC compose override)
+- `tools/auth/validate_keycloak_runtime.sh` (new — runtime validation script)
+- `Makefile` (fg-idp-validate target)
+- `docs/ai/PR_FIX_LOG.md`
+
+---

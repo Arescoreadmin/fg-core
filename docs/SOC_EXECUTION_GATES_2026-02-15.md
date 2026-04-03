@@ -1710,3 +1710,32 @@ Validation:
 "Start full stack" step passes with env propagation.
 Failure reproducible when env block is removed.
 All prior steps unaffected.
+
+---
+
+## SOC Review Entry — Task 6.1: Keycloak OIDC Integration
+
+Date: 2026-04-02
+Branch: blitz/6.1-keycloak-integration
+
+Change:
+Added FG_KEYCLOAK_* env var derivation to admin_gateway/auth/config.py.
+get_auth_config() now derives FG_OIDC_ISSUER from FG_KEYCLOAK_BASE_URL + FG_KEYCLOAK_REALM
+when FG_OIDC_ISSUER is not explicitly set. FG_KEYCLOAK_CLIENT_ID and FG_KEYCLOAK_CLIENT_SECRET
+are used as fallbacks for FG_OIDC_CLIENT_ID and FG_OIDC_CLIENT_SECRET respectively.
+Existing FG_OIDC_* vars take precedence — no behavior change for existing deployments.
+
+Security posture:
+- No OIDC config → oidc_enabled remains False (fail-closed)
+- Production gate unchanged: OIDC required in prod (errors on validate())
+- FG_DEV_AUTH_BYPASS remains forbidden in prod/staging
+- No defaults introduced for secrets; env vars must be explicitly set
+- Strict enforcement preserved
+
+Files Changed:
+- admin_gateway/auth/config.py (get_auth_config: FG_KEYCLOAK_* derivation)
+- docker-compose.yml (fg-idp service, profile: idp)
+- keycloak/realms/frostgate-realm.json (FrostGate realm + fg-service client)
+- tests/test_keycloak_oidc.py (14 new tests: wiring, negative-path, auth_flow)
+- docs/ai/PR_FIX_LOG.md
+- docs/SOC_EXECUTION_GATES_2026-02-15.md
