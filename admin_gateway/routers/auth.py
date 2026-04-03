@@ -209,11 +209,9 @@ async def token_exchange(
     access_token = auth_header[len("Bearer ") :]
 
     try:
-        claims = oidc.parse_id_token_claims(access_token)
-        if not claims.get("sub"):
-            raise HTTPException(
-                status_code=401, detail="Invalid token: missing sub claim"
-            )
+        # verify_access_token enforces signature, issuer, audience, and expiry.
+        # Any failure raises HTTPException(401) — no fallback path.
+        claims = await oidc.verify_access_token(access_token)
 
         scopes = oidc.extract_scopes_from_claims(claims)
         session = session_manager.create_session(

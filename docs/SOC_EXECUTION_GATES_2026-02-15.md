@@ -1771,3 +1771,39 @@ Files Changed:
 - Makefile (fg-auth-e2e-validate)
 - docs/ai/PR_FIX_LOG.md
 - docs/SOC_EXECUTION_GATES_2026-02-15.md
+
+## 2026-04-02 - Task 6.2 Addendum — Token Verification Enforcement
+
+Change:
+Added OIDCClient.verify_access_token() to admin_gateway/auth/oidc.py.
+Replaced unsafe parse_id_token_claims() call in the POST /auth/token-exchange
+endpoint (admin_gateway/routers/auth.py) with verify_access_token().
+
+verify_access_token() enforces:
+- JWKS-backed signature verification (fetches keys from provider.jwks_uri)
+- Issuer validation (must match AuthConfig.oidc_issuer)
+- Audience validation (must include AuthConfig.oidc_client_id)
+- Expiration validation (PyJWT enforces exp claim automatically)
+- Required claims: exp, iss, sub (PyJWT options: require)
+- Symmetric algorithm rejection (HS256/HMAC tokens rejected — only RSA/EC accepted)
+
+Any verification failure raises HTTPException(401) immediately. No fallback paths.
+If OIDC is not configured, raises HTTPException(503).
+
+Security impact:
+The prior implementation used parse_id_token_claims() which only base64-decoded
+the JWT payload without any signature, issuer, audience, or expiry checks.
+This allowed forged, expired, or wrong-issuer tokens to be accepted and converted
+into valid session cookies. This is now fixed.
+
+Keycloak realm updated with oidc-audience-mapper on fg-service client to ensure
+access tokens include client_id (fg-service) in the aud claim, enabling
+end-to-end audience validation.
+
+Files Changed:
+- admin_gateway/auth/oidc.py (verify_access_token method)
+- admin_gateway/routers/auth.py (use verify_access_token in token_exchange)
+- admin_gateway/tests/test_token_exchange_security.py (8 new negative security tests)
+- keycloak/realms/frostgate-realm.json (fg-service-audience-mapper)
+- docs/ai/PR_FIX_LOG.md
+- docs/SOC_EXECUTION_GATES_2026-02-15.md

@@ -1092,3 +1092,61 @@ Task 6.1 prerequisite — Keycloak integration had never been implemented.
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md`
 
 ---
+
+---
+
+## TASK 6.2 ADDENDUM — Critical Auth Fix: Token Verification Enforcement
+
+**Date:** 2026-04-02
+**Branch:** blitz/6.2-e2e-auth-enforcement
+
+**Root cause:**
+`POST /auth/token-exchange` (added in Task 6.2) called `oidc.parse_id_token_claims(access_token)`,
+which only base64-decodes the JWT payload. No signature, issuer, audience, or expiry checks were
+performed. Any caller could present a forged, expired, or wrong-issuer JWT and receive a valid
+session cookie.
+
+**Fix:**
+Added `OIDCClient.verify_access_token(access_token)` in `admin_gateway/auth/oidc.py`.
+Enforces:
+- JWKS-backed RSA/EC signature verification (symmetric HS256 rejected)
+- Issuer validation against `AuthConfig.oidc_issuer`
+- Audience validation against `AuthConfig.oidc_client_id`
+- Expiration validation (PyJWT automatic + `require: [exp, iss, sub]`)
+- No fallback: any failure → `HTTPException(401)` immediately
+
+`token_exchange` now calls `await oidc.verify_access_token(access_token)` instead of
+`parse_id_token_claims`. Session cookie is only issued after all checks pass.
+
+Added `fg-service-audience-mapper` (oidc-audience-mapper) to Keycloak realm so access
+tokens include `fg-service` in the `aud` claim, enabling audience validation end-to-end.
+
+**Security impact:**
+Forged tokens, unsigned tokens, expired tokens, wrong-issuer tokens, and tokens for a
+different audience are all now rejected with HTTP 401.
+
+**Validation evidence:**
+- `pytest admin_gateway/tests/test_token_exchange_security.py` — 8 new negative tests, all pass:
+  - `test_verify_access_token_valid` ✓ (valid token accepted)
+  - `test_verify_access_token_wrong_signature_rejected` ✓
+  - `test_verify_access_token_wrong_issuer_rejected` ✓
+  - `test_verify_access_token_wrong_audience_rejected` ✓
+  - `test_verify_access_token_expired_rejected` ✓
+  - `test_verify_access_token_symmetric_key_rejected` ✓ (HS256 algorithm confusion attack)
+  - `test_verify_access_token_no_matching_kid_rejected` ✓
+  - `test_verify_access_token_oidc_not_configured_rejected` ✓ (503 when no OIDC config)
+- `pytest admin_gateway/tests/ -q` → 149 passed ✓
+- `make fg-contract` ✓
+- `make admin-lint` ✓
+- `make soc-manifest-verify` ✓
+- `make prod-profile-check` ✓
+
+**Files changed:**
+- `admin_gateway/auth/oidc.py` (verify_access_token)
+- `admin_gateway/routers/auth.py` (use verify_access_token)
+- `admin_gateway/tests/test_token_exchange_security.py` (new — 8 security tests)
+- `keycloak/realms/frostgate-realm.json` (fg-service-audience-mapper)
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md`
+- `docs/ai/PR_FIX_LOG.md`
+
+---
