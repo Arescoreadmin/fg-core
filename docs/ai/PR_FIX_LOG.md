@@ -1234,3 +1234,20 @@ all four required categories simultaneously.
 - `docs/ai/PR_FIX_LOG.md`
 
 ---
+## Fix: codex_gates.sh secret scan — false-positive matches
+
+**Date:** 2026-04-03
+
+**Root cause:**
+`bash codex_gates.sh` exited at the secret scan step with two false positives:
+- `codex_gates.sh:51` — `rg` matched the pattern string inside its own command
+- `services/ai_plane_extension/policy_engine.py:14` — `re.compile(r"(?i)BEGIN PRIVATE KEY")` is a deny-list pattern, not an actual key
+
+**Fix:**
+Added `--glob '!codex_gates.sh'` and `--glob '!services/ai_plane_extension/policy_engine.py'` to the `rg` command, with explanatory comments. Pre-existing issue exposed when `codex_gates.sh` was first successfully run past the ruff gate.
+
+**Files changed:**
+- `codex_gates.sh`
+- `docs/ai/PR_FIX_LOG.md`
+
+---
