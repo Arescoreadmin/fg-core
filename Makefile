@@ -1236,6 +1236,17 @@ spine-wait:
 	./scripts/spine_wait.sh 180
 
 # =============================================================================
+# Keycloak / IdP Validation (Task 6.1)
+# =============================================================================
+.PHONY: fg-idp-validate
+
+## fg-idp-validate: prove Keycloak runtime (discovery, token, container-network, negative path)
+##   Requires Docker. Starts fg-idp profile, runs checks, tears down.
+##   Env: FG_KEYCLOAK_CLIENT_ID, FG_KEYCLOAK_CLIENT_SECRET, FG_KEYCLOAK_REALM
+fg-idp-validate:
+	@bash tools/auth/validate_keycloak_runtime.sh
+
+# =============================================================================
 # AI PR Fix Log Guard
 # =============================================================================
 .PHONY: fg-fixlog-guard

@@ -995,3 +995,46 @@ Task 6.1 prerequisite — Keycloak integration had never been implemented.
 - fg-fast: PASS (after SOC doc update)
 
 ---
+
+## Task 6.1 Addendum — Runtime Auth Proof and Residual Gap Closure
+
+**Date:** 2026-04-03
+**Branch:** blitz/6.1-keycloak-integration
+
+**Residual gaps identified after initial 6.1 implementation:**
+1. No runtime proof: discovery, token, container-network reachability, and negative path were unproven.
+2. `plans/30_day_repo_blitz.yaml` had dangling `depends_on: ["5.2"]` — 5.2 does not exist. Corrected to `depends_on: ["5.1"]`.
+3. `fg-idp` healthcheck used `curl`, which is not present in quay.io/keycloak/keycloak:24.0. Fixed to use bash /dev/tcp.
+4. `fg-idp` network definition used list syntax (no explicit alias). Updated to explicit `internal: aliases: [fg-idp]` matching repo convention.
+5. No make target or script for runtime auth validation.
+
+**Runtime validation path added:**
+- `tools/auth/validate_keycloak_runtime.sh` — deterministic 4-step validation:
+  - A) Host-side discovery (`localhost:8081`): issuer contains `/realms/FrostGate` ✓
+  - B) Container-network proof (`docker run --network fg-core_internal curlimages/curl http://fg-idp:8080/...`): `issuer=http://fg-idp:8080/realms/FrostGate` ✓
+  - C) Token issuance (`client_credentials`, `client_id=fg-service`): `token_type=Bearer, access_token=<present>` ✓
+  - D) Negative path (wrong secret): `HTTP=401, error=unauthorized_client` ✓
+- `make fg-idp-validate` — Makefile target calling the script
+
+**Internal vs external hostname decision:**
+- Host access: `localhost:8081` (published port; `fg-idp.local:8081` requires /etc/hosts entry)
+- Container-to-container: `http://fg-idp:8080` (Docker compose DNS via `fg-core_internal` network)
+- Issuer is dynamic in Keycloak dev mode (`KC_HOSTNAME_STRICT=false`); both paths return `/realms/FrostGate` in issuer ✓
+
+**Compose override for OIDC-wired admin-gateway:**
+- `docker-compose.oidc.yml` created: wires `FG_KEYCLOAK_BASE_URL=http://fg-idp:8080` and related vars into admin-gateway when used as an overlay
+
+**Discovery proof:** `issuer=http://localhost:8081/realms/FrostGate`, all required keys present
+**Token issuance proof:** `token_type=Bearer`, `access_token` present
+**Negative path proof:** `HTTP 401 unauthorized_client` when wrong secret used
+**Regression:** fg-fast not affected (no critical files changed in this addendum)
+
+**Files changed:**
+- `plans/30_day_repo_blitz.yaml` (dangling dependency fix)
+- `docker-compose.yml` (healthcheck fix, explicit network alias)
+- `docker-compose.oidc.yml` (new — OIDC compose override)
+- `tools/auth/validate_keycloak_runtime.sh` (new — runtime validation script)
+- `Makefile` (fg-idp-validate target)
+- `docs/ai/PR_FIX_LOG.md`
+
+---
