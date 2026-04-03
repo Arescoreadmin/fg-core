@@ -136,6 +136,8 @@ def _core_proxy_headers(request: Request) -> dict[str, str]:
     }
     if is_internal:
         headers[_CORE_INTERNAL_HEADER] = _CORE_INTERNAL_HEADER_VALUE
+        # Core's require_internal_admin_gateway checks x-fg-internal-token (Task 6.2).
+        headers["X-FG-Internal-Token"] = token
     return headers
 
 

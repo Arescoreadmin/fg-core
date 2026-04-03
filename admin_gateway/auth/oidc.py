@@ -260,6 +260,83 @@ class OIDCClient:
             response.raise_for_status()
             return response.json()
 
+    async def verify_access_token(self, access_token: str) -> dict[str, Any]:
+        """Verify an OIDC access token and return its claims.
+
+        Enforces:
+        - JWKS-backed signature verification
+        - Issuer validation (must match configured OIDC issuer)
+        - Audience validation (must include configured client_id)
+        - Expiration validation (via PyJWT)
+
+        Any verification failure raises HTTPException(401). There is no fallback.
+
+        Args:
+            access_token: JWT access token (e.g. from client_credentials flow)
+
+        Returns:
+            Verified token claims dict
+
+        Raises:
+            HTTPException(401): if token is invalid, expired, forged, or has wrong issuer/audience
+            HTTPException(503): if OIDC is not configured
+        """
+        import json
+
+        import jwt
+        from fastapi import HTTPException
+        from jwt import InvalidTokenError
+        from jwt.algorithms import ECAlgorithm, RSAAlgorithm
+
+        if not self.config.oidc_issuer or not self.config.oidc_client_id:
+            raise HTTPException(
+                status_code=503,
+                detail="OIDC not configured",
+            )
+
+        provider = await self.get_provider()
+
+        async with httpx.AsyncClient() as client:
+            jwks_resp = await client.get(provider.jwks_uri, timeout=10.0)
+            jwks_resp.raise_for_status()
+            jwks = jwks_resp.json()
+
+        try:
+            header = jwt.get_unverified_header(access_token)
+        except InvalidTokenError as exc:
+            log.warning("Token header decode failed: %s", exc)
+            raise HTTPException(status_code=401, detail="Invalid token") from exc
+
+        kid = header.get("kid")
+        keys = jwks.get("keys", [])
+        key_data = next((k for k in keys if k.get("kid") == kid), None)
+        if not key_data:
+            log.warning("No JWKS key found for kid=%s", kid)
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+        alg = header.get("alg", "RS256")
+        try:
+            if alg.startswith(("RS", "PS")):
+                public_key = RSAAlgorithm.from_jwk(json.dumps(key_data))
+            elif alg.startswith("ES"):
+                public_key = ECAlgorithm.from_jwk(json.dumps(key_data))
+            else:
+                raise HTTPException(status_code=401, detail="Invalid token")
+
+            claims = jwt.decode(
+                access_token,
+                public_key,
+                algorithms=[alg],
+                audience=self.config.oidc_client_id,
+                issuer=self.config.oidc_issuer,
+                options={"require": ["exp", "iss", "sub"]},
+            )
+        except InvalidTokenError as exc:
+            log.warning("Token verification failed: %s", exc)
+            raise HTTPException(status_code=401, detail="Invalid token") from exc
+
+        return claims
+
     def parse_id_token_claims(self, id_token: str) -> dict[str, Any]:
         """Parse claims from ID token (without signature verification).
 

@@ -176,6 +176,72 @@ async def logout(
     return response
 
 
+@router.post("/token-exchange")
+async def token_exchange(
+    request: Request,
+    oidc: OIDCClient = Depends(get_oidc_client),
+    session_manager: SessionManager = Depends(get_session_manager),
+    csrf: CSRFProtection = Depends(get_csrf),
+    config: AuthConfig = Depends(get_auth_config),
+):
+    """Exchange a machine bearer token for a gateway session cookie.
+
+    Accepts an OIDC access token (e.g. from client_credentials flow) in the
+    Authorization header and issues a signed session cookie.  Used by
+    machine-to-machine callers and the Task 6.2 e2e validation script.
+
+    Headers:
+        Authorization: Bearer <access_token>
+
+    Returns:
+        JSON {"session_id", "expires_in", "user_id"} and sets Set-Cookie.
+    """
+    if not config.oidc_enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="OIDC not configured — set FG_OIDC_* or FG_KEYCLOAK_* environment variables",
+        )
+
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Bearer token required")
+
+    access_token = auth_header[len("Bearer ") :]
+
+    try:
+        # verify_access_token enforces signature, issuer, audience, and expiry.
+        # Any failure raises HTTPException(401) — no fallback path.
+        claims = await oidc.verify_access_token(access_token)
+
+        scopes = oidc.extract_scopes_from_claims(claims)
+        session = session_manager.create_session(
+            user_id=claims["sub"],
+            email=claims.get("email"),
+            name=claims.get("name") or claims.get("preferred_username"),
+            scopes=scopes,
+            claims=claims,
+            tenant_id=claims.get("tenant_id"),
+        )
+
+        response = JSONResponse(
+            content={
+                "session_id": session.session_id,
+                "expires_in": session.remaining_ttl,
+                "user_id": session.user_id,
+            }
+        )
+        session_manager.set_session_cookie(response, session)
+        csrf.set_token_cookie(response)
+        log.info("Token exchange: session issued for sub=%s", claims["sub"])
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.warning("Token exchange failed: %s", e)
+        raise HTTPException(status_code=401, detail="Token exchange failed")
+
+
 @router.post("/logout")
 async def logout_post(
     request: Request,

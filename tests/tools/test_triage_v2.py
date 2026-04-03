@@ -36,3 +36,12 @@ def test_triage_is_deterministic() -> None:
     left = _classify(lines, lane="fg-contract")
     right = _classify(lines, lane="fg-contract")
     assert left == right
+
+
+def test_triage_unknown_schema_version_and_structure() -> None:
+    # Regression: UNKNOWN branch must emit triage_schema_version exactly once.
+    out = _classify(["totally novel failure signature xyzzy"], lane="fg-fast")
+    assert out["triage_schema_version"] == "2.0"
+    assert out["confidence"] == 0.0
+    assert out["category"] == "UNKNOWN"
+    assert "stable_hash" in out["evidence"]
