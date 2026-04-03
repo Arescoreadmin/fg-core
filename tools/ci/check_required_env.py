@@ -9,6 +9,7 @@ Exit codes:
   0  non-prod env (check skipped) OR prod env with all vars present
   1  prod-like env with one or more required vars missing
 """
+
 # ruff: noqa: E402
 from __future__ import annotations
 

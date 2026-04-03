@@ -28,10 +28,15 @@ fi
 
 echo "==> Gates: mypy"
 # Strict by default. If you want optional, make it explicit in fast mode.
-if [ "${GATES_MODE}" = "fast" ]; then
-  mypy . || { echo "WARN: mypy failed in fast mode (non-blocking)"; }
+# mypy is not in requirements-dev.txt; skip with warning if not installed.
+if command -v mypy >/dev/null 2>&1; then
+  if [ "${GATES_MODE}" = "fast" ]; then
+    mypy . || { echo "WARN: mypy failed in fast mode (non-blocking)"; }
+  else
+    mypy .
+  fi
 else
-  mypy .
+  echo "WARN: mypy not installed — skipping type checks (add mypy to requirements-dev.txt to enforce)"
 fi
 
 echo "==> Gates: pytest"

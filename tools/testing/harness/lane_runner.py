@@ -15,7 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools.testing.harness.quarantine_policy import pytest_addopts_for_lane
+from tools.testing.harness.quarantine_policy import pytest_addopts_for_lane  # noqa: E402
 
 TOOL_VERSION = "1.0.0"
 ARTIFACT_ROOT = "artifacts/testing"

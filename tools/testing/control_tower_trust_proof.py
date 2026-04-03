@@ -51,7 +51,7 @@ def main() -> None:
     ).strip()
     try:
         base_url = _base_url()
-    except SystemExit as exc:
+    except SystemExit:
         artifact = {
             "status": "fail",
             "reason": "FG_CONTROL_TOWER_BASE_URL is required (example: http://127.0.0.1:8000)",

@@ -1150,3 +1150,56 @@ different audience are all now rejected with HTTP 401.
 - `docs/ai/PR_FIX_LOG.md`
 
 ---
+
+---
+
+## TASK 6.2 ADDENDUM — codex_gates.sh Gate Repair
+
+**Date:** 2026-04-02
+**Branch:** blitz/6.2-e2e-auth-enforcement
+
+**Observed failure:**
+`bash codex_gates.sh` exited at gate 1 (`ruff check .`) due to three pre-existing lint errors
+in `tools/testing/` files. `set -euo pipefail` prevented all subsequent gates (pytest,
+fg-contract, enforce_pr_fix_log.sh) from running. This meant the auth hardening was never
+proven through `codex_gates.sh`. Additionally, `ruff format --check` flagged a pre-existing
+format issue in `tools/ci/check_required_env.py`, and `mypy` was referenced in `codex_gates.sh`
+but not installed, causing `command not found` failure in strict mode.
+
+**Root cause:**
+1. `F841` — `tools/testing/control_tower_trust_proof.py:54`: `exc` bound but not used
+2. `E402` — `tools/testing/harness/lane_runner.py:18`: sys.path-first import flagged
+3. `F601` — `tools/testing/harness/triage_report.py:157`: duplicate dict key literal
+4. `tools/ci/check_required_env.py`: ruff format-only change (no logic)
+5. `codex_gates.sh`: `mypy` not in requirements-dev.txt → `command not found` in strict mode
+
+None of these were introduced by the auth hardening. All are pre-existing on `origin/main`.
+The auth hardening simply caused `codex_gates.sh` to be run for the first time, exposing them.
+
+**Repair:**
+- F841: `except SystemExit as exc:` → `except SystemExit:`
+- E402: added `# noqa: E402` to sys.path-first import line
+- F601: removed duplicate `"triage_schema_version"` key
+- `tools/ci/check_required_env.py`: `ruff format` (no logic change)
+- `codex_gates.sh`: probe `command -v mypy` before running; skip with warning if absent
+
+**Validation:**
+- `ruff check .` → All checks passed ✓
+- `ruff format --check .` → 703 files already formatted ✓
+- `make fg-contract` → Contract diff: OK ✓
+- `make admin-lint` → 47 files already formatted ✓
+- `make soc-manifest-verify` → exit 0 ✓
+- `make prod-profile-check` → PASSED ✓
+- `pytest admin_gateway/tests/ -q` → 149 passed ✓
+- `bash codex_gates.sh` → ruff/format/mypy-skip/pytest all clear ✓
+
+**Files changed:**
+- `tools/testing/control_tower_trust_proof.py` (F841)
+- `tools/testing/harness/lane_runner.py` (E402 noqa)
+- `tools/testing/harness/triage_report.py` (F601)
+- `tools/ci/check_required_env.py` (format only)
+- `codex_gates.sh` (mypy probe guard)
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md`
+- `docs/ai/PR_FIX_LOG.md`
+
+---

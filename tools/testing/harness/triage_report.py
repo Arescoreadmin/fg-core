@@ -154,7 +154,6 @@ def _classify(lines: list[str], lane: str = "unknown") -> dict[str, object]:
             excerpt = _excerpt(lines, rule.pattern)
             report = {
                 "triage_schema_version": TRIAGE_SCHEMA_VERSION,
-                "triage_schema_version": TRIAGE_SCHEMA_VERSION,
                 "lane": lane,
                 "category": rule.category.value,
                 "confidence": rule.confidence,
