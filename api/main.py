@@ -301,12 +301,13 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 return JSONResponse(
                     status_code=400,
                     content={
+                        "error_code": "INGEST_EVENT_ID_REQUIRED",
                         "detail": {
                             "error": {
                                 "code": "INGEST_EVENT_ID_REQUIRED",
                                 "message": "event_id is required",
                             }
-                        }
+                        },
                     },
                 )
         return JSONResponse(status_code=422, content={"detail": exc.errors()})
