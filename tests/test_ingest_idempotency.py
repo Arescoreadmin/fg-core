@@ -55,12 +55,13 @@ def test_ingest_rejects_missing_event_id(build_app):
     )
     assert resp.status_code == 400
     assert resp.json() == {
+        "error_code": "INGEST_EVENT_ID_REQUIRED",
         "detail": {
             "error": {
                 "code": "INGEST_EVENT_ID_REQUIRED",
                 "message": "event_id is required",
             }
-        }
+        },
     }
 
 

@@ -1321,3 +1321,25 @@ Task 6.1 — Keycloak integration + validation alignment + contract authority sy
 - codex_gates.sh: in progress (pytest suite running)
 
 ---
+## Fix: pre-existing test assertion drift (gate unblock)
+
+**Date:** 2026-04-04
+**Branch:** blitz/mypy-remediation-batch-1
+
+**Root cause:**
+User commit `a2e8505` ("fix: add stable error_code handling in api main validation responses")
+changed two things without updating affected tests:
+1. `api/main.py`: app binding changed from `build_app()` to `_module_app_binding()`
+2. Ingest validation responses now include a top-level `"error_code"` field
+
+Both caused `make test-unit` (and thus `make fg-fast`) to fail, blocking the plan validation
+pre-commit hook with 2 test failures unrelated to mypy remediation.
+
+**Files changed:**
+- `tests/test_main_integrity.py` — updated assertion to match current `_module_app_binding()` pattern
+- `tests/test_ingest_idempotency.py` — added `"error_code"` field to expected response dict
+
+**Validation:**
+- `.venv/bin/pytest tests/test_main_integrity.py::test_main_py_not_truncated tests/test_ingest_idempotency.py::test_ingest_rejects_missing_event_id -v` → 2 passed ✓
+
+---
