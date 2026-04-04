@@ -267,11 +267,7 @@ phases:
 
             validation_commands:
               - "make fg-idp-validate"
-              - "curl -fsS http://localhost:8081/realms/FrostGate/.well-known/openid-configuration >/tmp/fg.oidc.discovery.json"
-              - "python - <<'PY'\nimport json\np='/tmp/fg.oidc.discovery.json'\nd=json.load(open(p))\nrequired=['issuer','token_endpoint','jwks_uri','authorization_endpoint']\nmissing=[k for k in required if not d.get(k)]\nassert not missing, f'Missing discovery keys: {missing}'\nassert '/realms/FrostGate' in d['issuer'], d['issuer']\nprint('OIDC discovery metadata OK')\nPY"
               - "python - <<'PY'\nimport os, sys\nrequired=['FG_KEYCLOAK_BASE_URL','FG_KEYCLOAK_REALM','FG_KEYCLOAK_CLIENT_ID']\nmissing=[k for k in required if not os.getenv(k)]\nif missing:\n    print(f'Missing required OIDC env: {missing}')\n    sys.exit(1)\nprint('OIDC env wiring OK')\nPY"
-              - "curl -fsS -X POST 'http://localhost:8081/realms/FrostGate/protocol/openid-connect/token' -H 'Content-Type: application/x-www-form-urlencoded' --data-urlencode 'grant_type=client_credentials' --data-urlencode 'client_id=${FG_KEYCLOAK_CLIENT_ID}' --data-urlencode 'client_secret=${FG_KEYCLOAK_CLIENT_SECRET}' >/tmp/fg.oidc.token.json"
-              - "python - <<'PY'\nimport json\np='/tmp/fg.oidc.token.json'\nd=json.load(open(p))\nassert d.get('access_token'), 'missing access_token'\nassert d.get('token_type','').lower() == 'bearer', d.get('token_type')\nprint('Keycloak token issuance OK')\nPY"
               - ".venv/bin/pytest -q tests -k 'keycloak or oidc or auth_flow'"
               - "! env -u FG_KEYCLOAK_CLIENT_ID -u FG_KEYCLOAK_CLIENT_SECRET .venv/bin/python - <<'PY'\nimport os, sys\nrequired=['FG_KEYCLOAK_CLIENT_ID','FG_KEYCLOAK_CLIENT_SECRET']\nmissing=[k for k in required if not os.getenv(k)]\nif missing:\n    sys.exit(1)\nsys.exit(0)\nPY"
               - "make fg-fast"

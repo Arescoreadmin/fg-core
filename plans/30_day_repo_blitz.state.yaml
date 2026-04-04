@@ -95,9 +95,9 @@ validations:
     working_tree_fingerprint: efb3df808219ac1ff57743c9ed76ce22e2debdfed291f594291e01b084588e52
   '6.1':
     status: fail
-    timestamp: 20260404T170618Z
+    timestamp: 20260404T170831Z
     artifact: artifacts/plan/6.1_validate_latest.json
-    working_tree_fingerprint: cf177b9bd4df29a8dfd554ea00f43f0fd1f831ed16ad43f4ba817a022b029a78
+    working_tree_fingerprint: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 history:
 - event: complete
   task_id: '1.1'
