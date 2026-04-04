@@ -1343,3 +1343,27 @@ pre-commit hook with 2 test failures unrelated to mypy remediation.
 - `.venv/bin/pytest tests/test_main_integrity.py::test_main_py_not_truncated tests/test_ingest_idempotency.py::test_ingest_rejects_missing_event_id -v` → 2 passed ✓
 
 ---
+
+## 2026-04-04 — Contract sync + CI-safe repo root (blitz/mypy-remediation-batch-1)
+
+**Scope:** Contract drift repair and tooling hardcoded-path fix
+
+**Files changed:**
+- `scripts/patch_compliant_surfaces.py` — replaced `Path("/home/jcosat/Projects/fg-core")` with `Path(__file__).resolve().parent.parent`
+- `contracts/core/openapi.json` — regenerated via `make contracts-gen-prod` to sync drift
+- `schemas/api/openapi.json` — same regen
+
+**Commands run:**
+1. `make contracts-gen-prod`
+2. `make contract-authority-check`
+3. `ruff format scripts/patch_compliant_surfaces.py`
+4. `make fg-fast`
+
+**Validation results:**
+- `make contract-authority-check` → `✅ Contract authority markers match prod OpenAPI spec` ✓
+- `make fg-fast` → `1626 passed, 24 skipped` / `All checks passed!` ✓
+- `make required-tests-gate` → `required-tests gate: PASS` ✓
+
+**Remaining blockers:** None
+
+---
