@@ -93,6 +93,11 @@ validations:
     timestamp: 20260402T120857Z
     artifact: artifacts/plan/5.1_validate_latest.json
     working_tree_fingerprint: efb3df808219ac1ff57743c9ed76ce22e2debdfed291f594291e01b084588e52
+  '6.1':
+    status: fail
+    timestamp: 20260403T190625Z
+    artifact: artifacts/plan/6.1_validate_latest.json
+    working_tree_fingerprint: 4e39461b879f443c1b534174ce517777701b47dedbd819ba3e2f57b5556b66d3
 history:
 - event: complete
   task_id: '1.1'
