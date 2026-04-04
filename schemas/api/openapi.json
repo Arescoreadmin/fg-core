@@ -10508,6 +10508,9 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
                   "title": "Response Health Health Get",
                   "type": "object"
                 }
@@ -10527,6 +10530,9 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
                   "title": "Response Health Live Health Live Get",
                   "type": "object"
                 }

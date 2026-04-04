@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 
-REPO_ROOT = Path("/home/jcosat/Projects/fg-core")
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 DB_MODELS = REPO_ROOT / "api/db_models.py"
 BILLING = REPO_ROOT / "api/billing.py"
