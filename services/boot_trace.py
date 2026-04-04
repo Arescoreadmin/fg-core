@@ -15,7 +15,7 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from services.error_sanitizer import sanitize_error_detail  # noqa: F401 (re-exported)
 
@@ -307,15 +307,20 @@ class BootTraceRegistry:
     _instance: Optional["BootTraceRegistry"] = None
     _init_lock: threading.Lock = threading.Lock()
 
+    _traces: Dict[str, "BootTrace"]
+    _lock: threading.RLock
+
     def __new__(cls) -> "BootTraceRegistry":
         if cls._instance is None:
             with cls._init_lock:
                 if cls._instance is None:
-                    obj = super().__new__(cls)
-                    obj._traces: Dict[str, BootTrace] = {}
-                    obj._lock = threading.RLock()
-                    cls._instance = obj
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialize()
         return cls._instance
+
+    def _initialize(self) -> None:
+        self._traces = {}
+        self._lock = threading.RLock()
 
     def create_trace(self, module_id: str) -> BootTrace:
         with self._lock:
@@ -378,7 +383,7 @@ class StageContext:
         self._trace.start_stage(self._stage)
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+    def __exit__(self, exc_type, exc_val, exc_tb) -> Literal[False]:
         if exc_type is None:
             self._trace.complete_stage(self._stage, status=StageStatus.OK)
         else:

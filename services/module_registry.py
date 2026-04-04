@@ -320,17 +320,23 @@ class ModuleRegistry:
     _instance: Optional["ModuleRegistry"] = None
     _init_lock: threading.Lock = threading.Lock()
 
+    _modules: Dict[str, "ModuleRegistration"]
+    _lock: threading.RLock
+    _node_registry: Dict[str, set]
+
     def __new__(cls) -> "ModuleRegistry":
         if cls._instance is None:
             with cls._init_lock:
                 if cls._instance is None:
-                    obj = super().__new__(cls)
-                    obj._modules: Dict[str, ModuleRegistration] = {}
-                    obj._lock = threading.RLock()
-                    # node_id → set[module_id] for conflict detection (P2)
-                    obj._node_registry: Dict[str, set] = {}
-                    cls._instance = obj
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialize()
         return cls._instance
+
+    def _initialize(self) -> None:
+        self._modules = {}
+        self._lock = threading.RLock()
+        # node_id → set[module_id] for conflict detection (P2)
+        self._node_registry = {}
 
     # ------------------------------------------------------------------
     # Registration

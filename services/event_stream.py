@@ -334,17 +334,24 @@ class EventStreamBus:
     _instance: Optional["EventStreamBus"] = None
     _init_lock: threading.Lock = threading.Lock()
 
+    _subscribers: Dict[str, "EventSubscriber"]
+    _lock: threading.RLock
+    _event_history: List["ControlEvent"]
+    _history_max: int
+
     def __new__(cls) -> "EventStreamBus":
         if cls._instance is None:
             with cls._init_lock:
                 if cls._instance is None:
-                    obj = super().__new__(cls)
-                    obj._subscribers: Dict[str, EventSubscriber] = {}
-                    obj._lock = threading.RLock()
-                    obj._event_history: list[ControlEvent] = []
-                    obj._history_max = int(os.getenv("FG_CP_EVENT_HISTORY_MAX", "500"))
-                    cls._instance = obj
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialize()
         return cls._instance
+
+    def _initialize(self) -> None:
+        self._subscribers = {}
+        self._lock = threading.RLock()
+        self._event_history = []
+        self._history_max = int(os.getenv("FG_CP_EVENT_HISTORY_MAX", "500"))
 
     # ------------------------------------------------------------------
     # Publishing

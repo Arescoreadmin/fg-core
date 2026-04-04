@@ -1250,4 +1250,74 @@ Added `--glob '!codex_gates.sh'` and `--glob '!services/ai_plane_extension/polic
 - `codex_gates.sh`
 - `docs/ai/PR_FIX_LOG.md`
 
+## PR Fix Entry — 2026-04-04
+
+### Scope
+Task 6.1 — Keycloak integration + validation alignment + contract authority sync + security gate compliance
+
+### Changes
+- Fixed ruff/type issues across:
+  - api/billing.py
+  - api/db_models.py
+  - api/agent_phase2.py
+- Added stable `error_code` handling in `api/main.py`
+- Synced contract authority markers:
+  - BLUEPRINT_STAGED.md
+  - CONTRACT.md
+- Introduced patch tooling:
+  - scripts/patch_compliant_surfaces.py
+  - scripts/type_fix_rules.json
+- Added AI client surface:
+  - services/ai/client.py
+- Updated locker command bus typing:
+  - services/locker_command_bus.py
+
+### Validation
+- fg-idp-validate: PASS
+- OIDC token + discovery: PASS
+- pytest (auth/oidc): PASS
+- fg-fast:
+  - contract gates: PASS
+  - security regression: PASS
+  - SOC + audit gates: PASS
+
+### Notes
+- Removed stale manual OIDC validation steps in favor of harness-driven validation
+- No invariant violations introduced
+- All changes deterministic and CI-aligned
+
+---
+## Batch 1 — registry singleton attribute remediation
+
+**Date:** 2026-04-04
+**Branch:** blitz/mypy-remediation-batch-1
+
+**Files changed:**
+- `services/boot_trace.py`
+- `services/module_registry.py`
+- `services/event_stream.py`
+
+**Error family addressed:**
+- `Type cannot be declared in assignment to non-self attribute` [misc] — typed assignments on `obj` in `__new__` not recognized by mypy
+- `Class has no attribute "_lock" / "_traces" / "_modules" / "_node_registry" / "_subscribers" / "_event_history" / "_history_max"` [attr-defined] — instance attrs missing class-level declarations
+- `Cannot determine type of "_event_history"` [has-type] — same root cause
+- `"bool" is invalid as return type for "__exit__" that always returns False` [exit-return] — `StageContext.__exit__` in `boot_trace.py`
+- Downstream generator type errors in `event_stream.py:411,455,459` — resolved after `_subscribers` declaration
+
+**Fix pattern applied (matches locker_command_bus.py reference):**
+1. Declare instance attrs at class body level with concrete types (no default value)
+2. Add `_initialize(self) -> None:` method that assigns via `self.*`
+3. Change `__new__` to call `cls._instance._initialize()` instead of assigning to `obj.*`
+4. Add `Literal` to `boot_trace.py` typing imports; change `StageContext.__exit__` return type to `Literal[False]`
+
+**Commands run:**
+- `.venv/bin/ruff format services/module_registry.py services/boot_trace.py services/event_stream.py services/locker_command_bus.py` → 4 files left unchanged
+- `.venv/bin/mypy services/module_registry.py services/boot_trace.py services/event_stream.py services/locker_command_bus.py --ignore-missing-imports` → **Success: no issues found in 4 source files** (67 errors eliminated)
+- `bash codex_gates.sh` → running (pytest suite ~53 min)
+
+**Validation outcome:**
+- Targeted mypy errors: 67 → 0 in allowed files
+- ruff format: no changes required
+- codex_gates.sh: in progress (pytest suite running)
+
 ---
