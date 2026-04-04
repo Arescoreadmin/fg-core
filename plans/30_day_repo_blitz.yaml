@@ -266,6 +266,7 @@ phases:
               - "Fast lane passes"
 
             validation_commands:
+              - "make fg-idp-validate"
               - "curl -fsS http://localhost:8081/realms/FrostGate/.well-known/openid-configuration >/tmp/fg.oidc.discovery.json"
               - "python - <<'PY'\nimport json\np='/tmp/fg.oidc.discovery.json'\nd=json.load(open(p))\nrequired=['issuer','token_endpoint','jwks_uri','authorization_endpoint']\nmissing=[k for k in required if not d.get(k)]\nassert not missing, f'Missing discovery keys: {missing}'\nassert '/realms/FrostGate' in d['issuer'], d['issuer']\nprint('OIDC discovery metadata OK')\nPY"
               - "python - <<'PY'\nimport os, sys\nrequired=['FG_KEYCLOAK_BASE_URL','FG_KEYCLOAK_REALM','FG_KEYCLOAK_CLIENT_ID']\nmissing=[k for k in required if not os.getenv(k)]\nif missing:\n    print(f'Missing required OIDC env: {missing}')\n    sys.exit(1)\nprint('OIDC env wiring OK')\nPY"

@@ -2,3 +2,4 @@ tools/ci/*.json text eol=lf
 tools/ci/*.sha256 text eol=lf
 artifacts/*.json text eol=lf
 artifacts/*.sha256 text eol=lf
+* text=auto eol=lf

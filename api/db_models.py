@@ -5,11 +5,11 @@ import hashlib
 import json
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import (
     JSON,
     Boolean,
-    Column,
     Date,
     DateTime,
     Float,
@@ -24,11 +24,13 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from api.signed_artifacts import canonical_hash
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    pass
 
 
 def utcnow() -> datetime:
@@ -54,18 +56,18 @@ class ApiKey(Base):
 
     __tablename__ = "api_keys"
 
-    id = Column(Integer, primary_key=True)
-    name = Column(String(128), nullable=False, default="default")
-    prefix = Column(String(64), nullable=False, index=True)
-    key_hash = Column(Text, nullable=False, unique=True, index=True)
-    key_lookup = Column(String(64), nullable=True, index=True)
-    hash_alg = Column(String(32), nullable=True)
-    hash_params = Column(JSON, nullable=True)
-    scopes_csv = Column(Text, nullable=True)
-    enabled = Column(Boolean, nullable=False, default=True)
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    name: Mapped[Any] = mapped_column(String(128), nullable=False, default="default")
+    prefix: Mapped[Any] = mapped_column(String(64), nullable=False, index=True)
+    key_hash: Mapped[Any] = mapped_column(Text, nullable=False, unique=True, index=True)
+    key_lookup: Mapped[Any] = mapped_column(String(64), nullable=True, index=True)
+    hash_alg: Mapped[Any] = mapped_column(String(32), nullable=True)
+    hash_params: Mapped[Any] = mapped_column(JSON, nullable=True)
+    scopes_csv: Mapped[Any] = mapped_column(Text, nullable=True)
+    enabled: Mapped[Any] = mapped_column(Boolean, nullable=False, default=True)
 
     # Must be NOT NULL and must default for SQLite + ORM
-    created_at = Column(
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -73,14 +75,20 @@ class ApiKey(Base):
     )
 
     # Key rotation and lifecycle support (SaaS-ready)
-    version = Column(Integer, nullable=False, default=1, server_default=text("1"))
-    expires_at = Column(DateTime(timezone=True), nullable=True)
-    rotated_from = Column(String(64), nullable=True)  # previous key_hash
-    last_used_at = Column(DateTime(timezone=True), nullable=True)
-    use_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    version: Mapped[Any] = mapped_column(
+        Integer, nullable=False, default=1, server_default=text("1")
+    )
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    rotated_from: Mapped[Any] = mapped_column(
+        String(64), nullable=True
+    )  # previous key_hash
+    last_used_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    use_count: Mapped[Any] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
 
     # Tenant isolation (multi-tenant SaaS)
-    tenant_id = Column(
+    tenant_id: Mapped[Any] = mapped_column(
         String(128),
         nullable=True,
         index=True,
@@ -89,8 +97,8 @@ class ApiKey(Base):
     )
 
     # Security metadata
-    created_by = Column(String(128), nullable=True)
-    description = Column(Text, nullable=True)
+    created_by: Mapped[Any] = mapped_column(String(128), nullable=True)
+    description: Mapped[Any] = mapped_column(Text, nullable=True)
 
 
 class SecurityAuditLog(Base):
@@ -105,60 +113,74 @@ class SecurityAuditLog(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True)
-    created_at = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
         server_default=func.now(),
     )
 
-    event_type = Column(String(64), nullable=False, index=True)
-    event_category = Column(String(32), nullable=False, default="security")
-    severity = Column(String(16), nullable=False, default="info")
+    event_type: Mapped[Any] = mapped_column(String(64), nullable=False, index=True)
+    event_category: Mapped[Any] = mapped_column(
+        String(32), nullable=False, default="security"
+    )
+    severity: Mapped[Any] = mapped_column(String(16), nullable=False, default="info")
 
-    tenant_id = Column(String(128), nullable=True, index=True)
-    key_prefix = Column(String(64), nullable=True)
-    client_ip = Column(String(45), nullable=True)  # IPv6 max length
-    user_agent = Column(String(512), nullable=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=True, index=True)
+    key_prefix: Mapped[Any] = mapped_column(String(64), nullable=True)
+    client_ip: Mapped[Any] = mapped_column(String(45), nullable=True)  # IPv6 max length
+    user_agent: Mapped[Any] = mapped_column(String(512), nullable=True)
 
-    request_id = Column(String(64), nullable=True, index=True)
-    request_path = Column(String(256), nullable=True)
-    request_method = Column(String(16), nullable=True)
+    request_id: Mapped[Any] = mapped_column(String(64), nullable=True, index=True)
+    request_path: Mapped[Any] = mapped_column(String(256), nullable=True)
+    request_method: Mapped[Any] = mapped_column(String(16), nullable=True)
 
-    success = Column(Boolean, nullable=False, default=True)
-    reason = Column(String(256), nullable=True)
-    details_json = Column(JSON, nullable=True)
+    success: Mapped[Any] = mapped_column(Boolean, nullable=False, default=True)
+    reason: Mapped[Any] = mapped_column(String(256), nullable=True)
+    details_json: Mapped[Any] = mapped_column(JSON, nullable=True)
 
-    chain_id = Column(
+    chain_id: Mapped[Any] = mapped_column(
         String(128),
         nullable=False,
         default="global",
         server_default=text("'global'"),
         index=True,
     )
-    prev_hash = Column(
+    prev_hash: Mapped[Any] = mapped_column(
         String(64),
         nullable=False,
         default="GENESIS",
         server_default=text("'GENESIS'"),
     )
-    entry_hash = Column(String(64), nullable=False, unique=True, index=True)
+    entry_hash: Mapped[Any] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
 
 
 class AgentEnrollmentToken(Base):
     __tablename__ = "agent_enrollment_tokens"
 
-    id = Column(Integer, primary_key=True)
-    token_hash = Column(String(64), nullable=False, unique=True, index=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    created_by = Column(String(128), nullable=False, default="unknown")
-    reason = Column(String(256), nullable=False, default="unspecified")
-    ticket = Column(String(128), nullable=True)
-    expires_at = Column(DateTime(timezone=True), nullable=False)
-    max_uses = Column(Integer, nullable=False, default=1, server_default=text("1"))
-    used_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
-    created_at = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    token_hash: Mapped[Any] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    created_by: Mapped[Any] = mapped_column(
+        String(128), nullable=False, default="unknown"
+    )
+    reason: Mapped[Any] = mapped_column(
+        String(256), nullable=False, default="unspecified"
+    )
+    ticket: Mapped[Any] = mapped_column(String(128), nullable=True)
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    max_uses: Mapped[Any] = mapped_column(
+        Integer, nullable=False, default=1, server_default=text("1")
+    )
+    used_count: Mapped[Any] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -169,24 +191,28 @@ class AgentEnrollmentToken(Base):
 class AgentDeviceRegistry(Base):
     __tablename__ = "agent_device_registry"
 
-    id = Column(Integer, primary_key=True)
-    device_id = Column(String(64), nullable=False, unique=True, index=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    fingerprint_hash = Column(String(64), nullable=False)
-    status = Column(String(16), nullable=False, default="active", index=True)
-    suspicious = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    device_id: Mapped[Any] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    fingerprint_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    status: Mapped[Any] = mapped_column(
+        String(16), nullable=False, default="active", index=True
+    )
+    suspicious: Mapped[Any] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("0")
     )
-    created_at = Column(
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
         server_default=func.now(),
     )
-    last_seen_at = Column(DateTime(timezone=True), nullable=True)
-    last_ip = Column(String(64), nullable=True)
-    last_version = Column(String(64), nullable=True)
-    ring = Column(
+    last_seen_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_ip: Mapped[Any] = mapped_column(String(64), nullable=True)
+    last_version: Mapped[Any] = mapped_column(String(64), nullable=True)
+    ring: Mapped[Any] = mapped_column(
         String(16), nullable=False, default="broad", server_default=text("'broad'")
     )
 
@@ -194,21 +220,27 @@ class AgentDeviceRegistry(Base):
 class AgentDeviceKey(Base):
     __tablename__ = "agent_device_keys"
 
-    id = Column(Integer, primary_key=True)
-    device_id = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    device_id: Mapped[Any] = mapped_column(
         String(64),
         ForeignKey("agent_device_registry.device_id"),
         nullable=False,
         index=True,
     )
-    tenant_id = Column(String(128), nullable=False, index=True)
-    key_prefix = Column(String(32), nullable=False, unique=True, index=True)
-    key_hash = Column(Text, nullable=False)
-    key_lookup = Column(String(64), nullable=False, index=True)
-    hash_alg = Column(String(32), nullable=False, default="argon2id")
-    hmac_secret_enc = Column(Text, nullable=False)
-    enabled = Column(Boolean, nullable=False, default=True, server_default=text("1"))
-    created_at = Column(
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    key_prefix: Mapped[Any] = mapped_column(
+        String(32), nullable=False, unique=True, index=True
+    )
+    key_hash: Mapped[Any] = mapped_column(Text, nullable=False)
+    key_lookup: Mapped[Any] = mapped_column(String(64), nullable=False, index=True)
+    hash_alg: Mapped[Any] = mapped_column(
+        String(32), nullable=False, default="argon2id"
+    )
+    hmac_secret_enc: Mapped[Any] = mapped_column(Text, nullable=False)
+    enabled: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("1")
+    )
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -222,10 +254,10 @@ class AgentDeviceNonce(Base):
         Index("ix_agent_device_nonces_device_created", "device_id", "created_at"),
     )
 
-    id = Column(Integer, primary_key=True)
-    device_id = Column(String(64), nullable=False, index=True)
-    nonce_hash = Column(String(64), nullable=False, index=True)
-    created_at = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    device_id: Mapped[Any] = mapped_column(String(64), nullable=False, index=True)
+    nonce_hash: Mapped[Any] = mapped_column(String(64), nullable=False, index=True)
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -236,17 +268,23 @@ class AgentDeviceNonce(Base):
 class AgentDeviceIdentity(Base):
     __tablename__ = "agent_device_identities"
 
-    id = Column(Integer, primary_key=True)
-    device_id = Column(String(64), nullable=False, unique=True, index=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    cert_fingerprint = Column(String(64), nullable=False, index=True)
-    cert_pem = Column(Text, nullable=False)
-    cert_chain_pem = Column(Text, nullable=True)
-    cert_not_after = Column(DateTime(timezone=True), nullable=False)
-    status = Column(String(16), nullable=False, default="active", index=True)
-    last_seen_at = Column(DateTime(timezone=True), nullable=True)
-    revoked_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    device_id: Mapped[Any] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    cert_fingerprint: Mapped[Any] = mapped_column(
+        String(64), nullable=False, index=True
+    )
+    cert_pem: Mapped[Any] = mapped_column(Text, nullable=False)
+    cert_chain_pem: Mapped[Any] = mapped_column(Text, nullable=True)
+    cert_not_after: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[Any] = mapped_column(
+        String(16), nullable=False, default="active", index=True
+    )
+    last_seen_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -257,41 +295,63 @@ class AgentDeviceIdentity(Base):
 class AgentCommand(Base):
     __tablename__ = "agent_commands"
 
-    id = Column(Integer, primary_key=True)
-    command_id = Column(String(64), nullable=False, unique=True, index=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    device_id = Column(String(64), nullable=False, index=True)
-    command_type = Column(String(64), nullable=False, index=True)
-    payload = Column(JSON, nullable=False, server_default=text("'{}'"))
-    issued_by = Column(String(128), nullable=False)
-    issued_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
-    expires_at = Column(DateTime(timezone=True), nullable=False)
-    signature = Column(Text, nullable=False)
-    nonce = Column(String(128), nullable=False)
-    idempotency_key = Column(String(128), nullable=True, index=True)
-    lease_owner = Column(String(128), nullable=True, index=True)
-    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
-    attempt_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
-    status = Column(String(32), nullable=False, default="issued", index=True)
-    terminal_state = Column(String(32), nullable=True, index=True)
-    acked_at = Column(DateTime(timezone=True), nullable=True)
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    command_id: Mapped[Any] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    device_id: Mapped[Any] = mapped_column(String(64), nullable=False, index=True)
+    command_type: Mapped[Any] = mapped_column(String(64), nullable=False, index=True)
+    payload: Mapped[Any] = mapped_column(
+        JSON, nullable=False, server_default=text("'{}'")
+    )
+    issued_by: Mapped[Any] = mapped_column(String(128), nullable=False)
+    issued_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    signature: Mapped[Any] = mapped_column(Text, nullable=False)
+    nonce: Mapped[Any] = mapped_column(String(128), nullable=False)
+    idempotency_key: Mapped[Any] = mapped_column(String(128), nullable=True, index=True)
+    lease_owner: Mapped[Any] = mapped_column(String(128), nullable=True, index=True)
+    lease_expires_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    attempt_count: Mapped[Any] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    status: Mapped[Any] = mapped_column(
+        String(32), nullable=False, default="issued", index=True
+    )
+    terminal_state: Mapped[Any] = mapped_column(String(32), nullable=True, index=True)
+    acked_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AgentUpdateRollout(Base):
     __tablename__ = "agent_update_rollouts"
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, unique=True, index=True)
-    canary_percent_per_hour = Column(Integer, nullable=False, default=10)
-    pilot_percent_per_hour = Column(Integer, nullable=False, default=30)
-    broad_percent_per_hour = Column(Integer, nullable=False, default=100)
-    canary_error_budget = Column(Integer, nullable=False, default=5)
-    canary_error_count = Column(Integer, nullable=False, default=0)
-    paused = Column(Boolean, nullable=False, default=False, server_default=text("0"))
-    kill_switch = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(
+        String(128), nullable=False, unique=True, index=True
+    )
+    canary_percent_per_hour: Mapped[Any] = mapped_column(
+        Integer, nullable=False, default=10
+    )
+    pilot_percent_per_hour: Mapped[Any] = mapped_column(
+        Integer, nullable=False, default=30
+    )
+    broad_percent_per_hour: Mapped[Any] = mapped_column(
+        Integer, nullable=False, default=100
+    )
+    canary_error_budget: Mapped[Any] = mapped_column(Integer, nullable=False, default=5)
+    canary_error_count: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    paused: Mapped[Any] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("0")
     )
-    updated_at = Column(
+    kill_switch: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
+    updated_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -302,13 +362,17 @@ class AgentUpdateRollout(Base):
 class AgentRateBudgetCounter(Base):
     __tablename__ = "agent_rate_budget_counters"
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    device_id = Column(String(64), nullable=True, index=True)
-    metric = Column(String(64), nullable=False, index=True)
-    window_start = Column(DateTime(timezone=True), nullable=False, index=True)
-    count = Column(Integer, nullable=False, default=0, server_default=text("0"))
-    created_at = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    device_id: Mapped[Any] = mapped_column(String(64), nullable=True, index=True)
+    metric: Mapped[Any] = mapped_column(String(64), nullable=False, index=True)
+    window_start: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    count: Mapped[Any] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -319,14 +383,18 @@ class AgentRateBudgetCounter(Base):
 class AgentPolicyBundle(Base):
     __tablename__ = "agent_policy_bundles"
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    version = Column(String(64), nullable=False)
-    policy_hash = Column(String(64), nullable=False, index=True)
-    policy_json = Column(JSON, nullable=False, server_default=text("'{}'"))
-    signature = Column(Text, nullable=False)
-    revoked = Column(Boolean, nullable=False, default=False, server_default=text("0"))
-    created_at = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    version: Mapped[Any] = mapped_column(String(64), nullable=False)
+    policy_hash: Mapped[Any] = mapped_column(String(64), nullable=False, index=True)
+    policy_json: Mapped[Any] = mapped_column(
+        JSON, nullable=False, server_default=text("'{}'")
+    )
+    signature: Mapped[Any] = mapped_column(Text, nullable=False)
+    revoked: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -337,11 +405,11 @@ class AgentPolicyBundle(Base):
 class AgentLogAnchor(Base):
     __tablename__ = "agent_log_anchors"
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    device_id = Column(String(64), nullable=False, index=True)
-    hash = Column(String(64), nullable=False)
-    anchored_at = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    device_id: Mapped[Any] = mapped_column(String(64), nullable=False, index=True)
+    hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    anchored_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -352,12 +420,12 @@ class AgentLogAnchor(Base):
 class AgentQuarantineEvent(Base):
     __tablename__ = "agent_quarantine_events"
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    device_id = Column(String(64), nullable=False, index=True)
-    action = Column(String(32), nullable=False)
-    reason = Column(String(512), nullable=True)
-    created_at = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    device_id: Mapped[Any] = mapped_column(String(64), nullable=False, index=True)
+    action: Mapped[Any] = mapped_column(String(32), nullable=False)
+    reason: Mapped[Any] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -373,19 +441,21 @@ class ConfigVersion(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    config_hash = Column(String(64), nullable=False, index=True)
-    created_at = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    config_hash: Mapped[Any] = mapped_column(String(64), nullable=False, index=True)
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
         server_default=func.now(),
     )
-    created_by = Column(String(128), nullable=True)
-    config_json = Column(JSON, nullable=False, server_default=text("'{}'"))
-    config_json_canonical = Column(Text, nullable=False)
-    parent_hash = Column(String(64), nullable=True)
+    created_by: Mapped[Any] = mapped_column(String(128), nullable=True)
+    config_json: Mapped[Any] = mapped_column(
+        JSON, nullable=False, server_default=text("'{}'")
+    )
+    config_json_canonical: Mapped[Any] = mapped_column(Text, nullable=False)
+    parent_hash: Mapped[Any] = mapped_column(String(64), nullable=True)
 
 
 class TenantActiveConfig(Base):
@@ -398,9 +468,9 @@ class TenantActiveConfig(Base):
         ),
     )
 
-    tenant_id = Column(String(128), primary_key=True)
-    active_config_hash = Column(String(64), nullable=False)
-    updated_at = Column(
+    tenant_id: Mapped[Any] = mapped_column(String(128), primary_key=True)
+    active_config_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -424,20 +494,20 @@ class DecisionRecord(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True)
-    created_at = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
         server_default=func.now(),
     )
 
-    tenant_id = Column(String, nullable=True, index=True)
-    source = Column(String, nullable=True)
-    event_id = Column(String, nullable=True)
-    event_type = Column(String, nullable=True)
-    policy_hash = Column(String(64), nullable=True)
-    config_hash = Column(
+    tenant_id: Mapped[Any] = mapped_column(String, nullable=True, index=True)
+    source: Mapped[Any] = mapped_column(String, nullable=True)
+    event_id: Mapped[Any] = mapped_column(String, nullable=True)
+    event_type: Mapped[Any] = mapped_column(String, nullable=True)
+    policy_hash: Mapped[Any] = mapped_column(String(64), nullable=True)
+    config_hash: Mapped[Any] = mapped_column(
         String(64),
         nullable=False,
         index=True,
@@ -445,23 +515,27 @@ class DecisionRecord(Base):
         server_default=text("'legacy_config_hash'"),
     )
 
-    threat_level = Column(String, nullable=True)
-    anomaly_score = Column(Float, nullable=True)
-    ai_adversarial_score = Column(Float, nullable=True)
-    pq_fallback = Column(Boolean, nullable=True)
+    threat_level: Mapped[Any] = mapped_column(String, nullable=True)
+    anomaly_score: Mapped[Any] = mapped_column(Float, nullable=True)
+    ai_adversarial_score: Mapped[Any] = mapped_column(Float, nullable=True)
+    pq_fallback: Mapped[Any] = mapped_column(Boolean, nullable=True)
 
-    rules_triggered_json = Column(
+    rules_triggered_json: Mapped[Any] = mapped_column(
         JSON, nullable=False, default=list, server_default=text("'[]'")
     )
-    decision_diff_json = Column(JSON, nullable=True)
+    decision_diff_json: Mapped[Any] = mapped_column(JSON, nullable=True)
 
-    request_json = Column(JSON, nullable=False, server_default=text("'{}'"))
-    response_json = Column(JSON, nullable=False, server_default=text("'{}'"))
+    request_json: Mapped[Any] = mapped_column(
+        JSON, nullable=False, server_default=text("'{}'")
+    )
+    response_json: Mapped[Any] = mapped_column(
+        JSON, nullable=False, server_default=text("'{}'")
+    )
 
-    prev_hash = Column(String(64), nullable=True)
-    chain_hash = Column(String(64), nullable=True)
-    chain_alg = Column(String(64), nullable=True)
-    chain_ts = Column(DateTime(timezone=True), nullable=True)
+    prev_hash: Mapped[Any] = mapped_column(String(64), nullable=True)
+    chain_hash: Mapped[Any] = mapped_column(String(64), nullable=True)
+    chain_alg: Mapped[Any] = mapped_column(String(64), nullable=True)
+    chain_ts: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class BillingDevice(Base):
@@ -473,20 +547,28 @@ class BillingDevice(Base):
         Index("ix_billing_devices_tenant_status", "tenant_id", "status"),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    device_id = Column(String(36), nullable=False, default=lambda: str(uuid.uuid4()))
-    device_key = Column(String(256), nullable=False)
-    device_type = Column(String(64), nullable=False)
-    status = Column(String(32), nullable=False, default="active")
-    first_seen_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
-    last_seen_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
-    labels = Column(JSON, nullable=False, default=dict, server_default=text("'{}'"))
-    identity_confidence = Column(Integer, nullable=False, default=0)
-    collision_signal = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    device_id: Mapped[Any] = mapped_column(
+        String(36), nullable=False, default=lambda: str(uuid.uuid4())
+    )
+    device_key: Mapped[Any] = mapped_column(String(256), nullable=False)
+    device_type: Mapped[Any] = mapped_column(String(64), nullable=False)
+    status: Mapped[Any] = mapped_column(String(32), nullable=False, default="active")
+    first_seen_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    last_seen_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    labels: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
+    identity_confidence: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    collision_signal: Mapped[Any] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
-    billable_state = Column(
+    billable_state: Mapped[Any] = mapped_column(
         String(32),
         nullable=False,
         default="billable",
@@ -503,15 +585,19 @@ class AIDeviceRegistry(Base):
         Index("ix_ai_device_registry_tenant_enabled", "tenant_id", "enabled"),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    device_id = Column(String(128), nullable=False, index=True)
-    enabled = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    device_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    enabled: Mapped[Any] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
-    registered_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
-    last_seen_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
-    telemetry_json = Column(
+    registered_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    last_seen_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    telemetry_json: Mapped[Any] = mapped_column(
         JSON, nullable=False, default=dict, server_default=text("'{}'")
     )
 
@@ -525,24 +611,32 @@ class AITokenUsage(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    device_id = Column(String(128), nullable=False, index=True)
-    user_id = Column(String(128), nullable=True)
-    usage_record_id = Column(String(64), nullable=False, unique=True, index=True)
-    persona = Column(String(64), nullable=False, default="default")
-    provider = Column(String(64), nullable=False)
-    model = Column(String(128), nullable=False)
-    prompt_tokens = Column(Integer, nullable=False, default=0)
-    completion_tokens = Column(Integer, nullable=False, default=0)
-    total_tokens = Column(Integer, nullable=False, default=0)
-    usage_day = Column(String(10), nullable=False, index=True)
-    metering_mode = Column(String(32), nullable=False, default="unknown")
-    estimation_mode = Column(String(16), nullable=False, default="estimated")
-    request_hash = Column(String(64), nullable=False)
-    policy_hash = Column(String(64), nullable=False)
-    experience_hash = Column(String(64), nullable=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    device_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    user_id: Mapped[Any] = mapped_column(String(128), nullable=True)
+    usage_record_id: Mapped[Any] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    persona: Mapped[Any] = mapped_column(String(64), nullable=False, default="default")
+    provider: Mapped[Any] = mapped_column(String(64), nullable=False)
+    model: Mapped[Any] = mapped_column(String(128), nullable=False)
+    prompt_tokens: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    completion_tokens: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    total_tokens: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    usage_day: Mapped[Any] = mapped_column(String(10), nullable=False, index=True)
+    metering_mode: Mapped[Any] = mapped_column(
+        String(32), nullable=False, default="unknown"
+    )
+    estimation_mode: Mapped[Any] = mapped_column(
+        String(16), nullable=False, default="estimated"
+    )
+    request_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    policy_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    experience_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
 
 
 class AIQuotaDaily(Base):
@@ -554,23 +648,29 @@ class AIQuotaDaily(Base):
         Index("ix_ai_quota_daily_tenant_day", "tenant_id", "usage_day"),
     )
 
-    id = Column(Integer, primary_key=True)
-    quota_scope = Column(String(256), nullable=False, index=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    device_id = Column(String(128), nullable=True, index=True)
-    usage_day = Column(String(10), nullable=False, index=True)
-    token_limit = Column(Integer, nullable=False, default=0)
-    used_tokens = Column(Integer, nullable=False, default=0)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    quota_scope: Mapped[Any] = mapped_column(String(256), nullable=False, index=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    device_id: Mapped[Any] = mapped_column(String(128), nullable=True, index=True)
+    usage_day: Mapped[Any] = mapped_column(String(10), nullable=False, index=True)
+    token_limit: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    used_tokens: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
 
 
 class PricingVersion(Base):
     __tablename__ = "pricing_versions"
 
-    pricing_version_id = Column(String(64), primary_key=True)
-    effective_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
-    rates_json = Column(JSON, nullable=False, default=dict, server_default=text("'{}'"))
-    sha256_hash = Column(String(64), nullable=False, unique=True)
+    pricing_version_id: Mapped[Any] = mapped_column(String(64), primary_key=True)
+    effective_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    rates_json: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
+    sha256_hash: Mapped[Any] = mapped_column(String(64), nullable=False, unique=True)
 
 
 class TenantContract(Base):
@@ -581,19 +681,19 @@ class TenantContract(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    contract_id = Column(String(128), nullable=False)
-    pricing_version_id = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    contract_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    pricing_version_id: Mapped[Any] = mapped_column(
         String(64), ForeignKey("pricing_versions.pricing_version_id"), nullable=False
     )
-    discount_rules_json = Column(
+    discount_rules_json: Mapped[Any] = mapped_column(
         JSON, nullable=False, default=dict, server_default=text("'{}'")
     )
-    commitment_minimum = Column(Float, nullable=False, default=0.0)
-    start_at = Column(DateTime(timezone=True), nullable=False)
-    end_at = Column(DateTime(timezone=True), nullable=True)
-    contract_hash = Column(
+    commitment_minimum: Mapped[Any] = mapped_column(Float, nullable=False, default=0.0)
+    start_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    contract_hash: Mapped[Any] = mapped_column(
         String(64), nullable=False, default="", server_default=text("''")
     )
 
@@ -612,22 +712,26 @@ class DeviceCoverageLedger(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    event_id = Column(String(128), nullable=False)
-    device_id = Column(String(36), nullable=False, index=True)
-    plan_id = Column(String(128), nullable=True, index=True)
-    action = Column(String(16), nullable=False)
-    effective_from = Column(DateTime(timezone=True), nullable=False)
-    effective_to = Column(DateTime(timezone=True), nullable=True)
-    pricing_version_id = Column(String(64), nullable=True)
-    config_hash = Column(String(64), nullable=False)
-    policy_hash = Column(String(64), nullable=False)
-    source = Column(String(64), nullable=False, default="api")
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
-    prev_hash = Column(String(64), nullable=False, default="GENESIS")
-    self_hash = Column(String(64), nullable=False, unique=True)
-    signature = Column(String(256), nullable=True)
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    event_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    device_id: Mapped[Any] = mapped_column(String(36), nullable=False, index=True)
+    plan_id: Mapped[Any] = mapped_column(String(128), nullable=True, index=True)
+    action: Mapped[Any] = mapped_column(String(16), nullable=False)
+    effective_from: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    effective_to: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    pricing_version_id: Mapped[Any] = mapped_column(String(64), nullable=True)
+    config_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    policy_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    source: Mapped[Any] = mapped_column(String(64), nullable=False, default="api")
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    prev_hash: Mapped[Any] = mapped_column(
+        String(64), nullable=False, default="GENESIS"
+    )
+    self_hash: Mapped[Any] = mapped_column(String(64), nullable=False, unique=True)
+    signature: Mapped[Any] = mapped_column(String(256), nullable=True)
 
 
 class BillingIdentityClaim(Base):
@@ -642,17 +746,23 @@ class BillingIdentityClaim(Base):
         Index("ix_billing_identity_claims_tenant_device", "tenant_id", "device_id"),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    device_id = Column(String(36), nullable=False, index=True)
-    claimed_id_type = Column(String(32), nullable=False)
-    claimed_id_value = Column(String(512), nullable=False)
-    first_seen = Column(DateTime(timezone=True), nullable=False, default=utcnow)
-    last_seen = Column(DateTime(timezone=True), nullable=False, default=utcnow)
-    source_agent_id = Column(String(256), nullable=True)
-    source_ip = Column(String(64), nullable=True)
-    attestation_level = Column(String(32), nullable=False, default="none")
-    conflict_state = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    device_id: Mapped[Any] = mapped_column(String(36), nullable=False, index=True)
+    claimed_id_type: Mapped[Any] = mapped_column(String(32), nullable=False)
+    claimed_id_value: Mapped[Any] = mapped_column(String(512), nullable=False)
+    first_seen: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    last_seen: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    source_agent_id: Mapped[Any] = mapped_column(String(256), nullable=True)
+    source_ip: Mapped[Any] = mapped_column(String(64), nullable=True)
+    attestation_level: Mapped[Any] = mapped_column(
+        String(32), nullable=False, default="none"
+    )
+    conflict_state: Mapped[Any] = mapped_column(
         String(32), nullable=False, default="clean", server_default=text("'clean'")
     )
 
@@ -677,26 +787,36 @@ class BillingCoverageDailyState(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    device_id = Column(String(36), nullable=False, index=True)
-    coverage_day = Column(Date, nullable=False, index=True)
-    coverage_state = Column(String(16), nullable=False)
-    plan_id = Column(String(128), nullable=True)
-    source_event_id = Column(String(128), nullable=False)
-    source_event_hash = Column(String(64), nullable=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    device_id: Mapped[Any] = mapped_column(String(36), nullable=False, index=True)
+    coverage_day: Mapped[Any] = mapped_column(Date, nullable=False, index=True)
+    coverage_state: Mapped[Any] = mapped_column(String(16), nullable=False)
+    plan_id: Mapped[Any] = mapped_column(String(128), nullable=True)
+    source_event_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    source_event_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
 
 
 class BillingCountSyncCheckpoint(Base):
     __tablename__ = "billing_count_sync_checkpoints"
 
-    tenant_id = Column(String(128), primary_key=True)
-    last_ledger_id = Column(Integer, nullable=False, default=0)
-    processed_digest = Column(String(64), nullable=False, default="GENESIS")
-    prev_hash = Column(String(64), nullable=False, default="GENESIS")
-    self_hash = Column(String(64), nullable=False, default="GENESIS")
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    tenant_id: Mapped[Any] = mapped_column(String(128), primary_key=True)
+    last_ledger_id: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    processed_digest: Mapped[Any] = mapped_column(
+        String(64), nullable=False, default="GENESIS"
+    )
+    prev_hash: Mapped[Any] = mapped_column(
+        String(64), nullable=False, default="GENESIS"
+    )
+    self_hash: Mapped[Any] = mapped_column(
+        String(64), nullable=False, default="GENESIS"
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
 
 
 class BillingCountSyncCheckpointEvent(Base):
@@ -707,15 +827,19 @@ class BillingCountSyncCheckpointEvent(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    sequence = Column(Integer, nullable=False)
-    from_ledger_id = Column(Integer, nullable=False)
-    to_ledger_id = Column(Integer, nullable=False)
-    processed_digest = Column(String(64), nullable=False)
-    prev_hash = Column(String(64), nullable=False, default="GENESIS")
-    self_hash = Column(String(64), nullable=False, unique=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    sequence: Mapped[Any] = mapped_column(Integer, nullable=False)
+    from_ledger_id: Mapped[Any] = mapped_column(Integer, nullable=False)
+    to_ledger_id: Mapped[Any] = mapped_column(Integer, nullable=False)
+    processed_digest: Mapped[Any] = mapped_column(String(64), nullable=False)
+    prev_hash: Mapped[Any] = mapped_column(
+        String(64), nullable=False, default="GENESIS"
+    )
+    self_hash: Mapped[Any] = mapped_column(String(64), nullable=False, unique=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
 
 
 class BillingIdentityClaimEvent(Base):
@@ -729,18 +853,22 @@ class BillingIdentityClaimEvent(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    claim_id = Column(Integer, nullable=False, index=True)
-    sequence = Column(Integer, nullable=False)
-    transition = Column(String(64), nullable=False)
-    from_state = Column(String(32), nullable=True)
-    to_state = Column(String(32), nullable=False)
-    actor = Column(String(128), nullable=True)
-    reason = Column(Text, nullable=True)
-    prev_hash = Column(String(64), nullable=False, default="GENESIS")
-    self_hash = Column(String(64), nullable=False, unique=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    claim_id: Mapped[Any] = mapped_column(Integer, nullable=False, index=True)
+    sequence: Mapped[Any] = mapped_column(Integer, nullable=False)
+    transition: Mapped[Any] = mapped_column(String(64), nullable=False)
+    from_state: Mapped[Any] = mapped_column(String(32), nullable=True)
+    to_state: Mapped[Any] = mapped_column(String(32), nullable=False)
+    actor: Mapped[Any] = mapped_column(String(128), nullable=True)
+    reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    prev_hash: Mapped[Any] = mapped_column(
+        String(64), nullable=False, default="GENESIS"
+    )
+    self_hash: Mapped[Any] = mapped_column(String(64), nullable=False, unique=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
 
 
 class BillingRun(Base):
@@ -752,23 +880,27 @@ class BillingRun(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    run_id = Column(String(128), nullable=False)
-    replay_id = Column(String(128), nullable=False)
-    idempotency_key = Column(String(128), nullable=False, index=True)
-    pricing_version_id = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    run_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    replay_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    idempotency_key: Mapped[Any] = mapped_column(
+        String(128), nullable=False, index=True
+    )
+    pricing_version_id: Mapped[Any] = mapped_column(
         String(64), nullable=False, default="", server_default=text("''")
     )
-    contract_hash = Column(
+    contract_hash: Mapped[Any] = mapped_column(
         String(64), nullable=False, default="", server_default=text("''")
     )
-    period_start = Column(DateTime(timezone=True), nullable=False)
-    period_end = Column(DateTime(timezone=True), nullable=False)
-    status = Column(String(32), nullable=False, default="scheduled")
-    invoice_id = Column(String(128), nullable=True)
-    export_path = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    period_start: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    period_end: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[Any] = mapped_column(String(32), nullable=False, default="scheduled")
+    invoice_id: Mapped[Any] = mapped_column(String(128), nullable=True)
+    export_path: Mapped[Any] = mapped_column(Text, nullable=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
 
 
 class BillingInvoiceStateEvent(Base):
@@ -782,20 +914,24 @@ class BillingInvoiceStateEvent(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    invoice_id = Column(String(128), nullable=False, index=True)
-    sequence = Column(Integer, nullable=False)
-    transition = Column(String(64), nullable=False)
-    from_state = Column(String(32), nullable=True)
-    to_state = Column(String(32), nullable=False)
-    actor = Column(String(128), nullable=False)
-    authority_ticket_id = Column(String(128), nullable=False)
-    reason = Column(Text, nullable=False)
-    prev_hash = Column(String(64), nullable=False, default="GENESIS")
-    self_hash = Column(String(64), nullable=False, unique=True)
-    signature = Column(String(256), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    invoice_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    sequence: Mapped[Any] = mapped_column(Integer, nullable=False)
+    transition: Mapped[Any] = mapped_column(String(64), nullable=False)
+    from_state: Mapped[Any] = mapped_column(String(32), nullable=True)
+    to_state: Mapped[Any] = mapped_column(String(32), nullable=False)
+    actor: Mapped[Any] = mapped_column(String(128), nullable=False)
+    authority_ticket_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    reason: Mapped[Any] = mapped_column(Text, nullable=False)
+    prev_hash: Mapped[Any] = mapped_column(
+        String(64), nullable=False, default="GENESIS"
+    )
+    self_hash: Mapped[Any] = mapped_column(String(64), nullable=False, unique=True)
+    signature: Mapped[Any] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
 
 
 class BillingCreditNote(Base):
@@ -806,21 +942,23 @@ class BillingCreditNote(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    credit_note_id = Column(String(128), nullable=False)
-    invoice_id = Column(String(128), nullable=False, index=True)
-    amount = Column(Float, nullable=False)
-    currency = Column(String(8), nullable=False, default="USD")
-    reason = Column(Text, nullable=False)
-    ticket_id = Column(String(128), nullable=False)
-    created_by = Column(String(128), nullable=False)
-    credit_json = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    credit_note_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    invoice_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    amount: Mapped[Any] = mapped_column(Float, nullable=False)
+    currency: Mapped[Any] = mapped_column(String(8), nullable=False, default="USD")
+    reason: Mapped[Any] = mapped_column(Text, nullable=False)
+    ticket_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    created_by: Mapped[Any] = mapped_column(String(128), nullable=False)
+    credit_json: Mapped[Any] = mapped_column(
         JSON, nullable=False, default=dict, server_default=text("'{}'")
     )
-    credit_sha256 = Column(String(64), nullable=False)
-    evidence_path = Column(String(512), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    credit_sha256: Mapped[Any] = mapped_column(String(64), nullable=False)
+    evidence_path: Mapped[Any] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
 
 
 class BillingDeviceEnrollment(Base):
@@ -831,13 +969,15 @@ class BillingDeviceEnrollment(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    device_id = Column(String(36), nullable=False, index=True)
-    attestation_type = Column(String(64), nullable=False)
-    attestation_payload_hash = Column(String(64), nullable=False)
-    enrolled_by = Column(String(128), nullable=False)
-    enrolled_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    device_id: Mapped[Any] = mapped_column(String(36), nullable=False, index=True)
+    attestation_type: Mapped[Any] = mapped_column(String(64), nullable=False)
+    attestation_payload_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    enrolled_by: Mapped[Any] = mapped_column(String(128), nullable=False)
+    enrolled_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
 
 
 class BillingDeviceActivityProof(Base):
@@ -853,13 +993,15 @@ class BillingDeviceActivityProof(Base):
         Index("ix_billing_activity_tenant_day", "tenant_id", "activity_day"),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    device_id = Column(String(36), nullable=False, index=True)
-    activity_day = Column(Date, nullable=False, index=True)
-    proof_type = Column(String(64), nullable=False)
-    proof_hash = Column(String(64), nullable=False)
-    observed_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    device_id: Mapped[Any] = mapped_column(String(36), nullable=False, index=True)
+    activity_day: Mapped[Any] = mapped_column(Date, nullable=False, index=True)
+    proof_type: Mapped[Any] = mapped_column(String(64), nullable=False)
+    proof_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    observed_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
 
 
 class BillingDailyCount(Base):
@@ -873,13 +1015,15 @@ class BillingDailyCount(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    day = Column(Date, nullable=False, index=True)
-    plan_id = Column(String(128), nullable=False)
-    covered_count = Column(Integer, nullable=False, default=0)
-    computed_from_hash = Column(String(64), nullable=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    day: Mapped[Any] = mapped_column(Date, nullable=False, index=True)
+    plan_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    covered_count: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    computed_from_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
 
 
 class BillingInvoice(Base):
@@ -890,30 +1034,32 @@ class BillingInvoice(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    invoice_id = Column(String(128), nullable=False)
-    period_start = Column(DateTime(timezone=True), nullable=False)
-    period_end = Column(DateTime(timezone=True), nullable=False)
-    pricing_version_id = Column(String(64), nullable=False)
-    pricing_hash = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    invoice_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    period_start: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    period_end: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    pricing_version_id: Mapped[Any] = mapped_column(String(64), nullable=False)
+    pricing_hash: Mapped[Any] = mapped_column(
         String(64), nullable=False, default="", server_default=text("''")
     )
-    contract_hash = Column(
+    contract_hash: Mapped[Any] = mapped_column(
         String(64), nullable=False, default="", server_default=text("''")
     )
-    config_hash = Column(String(64), nullable=False)
-    policy_hash = Column(String(64), nullable=False)
-    invoice_json = Column(
+    config_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    policy_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    invoice_json: Mapped[Any] = mapped_column(
         JSON, nullable=False, default=dict, server_default=text("'{}'")
     )
-    invoice_sha256 = Column(String(64), nullable=False)
-    evidence_path = Column(String(512), nullable=True)
-    invoice_state = Column(
+    invoice_sha256: Mapped[Any] = mapped_column(String(64), nullable=False)
+    evidence_path: Mapped[Any] = mapped_column(String(512), nullable=True)
+    invoice_state: Mapped[Any] = mapped_column(
         String(32), nullable=False, default="draft", server_default=text("'draft'")
     )
-    finalized_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    finalized_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
 
 
 @event.listens_for(TenantContract, "before_insert")
@@ -1006,32 +1152,32 @@ def _coverage_ledger_defaults(mapper, connection, target) -> None:
 class DecisionEvidenceArtifact(Base):
     __tablename__ = "decision_evidence_artifacts"
 
-    id = Column(Integer, primary_key=True)
-    created_at = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
         server_default=func.now(),
     )
-    tenant_id = Column(String, nullable=True, index=True)
-    decision_id = Column(Integer, nullable=False, index=True)
-    evidence_sha256 = Column(String(64), nullable=False)
-    storage_path = Column(Text, nullable=False)
-    payload_json = Column(JSON, nullable=False)
+    tenant_id: Mapped[Any] = mapped_column(String, nullable=True, index=True)
+    decision_id: Mapped[Any] = mapped_column(Integer, nullable=False, index=True)
+    evidence_sha256: Mapped[Any] = mapped_column(String(64), nullable=False)
+    storage_path: Mapped[Any] = mapped_column(Text, nullable=False)
+    payload_json: Mapped[Any] = mapped_column(JSON, nullable=False)
 
 
 class EvidenceBundle(Base):
     __tablename__ = "evidence_bundles"
 
-    id = Column(String(64), primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    subject_type = Column(String(64), nullable=False, index=True)
-    subject_id = Column(String(128), nullable=False, index=True)
-    bundle_json = Column(JSON, nullable=False)
-    bundle_hash = Column(String(64), nullable=False, index=True)
-    signature = Column(Text, nullable=False)
-    key_id = Column(String(128), nullable=False)
-    created_at = Column(
+    id: Mapped[Any] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    subject_type: Mapped[Any] = mapped_column(String(64), nullable=False, index=True)
+    subject_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    bundle_json: Mapped[Any] = mapped_column(JSON, nullable=False)
+    bundle_hash: Mapped[Any] = mapped_column(String(64), nullable=False, index=True)
+    signature: Mapped[Any] = mapped_column(Text, nullable=False)
+    key_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -1047,18 +1193,18 @@ class ApprovalLog(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    subject_type = Column(String(64), nullable=False, index=True)
-    subject_id = Column(String(128), nullable=False, index=True)
-    seq = Column(Integer, nullable=False)
-    entry_json = Column(JSON, nullable=False)
-    entry_hash = Column(String(64), nullable=False)
-    prev_chain_hash = Column(String(64), nullable=False)
-    chain_hash = Column(String(64), nullable=False, index=True)
-    signature = Column(Text, nullable=False)
-    key_id = Column(String(128), nullable=False)
-    created_at = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    subject_type: Mapped[Any] = mapped_column(String(64), nullable=False, index=True)
+    subject_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    seq: Mapped[Any] = mapped_column(Integer, nullable=False)
+    entry_json: Mapped[Any] = mapped_column(JSON, nullable=False)
+    entry_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    prev_chain_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    chain_hash: Mapped[Any] = mapped_column(String(64), nullable=False, index=True)
+    signature: Mapped[Any] = mapped_column(Text, nullable=False)
+    key_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -1069,13 +1215,15 @@ class ApprovalLog(Base):
 class ModuleRegistry(Base):
     __tablename__ = "module_registry"
 
-    module_id = Column(String(128), primary_key=True)
-    version = Column(String(64), primary_key=True)
-    record_json = Column(JSON, nullable=False)
-    registration_hash = Column(String(64), nullable=False, index=True)
-    signature = Column(Text, nullable=False)
-    key_id = Column(String(128), nullable=False)
-    registered_at = Column(
+    module_id: Mapped[Any] = mapped_column(String(128), primary_key=True)
+    version: Mapped[Any] = mapped_column(String(64), primary_key=True)
+    record_json: Mapped[Any] = mapped_column(JSON, nullable=False)
+    registration_hash: Mapped[Any] = mapped_column(
+        String(64), nullable=False, index=True
+    )
+    signature: Mapped[Any] = mapped_column(Text, nullable=False)
+    key_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    registered_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -1087,31 +1235,35 @@ class ModuleRegistry(Base):
 class ComplianceRequirementRecord(Base):
     __tablename__ = "compliance_requirements"
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    req_id = Column(String(128), nullable=False, index=True)
-    source = Column(String(32), nullable=False)
-    source_ref = Column(String(256), nullable=False)
-    title = Column(String(256), nullable=False)
-    description = Column(Text, nullable=False)
-    severity = Column(String(16), nullable=False)
-    effective_date_utc = Column(String(64), nullable=False)
-    version = Column(String(64), nullable=False)
-    status = Column(String(16), nullable=False)
-    evidence_type = Column(String(16), nullable=False)
-    owner = Column(String(128), nullable=False)
-    source_name = Column(String(128), nullable=True)
-    source_version = Column(String(64), nullable=True)
-    published_at_utc = Column(String(64), nullable=True)
-    retrieved_at_utc = Column(String(64), nullable=True)
-    bundle_sha256 = Column(String(64), nullable=True)
-    tags_json = Column(JSON, nullable=False, default=list, server_default=text("'[]'"))
-    created_at_utc = Column(String(64), nullable=False)
-    previous_record_hash = Column(String(64), nullable=False)
-    record_hash = Column(String(64), nullable=False, unique=True, index=True)
-    signature = Column(Text, nullable=False)
-    key_id = Column(String(64), nullable=False)
-    created_at = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    req_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    source: Mapped[Any] = mapped_column(String(32), nullable=False)
+    source_ref: Mapped[Any] = mapped_column(String(256), nullable=False)
+    title: Mapped[Any] = mapped_column(String(256), nullable=False)
+    description: Mapped[Any] = mapped_column(Text, nullable=False)
+    severity: Mapped[Any] = mapped_column(String(16), nullable=False)
+    effective_date_utc: Mapped[Any] = mapped_column(String(64), nullable=False)
+    version: Mapped[Any] = mapped_column(String(64), nullable=False)
+    status: Mapped[Any] = mapped_column(String(16), nullable=False)
+    evidence_type: Mapped[Any] = mapped_column(String(16), nullable=False)
+    owner: Mapped[Any] = mapped_column(String(128), nullable=False)
+    source_name: Mapped[Any] = mapped_column(String(128), nullable=True)
+    source_version: Mapped[Any] = mapped_column(String(64), nullable=True)
+    published_at_utc: Mapped[Any] = mapped_column(String(64), nullable=True)
+    retrieved_at_utc: Mapped[Any] = mapped_column(String(64), nullable=True)
+    bundle_sha256: Mapped[Any] = mapped_column(String(64), nullable=True)
+    tags_json: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
+    created_at_utc: Mapped[Any] = mapped_column(String(64), nullable=False)
+    previous_record_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    record_hash: Mapped[Any] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    signature: Mapped[Any] = mapped_column(Text, nullable=False)
+    key_id: Mapped[Any] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -1148,27 +1300,29 @@ class ComplianceRequirementRecord(Base):
 class ComplianceFindingRecord(Base):
     __tablename__ = "compliance_findings"
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    finding_id = Column(String(128), nullable=False, index=True)
-    req_ids_json = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    finding_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    req_ids_json: Mapped[Any] = mapped_column(
         JSON, nullable=False, default=list, server_default=text("'[]'")
     )
-    title = Column(String(256), nullable=False)
-    details = Column(Text, nullable=False)
-    severity = Column(String(16), nullable=False)
-    status = Column(String(16), nullable=False, index=True)
-    waiver_json = Column(JSON, nullable=True)
-    detected_at_utc = Column(String(64), nullable=False)
-    evidence_refs_json = Column(
+    title: Mapped[Any] = mapped_column(String(256), nullable=False)
+    details: Mapped[Any] = mapped_column(Text, nullable=False)
+    severity: Mapped[Any] = mapped_column(String(16), nullable=False)
+    status: Mapped[Any] = mapped_column(String(16), nullable=False, index=True)
+    waiver_json: Mapped[Any] = mapped_column(JSON, nullable=True)
+    detected_at_utc: Mapped[Any] = mapped_column(String(64), nullable=False)
+    evidence_refs_json: Mapped[Any] = mapped_column(
         JSON, nullable=False, default=list, server_default=text("'[]'")
     )
-    created_at_utc = Column(String(64), nullable=False)
-    previous_record_hash = Column(String(64), nullable=False)
-    record_hash = Column(String(64), nullable=False, unique=True, index=True)
-    signature = Column(Text, nullable=False)
-    key_id = Column(String(64), nullable=False)
-    created_at = Column(
+    created_at_utc: Mapped[Any] = mapped_column(String(64), nullable=False)
+    previous_record_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    record_hash: Mapped[Any] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    signature: Mapped[Any] = mapped_column(Text, nullable=False)
+    key_id: Mapped[Any] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -1197,18 +1351,22 @@ class ComplianceFindingRecord(Base):
 class ComplianceSnapshotRecord(Base):
     __tablename__ = "compliance_snapshots"
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    snapshot_id = Column(String(64), nullable=False, unique=True, index=True)
-    summary_json = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    snapshot_id: Mapped[Any] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    summary_json: Mapped[Any] = mapped_column(
         JSON, nullable=False, default=dict, server_default=text("'{}'")
     )
-    created_at_utc = Column(String(64), nullable=False)
-    previous_record_hash = Column(String(64), nullable=False)
-    record_hash = Column(String(64), nullable=False, unique=True, index=True)
-    signature = Column(Text, nullable=False)
-    key_id = Column(String(64), nullable=False)
-    created_at = Column(
+    created_at_utc: Mapped[Any] = mapped_column(String(64), nullable=False)
+    previous_record_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    record_hash: Mapped[Any] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    signature: Mapped[Any] = mapped_column(Text, nullable=False)
+    key_id: Mapped[Any] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -1219,66 +1377,82 @@ class ComplianceSnapshotRecord(Base):
 class AuditExamSession(Base):
     __tablename__ = "audit_exam_sessions"
 
-    id = Column(Integer, primary_key=True)
-    exam_id = Column(String(64), nullable=False, unique=True, index=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    name = Column(String(128), nullable=False)
-    window_start_utc = Column(String(64), nullable=False)
-    window_end_utc = Column(String(64), nullable=False)
-    created_at_utc = Column(String(64), nullable=False)
-    export_path = Column(String(512), nullable=True)
-    reproduce_json = Column(JSON, nullable=True)
-    previous_record_hash = Column(String(64), nullable=False, default="GENESIS")
-    record_hash = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    exam_id: Mapped[Any] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    name: Mapped[Any] = mapped_column(String(128), nullable=False)
+    window_start_utc: Mapped[Any] = mapped_column(String(64), nullable=False)
+    window_end_utc: Mapped[Any] = mapped_column(String(64), nullable=False)
+    created_at_utc: Mapped[Any] = mapped_column(String(64), nullable=False)
+    export_path: Mapped[Any] = mapped_column(String(512), nullable=True)
+    reproduce_json: Mapped[Any] = mapped_column(JSON, nullable=True)
+    previous_record_hash: Mapped[Any] = mapped_column(
+        String(64), nullable=False, default="GENESIS"
+    )
+    record_hash: Mapped[Any] = mapped_column(
         String(64), nullable=False, unique=True, index=True, default=""
     )
-    signature = Column(Text, nullable=False, default="")
-    key_id = Column(String(64), nullable=False, default="")
+    signature: Mapped[Any] = mapped_column(Text, nullable=False, default="")
+    key_id: Mapped[Any] = mapped_column(String(64), nullable=False, default="")
 
 
 class ComplianceRequirementUpdateRecord(Base):
     __tablename__ = "compliance_requirement_updates"
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    update_id = Column(String(64), nullable=False, unique=True, index=True)
-    source_name = Column(String(128), nullable=False)
-    source_version = Column(String(64), nullable=False)
-    published_at_utc = Column(String(64), nullable=False)
-    retrieved_at_utc = Column(String(64), nullable=False)
-    bundle_sha256 = Column(String(64), nullable=False)
-    status = Column(String(16), nullable=False, index=True)
-    diff_json = Column(JSON, nullable=False, default=dict, server_default=text("'{}'"))
-    previous_record_hash = Column(String(64), nullable=False)
-    record_hash = Column(String(64), nullable=False, unique=True, index=True)
-    signature = Column(Text, nullable=False)
-    key_id = Column(String(64), nullable=False)
-    created_at_utc = Column(String(64), nullable=False)
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    update_id: Mapped[Any] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    source_name: Mapped[Any] = mapped_column(String(128), nullable=False)
+    source_version: Mapped[Any] = mapped_column(String(64), nullable=False)
+    published_at_utc: Mapped[Any] = mapped_column(String(64), nullable=False)
+    retrieved_at_utc: Mapped[Any] = mapped_column(String(64), nullable=False)
+    bundle_sha256: Mapped[Any] = mapped_column(String(64), nullable=False)
+    status: Mapped[Any] = mapped_column(String(16), nullable=False, index=True)
+    diff_json: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
+    previous_record_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    record_hash: Mapped[Any] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    signature: Mapped[Any] = mapped_column(Text, nullable=False)
+    key_id: Mapped[Any] = mapped_column(String(64), nullable=False)
+    created_at_utc: Mapped[Any] = mapped_column(String(64), nullable=False)
 
 
 class AuditLedgerRecord(Base):
     __tablename__ = "audit_ledger"
 
-    id = Column(Integer, primary_key=True)
-    session_id = Column(String(64), nullable=False, index=True)
-    cycle_kind = Column(String(16), nullable=False, default="light")
-    timestamp_utc = Column(String(64), nullable=False, index=True)
-    invariant_id = Column(String(128), nullable=False, index=True)
-    decision = Column(String(8), nullable=False)
-    config_hash = Column(String(64), nullable=False)
-    policy_hash = Column(String(64), nullable=False)
-    git_commit = Column(String(64), nullable=False)
-    runtime_version = Column(String(64), nullable=False)
-    host_id = Column(String(128), nullable=False)
-    tenant_id = Column(String(128), nullable=False, index=True, default="unknown")
-    sha256_engine_code_hash = Column(String(64), nullable=False, default="")
-    sha256_self_hash = Column(String(64), nullable=False, unique=True, index=True)
-    previous_record_hash = Column(String(64), nullable=False)
-    signature = Column(Text, nullable=False)
-    details_json = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[Any] = mapped_column(String(64), nullable=False, index=True)
+    cycle_kind: Mapped[Any] = mapped_column(String(16), nullable=False, default="light")
+    timestamp_utc: Mapped[Any] = mapped_column(String(64), nullable=False, index=True)
+    invariant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    decision: Mapped[Any] = mapped_column(String(8), nullable=False)
+    config_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    policy_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    git_commit: Mapped[Any] = mapped_column(String(64), nullable=False)
+    runtime_version: Mapped[Any] = mapped_column(String(64), nullable=False)
+    host_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    tenant_id: Mapped[Any] = mapped_column(
+        String(128), nullable=False, index=True, default="unknown"
+    )
+    sha256_engine_code_hash: Mapped[Any] = mapped_column(
+        String(64), nullable=False, default=""
+    )
+    sha256_self_hash: Mapped[Any] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    previous_record_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    signature: Mapped[Any] = mapped_column(Text, nullable=False)
+    details_json: Mapped[Any] = mapped_column(
         JSON, nullable=False, default=dict, server_default=text("'{}'")
     )
-    created_at = Column(
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -1342,31 +1516,45 @@ class PolicyChangeRequest(Base):
 
     __tablename__ = "policy_change_requests"
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    change_id = Column(String(64), unique=True, nullable=False, index=True)
-    change_type = Column(String(64), nullable=False)
-    proposed_by = Column(String(128), nullable=False)
-    proposed_at = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    change_id: Mapped[Any] = mapped_column(
+        String(64), unique=True, nullable=False, index=True
+    )
+    change_type: Mapped[Any] = mapped_column(String(64), nullable=False)
+    proposed_by: Mapped[Any] = mapped_column(String(128), nullable=False)
+    proposed_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
         server_default=func.now(),
     )
-    justification = Column(Text, nullable=False)
+    justification: Mapped[Any] = mapped_column(Text, nullable=False)
 
-    rule_definition_json = Column(JSON, nullable=True)
-    roe_update_json = Column(JSON, nullable=True)
+    rule_definition_json: Mapped[Any] = mapped_column(JSON, nullable=True)
+    roe_update_json: Mapped[Any] = mapped_column(JSON, nullable=True)
 
-    simulation_results_json = Column(JSON, nullable=False, default=dict)
-    estimated_false_positives = Column(Integer, nullable=False, default=0)
-    estimated_true_positives = Column(Integer, nullable=False, default=0)
-    confidence = Column(String(16), nullable=False, default="medium")
+    simulation_results_json: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    estimated_false_positives: Mapped[Any] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    estimated_true_positives: Mapped[Any] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    confidence: Mapped[Any] = mapped_column(
+        String(16), nullable=False, default="medium"
+    )
 
-    requires_approval_from_json = Column(JSON, nullable=False, default=list)
-    approvals_json = Column(JSON, nullable=False, default=list)
-    status = Column(String(32), nullable=False, default="pending", index=True)
-    deployed_at = Column(DateTime(timezone=True), nullable=True)
+    requires_approval_from_json: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    approvals_json: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    status: Mapped[Any] = mapped_column(
+        String(32), nullable=False, default="pending", index=True
+    )
+    deployed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 @event.listens_for(SecurityAuditLog, "before_insert")
@@ -1404,18 +1592,22 @@ class ConnectorTenantState(Base):
         Index("ix_connectors_tenant_state_tenant_enabled", "tenant_id", "enabled"),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    connector_id = Column(String(128), nullable=False, index=True)
-    enabled = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    connector_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    enabled: Mapped[Any] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
-    config_hash = Column(String(128), nullable=False)
-    last_success_at = Column(DateTime(timezone=True), nullable=True)
-    last_error_code = Column(String(64), nullable=True)
-    failure_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
-    updated_by = Column(String(128), nullable=False, default="unknown")
-    updated_at = Column(
+    config_hash: Mapped[Any] = mapped_column(String(128), nullable=False)
+    last_success_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_code: Mapped[Any] = mapped_column(String(64), nullable=True)
+    failure_count: Mapped[Any] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    updated_by: Mapped[Any] = mapped_column(
+        String(128), nullable=False, default="unknown"
+    )
+    updated_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -1433,21 +1625,23 @@ class ConnectorCredential(Base):
         Index("ix_connectors_credentials_tenant_active", "tenant_id", "revoked_at"),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    connector_id = Column(String(128), nullable=False, index=True)
-    credential_id = Column(String(64), nullable=False, default="primary")
-    principal_id = Column(String(128), nullable=False)
-    auth_mode = Column(String(64), nullable=False)
-    ciphertext = Column(Text, nullable=False)
-    kek_version = Column(String(32), nullable=False)
-    created_at = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    connector_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    credential_id: Mapped[Any] = mapped_column(
+        String(64), nullable=False, default="primary"
+    )
+    principal_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    auth_mode: Mapped[Any] = mapped_column(String(64), nullable=False)
+    ciphertext: Mapped[Any] = mapped_column(Text, nullable=False)
+    kek_version: Mapped[Any] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
         server_default=func.now(),
     )
-    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ConnectorAuditLedger(Base):
@@ -1461,14 +1655,14 @@ class ConnectorAuditLedger(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    connector_id = Column(String(128), nullable=False, index=True)
-    action = Column(String(64), nullable=False)
-    params_hash = Column(String(64), nullable=False)
-    actor = Column(String(128), nullable=False)
-    request_id = Column(String(128), nullable=False, default="")
-    created_at = Column(
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    connector_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    action: Mapped[Any] = mapped_column(String(64), nullable=False)
+    params_hash: Mapped[Any] = mapped_column(String(64), nullable=False)
+    actor: Mapped[Any] = mapped_column(String(128), nullable=False)
+    request_id: Mapped[Any] = mapped_column(String(128), nullable=False, default="")
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -1489,17 +1683,17 @@ class ConnectorIdempotency(Base):
         Index("ix_connectors_idempotency_expiry", "expires_at"),
     )
 
-    id = Column(Integer, primary_key=True)
-    tenant_id = Column(String(128), nullable=False, index=True)
-    connector_id = Column(String(128), nullable=False, index=True)
-    action = Column(String(64), nullable=False)
-    idempotency_key = Column(String(128), nullable=False)
-    response_hash = Column(String(64), nullable=True)
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    connector_id: Mapped[Any] = mapped_column(String(128), nullable=False, index=True)
+    action: Mapped[Any] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[Any] = mapped_column(String(128), nullable=False)
+    response_hash: Mapped[Any] = mapped_column(String(64), nullable=True)
 
-    created_at = Column(
+    created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
         server_default=func.now(),
     )
-    expires_at = Column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
