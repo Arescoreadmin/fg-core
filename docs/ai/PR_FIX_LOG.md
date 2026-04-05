@@ -1367,3 +1367,30 @@ pre-commit hook with 2 test failures unrelated to mypy remediation.
 **Remaining blockers:** None
 
 ---
+
+## 2026-04-05 — fg-contract lane timeout root cause fix (blitz/mypy-remediation-batch-1)
+
+**Scope:** fg-contract lane hang elimination
+
+**Root cause identified:**
+`tools/testing/contracts/check_contract_drift.py` had three blocking vectors:
+1. `["python", ...]` — resolved to system Python (not venv) in CI safe-env PATH, causing import failures or hangs
+2. `subprocess.run` with no `timeout` — if any child hung (e.g. git lock inside `check_route_inventory`'s `subprocess.check_output`), the process waited indefinitely → `lane_timeout`
+3. No `stdin=subprocess.DEVNULL` — inherited the lane runner's stdin pipe; accidental stdin read would block forever
+
+**Files changed:**
+- `tools/testing/contracts/check_contract_drift.py`
+
+**Commands run:**
+1. `ruff format tools/testing/contracts/check_contract_drift.py`
+2. `ruff check tools/testing/contracts/check_contract_drift.py`
+3. `make fg-contract` (2.654s)
+4. `python tools/testing/harness/lane_runner.py --lane fg-contract` (3.182s)
+
+**Validation results:**
+- `make fg-contract` → `Contract diff: OK (admin/core/artifacts)` ✓
+- `lane_runner --lane fg-contract` → `status: passed` in 3.182s ✓
+
+**Remaining blockers:** None
+
+---
