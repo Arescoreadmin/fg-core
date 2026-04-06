@@ -577,8 +577,8 @@ required-tests-gate: guard-scripts
 	.venv/bin/python tools/testing/harness/required_tests_gate.py
 
 # fg-security is a lane target, not a single check.
-# Keep it deterministic and scoped: policy validation + invariant coverage + SOC invariants (if already defined).
-fg-security: policy-validate required-tests-gate soc-invariants
+# Keep it deterministic and scoped: policy validation + invariant coverage + security pytest lane.
+fg-security: policy-validate required-tests-gate soc-invariants fg-security-pytest
 	@set -euo pipefail; \
 	.venv/bin/python tools/testing/security/check_invariant_coverage.py; \
 	echo "fg-security: PASS"
@@ -639,6 +639,49 @@ control-plane-check: venv
 # Fast lane + audit/compliance
 # =============================================================================
 
+# =============================================================================
+# CI Lane Budgets + Scoped Pytest Filters
+# =============================================================================
+
+FG_FAST_MAX_SECONDS ?= 300
+FG_FAST_WARN_SECONDS ?= 240
+
+PYTEST_FAST_FILTER ?= -m "smoke or contract or security"
+
+.PHONY: fg-fast-pytest fg-fast-budget-check fg-security-pytest fg-full-pytest
+
+fg-fast-pytest: venv _require-pytest-venv
+	@set -euo pipefail; \
+	start=$$(date +%s); \
+	FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q $(PYTEST_FAST_FILTER) --durations=25; \
+	end=$$(date +%s); \
+	dur=$$((end - start)); \
+	mkdir -p artifacts/ci; \
+	printf '{"lane":"fg-fast","duration_seconds":%s,"warn_seconds":%s,"max_seconds":%s}\n' "$$dur" "$(FG_FAST_WARN_SECONDS)" "$(FG_FAST_MAX_SECONDS)" > artifacts/ci/fg_fast_duration.json; \
+	echo "fg-fast pytest duration: $$dur sec"; \
+	if [ "$$dur" -gt "$(FG_FAST_MAX_SECONDS)" ]; then \
+		echo "❌ fg-fast exceeded budget ($(FG_FAST_MAX_SECONDS)s)"; \
+		exit 1; \
+	elif [ "$$dur" -gt "$(FG_FAST_WARN_SECONDS)" ]; then \
+		echo "⚠️ fg-fast nearing budget ($(FG_FAST_WARN_SECONDS)s)"; \
+	fi
+
+fg-fast-budget-check: venv
+	@set -euo pipefail; \
+	test -f artifacts/ci/fg_fast_duration.json || { echo "❌ missing artifacts/ci/fg_fast_duration.json"; exit 1; }; \
+	dur="$$(python -c 'import json; print(json.load(open("artifacts/ci/fg_fast_duration.json"))["duration_seconds"])')"; \
+	warn="$$(python -c 'import json; print(json.load(open("artifacts/ci/fg_fast_duration.json"))["warn_seconds"])')"; \
+	max_s="$$(python -c 'import json; print(json.load(open("artifacts/ci/fg_fast_duration.json"))["max_seconds"])')"; \
+	echo "fg-fast budget check: duration=$$dur s warn=$$warn s max=$$max_s s"; \
+	test "$$dur" -le "$$max_s"
+
+fg-security-pytest: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q tests/security -m "not slow" --durations=25
+
+fg-full-pytest: venv _require-pytest-venv
+	@FG_ENV=test $(PYTEST_ENV) $(PYTEST) -q --durations=50
+
+
 .PHONY: audit-engine audit-export-test audit-repro-test compliance-registry-test exam-export-test exam-reproduce-test
 audit-engine: venv
 	@$(PY) scripts/run_audit_engine.py
@@ -678,10 +721,11 @@ fg-fast: venv fg-audit-make fg-contract fg-compile prod-profile-check \
 	bp-m1-006-gate bp-m2-001-gate bp-m2-002-gate bp-m2-003-gate \
 	bp-m3-001-gate bp-m3-003-gate bp-m3-004-gate bp-m3-005-gate bp-m3-006-gate bp-m3-007-gate bp-d-000-gate \
 	verify-spine-modules verify-schemas verify-drift align-score pr-fix-log fg-required-summary
-	@$(MAKE) -s test-unit
+	@$(MAKE) -s fg-fast-pytest
 	@$(MAKE) -s fg-lint
 	@$(MAKE) -s test-dashboard-p0
 	@$(MAKE) -s sql-migration-percent-guard
+	@$(MAKE) -s fg-fast-budget-check
 
 # Compat alias
 g-fast: fg-fast
@@ -690,7 +734,7 @@ fg-fast-ci: fg-fast billing-ledger-verify billing-invoice-verify opa-check contr
 
 fg-fast-full: fg-fast-ci compliance-chain-verify canonicalization-guard
 
-fg-full: fg-fast-full \
+fg-full: fg-fast-full fg-full-pytest \
 	audit-export-test audit-repro-test compliance-registry-test exam-export-test exam-reproduce-test
 
 fg-required-summary:
