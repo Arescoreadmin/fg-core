@@ -7,7 +7,7 @@ import subprocess
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -61,7 +61,7 @@ def _ts(value: datetime | None) -> str | None:
 
 
 def _canonical_contract_hash(contract: TenantContract) -> str:
-    payload = {
+    payload: dict[str, Any] = {
         "tenant_id": contract.tenant_id,
         "contract_id": contract.contract_id,
         "pricing_version_id": contract.pricing_version_id,
@@ -293,12 +293,12 @@ def _coverage_insert_idempotent(db: Session, event: DeviceCoverageLedger) -> Non
             )
             continue
 
-        existing = {
+        existing: dict[str, Any] = {
             "coverage_state": row.coverage_state,
             "plan_id": row.plan_id,
             "source_event_hash": row.source_event_hash,
         }
-        incoming = {
+        incoming: dict[str, Any] = {
             "coverage_state": coverage_state,
             "plan_id": event.plan_id,
             "source_event_hash": event.self_hash,
@@ -536,7 +536,7 @@ def _build_invoice_payload(
     config_hash: str,
     policy_hash: str,
 ) -> dict[str, Any]:
-    rates = dict(pricing.rates_json or {})
+    rates: dict[str, Any] = dict(pricing.rates_json or {})
     line_items: list[dict[str, Any]] = []
     subtotal = 0.0
     for row in daily_rows:
@@ -1503,7 +1503,8 @@ def invoice_details(
         .all()
     )
     credit_total = round(sum(float(c.amount) for c in credits), 6)
-    invoice_total = float((row.invoice_json or {}).get("total", 0.0))
+    invoice_payload = cast(dict[str, Any], row.invoice_json or {})
+    invoice_total = float(invoice_payload.get("total", 0.0))
     return {
         "invoice_id": row.invoice_id,
         "period_start": _ts(row.period_start),
@@ -1724,7 +1725,7 @@ def create_credit_note(
     if invoice is None:
         raise HTTPException(status_code=404, detail="invoice not found")
 
-    payload = {
+    payload: dict[str, Any] = {
         "tenant_id": tenant_id,
         "credit_note_id": req.credit_note_id,
         "invoice_id": invoice_id,

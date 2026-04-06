@@ -3,6 +3,7 @@ fail_closed: true
 categories:
   unit:
     required_test_globs:
+    - tests/*.py
     - tests/**/*.py
   contract:
     required_test_globs:

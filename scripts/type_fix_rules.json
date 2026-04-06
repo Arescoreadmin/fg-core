@@ -1,0 +1,7 @@
+[
+  {
+    "file": "requirements-dev.txt",
+    "find": "pip-audit==2.0.0\n",
+    "replace": "pip-audit==2.0.0\ntypes-PyYAML\ntypes-jsonschema\n"
+  }
+]

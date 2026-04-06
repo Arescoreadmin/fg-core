@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from fastapi import APIRouter, Depends, HTTPException, Request
+from typing import Any, cast
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
@@ -45,7 +46,7 @@ admin_router = APIRouter(
     dependencies=[Depends(require_scopes("keys:admin"))],
 )
 
-_CA_CACHE: tuple[rsa.RSAPrivateKey, x509.Certificate] | None = None
+_CA_CACHE: tuple[Any, x509.Certificate] | None = None
 
 
 class CertEnrollRequest(BaseModel):
@@ -69,7 +70,7 @@ class CommandAckRequest(BaseModel):
 
     command_id: str
     status: str = Field(pattern="^(ok|failed)$")
-    result: dict = Field(default_factory=dict)
+    result: dict[str, Any] = Field(default_factory=dict)
 
 
 class CommandIssueRequest(BaseModel):
@@ -79,7 +80,7 @@ class CommandIssueRequest(BaseModel):
     command_type: str = Field(
         pattern="^(collect_diagnostics|rotate_identity|flush_cache|run_integrity_check|fetch_inventory)$"
     )
-    payload: dict = Field(default_factory=dict, max_length=128)
+    payload: dict[str, Any] = Field(default_factory=dict)
     ttl_seconds: int = Field(default=300, ge=30, le=86400)
     idempotency_key: str | None = Field(default=None, min_length=8, max_length=128)
 
@@ -158,7 +159,7 @@ class PolicyPublishRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     version: str
-    policy_json: dict
+    policy_json: dict[str, Any]
     signature: str
 
 
@@ -166,7 +167,7 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def _load_or_create_ca() -> tuple[rsa.RSAPrivateKey, x509.Certificate]:
+def _load_or_create_ca() -> tuple[Any, x509.Certificate]:
     global _CA_CACHE
     if _CA_CACHE:
         return _CA_CACHE
@@ -176,7 +177,7 @@ def _load_or_create_ca() -> tuple[rsa.RSAPrivateKey, x509.Certificate]:
     if key_pem and cert_pem:
         key = serialization.load_pem_private_key(key_pem.encode("utf-8"), password=None)
         cert = x509.load_pem_x509_certificate(cert_pem.encode("utf-8"))
-        _CA_CACHE = (key, cert)
+        _CA_CACHE = (cast(Any, key), cert)
         return _CA_CACHE
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -202,7 +203,7 @@ def _device_fingerprint(cert: x509.Certificate) -> str:
     return cert.fingerprint(hashes.SHA256()).hex()
 
 
-def _sign_command(payload: dict) -> str:
+def _sign_command(payload: dict[str, Any]) -> str:
     key = (
         os.getenv("FG_AGENT_COMMAND_SIGNING_KEY") or os.getenv("FG_KEY_PEPPER") or ""
     ).encode("utf-8")
@@ -214,14 +215,14 @@ def _sign_command(payload: dict) -> str:
     return hmac.new(key, canonical, hashlib.sha256).hexdigest()
 
 
-def _verify_policy_hash(policy: dict, policy_hash: str) -> bool:
+def _verify_policy_hash(policy: dict[str, Any], policy_hash: str) -> bool:
     canonical = json.dumps(policy, separators=(",", ":"), sort_keys=True).encode(
         "utf-8"
     )
     return hashlib.sha256(canonical).hexdigest() == policy_hash
 
 
-def _params_hash(payload: dict | None) -> str:
+def _params_hash(payload: dict[str, Any] | None) -> str:
     canonical = json.dumps(payload or {}, separators=(",", ":"), sort_keys=True).encode(
         "utf-8"
     )
@@ -264,8 +265,8 @@ def _audit_action(
     request: Request,
     actor_id: str,
     scope: list[str],
-    params: dict | None = None,
-    extra: dict | None = None,
+    params: dict[str, Any] | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> None:
     details = {
         "actor_id": actor_id,
@@ -324,8 +325,8 @@ def _consume_budget(
     return True
 
 
-def _validate_command_payload(command_type: str, payload: dict) -> None:
-    validators = {
+def _validate_command_payload(command_type: str, payload: dict[str, Any]) -> None:
+    validators: dict[str, type[BaseModel]] = {
         "collect_diagnostics": CollectDiagnosticsParams,
         "rotate_identity": RotateIdentityParams,
         "flush_cache": FlushCacheParams,

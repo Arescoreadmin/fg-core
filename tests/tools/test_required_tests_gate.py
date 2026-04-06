@@ -38,3 +38,22 @@ def test_category_paths_ignore_deleted_and_include_renamed_from_path() -> None:
         ChangedFile(status="R100", path="api/new.py", previous_path="api/old.py"),
     ]
     assert _category_input_paths(changed) == ["api/new.py", "api/old.py"]
+
+
+def test_unit_glob_matches_top_level_tests_dir() -> None:
+    # Regression: PurePosixPath.match("tests/**/*.py") returns False for
+    # files directly under tests/ in Python 3.12 (** requires >=1 intermediate
+    # dir). Policy must include tests/*.py so that tests/test_foo.py satisfies
+    # the unit category.
+    policy = {
+        "categories": {
+            "unit": {"required_test_globs": ["tests/*.py", "tests/**/*.py"]},
+        }
+    }
+    top_level = ["tests/test_main_integrity.py"]
+    failures = _verify_required_tests_changed(top_level, {"unit"}, policy)
+    assert not failures, f"Expected unit satisfied by tests/*.py, got: {failures}"
+
+    nested = ["tests/tools/test_triage_v2.py"]
+    failures = _verify_required_tests_changed(nested, {"unit"}, policy)
+    assert not failures, f"Expected unit satisfied by tests/**/*.py, got: {failures}"

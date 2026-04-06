@@ -6,4 +6,4 @@ def test_main_py_not_truncated():
     assert "def build_app" in txt
     assert "PYp =" not in txt
     # Default app instance must exist, but auth mode can be env-derived
-    assert "app = build_app" in txt
+    assert "app = _module_app_binding()" in txt

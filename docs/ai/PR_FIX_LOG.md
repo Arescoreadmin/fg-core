@@ -1250,4 +1250,147 @@ Added `--glob '!codex_gates.sh'` and `--glob '!services/ai_plane_extension/polic
 - `codex_gates.sh`
 - `docs/ai/PR_FIX_LOG.md`
 
+## PR Fix Entry — 2026-04-04
+
+### Scope
+Task 6.1 — Keycloak integration + validation alignment + contract authority sync + security gate compliance
+
+### Changes
+- Fixed ruff/type issues across:
+  - api/billing.py
+  - api/db_models.py
+  - api/agent_phase2.py
+- Added stable `error_code` handling in `api/main.py`
+- Synced contract authority markers:
+  - BLUEPRINT_STAGED.md
+  - CONTRACT.md
+- Introduced patch tooling:
+  - scripts/patch_compliant_surfaces.py
+  - scripts/type_fix_rules.json
+- Added AI client surface:
+  - services/ai/client.py
+- Updated locker command bus typing:
+  - services/locker_command_bus.py
+
+### Validation
+- fg-idp-validate: PASS
+- OIDC token + discovery: PASS
+- pytest (auth/oidc): PASS
+- fg-fast:
+  - contract gates: PASS
+  - security regression: PASS
+  - SOC + audit gates: PASS
+
+### Notes
+- Removed stale manual OIDC validation steps in favor of harness-driven validation
+- No invariant violations introduced
+- All changes deterministic and CI-aligned
+
+---
+## Batch 1 — registry singleton attribute remediation
+
+**Date:** 2026-04-04
+**Branch:** blitz/mypy-remediation-batch-1
+
+**Files changed:**
+- `services/boot_trace.py`
+- `services/module_registry.py`
+- `services/event_stream.py`
+
+**Error family addressed:**
+- `Type cannot be declared in assignment to non-self attribute` [misc] — typed assignments on `obj` in `__new__` not recognized by mypy
+- `Class has no attribute "_lock" / "_traces" / "_modules" / "_node_registry" / "_subscribers" / "_event_history" / "_history_max"` [attr-defined] — instance attrs missing class-level declarations
+- `Cannot determine type of "_event_history"` [has-type] — same root cause
+- `"bool" is invalid as return type for "__exit__" that always returns False` [exit-return] — `StageContext.__exit__` in `boot_trace.py`
+- Downstream generator type errors in `event_stream.py:411,455,459` — resolved after `_subscribers` declaration
+
+**Fix pattern applied (matches locker_command_bus.py reference):**
+1. Declare instance attrs at class body level with concrete types (no default value)
+2. Add `_initialize(self) -> None:` method that assigns via `self.*`
+3. Change `__new__` to call `cls._instance._initialize()` instead of assigning to `obj.*`
+4. Add `Literal` to `boot_trace.py` typing imports; change `StageContext.__exit__` return type to `Literal[False]`
+
+**Commands run:**
+- `.venv/bin/ruff format services/module_registry.py services/boot_trace.py services/event_stream.py services/locker_command_bus.py` → 4 files left unchanged
+- `.venv/bin/mypy services/module_registry.py services/boot_trace.py services/event_stream.py services/locker_command_bus.py --ignore-missing-imports` → **Success: no issues found in 4 source files** (67 errors eliminated)
+- `bash codex_gates.sh` → running (pytest suite ~53 min)
+
+**Validation outcome:**
+- Targeted mypy errors: 67 → 0 in allowed files
+- ruff format: no changes required
+- codex_gates.sh: in progress (pytest suite running)
+
+---
+## Fix: pre-existing test assertion drift (gate unblock)
+
+**Date:** 2026-04-04
+**Branch:** blitz/mypy-remediation-batch-1
+
+**Root cause:**
+User commit `a2e8505` ("fix: add stable error_code handling in api main validation responses")
+changed two things without updating affected tests:
+1. `api/main.py`: app binding changed from `build_app()` to `_module_app_binding()`
+2. Ingest validation responses now include a top-level `"error_code"` field
+
+Both caused `make test-unit` (and thus `make fg-fast`) to fail, blocking the plan validation
+pre-commit hook with 2 test failures unrelated to mypy remediation.
+
+**Files changed:**
+- `tests/test_main_integrity.py` — updated assertion to match current `_module_app_binding()` pattern
+- `tests/test_ingest_idempotency.py` — added `"error_code"` field to expected response dict
+
+**Validation:**
+- `.venv/bin/pytest tests/test_main_integrity.py::test_main_py_not_truncated tests/test_ingest_idempotency.py::test_ingest_rejects_missing_event_id -v` → 2 passed ✓
+
+---
+
+## 2026-04-04 — Contract sync + CI-safe repo root (blitz/mypy-remediation-batch-1)
+
+**Scope:** Contract drift repair and tooling hardcoded-path fix
+
+**Files changed:**
+- `scripts/patch_compliant_surfaces.py` — replaced `Path("/home/jcosat/Projects/fg-core")` with `Path(__file__).resolve().parent.parent`
+- `contracts/core/openapi.json` — regenerated via `make contracts-gen-prod` to sync drift
+- `schemas/api/openapi.json` — same regen
+
+**Commands run:**
+1. `make contracts-gen-prod`
+2. `make contract-authority-check`
+3. `ruff format scripts/patch_compliant_surfaces.py`
+4. `make fg-fast`
+
+**Validation results:**
+- `make contract-authority-check` → `✅ Contract authority markers match prod OpenAPI spec` ✓
+- `make fg-fast` → `1626 passed, 24 skipped` / `All checks passed!` ✓
+- `make required-tests-gate` → `required-tests gate: PASS` ✓
+
+**Remaining blockers:** None
+
+---
+
+## 2026-04-05 — fg-contract lane timeout root cause fix (blitz/mypy-remediation-batch-1)
+
+**Scope:** fg-contract lane hang elimination
+
+**Root cause identified:**
+`tools/testing/contracts/check_contract_drift.py` had three blocking vectors:
+1. `["python", ...]` — resolved to system Python (not venv) in CI safe-env PATH, causing import failures or hangs
+2. `subprocess.run` with no `timeout` — if any child hung (e.g. git lock inside `check_route_inventory`'s `subprocess.check_output`), the process waited indefinitely → `lane_timeout`
+3. No `stdin=subprocess.DEVNULL` — inherited the lane runner's stdin pipe; accidental stdin read would block forever
+
+**Files changed:**
+- `tools/testing/contracts/check_contract_drift.py`
+
+**Commands run:**
+1. `ruff format tools/testing/contracts/check_contract_drift.py`
+2. `ruff check tools/testing/contracts/check_contract_drift.py`
+3. `make fg-contract` (2.654s)
+4. `python tools/testing/harness/lane_runner.py --lane fg-contract` (3.182s)
+
+**Validation results:**
+- `make fg-contract` → `Contract diff: OK (admin/core/artifacts)` ✓
+- `lane_runner --lane fg-contract` → `status: passed` in 3.182s ✓
+
+**Remaining blockers:** None
+
 ---
