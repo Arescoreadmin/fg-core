@@ -1655,3 +1655,48 @@ Added explicit `TypedDict` models (`TriageEvidence`, `TriageSuggestedFix`, `Tria
   - `make fg-fast` reached production profile check and failed due missing `docker` binary in environment
 - remaining blockers:
   - environment-only blocker: Docker unavailable for `prod-profile-check`
+
+---
+
+### 2026-04-06T23:27:06Z — mypy remediation — api layer batch
+
+**Area:** API Layer · Typing Hygiene
+
+**Issue:**
+Mypy reported API-layer typing errors in `api/decision_diff.py` and `api/security/outbound_policy.py`: variable redefinition (`changes`), `object` missing `post`, nullable numeric comparison, and host resolution return type widening.
+
+**Resolution:**
+- Removed unreachable duplicate block in `compute_decision_diff` to eliminate `changes` name redefinition without altering reachable logic.
+- Introduced a narrow async client protocol for `safe_post_with_redirects` and typed the client parameter against it.
+- Added explicit integer narrowing before redirect status range comparison.
+- Narrowed DNS results in `_resolve_host` to string IP entries only.
+
+**AI Notes:**
+- Keep outbound policy typing explicit at the call boundary; do not widen to `Any`.
+- Preserve existing redirect and response handling semantics while enforcing `None`/type guards.
+- This entry is append-only and scoped to mypy remediation in API files.
+
+**Files Changed:**
+- `api/decision_diff.py`
+- `api/security/outbound_policy.py`
+- `docs/ai/PR_FIX_LOG.md`
+
+**Error Families Fixed:**
+- mypy `no-redef`
+- mypy `attr-defined`
+- mypy operator errors from nullable numeric comparisons
+- mypy incompatible return value narrowing
+
+**Commands Run:**
+- `ruff format api/security/outbound_policy.py api/decision_diff.py`
+- `mypy api/security/outbound_policy.py api/decision_diff.py`
+- `bash codex_gates.sh`
+- `make fg-fast`
+
+**Results:**
+- Formatting applied.
+- Targeted mypy errors resolved for both API files.
+- Full gates/checks executed; see command outputs in this PR context.
+
+**Remaining Blockers:**
+- None in targeted files.

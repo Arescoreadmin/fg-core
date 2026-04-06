@@ -4,6 +4,7 @@ import ipaddress
 import re
 import socket
 from collections.abc import Mapping
+from typing import Protocol
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from api.config.env import is_production_env
@@ -73,7 +74,7 @@ def _resolve_host(host: str) -> list[str]:
         info = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
     except OSError as exc:
         raise OutboundPolicyError("dns_resolution_failed") from exc
-    ips = sorted({entry[4][0] for entry in info})
+    ips = sorted({entry[4][0] for entry in info if isinstance(entry[4][0], str)})
     if not ips:
         raise OutboundPolicyError("dns_no_addresses")
     return ips
@@ -111,8 +112,20 @@ def validate_target(url: str, *, allow_private: bool = False) -> tuple[str, list
     return normalized_url, ips
 
 
+class _AsyncPostClient(Protocol):
+    async def post(
+        self,
+        url: str,
+        *,
+        json: dict,
+        headers: Mapping[str, str],
+        timeout: float,
+        follow_redirects: bool,
+    ) -> object: ...
+
+
 async def safe_post_with_redirects(
-    client: object,
+    client: _AsyncPostClient,
     url: str,
     *,
     json_body: dict,
@@ -132,10 +145,10 @@ async def safe_post_with_redirects(
             timeout=timeout,
             follow_redirects=False,
         )
-        status = getattr(response, "status_code", None)
-        if status is None:
-            status = getattr(response, "status", 0)
-        if 300 <= status < 400:
+        status_code = getattr(response, "status_code", None)
+        if status_code is None:
+            status_code = getattr(response, "status", None)
+        if isinstance(status_code, int) and 300 <= status_code < 400:
             location = (getattr(response, "headers", {}) or {}).get("Location")
             if not location:
                 raise OutboundPolicyError("redirect_location_missing")
