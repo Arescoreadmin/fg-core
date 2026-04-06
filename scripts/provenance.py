@@ -27,7 +27,33 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, TypedDict
+
+
+class GitInfo(TypedDict):
+    """Typed git metadata used in provenance."""
+
+    commit: str | None
+    branch: str | None
+    tag: str | None
+    remote: str | None
+    dirty: bool
+
+
+class BuildEnvironment(TypedDict, total=False):
+    """Typed build environment metadata used in provenance."""
+
+    platform: str
+    platform_version: str
+    architecture: str
+    python_version: str
+    hostname: str
+    ci: str | None
+    ci_run_id: str | None
+    ci_workflow: str | None
+    ci_actor: str | None
+    ci_job_id: str | None
+
 
 # SLSA Provenance predicate type
 SLSA_PREDICATE_TYPE = "https://slsa.dev/provenance/v1"
@@ -51,9 +77,9 @@ def sha256_string(data: str) -> str:
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 
-def get_git_info() -> dict[str, Any]:
+def get_git_info() -> GitInfo:
     """Get comprehensive git info for provenance."""
-    info = {
+    info: GitInfo = {
         "commit": None,
         "branch": None,
         "tag": None,
@@ -112,9 +138,9 @@ def get_git_info() -> dict[str, Any]:
     return info
 
 
-def get_build_environment() -> dict[str, Any]:
+def get_build_environment() -> BuildEnvironment:
     """Get build environment information."""
-    env = {
+    env: BuildEnvironment = {
         "platform": platform.system(),
         "platform_version": platform.version(),
         "architecture": platform.machine(),
