@@ -1447,3 +1447,28 @@ Changed `die()` return annotation from `None` to `NoReturn` and imported `NoRetu
 
 **Remaining Out-of-Scope Failures:**
 - Environment/tooling prerequisite failures (`.venv`/`docker`) prevented full gate completion; no additional scoped type errors observed for the targeted file.
+
+### 2026-04-06T13:38:36Z — mypy remediation — scap_scan batch
+
+- timestamp: 2026-04-06T13:38:36Z
+- batch: mypy remediation — scap_scan batch
+- files changed:
+  - scripts/scap_scan.py
+  - docs/ai/PR_FIX_LOG.md
+- error families fixed:
+  - Sequence[str] vs str narrowing for security rule fields consumed by `re.compile()` and `Finding(...)`
+  - missing local annotation for `findings: list[Finding]`
+  - incorrect variable reuse (`TextIOWrapper` variable name reused as finding variable)
+  - wrong-type attribute access caused by variable reuse
+- commands run:
+  - mypy scripts/scap_scan.py
+  - ruff format scripts/scap_scan.py
+  - mypy scripts/scap_scan.py
+  - bash codex_gates.sh
+  - make fg-fast
+- results:
+  - scoped mypy target passes after remediation
+  - formatting clean
+  - repo-wide gates may still report unrelated pre-existing failures outside this batch scope
+- remaining errors:
+  - none in scripts/scap_scan.py under mypy
