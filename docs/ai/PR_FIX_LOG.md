@@ -1472,3 +1472,23 @@ Changed `die()` return annotation from `None` to `NoReturn` and imported `NoRetu
   - repo-wide gates may still report unrelated pre-existing failures outside this batch scope
 - remaining errors:
   - none in scripts/scap_scan.py under mypy
+
+---
+### 2026-04-06T14:24:01Z — mypy remediation — provenance batch
+
+- timestamp: 2026-04-06T14:24:01Z
+- batch name: mypy remediation — provenance batch
+- files changed: scripts/provenance.py, docs/ai/PR_FIX_LOG.md
+- exact error family addressed: dict mixed-type inference causing bool | None targets to reject str assignments; str | None/None assignments into fields inferred as str
+- commands run:
+  - mypy scripts/provenance.py
+  - ruff format scripts/provenance.py
+  - mypy scripts/provenance.py
+  - bash codex_gates.sh
+  - make fg-fast
+- results:
+  - Added TypedDict schemas for git/build environment payloads and annotated dict initialization points to stabilize key-level value types.
+  - Normalized optional CI environment fields as str | None within typed schema.
+- remaining out-of-scope blockers:
+  - `bash codex_gates.sh` failed before project venv bootstrap (`ERROR: venv missing at .venv. Run setup_codex_env.sh`).
+  - `make fg-fast` failed at production profile check in this environment (`[Errno 2] No such file or directory: 'docker'`).
