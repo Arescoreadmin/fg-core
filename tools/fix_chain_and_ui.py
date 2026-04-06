@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import NoReturn
 
 ROOT = Path.cwd()
 CHAIN = ROOT / "api" / "evidence_chain.py"
 MAIN = ROOT / "api" / "main.py"
 
 
-def die(msg: str) -> None:
+def die(msg: str) -> NoReturn:
     raise SystemExit(msg)
 
 
