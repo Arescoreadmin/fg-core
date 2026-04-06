@@ -31,9 +31,12 @@ def validate_payload_against_schema(
         if key not in payload:
             raise ValueError(f"SCHEMA_REQUIRED_FIELD_MISSING:{key}")
 
-    properties = (
-        schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
-    )
+    raw_properties = schema.get("properties")
+    properties: dict[Any, Any]
+    if isinstance(raw_properties, dict):
+        properties = raw_properties
+    else:
+        properties = {}
     additional = bool(schema.get("additionalProperties", True))
 
     if not additional:

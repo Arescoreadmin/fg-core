@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Iterable, List
+from typing import Iterable, List, TypedDict
 
 from contracts.engine_types import ClassificationRing, Persona, TIEDEstimate
 
@@ -20,7 +20,15 @@ class ROEResult:
 
 
 # Ultra-minimal ROE config for MVP.
-ROE_CONFIG = {
+class _ROEConfig(TypedDict):
+    allowed_actions: list[str]
+    max_confidence_drop_guardian: float
+    max_disruptive_actions_guardian: int
+    max_disruptive_actions_sentinel: int
+    ao_required_for_secret_high: bool
+
+
+ROE_CONFIG: dict[str, _ROEConfig] = {
     "default": {
         "allowed_actions": ["block_ip", "flag_session"],
         "max_confidence_drop_guardian": 0.1,
@@ -37,7 +45,7 @@ def apply_roe(
     ring: ClassificationRing,
     tie_d: TIEDEstimate | None = None,
 ) -> ROEResult:
-    cfg = ROE_CONFIG["default"]
+    cfg: _ROEConfig = ROE_CONFIG["default"]
     allowed = set(cfg["allowed_actions"])
 
     filtered: list[Mitigation] = []
