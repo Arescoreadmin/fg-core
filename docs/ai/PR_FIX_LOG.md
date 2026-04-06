@@ -1609,3 +1609,26 @@ Added explicit `TypedDict` models (`TriageEvidence`, `TriageSuggestedFix`, `Tria
 **AI Notes:**  
 - Keep `stable_hash` as a post-construction write on `evidence` to preserve hash computation semantics
 - Do NOT collapse report sections back into an untyped mixed dict literal
+
+### 2026-04-06T22:27:45Z — mypy remediation — control tower trust proof
+
+- timestamp: 2026-04-06T22:27:45Z
+- batch name: mypy remediation — control tower trust proof
+- files changed:
+  - tools/testing/control_tower_trust_proof.py
+  - docs/ai/PR_FIX_LOG.md
+- error families fixed:
+  - local variable redefinition (`artifact` declared in multiple scopes within `main`)
+  - mixed-value dict inference narrowed to `dict[str, str]` causing assignment/update type errors for `int`, `str | None`, and nullable payload-derived values
+- commands run:
+  - ruff format tools/testing/control_tower_trust_proof.py
+  - mypy tools/testing/control_tower_trust_proof.py
+  - bash codex_gates.sh
+  - make fg-fast
+- results:
+  - `ruff format` passed (no additional formatting changes needed)
+  - `mypy tools/testing/control_tower_trust_proof.py` passed with zero errors
+  - `bash codex_gates.sh` failed due to missing local venv at invocation time (`.venv` not present)
+  - `make fg-fast` ran contract checks successfully and then failed at prod profile check because `docker` is unavailable in this environment
+- remaining blockers:
+  - environment-only blockers remain for full gate completion (`docker` missing for `prod-profile-check`)

@@ -37,7 +37,7 @@ def _request_json(
         raise RuntimeError(f"Unable to reach {base_url}: {exc}") from exc
 
 
-def _emit(artifact: dict) -> None:
+def _emit(artifact: dict[str, object]) -> None:
     out = Path("artifacts/control_tower_trust_proof.json")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(artifact, sort_keys=True, indent=2), encoding="utf-8")
@@ -52,13 +52,13 @@ def main() -> None:
     try:
         base_url = _base_url()
     except SystemExit:
-        artifact = {
+        missing_base_url_artifact: dict[str, object] = {
             "status": "fail",
             "reason": "FG_CONTROL_TOWER_BASE_URL is required (example: http://127.0.0.1:8000)",
             "timestamp": run_at,
             "build_sha": build_sha,
         }
-        _emit(artifact)
+        _emit(missing_base_url_artifact)
         raise
 
     api_key = (os.getenv("FG_CONTROL_TOWER_API_KEY") or "").strip()
@@ -70,7 +70,7 @@ def main() -> None:
     if tenant_id:
         headers["X-Tenant-ID"] = tenant_id
 
-    artifact: dict = {
+    artifact: dict[str, object] = {
         "status": "pass",
         "timestamp": run_at,
         "build_sha": build_sha,
