@@ -1492,3 +1492,57 @@ Changed `die()` return annotation from `None` to `NoReturn` and imported `NoRetu
 - remaining out-of-scope blockers:
   - `bash codex_gates.sh` failed before project venv bootstrap (`ERROR: venv missing at .venv. Run setup_codex_env.sh`).
   - `make fg-fast` failed at production profile check in this environment (`[Errno 2] No such file or directory: 'docker'`).
+
+---
+### 2026-04-06T14:58:25Z — mypy remediation — openapi security diff batch
+
+- timestamp: 2026-04-06T14:58:25Z
+- batch name: mypy remediation — openapi security diff batch
+- files changed:
+  - tools/ci/check_openapi_security_diff.py
+  - docs/ai/PR_FIX_LOG.md
+- exact error family addressed:
+  - loaded JSON/config values typed as object but used as dict/iterable (`items`, `keys`, iteration)
+  - missing explicit type annotation for `protected_prefixes`
+  - unsafe `tuple(object)` / `dict(object)` conversions
+  - incompatible tuple variable reassignment to `str`
+- commands run:
+  - git status --short
+  - mypy tools/ci/check_openapi_security_diff.py
+  - ruff format tools/ci/check_openapi_security_diff.py
+  - mypy tools/ci/check_openapi_security_diff.py
+  - bash codex_gates.sh
+  - make fg-fast
+- results:
+  - added local typed narrowing helpers for object→dict/list conversion boundaries
+  - annotated `protected_prefixes` as `tuple[str, ...]`
+  - removed unsafe raw conversions by proving runtime shape first
+  - resolved tuple-vs-str assignment by splitting loop variable naming
+- remaining out-of-scope blockers:
+  - full-repo gates may fail on pre-existing unrelated issues or environment prerequisites
+
+---
+### 2026-04-06T15:45:15Z — mypy remediation — openapi security diff regression repair
+
+- timestamp: 2026-04-06T15:45:15Z
+- batch name: mypy remediation — openapi security diff regression repair
+- root cause:
+  - Batch 5 switched route inventory loading to `_load(...).get("routes", [])`, which assumes a dict payload.
+  - Scoping tests provide legacy list payloads for route inventory; calling `.get` on list raised `AttributeError: 'list' object has no attribute 'get'`.
+- files changed:
+  - tools/ci/check_openapi_security_diff.py
+  - docs/ai/PR_FIX_LOG.md
+- commands run:
+  - ruff format tools/ci/check_openapi_security_diff.py
+  - mypy tools/ci/check_openapi_security_diff.py
+  - pytest -q tests/security/test_openapi_security_diff.py tests/security/test_openapi_security_diff_scoping.py
+  - bash codex_gates.sh
+  - make fg-fast
+- validation results:
+  - `ruff format` passed.
+  - `mypy tools/ci/check_openapi_security_diff.py` passed.
+  - requested pytest command failed in this environment because `tests/security/test_openapi_security_diff.py` does not exist and pytest config reports `Unknown config option: asyncio_default_fixture_loop_scope`.
+  - `bash codex_gates.sh` failed before gate execution due missing local venv at invocation time.
+  - `make fg-fast` progressed through contract checks and failed at production profile check due missing `docker` binary.
+- remaining unrelated blockers:
+  - environment/tooling blockers (`pytest` config mismatch in this interpreter context, missing `.venv` for direct gate invocation, missing `docker`) prevented full end-to-end validation in this run.

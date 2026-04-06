@@ -31,6 +31,29 @@ def _load(path: Path) -> dict[str, object]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _as_object_dict(value: object) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        return None
+    return {str(k): v for k, v in value.items()}
+
+
+def _as_str_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(str(item) for item in value)
+
+
+def _as_routes(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    routes: list[dict[str, object]] = []
+    for entry in value:
+        entry_dict = _as_object_dict(entry)
+        if entry_dict is not None:
+            routes.append(entry_dict)
+    return routes
+
+
 def _load_route_inventory(path: Path) -> list[dict[str, object]]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(payload, list):
@@ -62,8 +85,11 @@ def _normalize(obj: Any) -> Any:
 
 
 def _ops(spec: dict[str, object]) -> dict[tuple[str, str], dict[str, object]]:
-    out = {}
-    for p, body in (spec.get("paths") or {}).items():
+    out: dict[tuple[str, str], dict[str, object]] = {}
+    paths = _as_object_dict(spec.get("paths"))
+    if paths is None:
+        raise ValueError("openapi spec requires object 'paths'")
+    for p, body in paths.items():
         if not isinstance(body, dict):
             continue
         for m, op in body.items():
@@ -111,11 +137,12 @@ def main() -> int:
     baseline = _load(baseline_path)
     target = _load(target_path)
     allow = _load(allowlist_path)
-    inv_doc = _load(route_inventory_path)
-    inv = inv_doc.get("routes", []) if isinstance(inv_doc, dict) else []
+    inv = _load_route_inventory(route_inventory_path)
 
-    protected_prefixes = tuple(allow.get("protected_prefixes", []))
-    waived = dict(allow.get("waived_401_403", {}))
+    protected_prefixes: tuple[str, ...] = _as_str_tuple(
+        allow.get("protected_prefixes", [])
+    )
+    waived = _as_object_dict(allow.get("waived_401_403", {})) or {}
     route_map = {
         (str(r.get("method", "")).lower(), str(r.get("path", ""))): r for r in inv
     }
@@ -124,13 +151,13 @@ def main() -> int:
     tgt_ops = _ops(target)
 
     changed_keys = []
-    for key, op in sorted(tgt_ops.items()):
-        b = base_ops.get(key)
+    for op_key, op in sorted(tgt_ops.items()):
+        b = base_ops.get(op_key)
         if b is None:
-            changed_keys.append(key)
+            changed_keys.append(op_key)
             continue
         if _normalize(b) != _normalize(op):
-            changed_keys.append(key)
+            changed_keys.append(op_key)
 
     failures: list[str] = []
 
@@ -155,7 +182,7 @@ def main() -> int:
             failures.append(f"OPENAPI_SECURITY_401_403_REQUIRED {key}")
 
         if _is_extension_route(path):
-            r = op.get("responses") if isinstance(op.get("responses"), dict) else {}
+            r = _as_object_dict(op.get("responses")) or {}
             has_4xx = any(str(code).startswith("4") for code in r.keys())
             if has_4xx:
                 raw = json.dumps(op, sort_keys=True)
