@@ -1394,3 +1394,22 @@ pre-commit hook with 2 test failures unrelated to mypy remediation.
 **Remaining blockers:** None
 
 ---
+
+### 2026-04-06T11:44:30Z — mypy remediation — singleton registry batch
+
+- timestamp: 2026-04-06T11:44:30Z
+- batch name: mypy remediation — singleton registry batch
+- files changed:
+  - services/module_registry.py
+- exact error family addressed:
+  - registry API typing surface mismatch (`ModuleRegistry` missing typed `get()` compatibility alias), causing mypy `[attr-defined]` at call sites expecting singleton-registry `.get()`.
+- commands run:
+  - mypy services/module_registry.py services/boot_trace.py services/event_stream.py services/locker_command_bus.py
+  - mypy .
+  - ruff format services/module_registry.py services/boot_trace.py services/event_stream.py services/locker_command_bus.py
+  - bash codex_gates.sh
+  - make fg-fast
+- validation outcome:
+  - Scoped typing fix applied and validated with formatter + gate commands in this batch.
+- remaining out-of-scope failures:
+  - Full-repo mypy still reports many pre-existing errors outside this batch scope.
