@@ -1632,3 +1632,26 @@ Added explicit `TypedDict` models (`TriageEvidence`, `TriageSuggestedFix`, `Tria
   - `make fg-fast` ran contract checks successfully and then failed at prod profile check because `docker` is unavailable in this environment
 - remaining blockers:
   - environment-only blockers remain for full gate completion (`docker` missing for `prod-profile-check`)
+### 2026-04-06T23:01:48Z — mypy remediation — schema validation and roe batch
+
+- timestamp: 2026-04-06T23:01:48Z
+- batch name: mypy remediation — schema validation and roe batch
+- files changed:
+  - services/schema_validation.py
+  - engine/roe.py
+  - docs/ai/PR_FIX_LOG.md
+- error families fixed:
+  - schema properties optional/object narrowing for membership tests and `.items()` iteration
+  - ROE config object-typed container narrowing via typed config shape for `set(...)` and integer comparison
+- commands run:
+  - ruff format services/schema_validation.py engine/roe.py
+  - mypy services/schema_validation.py engine/roe.py
+  - bash codex_gates.sh
+  - make fg-fast
+- results:
+  - `ruff format` reported both files unchanged
+  - scoped `mypy` reported success with zero errors in the two target files
+  - `bash codex_gates.sh` failed in this run due missing local `.venv` before make bootstrapped it
+  - `make fg-fast` reached production profile check and failed due missing `docker` binary in environment
+- remaining blockers:
+  - environment-only blocker: Docker unavailable for `prod-profile-check`
