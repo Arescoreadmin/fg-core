@@ -7,6 +7,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NotRequired, TypedDict
 
 from tools.testing.harness.triage_taxonomy import TriageCategory
 
@@ -127,6 +128,30 @@ _RULES: tuple[TriageRule, ...] = (
 )
 
 
+class TriageEvidence(TypedDict):
+    top_frames: list[str]
+    matched_patterns: list[str]
+    log_excerpt: list[str]
+    stable_hash: NotRequired[str]
+
+
+class TriageSuggestedFix(TypedDict):
+    summary: str
+    commands: list[str]
+    files: list[str]
+    links: list[str]
+
+
+class TriageReport(TypedDict):
+    triage_schema_version: str
+    lane: str
+    category: str
+    confidence: float
+    primary_error: str
+    evidence: TriageEvidence
+    suggested_fix: TriageSuggestedFix
+
+
 def _excerpt(
     lines: list[str], pattern: re.Pattern[str], max_lines: int = 30
 ) -> list[str]:
@@ -148,11 +173,11 @@ def _top_frames(lines: list[str]) -> list[str]:
     return deduped[:8]
 
 
-def _classify(lines: list[str], lane: str = "unknown") -> dict[str, object]:
+def _classify(lines: list[str], lane: str = "unknown") -> TriageReport:
     for rule in _RULES:
         if rule.pattern.search("\n".join(lines)):
             excerpt = _excerpt(lines, rule.pattern)
-            report = {
+            report: TriageReport = {
                 "triage_schema_version": TRIAGE_SCHEMA_VERSION,
                 "lane": lane,
                 "category": rule.category.value,

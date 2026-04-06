@@ -1595,3 +1595,17 @@ Changed `die()` return annotation from `None` to `NoReturn` and imported `NoRetu
   - soc-review-sync alignment repaired by documentation update.
 - remaining blockers:
   - any non-governance failures observed in fg-fast/codex gates are out-of-scope and unrelated to this doc-only repair.
+
+### 2026-04-06 — Mypy Remediation: Triage Report Structured Typing
+
+**Area:** Testing Harness · Type Safety
+
+**Issue:**  
+`tools/testing/harness/triage_report.py` built mixed-shape dict literals (nested dicts, lists, floats, strings), triggering mypy union inference that broke indexed assignment for `report["evidence"]["stable_hash"]` and return-type compatibility.
+
+**Resolution:**  
+Added explicit `TypedDict` models (`TriageEvidence`, `TriageSuggestedFix`, `TriageReport`) and annotated report construction paths so mypy keeps section types stable while preserving the existing output schema and runtime behavior.
+
+**AI Notes:**  
+- Keep `stable_hash` as a post-construction write on `evidence` to preserve hash computation semantics
+- Do NOT collapse report sections back into an untyped mixed dict literal
