@@ -88,7 +88,7 @@ def _ops(spec: dict[str, object]) -> dict[tuple[str, str], dict[str, object]]:
     out: dict[tuple[str, str], dict[str, object]] = {}
     paths = _as_object_dict(spec.get("paths"))
     if paths is None:
-        return out
+        raise ValueError("openapi spec requires object 'paths'")
     for p, body in paths.items():
         if not isinstance(body, dict):
             continue
@@ -137,8 +137,7 @@ def main() -> int:
     baseline = _load(baseline_path)
     target = _load(target_path)
     allow = _load(allowlist_path)
-    inv_doc = _load(route_inventory_path)
-    inv = _as_routes(inv_doc.get("routes", []))
+    inv = _load_route_inventory(route_inventory_path)
 
     protected_prefixes: tuple[str, ...] = _as_str_tuple(
         allow.get("protected_prefixes", [])
