@@ -1546,3 +1546,31 @@ Changed `die()` return annotation from `None` to `NoReturn` and imported `NoRetu
   - `make fg-fast` progressed through contract checks and failed at production profile check due missing `docker` binary.
 - remaining unrelated blockers:
   - environment/tooling blockers (`pytest` config mismatch in this interpreter context, missing `.venv` for direct gate invocation, missing `docker`) prevented full end-to-end validation in this run.
+### 2026-04-06T16:23:00Z — mypy remediation — easy wins cluster
+
+- timestamp: 2026-04-06T16:23:00Z
+- batch name: mypy remediation — easy wins cluster
+- files changed:
+  - scripts/find_bad_toml.py
+  - tools/ci/check_security_exception_swallowing.py
+  - scripts/gap_audit.py
+  - tools/tenant_hardening/inventory_optional_tenant.py
+  - docs/ai/PR_FIX_LOG.md
+- exact error families addressed:
+  - exception variable scope misuse / deleted exception variable access in TOML parser script
+  - Path vs str variable reuse collision in security exception swallowing check
+  - Optional waiver assignment into non-optional waiver variable in gap audit flow
+  - iterable shape/type narrowing for bucket membership iteration in optional tenant inventory script
+- commands run:
+  - git status --short
+  - mypy scripts/find_bad_toml.py tools/ci/check_security_exception_swallowing.py scripts/gap_audit.py tools/tenant_hardening/inventory_optional_tenant.py
+  - ruff format scripts/find_bad_toml.py tools/ci/check_security_exception_swallowing.py scripts/gap_audit.py tools/tenant_hardening/inventory_optional_tenant.py
+  - mypy scripts/find_bad_toml.py tools/ci/check_security_exception_swallowing.py scripts/gap_audit.py tools/tenant_hardening/inventory_optional_tenant.py
+  - bash codex_gates.sh
+  - make fg-fast
+- results:
+  - scoped mypy targets pass with no issues after remediation
+  - ruff format reports no further changes required
+- remaining out-of-scope blockers:
+  - bash codex_gates.sh fails on pre-existing full-repo mypy errors outside this batch (247 errors in 93 files)
+  - make fg-fast fails in this environment at prod-profile-check due missing Docker binary (`[Errno 2] No such file or directory: 'docker'`)

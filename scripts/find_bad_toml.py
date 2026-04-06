@@ -9,24 +9,24 @@ def main() -> None:
     tomls = sorted(
         {p for r in roots for p in r.rglob("*.toml")} | {Path("pyproject.toml")}
     )
-    bad = []
+    bad: list[tuple[Path, str, str]] = []
     for p in tomls:
         if not p.exists() or p.is_dir():
             continue
         try:
             tomllib.loads(p.read_text(encoding="utf-8"))
         except Exception as e:
-            bad.append((p, e))
+            bad.append((p, type(e).__name__, str(e)))
 
     if not bad:
         print("All TOML files parsed OK.")
         return
 
     print("Broken TOML files:")
-    for p, e in bad:
-        print(f"\n- {p}\n  {type(e).__name__}: {e}")
+    for p, err_type, err_msg in bad:
+        print(f"\n- {p}\n  {err_type}: {err_msg}")
         # Try to show nearby lines if we can parse position like "line X, column Y"
-        msg = str(e)
+        msg = err_msg
         import re
 
         m = re.search(r"line (\d+), column (\d+)", msg)

@@ -27,13 +27,13 @@ def _files() -> list[Path]:
 def main() -> int:
     violations: list[str] = []
     for path in _files():
-        rel = path.relative_to(ROOT)
+        rel_path = path.relative_to(ROOT)
         text = path.read_text(encoding="utf-8")
         if PATTERN.search(text):
-            violations.append(str(rel))
+            violations.append(str(rel_path))
     if violations:
-        for rel in violations:
-            print(f"forbidden exception swallowing: {rel}")
+        for violation in violations:
+            print(f"forbidden exception swallowing: {violation}")
         return 1
     print("security exception swallowing: OK")
     return 0
