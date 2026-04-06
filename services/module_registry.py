@@ -581,6 +581,15 @@ class ModuleRegistry:
     def get_registration(self, module_id: str) -> Optional[ModuleRegistration]:
         return self._get(module_id)
 
+    def get(self, module_id: str) -> Optional[ModuleRegistration]:
+        """
+        Compatibility alias for direct registration lookup.
+
+        This preserves call sites that expect a dict-like registry.get()
+        while keeping the typed ModuleRegistration return contract.
+        """
+        return self._get(module_id)
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
