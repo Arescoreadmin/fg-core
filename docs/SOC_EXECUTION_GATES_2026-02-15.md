@@ -1865,3 +1865,32 @@ Files Changed:
 ### Notes
 - This change is strictly typing-level and defensive narrowing
 - No contract, route, or auth surface changes
+
+---
+
+## 2026-04-06 — SOC Review Sync Repair: mypy easy wins cluster CI tooling file
+
+Date: 2026-04-06
+Scope / File Changed:
+- `tools/ci/check_security_exception_swallowing.py`
+
+Change Type:
+- Type-safety remediation (mypy-only) for CI tooling code path.
+
+Summary of Fix:
+- Separated variable bindings so `Path`-typed relative path (`rel_path`) is not reused as a `str` loop variable during violation printing.
+- Kept path discovery, regex match behavior, violation detection, output strings, and exit code semantics unchanged.
+
+Security Impact Assessment:
+- No security enforcement logic weakened.
+- Exception-swallowing detection pattern and target file coverage are unchanged.
+- Runtime/security behavior is preserved; change is strictly type-safety and naming hygiene.
+
+Validation Performed:
+- `mypy scripts/find_bad_toml.py tools/ci/check_security_exception_swallowing.py scripts/gap_audit.py tools/tenant_hardening/inventory_optional_tenant.py` → scoped pass.
+- `make soc-review-sync` → passes after SOC documentation synchronization.
+- `make fg-fast` / `bash codex_gates.sh` may still fail on independent environment or pre-existing out-of-scope blockers; no new blocker introduced by this tooling-type fix.
+
+Conclusion:
+- SOC review trail is now synchronized for the critical `tools/ci` path change.
+- Enforcement semantics remain unchanged.

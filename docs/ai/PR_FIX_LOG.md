@@ -1574,3 +1574,24 @@ Changed `die()` return annotation from `None` to `NoReturn` and imported `NoRetu
 - remaining out-of-scope blockers:
   - bash codex_gates.sh fails on pre-existing full-repo mypy errors outside this batch (247 errors in 93 files)
   - make fg-fast fails in this environment at prod-profile-check due missing Docker binary (`[Errno 2] No such file or directory: 'docker'`)
+
+### 2026-04-06T17:07:43Z — governance repair — soc-review-sync alignment for mypy batch 6
+
+- timestamp: 2026-04-06T17:07:43Z
+- batch name: governance repair — soc-review-sync alignment for mypy batch 6
+- files changed:
+  - docs/SOC_EXECUTION_GATES_2026-02-15.md
+  - docs/ai/PR_FIX_LOG.md
+- issue addressed:
+  - SOC-HIGH-002 governance failure for critical-path file change in `tools/ci/check_security_exception_swallowing.py` without synchronized SOC review documentation.
+- fix:
+  - appended SOC review entry documenting the type-safety-only change, preserved enforcement semantics, and validation evidence.
+- commands run:
+  - make soc-review-sync
+  - make fg-fast
+  - make required-tests-gate
+  - bash codex_gates.sh
+- results:
+  - soc-review-sync alignment repaired by documentation update.
+- remaining blockers:
+  - any non-governance failures observed in fg-fast/codex gates are out-of-scope and unrelated to this doc-only repair.
