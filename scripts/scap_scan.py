@@ -25,7 +25,18 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, NotRequired, Optional, TypedDict
+
+
+class SecurityRule(TypedDict):
+    id: str
+    title: str
+    severity: str
+    pattern: str
+    description: str
+    extensions: list[str]
+    remediation: NotRequired[str]
+
 
 # Output directory
 ARTIFACTS_DIR = Path(os.getenv("FG_ARTIFACTS_DIR", "artifacts"))
@@ -71,7 +82,7 @@ class ScanResult:
 
 
 # Security rules to check
-SECURITY_RULES = [
+SECURITY_RULES: list[SecurityRule] = [
     # SQL Injection patterns
     {
         "id": "SCAP-SQL-001",
@@ -241,7 +252,7 @@ def should_scan_file(filepath: Path) -> bool:
 
 def scan_file(filepath: Path) -> list[Finding]:
     """Scan a single file for security issues."""
-    findings = []
+    findings: list[Finding] = []
 
     try:
         content = filepath.read_text(encoding="utf-8", errors="ignore")
@@ -382,8 +393,8 @@ def main() -> int:
 
     # Write JSON output
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    with open(args.output, "w") as f:
-        json.dump(result_to_dict(result), f, indent=2)
+    with open(args.output, "w") as output_file:
+        json.dump(result_to_dict(result), output_file, indent=2)
 
     if not args.json:
         # Print summary
@@ -403,12 +414,14 @@ def main() -> int:
         important = [f for f in result.findings if f.severity in ("critical", "high")]
         if important:
             print("CRITICAL/HIGH FINDINGS:")
-            for f in important[:10]:  # Limit output
-                print(f"  [{f.severity.upper()}] {f.rule_id}: {f.title}")
-                print(f"    File: {f.file}:{f.line}")
-                print(f"    Match: {f.match}")
-                if f.remediation:
-                    print(f"    Remediation: {f.remediation}")
+            for finding in important[:10]:  # Limit output
+                print(
+                    f"  [{finding.severity.upper()}] {finding.rule_id}: {finding.title}"
+                )
+                print(f"    File: {finding.file}:{finding.line}")
+                print(f"    Match: {finding.match}")
+                if finding.remediation:
+                    print(f"    Remediation: {finding.remediation}")
             if len(important) > 10:
                 print(f"  ... and {len(important) - 10} more")
             print()
