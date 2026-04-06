@@ -1413,3 +1413,37 @@ pre-commit hook with 2 test failures unrelated to mypy remediation.
   - Scoped typing fix applied and validated with formatter + gate commands in this batch.
 - remaining out-of-scope failures:
   - Full-repo mypy still reports many pre-existing errors outside this batch scope.
+
+---
+
+### 2026-04-06T13:03:18Z — mypy remediation — regex match narrowing batch
+
+**Area:** Type Safety · Tooling Script
+
+**Issue:**  
+`tools/fix_chain_and_ui.py` had mypy `union-attr` errors from `re.Match[str] | None` values being used via `.group()`, `.start()`, and `.end()` after `die()` guards that were not typed as non-returning.
+
+**Resolution:**  
+Changed `die()` return annotation from `None` to `NoReturn` and imported `NoReturn` from `typing`, allowing control-flow narrowing to prove `Match` non-null after existing guard checks without behavior changes.
+
+**AI Notes:**  
+- Keep `die()` annotated `NoReturn` so mypy preserves regex match narrowing after guard calls.
+- Do not replace with broad ignores for `union-attr` in this script.
+
+**Batch Name:** mypy remediation — regex match narrowing batch  
+**Files Changed:** tools/fix_chain_and_ui.py  
+**Error Family Addressed:** regex `Match | None` misuse (`group/start/end` on optional match)  
+**Commands Run:**
+- `ruff format tools/fix_chain_and_ui.py`
+- `mypy tools/fix_chain_and_ui.py`
+- `bash codex_gates.sh`
+- `make fg-fast`
+
+**Validation Outcome:**
+- `ruff format` passed.
+- `mypy tools/fix_chain_and_ui.py` passed (`Success: no issues found in 1 source file`).
+- `bash codex_gates.sh` failed due missing local venv at invocation time (`ERROR: venv missing at .venv`).
+- `make fg-fast` progressed but failed at production profile check due missing Docker binary in environment.
+
+**Remaining Out-of-Scope Failures:**
+- Environment/tooling prerequisite failures (`.venv`/`docker`) prevented full gate completion; no additional scoped type errors observed for the targeted file.
