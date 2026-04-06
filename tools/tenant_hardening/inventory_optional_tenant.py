@@ -4,13 +4,14 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from collections import defaultdict
+from typing import DefaultDict
 
 ROOT = Path(__file__).resolve().parents[2]
 API_DIR = ROOT / "api"
 
 PATTERN = re.compile(r"Optional\[[^\]]*tenant_id|tenant_id:\s*Optional")
 
-BUCKETS = [
+BUCKETS: list[tuple[str, list[str]]] = [
     (
         "entrypoints",
         [
@@ -44,7 +45,7 @@ def classify(rel_path: str) -> str:
 
 
 def main() -> int:
-    hits = defaultdict(list)
+    hits: DefaultDict[str, list[tuple[str, int, str]]] = defaultdict(list)
 
     for path in sorted(API_DIR.rglob("*.py")):
         rel = str(path.relative_to(ROOT))

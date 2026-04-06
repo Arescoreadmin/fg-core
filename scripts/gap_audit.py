@@ -898,9 +898,9 @@ def run_gap_audit(
             for e in ev.errors:
                 result.evidence_verification_errors.append(f"{g.id}: {e}")
 
-        w = waiver_by_gap.get(g.id)
-        if w and g.severity != "Production-blocking":
-            result.waived_gaps.append((g, w))
+        waiver = waiver_by_gap.get(g.id)
+        if waiver and g.severity != "Production-blocking":
+            result.waived_gaps.append((g, waiver))
             continue
 
         if g.severity == "Production-blocking":
