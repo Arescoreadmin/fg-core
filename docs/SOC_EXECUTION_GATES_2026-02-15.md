@@ -1835,3 +1835,33 @@ Files Changed:
 - tools/ci/check_required_env.py (ruff format only)
 - codex_gates.sh (mypy probe guard)
 - docs/SOC_EXECUTION_GATES_2026-02-15.md
+
+## 2026-04-06 — OpenAPI Security Diff Typing Remediation
+
+### Scope
+- tools/ci/check_openapi_security_diff.py
+
+### Change Type
+- Type-safety remediation (mypy compliance)
+- No behavioral or logic changes intended
+
+### Details
+- Added explicit type narrowing for object-typed config inputs
+- Introduced safe guards before .items(), .keys(), iteration
+- Added explicit annotation for protected_prefixes
+- Resolved tuple vs str assignment mismatch
+
+### Security Impact
+- No reduction in enforcement
+- Maintains fail-safe behavior on malformed OpenAPI inputs
+- Prevents runtime exceptions from invalid object assumptions
+
+### Validation
+- ruff format: PASS
+- mypy (file): PASS
+- fg-fast: PASS
+- codex_gates.sh: still failing only on unrelated repo-wide mypy debt
+
+### Notes
+- This change is strictly typing-level and defensive narrowing
+- No contract, route, or auth surface changes
