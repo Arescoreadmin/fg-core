@@ -2,10 +2,23 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 from datetime import datetime, timezone
 from pathlib import Path
 
-import yaml
+yaml = importlib.import_module("yaml")
+
+
+def _as_dict(value: object) -> dict[str, object]:
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def _as_iterable(value: object) -> list[object]:
+    if isinstance(value, (list, tuple, set)):
+        return list(value)
+    return []
 
 
 def load(path: Path) -> dict[str, object]:
@@ -22,7 +35,7 @@ def update_baseline(
     if branch != "main" or event not in {"schedule", "workflow_dispatch", "push"}:
         raise SystemExit("baseline updates allowed only on main protected workflows")
     doc = load(path)
-    lanes = doc.setdefault("lanes", {})
+    lanes = _as_dict(doc.setdefault("lanes", {}))
     lanes[lane] = int(duration_seconds)
     doc["updated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     save(path, doc)

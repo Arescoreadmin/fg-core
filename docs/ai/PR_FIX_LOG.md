@@ -1700,3 +1700,11 @@ Mypy reported API-layer typing errors in `api/decision_diff.py` and `api/securit
 
 **Remaining Blockers:**
 - None in targeted files.
+
+## 2026-04-07 — mypy remediation — runtime narrowing batch
+
+batch: "mypy remediation — runtime narrowing batch"
+families:
+- object misuse
+- iterable misuse
+- dict narrowing
