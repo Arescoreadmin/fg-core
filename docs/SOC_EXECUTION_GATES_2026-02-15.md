@@ -1894,3 +1894,12 @@ Validation Performed:
 Conclusion:
 - SOC review trail is now synchronized for the critical `tools/ci` path change.
 - Enforcement semantics remain unchanged.
+
+## 2026-04-06 — SOC sync review for outbound policy typing remediation
+
+- File: `api/security/outbound_policy.py`
+  Change: Introduced a typed async HTTP client protocol for `.post(...)` and explicit `None`/`int` narrowing for redirect status comparisons.
+  Impact: No runtime or behavioral changes.
+  Security: No change to enforcement logic, policy decisions, or trust boundaries.
+  Rationale: Improve static correctness and prevent unsafe nullable numeric comparisons while preserving existing control flow.
+  Validation: `mypy api/security/outbound_policy.py api/decision_diff.py` clean; `make fg-fast` clean except environment-only Docker limitation, with SOC sync as the remaining CI blocker before this update.
