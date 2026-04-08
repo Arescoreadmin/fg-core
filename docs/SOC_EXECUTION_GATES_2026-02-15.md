@@ -1903,3 +1903,23 @@ Conclusion:
   Security: No change to enforcement logic, policy decisions, or trust boundaries.
   Rationale: Improve static correctness and prevent unsafe nullable numeric comparisons while preserving existing control flow.
   Validation: `mypy api/security/outbound_policy.py api/decision_diff.py` clean; `make fg-fast` clean except environment-only Docker limitation, with SOC sync as the remaining CI blocker before this update.
+
+## 2026-04-07 — Control-plane invariant checker typing remediation review
+
+Critical file updated:
+- `tools/ci/check_control_plane_v2_invariants.py`
+
+Change summary:
+- applied type-safety remediation for mypy compliance using tighter object narrowing checks in control-plane invariant marker evaluation
+- narrowed membership checks to explicit string-typed markers before `in` evaluation against file content
+- preserved existing invariant/policy enforcement semantics and check coverage
+
+Governance/security impact:
+- no intended runtime or enforcement behavior change
+- no weakening of control-plane invariants or CI guard strictness
+- typing hardening reduces ambiguity in static analysis without broadening acceptance logic
+
+Validation evidence reviewed:
+- scoped mypy for the touched checker file was clean after remediation
+- prior fg-fast signal was green except for SOC review sync governance coverage
+- current blocker classified as governance/documentation-only SOC sync failure

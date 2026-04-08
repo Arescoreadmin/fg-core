@@ -1,9 +1,36 @@
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
-import yaml
+yaml = importlib.import_module("yaml")
+
+
+@runtime_checkable
+class _SupportsInt(Protocol):
+    def __int__(self) -> int: ...
+
+
+def _as_dict(value: object) -> dict[str, object]:
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def _as_iterable(value: object) -> list[object]:
+    if isinstance(value, (list, tuple, set)):
+        return list(value)
+    return []
+
+
+def _to_int(value: object) -> int:
+    if isinstance(value, (str, bytes, bytearray, _SupportsInt)):
+        return int(value)
+    raise TypeError(
+        f"int() argument must be a string, bytes-like, or number, not {type(value).__name__}"
+    )
 
 
 @dataclass(frozen=True)
@@ -26,11 +53,12 @@ def enforce_lane_budget(
     budget_doc: dict[str, object],
     baseline_seconds: int,
 ) -> tuple[bool, str]:
-    lane_cfg = (budget_doc.get("lanes") or {}).get(lane)
+    lane_cfg = _as_dict(_as_dict(budget_doc).get("lanes")).get(lane)
     if not lane_cfg:
         return True, ""
-    max_seconds = int(lane_cfg["max_seconds"])
-    fail_pct = int(lane_cfg["fail_pct"])
+    lane_cfg_dict = _as_dict(lane_cfg)
+    max_seconds = _to_int(lane_cfg_dict["max_seconds"])
+    fail_pct = _to_int(lane_cfg_dict["fail_pct"])
     if duration_seconds > max_seconds:
         return (
             False,
@@ -47,5 +75,5 @@ def enforce_lane_budget(
 
 def load_runtime_baselines(path: Path) -> dict[str, int]:
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    lanes = data.get("lanes") or {}
-    return {str(k): int(v) for k, v in lanes.items()}
+    lanes = _as_dict(_as_dict(data).get("lanes"))
+    return {str(k): _to_int(v) for k, v in lanes.items()}

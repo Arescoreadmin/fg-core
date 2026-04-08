@@ -32,6 +32,18 @@ REPO = Path(__file__).resolve().parents[2]
 FAILURES: list[str] = []
 
 
+def _as_dict(value: object) -> dict[str, object]:
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def _as_iterable(value: object) -> list[object]:
+    if isinstance(value, (list, tuple, set)):
+        return list(value)
+    return []
+
+
 def fail(msg: str) -> None:
     FAILURES.append(msg)
     print(f"  FAIL: {msg}")
@@ -751,7 +763,7 @@ def check_policy_lifecycle_service() -> None:
                 fail(f"Policy lifecycle: {description}")
         else:
             marker, description = item
-            if marker in content:
+            if isinstance(marker, str) and marker in content:
                 ok(description)
             else:
                 fail(f"Policy lifecycle: {description} — '{marker}' not found")

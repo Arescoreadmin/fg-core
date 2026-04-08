@@ -6,13 +6,14 @@ import dataclasses
 import datetime as dt
 import fnmatch
 import hashlib
+import importlib
 import json
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-import yaml
+yaml = importlib.import_module("yaml")
 
 ROOT = Path(__file__).resolve().parents[2]
 PLAN_PATH = ROOT / "plans" / "30_day_repo_blitz.yaml"
@@ -148,9 +149,12 @@ def save_state(state: dict[str, Any]) -> None:
 
 def get_current_task(plan: dict[str, Any], state: dict[str, Any]) -> TaskRef:
     idx = index_tasks(plan)
-    current_id = state.get("current_task_id")
+    current_id_raw = state.get("current_task_id")
+    if not isinstance(current_id_raw, str):
+        die(f"Current task id not found in plan: {current_id_raw}")
+    current_id = str(current_id_raw)
     if current_id not in idx:
-        die(f"Current task id not found in plan: {current_id}")
+        die(f"Current task id not found in plan: {current_id_raw}")
     return idx[current_id]
 
 
@@ -272,7 +276,7 @@ def run_validation(ref: TaskRef, state: dict[str, Any]) -> dict[str, Any]:
 
     guards = enforce_file_guards(ref)
     if guards["errors"]:
-        result = {
+        fail_result: dict[str, object] = {
             "task_id": ref.task_id,
             "phase_id": ref.phase_id,
             "module_id": ref.module_id,
@@ -283,22 +287,22 @@ def run_validation(ref: TaskRef, state: dict[str, Any]) -> dict[str, Any]:
             "command_results": [],
             "working_tree_fingerprint": working_tree_fingerprint(),
         }
-        write_validation_artifacts(ref.task_id, result)
+        write_validation_artifacts(ref.task_id, fail_result)
         state.setdefault("validations", {})[ref.task_id] = {
-            "status": result["status"],
-            "timestamp": result["timestamp"],
+            "status": fail_result["status"],
+            "timestamp": fail_result["timestamp"],
             "artifact": str(
                 (ARTIFACTS_DIR / f"{ref.task_id}_validate_latest.json").relative_to(
                     ROOT
                 )
             ),
-            "working_tree_fingerprint": result["working_tree_fingerprint"],
+            "working_tree_fingerprint": fail_result["working_tree_fingerprint"],
         }
         save_state(state)
         print("Validation failed before commands:\n")
         for err in guards["errors"]:
             print(f"- {err}")
-        return result
+        return fail_result
 
     command_results: list[dict[str, Any]] = []
     failed = False
@@ -323,7 +327,7 @@ def run_validation(ref: TaskRef, state: dict[str, Any]) -> dict[str, Any]:
             failed = True
             break
 
-    result = {
+    result: dict[str, object] = {
         "task_id": ref.task_id,
         "phase_id": ref.phase_id,
         "module_id": ref.module_id,

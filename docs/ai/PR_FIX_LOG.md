@@ -1700,3 +1700,38 @@ Mypy reported API-layer typing errors in `api/decision_diff.py` and `api/securit
 
 **Remaining Blockers:**
 - None in targeted files.
+
+## 2026-04-07 — mypy remediation — runtime narrowing batch
+
+batch: "mypy remediation — runtime narrowing batch"
+families:
+- object misuse
+- iterable misuse
+- dict narrowing
+
+## 2026-04-07T00:00:00Z — mypy remediation — taskctl batch
+
+- timestamp: "2026-04-07T00:00:00Z"
+- batch: "mypy remediation — taskctl batch"
+- files changed:
+  - tools/plan/taskctl.py
+  - docs/ai/PR_FIX_LOG.md
+- error families fixed:
+  - invalid dict index key narrowing (`Any | None` -> `str` guard)
+  - mixed dict value inference narrowing for validation payload
+  - untyped yaml import handling for mypy
+- commands run:
+  - ruff format tools/plan/taskctl.py
+  - mypy tools/plan/taskctl.py
+  - bash codex_gates.sh
+  - make fg-fast
+- results:
+  - formatting: clean
+  - mypy: success (no issues in target file)
+  - codex_gates: blocked by missing .venv in environment
+  - make fg-fast: completed successfully
+- remaining blockers:
+  - local environment missing `.venv` for `codex_gates.sh`
+- update:
+  - make fg-fast: failed at `prod-profile-check` due missing `docker` binary in environment
+  - codex_gates: runs now with `.venv`, fails on unrelated repo-wide mypy errors outside this batch scope
