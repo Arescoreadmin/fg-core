@@ -118,6 +118,10 @@ def normalize_string(value: Any) -> str:
     return str(value).strip().lower()
 
 
+def _as_list(value: Any) -> list[object]:
+    return value if isinstance(value, list) else []
+
+
 def validate_finding(finding: dict[str, Any], index: int) -> None:
     finding_id = finding.get("id")
     label = (
@@ -142,10 +146,10 @@ def validate_finding(finding: dict[str, Any], index: int) -> None:
     if not isinstance(gate, str):
         fail("gate", "must be a string (empty string allowed)")
 
-    evidence = finding.get("evidence")
-    if not isinstance(evidence, list):
+    evidence_list = _as_list(finding.get("evidence"))
+    if not isinstance(finding.get("evidence"), list):
         fail("evidence", "must be a list of strings")
-    for idx, item in enumerate(evidence):
+    for idx, item in enumerate(evidence_list):
         if not isinstance(item, str):
             fail("evidence", f"item {idx} must be a string")
 

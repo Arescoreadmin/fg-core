@@ -2,11 +2,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+from typing import TypedDict
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.db import set_tenant_context
+
+
+class RLSDiagnostics(TypedDict):
+    rls: set[tuple[str, bool, bool]]
+    policies: set[tuple[str, str]]
+    role: tuple[str, bool, bool]
+    row_security: str
 
 
 def _canonical_json_str(obj: object) -> str:
@@ -78,7 +86,7 @@ def _insert_decision(session: Session, tenant_id: str, event_id: str) -> None:
     )
 
 
-def _rls_diagnostics(session: Session) -> dict[str, object]:
+def _rls_diagnostics(session: Session) -> RLSDiagnostics:
     rls_rows = session.execute(
         text(
             """
@@ -122,8 +130,8 @@ def _rls_diagnostics(session: Session) -> dict[str, object]:
     return {
         "rls": {(row[0], row[1], row[2]) for row in rls_rows},
         "policies": {(row[0], row[1]) for row in policies},
-        "role": role_row,
-        "row_security": row_security,
+        "role": (str(role_row[0]), bool(role_row[1]), bool(role_row[2])),
+        "row_security": str(row_security),
     }
 
 

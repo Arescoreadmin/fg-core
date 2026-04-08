@@ -23,7 +23,7 @@ def test_receipt_rejects_unsafe_id(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("FG_ARTIFACTS_DIR", str(tmp_path / "artifacts"))
-    payload = {
+    payload: dict[str, object] = {
         "receipt_id": "../../evil",
         "tenant_id": "tenant-a",
         "artifact_sha256": "a" * 64,
@@ -39,7 +39,7 @@ def test_receipt_rejects_oversize_payload(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("FG_ARTIFACTS_DIR", str(tmp_path / "artifacts"))
-    payload = {
+    payload: dict[str, object] = {
         "receipt_id": "safe-id-1",
         "tenant_id": "tenant-a",
         "artifact_sha256": "b" * 64,
@@ -55,7 +55,7 @@ def test_receipt_uses_restricted_permissions(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("FG_ARTIFACTS_DIR", str(tmp_path / "artifacts"))
-    payload = {
+    payload: dict[str, object] = {
         "receipt_id": "safe-id-2",
         "tenant_id": "tenant-a",
         "artifact_sha256": "c" * 64,

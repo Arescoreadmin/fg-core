@@ -11,6 +11,14 @@ from services.enterprise_controls_extension.models import TenantControlStateUpse
 SEED_PATH = Path("seeds/enterprise_control_catalog_v1.json")
 
 
+def _as_list(value: object) -> list[object]:
+    return value if isinstance(value, list) else []
+
+
+def _as_dict(value: object) -> dict[str, object]:
+    return value if isinstance(value, dict) else {}
+
+
 class EnterpriseControlsService:
     def _seed_payload(self) -> dict[str, object]:
         if not SEED_PATH.exists():
@@ -73,7 +81,8 @@ class EnterpriseControlsService:
 
     def seed_minimal(self, db: Session) -> None:
         payload = self._seed_payload()
-        for framework in payload.get("frameworks", []):
+        for framework_item in _as_list(payload.get("frameworks", [])):
+            framework = _as_dict(framework_item)
             db.execute(
                 text(
                     """
@@ -84,7 +93,8 @@ class EnterpriseControlsService:
                 ),
                 framework,
             )
-        for control in payload.get("controls", []):
+        for control_item in _as_list(payload.get("controls", [])):
+            control = _as_dict(control_item)
             db.execute(
                 text(
                     """
@@ -95,7 +105,8 @@ class EnterpriseControlsService:
                 ),
                 control,
             )
-        for x in payload.get("crosswalk", []):
+        for crosswalk_item in _as_list(payload.get("crosswalk", [])):
+            x = _as_dict(crosswalk_item)
             db.execute(
                 text(
                     """
