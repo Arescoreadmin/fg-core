@@ -11,6 +11,7 @@ Validates critical security controls:
 from __future__ import annotations
 
 import os
+import shutil
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -303,6 +304,9 @@ class TestProductionProfileValidation:
         """Production profile checker script must run without errors."""
         from scripts.prod_profile_check import ProductionProfileChecker
         from pathlib import Path
+
+        if shutil.which("docker") is None:
+            pytest.skip("docker binary not available in test environment")
 
         checker = ProductionProfileChecker()
         checker.check_compose_file(Path("docker-compose.yml"))
