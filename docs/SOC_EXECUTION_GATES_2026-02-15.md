@@ -1923,3 +1923,17 @@ Validation evidence reviewed:
 - scoped mypy for the touched checker file was clean after remediation
 - prior fg-fast signal was green except for SOC review sync governance coverage
 - current blocker classified as governance/documentation-only SOC sync failure
+
+## 2026-04-08 — SOC manifest sync typing update registration
+
+File:
+- `tools/ci/sync_soc_manifest_status.py`
+
+Change type:
+- typing-only
+
+Runtime impact:
+- none
+
+Notes:
+- Registers prior type-narrowing-only edit for SOC gate traceability.

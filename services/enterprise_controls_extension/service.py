@@ -11,12 +11,18 @@ from services.enterprise_controls_extension.models import TenantControlStateUpse
 SEED_PATH = Path("seeds/enterprise_control_catalog_v1.json")
 
 
-def _as_list(value: object) -> list[object]:
-    return value if isinstance(value, list) else []
-
-
-def _as_dict(value: object) -> dict[str, object]:
-    return value if isinstance(value, dict) else {}
+def _seed_objects(payload: dict[str, object], key: str) -> list[dict[str, object]]:
+    value = payload.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError(f"ENTERPRISE_SEED_{key.upper()}_MUST_BE_LIST")
+    output: list[dict[str, object]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            raise ValueError(f"ENTERPRISE_SEED_{key.upper()}_ITEM_MUST_BE_OBJECT")
+        output.append(item)
+    return output
 
 
 class EnterpriseControlsService:
@@ -81,8 +87,7 @@ class EnterpriseControlsService:
 
     def seed_minimal(self, db: Session) -> None:
         payload = self._seed_payload()
-        for framework_item in _as_list(payload.get("frameworks", [])):
-            framework = _as_dict(framework_item)
+        for framework in _seed_objects(payload, "frameworks"):
             db.execute(
                 text(
                     """
@@ -93,8 +98,7 @@ class EnterpriseControlsService:
                 ),
                 framework,
             )
-        for control_item in _as_list(payload.get("controls", [])):
-            control = _as_dict(control_item)
+        for control in _seed_objects(payload, "controls"):
             db.execute(
                 text(
                     """
@@ -105,8 +109,7 @@ class EnterpriseControlsService:
                 ),
                 control,
             )
-        for crosswalk_item in _as_list(payload.get("crosswalk", [])):
-            x = _as_dict(crosswalk_item)
+        for crosswalk in _seed_objects(payload, "crosswalk"):
             db.execute(
                 text(
                     """
@@ -115,6 +118,6 @@ class EnterpriseControlsService:
                     ON CONFLICT(crosswalk_id) DO NOTHING
                     """
                 ),
-                x,
+                crosswalk,
             )
         db.commit()
