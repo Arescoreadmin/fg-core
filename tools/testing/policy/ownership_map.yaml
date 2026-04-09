@@ -1,5 +1,5 @@
 version: 1
-updated_at: "2026-02-25T00:00:00Z"
+updated_at: "2026-04-08T00:00:00Z"
 default_owner: platform-core
 owners:
   - module_id: control_plane
@@ -15,6 +15,7 @@ owners:
       - unit
       - contract
       - security
+
   - module_id: connector_plane
     plane: connector
     owner: team-connectors
@@ -28,6 +29,7 @@ owners:
       - unit
       - contract
       - security
+
   - module_id: testing_module
     plane: security
     owner: team-platform-security
@@ -42,3 +44,43 @@ owners:
       - contract
       - security
       - integration
+
+  - module_id: ai_plane_extension
+    plane: control
+    owner: team-control-plane
+    path_globs:
+      - services/ai_plane_extension/**
+      - tests/modules/test_ai_plane_extension_unit.py
+      - tests/security/test_ai_plane_extension_tenant_binding.py
+    route_prefixes:
+      - /ai-plane
+    required_categories:
+      - unit
+      - security
+
+  - module_id: enterprise_controls_extension
+    plane: control
+    owner: team-control-plane
+    path_globs:
+      - services/enterprise_controls_extension/**
+      - tests/modules/test_enterprise_controls_extension_unit.py
+      - tests/security/test_enterprise_controls_extension_tenant_binding.py
+    route_prefixes:
+      - /ui/controls
+      - /ui/compliance
+    required_categories:
+      - unit
+      - security
+
+  - module_id: evidence_anchor_extension
+    plane: control
+    owner: team-control-plane
+    path_globs:
+      - services/evidence_anchor_extension/**
+      - tests/modules/test_evidence_anchor_extension_unit.py
+      - tests/security/test_evidence_anchor_extension_tenant_binding.py
+    route_prefixes:
+      - /control-plane/evidence
+    required_categories:
+      - unit
+      - security

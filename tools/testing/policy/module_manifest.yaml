@@ -11,6 +11,7 @@ modules:
       - unit
       - contract
       - security
+
   - module_id: testing_module
     plane: security
     route_prefixes:
@@ -23,3 +24,37 @@ modules:
       - contract
       - security
       - integration
+
+  - module_id: ai_plane_extension
+    plane: control
+    route_prefixes:
+      - /ai-plane
+    required_scopes:
+      - control_plane.read
+      - control_plane.write
+    required_test_category:
+      - unit
+      - security
+
+  - module_id: enterprise_controls_extension
+    plane: control
+    route_prefixes:
+      - /ui/controls
+      - /ui/compliance
+    required_scopes:
+      - control_plane.read
+      - control_plane.write
+    required_test_category:
+      - unit
+      - security
+
+  - module_id: evidence_anchor_extension
+    plane: control
+    route_prefixes:
+      - /control-plane/evidence
+    required_scopes:
+      - control_plane.read
+      - control_plane.write
+    required_test_category:
+      - unit
+      - security
