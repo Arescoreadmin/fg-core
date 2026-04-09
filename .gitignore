@@ -191,3 +191,4 @@ tools/ci/plane_registry_snapshot.json
 tools/ci/plane_registry_snapshot.sha256
 tools/ci/topology.sha256
 .env.ci
+*.swp
