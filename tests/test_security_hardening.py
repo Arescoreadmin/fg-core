@@ -292,7 +292,9 @@ class TestExtensionSecurityShape:
         assert payload["tenant_id"] == "tenant-a"
         assert not isinstance(payload["contexts"], list)
 
-    def test_enterprise_controls_extension_payload_keeps_tenant_binding_shape(self) -> None:
+    def test_enterprise_controls_extension_payload_keeps_tenant_binding_shape(
+        self,
+    ) -> None:
         payload: dict[str, object] = {
             "tenant_id": "tenant-a",
             "frameworks": [],
