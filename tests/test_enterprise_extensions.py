@@ -4,11 +4,15 @@ import base64
 import json
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+from unittest.mock import Mock
 
 from api.auth_scopes import mint_key
 from api.db import init_db, reset_engine_cache
 from api.main import build_app
+from services.enterprise_controls_extension.service import EnterpriseControlsService
 
 
 def _setup_client(tmp_path: Path) -> tuple[TestClient, str, str]:
@@ -136,3 +140,27 @@ def test_federation_error_and_happy(tmp_path: Path) -> None:
     )
     assert resp.status_code == 200
     assert resp.json()["tenant_id"] == "tenant-a"
+
+
+def test_enterprise_seed_rejects_non_list_sections() -> None:
+    class _BadListSeedService(EnterpriseControlsService):
+        def _seed_payload(self) -> dict[str, object]:
+            return {"frameworks": "bad", "controls": [], "crosswalk": []}
+
+    service = _BadListSeedService()
+    db = Mock(spec=Session)
+    with pytest.raises(ValueError, match="ENTERPRISE_SEED_FRAMEWORKS_MUST_BE_LIST"):
+        service.seed_minimal(db)
+
+
+def test_enterprise_seed_rejects_non_object_items() -> None:
+    class _BadItemSeedService(EnterpriseControlsService):
+        def _seed_payload(self) -> dict[str, object]:
+            return {"frameworks": ["bad-item"], "controls": [], "crosswalk": []}
+
+    service = _BadItemSeedService()
+    db = Mock(spec=Session)
+    with pytest.raises(
+        ValueError, match="ENTERPRISE_SEED_FRAMEWORKS_ITEM_MUST_BE_OBJECT"
+    ):
+        service.seed_minimal(db)

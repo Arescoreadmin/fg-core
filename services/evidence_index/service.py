@@ -32,7 +32,7 @@ class EvidenceIndexService:
             if p.exists() and p.is_file()
             else "missing"
         )
-        payload = {
+        payload: dict[str, object] = {
             "id": str(uuid.uuid4()),
             "tenant_id": tenant_id,
             "plane_id": plane_id,

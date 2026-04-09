@@ -1735,3 +1735,42 @@ families:
 - update:
   - make fg-fast: failed at `prod-profile-check` due missing `docker` binary in environment
   - codex_gates: runs now with `.venv`, fails on unrelated repo-wide mypy errors outside this batch scope
+
+### 2026-04-08T00:00:00Z — cluster remediation — object and dict narrowing
+
+**Area:** Type Safety · Mypy Cluster A/B
+
+**Issue:**
+Cluster A/B mypy failures remained across services/tools/tests where `object` values were used without narrowing and mixed payload dicts were inferred too narrowly.
+
+**Resolution:**
+Applied minimal local narrowing and explicit mixed-payload typing in:
+- services/ai_plane_extension/service.py
+- services/enterprise_controls_extension/service.py
+- services/evidence_anchor_extension/service.py
+- services/evidence_index/service.py
+- tools/ci/sync_soc_manifest_status.py
+- tests/postgres/test_tenant_isolation_postgres.py
+- tests/security/test_anchor_receipt_path_safety.py
+
+Fixed families:
+- Cluster A: object iteration/index/get/int conversion without narrowing
+- Cluster B: mixed payload dicts inferred too narrowly (`dict[str, str]` / `dict[str, str | None]`)
+
+Commands run:
+- `ruff format services/ai_plane_extension/service.py services/enterprise_controls_extension/service.py services/evidence_anchor_extension/service.py services/evidence_index/service.py tests/postgres/test_tenant_isolation_postgres.py tests/security/test_anchor_receipt_path_safety.py tools/ci/sync_soc_manifest_status.py`
+- `.venv/bin/mypy services/ai_plane_extension/service.py services/enterprise_controls_extension/service.py services/evidence_anchor_extension/service.py services/evidence_index/service.py tests/postgres/test_tenant_isolation_postgres.py tests/security/test_anchor_receipt_path_safety.py tools/ci/sync_soc_manifest_status.py`
+- `bash codex_gates.sh`
+- `make fg-fast`
+
+Error count (targeted slice):
+- Before: Cluster A = 11, Cluster B = 6 (17 total across touched files)
+- After: Cluster A = 0, Cluster B = 0 (0 total across touched files)
+
+Remaining dominant blockers:
+- Repo-wide unrelated mypy families outside this batch (attr-defined, signature mismatches, admin_gateway/starlette typing, etc.).
+- `make fg-fast` blocked in this environment by missing `docker` during `prod-profile-check`.
+
+**AI Notes:**
+- Keep local narrowing guards before iterable/index/get/int boundaries when payload types are `object`.
+- Keep mixed-value payloads explicitly typed as `dict[str, object]` where schema values are heterogeneous.

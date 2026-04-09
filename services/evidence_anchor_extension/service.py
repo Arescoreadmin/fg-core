@@ -100,7 +100,7 @@ class EvidenceAnchorService:
             },
         )
         db.commit()
-        receipt = {
+        receipt: dict[str, object] = {
             "receipt_id": f"ar-{uuid.uuid4().hex[:12]}",
             "tenant_id": tenant_id,
             "artifact_sha256": digest,

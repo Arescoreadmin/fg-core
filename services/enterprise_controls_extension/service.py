@@ -11,6 +11,20 @@ from services.enterprise_controls_extension.models import TenantControlStateUpse
 SEED_PATH = Path("seeds/enterprise_control_catalog_v1.json")
 
 
+def _seed_objects(payload: dict[str, object], key: str) -> list[dict[str, object]]:
+    value = payload.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError(f"ENTERPRISE_SEED_{key.upper()}_MUST_BE_LIST")
+    output: list[dict[str, object]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            raise ValueError(f"ENTERPRISE_SEED_{key.upper()}_ITEM_MUST_BE_OBJECT")
+        output.append(item)
+    return output
+
+
 class EnterpriseControlsService:
     def _seed_payload(self) -> dict[str, object]:
         if not SEED_PATH.exists():
@@ -73,7 +87,7 @@ class EnterpriseControlsService:
 
     def seed_minimal(self, db: Session) -> None:
         payload = self._seed_payload()
-        for framework in payload.get("frameworks", []):
+        for framework in _seed_objects(payload, "frameworks"):
             db.execute(
                 text(
                     """
@@ -84,7 +98,7 @@ class EnterpriseControlsService:
                 ),
                 framework,
             )
-        for control in payload.get("controls", []):
+        for control in _seed_objects(payload, "controls"):
             db.execute(
                 text(
                     """
@@ -95,7 +109,7 @@ class EnterpriseControlsService:
                 ),
                 control,
             )
-        for x in payload.get("crosswalk", []):
+        for crosswalk in _seed_objects(payload, "crosswalk"):
             db.execute(
                 text(
                     """
@@ -104,6 +118,6 @@ class EnterpriseControlsService:
                     ON CONFLICT(crosswalk_id) DO NOTHING
                     """
                 ),
-                x,
+                crosswalk,
             )
         db.commit()

@@ -41,6 +41,16 @@ def ai_external_provider_enabled() -> bool:
     }
 
 
+def _int_or_default(value: object, default: int) -> int:
+    return int(value) if isinstance(value, int) else default
+
+
+def _str_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value]
+
+
 class AIPlaneService:
     def get_policy(self, db: Session, tenant_id: str) -> dict[str, object]:
         row = (
@@ -127,7 +137,10 @@ class AIPlaneService:
             .mappings()
             .first()
         )
-        return int((row or {}).get("c", 0)) + 1
+        if row is None:
+            return 1
+        count = row.get("c")
+        return (count if isinstance(count, int) else 0) + 1
 
     def _log_retrieval_stub(self, db: Session, tenant_id: str, prompt_sha: str) -> None:
         db.execute(
@@ -163,13 +176,15 @@ class AIPlaneService:
         self, db: Session, tenant_id: str, payload: AIInferRequest
     ) -> dict[str, object]:
         policy = self.get_policy(db, tenant_id)
+        max_prompt_chars = _int_or_default(policy.get("max_prompt_chars"), 2000)
+        denylist = _str_list(policy.get("denylist"))
 
-        if len(payload.query) > int(policy["max_prompt_chars"]):
+        if len(payload.query) > max_prompt_chars:
             self._record_violation(db, tenant_id, "AI_INPUT_POLICY_BLOCKED")
             db.commit()
             raise ValueError("AI_INPUT_POLICY_BLOCKED")
 
-        ok_in, code_in = policy_engine.evaluate_input(payload.query, policy["denylist"])
+        ok_in, code_in = policy_engine.evaluate_input(payload.query, denylist)
         if not ok_in:
             self._record_violation(db, tenant_id, code_in or "AI_INPUT_POLICY_BLOCKED")
             db.commit()
