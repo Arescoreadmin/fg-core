@@ -57,3 +57,28 @@ def test_unit_glob_matches_top_level_tests_dir() -> None:
     nested = ["tests/tools/test_triage_v2.py"]
     failures = _verify_required_tests_changed(nested, {"unit"}, policy)
     assert not failures, f"Expected unit satisfied by tests/**/*.py, got: {failures}"
+
+
+def test_testing_module_security_category_accepts_recognized_tools_test() -> None:
+    # The testing_module ownership entry maps tools/testing/** and selected
+    # tooling surfaces to required categories including security. This keeps a
+    # recognized tests/tools delta tied to that module so the gate does not
+    # treat tooling-only changes as missing security coverage.
+    policy = {
+        "categories": {
+            "security": {
+                "required_test_globs": [
+                    "tests/tools/*.py",
+                    "tests/tools/**/*.py",
+                ]
+            },
+        }
+    }
+
+    changed = ["tests/tools/test_required_tests_gate.py"]
+    failures = _verify_required_tests_changed(changed, {"security"}, policy)
+
+    assert not failures, (
+        "Expected tests/tools/test_required_tests_gate.py to satisfy the "
+        f"security category for testing-module coverage, got: {failures}"
+    )
