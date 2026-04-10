@@ -10,7 +10,6 @@ from enum import Enum
 
 from sqlalchemy import (
     Boolean,
-    Column,
     DateTime,
     ForeignKey,
     Index,
@@ -19,7 +18,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import DeclarativeBase, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 def utcnow() -> datetime:
@@ -53,34 +52,31 @@ class Product(Base):
         Index("ix_products_tenant_slug", "tenant_id", "slug", unique=True),
     )
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    slug = Column(String(128), nullable=False, index=True)
-    name = Column(String(256), nullable=False)
-    env = Column(String(64), nullable=False, default="production")
-    owner = Column(String(256), nullable=True)
-    enabled = Column(Boolean, nullable=False, default=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    slug: Mapped[str] = mapped_column(String(128), index=True)
+    name: Mapped[str] = mapped_column(String(256))
+    env: Mapped[str] = mapped_column(String(64), default="production")
+    owner: Mapped[str | None] = mapped_column(String(256))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Tenant scoping for multi-tenant isolation
-    tenant_id = Column(String(128), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(128), index=True)
 
     # Timestamps
-    created_at = Column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        nullable=False,
         default=utcnow,
         server_default=func.now(),
     )
-    updated_at = Column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        nullable=False,
         default=utcnow,
         onupdate=utcnow,
         server_default=func.now(),
     )
 
     # Relationships
-    endpoints = relationship(
-        "ProductEndpoint",
+    endpoints: Mapped[list[ProductEndpoint]] = relationship(
         back_populates="product",
         cascade="all, delete-orphan",
         lazy="selectin",
@@ -111,28 +107,27 @@ class ProductEndpoint(Base):
     __tablename__ = "product_endpoints"
     __table_args__ = (Index("ix_product_endpoints_product_kind", "product_id", "kind"),)
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    product_id = Column(
-        Integer,
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    product_id: Mapped[int] = mapped_column(
         ForeignKey("products.id", ondelete="CASCADE"),
-        nullable=False,
         index=True,
     )
-    kind = Column(String(32), nullable=False)  # rest, grpc, nats
-    url = Column(String(1024), nullable=True)  # For REST/gRPC
-    target = Column(String(1024), nullable=True)  # For NATS subject
-    meta_json = Column(Text, nullable=True)  # JSON string for additional metadata
+    kind: Mapped[str] = mapped_column(String(32))  # rest, grpc, nats
+    url: Mapped[str | None] = mapped_column(String(1024))  # For REST/gRPC
+    target: Mapped[str | None] = mapped_column(String(1024))  # For NATS subject
+    meta_json: Mapped[str | None] = mapped_column(
+        Text
+    )  # JSON string for additional metadata
 
     # Timestamps
-    created_at = Column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        nullable=False,
         default=utcnow,
         server_default=func.now(),
     )
 
     # Relationships
-    product = relationship("Product", back_populates="endpoints")
+    product: Mapped[Product] = relationship(back_populates="endpoints")
 
     def to_dict(self) -> dict:
         """Convert to dictionary representation."""

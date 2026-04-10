@@ -347,7 +347,8 @@ async def create_product(
 
     # Check for duplicate slug within tenant
     stmt = select(Product).where(
-        Product.tenant_id == tenant_id, Product.slug == data.slug
+        Product.tenant_id == tenant_id,
+        Product.slug == data.slug,
     )
     result = await db.execute(stmt)
     if result.scalar_one_or_none():
@@ -413,7 +414,8 @@ async def get_product(
 
     # Query product
     stmt = select(Product).where(
-        Product.id == product_id, Product.tenant_id == tenant_id
+        Product.id == product_id,
+        Product.tenant_id == tenant_id,
     )
     result = await db.execute(stmt)
     product = result.scalar_one_or_none()
@@ -459,7 +461,8 @@ async def update_product(
 
     # Query product
     stmt = select(Product).where(
-        Product.id == product_id, Product.tenant_id == tenant_id
+        Product.id == product_id,
+        Product.tenant_id == tenant_id,
     )
     result = await db.execute(stmt)
     product = result.scalar_one_or_none()
@@ -479,7 +482,7 @@ async def update_product(
         )
 
     # Update fields
-    changes = {}
+    changes: dict[str, Any] = {}
     if data.name is not None:
         changes["name"] = (product.name, data.name)
         product.name = data.name
@@ -553,7 +556,8 @@ async def test_connection(
 
     # Query product
     stmt = select(Product).where(
-        Product.id == product_id, Product.tenant_id == tenant_id
+        Product.id == product_id,
+        Product.tenant_id == tenant_id,
     )
     result = await db.execute(stmt)
     product = result.scalar_one_or_none()

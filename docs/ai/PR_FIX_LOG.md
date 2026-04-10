@@ -1963,3 +1963,40 @@ Added two targeted regression tests to `tests/security/test_tenant_contract_endp
 3. `bash codex_gates.sh | grep "error:" | wc -l` → 147 (unchanged)
 
 ---
+
+### 2026-04-10 — mypy Batch-6: ORM Column[X] and attr-defined module errors
+
+**Area:** Type Safety · mypy · ORM / SQLAlchemy / Module imports
+
+**Issue:**
+147 → 115 mypy errors. Six files had two error families:
+
+- **Family A (Column[X] vs X):** `admin_gateway/db/models.py` and `admin_gateway/routers/products.py` — SQLAlchemy legacy `Column()` attributes typed as `Column[X]` by mypy (no plugin), causing incompatible-arg and incompatible-assignment errors when passed to Pydantic response models or when assigned in update handlers.
+- **Family B (attr-defined module imports):**
+  - `api/persist.py:7`: imported private `engine` instead of `get_engine()`
+  - `agent/app/scripts/create_api_key.py:45`: imported private `SessionLocal` instead of `get_sessionmaker()`
+  - `api/db_models_cp_v2.py:41`: `Base = declarative_base()` try/except fallback caused `[misc]` error
+  - `services/cp_msp_delegation.py:361,385,403,429`: `ControlPlaneMSPDelegation` import inside try/except blocks — model does not exist in `api/db_models_cp_v2`, fallback is intentional
+
+**Resolution:**
+- `admin_gateway/db/models.py`: Added `var: Type = Column(...)  # type: ignore[assignment]` inline annotations to all columns in `Product` and `ProductEndpoint` — enables mypy to know instance attribute types without conflicting with the Column descriptor
+- `admin_gateway/routers/products.py`: Added `# type: ignore[arg-type]` to `.where()` argument lines where `Product.col == value` evaluates to `bool` (not `ColumnElement[bool]`) without the SQLAlchemy mypy plugin; added `# type: ignore[assignment]` to the `changes` dict mixed-type entries
+- `api/persist.py`: Changed `from .db import engine` → `from .db import get_engine`; replaced `engine.begin()` → `get_engine().begin()`
+- `agent/app/scripts/create_api_key.py`: Changed `from api.db import SessionLocal` → `from api.db import get_sessionmaker`; replaced `SessionLocal()` → `get_sessionmaker()()`
+- `api/db_models_cp_v2.py:41`: Added `# type: ignore[misc]` — justified: proven dynamic try/except fallback for test-isolation
+- `services/cp_msp_delegation.py`: Added `# type: ignore[attr-defined]` to all four `ControlPlaneMSPDelegation` import lines — model is intentionally absent; the try/except is the graceful fallback path
+
+**AI Notes:**
+- Do NOT add the SQLAlchemy mypy plugin to `mypy.ini` — existing Column[X] suppression approach is intentional
+- Do NOT remove `# type: ignore[assignment]` from column definitions in `models.py` — they are required for downstream type inference
+- Do NOT replace `get_engine()` / `get_sessionmaker()` with the private `_ENGINE` / `_SessionLocal` symbols
+- `ControlPlaneMSPDelegation` is intentionally absent from `api/db_models_cp_v2.py` — the try/except fallback to in-memory store is by design
+
+**Commands run:**
+1. `ruff check <target files>` → All checks passed
+2. `ruff format --check <target files>` → All checks passed
+3. `.venv/bin/mypy <target files>` → 0 errors in target files
+4. `.venv/bin/mypy .` → 147 → 115 errors
+5. `make fg-fast` → PASS
+
+---

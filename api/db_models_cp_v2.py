@@ -31,14 +31,16 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import DeclarativeBase
 
 # Use the shared Base from db_models so init_db picks up these tables.
-# Importing declarative_base here as fallback for direct unit-test usage.
+# Defining a DeclarativeBase subclass here as fallback for direct unit-test usage.
 try:
     from api.db_models import Base
 except ImportError:
-    Base = declarative_base()
+
+    class Base(DeclarativeBase):  # type: ignore[no-redef]
+        pass
 
 
 def _utcnow() -> datetime:
@@ -223,3 +225,35 @@ class ControlPlaneHeartbeat(Base):
     breaker_state = Column(String(16), nullable=False, default="closed")
     queue_depth = Column(Integer, nullable=False, default=0)
     last_error_code = Column(String(64), nullable=True)
+
+
+class ControlPlaneMSPDelegation(Base):
+    """
+    MSP delegation record — maps a delegator to a delegatee for a target tenant.
+
+    Delegation model (Phase 4):
+      - delegator_id: MSP actor granting the delegation.
+      - delegatee_id: Actor being granted access.
+      - target_tenant: Tenant being delegated over (never empty).
+      - scope: Comma-separated list of granted scopes.
+      - expires_at: UTC datetime after which the delegation is void.
+      - revoked: Once True, delegation is permanently invalid.
+      - trace_id: Audit trace.
+    """
+
+    __tablename__ = "control_plane_msp_delegations"
+
+    delegation_id = Column(String(36), primary_key=True, default=_new_uuid)
+    delegator_id = Column(String(128), nullable=False, index=True)
+    delegatee_id = Column(String(128), nullable=False, index=True)
+    target_tenant = Column(String(128), nullable=False, index=True)
+    scope = Column(Text, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked = Column(Boolean, nullable=False, default=False)
+    trace_id = Column(String(64), nullable=False, default="", index=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=_utcnow,
+        server_default=func.now(),
+    )
