@@ -10,4 +10,4 @@ def test_quarantine_policy_schema_loads() -> None:
     assert entries
     nodeid, payload = next(iter(entries.items()))
     assert nodeid.startswith("tests/")
-    assert payload["sla_days"] > 0
+    assert isinstance(payload["sla_days"], int) and payload["sla_days"] > 0

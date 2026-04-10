@@ -23,7 +23,7 @@ try:
     from tools.testing.harness.quarantine_policy import pytest_addopts_for_lane  # noqa: E402
 except Exception:  # pragma: no cover
 
-    def _classify(lines: list[str]) -> dict[str, Any]:
+    def _classify(lines: list[str], lane: str = "unknown") -> dict[str, Any]:  # type: ignore[misc]
         text = "\n".join(lines[-200:])
         return {
             "classifier": "fallback",
@@ -31,7 +31,7 @@ except Exception:  # pragma: no cover
             "tail": text,
         }
 
-    def pytest_addopts_for_lane(_: str) -> str:
+    def pytest_addopts_for_lane(lane: str) -> str:
         # Conservative fallback: no extra pytest options.
         return ""
 
@@ -474,21 +474,22 @@ def _write_summary(
     elapsed_seconds: int,
     artifact_hashes: dict[str, str],
 ) -> None:
+    lane_summaries: list[dict[str, object]] = [
+        {
+            "artifact_paths": r.artifact_paths or {},
+            "duration_seconds": r.duration_seconds,
+            "error": r.error,
+            "name": r.lane,
+            "status": r.status,
+            "timeout": r.timeout,
+        }
+        for r in results
+    ]
     payload = {
         "artifact_hashes": artifact_hashes,
         "budget_seconds": budget_seconds,
         "elapsed_seconds": elapsed_seconds,
-        "lanes": [
-            {
-                "artifact_paths": r.artifact_paths or {},
-                "duration_seconds": r.duration_seconds,
-                "error": r.error,
-                "name": r.lane,
-                "status": r.status,
-                "timeout": r.timeout,
-            }
-            for r in results
-        ],
+        "lanes": lane_summaries,
         "overall_status": overall_status,
     }
     _write_json(ARTIFACT_ROOT / "fg-required-summary.json", payload)
@@ -502,7 +503,7 @@ def _write_summary(
         "",
         "## lanes",
     ]
-    for lane in payload["lanes"]:
+    for lane in lane_summaries:
         suffix = f" - {lane['error']}" if lane["error"] else ""
         lines.append(
             f"- {lane['name']}: {lane['status']} ({lane['duration_seconds']}s){suffix}"
