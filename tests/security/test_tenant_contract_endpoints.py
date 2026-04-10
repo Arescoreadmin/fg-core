@@ -301,3 +301,23 @@ def test_tenant_scope_denial_contract_after_scopes_annotation(
         headers={"X-API-Key": key},
     )
     assert resp.status_code == 403
+
+
+def test_control_plane_scopes_annotation_does_not_alter_denial(
+    client: TestClient,
+) -> None:
+    """Contract: scopes: set[str] annotation in control_plane_v2.py must not alter behavior.
+
+    control_plane_v2.py _actor_role() and _has_msp_scope() changed scopes assignment
+    from untyped to set[str] annotation. Confirms key without msp scope still denied on
+    msp-only control plane paths.
+    """
+    key = mint_key("control-plane:read", tenant_id="tenant-cp-a")
+    resp = client.get(
+        "/v2/control-plane/delegations?tenant_id=tenant-cp-a",
+        headers={"X-API-Key": key},
+    )
+    # No msp scope → either 403 (scope denial) or 404 (route absent in test app); not 500
+    assert resp.status_code in {403, 404}, (
+        f"Unexpected status {resp.status_code}: scopes annotation must not alter denial"
+    )

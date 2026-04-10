@@ -613,7 +613,7 @@ async def ui_posture(
 
     return PostureResponse(
         tenant_id=tenant_id,
-        generated_at=_iso(stats.now) or _iso(datetime.now(timezone.utc)),
+        generated_at=_iso(stats.now) or _iso(datetime.now(timezone.utc)) or "",
         request_id=_request_id(request),
         tiles=tiles,
         trends=trends,
@@ -702,7 +702,7 @@ async def ui_decision_detail(
     request: Request,
     db: Session = Depends(tenant_db_required),
     tenant_id: Optional[str] = Query(default=None, max_length=128),
-) -> DecisionDetail:
+) -> DecisionDetail | JSONResponse:
     tenant_id = _resolve_tenant(request, tenant_id)
     record = db.get(DecisionRecord, decision_id)
     if record is None:
@@ -890,7 +890,7 @@ async def ui_audit_packet(
     return AuditPacketResponse(
         tenant_id=tenant_id,
         packet_id=packet_id,
-        created_at=_iso(created_at) or _iso(datetime.now(timezone.utc)),
+        created_at=_iso(created_at) or _iso(datetime.now(timezone.utc)) or "",
         download_url=f"/ui/audit/packet/{packet_id}/download?token={token}",
         request_id=_request_id(request),
         manifest=manifest,
@@ -899,6 +899,7 @@ async def ui_audit_packet(
 
 @router.get(
     "/audit/packet/{packet_id}/download",
+    response_model=None,
     dependencies=[Depends(require_scopes("audit:read"))],
 )
 async def ui_audit_packet_download(
@@ -906,7 +907,7 @@ async def ui_audit_packet_download(
     request: Request,
     tenant_id: Optional[str] = Query(default=None, max_length=128),
     token: str = Query(..., min_length=8),
-) -> FileResponse:
+) -> FileResponse | JSONResponse:
     tenant_id = _resolve_tenant(request, tenant_id)
     packet_dir = _audit_packet_dir() / packet_id
     if not packet_dir.exists():

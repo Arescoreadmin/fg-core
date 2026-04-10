@@ -351,7 +351,7 @@ class IngestProcessor:
             # Canonicalize rule IDs for output stability
             rules_triggered = _normalize_rules(rules_triggered)
 
-            result = {
+            output: dict[str, Any] = {
                 "message_id": message.message_id,
                 "tenant_id": message.tenant_id,
                 "event_type": message.event_type,
@@ -369,7 +369,7 @@ class IngestProcessor:
 
             self._processed_count += 1
             log.debug(f"Processed message {message.message_id}: {threat_level}")
-            return result
+            return output
 
         except Exception as e:
             self._error_count += 1

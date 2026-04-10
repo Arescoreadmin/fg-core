@@ -236,7 +236,7 @@ def _resolve_experience(
 
 def _extract_persona(request: Request, requested: str | None) -> str:
     auth = getattr(request.state, "auth", None)
-    scopes = getattr(auth, "scopes", set()) or set()
+    scopes: set[str] = getattr(auth, "scopes", set()) or set()
     if "ai:admin" in scopes:
         return (requested or "admin").strip() or "admin"
     if "ai:chat" in scopes:

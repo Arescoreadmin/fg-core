@@ -13,6 +13,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.auth_scopes import mint_key
@@ -26,7 +27,7 @@ def _suffix() -> str:
 
 
 @pytest.fixture
-def spoof_client(tmp_path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def spoof_client(tmp_path, monkeypatch: pytest.MonkeyPatch) -> FastAPI:
     import base64
 
     from cryptography.hazmat.primitives import serialization

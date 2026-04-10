@@ -1895,10 +1895,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "title": "Response Csrf Token Auth Csrf Get",
-                  "type": "object"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
