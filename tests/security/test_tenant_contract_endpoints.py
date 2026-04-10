@@ -267,3 +267,37 @@ def test_proxy_headers_honored_when_explicitly_enabled(
     assert records
     record = records[-1]
     assert getattr(record, "remote_ip", None) == "203.0.113.11"
+
+
+def test_remote_ip_value_handles_none_client() -> None:
+    """Regression: _remote_ip_value must safely handle request.client = None.
+
+    resolution.py:135 previously used getattr(request, "client", None) is not None
+    which mypy cannot narrow to Address; now uses request.client is not None directly.
+    This test confirms the None-client path returns None without AttributeError.
+    """
+    from unittest.mock import MagicMock
+
+    from api.auth_scopes.resolution import _remote_ip_value
+
+    mock_req = MagicMock()
+    mock_req.client = None
+    mock_req.headers = {}
+
+    assert _remote_ip_value(mock_req) is None
+
+
+def test_tenant_scope_denial_contract_after_scopes_annotation(
+    client: TestClient,
+) -> None:
+    """Contract: scopes: set[str] annotation in resolution.py must not alter denial.
+
+    resolution.py:775 changed scopes assignment from untyped to set[str] annotation.
+    Confirms tenant-scoped key with wrong tenant still receives 403.
+    """
+    key = mint_key("decisions:read", tenant_id="tenant-a")
+    resp = client.get(
+        "/decisions?tenant_id=tenant-b&limit=1",
+        headers={"X-API-Key": key},
+    )
+    assert resp.status_code == 403
