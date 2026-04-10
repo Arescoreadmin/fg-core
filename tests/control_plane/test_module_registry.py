@@ -34,7 +34,7 @@ def _make_store() -> _RegistryStore:
 
 def _make_record(
     module_id: str = "mod-a",
-    tenant_id: str | None = "tenant-1",
+    tenant_id: str = "tenant-1",
 ) -> ModuleRecord:
     return ModuleRecord(
         module_id=module_id,

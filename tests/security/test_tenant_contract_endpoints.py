@@ -245,7 +245,7 @@ def test_proxy_headers_ignored_by_default_for_denial_logs(
     assert records
     record = records[-1]
     # With default trust disabled, spoofed header must not be used.
-    assert record.remote_ip != "203.0.113.9"
+    assert getattr(record, "remote_ip", None) != "203.0.113.9"
 
 
 def test_proxy_headers_honored_when_explicitly_enabled(
@@ -266,4 +266,4 @@ def test_proxy_headers_honored_when_explicitly_enabled(
     records = [r for r in caplog.records if r.msg == "tenant_denial"]
     assert records
     record = records[-1]
-    assert record.remote_ip == "203.0.113.11"
+    assert getattr(record, "remote_ip", None) == "203.0.113.11"
