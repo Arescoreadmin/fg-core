@@ -305,6 +305,43 @@ class TestBootTraceEndpoint:
             assert "error_code" in stage
             assert "error_detail_redacted" in stage
 
+    def test_boot_trace_cross_tenant_probe_returns_404(
+        self, app_client, tmp_path, monkeypatch
+    ):
+        """Regression: cross-tenant module_id probe must return 404.
+
+        A tenant-scoped key for tenant-b must not be able to reach get_trace()
+        for a module registered under tenant-a, even when redact=True would
+        null out tenant_id in the serialized record (the previous bug).
+        """
+        db_path = tmp_path / "cp_test.db"
+        monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
+
+        # Register a module belonging to tenant-a
+        registry = get_registry()
+        registry.register(
+            ModuleRecord(
+                module_id="foreign-module",
+                name="Foreign Module",
+                version="1.0.0",
+                commit_hash="dead1234",
+                build_timestamp="2024-01-01T00:00:00Z",
+                node_id="node-foreign",
+                tenant_id="tenant-a",
+            )
+        )
+
+        # Create a key bound to a different tenant (tenant-b)
+        tenant_b_key = mint_key("control-plane:read", tenant_id="tenant-b")
+
+        resp = app_client.get(
+            "/control-plane/modules/foreign-module/boot-trace",
+            headers=_headers(tenant_b_key),
+        )
+        assert resp.status_code == 404, (
+            "Cross-tenant boot-trace probe must return 404, not expose module data"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Module list
