@@ -142,7 +142,7 @@ def _core_proxy_headers(request: Request) -> dict[str, str]:
 
 
 def _core_internal_token() -> str:
-    token = (os.getenv("AG_CORE_INTERNAL_TOKEN") or "").strip() or _core_api_key()
+    token = (os.getenv("AG_CORE_INTERNAL_TOKEN") or "").strip() or _core_api_key()[0]
     if not token:
         raise HTTPException(
             status_code=503,
@@ -276,7 +276,7 @@ async def get_current_user(
 async def get_csrf_token(
     request: Request,
     session: Session = Depends(get_current_session),
-) -> CSRFTokenResponse:
+) -> JSONResponse:
     """Get CSRF token for state-changing requests.
 
     The token is also set in a cookie. Include the token value

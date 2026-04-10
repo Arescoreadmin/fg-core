@@ -173,7 +173,7 @@ def _actor_role(request: Request) -> str:
     auth = _get_auth(request)
     if auth is None:
         return "unknown"
-    scopes = getattr(auth, "scopes", set()) or set()
+    scopes: set[str] = getattr(auth, "scopes", set()) or set()
     if "control-plane:msp:admin" in scopes:
         return "msp_admin"
     if "control-plane:admin" in scopes:
@@ -220,7 +220,7 @@ def _check_msp_scope(request: Request) -> bool:
     auth = _get_auth(request)
     if not auth:
         return False
-    scopes = getattr(auth, "scopes", set()) or set()
+    scopes: set[str] = getattr(auth, "scopes", set()) or set()
     return bool(scopes & {"control-plane:msp:read", "control-plane:msp:admin"})
 
 

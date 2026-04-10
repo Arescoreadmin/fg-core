@@ -90,7 +90,7 @@ async def login(
 async def csrf_token(
     request: Request,
     csrf: CSRFProtection = Depends(get_csrf),
-) -> dict:
+) -> JSONResponse:
     """Return a CSRF token tied to the session."""
     response = JSONResponse(content={})
     token = csrf.set_token_cookie(response)
