@@ -52,7 +52,8 @@ def validate_federated_identity(request: Request) -> dict[str, object]:
             },
         )
 
-    groups = claims.get("groups") if isinstance(claims.get("groups"), list) else []
+    _groups_raw = claims.get("groups")
+    groups: list[object] = _groups_raw if isinstance(_groups_raw, list) else []
     mapped_roles = service.map_roles([str(g) for g in groups])
     return {
         "tenant_id": tenant_id,

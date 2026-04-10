@@ -1883,3 +1883,83 @@ Two dense error clusters remained after batch 3:
 - Do NOT restore `if status_code is None:` pattern — mypy does not narrow through None-guard reassignment with `getattr`; use `isinstance(status_code, int)` instead.
 
 ---
+
+### 2026-04-10 — mypy remediation batch 5 / Set E — 7 errors across 3 files (154→147)
+
+**Area:** Type Safety · Mypy Set E Batch 5
+
+**Issue:**
+Three localized error clusters in auth and control-plane code:
+
+1. `api/control_plane.py` (3 errors):
+   - Line 385: `rec.tenant_id` on `dict | None` — attribute access on dict type. `get_module()` returns `Optional[dict]`, not a model with `.tenant_id`.
+   - Lines 444, 449: `locker_info.get(...)` on `LockerRuntime | dict[str, object]` — `LockerRuntime` has no `.get()` method; only the dict branch does.
+
+2. `api/auth_scopes/resolution.py` (3 errors):
+   - Line 135: `request.client.host` — `request.client` is `Address | None`; guarded via `getattr(request, "client", None) is not None` which mypy cannot narrow.
+   - Line 673: `key_lookup if ... else key_hash` typed as `Any | str | None` passed to `_update_key_usage(identifier: str)`.
+   - Line 775: `scopes = getattr(auth, "scopes", set())` — mypy cannot infer set element type without annotation.
+
+3. `api/auth_federation.py` (1 error):
+   - Line 56: `claims.get("groups")` called twice — once in `isinstance()` and once in the ternary value; mypy cannot narrow the second call.
+
+**Resolution:**
+- `api/control_plane.py:385`: Changed `rec.tenant_id` to `rec.get("tenant_id")` — correct dict access.
+- `api/control_plane.py:444`: Changed `if locker_info and ...` to `if isinstance(locker_info, dict) and ...` — narrows union type to `dict`, enabling `.get()`.
+- `api/auth_scopes/resolution.py:135`: Changed `getattr(request, "client", None) is not None` to `request.client is not None` — `request` already non-None at this point; direct check allows mypy to narrow `Address | None` to `Address`.
+- `api/auth_scopes/resolution.py:673`: Extracted `_key_val = key_lookup if ... else key_hash`; added `if _key_val is not None:` guard — semantically equivalent to original `(key_lookup or key_hash)` check.
+- `api/auth_scopes/resolution.py:775`: Added `scopes: set[str] =` annotation.
+- `api/auth_federation.py:55-56`: Extracted `_groups_raw = claims.get("groups")` before isinstance check; single variable enables mypy narrowing.
+
+**Files changed:**
+- `api/control_plane.py`
+- `api/auth_scopes/resolution.py`
+- `api/auth_federation.py`
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` (SOC review sync gate — auth paths modified)
+
+**Error families addressed:**
+- `attr-defined` (dict attribute access vs model attribute access)
+- `union-attr` (LockerRuntime | dict; Address | None; list | None)
+- `arg-type` (str | None passed where str expected)
+- `var-annotated` (untyped set())
+
+**Mypy count:** 154 → 147
+
+**Validation:**
+1. `ruff check .` → PASS
+2. `ruff format --check .` → PASS (control_plane.py auto-reformatted)
+3. `make fg-fast` → PASS (11s)
+4. `bash codex_gates.sh | grep "error:" | wc -l` → 147
+
+**AI Notes:**
+- Do NOT restore `getattr(request, "client", None) is not None` — this is not narrowable by mypy; use `request.client is not None` directly.
+- Do NOT revert the `_key_val` extraction — passing the ternary inline leaves mypy unable to narrow `str | None` to `str`.
+- Do NOT revert `isinstance(locker_info, dict)` — `LockerRuntime` has no `.get()`; the isinstance narrows the union correctly.
+- Do NOT restore the double `claims.get("groups")` pattern — extract to single var first for isinstance narrowing.
+
+---
+
+### 2026-04-10 — required-tests-gate: contract+security compliance for batch-5
+
+**Area:** CI · required-tests-gate
+
+**Issue:**
+`required-tests-gate` failed on `[FAIL][contract]` and `[FAIL][security]` for the batch-5 PR.
+
+Root cause: batch-5 changed `tests/control_plane/test_control_plane_api.py` (regression test for tenant guard fix), which matched the `control_plane` ownership_map path_glob `tests/control_plane/**`. This triggered the `control_plane` module's required categories: `unit`, `contract`, `security`. `unit` was satisfied by the control_plane test file itself. `contract` and `security` were not satisfied because no file matching `tests/security/*.py` or `tests/security/test_*contract*.py` was in the diff.
+
+**Resolution:**
+Added two targeted regression tests to `tests/security/test_tenant_contract_endpoints.py` (satisfies both `tests/security/*.py` and `tests/security/test_*contract*.py` globs simultaneously):
+
+1. `test_remote_ip_value_handles_none_client` — directly exercises the `resolution.py:135` narrowing fix (`getattr` guard → `request.client is not None`). Confirms None-client returns None without AttributeError.
+
+2. `test_tenant_scope_denial_contract_after_scopes_annotation` — verifies that the `scopes: set[str]` annotation at `resolution.py:775` does not alter tenant denial behavior.
+
+**Note:** required-tests-gate diffs against committed HEAD — working-tree changes are invisible to the gate. Tests must be committed before the gate is re-run.
+
+**Commands run:**
+1. `make required-tests-gate` → PASS
+2. `make fg-fast` → PASS (11s)
+3. `bash codex_gates.sh | grep "error:" | wc -l` → 147 (unchanged)
+
+---

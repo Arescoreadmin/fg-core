@@ -379,10 +379,15 @@ def get_boot_trace(module_id: str, request: Request) -> dict:
     redact = _is_prod_like()
 
     # P0: Tenant guard — cross-tenant access returns 404 (no information disclosure)
+    # Use redact=False so tenant_id is never nulled before the authorization check.
     if tenant_id is not None:
         registry = ModuleRegistry()
-        rec = registry.get_module(module_id)
-        if rec is not None and rec.tenant_id and rec.tenant_id != tenant_id:
+        rec_auth = registry.get_module(module_id, redact=False)
+        if (
+            rec_auth is not None
+            and rec_auth.get("tenant_id")
+            and rec_auth.get("tenant_id") != tenant_id
+        ):
             raise HTTPException(
                 status_code=404,
                 detail={
@@ -441,7 +446,7 @@ def _dispatch_locker_command(
 
     # P0: Tenant binding — locker must belong to actor's tenant
     locker_info = bus.get_locker(locker_id)
-    if locker_info and locker_info.get("tenant_id") != tenant_id:
+    if isinstance(locker_info, dict) and locker_info.get("tenant_id") != tenant_id:
         log.warning(
             "locker_tenant_mismatch locker_id=%s actor_tenant=%s locker_tenant=%s",
             locker_id,
