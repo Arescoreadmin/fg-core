@@ -145,30 +145,32 @@ def main() -> int:
             .all()
         )
         prev = "GENESIS"
-        for row in find_rows:
+        for find_row in find_rows:
             material = {
-                "finding_id": row.finding_id,
-                "req_ids": row.req_ids_json,
-                "title": row.title,
-                "details": row.details,
-                "severity": row.severity,
-                "status": row.status,
-                "waiver": row.waiver_json,
-                "detected_at_utc": row.detected_at_utc,
-                "evidence_refs": row.evidence_refs_json,
-                "created_at_utc": row.created_at_utc,
-                "previous_record_hash": row.previous_record_hash,
-                "tenant_id": row.tenant_id,
+                "finding_id": find_row.finding_id,
+                "req_ids": find_row.req_ids_json,
+                "title": find_row.title,
+                "details": find_row.details,
+                "severity": find_row.severity,
+                "status": find_row.status,
+                "waiver": find_row.waiver_json,
+                "detected_at_utc": find_row.detected_at_utc,
+                "evidence_refs": find_row.evidence_refs_json,
+                "created_at_utc": find_row.created_at_utc,
+                "previous_record_hash": find_row.previous_record_hash,
+                "tenant_id": find_row.tenant_id,
             }
-            if row.previous_record_hash != prev or row.record_hash != _sha(material):
+            if find_row.previous_record_hash != prev or find_row.record_hash != _sha(
+                material
+            ):
                 raise SystemExit("finding chain broken")
             if not _verify_sig(
-                row.record_hash,
-                row.signature,
+                find_row.record_hash,
+                find_row.signature,
                 "test-compliance-key-test-compliance-key-0000",
             ):
                 raise SystemExit("finding signature invalid")
-            prev = row.record_hash
+            prev = find_row.record_hash
 
     snap = reg.snapshot("tenant-a")
     if not snap["expired_waivers"]:

@@ -183,8 +183,8 @@ class WebhookDeliveryService:
                     client, url, payload, alert_type, severity
                 )
                 status_code = getattr(response, "status_code", None)
-                if status_code is None:
-                    status_code = getattr(response, "status", 0)
+                if not isinstance(status_code, int):
+                    status_code = int(getattr(response, "status", 0) or 0)
                 response_time = (time.time() - start_time) * 1000
 
                 last_status = status_code
@@ -333,8 +333,8 @@ class WebhookDeliveryService:
                 follow_redirects=False,
             )
             status_code = getattr(response, "status_code", None)
-            if status_code is None:
-                status_code = getattr(response, "status", 0)
+            if not isinstance(status_code, int):
+                status_code = int(getattr(response, "status", 0) or 0)
             if 300 <= status_code < 400:
                 location = (getattr(response, "headers", {}) or {}).get("Location")
                 if not location:
