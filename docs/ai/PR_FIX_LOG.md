@@ -1938,3 +1938,28 @@ Three localized error clusters in auth and control-plane code:
 - Do NOT restore the double `claims.get("groups")` pattern — extract to single var first for isinstance narrowing.
 
 ---
+
+### 2026-04-10 — required-tests-gate: contract+security compliance for batch-5
+
+**Area:** CI · required-tests-gate
+
+**Issue:**
+`required-tests-gate` failed on `[FAIL][contract]` and `[FAIL][security]` for the batch-5 PR.
+
+Root cause: batch-5 changed `tests/control_plane/test_control_plane_api.py` (regression test for tenant guard fix), which matched the `control_plane` ownership_map path_glob `tests/control_plane/**`. This triggered the `control_plane` module's required categories: `unit`, `contract`, `security`. `unit` was satisfied by the control_plane test file itself. `contract` and `security` were not satisfied because no file matching `tests/security/*.py` or `tests/security/test_*contract*.py` was in the diff.
+
+**Resolution:**
+Added two targeted regression tests to `tests/security/test_tenant_contract_endpoints.py` (satisfies both `tests/security/*.py` and `tests/security/test_*contract*.py` globs simultaneously):
+
+1. `test_remote_ip_value_handles_none_client` — directly exercises the `resolution.py:135` narrowing fix (`getattr` guard → `request.client is not None`). Confirms None-client returns None without AttributeError.
+
+2. `test_tenant_scope_denial_contract_after_scopes_annotation` — verifies that the `scopes: set[str]` annotation at `resolution.py:775` does not alter tenant denial behavior.
+
+**Note:** required-tests-gate diffs against committed HEAD — working-tree changes are invisible to the gate. Tests must be committed before the gate is re-run.
+
+**Commands run:**
+1. `make required-tests-gate` → PASS
+2. `make fg-fast` → PASS (11s)
+3. `bash codex_gates.sh | grep "error:" | wc -l` → 147 (unchanged)
+
+---
