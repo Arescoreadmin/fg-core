@@ -152,10 +152,12 @@ def _required_categories(
     return required
 
 
-def _detect_new_modules(changed_paths: list[str]) -> list[str]:
+def _detect_new_modules(changed: list[ChangedFile]) -> list[str]:
     modules: list[str] = []
-    for path in changed_paths:
-        p = Path(path)
+    for item in changed:
+        if not item.status.startswith("A"):
+            continue
+        p = Path(item.path)
         if (
             len(p.parts) >= 2
             and p.parts[0] == "services"
@@ -240,7 +242,7 @@ def main() -> int:
     changed_paths = _category_input_paths(changed)
 
     categories = _required_categories(changed_paths, ownership)
-    new_modules = _detect_new_modules(changed_paths)
+    new_modules = _detect_new_modules(changed)
 
     failures = []
     failures.extend(

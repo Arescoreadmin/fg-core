@@ -68,7 +68,7 @@ def get_allowed_tenants(session: "Session") -> Set[str]:
     2. tenant_id single value (legacy support)
     3. Falls back to DEFAULT_TENANT if none specified
     """
-    allowed = set()
+    allowed: Set[str] = set()
 
     # Check for allowed_tenants claim (list)
     if session.claims:

@@ -1937,3 +1937,18 @@ Runtime impact:
 
 Notes:
 - Registers prior type-narrowing-only edit for SOC gate traceability.
+
+## 2026-04-09 — admin_gateway/auth/tenant.py type annotation fix
+
+File:
+- `admin_gateway/auth/tenant.py`
+
+Change type:
+- typing-only
+
+Runtime impact:
+- none
+
+Notes:
+- `allowed = set()` annotated as `allowed: Set[str] = set()` so mypy can infer element type.
+- Zero logic change; var-annotated error only.

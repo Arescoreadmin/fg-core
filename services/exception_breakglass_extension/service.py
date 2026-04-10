@@ -24,7 +24,7 @@ class ExceptionBreakglassService:
         self, db: Session, tenant_id: str, payload: ExceptionRequestCreate
     ) -> dict[str, object]:
         request_id = f"exc-{uuid.uuid4().hex[:10]}"
-        entry = {
+        entry: dict[str, object] = {
             "request_id": request_id,
             "tenant_id": tenant_id,
             "status": "pending",

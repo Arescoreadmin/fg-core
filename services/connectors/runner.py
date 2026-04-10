@@ -58,8 +58,9 @@ def _enforce_rate_budget(
     connector_id: str,
     policy: dict[str, Any],
 ) -> None:
-    limits = (
-        policy.get("rate_limits") if isinstance(policy.get("rate_limits"), dict) else {}
+    _rate_limits_raw = policy.get("rate_limits")
+    limits: dict[str, Any] = (
+        _rate_limits_raw if isinstance(_rate_limits_raw, dict) else {}
     )
     tenant_budget = int(limits.get("tenant_dispatch_per_minute", 60))
     connector_budget = int(limits.get("connector_dispatch_per_minute", 30))
@@ -96,8 +97,9 @@ def _enforce_rate_budget(
 def _enforce_cooldown(
     db: Session, *, tenant_id: str, connector_id: str, policy: dict[str, Any]
 ) -> None:
-    limits = (
-        policy.get("rate_limits") if isinstance(policy.get("rate_limits"), dict) else {}
+    _rate_limits_raw = policy.get("rate_limits")
+    limits: dict[str, Any] = (
+        _rate_limits_raw if isinstance(_rate_limits_raw, dict) else {}
     )
     max_failures = int(limits.get("failure_cooldown_threshold", 3))
     cooldown_seconds = int(limits.get("failure_cooldown_seconds", 120))

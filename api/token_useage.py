@@ -147,7 +147,7 @@ async def token_usage_middleware(request: Request, call_next):
     latency_ms = (time.perf_counter() - start) * 1000
 
     api_key = request.headers.get("x-api-key")
-    tenant_id = request.headers.get("x-tenant-id")
+    tenant_id: str = request.headers.get("x-tenant-id") or ""
     endpoint = request.url.path
 
     token_fp = token_usage_tracker.record(

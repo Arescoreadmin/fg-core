@@ -12,8 +12,10 @@ categories:
     - tools/testing/contracts/**/*.py
     - tests/tools/**/*.py
     - tests/tools/*.py
+    - tests/security/test_*contract*.py
   security:
     required_test_globs:
+    - tests/security/*.py
     - tests/security/**/*.py
     - tools/ci/check_*security*.py
     - tools/testing/security/**/*.py

@@ -1817,6 +1817,30 @@ Commit 6d0cfed introduced `_as_dict`/`_to_int` helpers in `runtime_budgets.py` a
 
 **Error reduction:** 193 → 181 (12 net; 13 in target files, 1 transitive effect)
 
+---
+
+## 2026-04-10 — Bounded mypy remediation batch 3 / Set E (blitz/mypy-remediation-batch-3)
+
+**Scope:** Fix 14 mypy errors across 8 files — Optional/None contract, var-annotated, union-attr families
+
+**Files changed and error families:**
+- `tests/control_plane/test_module_registry.py` — 1 `arg-type`: `_make_record` param `tenant_id: str | None` → `str`; underlying `ModuleRegistration.tenant_id` requires `str`
+- `tests/test_e2e_http_local.py` — 1 `dict-item`: `API_KEY: str | None` passed to `Dict[str, str]`; added `assert API_KEY` guard inside `_headers()` — invariant already guaranteed by module-level raise
+- `api/token_useage.py` — 1 `arg-type`: `tenant_id = request.headers.get(...)` → `tenant_id: str = ... or ""`; empty string handled by existing `if tenant_id:` guard in `TokenUsageStats.record()`
+- `admin_gateway/auth/tenant.py` — 1 `var-annotated`: `allowed = set()` → `allowed: Set[str] = set()`; SOC doc updated (typing-only, zero runtime impact)
+- `services/exception_breakglass_extension/service.py` — 1 `var-annotated`: `entry = {` → `entry: dict[str, object] = {`; matches function return type
+- `admin_gateway/tests/test_jwt_verification.py` — 3 errors (`arg-type` + 2 `union-attr`): `spec_from_loader()` returns `ModuleSpec | None`; added `assert _AUTH_SPEC is not None` and `assert _AUTH_SPEC.loader is not None`; removed stale `# type: ignore[assignment]`
+- `services/connectors/runner.py` — 4 `union-attr`: repeated `policy.get("rate_limits")` in ternary prevents isinstance narrowing; extracted to `_rate_limits_raw` local variable in both `_enforce_rate_budget` and `_enforce_cooldown`
+- `tests/security/test_tenant_contract_endpoints.py` — 2 `attr-defined`: `record.remote_ip` → `getattr(record, "remote_ip", None)` (custom field added by logging, not on `LogRecord` base class)
+
+**Error reduction:** 181 → 167 (14 fixed)
+
+**Commands run:**
+1. `.venv/bin/mypy .` — 181 → 167 errors
+2. `ruff check .` → PASS; `ruff format --check .` → PASS (runner.py auto-formatted)
+3. `make fg-fast` → PASS (11s)
+4. `bash codex_gates.sh` → ruff PASS; mypy 167 pre-existing errors (non-blocking per batch protocol); pytest and remaining gates verified via fg-fast
+
 **Commands run:**
 1. `.venv/bin/mypy .` — 193 → 181 errors
 2. `bash codex_gates.sh` → EXIT:0 (ruff lint+format PASS, mypy gate passes via hotspot list)

@@ -16,9 +16,11 @@ _AUTH_MODULE_NAME = "admin_gateway_auth_module"
 _AUTH_SPEC = spec_from_loader(
     _AUTH_MODULE_NAME, SourceFileLoader(_AUTH_MODULE_NAME, str(_AUTH_PATH))
 )
+assert _AUTH_SPEC is not None, f"Failed to build module spec for {_AUTH_PATH}"
 _AUTH_MODULE = module_from_spec(_AUTH_SPEC)
 sys.modules[_AUTH_MODULE_NAME] = _AUTH_MODULE
-_AUTH_SPEC.loader.exec_module(_AUTH_MODULE)  # type: ignore[assignment]
+assert _AUTH_SPEC.loader is not None
+_AUTH_SPEC.loader.exec_module(_AUTH_MODULE)
 verify_id_token = _AUTH_MODULE.verify_id_token
 
 

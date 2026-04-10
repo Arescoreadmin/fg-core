@@ -41,6 +41,7 @@ pytestmark = pytest.mark.e2e_http
 def _headers(with_key: bool = True) -> Dict[str, str]:
     if not with_key:
         return {}
+    assert API_KEY  # guaranteed by module-level guard above
     return {"X-API-Key": API_KEY}
 
 
