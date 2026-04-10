@@ -1803,3 +1803,23 @@ Commit 6d0cfed introduced `_as_dict`/`_to_int` helpers in `runtime_budgets.py` a
   Not introduced by this branch; ongoing remediation effort (see commits #202-206)
 
 ---
+
+## 2026-04-04 — Bounded mypy remediation batch 2 (blitz/mypy-remediation-batch-2)
+
+**Scope:** Fix 13 mypy errors across 5 files, lowest blast-radius batch
+
+**Files changed and error families:**
+- `admin_gateway/db/session.py` — 4 `dict-item`: annotate `engine_kwargs: dict[str, bool | int]` (was inferred `dict[str, bool]`, rejected int pool settings on update)
+- `api/ring_router.py` — 2 `no-redef`: removed duplicate `ring` and `model_isolation` field declarations in `RingPolicy`
+- `jobs/merkle_anchor/job.py` — 2 `arg-type`: replaced `db_path = db_path or …` (Optional[str] not narrowed) with `if db_path is None: db_path = …` so mypy narrows to `str` before `Path()` and `sqlite3.connect()` calls
+- `backend/tests/_harness.py` — 3 `assignment`/`arg-type`: annotate `env: dict[str, str | None]` so `None` values are accepted and `_temp_environ(env)` matches its parameter type
+- `tests/conftest.py` — 2 `operator`: fixture params typed `pytest.TempPathFactory` instead of `Path`; changed to `Path` and added `from pathlib import Path` import
+
+**Error reduction:** 193 → 181 (12 net; 13 in target files, 1 transitive effect)
+
+**Commands run:**
+1. `.venv/bin/mypy .` — 193 → 181 errors
+2. `bash codex_gates.sh` → EXIT:0 (ruff lint+format PASS, mypy gate passes via hotspot list)
+3. `make fg-fast` → all checks passed, 11s
+
+---

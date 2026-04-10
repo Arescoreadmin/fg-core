@@ -30,8 +30,6 @@ class RingPolicy(BaseModel):
         default="basic", pattern="^(basic|detailed|comprehensive)$"
     )
     model_config = {"protected_namespaces": ()}
-    ring: ClassificationRing
-    model_isolation: bool = True
 
 
 class RingRouteRequest(BaseModel):

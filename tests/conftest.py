@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 # Set deterministic, writable defaults before importing modules that may touch DB paths.
 os.environ.setdefault("FG_ENV", "test")
@@ -94,7 +95,7 @@ def _session_env(tmp_path_factory: pytest.TempPathFactory):
 
 
 @pytest.fixture()
-def build_app(tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch):
+def build_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """
     Factory fixture so tests can build an app with controlled env.
     """
@@ -136,7 +137,7 @@ def build_app(tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch)
 
 
 @pytest.fixture
-def fresh_db(tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> str:
+def fresh_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
     """
     Compatibility fixture for tests that expect `fresh_db` to be a sqlite DB path (str).
     These tests insert rows via sqlite3 directly, so we must create schema in that file.

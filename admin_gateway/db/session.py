@@ -67,7 +67,7 @@ def get_engine() -> AsyncEngine:
         db_url = get_database_url()
         is_sqlite = db_url.startswith("sqlite")
 
-        engine_kwargs = {
+        engine_kwargs: dict[str, bool | int] = {
             "echo": os.getenv("AG_DB_ECHO", "").lower() in ("1", "true", "yes"),
         }
 

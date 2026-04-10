@@ -138,7 +138,8 @@ def get_audit_entries_in_window(
 
     import sqlite3
 
-    db_path = db_path or os.getenv("FG_SQLITE_PATH", str(STATE_DIR / "frostgate.db"))
+    if db_path is None:
+        db_path = os.getenv("FG_SQLITE_PATH", str(STATE_DIR / "frostgate.db"))
 
     if not Path(db_path).exists():
         logger.warning(f"Database not found: {db_path}")

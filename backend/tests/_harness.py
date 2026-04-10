@@ -73,7 +73,7 @@ def build_app_factory(
         elif base_sqlite_path is not None:
             sqlite_path = str(base_sqlite_path)
 
-        env = {
+        env: dict[str, str | None] = {
             # pin auth behavior
             "FG_AUTH_ENABLED": "1" if auth_enabled else "0",
             "FG_API_KEY": api_key,
