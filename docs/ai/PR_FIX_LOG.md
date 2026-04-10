@@ -2000,3 +2000,52 @@ Added two targeted regression tests to `tests/security/test_tenant_contract_endp
 5. `make fg-fast` → PASS
 
 ---
+
+### 2026-04-10 — mypy Batch-7: return-value, var-annotated, arg-type fixes + CI repair
+
+**Area:** Type Safety · mypy · FastAPI response annotations · CI contracts
+
+**Issue (original batch):**
+115 → 99 mypy errors (−16). Error families fixed:
+
+- **return-value mismatches:** Endpoints returning `JSONResponse` on early-exit paths but declared `-> Pydantic model`. Fixed by widening return type to `Model | JSONResponse` (with `response_model=None` on routes where FastAPI cannot use the union as a response field).
+- **var-annotated:** `scopes = getattr(..., set()) or set()` without annotation in `api/control_plane_v2.py` (×2) and `api/ui_ai_console.py` (×1). Fixed with `scopes: set[str] = ...`.
+- **arg-type (str | None → str):** `_iso()` calls returning `str | None` passed to fields requiring `str`. Fixed with `or ""` fallback.
+- **Fixture return type:** `spoof_client` fixture declared `-> TestClient` but returned `FastAPI`. Fixed to `-> FastAPI`.
+- **Variable shadowing:** `result` reused for `PipelineResult` then `dict[str, Any]` in `IngestProcessor.process`. Renamed inner dict to `output`.
+
+**CI failures introduced by batch (repaired in this entry):**
+
+1. **FastAPI invalid response field** (`api/ui_dashboards.py:ui_audit_packet_download`):
+   Changing return annotation to `FileResponse | JSONResponse` without `response_model=None` caused `FastAPIError` at app import. Fixed by adding `response_model=None` to the `@router.get` decorator.
+
+2. **Contract drift** (`contracts/admin/openapi.json`):
+   Changing `csrf_token()` return annotation from `-> dict` to `-> JSONResponse` altered the generated OpenAPI schema (response schema changed from `{"title": "...", "type": "object"}` to `{}`). Fixed by running `make contracts-gen` and committing the refreshed contract artifact.
+
+3. **PR_FIX_LOG guard:** This entry.
+
+4. **Docker Compose DATABASE_URL interpolation:** See investigation section below.
+
+**Files changed:**
+- `admin_gateway/routers/admin.py` — return type `-> JSONResponse`; extract `str` from `_core_api_key()` tuple
+- `admin_gateway/routers/auth.py` — `csrf_token()` return type `-> JSONResponse`
+- `api/control_plane_v2.py` — `scopes: set[str]` annotation (×2)
+- `api/ingest_bus.py` — rename `result` → `output` dict
+- `api/ui_ai_console.py` — `scopes: set[str]` annotation
+- `api/ui_dashboards.py` — return type widening + `response_model=None` + `or ""` fallbacks
+- `tests/security/test_tenant_context_spoof.py` — fixture return type `-> FastAPI`
+- `contracts/admin/openapi.json` — regenerated contract artifact
+
+**AI Notes:**
+- `response_model=None` is required whenever an endpoint return annotation is a union containing `Response`/`JSONResponse`/`FileResponse` — FastAPI cannot use such unions as Pydantic response fields
+- `make contracts-gen` must be run and the output committed whenever a return annotation change affects the admin gateway's OpenAPI schema
+- Do NOT use `-> dict` as a return annotation for endpoints that actually return `JSONResponse` — this masks the real type and misleads FastAPI
+
+**Commands run:**
+1. `.venv/bin/python -c "from api.main import build_app; build_app()"` → OK (no FastAPIError)
+2. `make fg-contract` → PASS
+3. `ruff check .` → All checks passed
+4. `ruff format --check .` → All checks passed
+5. `.venv/bin/mypy .` → 99 errors (−16 from 115)
+
+---

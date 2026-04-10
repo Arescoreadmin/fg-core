@@ -899,6 +899,7 @@ async def ui_audit_packet(
 
 @router.get(
     "/audit/packet/{packet_id}/download",
+    response_model=None,
     dependencies=[Depends(require_scopes("audit:read"))],
 )
 async def ui_audit_packet_download(
