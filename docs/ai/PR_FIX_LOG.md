@@ -258,6 +258,53 @@ Dependency trees are audited separately for core and admin_gateway. Security fix
 
 ---
 
+### 2026-04-10 — Mypy Batch: ORM Boundary + Attr-Defined Surface Fixes
+
+**Area:** Typing · ORM Boundaries · Module Surface
+
+**Issue:**  
+Mypy baseline was 147 errors. The selected batch contained ORM boundary misuse (legacy SQLAlchemy `Column[...]` descriptors flowing into response DTO fields and assignment targets) and attr-defined module surface mismatches in prioritized files (`engine`, `SessionLocal` style imports, missing `ControlPlaneMSPDelegation`, missing `get_tenant`).
+
+**Resolution:**  
+Applied minimal targeted fixes only for the selected families: (1) converted Product/ProductEndpoint response and test-connection DTO construction to concrete runtime scalar values and avoided descriptor-typed direct assignments in `admin_gateway/routers/products.py`; (2) corrected module-surface usage in `api/persist.py` and `agent/app/scripts/create_api_key.py` by importing factory functions instead of missing module attributes; (3) added `ControlPlaneMSPDelegation` ORM model and simplified Base import in `api/db_models_cp_v2.py`; (4) added `get_tenant` accessor to `tools/tenants/registry.py`; (5) made optional callable typing explicit in `api/auth.py` fallback import path.
+
+**AI Notes:**  
+- Error families addressed: ORM / SQLAlchemy boundary misuse; attr-defined module surface mismatches.  
+- Files changed: `admin_gateway/routers/products.py`, `api/db_models_cp_v2.py`, `api/persist.py`, `agent/app/scripts/create_api_key.py`, `api/auth.py`, `tools/tenants/registry.py`.  
+- old mypy count: 147  
+- new mypy count: 115  
+- validation commands run:  
+  - `ruff check .`  
+  - `ruff format --check .`  
+  - `make fg-fast` (fails at docker-dependent prod-profile-check in this environment)  
+  - `bash codex_gates.sh`  
+  - `bash codex_gates.sh | grep "error:" | wc -l`
+
+---
+
+### 2026-04-10 — Mypy Batch Follow-up: ProductEndpoint ORM Boundary Conversion
+
+**Area:** Typing · ORM Boundaries · Admin Gateway Models
+
+**Issue:**  
+After the prior batch, mypy remained at 115 errors and still reported an ORM boundary misuse in `admin_gateway/db/models.py`: `json.loads(self.meta_json)` received a SQLAlchemy `Column[str]` descriptor-typed value instead of a concrete runtime `str`.
+
+**Resolution:**  
+Converted `self.meta_json` to a concrete local runtime string (`meta_json`) before JSON parsing in `ProductEndpoint.to_dict`, and used that same concrete value in the fallback branch. This removes descriptor typing leakage without changing runtime behavior.
+
+**AI Notes:**  
+- Error family addressed: ORM / SQLAlchemy boundary misuse.  
+- File changed: `admin_gateway/db/models.py`.  
+- old mypy count: 115  
+- new mypy count: 114  
+- validation commands run:  
+  - `source .venv/bin/activate && python -m mypy .`  
+  - `source .venv/bin/activate && ruff check .`  
+  - `source .venv/bin/activate && ruff format --check .`  
+  - `source .venv/bin/activate && bash codex_gates.sh || true`
+
+---
+
 ### 2026-03-28 — Task 1.3: Read-Path Tenant Isolation Audit and Regression Tests
 
 **Area:** Tenant Isolation · Read Paths · Security Tests

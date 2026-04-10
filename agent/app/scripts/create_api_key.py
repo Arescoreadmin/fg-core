@@ -42,7 +42,7 @@ _add_repo_paths()
 
 # Now imports should work if the repo layout is sane
 from sqlalchemy.orm import Session  # noqa: E402
-from api.db import SessionLocal  # noqa: E402
+from api.db import get_sessionmaker  # noqa: E402
 from api.db_models import ApiKey, hash_api_key  # noqa: E402
 
 
@@ -67,7 +67,8 @@ def main() -> None:
     raw = prefix + secrets.token_urlsafe(32)
     key_hash = hash_api_key(raw)
 
-    db: Session = SessionLocal()
+    db_sessionmaker = get_sessionmaker()
+    db: Session = db_sessionmaker()
     try:
         row = ApiKey(
             name=name,

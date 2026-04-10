@@ -163,3 +163,8 @@ def list_tenants(include_revoked: bool = True) -> List[TenantRecord]:
     if not include_revoked:
         items = [r for r in items if r.status != "revoked"]
     return sorted(items, key=lambda r: r.tenant_id)
+
+
+def get_tenant(tenant_id: str) -> Optional[TenantRecord]:
+    """Return a tenant record by tenant_id, or None when not found."""
+    return load_registry().get(tenant_id)

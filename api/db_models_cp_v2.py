@@ -31,14 +31,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import declarative_base
-
-# Use the shared Base from db_models so init_db picks up these tables.
-# Importing declarative_base here as fallback for direct unit-test usage.
-try:
-    from api.db_models import Base
-except ImportError:
-    Base = declarative_base()
+from api.db_models import Base
 
 
 def _utcnow() -> datetime:
@@ -223,3 +216,33 @@ class ControlPlaneHeartbeat(Base):
     breaker_state = Column(String(16), nullable=False, default="closed")
     queue_depth = Column(Integer, nullable=False, default=0)
     last_error_code = Column(String(64), nullable=True)
+
+
+class ControlPlaneMSPDelegation(Base):
+    """MSP delegated cross-tenant access grants."""
+
+    __tablename__ = "control_plane_msp_delegations"
+    __table_args__ = (
+        UniqueConstraint(
+            "delegator_id",
+            "delegatee_id",
+            "target_tenant",
+            "scope",
+            name="uq_cp_msp_delegation_grant",
+        ),
+    )
+
+    delegation_id = Column(String(36), primary_key=True, default=_new_uuid)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=_utcnow,
+        server_default=func.now(),
+    )
+    delegator_id = Column(String(128), nullable=False, index=True)
+    delegatee_id = Column(String(128), nullable=False, index=True)
+    target_tenant = Column(String(128), nullable=False, index=True)
+    scope = Column(Text, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    revoked = Column(Boolean, nullable=False, default=False, index=True)
+    trace_id = Column(String(64), nullable=False, default="", index=True)

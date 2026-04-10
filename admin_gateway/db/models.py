@@ -139,11 +139,13 @@ class ProductEndpoint(Base):
         import json
 
         meta = None
-        if self.meta_json:
+        meta_json_raw = self.meta_json
+        meta_json = str(meta_json_raw) if meta_json_raw is not None else None
+        if meta_json:
             try:
-                meta = json.loads(self.meta_json)
+                meta = json.loads(meta_json)
             except (json.JSONDecodeError, TypeError):
-                meta = self.meta_json
+                meta = meta_json
 
         return {
             "id": self.id,

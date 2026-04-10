@@ -9,16 +9,17 @@ to auth_scopes.verify_api_key_detailed(), which is the SINGLE SOURCE OF TRUTH.
 from __future__ import annotations
 
 import os
-from typing import Optional
+from typing import Callable, Optional
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import APIKeyHeader
 import api.auth_scopes as auth_scopes
 
+_registry_get_tenant: Optional[Callable[[str], object]] = None
 try:
     from tools.tenants.registry import get_tenant as _registry_get_tenant
 except Exception:  # pragma: no cover
-    _registry_get_tenant = None
+    pass
 
 
 def get_tenant(tenant_id: str):

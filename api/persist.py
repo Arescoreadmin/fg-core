@@ -4,7 +4,7 @@ import time
 import logging
 from datetime import datetime, timezone
 from sqlalchemy import text
-from .db import engine
+from .db import get_engine
 from api.evidence_chain import (
     CHAIN_ALG,
     build_chain_payload,
@@ -13,6 +13,7 @@ from api.evidence_chain import (
 )
 
 log = logging.getLogger("frostgate.persist")
+engine = get_engine()
 
 
 def persist_decision(

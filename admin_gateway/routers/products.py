@@ -163,24 +163,24 @@ def _product_to_response(product: Product) -> ProductResponse:
                 pass
         endpoints.append(
             EndpointResponse(
-                id=ep.id,
-                product_id=ep.product_id,
-                kind=ep.kind,
-                url=ep.url,
-                target=ep.target,
+                id=int(ep.id),
+                product_id=int(ep.product_id),
+                kind=str(ep.kind),
+                url=str(ep.url) if ep.url is not None else None,
+                target=str(ep.target) if ep.target is not None else None,
                 meta=meta,
                 created_at=ep.created_at.isoformat() if ep.created_at else "",
             )
         )
 
     return ProductResponse(
-        id=product.id,
-        slug=product.slug,
-        name=product.name,
-        env=product.env,
-        owner=product.owner,
-        enabled=product.enabled,
-        tenant_id=product.tenant_id,
+        id=int(product.id),
+        slug=str(product.slug),
+        name=str(product.name),
+        env=str(product.env),
+        owner=str(product.owner) if product.owner is not None else None,
+        enabled=bool(product.enabled),
+        tenant_id=str(product.tenant_id),
         created_at=product.created_at.isoformat() if product.created_at else "",
         updated_at=product.updated_at.isoformat() if product.updated_at else "",
         endpoints=endpoints,
@@ -479,19 +479,19 @@ async def update_product(
         )
 
     # Update fields
-    changes = {}
+    changes: dict[str, Any] = {}
     if data.name is not None:
         changes["name"] = (product.name, data.name)
-        product.name = data.name
+        setattr(product, "name", data.name)
     if data.env is not None:
         changes["env"] = (product.env, data.env)
-        product.env = data.env
+        setattr(product, "env", data.env)
     if data.owner is not None:
         changes["owner"] = (product.owner, data.owner)
-        product.owner = data.owner
+        setattr(product, "owner", data.owner)
     if data.enabled is not None:
         changes["enabled"] = (product.enabled, data.enabled)
-        product.enabled = data.enabled
+        setattr(product, "enabled", data.enabled)
 
     # Update endpoints if provided
     if data.endpoints is not None:
@@ -511,7 +511,7 @@ async def update_product(
             db.add(endpoint)
         changes["endpoints"] = f"replaced with {len(data.endpoints)} endpoints"
 
-    product.updated_at = datetime.now(timezone.utc)
+    setattr(product, "updated_at", datetime.now(timezone.utc))
     await db.commit()
     await db.refresh(product)
 
@@ -596,8 +596,8 @@ async def test_connection(
             session,
         )
         return TestConnectionResult(
-            product_id=product.id,
-            product_name=product.name,
+            product_id=int(product.id),
+            product_name=str(product.name),
             endpoint_id=None,
             endpoint_kind="none",
             endpoint_url=None,
@@ -650,10 +650,10 @@ async def test_connection(
             )
 
             return TestConnectionResult(
-                product_id=product.id,
-                product_name=product.name,
-                endpoint_id=rest_endpoint.id,
-                endpoint_kind=rest_endpoint.kind,
+                product_id=int(product.id),
+                product_name=str(product.name),
+                endpoint_id=int(rest_endpoint.id),
+                endpoint_kind=str(rest_endpoint.kind),
                 endpoint_url=health_url,
                 success=success,
                 status_code=response.status_code,
@@ -673,10 +673,10 @@ async def test_connection(
             session,
         )
         return TestConnectionResult(
-            product_id=product.id,
-            product_name=product.name,
-            endpoint_id=rest_endpoint.id,
-            endpoint_kind=rest_endpoint.kind,
+            product_id=int(product.id),
+            product_name=str(product.name),
+            endpoint_id=int(rest_endpoint.id),
+            endpoint_kind=str(rest_endpoint.kind),
             endpoint_url=health_url,
             success=False,
             status_code=None,
@@ -696,10 +696,10 @@ async def test_connection(
             session,
         )
         return TestConnectionResult(
-            product_id=product.id,
-            product_name=product.name,
-            endpoint_id=rest_endpoint.id,
-            endpoint_kind=rest_endpoint.kind,
+            product_id=int(product.id),
+            product_name=str(product.name),
+            endpoint_id=int(rest_endpoint.id),
+            endpoint_kind=str(rest_endpoint.kind),
             endpoint_url=health_url,
             success=False,
             status_code=None,
@@ -731,10 +731,10 @@ async def test_connection(
             session,
         )
         return TestConnectionResult(
-            product_id=product.id,
-            product_name=product.name,
-            endpoint_id=rest_endpoint.id,
-            endpoint_kind=rest_endpoint.kind,
+            product_id=int(product.id),
+            product_name=str(product.name),
+            endpoint_id=int(rest_endpoint.id),
+            endpoint_kind=str(rest_endpoint.kind),
             endpoint_url=health_url,
             success=False,
             status_code=None,
