@@ -1847,3 +1847,39 @@ Commit 6d0cfed introduced `_as_dict`/`_to_int` helpers in `runtime_budgets.py` a
 3. `make fg-fast` → all checks passed, 11s
 
 ---
+
+### 2026-04-10 — mypy remediation batch 4 / Set E — 13 errors across 2 files (167→154)
+
+**Area:** Type Safety · Mypy Set E Batch 4
+
+**Issue:**
+Two dense error clusters remained after batch 3:
+1. `scripts/verify_compliance_chain.py` (7 errors): Loop variable `row` was typed as `ComplianceRequirementRecord` (from first loop over `req_rows`). Second loop over `find_rows` (type `ComplianceFindingRecord`) caused an `assignment` error at the loop binding, and six downstream `attr-defined` errors on `ComplianceFindingRecord`-specific attributes (`finding_id`, `req_ids_json`, `details`, `waiver_json`, `detected_at_utc`, `evidence_refs_json`).
+2. `api/tripwires.py` (6 errors): Two occurrences of `status_code = getattr(response, "status_code", None)` followed by `if status_code is None: status_code = getattr(response, "status", 0)`. Mypy cannot narrow `status_code` to `int` through the None-reassignment pattern, causing `operator` errors (`<=`, `>`) at three comparison sites (lines 193, 214, 338).
+
+**Resolution:**
+- `scripts/verify_compliance_chain.py`: Renamed second loop variable from `row` to `find_row` throughout the `find_rows` loop body. Root cause fixed (not patched per attribute).
+- `api/tripwires.py`: Replaced `if status_code is None:` with `if not isinstance(status_code, int):` and wrapped the fallback in `int(... or 0)`. `isinstance` narrowing is recognized by mypy; None-guard reassignment is not.
+
+**Files changed:**
+- `scripts/verify_compliance_chain.py`
+- `api/tripwires.py`
+
+**Error families addressed:**
+- `assignment` (loop variable reuse across heterogeneous model types)
+- `attr-defined` (downstream of wrong loop variable type)
+- `operator` (int vs None comparison due to unnarrowed getattr pattern)
+
+**Mypy count:** 167 → 154
+
+**Validation:**
+1. `ruff check .` → PASS
+2. `ruff format --check .` → PASS (verify_compliance_chain.py auto-reformatted)
+3. `make fg-fast` → PASS (11s)
+4. `bash codex_gates.sh | grep "error:" | wc -l` → 154
+
+**AI Notes:**
+- Do NOT revert the `find_row` rename back to `row` — the second loop is over a different model type; reusing `row` is a mypy error.
+- Do NOT restore `if status_code is None:` pattern — mypy does not narrow through None-guard reassignment with `getattr`; use `isinstance(status_code, int)` instead.
+
+---
