@@ -131,7 +131,7 @@ def _remote_ip_value(request: Optional[Request]) -> Optional[str]:
             if raw_ip:
                 return _normalize_field(raw_ip.split(",")[0], max_len=64)
 
-    if getattr(request, "client", None) is not None:
+    if request.client is not None:
         return _normalize_field(request.client.host, max_len=64)
     return None
 
@@ -666,12 +666,9 @@ def verify_api_key_detailed(
             )
 
     if identifier_col and (key_lookup or key_hash):
-        _update_key_usage(
-            sqlite_path,
-            key_prefix,
-            identifier_col,
-            key_lookup if identifier_col == "key_lookup" else key_hash,
-        )
+        _key_val = key_lookup if identifier_col == "key_lookup" else key_hash
+        if _key_val is not None:
+            _update_key_usage(sqlite_path, key_prefix, identifier_col, _key_val)
 
     _log_auth_event(
         "auth_attempt",
@@ -772,7 +769,7 @@ def bind_tenant_id(
     auth = getattr(getattr(request, "state", None), "auth", None)
     auth_tenant = _auth_tenant_from_request(request)
     key_prefix = getattr(auth, "key_prefix", None)
-    scopes = getattr(auth, "scopes", set())
+    scopes: set[str] = getattr(auth, "scopes", set())
 
     if auth_tenant:
         if requested and requested != auth_tenant:

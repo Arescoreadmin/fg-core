@@ -382,7 +382,11 @@ def get_boot_trace(module_id: str, request: Request) -> dict:
     if tenant_id is not None:
         registry = ModuleRegistry()
         rec = registry.get_module(module_id)
-        if rec is not None and rec.tenant_id and rec.tenant_id != tenant_id:
+        if (
+            rec is not None
+            and rec.get("tenant_id")
+            and rec.get("tenant_id") != tenant_id
+        ):
             raise HTTPException(
                 status_code=404,
                 detail={
@@ -441,7 +445,7 @@ def _dispatch_locker_command(
 
     # P0: Tenant binding — locker must belong to actor's tenant
     locker_info = bus.get_locker(locker_id)
-    if locker_info and locker_info.get("tenant_id") != tenant_id:
+    if isinstance(locker_info, dict) and locker_info.get("tenant_id") != tenant_id:
         log.warning(
             "locker_tenant_mismatch locker_id=%s actor_tenant=%s locker_tenant=%s",
             locker_id,

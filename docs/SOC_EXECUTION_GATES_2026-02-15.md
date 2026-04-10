@@ -1952,3 +1952,21 @@ Runtime impact:
 Notes:
 - `allowed = set()` annotated as `allowed: Set[str] = set()` so mypy can infer element type.
 - Zero logic change; var-annotated error only.
+
+## 2026-04-10 — api/auth_scopes/resolution.py and api/auth_federation.py type narrowing fixes
+
+Files:
+- `api/auth_scopes/resolution.py`
+- `api/auth_federation.py`
+
+Change type:
+- typing-only
+
+Runtime impact:
+- none
+
+Notes:
+- `resolution.py:135`: replaced `getattr(request, "client", None) is not None` with `request.client is not None` — request is already narrowed to non-None at that point; direct attribute access allows mypy to narrow `Address | None` to `Address`.
+- `resolution.py:673`: extracted `_key_val` local variable before passing to `_update_key_usage`; added `if _key_val is not None` guard for mypy narrowing. Semantically equivalent to original `(key_lookup or key_hash)` guard.
+- `resolution.py:775`: annotated `scopes: set[str] = getattr(auth, "scopes", set())` so mypy can infer the set element type.
+- `auth_federation.py:55-56`: extracted `_groups_raw = claims.get("groups")` to a single variable before the isinstance check, allowing mypy to narrow through the conditional. Same isinstance-narrowing fix pattern as batch-3.
