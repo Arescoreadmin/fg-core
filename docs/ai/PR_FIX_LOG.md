@@ -1774,3 +1774,32 @@ Remaining dominant blockers:
 **AI Notes:**
 - Keep local narrowing guards before iterable/index/get/int boundaries when payload types are `object`.
 - Keep mixed-value payloads explicitly typed as `dict[str, object]` where schema values are heterogeneous.
+
+## 2026-04-09 — Harness mypy narrowing fixes (blitz/codex-generic-20260409)
+
+**Scope:** Fix 4 new mypy errors introduced by recent object/dict narrowing commit (6d0cfed)
+
+**Root cause:**
+Commit 6d0cfed introduced `_as_dict`/`_to_int` helpers in `runtime_budgets.py` and applied
+`dict[str, object]` narrowing patterns. This propagated `object` types to:
+- `fg_required.py` fallback stubs: missing `lane` param + return type mismatch
+- `fg_required.py:_write_summary`: `payload["lanes"]` inferred as `object` (not iterable)
+- `test_quarantine_policy.py`: `payload["sla_days"]` as `object` not comparable to `int`
+
+**Files changed:**
+- `tools/testing/harness/fg_required.py`
+- `tests/tools/test_quarantine_policy.py`
+
+**Commands run:**
+1. `.venv/bin/mypy .` — 198 → 194 errors (4 fixed; 194 pre-existing, unrelated)
+2. `make required-tests-gate` → PASS
+3. `make fg-contract` → `Contract diff: OK`
+4. `ruff check` + `ruff format --check` → PASS
+5. `pytest tests/tools/test_quarantine_policy.py -q` → 1 passed
+6. `bash codex_gates.sh` → EXIT:1 (remaining 194 pre-existing errors; blocker for gate)
+
+**Remaining blockers:**
+- `codex_gates.sh` mypy gate: 194 pre-existing errors in 73 files (tracked in mypy_hotspots.txt)
+  Not introduced by this branch; ongoing remediation effort (see commits #202-206)
+
+---
