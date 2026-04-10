@@ -358,7 +358,7 @@ class MSPDelegationService:
 
         # Try DB if model available
         try:
-            from api.db_models_cp_v2 import ControlPlaneMSPDelegation  # type: ignore[attr-defined]  # noqa: F401  # type: ignore[attr-defined]
+            from api.db_models_cp_v2 import ControlPlaneMSPDelegation  # noqa: F401
 
             row = ControlPlaneMSPDelegation(
                 delegation_id=rec.delegation_id,
@@ -382,7 +382,7 @@ class MSPDelegationService:
         if delegation_id in _in_memory_store:
             _in_memory_store[delegation_id].revoked = True
         try:
-            from api.db_models_cp_v2 import ControlPlaneMSPDelegation  # type: ignore[attr-defined]
+            from api.db_models_cp_v2 import ControlPlaneMSPDelegation
 
             row = (
                 db_session.query(ControlPlaneMSPDelegation)
@@ -400,7 +400,7 @@ class MSPDelegationService:
         if delegation_id in _in_memory_store:
             return _in_memory_store[delegation_id]
         try:
-            from api.db_models_cp_v2 import ControlPlaneMSPDelegation  # type: ignore[attr-defined]
+            from api.db_models_cp_v2 import ControlPlaneMSPDelegation
 
             row = (
                 db_session.query(ControlPlaneMSPDelegation)
@@ -426,7 +426,7 @@ class MSPDelegationService:
             if r.delegatee_id == delegatee_id and r.target_tenant == target_tenant
         ]
         try:
-            from api.db_models_cp_v2 import ControlPlaneMSPDelegation  # type: ignore[attr-defined]
+            from api.db_models_cp_v2 import ControlPlaneMSPDelegation
 
             rows = (
                 db_session.query(ControlPlaneMSPDelegation)

@@ -308,7 +308,7 @@ async def list_products(
     tenant_id = _get_tenant_id(request, session)
 
     # Query products for tenant
-    stmt = select(Product).where(Product.tenant_id == tenant_id).order_by(Product.name)  # type: ignore[arg-type]
+    stmt = select(Product).where(Product.tenant_id == tenant_id).order_by(Product.name)
     result = await db.execute(stmt)
     products = result.scalars().all()
 
@@ -347,8 +347,8 @@ async def create_product(
 
     # Check for duplicate slug within tenant
     stmt = select(Product).where(
-        Product.tenant_id == tenant_id,  # type: ignore[arg-type]
-        Product.slug == data.slug,  # type: ignore[arg-type]
+        Product.tenant_id == tenant_id,
+        Product.slug == data.slug,
     )
     result = await db.execute(stmt)
     if result.scalar_one_or_none():
@@ -414,8 +414,8 @@ async def get_product(
 
     # Query product
     stmt = select(Product).where(
-        Product.id == product_id,  # type: ignore[arg-type]
-        Product.tenant_id == tenant_id,  # type: ignore[arg-type]
+        Product.id == product_id,
+        Product.tenant_id == tenant_id,
     )
     result = await db.execute(stmt)
     product = result.scalar_one_or_none()
@@ -461,8 +461,8 @@ async def update_product(
 
     # Query product
     stmt = select(Product).where(
-        Product.id == product_id,  # type: ignore[arg-type]
-        Product.tenant_id == tenant_id,  # type: ignore[arg-type]
+        Product.id == product_id,
+        Product.tenant_id == tenant_id,
     )
     result = await db.execute(stmt)
     product = result.scalar_one_or_none()
@@ -482,7 +482,7 @@ async def update_product(
         )
 
     # Update fields
-    changes = {}
+    changes: dict[str, Any] = {}
     if data.name is not None:
         changes["name"] = (product.name, data.name)
         product.name = data.name
@@ -490,10 +490,10 @@ async def update_product(
         changes["env"] = (product.env, data.env)
         product.env = data.env
     if data.owner is not None:
-        changes["owner"] = (product.owner, data.owner)  # type: ignore[assignment]
+        changes["owner"] = (product.owner, data.owner)
         product.owner = data.owner
     if data.enabled is not None:
-        changes["enabled"] = (product.enabled, data.enabled)  # type: ignore[assignment]
+        changes["enabled"] = (product.enabled, data.enabled)
         product.enabled = data.enabled
 
     # Update endpoints if provided
@@ -512,7 +512,7 @@ async def update_product(
                 meta_json=json.dumps(ep_data.meta) if ep_data.meta else None,
             )
             db.add(endpoint)
-        changes["endpoints"] = f"replaced with {len(data.endpoints)} endpoints"  # type: ignore[assignment]
+        changes["endpoints"] = f"replaced with {len(data.endpoints)} endpoints"
 
     product.updated_at = datetime.now(timezone.utc)
     await db.commit()
@@ -556,8 +556,8 @@ async def test_connection(
 
     # Query product
     stmt = select(Product).where(
-        Product.id == product_id,  # type: ignore[arg-type]
-        Product.tenant_id == tenant_id,  # type: ignore[arg-type]
+        Product.id == product_id,
+        Product.tenant_id == tenant_id,
     )
     result = await db.execute(stmt)
     product = result.scalar_one_or_none()
