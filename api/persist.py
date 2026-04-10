@@ -4,7 +4,7 @@ import time
 import logging
 from datetime import datetime, timezone
 from sqlalchemy import text
-from .db import engine
+from .db import get_engine
 from api.evidence_chain import (
     CHAIN_ALG,
     build_chain_payload,
@@ -54,7 +54,7 @@ def persist_decision(
 
     prev_hash = GENESIS_HASH
     try:
-        with engine.begin() as c:
+        with get_engine().begin() as c:
             row = c.execute(
                 text(
                     """
@@ -103,7 +103,7 @@ def persist_decision(
     """)
 
     try:
-        with engine.begin() as c:
+        with get_engine().begin() as c:
             c.execute(sql, payload)
         log.info(
             "persisted decision event_id=%s in %dms",

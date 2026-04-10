@@ -53,24 +53,26 @@ class Product(Base):
         Index("ix_products_tenant_slug", "tenant_id", "slug", unique=True),
     )
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    slug = Column(String(128), nullable=False, index=True)
-    name = Column(String(256), nullable=False)
-    env = Column(String(64), nullable=False, default="production")
-    owner = Column(String(256), nullable=True)
-    enabled = Column(Boolean, nullable=False, default=True)
+    id: int = Column(Integer, primary_key=True, autoincrement=True)  # type: ignore[assignment]
+    slug: str = Column(String(128), nullable=False, index=True)  # type: ignore[assignment]
+    name: str = Column(String(256), nullable=False)  # type: ignore[assignment]
+    env: str = Column(String(64), nullable=False, default="production")  # type: ignore[assignment]
+    owner: str | None = Column(String(256), nullable=True)  # type: ignore[assignment]
+    enabled: bool = Column(Boolean, nullable=False, default=True)  # type: ignore[assignment]
 
     # Tenant scoping for multi-tenant isolation
-    tenant_id = Column(String(128), nullable=False, index=True)
+    tenant_id: str = Column(String(128), nullable=False, index=True)  # type: ignore[assignment]
 
     # Timestamps
-    created_at = Column(
+    created_at: datetime
+    created_at = Column(  # type: ignore[assignment]
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
         server_default=func.now(),
     )
-    updated_at = Column(
+    updated_at: datetime
+    updated_at = Column(  # type: ignore[assignment]
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
@@ -111,20 +113,22 @@ class ProductEndpoint(Base):
     __tablename__ = "product_endpoints"
     __table_args__ = (Index("ix_product_endpoints_product_kind", "product_id", "kind"),)
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    product_id = Column(
+    id: int = Column(Integer, primary_key=True, autoincrement=True)  # type: ignore[assignment]
+    product_id: int
+    product_id = Column(  # type: ignore[assignment]
         Integer,
         ForeignKey("products.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    kind = Column(String(32), nullable=False)  # rest, grpc, nats
-    url = Column(String(1024), nullable=True)  # For REST/gRPC
-    target = Column(String(1024), nullable=True)  # For NATS subject
-    meta_json = Column(Text, nullable=True)  # JSON string for additional metadata
+    kind: str = Column(String(32), nullable=False)  # type: ignore[assignment]  # rest, grpc, nats
+    url: str | None = Column(String(1024), nullable=True)  # type: ignore[assignment]  # For REST/gRPC
+    target: str | None = Column(String(1024), nullable=True)  # type: ignore[assignment]  # For NATS subject
+    meta_json: str | None = Column(Text, nullable=True)  # type: ignore[assignment]  # JSON string for additional metadata
 
     # Timestamps
-    created_at = Column(
+    created_at: datetime
+    created_at = Column(  # type: ignore[assignment]
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,

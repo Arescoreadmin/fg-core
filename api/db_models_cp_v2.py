@@ -38,7 +38,7 @@ from sqlalchemy.orm import declarative_base
 try:
     from api.db_models import Base
 except ImportError:
-    Base = declarative_base()
+    Base = declarative_base()  # type: ignore[misc]
 
 
 def _utcnow() -> datetime:
