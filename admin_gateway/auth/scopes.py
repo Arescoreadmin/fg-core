@@ -128,7 +128,7 @@ def require_scope(scope: str | Scope) -> Callable:
             return await func(*args, **kwargs)
 
         # Store required scope for introspection
-        wrapper._required_scope = scope_str
+        setattr(wrapper, "_required_scope", scope_str)
         return wrapper
 
     return decorator

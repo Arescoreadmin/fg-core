@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tools.ci.route_checks import iter_route_records, is_public_path
+from tools.ci.route_checks import RouteRecord, iter_route_records, is_public_path
 
 REPO = Path(__file__).resolve().parents[2]
 API_DIR = REPO / "api"
@@ -15,7 +15,7 @@ TARGETS: set[tuple[str, str]] = {
 
 
 def test_audit_reproduce_routes_are_scoped_and_tenant_bound() -> None:
-    found: dict[tuple[str, str], list[object]] = {k: [] for k in TARGETS}
+    found: dict[tuple[str, str], list[RouteRecord]] = {k: [] for k in TARGETS}
 
     for rec in iter_route_records(API_DIR):
         key = (rec.method.upper(), rec.full_path)

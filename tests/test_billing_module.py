@@ -8,7 +8,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import mint_key
-from api.billing import _stable_device_key
+from typing import cast
+
+from api.billing import DeviceUpsertRequest, _stable_device_key
 from api.db import get_engine
 from api.db_models import (
     BillingCountSyncCheckpoint,
@@ -54,15 +56,18 @@ def _seed_pricing_and_contract(db: Session, tenant_id: str) -> None:
 
 def test_identity_dedupe_priority() -> None:
     claim_type, key, confidence = _stable_device_key(
-        type(
-            "R",
-            (),
-            {
-                "asset_id": "asset-1",
-                "asset_verified": True,
-                "agent_stable_id": "ag-1",
-                "fingerprint_hash": "fp-1",
-            },
+        cast(
+            DeviceUpsertRequest,
+            type(
+                "R",
+                (),
+                {
+                    "asset_id": "asset-1",
+                    "asset_verified": True,
+                    "agent_stable_id": "ag-1",
+                    "fingerprint_hash": "fp-1",
+                },
+            ),
         )
     )
     assert claim_type == "asset_id"

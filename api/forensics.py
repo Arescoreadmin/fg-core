@@ -139,7 +139,7 @@ def chain_verify(
     limit: int = Query(10, ge=1, le=500),
 ) -> dict[str, Any]:
     tenant_id = getattr(request.state, "tenant_id", None)
-    result = verify_chain_for_tenant(db, tenant_id=tenant_id, limit=limit)
+    result = verify_chain_for_tenant(db, tenant_id=tenant_id or "", limit=limit)
 
     if isinstance(result, dict):
         result.setdefault("tenant_id", tenant_id)

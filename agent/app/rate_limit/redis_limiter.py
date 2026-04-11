@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from typing import Any
+
 from agent.app.rate_limit.memory_fallback import MemoryLimiter
 
+redis: Any = None
 try:
-    import redis
+    import redis  # type: ignore
 except Exception:  # pragma: no cover
-    redis = None
+    pass
 
 
 class RedisFirstLimiter:

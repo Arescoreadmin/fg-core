@@ -21,6 +21,7 @@ def _set_ring(device_id: str, ring: str) -> None:
             .filter(AgentDeviceRegistry.device_id == device_id)
             .first()
         )
+        assert row is not None
         row.ring = ring
         session.commit()
 

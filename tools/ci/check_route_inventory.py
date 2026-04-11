@@ -116,7 +116,10 @@ def _is_v1_wrapper(obj: object) -> bool:
 
 
 def _unwrap_v1(obj: object) -> object:
-    return obj["data"] if _is_v1_wrapper(obj) else obj
+    if _is_v1_wrapper(obj):
+        assert isinstance(obj, dict)
+        return obj["data"]
+    return obj
 
 
 def _write_wrapped_json_if_data_changed(

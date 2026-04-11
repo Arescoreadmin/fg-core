@@ -6,6 +6,7 @@ Handles OAuth 2.0 / OpenID Connect authentication flow with any compliant provid
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import logging
 import secrets
@@ -111,7 +112,7 @@ class OIDCClient:
     def _generate_code_challenge(self, verifier: str) -> str:
         """Generate PKCE code challenge from verifier."""
         digest = hashlib.sha256(verifier.encode()).digest()
-        return secrets.base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+        return base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
 
     async def get_authorization_url(
         self,
@@ -316,6 +317,7 @@ class OIDCClient:
 
         alg = header.get("alg", "RS256")
         try:
+            public_key: Any = None
             if alg.startswith(("RS", "PS")):
                 public_key = RSAAlgorithm.from_jwk(json.dumps(key_data))
             elif alg.startswith("ES"):

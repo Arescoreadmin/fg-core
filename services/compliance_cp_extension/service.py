@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal, cast
+
 from services.compliance_registry import ComplianceRegistry, FindingCreateItem
 from services.compliance_cp_extension.models import ComplianceCPEvidenceIngestRequest
 
@@ -58,7 +60,7 @@ class ComplianceControlPlaneService:
             req_ids=payload.req_ids,
             title=payload.title,
             details=payload.details,
-            severity=payload.severity,
+            severity=cast(Literal["low", "med", "high", "critical"], payload.severity),
             status="open",
             waiver=None,
             detected_at_utc=payload.detected_at_utc,

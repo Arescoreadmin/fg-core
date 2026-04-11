@@ -12,10 +12,11 @@ from fastapi import HTTPException, Request
 
 log = logging.getLogger("frostgate.ratelimit")
 
+redis: Any = None
 try:
     import redis  # type: ignore
 except Exception:  # pragma: no cover
-    redis = None
+    pass
 
 
 # -----------------------------

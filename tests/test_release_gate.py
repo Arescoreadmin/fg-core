@@ -412,21 +412,22 @@ class TestRunReadinessChecks:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Readiness checks return expected core results."""
+        from unittest.mock import patch
 
-    from unittest.mock import patch
+        def mock_run_command(cmd: list[str], desc: str) -> tuple[bool, str]:
+            return True, ""
 
-    def mock_run_command(cmd: list[str], desc: str) -> tuple[bool, str]:
-        return True, ""
+        with patch("release_gate.run_command", side_effect=mock_run_command):
+            results = run_readiness_checks()
 
-    with patch("release_gate.run_command", side_effect=mock_run_command):
-        results = run_readiness_checks()
+        names = {name for name, *_ in results}
 
-    names = {name for name, *_ in results}
+        assert {"contracts-gen", "contracts-diff", "fg-contract", "fg-lint"}.issubset(
+            names
+        )
 
-    assert {"contracts-gen", "contracts-diff", "fg-contract", "fg-lint"}.issubset(names)
-
-    if os.getenv("FG_DB_BACKEND") == "postgres":
-        assert "db-postgres-verify" in names
+        if os.getenv("FG_DB_BACKEND") == "postgres":
+            assert "db-postgres-verify" in names
 
     def test_contracts_diff_skipped_on_gen_failure(
         self, monkeypatch: pytest.MonkeyPatch

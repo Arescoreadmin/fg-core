@@ -822,9 +822,11 @@ def ai_chat(
 
     if blocked_error is not None or denial_error is not None:
         denied = blocked_error or denial_error
+        assert denied is not None
         reason_code = "ai_denied"
-        if isinstance(getattr(denied, "detail", None), dict):
-            reason_code = denied.detail.get("error_code", reason_code)
+        _detail = getattr(denied, "detail", None)
+        if isinstance(_detail, dict):
+            reason_code = _detail.get("error_code", reason_code)
         if quota_precharged_tokens > 0 and completion_tokens == 0:
             _refund_quota_atomic(
                 db,

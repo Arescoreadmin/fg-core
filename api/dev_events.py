@@ -191,7 +191,7 @@ def dev_seed(
     src = "dev_seed"
 
     # 1) Non-actionable: low/info + log_only
-    seeds = [
+    seeds: list[dict[str, Any]] = [
         dict(
             stable_key="low_log_only",
             kind="info",
@@ -258,7 +258,7 @@ def dev_seed(
         ):
             chain_fields = chain_fields_for_decision(
                 db,
-                tenant_id=tenant_id,
+                tenant_id=tenant_id or "",
                 request_json=rec.request_json,
                 response_json=rec.response_json,
                 threat_level=rec.threat_level,
@@ -338,7 +338,7 @@ def dev_emit(
         ):
             chain_fields = chain_fields_for_decision(
                 db,
-                tenant_id=tenant_id,
+                tenant_id=tenant_id or "",
                 request_json=rec.request_json,
                 response_json=rec.response_json,
                 threat_level=rec.threat_level,

@@ -127,7 +127,6 @@ def set_policy(
                 action="policy_set",
                 idempotency_key=idempotency_key,
                 ttl_hours=168,
-                response_hash=None,
             )
             if not first:
                 return {"ok": True, "idempotent_replay": True}

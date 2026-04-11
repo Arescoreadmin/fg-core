@@ -1,9 +1,12 @@
+from typing import cast
+
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.auth_scopes import mint_key
 from api.main import app
 
-client = TestClient(app)
+client = TestClient(cast(FastAPI, app))
 
 
 def test_stats_requires_auth():

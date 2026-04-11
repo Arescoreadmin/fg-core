@@ -130,13 +130,17 @@ class AlertSeverity(str, Enum):
                 return severity
         return cls.WARNING
 
-    def __ge__(self, other: "AlertSeverity") -> bool:
+    def __ge__(self, other: str) -> bool:
         order = [self.INFO, self.WARNING, self.ERROR, self.CRITICAL]
-        return order.index(self) >= order.index(other)
+        if isinstance(other, AlertSeverity):
+            return order.index(self) >= order.index(other)
+        return str.__ge__(self, other)
 
-    def __gt__(self, other: "AlertSeverity") -> bool:
+    def __gt__(self, other: str) -> bool:
         order = [self.INFO, self.WARNING, self.ERROR, self.CRITICAL]
-        return order.index(self) > order.index(other)
+        if isinstance(other, AlertSeverity):
+            return order.index(self) > order.index(other)
+        return str.__gt__(self, other)
 
 
 class AlertCategory(str, Enum):
@@ -421,8 +425,8 @@ class SecurityAlertManager:
         )
 
         # Try aggregation
-        alert = self._try_aggregate(alert)
-        if alert is None:
+        aggregated = self._try_aggregate(alert)
+        if aggregated is None:
             self._suppressed_count += 1
             return None
 
@@ -435,18 +439,18 @@ class SecurityAlertManager:
         # Send to all channels
         for channel in self._channels:
             try:
-                await channel.send(alert)
+                await channel.send(aggregated)
             except Exception as e:
                 log.exception(f"Alert channel error: {e}")
 
         # Call callbacks
         for callback in self._callbacks:
             try:
-                callback(alert)
+                callback(aggregated)
             except Exception as e:
                 log.exception(f"Alert callback error: {e}")
 
-        return alert
+        return aggregated
 
     def get_stats(self) -> Dict[str, Any]:
         """Get alert statistics."""

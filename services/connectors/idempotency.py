@@ -115,7 +115,7 @@ def prune_expired(db: Session, *, limit: int = 5000) -> int:
             execution_options={"synchronize_session": False},
         )
         try:
-            return int(res.rowcount or 0)
+            return int(getattr(res, "rowcount", None) or 0)
         except Exception:
             return 0
 

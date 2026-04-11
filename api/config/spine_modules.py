@@ -22,7 +22,7 @@ def load_spine_modules() -> SpineModules:
     admin_enabled = _env_bool("FG_ADMIN_API_ENABLED", True)
     graceful_shutdown_enabled = _env_bool("FG_GRACEFUL_SHUTDOWN_ENABLED", True)
 
-    admin_router = None
+    admin_router: object | None = None
     if admin_enabled:
         from api.admin import router as admin_router
 
@@ -32,7 +32,7 @@ def load_spine_modules() -> SpineModules:
             get_shutdown_manager,
         )
     else:
-        ConnectionTrackingMiddleware = None  # type: ignore[assignment]
+        ConnectionTrackingMiddleware = None  # type: ignore[misc,assignment]
         get_shutdown_manager = None  # type: ignore[assignment]
 
     return SpineModules(

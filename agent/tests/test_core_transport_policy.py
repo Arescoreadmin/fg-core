@@ -4,7 +4,7 @@ import pytest
 import requests
 from requests.adapters import HTTPAdapter
 
-from agent.core_client import CoreClient, PinningAdapter
+from agent.core_client import CoreClient, FingerprintPinningAdapter as PinningAdapter
 
 
 def _addr(ip):

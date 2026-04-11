@@ -10,8 +10,10 @@ Proves:
 from __future__ import annotations
 
 import uuid
+from typing import cast
 
 import pytest
+from fastapi import Request
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -232,7 +234,9 @@ def test_audit_bundle_export_chain_failure_no_success_record(
         url = SimpleNamespace(path="/audit/export")
 
     with pytest.raises(HTTPException) as exc:
-        audit_export(DummyReq(), "1970-01-01T00:00:00Z", "9999-12-31T23:59:59Z")
+        audit_export(
+            cast(Request, DummyReq()), "1970-01-01T00:00:00Z", "9999-12-31T23:59:59Z"
+        )
     assert exc.value.status_code == 409
 
     from api.db import get_engine as _get_engine

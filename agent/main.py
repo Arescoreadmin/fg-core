@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import random
+import sys
 import socket
 import ssl
 import stat
@@ -153,7 +154,7 @@ class AgentRuntime:
         tamper = False
         debugged = False
 
-        if os.name == "nt":
+        if sys.platform == "win32":
             debugged = bool(ctypes.windll.kernel32.IsDebuggerPresent())
             expected = WINDOWS_EXPECTED_DIR
             tamper = (

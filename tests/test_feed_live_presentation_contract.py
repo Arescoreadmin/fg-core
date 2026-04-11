@@ -12,7 +12,7 @@ if not API_KEY:
 def build_app(auth_enabled: bool):
     # Always set auth env before importing main (since main/build_app may read env)
     os.environ["FG_AUTH_ENABLED"] = "1" if auth_enabled else "0"
-    os.environ["FG_API_KEY"] = API_KEY
+    os.environ["FG_API_KEY"] = API_KEY or ""
 
     import api.main as main
 

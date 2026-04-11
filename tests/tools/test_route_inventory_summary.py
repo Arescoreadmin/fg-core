@@ -31,3 +31,13 @@ def test_route_inventory_summary_object_shape(monkeypatch):
     )
 
     assert check_route_inventory.main() == 0
+
+
+def test_unwrap_v1_with_wrapper() -> None:
+    wrapped = {"schema_version": "1", "generated_at": "2026-01-01", "data": [1, 2, 3]}
+    assert check_route_inventory._unwrap_v1(wrapped) == [1, 2, 3]
+
+
+def test_unwrap_v1_without_wrapper() -> None:
+    plain: list[object] = [{"method": "GET", "path": "/foo"}]
+    assert check_route_inventory._unwrap_v1(plain) is plain

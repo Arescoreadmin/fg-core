@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from engine.doctrine import apply_doctrine
-from engine.pipeline import Mitigation as PipelineMitigation
+from engine.evaluate import Mitigation as PipelineMitigation
 
 from api.config.startup_validation import compliance_module_enabled
 
