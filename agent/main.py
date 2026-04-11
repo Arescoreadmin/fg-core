@@ -17,10 +17,40 @@ from pathlib import Path
 from typing import Any
 from urllib import error, request
 
+
+class _AgentJsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        record.message = record.getMessage()
+        ts = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(record.created))
+        ts += f".{int(record.msecs):03d}Z"
+        payload: dict[str, Any] = {
+            "timestamp": ts,
+            "level": record.levelname,
+            "service": "fg-agent",
+            "event": record.message,
+            "logger": record.name,
+        }
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(payload, default=str)
+
+
+def _configure_agent_logging() -> None:
+    """Add JSON handler to root logger if no handlers are already configured.
+
+    Additive and idempotent: preserves any handlers already attached by the
+    host process (service wrapper, pytest caplog, etc.).
+    """
+    root = logging.getLogger()
+    if root.handlers:
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(_AgentJsonFormatter())
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+
+
 LOG = logging.getLogger("frostgate.agent")
-logging.basicConfig(
-    level=logging.INFO, format='{"level":"%(levelname)s","msg":"%(message)s"}'
-)
 
 WINDOWS_CONFIG = Path(r"C:\ProgramData\FrostGate\agent\config.json")
 LINUX_CONFIG = Path("/etc/frostgate/agent/config.json")
@@ -208,6 +238,7 @@ def _default_config_path() -> Path:
 
 
 def main() -> int:
+    _configure_agent_logging()
     runtime = AgentRuntime(_default_config_path())
     runtime.enroll_if_needed()
     return runtime.heartbeat_loop()

@@ -4,20 +4,16 @@ import json
 
 from loguru import logger
 
+from jobs.logging_config import configure_job_logging
+
 STATE_DIR = Path(__file__).resolve().parents[2] / "state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
 CHAOS_STATE_FILE = STATE_DIR / "chaos_status.json"
 
 
 async def job() -> None:
-    """
-    Smoke-test chaos job.
-
-    Real implementation should:
-      - inject controlled failures / latency
-      - validate resilience / recovery
-      - write status for /chaos/status
-    """
+    """Smoke-test chaos job."""
+    configure_job_logging()
     payload = {
         "status": "ok",
         "last_run": datetime.now(timezone.utc).isoformat(),

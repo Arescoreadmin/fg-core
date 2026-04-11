@@ -6,6 +6,8 @@ Use this in uvicorn/gunicorn:  admin_gateway.asgi:app
 
 from __future__ import annotations
 
+from admin_gateway.logging_config import configure_gateway_logging
 from admin_gateway.main import build_app
 
+configure_gateway_logging()
 app = build_app()

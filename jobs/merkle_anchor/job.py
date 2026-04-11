@@ -20,6 +20,8 @@ from typing import Any, Optional
 
 from loguru import logger
 
+from jobs.logging_config import configure_job_logging
+
 # State directory for anchor artifacts
 STATE_DIR = Path(
     os.getenv("FG_STATE_DIR", str(Path(__file__).resolve().parents[2] / "state"))
@@ -379,21 +381,8 @@ def verify_entry_in_anchor(
 
 
 async def job(tenant_id: str) -> dict[str, Any]:
-    """
-    Merkle anchor job - computes and anchors audit entries for a single tenant.
-
-    tenant_id is required. Job will not execute without a bound tenant context.
-
-    Workflow:
-    1. Determine time window (last N hours)
-    2. Fetch audit entries from database (tenant-scoped)
-    3. Compute leaf hashes and Merkle root
-    4. Create anchor record with chain linkage
-    5. Append to anchor log
-    6. Update status file
-
-    Returns job result dict.
-    """
+    """Merkle anchor job — computes and anchors audit entries for a single tenant."""
+    configure_job_logging()
     if not tenant_id:
         raise ValueError("tenant_id is required to run the merkle anchor job")
 

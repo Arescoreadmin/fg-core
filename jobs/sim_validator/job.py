@@ -20,6 +20,8 @@ from typing import Any, Optional
 
 from loguru import logger
 
+from jobs.logging_config import configure_job_logging
+
 # State directory for artifacts
 STATE_DIR = Path(
     os.getenv("FG_STATE_DIR", str(Path(__file__).resolve().parents[2] / "state"))
@@ -566,16 +568,8 @@ async def job(
     update_golden: bool = False,
     fail_on_drift: bool = True,
 ) -> dict[str, Any]:
-    """
-    Simulation validator job.
-
-    Args:
-        update_golden: If True, update golden outputs instead of validating
-        fail_on_drift: If True, fail when outputs drift from golden
-
-    Returns:
-        Job result dict
-    """
+    """Simulation validator job."""
+    configure_job_logging()
     logger.info(
         f"sim_validator.job: starting with {len(SIMULATION_INPUTS)} simulations"
     )

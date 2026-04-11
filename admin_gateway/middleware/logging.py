@@ -41,6 +41,8 @@ class StructuredLoggingMiddleware(BaseHTTPMiddleware):
                 "duration_ms": round(duration_ms, 2),
                 "client_ip": request.client.host if request.client else None,
                 "user_agent": request.headers.get("user-agent"),
+                "tenant_id": getattr(request.state, "tenant_id", None),
+                "subject": getattr(request.state, "user_id", None),
             },
         )
 
