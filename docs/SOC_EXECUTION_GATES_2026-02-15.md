@@ -2003,3 +2003,27 @@ Validation:
 - `.venv/bin/python -m mypy .` → Success: no issues found in 720 source files
 - `.venv/bin/ruff check .` → All checks passed!
 - `make fg-contract` → Contract diff: OK
+
+## 2026-04-11 — Task 6.2: add /auth/token-exchange to CSRF exempt paths
+
+Critical file changed:
+- `admin_gateway/auth/csrf.py`
+
+Change type: security enforcement correction
+
+Runtime impact: none for existing browser flows; enables machine-to-machine token exchange
+
+Change summary:
+- Added `/auth/token-exchange` to `CSRF_EXEMPT_PATHS` in `admin_gateway/auth/csrf.py`.
+- The token exchange endpoint (`POST /auth/token-exchange`) is a machine-to-machine (M2M) Bearer token flow. Callers present a Keycloak-issued access token; they have no existing browser session and therefore cannot possess a CSRF cookie. CSRF attacks require an attacker to exploit an existing authenticated session — no session means no CSRF risk. The endpoint is fully protected by possession of a valid OIDC access token (signature, issuer, audience, expiry all verified by `verify_access_token()`).
+- No change to CSRF enforcement on any browser-session-based endpoint.
+- No weakening of any existing CSRF protection.
+
+Security/governance impact:
+- Corrects a design gap that made the M2M token exchange endpoint unreachable.
+- No reduction in security: Bearer token verification provides equivalent or stronger protection than CSRF cookies for M2M flows.
+- All browser-facing POST endpoints remain CSRF-protected.
+
+Validation:
+- `admin_gateway/tests/test_auth_flow_task62.py`: 12/12 pass (all DoD requirements)
+- `make fg-fast` → running; `ruff check` → clean after removing unused import
