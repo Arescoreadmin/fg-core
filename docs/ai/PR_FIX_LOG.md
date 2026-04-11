@@ -2001,6 +2001,57 @@ Added two targeted regression tests to `tests/security/test_tenant_contract_endp
 
 ---
 
+### 2026-04-11 — Task 7.1: Structured logging (enforced, auditable)
+
+**Area:** Observability · Structured Logging · JSON
+
+**Root cause of gap:**
+`api/logging_config.py` had a `configure_logging()` function using loguru but it was **never called** anywhere. All services (`api/`, `admin_gateway/`, `agent/`) emitted unstructured plaintext logs. The `admin_gateway` request middleware logged `extra={}` fields that were silently dropped because no JSON formatter was configured. Job processes used loguru's default human-readable stderr sink.
+
+**Fix:**
+
+- `api/logging_config.py` — rewritten: dropped loguru dependency, implemented stdlib `_JsonFormatter` with guaranteed fields `timestamp, level, service, event, logger`. Any `extra={}` keys are merged into the JSON payload. Idempotent `configure_logging(service=...)` function.
+- `admin_gateway/logging_config.py` (NEW) — parallel stdlib `_JsonFormatter` + `configure_gateway_logging()` for the gateway service.
+- `admin_gateway/asgi.py` — calls `configure_gateway_logging()` before `build_app()`. Safe: `asgi.py` is NOT imported by tests (they import from `admin_gateway.main`), so pytest `caplog` is unaffected.
+- `admin_gateway/middleware/logging.py` — added `tenant_id` and `subject` (from `request.state`) to the per-request log entry.
+- `agent/main.py` — replaced pseudo-JSON `basicConfig` format string with proper `_AgentJsonFormatter` class (service=`fg-agent`).
+- `agent/app/agent_main.py` — replaced plaintext `logging.basicConfig` with `_JsonFormatter` (service=`fg-agent-app`) configured inside `run()`.
+- `jobs/logging_config.py` (NEW) — loguru `configure_job_logging()` that calls `logger.remove(); logger.add(sys.stdout, serialize=True)`. Called at the start of each job's `async def job()`.
+- `jobs/chaos/job.py`, `jobs/sim_validator/job.py`, `jobs/merkle_anchor/job.py` — added `configure_job_logging()` call at entry.
+
+**Why configure from ASGI entry points, NOT module scope:**
+`logging.basicConfig(force=True)` or replacing root handlers at module scope would destroy pytest's `caplog` fixture handler on import. The gateway's `asgi.py` is the actual uvicorn entry point and is never imported in tests. Job `configure_job_logging()` calls are inside `async def job()` functions, not at module level.
+
+**Files changed:**
+- `api/logging_config.py` — rewritten (stdlib JsonFormatter, was loguru)
+- `admin_gateway/logging_config.py` — NEW (parallel JsonFormatter)
+- `admin_gateway/asgi.py` — wire configure_gateway_logging()
+- `admin_gateway/middleware/logging.py` — add tenant_id + subject fields
+- `agent/main.py` — proper JsonFormatter (was pseudo-JSON format string)
+- `agent/app/agent_main.py` — proper JsonFormatter (was plaintext basicConfig)
+- `jobs/logging_config.py` — NEW (loguru JSON config)
+- `jobs/chaos/job.py` — configure_job_logging() at entry
+- `jobs/sim_validator/job.py` — configure_job_logging() at entry
+- `jobs/merkle_anchor/job.py` — configure_job_logging() at entry
+- `admin_gateway/tests/test_structured_logging_task71.py` — NEW (10 tests)
+
+**Validation commands executed:**
+1. `.venv/bin/pytest -q admin_gateway/tests/test_structured_logging_task71.py` → 10 passed
+2. `.venv/bin/pytest -q admin_gateway/tests/` → 172 passed
+3. `.venv/bin/pytest -q tests/test_jobs_smoke.py tests/test_job_tenant_isolation.py tests/test_merkle_anchor.py tests/test_sim_validator.py` → 81 passed
+4. `.venv/bin/mypy --config-file mypy.ini api/logging_config.py admin_gateway/logging_config.py admin_gateway/asgi.py admin_gateway/middleware/logging.py agent/main.py agent/app/agent_main.py jobs/logging_config.py` → Success: no issues found in 7 source files
+5. `make fg-fast` → All checks passed!
+6. `GITHUB_BASE_REF=main python tools/ci/check_soc_review_sync.py` → no changed critical-prefix files (none of the modified files match CRITICAL_PREFIXES)
+
+**AI Notes:**
+- Do NOT call `configure_logging()` or `configure_gateway_logging()` at module scope or inside `build_app()` — that replaces pytest's caplog handler on import
+- The safe entry point for gateway is `admin_gateway/asgi.py` (uvicorn's ASGI entry, never imported by tests)
+- For standalone workers/jobs, call inside the `run()` or `async def job()` entry function
+- `_JsonFormatter` merges all non-stdlib `LogRecord` attributes into the JSON payload — `extra={}` fields flow through automatically
+- loguru and stdlib logging are separate systems; jobs use loguru, services use stdlib; each needs its own configure function
+
+---
+
 ### 2026-04-11 — Task 6.2: end-to-end auth flow implementation
 
 **Area:** Authentication · JWT validation · CSRF · End-to-end flow
@@ -2162,5 +2213,24 @@ HTTP-level tests for Task 6.2 DoD written for the first time, all failed with `4
 3. `ruff check .` → All checks passed
 4. `ruff format --check .` → All checks passed
 5. `.venv/bin/mypy .` → 99 errors (−16 from 115)
+
+Include:
+- task id 6.2
+- root cause
+- files changed
+- auth flow path corrected
+- negative-path coverage added or updated
+- commands run
+- results
+
+---
+OUTPUT RULE
+
+Output ONLY:
+1) a concise remediation summary suitable for PR notes
+OR
+2) BLOCKED: <single concise reason>
+
+No extra text.
 
 ---

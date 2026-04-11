@@ -1,12 +1,11 @@
-"""Structured JSON logging configuration for fg-core services.
+"""Structured JSON logging configuration for Admin Gateway.
 
-Provides a stdlib-based JSON formatter so every log record emitted by
-logging.getLogger() is machine-parseable with a consistent field set.
+See api/logging_config.py for the canonical JsonFormatter implementation.
+This module provides the same pattern for the gateway service.
 
-Usage (ASGI entry point or job run() — NOT module scope):
-    from api.logging_config import configure_logging
-    configure_logging()          # service defaults to "fg-core"
-    configure_logging(service="my-worker")
+Usage (from admin_gateway/asgi.py — NOT from build_app or module scope):
+    from admin_gateway.logging_config import configure_gateway_logging
+    configure_gateway_logging()
 """
 
 from __future__ import annotations
@@ -17,7 +16,6 @@ import os
 import time
 from typing import Any
 
-# Attributes that are part of the stdlib LogRecord — excluded from extra payload
 _STDLIB_ATTRS: frozenset[str] = frozenset(
     {
         "args",
@@ -53,7 +51,7 @@ class _JsonFormatter(logging.Formatter):
     Any extra={...} keys passed to the logger call are merged in.
     """
 
-    def __init__(self, service: str = "fg-core") -> None:
+    def __init__(self, service: str = "admin-gateway") -> None:
         super().__init__()
         self._service = service
 
@@ -70,7 +68,6 @@ class _JsonFormatter(logging.Formatter):
             "logger": record.name,
         }
 
-        # Merge extra= fields (request_id, tenant_id, subject, etc.)
         for key, val in record.__dict__.items():
             if key not in _STDLIB_ATTRS and not key.startswith("_"):
                 payload[key] = val
@@ -81,22 +78,21 @@ class _JsonFormatter(logging.Formatter):
         return json.dumps(payload, default=str)
 
 
-def configure_logging(service: str = "fg-core") -> None:
-    """Configure root logger to emit JSON to stdout.
+def configure_gateway_logging() -> None:
+    """Configure root logger to emit JSON to stdout for Admin Gateway.
 
     Idempotent — a second call is a no-op if JSON logging is already set up.
 
-    MUST be called from ASGI entry points (asgi.py) or job run() functions,
-    NOT at module scope, to avoid replacing pytest's log capture handlers.
+    Call from admin_gateway/asgi.py, NOT from build_app() or module scope.
     """
     root = logging.getLogger()
     if any(
         isinstance(h.formatter, _JsonFormatter) for h in root.handlers if h.formatter
     ):
-        return  # already configured
+        return
 
     level = os.getenv("FG_LOG_LEVEL", "INFO").upper()
     handler = logging.StreamHandler()
-    handler.setFormatter(_JsonFormatter(service=service))
+    handler.setFormatter(_JsonFormatter(service="admin-gateway"))
     root.handlers = [handler]
     root.setLevel(level)
