@@ -2001,6 +2001,49 @@ Added two targeted regression tests to `tests/security/test_tenant_contract_endp
 
 ---
 
+### 2026-04-11 — Task 6.2: end-to-end auth flow implementation
+
+**Area:** Authentication · JWT validation · CSRF · End-to-end flow
+
+**Root cause of gap:**
+`POST /auth/token-exchange` (the machine-to-machine Bearer token intake endpoint) was blocked by the CSRF middleware before JWT validation could run. Machine-to-machine callers present a fresh Bearer token with no existing browser session — they cannot have a CSRF cookie. CSRF attacks require an existing authenticated session; therefore CSRF protection on this endpoint provides no security value and prevents legitimate use.
+
+**Discovery method:**
+HTTP-level tests for Task 6.2 DoD written for the first time, all failed with `403 CSRF token missing from cookie` instead of exercising JWT validation.
+
+**Auth flow surface corrected:**
+`admin_gateway/auth/csrf.py` — added `/auth/token-exchange` to `CSRF_EXEMPT_PATHS`. All browser-session POST endpoints remain CSRF-protected. The token exchange endpoint is protected by Bearer token possession (signature, issuer, audience, expiry all verified by `verify_access_token()`).
+
+**Files modified:**
+- `admin_gateway/auth/csrf.py` — CSRF exemption for token-exchange endpoint
+- `admin_gateway/tests/test_auth_flow_task62.py` — 12 new HTTP-level DoD tests
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — SOC review entry for csrf.py change
+
+**All Task 6.2 DoD validation requirements covered:**
+1. Valid token → 200 + session cookie ✓
+2. Session cookie from exchange → protected endpoint success ✓
+3. Missing Bearer header → 401 ✓
+4. Wrong scheme (Basic) → 401 ✓
+5. Tampered/invalid token → 401 (mocked path) ✓
+6. Wrong issuer → 401 ✓
+7. Wrong audience → 401 ✓
+8. Expired token → 401 ✓
+9. Real RSA tamper (different signing key) → 401 (cryptographic proof) ✓
+10. Insufficient scope → 403 ✓
+11. Wrong tenant → 403 ✓
+12. OIDC not configured → 503 (fail-closed) ✓
+
+**Validation commands executed:**
+1. `.venv/bin/pytest -q admin_gateway/tests/test_auth_flow_task62.py` → 12 passed
+2. `.venv/bin/pytest -q tests -k 'auth_flow or keycloak or oidc or jwt'` → 16 passed
+3. `make required-tests-gate` → PASS
+4. `GITHUB_BASE_REF=main python tools/ci/check_soc_review_sync.py` → OK
+5. `ruff check .` → All checks passed!
+6. `ruff format --check .` → All files already formatted
+7. `make fg-fast` → All checks passed! (33 s)
+
+---
+
 ### 2026-04-11 — CI repair: required-tests-gate (contract) + soc-review-sync
 
 **Area:** CI Governance · required-tests-gate · soc-review-sync
