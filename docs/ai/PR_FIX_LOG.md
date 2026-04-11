@@ -2001,6 +2001,49 @@ Added two targeted regression tests to `tests/security/test_tenant_contract_endp
 
 ---
 
+### 2026-04-11 — Task 7.1 review fix: logging initialization idempotency
+
+**Area:** Observability · Structured Logging · Import-time safety
+
+**Review findings addressed:**
+
+**Finding 1 — `agent/main.py` import-time handler clobber:**
+Lines 38–41 mutated the root logger's handler list at module import time (`logging.getLogger().handlers = [_handler]`). Any host-configured handler (pytest `caplog`, service wrapper) was silently replaced on `import agent.main`. The `_AgentJsonFormatter` class was correct; only the setup location was wrong.
+
+Fix: extracted the setup into `_configure_agent_logging()`. The function is additive and idempotent: it checks `if root.handlers: return` before doing anything, then adds (not replaces) a single handler. Called only from `main()`, never at module scope.
+
+**Finding 2 — `jobs/logging_config.py` destructive repeat calls:**
+`configure_job_logging()` unconditionally called `logger.remove()` on every invocation. In a long-lived worker that attached a runtime sink after the first configure call, a second call would silently drop that sink.
+
+Fix: added a module-level `_configured: bool = False` flag. `logger.remove()` now runs only on the first call. Subsequent calls return immediately, leaving any externally attached sinks intact.
+
+**Files modified:**
+- `agent/main.py` — moved logging setup from module scope into `_configure_agent_logging()`; called from `main()`
+- `jobs/logging_config.py` — added `_configured` flag; `logger.remove()` runs once only
+- `admin_gateway/tests/test_structured_logging_task71.py` — added 2 agent tests; moved 2 loguru tests to root (admin venv lacks loguru)
+- `tests/test_job_logging_idempotency.py` — NEW: 2 loguru idempotency tests (root venv)
+
+**Tests proving fixes:**
+1. `test_importing_agent_main_does_not_replace_root_handlers` — reloads `agent.main` with a sentinel handler pre-attached; asserts sentinel survives
+2. `test_agent_configure_logging_additive_when_handlers_absent` — clears root handlers, calls `_configure_agent_logging()` twice; asserts exactly one handler added
+3. `test_configure_job_logging_idempotent_no_sink_removal` — attaches sentinel after first configure, calls again; asserts sentinel still receives messages
+4. `test_configure_job_logging_structured_output_intact` — verifies loguru `serialize=True` JSON schema intact
+
+**Validation commands:**
+1. `.venv/bin/pytest -q admin_gateway/tests/test_structured_logging_task71.py` → 12 passed
+2. `admin_gateway/.venv/bin/pytest -q admin_gateway/tests/test_structured_logging_task71.py` → 12 passed (admin venv)
+3. `.venv/bin/pytest -q tests/test_job_logging_idempotency.py` → 2 passed
+4. `.venv/bin/pytest -q tests/test_jobs_smoke.py tests/test_job_tenant_isolation.py tests/test_job_logging_idempotency.py` → 21 passed
+5. `make fg-fast` → All checks passed
+6. `GITHUB_BASE_REF=main python tools/ci/check_soc_review_sync.py` → OK
+
+**AI Notes:**
+- `agent.main` module-level code runs in embedded/test contexts; `if root.handlers: return` is the correct guard (do not use `if not root.handlers` with a clobber)
+- `_configured` flag in `jobs/logging_config.py` can be reset to `False` in tests by direct assignment — this is intentional for test isolation; do not make it private
+- loguru tests must NOT live in `admin_gateway/tests/` — admin_gateway venv has no loguru; they belong in root `tests/`
+
+---
+
 ### 2026-04-11 — Task 7.1: Structured logging (enforced, auditable)
 
 **Area:** Observability · Structured Logging · JSON

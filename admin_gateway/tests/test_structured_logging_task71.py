@@ -7,6 +7,10 @@ Proves all DoD requirements:
 4. No plaintext secrets leak into log output (secret redaction gate)
 5. HTTP request logs from StructuredLoggingMiddleware are parseable JSON
 6. configure_gateway_logging() does NOT replace pytest's caplog handlers
+
+Review-finding fixes (addendum):
+7. Importing agent.main does NOT replace existing root handlers
+8. configure_job_logging() is truly idempotent — no logger.remove() on repeat
 """
 
 from __future__ import annotations
@@ -257,3 +261,55 @@ def test_api_configure_logging_idempotent() -> None:
         assert len(root.handlers) == count1
     finally:
         root.handlers = orig_handlers
+
+
+# ---------------------------------------------------------------------------
+# Review-finding fixes: agent import safety + job logging idempotency
+# ---------------------------------------------------------------------------
+
+
+def test_importing_agent_main_does_not_replace_root_handlers() -> None:
+    """Importing agent.main must NOT clobber pre-existing root handlers.
+
+    A pre-configured handler (e.g. pytest caplog, service wrapper) must
+    survive the import.
+    """
+    import importlib
+
+    root = logging.getLogger()
+    sentinel = logging.StreamHandler()
+    orig_handlers = list(root.handlers)
+    root.handlers = [sentinel]
+    try:
+        # Force re-execution of module-level code by reloading
+        import agent.main as agent_main_mod
+
+        importlib.reload(agent_main_mod)
+        assert sentinel in root.handlers, (
+            "agent.main import replaced pre-existing root handler"
+        )
+    finally:
+        root.handlers = orig_handlers
+
+
+def test_agent_configure_logging_additive_when_handlers_absent() -> None:
+    """_configure_agent_logging() adds a JSON handler when root has none."""
+    from agent.main import _AgentJsonFormatter, _configure_agent_logging
+
+    root = logging.getLogger()
+    orig_handlers = list(root.handlers)
+    root.handlers = []
+    try:
+        _configure_agent_logging()
+        assert len(root.handlers) == 1
+        assert isinstance(root.handlers[0].formatter, _AgentJsonFormatter)
+        # Second call must be a no-op
+        _configure_agent_logging()
+        assert len(root.handlers) == 1
+    finally:
+        root.handlers = orig_handlers
+
+
+# Note: configure_job_logging() idempotency tests require loguru (not in the
+# admin_gateway venv). Those tests live in tests/test_job_logging_idempotency.py
+# which runs under the root venv where loguru is available.

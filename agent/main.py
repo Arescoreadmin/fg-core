@@ -35,10 +35,20 @@ class _AgentJsonFormatter(logging.Formatter):
         return json.dumps(payload, default=str)
 
 
-_handler = logging.StreamHandler()
-_handler.setFormatter(_AgentJsonFormatter())
-logging.getLogger().handlers = [_handler]
-logging.getLogger().setLevel(logging.INFO)
+def _configure_agent_logging() -> None:
+    """Add JSON handler to root logger if no handlers are already configured.
+
+    Additive and idempotent: preserves any handlers already attached by the
+    host process (service wrapper, pytest caplog, etc.).
+    """
+    root = logging.getLogger()
+    if root.handlers:
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(_AgentJsonFormatter())
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+
 
 LOG = logging.getLogger("frostgate.agent")
 
@@ -228,6 +238,7 @@ def _default_config_path() -> Path:
 
 
 def main() -> int:
+    _configure_agent_logging()
     runtime = AgentRuntime(_default_config_path())
     runtime.enroll_if_needed()
     return runtime.heartbeat_loop()
