@@ -21,10 +21,12 @@ log = logging.getLogger("admin-gateway.csrf")
 # Methods that modify state and require CSRF protection
 STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
-# Paths that are exempt from CSRF (e.g., OIDC callback which comes from IdP)
+# Paths that are exempt from CSRF (e.g., OIDC callback which comes from IdP,
+# and machine-to-machine token exchange which is protected by Bearer possession)
 CSRF_EXEMPT_PATHS = {
     "/auth/callback",
     "/auth/oidc/callback",
+    "/auth/token-exchange",
 }
 
 
