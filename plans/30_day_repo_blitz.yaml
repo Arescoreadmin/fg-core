@@ -270,16 +270,31 @@ phases:
               - ".venv/bin/pytest -q tests -k 'keycloak or oidc or auth_flow'"
               - "make fg-fast"
 
-          - id: "6.2"
-            title: "End-to-end auth"
-            status: "pending"
-            depends_on: ["6.1"]
-            definition_of_done:
-              - "Login through gateway to core works end-to-end"
-            validation:
-              - "Auth smoke path succeeds"
-            validation_commands:
-              - "make fg-fast || true"
+      - id: "6.2"
+        title: "End-to-end auth flow"
+        status: "pending"
+        depends_on: ["6.1"]
+        definition_of_done:
+          - "A Keycloak-issued token for the configured realm/client is accepted on the intended gateway entry path"
+          - "Gateway-authenticated requests reach protected core functionality without local bypasses or alternate trust paths"
+          - "JWT validation enforces issuer, audience, signature, and expiry"
+          - "Authorization enforces required scopes and tenant isolation on protected routes"
+          - "Misconfigured OIDC discovery, JWKS, issuer, audience, or client wiring fails explicitly"
+        validation:
+          - "Valid token request to a protected endpoint returns success"
+          - "Request without token returns 401 or repository-defined equivalent"
+          - "Request with tampered token returns 401 or repository-defined equivalent"
+          - "Request with wrong issuer or audience returns 401 or repository-defined equivalent"
+          - "Request with valid token but insufficient scope returns 403 or repository-defined equivalent"
+          - "Request with valid token for the wrong tenant is denied"
+          - "OIDC/JWKS misconfiguration fails closed and does not fall back silently"
+          - "Fast lane and codex gates remain green"
+        validation_commands:
+          - "make fg-idp-validate"
+          - ".venv/bin/pytest -q tests -k 'auth_flow or keycloak or oidc or jwt'"
+          - ".venv/bin/pytest -q tests/security -k 'tenant or scope or auth'"
+          - "make fg-fast"
+          - "bash codex_gates.sh"
 
       - id: "7.0"
         name: "Observability"
