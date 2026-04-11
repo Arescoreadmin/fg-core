@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 from collections import defaultdict
 from pathlib import Path
 
@@ -70,8 +71,8 @@ def dependency_categories_for_record(rec) -> list[str]:
     return sorted(set(categories))
 
 
-def runtime_routes_ast() -> list[dict[str, object]]:
-    rows: list[dict[str, object]] = []
+def runtime_routes_ast() -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
     for rec in iter_route_records(REPO / "api"):
         rows.append(
             {
@@ -90,7 +91,7 @@ def runtime_routes_ast() -> list[dict[str, object]]:
     )
 
 
-def runtime_routes_app() -> list[dict[str, object]] | None:
+def runtime_routes_app() -> list[dict[str, Any]] | None:
     """
     Best-effort runtime route extraction from the built FastAPI app.
 
@@ -106,7 +107,7 @@ def runtime_routes_app() -> list[dict[str, object]] | None:
     except Exception:
         return None
 
-    rows: list[dict[str, object]] = []
+    rows: list[dict[str, Any]] = []
     for r in getattr(app, "routes", []) or []:
         path = getattr(r, "path", None)
         methods = getattr(r, "methods", None)
@@ -118,11 +119,11 @@ def runtime_routes_app() -> list[dict[str, object]] | None:
     return sorted(rows, key=lambda x: (str(x["path"]), str(x["method"])))
 
 
-def contract_routes() -> list[dict[str, object]]:
+def contract_routes() -> list[dict[str, Any]]:
     if not CONTRACT_OPENAPI.exists():
         return []
     doc = json.loads(CONTRACT_OPENAPI.read_text(encoding="utf-8"))
-    rows: list[dict[str, object]] = []
+    rows: list[dict[str, Any]] = []
     for path, ops in sorted((doc.get("paths") or {}).items()):
         if not isinstance(ops, dict):
             continue
@@ -160,10 +161,6 @@ def match_plane(path: str) -> list[str]:
     matches.sort(reverse=True)
     top_len = matches[0][0]
     return sorted({plane for plen, plane in matches if plen == top_len})
-
-
-def _route_tuple(method: str, path: str) -> tuple[str, str]:
-    return (method.upper(), path)
 
 
 def plane_coverage_summary(routes: list[dict[str, object]]) -> dict[str, int]:

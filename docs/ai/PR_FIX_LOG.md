@@ -2001,6 +2001,49 @@ Added two targeted regression tests to `tests/security/test_tenant_contract_endp
 
 ---
 
+### 2026-04-10 — mypy Zero: drive all 99 remaining errors to 0 across 720 source files
+
+**Area:** Type Safety · mypy 1.5.1 · zero-error baseline
+
+**Issue:**
+99 mypy errors remained after Batch-7. This entry covers the final remediation pass that brings the repo to a clean `Success: no issues found in 720 source files`.
+
+**Error families fixed:**
+
+- **NoReturn annotations** (`api/control_plane_v2.py`, `api/main.py`): `_error_response()` and `_fail()` always raise. Annotating `-> NoReturn` lets mypy narrow `Optional[str]` after call sites.
+- **Optional/None safety** (`api/dev_events.py`, `api/defend.py`, `api/forensics.py`, `api/ui_ai_console.py`, `api/agent_phase2.py`, `api/testing_control_tower.py`): `or ""` fallbacks on `str | None` values; renamed `reg` → `reg2` to avoid variable type reassignment; getattr chain for `request.state.auth.key_prefix`.
+- **Module-attribute errors** (`api/billing.py`, `api/ratelimit.py`, `agent/app/rate_limit/redis_limiter.py`, `admin_gateway/auth/oidc.py`, `api/auth.py`, `agent/main.py`): `sys.version` instead of `os.sys.version`; `redis: Any = None` pattern for optional import; `getattr` for optional registry function; `sys.platform == "win32"` guard (mypy-narrowable vs `os.name == "nt"`); `base64.urlsafe_b64encode` instead of inline encoding.
+- **Type collisions / wrong-import** (`api/roe_engine.py`, `api/key_rotation.py`, `api/admin.py`, `api/config/spine_modules.py`): corrected import path for `Mitigation`; fixed `rotate_api_key` signature; renamed `manager` → `alert_manager` to avoid collision with `GracefulShutdownManager`; `ConnectionTrackingMiddleware = None  # type: ignore[misc,assignment]` for conditional middleware.
+- **Contravariance for comparison operators** (`api/security_alerts.py`): `__ge__`/`__gt__` must accept `str` (the base type), not `AlertSeverity`. Implemented with `isinstance` guard + `str.__ge__/str.__gt__` fallback.
+- **Pydantic default_factory** (`api/defend.py`): `TieD` requires `policy_hash`; used `lambda: TieD(policy_hash="0" * 64)`.
+- **SQLAlchemy `Result[Any]` lacks `.rowcount`** (`services/connectors/idempotency.py`): `getattr(res, "rowcount", None) or 0`.
+- **Nonexistent kwarg** (`api/connectors_policy.py`): removed `response_hash=None` from call.
+- **`HTTPException.detail` typed as `str | None`** (`api/ui_ai_console.py`): used `_detail = getattr(denied, "detail", None)` + `isinstance(_detail, dict)` guard.
+- **`setattr` for dynamically set attribute** (`admin_gateway/auth/scopes.py`): `setattr(wrapper, "_required_scope", scope_str)` instead of direct attribute assignment.
+- **starlette `_MiddlewareFactory` Protocol false positives** (4 files: `admin_gateway/main.py`, `tests/test_resilience_guard_determinism.py`, `tests/security/test_spine_enforcement.py`, `tests/security/test_exception_shield_middleware.py`): added per-module `disable_error_code = arg-type,call-arg` in `mypy.ini`.
+- **psycopg site-packages** (`mypy.ini`): `explicit_package_bases = True` caused psycopg in site-packages to be discovered. Fixed with `[mypy-psycopg]` AND `[mypy-psycopg.*]` both set to `follow_imports = skip`.
+- **Test file fixes** (`tests/test_stats_endpoint.py`, `tests/test_feed_endpoint.py`, `tests/test_decision_diff_surfaces.py`, `tests/test_decision_diff_db.py`, `tests/test_decision_artifact_schema.py`, `backend/tests/test_stats_endpoint.py`): `cast(FastAPI, app)` for `TestClient` arg.
+- **Other test fixes**: `cast(Request, DummyReq())` in export test; `assert row is not None` + direct attribute write in rollout test; `cast(DeviceUpsertRequest, ...)` in billing test; `os.environ["FG_API_KEY"] = API_KEY or ""`; de-indentation fix in `tests/test_release_gate.py`.
+- **tools/ci** (`tools/ci/plane_registry_checks.py`, `tools/ci/check_route_inventory.py`): return type annotations `list[dict[str, Any]]`; removed duplicate `_route_tuple`; `_unwrap_v1` typed as `object -> object`.
+- **Test route inventory** (`tests/security/test_route_inventory_audit_endpoints.py`): typed `found` dict and used `RouteRecord` from correct import path.
+- **Agent transport test** (`agent/tests/test_core_transport_policy.py`): import `FingerprintPinningAdapter` via `core_client` module alias.
+
+**Files changed (39):**
+`mypy.ini`, `api/control_plane_v2.py`, `api/main.py`, `api/dev_events.py`, `api/defend.py`, `api/forensics.py`, `api/ui_ai_console.py`, `api/agent_phase2.py`, `api/testing_control_tower.py`, `api/billing.py`, `api/ratelimit.py`, `agent/app/rate_limit/redis_limiter.py`, `admin_gateway/auth/oidc.py`, `api/auth.py`, `agent/main.py`, `api/roe_engine.py`, `api/key_rotation.py`, `api/admin.py`, `api/config/spine_modules.py`, `api/connectors_policy.py`, `api/security_alerts.py`, `admin_gateway/auth/scopes.py`, `services/connectors/idempotency.py`, `services/compliance_cp_extension/service.py`, `tools/ci/plane_registry_checks.py`, `tools/ci/check_route_inventory.py`, `tests/security/test_route_inventory_audit_endpoints.py`, `tests/security/test_export_path_tenant_isolation.py`, `tests/agent/test_phase21_rollout.py`, `tests/test_billing_module.py`, `tests/test_decision_artifact_schema.py`, `tests/test_decision_diff_db.py`, `tests/test_decision_diff_surfaces.py`, `tests/test_feed_endpoint.py`, `tests/test_feed_live_presentation_contract.py`, `tests/test_release_gate.py`, `tests/test_stats_endpoint.py`, `backend/tests/test_stats_endpoint.py`, `agent/tests/test_core_transport_policy.py`
+
+**AI Notes:**
+- Starlette 0.49.1 `_MiddlewareFactory` is a `ParamSpec`-based Protocol; `BaseHTTPMiddleware` subclasses and pure ASGI callables always trigger false positives when passed to `add_middleware()`. Use per-module `disable_error_code = arg-type,call-arg` in `mypy.ini` rather than touching the middleware classes.
+- `explicit_package_bases = True` widens mypy's discovery to site-packages. Any package there with a `# mypy: disable-error-code` comment using an invalid code (like psycopg) will surface errors. Fix with `follow_imports = skip` for both `[mypy-pkg]` and `[mypy-pkg.*]` sections.
+- `str` subclass comparison operator overrides must accept the base type (`str`), not the subtype — Python's comparison protocol requires contravariance on the `other` parameter.
+- `-> NoReturn` is the correct annotation for always-raising helpers; it enables mypy to narrow subsequent code without requiring `assert`/cast guards.
+
+**Commands run:**
+1. `.venv/bin/python -m mypy .` → `Success: no issues found in 720 source files`
+2. `.venv/bin/ruff check .` → `All checks passed!`
+3. `.venv/bin/ruff format --check .` → `715 files already formatted`
+
+---
+
 ### 2026-04-10 — mypy Batch-7: return-value, var-annotated, arg-type fixes + CI repair
 
 **Area:** Type Safety · mypy · FastAPI response annotations · CI contracts

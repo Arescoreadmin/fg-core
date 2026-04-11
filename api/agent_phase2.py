@@ -818,8 +818,8 @@ def poll_commands(
     engine = get_engine()
     with Session(engine) as session:
         _require_valid_device_identity(session, device)
-        reg = _require_operational_device(session, device)
-        reg = (
+        _require_operational_device(session, device)
+        reg2 = (
             session.query(AgentDeviceRegistry)
             .filter(
                 AgentDeviceRegistry.device_id == device.device_id,
@@ -827,7 +827,7 @@ def poll_commands(
             )
             .first()
         )
-        quarantined = bool(reg and reg.status == "quarantined")
+        quarantined = bool(reg2 and reg2.status == "quarantined")
         lease_now = _utcnow()
         rows = (
             session.query(AgentCommand)

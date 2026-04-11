@@ -150,7 +150,10 @@ def register_run_summary(request: Request, body: dict[str, Any]) -> dict[str, st
     _verify_signature(request, canonical)
 
     actor = str(
-        getattr(getattr(request, "state", None), "auth", None).key_prefix or "ci"
+        getattr(
+            getattr(getattr(request, "state", None), "auth", None), "key_prefix", None
+        )
+        or "ci"
     )
     register_run(canonical, actor=actor, policy_change_event=derived_policy_event)
     return {"status": "registered", "run_id": str(canonical["run_id"])}

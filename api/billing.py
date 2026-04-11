@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import os
 import subprocess
+import sys
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -1623,7 +1624,7 @@ def export_evidence(
                 "git_sha": _git_commit(),
                 "schema_migrations": [m.version for m in _load_migrations()],
                 "service_version": os.getenv("FG_SERVICE_VERSION", "unknown"),
-                "python_version": os.sys.version,
+                "python_version": sys.version,
                 "schema_hash": canonical_hash([m.version for m in _load_migrations()]),
                 "verifier_version": VERIFIER_VERSION,
                 "expected_pubkey_kid": "fg_billing_default",

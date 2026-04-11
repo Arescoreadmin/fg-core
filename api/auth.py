@@ -15,10 +15,13 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import APIKeyHeader
 import api.auth_scopes as auth_scopes
 
+_registry_get_tenant = None
 try:
-    from tools.tenants.registry import get_tenant as _registry_get_tenant
+    import tools.tenants.registry as _tenant_registry_mod
+
+    _registry_get_tenant = getattr(_tenant_registry_mod, "get_tenant", None)
 except Exception:  # pragma: no cover
-    _registry_get_tenant = None
+    pass
 
 
 def get_tenant(tenant_id: str):

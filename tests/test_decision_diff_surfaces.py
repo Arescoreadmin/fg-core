@@ -1,5 +1,8 @@
 import os
+from typing import cast
+
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.auth_scopes import mint_key
@@ -7,7 +10,7 @@ from api.main import app
 
 
 os.environ.setdefault("FG_RL_ENABLED", "0")
-client = TestClient(app)
+client = TestClient(cast(FastAPI, app))
 
 
 @pytest.mark.smoke

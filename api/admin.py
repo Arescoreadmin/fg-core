@@ -1316,8 +1316,8 @@ async def get_system_health() -> SystemHealthResponse:
     try:
         from api.security_alerts import get_alert_manager
 
-        manager = get_alert_manager()
-        alert_stats = manager.get_stats()
+        alert_manager = get_alert_manager()
+        alert_stats = alert_manager.get_stats()
     except ImportError:
         pass
 

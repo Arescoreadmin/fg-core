@@ -7,7 +7,7 @@ import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, Protocol, cast
+from typing import Any, NoReturn, Optional, Protocol, cast
 from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -425,7 +425,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.state.startup_validation = None
     app.state.dos_guard_enabled = bool(dos_guard_config.enabled)
 
-    def _fail(detail: str = ERR_INVALID) -> None:
+    def _fail(detail: str = ERR_INVALID) -> NoReturn:
         raise HTTPException(status_code=401, detail=detail)
 
     def _hdr(req: Request, name: str) -> Optional[str]:

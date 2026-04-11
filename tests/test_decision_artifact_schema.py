@@ -55,9 +55,13 @@ def test_defend_response_matches_schema(
     # Ensure rate limiting is disabled BEFORE importing api.main (app is built at import time).
     os.environ["FG_RL_ENABLED"] = "0"
 
+    from typing import cast as _cast
+
+    from fastapi import FastAPI as _FastAPI
+
     from api.main import app as main_app  # import after env is set
 
-    client = TestClient(main_app)
+    client = TestClient(_cast(_FastAPI, main_app))
     key = mint_key("defend:write", tenant_id="test-tenant")
 
     resp = client.post(

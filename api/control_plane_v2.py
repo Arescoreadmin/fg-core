@@ -40,7 +40,7 @@ import hashlib
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, NoReturn, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -297,7 +297,7 @@ def _error_response(
     error_code: str,
     message: str,
     trace_id: str,
-) -> None:
+) -> NoReturn:
     raise HTTPException(
         status_code=status_code,
         detail={

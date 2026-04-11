@@ -459,12 +459,13 @@ def check_key_rotation_status(key_prefix: str) -> Optional[KeyRotationInfo]:
 
 def rotate_api_key(
     old_key_prefix: str,
+    tenant_id: str = "",
     new_scopes: Optional[List[str]] = None,
     new_ttl_seconds: Optional[int] = None,
 ) -> RotationResult:
     """Rotate an API key."""
     return get_rotation_manager().rotate_key(
-        old_key_prefix, new_scopes, new_ttl_seconds
+        old_key_prefix, tenant_id, new_scopes, new_ttl_seconds
     )
 
 

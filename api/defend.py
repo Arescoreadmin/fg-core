@@ -6,7 +6,7 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
@@ -222,7 +222,7 @@ class DecisionExplain(BaseModel):
     anomaly_score: float = 0.0
     llm_note: Optional[str] = None
 
-    tie_d: TieD = Field(default_factory=TieD)
+    tie_d: TieD = Field(default_factory=lambda: TieD(policy_hash="0" * 64))
     score: int = 0
 
     roe_applied: bool = False
@@ -362,7 +362,7 @@ def _persist_decision_best_effort(
         if _supports_chain_fields():
             chain_fields = chain_fields_for_decision(
                 db,
-                tenant_id=req.tenant_id,
+                tenant_id=req.tenant_id or "",
                 request_json=req_value,
                 response_json=resp_value,
                 threat_level=str(decision.threat_level),
@@ -501,7 +501,10 @@ def defend(
     resp_model = DefendResponse(
         schema_version="v1",
         explanation_brief=summary,
-        threat_level=str(threat_level).lower(),  # ensure literal match
+        threat_level=cast(
+            Literal["none", "low", "medium", "high", "critical"],
+            str(threat_level).lower(),
+        ),
         mitigations=api_mitigations,
         explain=explain,
         ai_adversarial_score=float(result.ai_adversarial_score or 0.0),
