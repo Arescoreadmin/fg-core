@@ -1970,3 +1970,36 @@ Notes:
 - `resolution.py:673`: extracted `_key_val` local variable before passing to `_update_key_usage`; added `if _key_val is not None` guard for mypy narrowing. Semantically equivalent to original `(key_lookup or key_hash)` guard.
 - `resolution.py:775`: annotated `scopes: set[str] = getattr(auth, "scopes", set())` so mypy can infer the set element type.
 - `auth_federation.py:55-56`: extracted `_groups_raw = claims.get("groups")` to a single variable before the isinstance check, allowing mypy to narrow through the conditional. Same isinstance-narrowing fix pattern as batch-3.
+
+## 2026-04-11 — mypy zero: type-only remediation across auth, security, and CI tooling
+
+Critical files changed:
+- `admin_gateway/auth/oidc.py`
+- `admin_gateway/auth/scopes.py`
+- `api/auth.py`
+- `api/security_alerts.py`
+- `tools/ci/check_route_inventory.py`
+- `tools/ci/plane_registry_checks.py`
+
+Change type: typing-only
+
+Runtime impact: none
+
+Change summary:
+- `admin_gateway/auth/oidc.py`: added `base64` import for urlsafe encode; narrowed `public_key` to `Any` type before conditional RSA/EC assignment — no change to key verification logic or trust decisions.
+- `admin_gateway/auth/scopes.py`: replaced direct attribute write (`wrapper._required_scope = scope_str`) with `setattr(wrapper, "_required_scope", scope_str)` to satisfy mypy's attr-defined check — identical runtime behavior.
+- `api/auth.py`: replaced direct attribute access on `_tenant_registry_mod` with `getattr(_tenant_registry_mod, "get_tenant", None)` — safer optional binding, no enforcement change.
+- `api/security_alerts.py`: fixed `__ge__`/`__gt__` override signatures from `AlertSeverity` to `str` (base type) to satisfy contravariance rules; added `isinstance` guard and fallback to `str.__ge__`/`str.__gt__` for non-AlertSeverity inputs — identical ordering semantics.
+- `tools/ci/check_route_inventory.py`: refactored `_unwrap_v1` to use explicit `isinstance` assertion before dict access — same logic, narrowed for mypy; added unit tests in `tests/tools/test_route_inventory_summary.py`.
+- `tools/ci/plane_registry_checks.py`: added `list[dict[str, Any]]` return type annotations to `runtime_routes_ast`, `runtime_routes_app`, and `contract_routes`; removed duplicate `_route_tuple` function — no behavioral change.
+
+Security/governance impact:
+- No weakening of auth enforcement, scope checks, or access control decisions.
+- No change to alert routing, severity ordering semantics, or SOC invariants.
+- No change to route inventory check logic or contract verification behavior.
+- All changes are static-analysis-only; runtime paths are semantically equivalent to prior versions.
+
+Validation:
+- `.venv/bin/python -m mypy .` → Success: no issues found in 720 source files
+- `.venv/bin/ruff check .` → All checks passed!
+- `make fg-contract` → Contract diff: OK
