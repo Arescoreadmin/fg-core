@@ -13,7 +13,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,7 +20,7 @@ from typing import Any, Optional
 
 from loguru import logger
 
-from jobs.logging_config import configure_job_logging
+from jobs.logging_config import configure_job_logging, resolve_request_id
 
 # State directory for artifacts
 STATE_DIR = Path(
@@ -568,10 +567,20 @@ def validate_all(
 async def job(
     update_golden: bool = False,
     fail_on_drift: bool = True,
+    request_id: str | None = None,
 ) -> dict[str, Any]:
-    """Simulation validator job."""
+    """Simulation validator job.
+
+    Args:
+        update_golden: When True, re-generate golden outputs instead of validating.
+        fail_on_drift: When True, raise on detected drift (validation mode).
+        request_id: Optional parent request_id for trace continuity. Must be a
+            valid UUID v4; any other value is replaced with a fresh UUID v4.
+            Once resolved it is immutable for the duration of this execution.
+    """
     configure_job_logging()
-    with logger.contextualize(request_id=str(uuid.uuid4())):
+    rid = resolve_request_id(request_id)
+    with logger.contextualize(request_id=rid):
         logger.info(
             f"sim_validator.job: starting with {len(SIMULATION_INPUTS)} simulations"
         )
