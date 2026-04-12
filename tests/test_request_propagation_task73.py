@@ -400,3 +400,70 @@ def test_resolve_request_id_does_not_accept_tenant_id_as_request_id():
             f"Tenant-like value {tenant_like!r} accepted as request_id"
         )
         assert _UUID4_RE.match(result)
+
+
+# ---------------------------------------------------------------------------
+# PR #219 review fix: metadata-type-safe IngestMessage.request_id
+# ---------------------------------------------------------------------------
+
+
+def test_ingest_message_request_id_none_when_metadata_is_none():
+    """IngestMessage.request_id must return None when metadata is None."""
+    from api.ingest_bus import IngestMessage
+
+    msg = IngestMessage.__new__(IngestMessage)
+    object.__setattr__(msg, "metadata", None)
+    assert msg.request_id is None
+
+
+def test_ingest_message_request_id_none_when_metadata_is_non_dict():
+    """IngestMessage.request_id must return None for any non-dict metadata type."""
+    from api.ingest_bus import IngestMessage
+
+    for bad_meta in [[], "string", 42, 3.14, True, b"bytes"]:
+        msg = IngestMessage.__new__(IngestMessage)
+        object.__setattr__(msg, "metadata", bad_meta)
+        assert msg.request_id is None, (
+            f"Expected None for metadata={bad_meta!r}, got {msg.request_id!r}"
+        )
+
+
+def test_ingest_message_request_id_none_when_malformed():
+    """IngestMessage.request_id returns None for absent/malformed request_id values."""
+    from api.ingest_bus import IngestMessage
+    import uuid as _uuid
+
+    for bad_meta in [
+        {},
+        {"request_id": None},
+        {"request_id": 12345},
+        {"request_id": "not-a-uuid"},
+        {"request_id": str(_uuid.uuid1())},  # v1 rejected
+        {"request_id": "../../etc/passwd"},
+    ]:
+        msg = IngestMessage(
+            tenant_id="t1",
+            source="test",
+            event_type="e",
+            payload={},
+            metadata=bad_meta,
+        )
+        assert msg.request_id is None, (
+            f"Expected None for {bad_meta!r}, got {msg.request_id!r}"
+        )
+
+
+def test_ingest_message_request_id_valid_uuid4_preserved():
+    """IngestMessage.request_id must still return a valid UUID4 from metadata."""
+    from api.ingest_bus import IngestMessage
+    import uuid
+
+    rid = str(uuid.uuid4())
+    msg = IngestMessage(
+        tenant_id="t1",
+        source="test",
+        event_type="e",
+        payload={},
+        metadata={"request_id": rid},
+    )
+    assert msg.request_id == rid.lower()

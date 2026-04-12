@@ -120,7 +120,12 @@ class IngestMessage:
         Returns None (not a generated value) so the consumer can decide whether
         to inherit the parent ID or generate a fresh one.  Validation is strict:
         only UUID v4 values are returned; anything else is treated as absent.
+
+        Safe against malformed external payloads: if metadata is None or not a
+        dict, returns None instead of raising AttributeError.
         """
+        if not isinstance(self.metadata, dict):
+            return None
         raw = self.metadata.get("request_id")
         if isinstance(raw, str) and _UUID4_RE.match(raw.strip()):
             return raw.strip().lower()

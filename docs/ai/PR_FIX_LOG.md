@@ -2378,3 +2378,39 @@ Jobs generated a fresh `uuid.uuid4()` unconditionally. Any caller with a known `
 - `logger.contextualize()` context var is immutable within the `with` block — no override mechanism exists or should be added
 - `sim_validator/job.py` and `merkle_anchor/job.py` no longer import `uuid` directly — they rely on `resolve_request_id` from `logging_config`
 
+
+---
+
+## PR #219 review findings fix (2026-04-12)
+
+**Branch:** `blitz/task-7.3-distributed-tracing`
+
+### Finding 1 — Failure-path request logging
+
+**File:** `api/middleware/logging.py`
+
+**Problem:** `RequestLoggingMiddleware.dispatch()` only emitted a log record on the success path. A downstream exception skipped the `log.info()` call entirely, leaving the request untraced.
+
+**Fix:** Refactored to `try/finally` — `status_code` initialised to `500`, updated to actual status on success. One log record emitted per request regardless of downstream exception.
+
+**Tests added** (`tests/test_request_tracing_task72.py`):
+- `test_request_logging_middleware_emits_log_on_downstream_exception`
+- `test_request_logging_failure_path_includes_request_id_and_status`
+- `test_request_logging_exception_is_reraised`
+
+### Finding 2 — Metadata-type-safe `IngestMessage.request_id`
+
+**File:** `api/ingest_bus.py`
+
+**Problem:** `IngestMessage.request_id` property called `self.metadata.get(...)` without checking type first. If `metadata` is `None` or any non-dict (list, string, int, etc.) the call raises `AttributeError`.
+
+**Fix:** Added `if not isinstance(self.metadata, dict): return None` guard before `.get()`.
+
+**Tests added** (`tests/test_request_propagation_task73.py`):
+- `test_ingest_message_request_id_none_when_metadata_is_none`
+- `test_ingest_message_request_id_none_when_metadata_is_non_dict`
+- `test_ingest_message_request_id_none_when_malformed`
+- `test_ingest_message_request_id_valid_uuid4_preserved`
+
+### Gate result
+`make fg-fast`: all 10 gates passed (SOC doc updated for `api/middleware/logging.py` change).
