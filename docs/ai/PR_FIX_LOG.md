@@ -2556,3 +2556,18 @@ soc invariants: FAILED
 - Do NOT remove `FG_API_KEY` from `REQUIRED_PROD_ENV_VARS`.
 - When `REQUIRED_PROD_ENV_VARS` grows, update ALL three fixture locations above plus `_VALID_PROD_ENV` in `tests/security/test_required_env_enforcement.py`.
 - `test_compliance_modules.py::_seed_prod_env` already had `FG_API_KEY` — no change needed there.
+
+## 2026-04-12 — fmt-check failure: tests/security/test_secret_scanner.py
+
+**Root cause:** `tests/security/test_secret_scanner.py` was created without running the repo formatter. `ruff format` required reformatting: blank line added after module docstring, `@pytest.mark.parametrize` argument lists normalized to trailing-comma multi-line style, inline comments trimmed of extra whitespace.
+
+**File formatted:** `tests/security/test_secret_scanner.py`
+
+**Command used:** `ruff format tests/security/test_secret_scanner.py`
+
+**Change type:** Formatting only — no semantic changes, no assertions altered, no tests removed.
+
+**Validation:**
+- `ruff format --check tests/security/test_secret_scanner.py` → 1 file already formatted
+- `make fmt-check` → All checks passed! 439 files already formatted
+- `pytest -q tests/security/test_secret_scanner.py` → 60 passed
