@@ -38,13 +38,15 @@ A gap is `Post-launch` if:
 
 | ID | Gap | Severity | Evidence (file / test / CI lane) | Owner | ETA / Milestone | Definition of Done |
 |----|-----|----------|----------------------------------|-------|-----------------|--------------------|
-| G001 | Auth fallback must be OFF by default (compose + prod-like) | Launch-risk | `docker-compose.yml:96` / `scripts/prod_profile_check.py` / `.github/workflows/ci.yml` / `unit` | repo | V2 | fallback off by default; only enabled in explicit dev profile |
+| _None_ | No active production-readiness gaps | - | `scripts/prod_profile_check.py` / `api/config/prod_invariants.py` / `tests/security/test_prod_invariants.py` | repo | - | N/A |
 
 ---
 
 ## Closed Gaps (Implemented in This Release)
 
 The following gaps were closed on 2026-01-31:
+
+- **G001 - Auth fallback default**: Closed on 2026-04-12. Default remains `FG_AUTH_ALLOW_FALLBACK=false` in production compose and prod/staging runtime invariants hard-fail if fallback is enabled.
 
 - **Former G002 - SLSA provenance attestations**: Now generated via `scripts/provenance.py` (SLSA v1.0 format). Validated by `tests/test_compliance_gates.py::TestProvenanceGeneration`.
 
