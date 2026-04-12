@@ -64,6 +64,7 @@ from api.agent_tokens import router as agent_tokens_router
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
 from api.middleware.exception_shield import FGExceptionShieldMiddleware
+from api.middleware.logging import RequestLoggingMiddleware
 from api.middleware.request_validation import (
     RequestValidationConfig,
     RequestValidationMiddleware,
@@ -380,6 +381,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         return await call_next(request)
 
     _add_middleware(app, FGExceptionShieldMiddleware)
+    _add_middleware(app, RequestLoggingMiddleware)
 
     connection_tracking_middleware = getattr(
         spine_modules, "connection_tracking_middleware", None

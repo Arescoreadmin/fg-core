@@ -2095,6 +2095,47 @@ Fix: added a module-level `_configured: bool = False` flag. `logger.remove()` no
 
 ---
 
+### 2026-04-11 — Task 7.2: End-to-end request tracing (propagation + integrity)
+
+**Area:** Observability · Request Tracing · Log Injection Prevention
+
+**Root cause of gap:**
+Three separate gaps existed:
+1. `admin_gateway/middleware/request_id.py` accepted any attacker-controlled string as `X-Request-Id` (no format validation). Log injection via a crafted header was possible.
+2. Core API had `request.state.request_id` set by `SecurityHeadersMiddleware` but no per-request structured log entry that captured it alongside method, path, status, and duration.
+3. Job processes (`chaos`, `sim_validator`, `merkle_anchor`) had no `request_id` in any log record — impossible to correlate job runs to gateway requests.
+
+**Fix:**
+
+- `admin_gateway/middleware/request_id.py` — added `_UUID4_RE` compiled regex and `_safe_request_id()` helper. Inbound `X-Request-Id` is accepted only if it matches strict UUID v4 format; anything else (empty, non-UUID, injection payload) is silently replaced with a fresh `uuid.uuid4()`.
+- `api/middleware/logging.py` (NEW) — `RequestLoggingMiddleware(BaseHTTPMiddleware)` emits one `log.info("request", extra={...})` per request with `request_id`, `method`, `path`, `status_code`, `duration_ms`, `client_ip`. Sits inner-to-`SecurityHeadersMiddleware` so `request.state.request_id` is already populated.
+- `api/main.py` — imports `RequestLoggingMiddleware`; wired as the 2nd `_add_middleware` call (after `FGExceptionShieldMiddleware`, before `SecurityHeadersMiddleware`).
+- `jobs/chaos/job.py` — added `import uuid`; body wrapped in `with logger.contextualize(request_id=str(uuid.uuid4()))`.
+- `jobs/sim_validator/job.py` — added `import uuid`; body wrapped in `with logger.contextualize(request_id=str(uuid.uuid4()))`.
+- `jobs/merkle_anchor/job.py` — added `import uuid`; body wrapped in `with logger.contextualize(request_id=str(uuid.uuid4()), tenant_id=tenant_id)` (tenant included for attribution).
+
+**Middleware ordering note (core API):**
+`add_middleware()` last-added = outermost. `RequestLoggingMiddleware` is added 2nd (inner to `SecurityHeaders`). Request flow: `AuthGate → ... → SecurityHeaders [sets request_id] → RequestLogging [reads + logs request_id] → ExceptionShield → routes`.
+
+**Files changed:**
+- `admin_gateway/middleware/request_id.py` — UUID v4 validation via `_safe_request_id()`
+- `api/middleware/logging.py` — NEW: `RequestLoggingMiddleware`
+- `api/main.py` — import + wire `RequestLoggingMiddleware`
+- `jobs/chaos/job.py` — `import uuid` + `logger.contextualize`
+- `jobs/sim_validator/job.py` — `import uuid` + `logger.contextualize`
+- `jobs/merkle_anchor/job.py` — `import uuid` + `logger.contextualize` (+ `tenant_id`)
+- `tests/test_request_tracing_task72.py` — NEW: 8 DoD tests (core API + jobs)
+- `admin_gateway/tests/test_request_tracing_task72.py` — NEW: 9 gateway tests
+
+**AI Notes:**
+- `_safe_request_id()` must use strict UUID v4 regex (version digit = `4`, variant bits = `[89ab]`). UUID v1/v3/v5 must NOT pass through.
+- `RequestLoggingMiddleware` must sit INNER to `SecurityHeadersMiddleware` — if placed outer, `request.state.request_id` is not yet set when the log fires.
+- `logger.contextualize()` is a sync context manager using `contextvars.ContextVar`; all loguru calls within the block automatically include the bound keys. No individual log call changes needed.
+- The `_configured` flag in `jobs/logging_config.py` must be reset to `False` in tests before calling `configure_job_logging()` for clean capture.
+- Do NOT apply UUID-strict validation to `api/middleware/security_headers.py` — existing test `test_request_id_passthrough` uses `"test-request-123"` and that file's sanitization is already adequate.
+
+---
+
 ### 2026-04-11 — Task 6.2: end-to-end auth flow implementation
 
 **Area:** Authentication · JWT validation · CSRF · End-to-end flow
