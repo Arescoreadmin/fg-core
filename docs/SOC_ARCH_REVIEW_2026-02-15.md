@@ -369,3 +369,31 @@ Format: `Risk | File | Description | Exploit Path | Fix Strategy`
 
 ### Rollback
 - Revert `api/auth_scopes/resolution.py` and `api/main.py` changes if unexpected service auth issues arise.
+
+
+---
+
+## 2026-04-11 — Task 7.2: End-to-end request tracing (propagation + integrity)
+
+### What changed
+- `api/middleware/logging.py` (NEW): `RequestLoggingMiddleware` — one structured log entry per request, captures `request_id`, `method`, `path`, `status_code`, `duration_ms`, `client_ip`. No auth logic, no route-level side effects.
+- `api/main.py`: `RequestLoggingMiddleware` wired as the 2nd `_add_middleware` call, inner to `SecurityHeadersMiddleware` so `request.state.request_id` is populated before the log fires.
+- `admin_gateway/middleware/request_id.py`: `_safe_request_id()` added — inbound `X-Request-Id` accepted only if it matches strict UUID v4 regex; otherwise replaced with `uuid.uuid4()`. Prevents log injection via attacker-controlled header.
+
+### Why
+- Per-request log entries are required for trace correlation. Without a structured entry the `request_id` set by `SecurityHeadersMiddleware` was unreachable from log analysis.
+- The gateway accepted any string as `X-Request-Id`, enabling log injection. UUID v4 format validation closes that gap.
+
+### Risk
+- **Low.** `RequestLoggingMiddleware` is read-only with respect to request/response content — it logs metadata and returns the upstream response unchanged.
+- Gateway callers that previously passed non-UUID `X-Request-Id` values will now receive a fresh UUID4 in the response. All internal services use generated UUIDs. `test_health_propagates_request_id` updated to use a valid UUID4.
+
+### Validation performed
+- `pytest -q admin_gateway/tests/test_request_tracing_task72.py`: 9 passed
+- `pytest -q tests/test_request_tracing_task72.py`: 8 passed
+- `pytest -q admin_gateway/tests/`: 183 passed
+- `pytest -q tests/test_jobs_smoke.py tests/test_merkle_anchor.py tests/test_sim_validator.py`: all passed
+
+### Rollback
+- Remove `RequestLoggingMiddleware` import and `_add_middleware` call from `api/main.py`.
+- Revert `admin_gateway/middleware/request_id.py` to remove UUID validation.

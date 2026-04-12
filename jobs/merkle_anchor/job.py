@@ -14,6 +14,7 @@ import hashlib
 import hmac
 import json
 import os
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -386,65 +387,68 @@ async def job(tenant_id: str) -> dict[str, Any]:
     if not tenant_id:
         raise ValueError("tenant_id is required to run the merkle anchor job")
 
-    window_hours = DEFAULT_WINDOW_HOURS
-    window_end = datetime.now(timezone.utc)
-    window_start = window_end - timedelta(hours=window_hours)
+    with logger.contextualize(request_id=str(uuid.uuid4()), tenant_id=tenant_id):
+        window_hours = DEFAULT_WINDOW_HOURS
+        window_end = datetime.now(timezone.utc)
+        window_start = window_end - timedelta(hours=window_hours)
 
-    logger.info(
-        f"merkle_anchor.job: starting window {window_start.isoformat()} to {window_end.isoformat()} "
-        f"for tenant {tenant_id}"
-    )
+        logger.info(
+            f"merkle_anchor.job: starting window {window_start.isoformat()} to {window_end.isoformat()} "
+            f"for tenant {tenant_id}"
+        )
 
-    # Fetch audit entries (tenant-scoped)
-    entries = get_audit_entries_in_window(window_start, window_end, tenant_id=tenant_id)
-    logger.info(f"merkle_anchor.job: found {len(entries)} entries in window")
+        # Fetch audit entries (tenant-scoped)
+        entries = get_audit_entries_in_window(
+            window_start, window_end, tenant_id=tenant_id
+        )
+        logger.info(f"merkle_anchor.job: found {len(entries)} entries in window")
 
-    # Compute leaf hashes
-    leaf_hashes = [compute_leaf_hash(e) for e in entries]
+        # Compute leaf hashes
+        leaf_hashes = [compute_leaf_hash(e) for e in entries]
 
-    # Build Merkle tree
-    tree = MerkleTree(leaf_hashes)
-    merkle_root = tree.root
+        # Build Merkle tree
+        tree = MerkleTree(leaf_hashes)
+        merkle_root = tree.root
 
-    # Load chain state
-    chain_state = load_anchor_chain()
-    prev_anchor_hash = chain_state.get("prev_anchor_hash")
+        # Load chain state
+        chain_state = load_anchor_chain()
+        prev_anchor_hash = chain_state.get("prev_anchor_hash")
 
-    # Create anchor record (tenant_id is included in the durable record and its hash)
-    anchor_record = create_anchor_record(
-        merkle_root=merkle_root,
-        window_start=window_start,
-        window_end=window_end,
-        leaf_count=len(entries),
-        leaf_hashes=leaf_hashes,
-        prev_anchor_hash=prev_anchor_hash,
-        tenant_id=tenant_id,
-    )
+        # Create anchor record (tenant_id is included in the durable record and its hash)
+        anchor_record = create_anchor_record(
+            merkle_root=merkle_root,
+            window_start=window_start,
+            window_end=window_end,
+            leaf_count=len(entries),
+            leaf_hashes=leaf_hashes,
+            prev_anchor_hash=prev_anchor_hash,
+            tenant_id=tenant_id,
+        )
 
-    # Append to log
-    append_to_anchor_log(anchor_record)
+        # Append to log
+        append_to_anchor_log(anchor_record)
 
-    # Update chain state
-    chain_state["prev_anchor_hash"] = anchor_record["anchor_hash"]
-    chain_state["anchor_count"] = chain_state.get("anchor_count", 0) + 1
-    save_anchor_chain(chain_state)
+        # Update chain state
+        chain_state["prev_anchor_hash"] = anchor_record["anchor_hash"]
+        chain_state["anchor_count"] = chain_state.get("anchor_count", 0) + 1
+        save_anchor_chain(chain_state)
 
-    # Write status file
-    status = {
-        "status": "ok",
-        "tenant_id": tenant_id,
-        "anchored_at": anchor_record["anchor_time"],
-        "window_start": window_start.isoformat(),
-        "window_end": window_end.isoformat(),
-        "entry_count": len(entries),
-        "merkle_root": merkle_root,
-        "anchor_hash": anchor_record["anchor_hash"],
-        "anchor_count": chain_state["anchor_count"],
-    }
-    ANCHOR_STATE_FILE.write_text(json.dumps(status, indent=2))
-    logger.info("merkle_anchor.job: anchor created", extra=status)
+        # Write status file
+        status = {
+            "status": "ok",
+            "tenant_id": tenant_id,
+            "anchored_at": anchor_record["anchor_time"],
+            "window_start": window_start.isoformat(),
+            "window_end": window_end.isoformat(),
+            "entry_count": len(entries),
+            "merkle_root": merkle_root,
+            "anchor_hash": anchor_record["anchor_hash"],
+            "anchor_count": chain_state["anchor_count"],
+        }
+        ANCHOR_STATE_FILE.write_text(json.dumps(status, indent=2))
+        logger.info("merkle_anchor.job: anchor created", extra=status)
 
-    return status
+        return status
 
 
 # Export verification functions for external use

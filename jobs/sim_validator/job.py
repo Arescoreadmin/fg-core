@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -570,51 +571,52 @@ async def job(
 ) -> dict[str, Any]:
     """Simulation validator job."""
     configure_job_logging()
-    logger.info(
-        f"sim_validator.job: starting with {len(SIMULATION_INPUTS)} simulations"
-    )
+    with logger.contextualize(request_id=str(uuid.uuid4())):
+        logger.info(
+            f"sim_validator.job: starting with {len(SIMULATION_INPUTS)} simulations"
+        )
 
-    if update_golden:
-        # Update mode: run simulations and save as new golden outputs
+        if update_golden:
+            # Update mode: run simulations and save as new golden outputs
+            outputs = run_all_simulations()
+            save_golden_outputs(outputs, GOLDEN_VERSION)
+            return {
+                "status": "ok",
+                "mode": "update_golden",
+                "version": GOLDEN_VERSION,
+                "simulation_count": len(outputs),
+            }
+
+        # Validation mode
+        result = validate_all(fail_on_drift=fail_on_drift)
+
+        # Save artifacts
         outputs = run_all_simulations()
-        save_golden_outputs(outputs, GOLDEN_VERSION)
-        return {
-            "status": "ok",
-            "mode": "update_golden",
-            "version": GOLDEN_VERSION,
-            "simulation_count": len(outputs),
+        artifacts_dir = save_artifacts(SIMULATION_INPUTS, outputs, result)
+
+        status = {
+            "status": "ok" if result.passed else "failed",
+            "mode": "validate",
+            "version": result.version,
+            "timestamp": result.timestamp,
+            "total_simulations": result.total_simulations,
+            "passed": result.passed_count,
+            "failed": result.failed_count,
+            "drift_detected": result.drift_detected,
+            "artifacts_dir": str(artifacts_dir),
         }
 
-    # Validation mode
-    result = validate_all(fail_on_drift=fail_on_drift)
+        if not result.passed:
+            status["failures"] = result.failures
+            logger.warning(
+                f"sim_validator.job: validation FAILED - {result.failed_count} failures"
+            )
+        else:
+            logger.info(
+                f"sim_validator.job: validation PASSED - {result.passed_count}/{result.total_simulations}"
+            )
 
-    # Save artifacts
-    outputs = run_all_simulations()
-    artifacts_dir = save_artifacts(SIMULATION_INPUTS, outputs, result)
-
-    status = {
-        "status": "ok" if result.passed else "failed",
-        "mode": "validate",
-        "version": result.version,
-        "timestamp": result.timestamp,
-        "total_simulations": result.total_simulations,
-        "passed": result.passed_count,
-        "failed": result.failed_count,
-        "drift_detected": result.drift_detected,
-        "artifacts_dir": str(artifacts_dir),
-    }
-
-    if not result.passed:
-        status["failures"] = result.failures
-        logger.warning(
-            f"sim_validator.job: validation FAILED - {result.failed_count} failures"
-        )
-    else:
-        logger.info(
-            f"sim_validator.job: validation PASSED - {result.passed_count}/{result.total_simulations}"
-        )
-
-    return status
+        return status
 
 
 # Export for external use

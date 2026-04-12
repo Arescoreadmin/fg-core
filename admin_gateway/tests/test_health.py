@@ -22,8 +22,10 @@ def test_health_includes_request_id(client):
 
 
 def test_health_propagates_request_id(client):
-    """Test request ID is propagated from header."""
-    custom_id = "test-request-123"
+    """Test request ID is propagated from header (must be a valid UUID v4)."""
+    import uuid
+
+    custom_id = str(uuid.uuid4())
     response = client.get("/health", headers={"X-Request-Id": custom_id})
     assert response.status_code == 200
     assert response.headers["X-Request-Id"] == custom_id
