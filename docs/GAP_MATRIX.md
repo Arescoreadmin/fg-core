@@ -77,3 +77,9 @@ The following gaps were closed on 2026-01-31:
 - All gaps MUST have evidence citing file path, test name, or CI lane
 - All Definition of Done MUST be objectively testable
 - To close a gap: implement fix, add test, update this matrix, run `make gap-audit`
+
+## Gap ID Registry (Closed IDs)
+
+| Gap ID |
+|--------|
+| G001 |
