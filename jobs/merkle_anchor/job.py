@@ -21,7 +21,7 @@ from typing import Any, Optional
 
 from loguru import logger
 
-from jobs.logging_config import configure_job_logging
+from jobs.logging_config import configure_job_logging, resolve_request_id
 
 # State directory for anchor artifacts
 STATE_DIR = Path(
@@ -381,13 +381,21 @@ def verify_entry_in_anchor(
     return True, "Verified"
 
 
-async def job(tenant_id: str) -> dict[str, Any]:
-    """Merkle anchor job — computes and anchors audit entries for a single tenant."""
+async def job(tenant_id: str, request_id: str | None = None) -> dict[str, Any]:
+    """Merkle anchor job — computes and anchors audit entries for a single tenant.
+
+    Args:
+        tenant_id: Required. Scopes all audit entry access to this tenant.
+        request_id: Optional parent request_id for trace continuity. Must be a
+            valid UUID v4; any other value is replaced with a fresh UUID v4.
+            Once resolved it is immutable for the duration of this execution.
+    """
     configure_job_logging()
     if not tenant_id:
         raise ValueError("tenant_id is required to run the merkle anchor job")
 
-    with logger.contextualize(request_id=str(uuid.uuid4()), tenant_id=tenant_id):
+    rid = resolve_request_id(request_id)
+    with logger.contextualize(request_id=rid, tenant_id=tenant_id):
         window_hours = DEFAULT_WINDOW_HOURS
         window_end = datetime.now(timezone.utc)
         window_start = window_end - timedelta(hours=window_hours)

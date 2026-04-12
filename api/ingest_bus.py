@@ -18,10 +18,17 @@ import asyncio
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 from uuid import uuid4
+
+# Strict UUID v4 pattern for request_id validation in message metadata.
+_UUID4_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
 
 log = logging.getLogger("frostgate.ingest_bus")
 
@@ -106,6 +113,24 @@ class IngestMessage:
         safe_event = self.event_type.replace(".", "_")
         return f"{NATS_SUBJECT_PREFIX}.{safe_tenant}.{safe_event}"
 
+    @property
+    def request_id(self) -> str | None:
+        """Extract a validated UUID v4 request_id from metadata, or None.
+
+        Returns None (not a generated value) so the consumer can decide whether
+        to inherit the parent ID or generate a fresh one.  Validation is strict:
+        only UUID v4 values are returned; anything else is treated as absent.
+
+        Safe against malformed external payloads: if metadata is None or not a
+        dict, returns None instead of raising AttributeError.
+        """
+        if not isinstance(self.metadata, dict):
+            return None
+        raw = self.metadata.get("request_id")
+        if isinstance(raw, str) and _UUID4_RE.match(raw.strip()):
+            return raw.strip().lower()
+        return None
+
 
 class NatsConnection:
     def __init__(self, url: str = NATS_URL):
@@ -184,13 +209,25 @@ class IngestProducer:
         event_type: str,
         payload: dict[str, Any],
         metadata: Optional[dict[str, Any]] = None,
+        request_id: Optional[str] = None,
     ) -> str:
+        """Publish a message, embedding request_id into metadata for trace continuity.
+
+        If request_id is a valid UUID v4 it is stored in metadata["request_id"].
+        Consumers call IngestMessage.request_id to extract and validate it before
+        restoring into their logging context.
+        """
+        merged_metadata: dict[str, Any] = dict(metadata or {})
+        if request_id is not None:
+            raw = request_id.strip()
+            if _UUID4_RE.match(raw):
+                merged_metadata["request_id"] = raw.lower()
         msg = IngestMessage(
             tenant_id=tenant_id,
             source=source,
             event_type=event_type,
             payload=payload,
-            metadata=metadata or {},
+            metadata=merged_metadata,
         )
         await self.publish(msg)
         return msg.message_id

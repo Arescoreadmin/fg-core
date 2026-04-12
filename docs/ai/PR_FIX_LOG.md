@@ -2318,3 +2318,99 @@ OR
 No extra text.
 
 ---
+
+---
+
+### 2026-04-12 — Task 7.3: Distributed request_id propagation across async boundaries
+
+**Area:** Observability · Distributed Tracing · Job Propagation
+
+**Discovery findings:**
+- `jobs/chaos`, `jobs/sim_validator`, `jobs/merkle_anchor` are standalone async functions — no queue broker calls them. There is no `gateway → core → queue → worker` path in this repo.
+- `api/ingest_bus.py` has NATS `IngestMessage` with `metadata: dict[str, Any]` — the natural injection point for request_id in the NATS path.
+- Propagation boundary = job function parameters (direct-invocation architecture).
+
+**Gap being fixed:**
+Jobs generated a fresh `uuid.uuid4()` unconditionally. Any caller with a known `request_id` (API endpoint, scheduler, test harness) had no mechanism to propagate it — the tracing chain broke at the enqueue boundary.
+
+**Fix:**
+
+- `jobs/logging_config.py` — added `resolve_request_id(parent: str | None) -> str`: accepts a parent `request_id` if it is a valid UUID v4 (same regex as gateway), returns it lowercased; otherwise generates a fresh `uuid.uuid4()`. This is the single source of truth for request_id resolution across all jobs.
+- `jobs/chaos/job.py` — signature becomes `async def job(request_id: str | None = None)`. Body calls `rid = resolve_request_id(request_id)` before `logger.contextualize(request_id=rid)`. Removed standalone `uuid` import (now in `logging_config`).
+- `jobs/sim_validator/job.py` — same pattern; `request_id: str | None = None` added as last param. Removed standalone `uuid` import.
+- `jobs/merkle_anchor/job.py` — same pattern; `request_id: str | None = None` added. Removed standalone `uuid` import.
+- `api/ingest_bus.py` — added `_UUID4_RE` compile; added `IngestMessage.request_id` property that extracts and validates UUID v4 from `metadata["request_id"]` (returns `None` for absent/invalid — consumer decides whether to inherit or generate); updated `publish_raw()` to accept `request_id: str | None = None` and embed validated value into `metadata["request_id"]` — this is the enqueue boundary for the NATS path.
+
+**Immutability:** `logger.contextualize()` binds the context var once at the top of the `with` block. All log calls inside the block see exactly that value; there is no mechanism to reassign it mid-execution.
+
+**Files changed:**
+- `jobs/logging_config.py` — `resolve_request_id()` utility + `_UUID4_RE`
+- `jobs/chaos/job.py` — `request_id` param + `resolve_request_id()`
+- `jobs/sim_validator/job.py` — `request_id` param + `resolve_request_id()`
+- `jobs/merkle_anchor/job.py` — `request_id` param + `resolve_request_id()`
+- `api/ingest_bus.py` — `IngestMessage.request_id` property + `publish_raw(request_id=)` injection
+- `tests/test_request_propagation_task73.py` — NEW: 18 tests
+
+**Tests added (`tests/test_request_propagation_task73.py`):**
+1. `resolve_request_id` unit: valid UUID4 → returned; None → generated; non-UUID → replaced; UUID v1 → replaced; uppercase → lowercased
+2. `test_chaos_job_uses_parent_request_id` — all chaos log records use parent rid
+3. `test_sim_validator_job_uses_parent_request_id` — same for sim_validator
+4. `test_merkle_anchor_job_uses_parent_request_id` — same for merkle_anchor
+5. `test_missing_request_id_generated_once_reused` — no parent → one UUID4, consistent throughout
+6. `test_malformed_request_id_replaced_safely` — 4 injection payloads each replaced safely
+7. `test_multiple_jobs_share_parent_request_id` — two runs with same parent → both logs match
+8. `test_request_id_immutable_within_job` — single run has exactly one unique request_id
+9. `IngestMessage.request_id` property: valid → extracted; invalid/absent → None; UUID v1 → None
+10. `publish_raw()` injection: valid UUID4 embedded; invalid not embedded
+11. `test_resolve_request_id_does_not_accept_tenant_id_as_request_id` — tenant-like strings not accepted
+
+**Validation commands:**
+1. `.venv/bin/pytest -q tests/test_request_propagation_task73.py` → 18 passed
+2. `.venv/bin/pytest -q tests -k 'trace or request_id or propagation'` → 70 passed
+3. `ruff check .` → All checks passed
+4. `ruff format --check .` → 724 files already formatted
+5. `mypy .` → Success: no issues in 729 source files
+
+**AI Notes:**
+- `resolve_request_id()` is the canonical resolver for all jobs — do NOT inline UUID generation in individual job files
+- `IngestMessage.request_id` returns `None` (not a generated value) — the consumer is responsible for calling `resolve_request_id(msg.request_id)` to either inherit or generate
+- UUID v1/v3/v5 are explicitly rejected — only v4 is valid
+- `logger.contextualize()` context var is immutable within the `with` block — no override mechanism exists or should be added
+- `sim_validator/job.py` and `merkle_anchor/job.py` no longer import `uuid` directly — they rely on `resolve_request_id` from `logging_config`
+
+
+---
+
+## PR #219 review findings fix (2026-04-12)
+
+**Branch:** `blitz/task-7.3-distributed-tracing`
+
+### Finding 1 — Failure-path request logging
+
+**File:** `api/middleware/logging.py`
+
+**Problem:** `RequestLoggingMiddleware.dispatch()` only emitted a log record on the success path. A downstream exception skipped the `log.info()` call entirely, leaving the request untraced.
+
+**Fix:** Refactored to `try/finally` — `status_code` initialised to `500`, updated to actual status on success. One log record emitted per request regardless of downstream exception.
+
+**Tests added** (`tests/test_request_tracing_task72.py`):
+- `test_request_logging_middleware_emits_log_on_downstream_exception`
+- `test_request_logging_failure_path_includes_request_id_and_status`
+- `test_request_logging_exception_is_reraised`
+
+### Finding 2 — Metadata-type-safe `IngestMessage.request_id`
+
+**File:** `api/ingest_bus.py`
+
+**Problem:** `IngestMessage.request_id` property called `self.metadata.get(...)` without checking type first. If `metadata` is `None` or any non-dict (list, string, int, etc.) the call raises `AttributeError`.
+
+**Fix:** Added `if not isinstance(self.metadata, dict): return None` guard before `.get()`.
+
+**Tests added** (`tests/test_request_propagation_task73.py`):
+- `test_ingest_message_request_id_none_when_metadata_is_none`
+- `test_ingest_message_request_id_none_when_metadata_is_non_dict`
+- `test_ingest_message_request_id_none_when_malformed`
+- `test_ingest_message_request_id_valid_uuid4_preserved`
+
+### Gate result
+`make fg-fast`: all 10 gates passed (SOC doc updated for `api/middleware/logging.py` change).

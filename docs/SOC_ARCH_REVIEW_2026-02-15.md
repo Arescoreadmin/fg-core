@@ -397,3 +397,20 @@ Format: `Risk | File | Description | Exploit Path | Fix Strategy`
 ### Rollback
 - Remove `RequestLoggingMiddleware` import and `_add_middleware` call from `api/main.py`.
 - Revert `admin_gateway/middleware/request_id.py` to remove UUID validation.
+
+---
+
+## PR #219 review fix — failure-path request logging (2026-04-12)
+
+### Files changed
+- `api/middleware/logging.py`: `dispatch()` refactored from success-only log to `try/finally` pattern. `status_code` initialised to `500` as fallback, updated to actual response status on success path.
+
+### Why
+PR #219 review identified that `RequestLoggingMiddleware.dispatch()` only emitted a log record on the success path. A downstream exception would skip the `log.info()` call entirely, leaving the request untraced. The `try/finally` pattern guarantees exactly one log record per request regardless of whether downstream raises.
+
+### Risk
+- **Low.** The log call moves into a `finally` block — no change to request/response content, no new I/O, no change to exception propagation (exceptions still bubble after `finally` completes).
+
+### Validation performed
+- `pytest -q tests/test_request_tracing_task72.py`: 11 passed (includes 3 new failure-path tests)
+- `make fg-fast`: all gates passed

@@ -224,3 +224,73 @@ def test_job_request_id_is_valid_uuid4(tmp_path, monkeypatch):
     assert _UUID4_RE.match(rid1), f"run1 request_id not UUID v4: {rid1!r}"
     assert _UUID4_RE.match(rid2), f"run2 request_id not UUID v4: {rid2!r}"
     assert rid1 != rid2, "request_id must be unique per job run"
+
+
+# ---------------------------------------------------------------------------
+# PR #219 review fix: failure-path request logging
+# ---------------------------------------------------------------------------
+
+
+def test_request_logging_middleware_emits_log_on_downstream_exception(caplog):
+    """RequestLoggingMiddleware must emit a log record even when downstream raises."""
+    from fastapi.testclient import TestClient
+    from api.main import build_app
+
+    app = build_app(auth_enabled=False)
+
+    @app.get("/_test_raise")
+    async def _raise():
+        raise RuntimeError("deliberate downstream failure")
+
+    rid = str(uuid.uuid4())
+    with caplog.at_level(logging.INFO, logger="frostgate"):
+        with TestClient(app, raise_server_exceptions=False) as client:
+            client.get("/_test_raise", headers={"X-Request-Id": rid})
+
+    request_log_records = [r for r in caplog.records if r.getMessage() == "request"]
+    assert request_log_records, (
+        "No 'request' log record emitted by RequestLoggingMiddleware on exception path"
+    )
+
+
+def test_request_logging_failure_path_includes_request_id_and_status(caplog):
+    """Failure-path request log must include request_id and fallback status_code=500."""
+    from fastapi.testclient import TestClient
+    from api.main import build_app
+
+    app = build_app(auth_enabled=False)
+
+    @app.get("/_test_raise2")
+    async def _raise2():
+        raise RuntimeError("deliberate downstream failure")
+
+    rid = str(uuid.uuid4())
+    with caplog.at_level(logging.INFO, logger="frostgate"):
+        with TestClient(app, raise_server_exceptions=False) as client:
+            client.get("/_test_raise2", headers={"X-Request-Id": rid})
+
+    request_log_records = [r for r in caplog.records if r.getMessage() == "request"]
+    assert request_log_records, "No request log on failure path"
+    record = request_log_records[0]
+    assert getattr(record, "status_code", None) == 500
+    assert getattr(record, "method", None) == "GET"
+    assert "raise2" in (getattr(record, "path", "") or "")
+
+
+def test_request_logging_exception_is_reraised(caplog):
+    """Exception must propagate after logging — middleware must not swallow it."""
+    from fastapi.testclient import TestClient
+    from api.main import build_app
+
+    app = build_app(auth_enabled=False)
+
+    @app.get("/_test_raise3")
+    async def _raise3():
+        raise RuntimeError("deliberate downstream failure")
+
+    with caplog.at_level(logging.INFO, logger="frostgate"):
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.get("/_test_raise3")
+
+    # FGExceptionShieldMiddleware or Starlette converts unhandled errors to 500
+    assert response.status_code == 500
