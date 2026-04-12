@@ -2414,3 +2414,56 @@ Jobs generated a fresh `uuid.uuid4()` unconditionally. Any caller with a known `
 
 ### Gate result
 `make fg-fast`: all 10 gates passed (SOC doc updated for `api/middleware/logging.py` change).
+
+---
+
+## Secret Rotation & Scanning Gate — 2026-04-12
+
+**Branch:** `claude/secret-rotation-scanning-XuPGp`
+
+**Area:** Security · Secret Hygiene
+
+**Root cause / what was wrong:**
+
+- `env/prod.env` contained a real Postgres password (`VD_6zx6nD4JJg3APEhNVAIBPSlqlGQao`) committed in plain text.  The value was also embedded in `DATABASE_URL` and `FG_DB_URL` in the same file.
+- Additional stub values (`dev-signing-secret-32-bytes-minimum`, `prod-redis-password-32charsmin`, etc.) were committed, providing attacker-friendly defaults and creating ambiguity between template and real values.
+- `agent/.env.example` contained `FG_AGENT_KEY=replace-with-agent-key` — a non-template value that would bypass naive placeholder checks.
+- No CI gate existed to prevent secrets from being re-introduced.
+- Runtime (`api/config/required_env.py`) did not detect `CHANGE_ME_*` placeholders as missing, so a misconfigured deployment could start with unrotated secrets without error.
+- `FG_API_KEY` was not in the required-env list despite being a primary auth credential.
+
+**Previously exposed secrets requiring rotation:**
+
+| Credential | Variable(s) |
+|---|---|
+| `VD_6zx6nD4JJg3APEhNVAIBPSlqlGQao` | `POSTGRES_PASSWORD`, `POSTGRES_APP_PASSWORD`, `DATABASE_URL`, `FG_DB_URL` |
+
+**Fix:**
+
+1. `env/prod.env` — replaced all credential values with `CHANGE_ME_<VAR>` placeholders; removed embedded password from DB URL strings.
+2. `agent/.env.example` — replaced `replace-with-agent-key` stub with `CHANGE_ME_FG_AGENT_KEY`.
+3. `tools/ci/check_no_plaintext_secrets.py` — new + hardened scanner:
+   - Covers `env/*.env`, `.env.example`, `agent/.env.example`.
+   - Detects all secret-class variable names (`*_PASSWORD`, `*_SECRET`, `*_TOKEN`, `*_KEY`, `*_CREDENTIAL`, etc.).
+   - Allows only `CHANGE_ME_*` and `${VAR}` shell-reference forms.
+   - Extracts and checks URL credential segments independently.
+   - Hard-blocks the specific leaked literal regardless of variable name.
+4. `tools/ci/check_secret_history.py` — new history audit script:
+   - Fails CI if any blocked literal reappears in non-exempt files in HEAD.
+   - Warns (non-blocking) if blocked literals are found in git history.
+   - Prints rotation instructions and commit references.
+5. `api/config/required_env.py`:
+   - `get_missing_required_env` now treats `CHANGE_ME_*` as missing.
+   - Added `FG_API_KEY` to `REQUIRED_PROD_ENV_VARS`.
+6. `tests/security/test_required_env_enforcement.py`:
+   - Added `FG_API_KEY` to `_VALID_PROD_ENV`.
+   - Added parametrized `test_required_env_prod_fails_when_var_is_placeholder`.
+7. `.github/workflows/ci.yml` — secret scanning gate and history audit now run early in `fg_guard` (before migration/scope checks).
+8. `.pre-commit-config.yaml` — `no-plaintext-secrets` hook blocks commits locally.
+9. `docs/security/secret_handling.md` — new operational runbook.
+
+**AI Notes:**
+- Do NOT suggest relaxing the `CHANGE_ME_*` enforcement or adding "convenience" defaults.
+- Do NOT add new real secrets to env files — use `CHANGE_ME_<VAR_NAME>` placeholders only.
+- When adding a new required env var, update both `REQUIRED_PROD_ENV_VARS` and `_VALID_PROD_ENV` in the test file.
+- The EXEMPT_PATHS set in `check_secret_history.py` is intentionally narrow — do not add application files to it.

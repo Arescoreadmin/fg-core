@@ -34,6 +34,7 @@ _VALID_PROD_ENV: dict[str, str] = {
     "DATABASE_URL": "postgresql://x",
     "FG_SIGNING_SECRET": "test-signing-secret",
     "FG_INTERNAL_AUTH_SECRET": "test-internal-secret",
+    "FG_API_KEY": "test-api-key",
 }
 
 
@@ -71,6 +72,14 @@ def test_required_env_prod_fails_when_var_missing(missing_var: str) -> None:
 def test_required_env_prod_fails_when_var_blank(missing_var: str) -> None:
     """Blank (whitespace-only) values must also be treated as missing."""
     env = {**_VALID_PROD_ENV, missing_var: "   "}
+    with pytest.raises(RuntimeError, match="Missing required production env vars"):
+        enforce_required_env(env)
+
+
+@pytest.mark.parametrize("missing_var", list(REQUIRED_PROD_ENV_VARS))
+def test_required_env_prod_fails_when_var_is_placeholder(missing_var: str) -> None:
+    """CHANGE_ME_* values must be treated as missing — the secret was never rotated."""
+    env = {**_VALID_PROD_ENV, missing_var: f"CHANGE_ME_{missing_var}"}
     with pytest.raises(RuntimeError, match="Missing required production env vars"):
         enforce_required_env(env)
 
