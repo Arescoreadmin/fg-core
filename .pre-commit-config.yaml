@@ -14,6 +14,13 @@ repos:
         language: system
         pass_filenames: false
 
+      - id: no-plaintext-secrets
+        name: No plaintext secrets in env files
+        entry: python tools/ci/check_no_plaintext_secrets.py
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
       - id: fg-soc-review-sync
         name: FrostGate SOC review sync
         entry: bash -lc 'make soc-review-sync'

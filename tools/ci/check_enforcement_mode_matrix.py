@@ -25,6 +25,7 @@ def run_case(env_name: str, mode: str) -> tuple[int, str]:
     env["DATABASE_URL"] = "postgresql://example"
     env["FG_SIGNING_SECRET"] = "test-signing-secret"
     env["FG_INTERNAL_AUTH_SECRET"] = "test-internal-secret"
+    env["FG_API_KEY"] = "test-api-key"
     if mode:
         env["FG_ENFORCEMENT_MODE"] = mode
     else:

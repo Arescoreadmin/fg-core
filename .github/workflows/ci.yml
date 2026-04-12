@@ -76,6 +76,12 @@ jobs:
       - name: Syntax / import guard (fast fail)
         run: python -m compileall -q api engine tests
 
+      - name: Secret scanning gate
+        run: python tools/ci/check_no_plaintext_secrets.py
+
+      - name: Secret history audit
+        run: python tools/ci/check_secret_history.py
+
       - name: SQL migration percent-token guard
         run: python tools/ci/guard_no_raw_percent_in_sql.py
 

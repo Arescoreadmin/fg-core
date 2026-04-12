@@ -18,15 +18,22 @@ REQUIRED_PROD_ENV_VARS: tuple[str, ...] = (
     "DATABASE_URL",
     "FG_SIGNING_SECRET",
     "FG_INTERNAL_AUTH_SECRET",
+    "FG_API_KEY",
 )
 
 
 def get_missing_required_env(
     env: Mapping[str, str] | None = None,
 ) -> list[str]:
-    """Return names of required production env vars that are absent or blank."""
+    """Return names of required production env vars that are absent, blank, or
+    still contain a CHANGE_ME_* placeholder (i.e. never rotated)."""
     e: Mapping[str, str] = env if env is not None else os.environ
-    return [k for k in REQUIRED_PROD_ENV_VARS if not (e.get(k) or "").strip()]
+    missing: list[str] = []
+    for k in REQUIRED_PROD_ENV_VARS:
+        v = (e.get(k) or "").strip()
+        if not v or v.startswith("CHANGE_ME_"):
+            missing.append(k)
+    return missing
 
 
 def enforce_required_env(

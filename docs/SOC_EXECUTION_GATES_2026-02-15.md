@@ -2026,4 +2026,43 @@ Security/governance impact:
 
 Validation:
 - `admin_gateway/tests/test_auth_flow_task62.py`: 12/12 pass (all DoD requirements)
+
+## 2026-04-12 — Secret-hardening: scanner, history audit, and invariant alignment
+
+Critical files changed:
+- `.github/workflows/ci.yml`
+- `tools/ci/check_no_plaintext_secrets.py`
+- `tools/ci/check_secret_history.py`
+- `tools/ci/check_enforcement_mode_matrix.py`
+- `tools/ci/check_soc_invariants.py`
+
+Change type: security control addition — secret lifecycle enforcement
+
+Change summary:
+- `tools/ci/check_no_plaintext_secrets.py` (NEW): CI gate that scans all tracked env files (`env/*.env`, `.env.example`, `agent/.env.example`) for plaintext secrets. Enforces two independent checks per line: (A) URL credential scan for every assignment containing `://`, regardless of variable name — catches `DATABASE_URL`, `FG_DB_URL`, `FG_REDIS_URL`, `FG_NATS_URL`, `AMQP_URL`, etc.; (B) secret-class direct-value check for variables matching known secret-suffix patterns (`PASSWORD`, `SECRET`, `_TOKEN`, `_KEY`, etc.), suppressed when Check A already fired to prevent double-reporting. A hard blocklist of previously-leaked raw credential literals is checked against each entire file. Only `CHANGE_ME_<VAR>` sentinels and `${VAR}` shell-reference forms are accepted as placeholder values.
+- `tools/ci/check_secret_history.py` (NEW): Git history audit that scans all non-exempt files at HEAD for blocked literal credentials. Exits 1 if a blocked literal appears in HEAD (hard failure); warns but exits 0 if the literal only appears in unreachable history. `EXEMPT_PATHS` covers scanner source files that must reference the literal for detection.
+- `.github/workflows/ci.yml`: Added two early steps to the `fg_guard` job — `Secret scanning gate` (`check_no_plaintext_secrets.py`) and `Secret history audit` (`check_secret_history.py`) — ensuring every PR is blocked if a plaintext credential is introduced or reintroduced.
+- `tools/ci/check_enforcement_mode_matrix.py`: Added `FG_API_KEY` to the subprocess environment for every test case, aligning with the updated `REQUIRED_PROD_ENV_VARS` that now mandates `FG_API_KEY` for prod/staging.
+- `tools/ci/check_soc_invariants.py`: Added `FG_API_KEY` to the `valid` environment dict in `_check_runtime_enforcement_mode`, so the inline invariant smoke-test no longer fails on missing `FG_API_KEY`.
+
+Security / governance impact:
+- Eliminates the class of incidents where a real credential is committed to a tracked env file and silently passes CI.
+- URL credential check is name-agnostic: no bypass via renaming a secret-bearing variable to a non-secret-looking name.
+- Hard blocklist prevents reintroduction of any previously-leaked literal, even in comments.
+- Runtime fail-closed: `CHANGE_ME_*` values are treated as missing by `get_missing_required_env`, so a deployment that forgot to inject the real secret fails at startup rather than operating with a sentinel.
+- `FG_API_KEY` is now a required production env var enforced at startup, in CI invariant checks, and in the enforcement-mode matrix.
+- No weakening of any existing enforcement; all pre-existing invariant checks continue to pass.
+
+Risk before: plaintext database passwords and API keys could be committed to env files with no automated detection. A `DATABASE_URL` with an embedded real password would pass all prior CI checks because its key name did not match a secret suffix.
+
+Risk after: any non-placeholder credential in a URL or a secret-named variable causes immediate CI failure with a remediation message. Previously-leaked literals are detected at HEAD and in every subsequent PR.
+
+Validation:
+- `python tools/ci/check_no_plaintext_secrets.py` → OK
+- `python tools/ci/check_secret_history.py` → OK (or warn-only for old history)
+- `python tools/ci/check_enforcement_mode_matrix.py` → enforcement-mode matrix: OK
+- `python tools/ci/check_soc_invariants.py` → soc invariants: OK
+- `pytest tests/security/test_secret_scanner.py` → 38 assertions, all pass
+- `pytest tests/security/test_prod_invariants.py` → all pass
+- `pytest tests/security/test_required_env_enforcement.py` → all pass
 - `make fg-fast` → running; `ruff check` → clean after removing unused import
