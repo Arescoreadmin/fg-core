@@ -75,6 +75,7 @@ def test_prod_invariants_allow_enforcement_mode_enforce(fg_env: str) -> None:
             "DATABASE_URL": "postgresql://x",
             "FG_SIGNING_SECRET": "test-signing-secret",
             "FG_INTERNAL_AUTH_SECRET": "test-internal-secret",
+            "FG_API_KEY": "test-api-key",
         }
     )
 

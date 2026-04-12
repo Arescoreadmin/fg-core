@@ -2513,3 +2513,46 @@ Per-line logic split into two independent checks:
 - Do NOT add `docs/security/secret_handling.md` or any doc file to `EXEMPT_PATHS` — redact the literal from the doc instead.
 - URL credential scanning (Check A) must run for EVERY line, not just secret-named variables.
 - `_is_cred_acceptable("")` returns False — empty URL credential is not an approved placeholder.
+
+---
+
+## FG_API_KEY Invariant Harness Alignment — 2026-04-12
+
+**Branch:** `claude/secret-rotation-scanning-XuPGp`
+
+**Area:** Security · Runtime Invariants · CI Gates
+
+**Root cause:**
+`FG_API_KEY` was added to `REQUIRED_PROD_ENV_VARS` in `api/config/required_env.py` (correct) but the three invariant-fixture dicts that drive `prod/enforce` and `staging/enforce` checks were not updated to provide a valid `FG_API_KEY`. When those fixtures call `assert_prod_invariants()` → `enforce_required_env()` → `get_missing_required_env()`, the missing key caused `fg-fast-full soc-invariants` and `enforcement-mode-matrix` to fail.
+
+**Exact failure:**
+```
+soc invariants: FAILED
+- runtime invariant unexpectedly failed for prod/enforce: Missing required production env vars: ['FG_API_KEY']
+- runtime invariant unexpectedly failed for staging/enforce: Missing required production env vars: ['FG_API_KEY']
+```
+
+**Files updated (smallest diff — one line each):**
+
+1. `tools/ci/check_soc_invariants.py` (`_check_runtime_enforcement_mode` `valid` dict):
+   added `"FG_API_KEY": "test-api-key"`
+2. `tools/ci/check_enforcement_mode_matrix.py` (`run_case` env setup):
+   added `env["FG_API_KEY"] = "test-api-key"`
+3. `tests/security/test_prod_invariants.py` (`test_prod_invariants_allow_enforcement_mode_enforce`):
+   added `"FG_API_KEY": "test-api-key"` to fixture env dict
+
+`FG_API_KEY` remains in `REQUIRED_PROD_ENV_VARS`. No enforcement was weakened.
+
+**Validation:**
+
+- `_check_runtime_enforcement_mode`: OK (prod/enforce, staging/enforce both pass)
+- `enforcement_mode_matrix`: OK (all 6 cases)
+- `check_required_env` (non-prod): exit 0 ✓
+- `check_required_env` (prod, all vars present): exit 0 ✓
+- `check_required_env` (prod, FG_API_KEY absent): exit 1 ✓
+- `check_required_env` (prod, FG_API_KEY=CHANGE_ME_FG_API_KEY): exit 1 ✓
+
+**AI Notes:**
+- Do NOT remove `FG_API_KEY` from `REQUIRED_PROD_ENV_VARS`.
+- When `REQUIRED_PROD_ENV_VARS` grows, update ALL three fixture locations above plus `_VALID_PROD_ENV` in `tests/security/test_required_env_enforcement.py`.
+- `test_compliance_modules.py::_seed_prod_env` already had `FG_API_KEY` — no change needed there.
