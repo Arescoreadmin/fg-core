@@ -55,7 +55,7 @@ It **must be rotated** regardless of whether it is currently in use.
 
 | Credential | Variable | Exposed in | Status |
 |---|---|---|---|
-| `VD_6zx6nD4JJg3APEhNVAIBPSlqlGQao` | `POSTGRES_PASSWORD` / `POSTGRES_APP_PASSWORD` / `DATABASE_URL` | commits prior to `claude/secret-rotation-scanning-XuPGp` | **ROTATE IMMEDIATELY** |
+| `[REDACTED_EXPOSED_PASSWORD]` | `POSTGRES_PASSWORD` / `POSTGRES_APP_PASSWORD` / `DATABASE_URL` | commits prior to `claude/secret-rotation-scanning-XuPGp` — full literal in `BLOCKED_LITERALS` inside `tools/ci/check_secret_history.py` | **ROTATE IMMEDIATELY** |
 
 ### All production secrets requiring rotation before first deploy
 

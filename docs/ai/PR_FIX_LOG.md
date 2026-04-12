@@ -732,7 +732,7 @@ This was the same structural gap as Task 2.1 (`_is_production_runtime()` also om
 
 **Files changed:**
 - `env/prod.env`: added three missing vars under existing sections:
-  - `DATABASE_URL=postgresql+psycopg://fg_user:VD_6zx6nD4JJg3APEhNVAIBPSlqlGQao@postgres:5432/frostgate` (adjacent to `FG_DB_URL` — same connection, standard platform alias)
+  - `DATABASE_URL=postgresql+psycopg://fg_user:[REDACTED_EXPOSED_PASSWORD]@postgres:5432/frostgate` (adjacent to `FG_DB_URL` — same connection, standard platform alias)
   - `FG_SIGNING_SECRET=dev-signing-secret-32-bytes-minimum` (in existing CI-secrets section)
   - `FG_INTERNAL_AUTH_SECRET=dev-internal-auth-secret-32-bytes` (in existing CI-secrets section)
 
@@ -2425,7 +2425,7 @@ Jobs generated a fresh `uuid.uuid4()` unconditionally. Any caller with a known `
 
 **Root cause / what was wrong:**
 
-- `env/prod.env` contained a real Postgres password (`VD_6zx6nD4JJg3APEhNVAIBPSlqlGQao`) committed in plain text.  The value was also embedded in `DATABASE_URL` and `FG_DB_URL` in the same file.
+- `env/prod.env` contained a real Postgres password (`[REDACTED_EXPOSED_PASSWORD]`) committed in plain text.  The value was also embedded in `DATABASE_URL` and `FG_DB_URL` in the same file.
 - Additional stub values (`dev-signing-secret-32-bytes-minimum`, `prod-redis-password-32charsmin`, etc.) were committed, providing attacker-friendly defaults and creating ambiguity between template and real values.
 - `agent/.env.example` contained `FG_AGENT_KEY=replace-with-agent-key` — a non-template value that would bypass naive placeholder checks.
 - No CI gate existed to prevent secrets from being re-introduced.
@@ -2436,7 +2436,7 @@ Jobs generated a fresh `uuid.uuid4()` unconditionally. Any caller with a known `
 
 | Credential | Variable(s) |
 |---|---|
-| `VD_6zx6nD4JJg3APEhNVAIBPSlqlGQao` | `POSTGRES_PASSWORD`, `POSTGRES_APP_PASSWORD`, `DATABASE_URL`, `FG_DB_URL` |
+| `[REDACTED_EXPOSED_PASSWORD]` | `POSTGRES_PASSWORD`, `POSTGRES_APP_PASSWORD`, `DATABASE_URL`, `FG_DB_URL` |
 
 **Fix:**
 
@@ -2467,3 +2467,49 @@ Jobs generated a fresh `uuid.uuid4()` unconditionally. Any caller with a known `
 - Do NOT add new real secrets to env files — use `CHANGE_ME_<VAR_NAME>` placeholders only.
 - When adding a new required env var, update both `REQUIRED_PROD_ENV_VARS` and `_VALID_PROD_ENV` in the test file.
 - The EXEMPT_PATHS set in `check_secret_history.py` is intentionally narrow — do not add application files to it.
+
+---
+
+## Secret Hygiene Regression Fix — 2026-04-12
+
+**Branch:** `claude/secret-rotation-scanning-XuPGp`
+
+**Area:** Security · Secret Hygiene · CI Gates
+
+**Root cause 1 — leaked literal in documentation:**
+`docs/security/secret_handling.md` contained the exact blocked literal `[REDACTED_EXPOSED_PASSWORD]` (the previously leaked Postgres password) in a rotation table row.  That file was not in `EXEMPT_PATHS`, so `check_secret_history.py` correctly hard-failed CI on the current HEAD.
+
+**Files where literal was redacted:**
+- `docs/security/secret_handling.md`: rotation table row — replaced with `[REDACTED_EXPOSED_PASSWORD]`
+- `docs/ai/PR_FIX_LOG.md`: three occurrences in prior fix entries — replaced with `[REDACTED_EXPOSED_PASSWORD]`
+
+The only remaining references to the real blocked literal are in the two exempt scanner source files (`tools/ci/check_no_plaintext_secrets.py`, `tools/ci/check_secret_history.py`), which must contain it to detect it.
+
+**Root cause 2 — URL credential scan gated behind key-name check:**
+`_scan_file` in `check_no_plaintext_secrets.py` called `if not _is_secret_var(key): continue` before any checks, including the URL credential extraction.  Variables like `DATABASE_URL`, `FG_DB_URL`, `FG_REDIS_URL`, and `FG_NATS_URL` do not match `_SECRET_SUFFIXES`, so their embedded URL credentials were never inspected.  A plaintext password in `DATABASE_URL=postgresql://user:realpass@host/db` would silently pass the scanner.
+
+**Fix:**
+Per-line logic split into two independent checks:
+- **Check A** (URL credential scan): runs for EVERY line when `://` is present in the value.  Extracts the credential segment and fails if it is not `CHANGE_ME_*` or a shell ref.  Key name is irrelevant.
+- **Check B** (secret-class direct value): runs only when key matches `_SECRET_SUFFIXES`.  Suppressed when Check A already reported a violation on the same line to avoid duplicate reports.
+
+`_is_cred_acceptable`, `_extract_url_cred`, and `_is_acceptable` extracted as testable helpers.
+
+**Regression tests added:**
+`tests/security/test_secret_scanner.py` — 38 assertions covering:
+- A) Documentation/literal safety: redacted token passes; exact blocked literal fails even in comments
+- B) URL credential scanning independent of key name: DATABASE_URL, FG_DB_URL, REDIS_URL, FG_NATS_URL with plaintext creds fail; CHANGE_ME_* and ${VAR} creds pass; non-secret non-URL config passes; URLs without @ pass
+- C) Secret-class direct value checks unchanged: real value fails; CHANGE_ME_* passes; non-secret config passes
+- D) No double-reporting: URL violation in a secret-class var reports exactly once
+
+**Validation:**
+- `python tools/ci/check_no_plaintext_secrets.py` → OK (env/prod.env, .env.example, agent/.env.example)
+- `python tools/ci/check_secret_history.py` → exit 0 (history warning only, no HEAD violations)
+- `git grep "VD_6zx6n..."` → only `tools/ci/check_no_plaintext_secrets.py` and `tools/ci/check_secret_history.py` (both exempt)
+- 38/38 scanner regression assertions pass
+- No enforcement was weakened; `EXEMPT_PATHS` unchanged
+
+**AI Notes:**
+- Do NOT add `docs/security/secret_handling.md` or any doc file to `EXEMPT_PATHS` — redact the literal from the doc instead.
+- URL credential scanning (Check A) must run for EVERY line, not just secret-named variables.
+- `_is_cred_acceptable("")` returns False — empty URL credential is not an approved placeholder.

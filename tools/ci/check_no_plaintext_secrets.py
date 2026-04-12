@@ -3,15 +3,17 @@ tools/ci/check_no_plaintext_secrets.py
 
 Secret-scanning gate: ensures that env files tracked in this repository only
 contain CHANGE_ME_* placeholder values (or shell-reference forms) for all
-known-secret variables.  Fail-closed: any unrecognised value in a secret-class
-variable is a hard failure.
+known-secret variables, AND that no URL-embedded credential is plaintext
+regardless of the variable name.
 
 Rules enforced
 --------------
-1. Any variable whose name matches SECRET_VAR_RE must have a value that is
-   either empty, a CHANGE_ME_* placeholder, a ${VAR} shell reference, or
-   (for URL values) has a credential segment that satisfies one of the above.
-2. A hard blocklist of known-leaked raw values is checked across ALL lines in
+1. Every assignment whose value is a URL with userinfo is checked for
+   plaintext credentials — independent of whether the key name looks secret.
+   This catches DATABASE_URL, FG_DB_URL, FG_REDIS_URL, etc.
+2. Any variable whose name matches _SECRET_SUFFIXES must have a direct value
+   that is either empty, a CHANGE_ME_* placeholder, or a ${VAR} shell ref.
+3. A hard blocklist of known-leaked raw values is checked across ALL lines in
    every scanned file, regardless of variable name.
 
 Exit codes
@@ -26,17 +28,16 @@ import sys
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Secret variable-name detection
+# Secret variable-name detection (Check B — direct value check only)
 # ---------------------------------------------------------------------------
-# Matches any variable whose name contains a known secret-class suffix/token.
-# Anchored tokens (ending with $) prevent matching config booleans such as
+# Anchored tokens prevent false-positives on config booleans such as
 # FG_AUTH_ALLOW_FALLBACK or FG_AUTH_ENABLED.
 _SECRET_SUFFIXES = re.compile(
     r"""(?x)
     (?:
         PASSWORD          # *_PASSWORD
       | SECRET            # *_SECRET
-      | _TOKEN(?:$|\b)    # *_TOKEN (not TOKENIZE etc.)
+      | _TOKEN(?:$|\b)    # *_TOKEN  (not TOKENIZE etc.)
       | _KEY(?:$|\b)      # *_KEY
       | _CREDENTIAL       # *_CREDENTIAL
       | _PEPPER           # *_PEPPER
@@ -59,30 +60,32 @@ _SECRET_SUFFIXES = re.compile(
 # Acceptable placeholder patterns
 # ---------------------------------------------------------------------------
 
-# Plain CHANGE_ME_* sentinel
+# Plain CHANGE_ME_* sentinel.
 _CHANGE_ME_RE = re.compile(r"^CHANGE_ME_[A-Z0-9_]+$")
 
 # Shell variable reference: ${VAR}, ${VAR:-default}, ${VAR:?error}, $VAR
-_SHELL_REF_RE = re.compile(r"^\$\{[A-Z_][A-Z0-9_]*(?::[?!-][^}]*)?\}$|^\$[A-Z_][A-Z0-9_]*$")
+_SHELL_REF_RE = re.compile(
+    r"^\$\{[A-Z_][A-Z0-9_]*(?::[?!-][^}]*)?\}$|^\$[A-Z_][A-Z0-9_]*$"
+)
 
-# Extract credential segment from a URL (the token between : and @ ).
+# Extract the credential (password/token) from a URL's userinfo component.
 # Handles:
-#   scheme://user:PASSWORD@host
-#   scheme://:PASSWORD@host          (redis style — no user)
-#   scheme://PASSWORD@host           (nats style — token only)
+#   scheme://user:PASSWORD@host      → group(1) = PASSWORD
+#   scheme://:PASSWORD@host          → group(1) = PASSWORD  (redis style)
+#   scheme://PASSWORD@host           → group(1) = PASSWORD  (nats token style)
 _URL_CRED_RE = re.compile(r"://(?:[^:@/]*:)?([^@/]+)@")
 
 # ---------------------------------------------------------------------------
 # Hard-blocked literal substrings
 # Add every previously-leaked raw credential here.  The list must be kept
-# short; the placeholder rule catches all future secrets by name.
+# short; the name-pattern rule catches all future secrets.
 # ---------------------------------------------------------------------------
 BLOCKED_LITERALS: list[str] = [
     "VD_6zx6nD4JJg3APEhNVAIBPSlqlGQao",  # postgres password — leaked in git history
 ]
 
 # ---------------------------------------------------------------------------
-# Scan surface: globs relative to repo root
+# Scan surface: globs relative to repo root.
 # Only globs for which there is repo evidence are included.
 # ---------------------------------------------------------------------------
 ENV_GLOBS: list[str] = [
@@ -96,8 +99,27 @@ ENV_GLOBS: list[str] = [
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _is_secret_var(key: str) -> bool:
+    return bool(_SECRET_SUFFIXES.search(key))
+
+
+def _is_cred_acceptable(cred: str) -> bool:
+    """Return True if a URL credential segment is an approved placeholder."""
+    return bool(_CHANGE_ME_RE.match(cred) or _SHELL_REF_RE.match(cred))
+
+
+def _extract_url_cred(value: str) -> str | None:
+    """Return the credential segment embedded in *value* as a URL, or None."""
+    match = _URL_CRED_RE.search(value)
+    return match.group(1) if match else None
+
+
 def _is_acceptable(value: str) -> bool:
-    """Return True if *value* is empty or an approved template form."""
+    """Return True if *value* is empty or an approved template form.
+
+    For URL values the credential segment is extracted and checked; the rest
+    of the URL is not evaluated.
+    """
     if not value:
         return True
     if _CHANGE_ME_RE.match(value):
@@ -105,17 +127,11 @@ def _is_acceptable(value: str) -> bool:
     if _SHELL_REF_RE.match(value):
         return True
     if "://" in value:
-        match = _URL_CRED_RE.search(value)
-        if match:
-            cred = match.group(1)
-            return bool(_CHANGE_ME_RE.match(cred) or _SHELL_REF_RE.match(cred))
-        # URL with no embedded credential — nothing to check.
-        return True
+        cred = _extract_url_cred(value)
+        if cred is None:
+            return True  # URL with no embedded credential
+        return _is_cred_acceptable(cred)
     return False
-
-
-def _is_secret_var(key: str) -> bool:
-    return bool(_SECRET_SUFFIXES.search(key))
 
 
 def _scan_file(path: Path) -> list[str]:
@@ -127,7 +143,7 @@ def _scan_file(path: Path) -> list[str]:
         violations.append(f"{path}: cannot read file — {exc}")
         return violations
 
-    # Hard-blocklist check (whole-file scan, independent of var name).
+    # --- Hard-blocklist check (whole-file, independent of var name) ---------
     for bad in BLOCKED_LITERALS:
         if bad in text:
             violations.append(
@@ -135,7 +151,7 @@ def _scan_file(path: Path) -> list[str]:
                 "rotate immediately and remove from file"
             )
 
-    # Per-line secret-variable check.
+    # --- Per-line checks ----------------------------------------------------
     for lineno, raw_line in enumerate(text.splitlines(), start=1):
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -151,14 +167,31 @@ def _scan_file(path: Path) -> list[str]:
         if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
             value = value[1:-1]
 
-        if not _is_secret_var(key):
-            continue
+        url_violation_reported = False
 
-        if not _is_acceptable(value):
-            violations.append(
-                f"{path}:{lineno}: {key!r} has a non-placeholder value — "
-                f"replace with CHANGE_ME_{key} and rotate the real secret externally"
-            )
+        # --- Check A: URL credential scan — runs for EVERY line -------------
+        # Catches DATABASE_URL, FG_DB_URL, FG_REDIS_URL, FG_NATS_URL, etc.
+        # regardless of whether the key name matches a secret suffix.
+        if "://" in value:
+            cred = _extract_url_cred(value)
+            if cred is not None and not _is_cred_acceptable(cred):
+                violations.append(
+                    f"{path}:{lineno}: {key!r} URL contains a non-placeholder "
+                    f"credential — replace the embedded password with "
+                    f"CHANGE_ME_{key} and rotate externally"
+                )
+                url_violation_reported = True
+
+        # --- Check B: Secret-class direct value -----------------------------
+        # Only for variables whose name matches a known secret suffix.
+        # Suppressed when Check A already flagged this line (avoids duplicate
+        # reports for URL-valued secret-class variables).
+        if not url_violation_reported and _is_secret_var(key):
+            if not _is_acceptable(value):
+                violations.append(
+                    f"{path}:{lineno}: {key!r} has a non-placeholder value — "
+                    f"replace with CHANGE_ME_{key} and rotate the real secret externally"
+                )
 
     return violations
 
