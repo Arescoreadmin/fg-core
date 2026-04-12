@@ -26,10 +26,12 @@ Exit codes
   1  blocked literal found in current working tree (must remove before merging)
   2  git not available or repository not found
 """
+
 from __future__ import annotations
 
 import subprocess
 import sys
+import os as _os
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -42,23 +44,24 @@ BLOCKED_LITERALS: list[str] = [
 # Paths that are permitted to reference a blocked literal for audit/tracking
 # purposes (scanner source itself, incident post-mortems, fix logs).
 # These are NOT exempted from history scanning — only from the HEAD grep.
-EXEMPT_PATHS: frozenset[str] = frozenset({
-    "tools/ci/check_no_plaintext_secrets.py",
-    "tools/ci/check_secret_history.py",
-    "docs/ai/PR_FIX_LOG.md",
-})
+EXEMPT_PATHS: frozenset[str] = frozenset(
+    {
+        "tools/ci/check_no_plaintext_secrets.py",
+        "tools/ci/check_secret_history.py",
+        "docs/ai/PR_FIX_LOG.md",
+    }
+)
 
 # How many recent commits to scan in history (0 = full history).
 # Full history is O(n) on repo size; the default is kept at 0 because the
 # repo is small.  Operators may override via HISTORY_DEPTH env var.
-import os as _os
-
 _HISTORY_DEPTH: int = int(_os.environ.get("HISTORY_DEPTH", "0"))
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _run(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -77,7 +80,11 @@ def _git_available(repo_root: Path) -> bool:
 def _head_contains(literal: str, repo_root: Path) -> list[str]:
     """Return non-exempt repo-relative paths that contain *literal* in HEAD."""
     result = _run(
-        "git", "grep", "--fixed-strings", "-l", "--",
+        "git",
+        "grep",
+        "--fixed-strings",
+        "-l",
+        "--",
         literal,
         cwd=repo_root,
     )
@@ -94,7 +101,10 @@ def _history_commits(literal: str, repo_root: Path) -> list[str]:
         depth_args = [f"-{_HISTORY_DEPTH}"]
 
     result = _run(
-        "git", "log", "--all", *depth_args,
+        "git",
+        "log",
+        "--all",
+        *depth_args,
         f"-S{literal}",
         "--format=%H %as %s",
         cwd=repo_root,
@@ -108,6 +118,7 @@ def _history_commits(literal: str, repo_root: Path) -> list[str]:
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def main() -> int:
     repo_root = Path(__file__).resolve().parents[2]
 
@@ -118,8 +129,8 @@ def main() -> int:
         )
         return 2
 
-    head_violations: dict[str, list[str]] = {}   # literal → [paths]
-    history_hits: dict[str, list[str]] = {}       # literal → [commit lines]
+    head_violations: dict[str, list[str]] = {}  # literal → [paths]
+    history_hits: dict[str, list[str]] = {}  # literal → [commit lines]
 
     for literal in BLOCKED_LITERALS:
         paths = _head_contains(literal, repo_root)
@@ -155,7 +166,9 @@ def main() -> int:
             depth_label = (
                 f"last {_HISTORY_DEPTH} commits" if _HISTORY_DEPTH else "full history"
             )
-            print(f"  Literal {short!r} — found in {len(commits)} commit(s) ({depth_label}):")
+            print(
+                f"  Literal {short!r} — found in {len(commits)} commit(s) ({depth_label}):"
+            )
             for c in commits[:10]:  # cap display at 10 commits
                 print(f"    {c}")
             if len(commits) > 10:

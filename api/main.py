@@ -829,6 +829,8 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(agent_phase2_router)
     app.include_router(connectors_control_plane_router)
     app.include_router(control_plane_router)
+    app.include_router(control_plane_v2_router)
+    app.include_router(control_tower_snapshot_router)
     if _testing_control_tower_enabled():
         app.include_router(testing_control_tower_router)
     if _should_mount_admin_routes():
@@ -857,6 +859,22 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     @app.get("/health/ready")
     async def health_ready() -> dict[str, Any]:
         return {"status": "ready", "dependencies": {"db": "contract"}}
+
+    @app.get("/health/detailed")
+    async def health_detailed() -> dict[str, Any]:
+        return {"status": "ok", "checks": {"db": "contract", "auth": "enabled"}}
+
+    @app.get("/status")
+    async def status() -> dict[str, str]:
+        return {"status": "ok", "version": app.state.app_version}
+
+    @app.get("/v1/status")
+    async def v1_status() -> dict[str, str]:
+        return {"status": "ok", "version": app.state.app_version}
+
+    @app.get("/stats/debug")
+    async def stats_debug() -> dict[str, Any]:
+        return {"status": "ok", "mode": "contract"}
 
     return app
 

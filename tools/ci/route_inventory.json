@@ -2875,6 +2875,18 @@
       "dependency_categories": [],
       "file": "api/main.py",
       "method": "GET",
+      "path": "/health/detailed",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/main.py",
+      "method": "GET",
       "path": "/health/live",
       "plane": "control",
       "plane_id": "control",
@@ -3251,6 +3263,18 @@
       "tenant_bound": false
     },
     {
+      "dependency_categories": [],
+      "file": "api/main.py",
+      "method": "GET",
+      "path": "/stats/debug",
+      "plane": "data",
+      "plane_id": "data",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
       "dependency_categories": [
         "auth",
         "tenant"
@@ -3266,6 +3290,18 @@
       ],
       "source": "runtime-ast",
       "tenant_bound": true
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/main.py",
+      "method": "GET",
+      "path": "/status",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
     },
     {
       "dependency_categories": [],
@@ -3816,9 +3852,21 @@
       "scopes": [],
       "source": "runtime-ast",
       "tenant_bound": false
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/main.py",
+      "method": "GET",
+      "path": "/v1/status",
+      "plane": "connector",
+      "plane_id": "connector",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
     }
   ],
-  "generated_at": "2026-03-29T16:10:55.430115+00:00",
+  "generated_at": "2026-04-12T21:44:00.978439+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

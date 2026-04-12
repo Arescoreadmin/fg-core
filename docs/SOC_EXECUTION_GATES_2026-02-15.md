@@ -2004,6 +2004,32 @@ Validation:
 - `.venv/bin/ruff check .` → All checks passed!
 - `make fg-contract` → Contract diff: OK
 
+## 2026-04-12 — Route contract/runtime alignment + G001 waiver closure
+
+### Files reviewed/updated
+- `api/main.py`
+- `contracts/core/openapi.json`
+- `schemas/api/openapi.json`
+- `tools/ci/route_inventory_summary.json`
+- `docs/RISK_WAIVERS.md`
+- `docs/GAP_MATRIX.md`
+
+### Route drift root cause + resolution
+- Root cause: production runtime composition included control-plane v2/status/control-tower surfaces not present in `build_contract_app`, inflating runtime-vs-contract drift noise.
+- Resolution: contract app now includes `control_plane_v2_router`, `control_tower_snapshot_router`, and contract handlers for `/health/detailed`, `/status`, `/v1/status`, `/stats/debug`; contracts regenerated.
+- Result: runtime_only warning list materially reduced to internal/dev/admin/UI-focused surfaces.
+
+### G001 root cause + resolution
+- Root cause: governance docs still carried an active G001 waiver despite fallback already default-off and prod invariant checks requiring fail-closed behavior.
+- Resolution: removed G001 waiver entry from `docs/RISK_WAIVERS.md` and updated `docs/GAP_MATRIX.md` to no active open gap entry.
+
+### Validation evidence
+- `make contracts-core-gen`
+- `make route-inventory-generate`
+- `make route-inventory-audit` (passes; runtime_only warning only, contract_only empty)
+- `make gap-audit` (0 blocking/launch/post-launch gaps; 0 waivers)
+- `pytest -q tests/tools/test_route_inventory_summary.py tests/security/test_prod_invariants.py` (pass)
+
 ## 2026-04-11 — Task 6.2: add /auth/token-exchange to CSRF exempt paths
 
 Critical file changed:
