@@ -373,3 +373,122 @@ def test_sessions_records_count_matches_invariants(isolated_db, monkeypatch):
     matched = [s for s in result["sessions"] if s["session_id"] == session_id]
     assert len(matched) == 1
     assert matched[0]["records"] == len(invariants)
+
+
+# ---------------------------------------------------------------------------
+# 8. Revoked-tenant denial
+# ---------------------------------------------------------------------------
+
+
+def _patch_registry(monkeypatch, registry_dict: dict) -> None:
+    """Patch tools.tenants.registry.load_registry to return a fixed dict."""
+    import tools.tenants.registry as _reg_mod
+    from tools.tenants.registry import TenantRecord
+
+    def _fake_load():
+        out = {}
+        for tid, payload in registry_dict.items():
+            out[tid] = TenantRecord.from_dict({"tenant_id": tid, **payload})
+        return out
+
+    monkeypatch.setattr(_reg_mod, "load_registry", _fake_load)
+
+
+def _make_revoked_registry(monkeypatch, tenant_id: str) -> None:
+    """Patch registry so tenant_id appears revoked."""
+    _patch_registry(
+        monkeypatch,
+        {
+            tenant_id: {
+                "api_key": "test-key-revoked",
+                "status": "revoked",
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "updated_at": "2026-01-02T00:00:00+00:00",
+            }
+        },
+    )
+
+
+def _make_active_registry(monkeypatch, tenant_id: str) -> None:
+    """Patch registry so tenant_id appears active."""
+    _patch_registry(
+        monkeypatch,
+        {
+            tenant_id: {
+                "api_key": "test-key-active",
+                "status": "active",
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "updated_at": "2026-01-02T00:00:00+00:00",
+            }
+        },
+    )
+
+
+def test_revoked_tenant_denied_on_cycle_run(isolated_db, monkeypatch):
+    """Revoked tenant in registry must not be able to trigger a cycle run."""
+    _make_revoked_registry(monkeypatch, "tenant-revoked")
+    monkeypatch.setattr(
+        "api.audit.AuditEngine",
+        lambda: _make_mocked_engine(isolated_db, monkeypatch),
+    )
+    with pytest.raises(HTTPException) as exc:
+        run_audit_cycle(
+            CycleRunRequest(cycle_kind="light"), _bound_request("tenant-revoked")
+        )
+    assert exc.value.status_code == 403
+    assert exc.value.detail["code"] == "TENANT_REVOKED"
+
+
+def _make_mocked_engine(isolated_db, monkeypatch):
+    """Helper: return an AuditEngine with _invariants stubbed."""
+    eng = AuditEngine()
+    eng._invariants = lambda: [InvariantResult("inv-1", "pass", "ok")]  # type: ignore[method-assign]
+    return eng
+
+
+def test_revoked_tenant_creates_no_ledger_state(isolated_db, monkeypatch):
+    """Revoked tenant denial must occur before any persistence."""
+    _make_revoked_registry(monkeypatch, "tenant-revoked")
+    monkeypatch.setattr(
+        "api.audit.AuditEngine",
+        lambda: _make_mocked_engine(isolated_db, monkeypatch),
+    )
+    try:
+        run_audit_cycle(
+            CycleRunRequest(cycle_kind="light"), _bound_request("tenant-revoked")
+        )
+    except HTTPException:
+        pass
+
+    from api.db_models import AuditLedgerRecord
+
+    with Session(get_engine()) as s:
+        rows = (
+            s.query(AuditLedgerRecord)
+            .filter(AuditLedgerRecord.tenant_id == "tenant-revoked")
+            .all()
+        )
+    assert rows == []
+
+
+def test_active_tenant_in_registry_allowed(isolated_db, monkeypatch):
+    """Active tenant in registry can still run cycle successfully."""
+    _make_active_registry(monkeypatch, "tenant-active")
+    eng = _make_mocked_engine(isolated_db, monkeypatch)
+    monkeypatch.setattr("api.audit.AuditEngine", lambda: eng)
+    result = run_audit_cycle(
+        CycleRunRequest(cycle_kind="light"), _bound_request("tenant-active")
+    )
+    assert "session_id" in result
+    assert result["cycle_kind"] == "light"
+
+
+def test_tenant_not_in_registry_allowed(isolated_db, monkeypatch):
+    """Tenant absent from registry (no revocation recorded) is allowed through."""
+    _patch_registry(monkeypatch, {})  # empty registry
+    eng = _make_mocked_engine(isolated_db, monkeypatch)
+    monkeypatch.setattr("api.audit.AuditEngine", lambda: eng)
+    result = run_audit_cycle(
+        CycleRunRequest(cycle_kind="light"), _bound_request("tenant-unknown")
+    )
+    assert "session_id" in result
