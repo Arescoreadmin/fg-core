@@ -177,14 +177,18 @@ class AuditEngine:
         )
         return results
 
-    def run_cycle(self, cycle_kind: str = "light") -> str:
+    def run_cycle(
+        self, cycle_kind: str = "light", tenant_id: str | None = None
+    ) -> str:
+        if tenant_id is not None and not tenant_id.strip():
+            raise AuditTamperDetected("tenant_context_required")
         with Session(self.engine) as session:
             if not self.verify_chain_integrity(session):
                 raise AuditTamperDetected("audit ledger tampering detected")
 
             session_id = str(uuid.uuid4())
             host_id = os.getenv("FG_AUDIT_HOST_ID", socket.gethostname())
-            tenant_id = os.getenv("FG_AUDIT_TENANT_ID", host_id)
+            tenant_id = tenant_id or os.getenv("FG_AUDIT_TENANT_ID", host_id)
             key_id, keys = _audit_keys()
             key = keys[key_id]
             last = (

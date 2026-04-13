@@ -10,7 +10,7 @@ from api.db import get_engine
 from api.db_models import AuditLedgerRecord
 from api.security_audit import audit_admin_action
 from services.audit_engine import AuditEngine
-from services.audit_engine.engine import AuditIntegrityError
+from services.audit_engine.engine import AuditIntegrityError, AuditTamperDetected
 from services.compliance_registry import ComplianceRegistry
 
 router = APIRouter(tags=["audit"])
@@ -20,12 +20,84 @@ class ReproduceRequest(BaseModel):
     session_id: str
 
 
+class CycleRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cycle_kind: str = "light"
+
+
 class ExamRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
     window_start_utc: str
     window_end_utc: str
+
+
+_VALID_CYCLE_KINDS: frozenset[str] = frozenset({"light", "full"})
+
+
+@router.post(
+    "/audit/cycle/run",
+    dependencies=[
+        Depends(require_scopes("audit:write")),
+        Depends(require_bound_tenant),
+    ],
+)
+def audit_cycle_run(body: CycleRunRequest, request: Request) -> dict[str, object]:
+    tenant_id = require_bound_tenant(request)
+
+    if body.cycle_kind not in _VALID_CYCLE_KINDS:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "INVALID_CYCLE_KIND",
+                "message": f"cycle_kind must be one of {sorted(_VALID_CYCLE_KINDS)}",
+            },
+        )
+
+    try:
+        from tools.tenants.registry import load_registry as _load_registry
+
+        registry = _load_registry()
+    except ImportError:
+        raise HTTPException(
+            status_code=501,
+            detail={
+                "code": "REGISTRY_UNAVAILABLE",
+                "message": "tenant registry not available",
+            },
+        )
+
+    if tenant_id not in registry:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "TENANT_NOT_FOUND",
+                "message": "tenant not found in registry; create it first",
+            },
+        )
+
+    engine = AuditEngine()
+    try:
+        session_id = engine.run_cycle(cycle_kind=body.cycle_kind, tenant_id=tenant_id)
+    except AuditTamperDetected as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "AUDIT_TAMPER_DETECTED", "message": str(exc)},
+        )
+
+    audit_admin_action(
+        action="audit_cycle_run",
+        tenant_id=tenant_id,
+        request=request,
+        details={"cycle_kind": body.cycle_kind, "session_id": session_id},
+    )
+    return {
+        "session_id": session_id,
+        "cycle_kind": body.cycle_kind,
+        "tenant_id": tenant_id,
+    }
 
 
 @router.get("/audit/sessions", dependencies=[Depends(require_scopes("audit:read"))])

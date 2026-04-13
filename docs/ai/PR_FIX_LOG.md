@@ -6,6 +6,87 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-13 — Task 9.2: Run Primary Audit/Control Flow
+
+**Area:** Audit Engine · API Surface · Tenant Isolation · Flow Trigger
+
+**Primary flow selected:** `POST /audit/cycle/run` → `AuditEngine.run_cycle(cycle_kind, tenant_id)` → persists `AuditLedgerRecord` + `ComplianceSnapshotRecord` → retrievable via `GET /audit/sessions`
+
+**Why this is the intended primary flow:**
+- `AuditEngine.run_cycle()` is the only mechanism that produces audit ledger records (the core audit artifact).
+- All other `/audit/*` endpoints (sessions, export, reproduce) are read/retrieval operations on records produced by `run_cycle()`.
+- `scripts/run_audit_engine.py` is a dev/shell script, not the supported product interface.
+- The audit router is already mounted in `api/main.py` as the authoritative API surface.
+- Task 9.1 (tenant creation) is the stated prerequisite; 9.2 runs the flow for that tenant.
+
+**Supported trigger path:** `POST /audit/cycle/run` in `api/audit.py` (audit_router, evidence plane)
+
+**Persisted artifact:** `AuditLedgerRecord` rows in `audit_ledger` table (tagged `session_id` + `tenant_id`) and one `ComplianceSnapshotRecord` per cycle.
+
+**Retrieval path:** `GET /audit/sessions` (already existed; filters by bound `tenant_id`).
+
+**Auth/tenant/precondition enforcement:**
+- `audit:write` scope required (consistent with all other audit write ops).
+- `require_bound_tenant` enforced; unbound key → 400.
+- Tenant must exist in registry (Task 9.1 prerequisite); missing → 422 `TENANT_NOT_FOUND`.
+- `cycle_kind` must be `light` or `full`; invalid value → 422 `INVALID_CYCLE_KIND`.
+- Extra fields in request body rejected (`extra="forbid"` on `CycleRunRequest`).
+- Cross-tenant isolation: `run_cycle()` tags records with the auth-bound tenant_id; `GET /audit/sessions` filters by tenant_id; tenant-b cannot see tenant-a's sessions.
+- Tampered chain → `AuditTamperDetected` → 409 `AUDIT_TAMPER_DETECTED`.
+
+**Issue — `run_cycle()` read tenant_id from env var only:**
+`AuditEngine.run_cycle()` unconditionally read `tenant_id` from `FG_AUDIT_TENANT_ID` env var. There was no way to pass in the auth-bound tenant_id from an API request. Without this, any API trigger would tag records with the env-var tenant, violating per-request tenant isolation.
+
+**Fix:** Added `tenant_id: str | None = None` parameter to `run_cycle()`. If provided, it overrides the env var. Empty string when provided is rejected with `AuditTamperDetected("tenant_context_required")`. Script/background callers continue to use the env var (backward compatible).
+
+**Tests added (11 new tests in `tests/test_audit_cycle_run.py`):**
+- `test_audit_cycle_run_happy_path` — POST returns 200 with session_id, cycle_kind, tenant_id
+- `test_audit_cycle_run_persists_ledger_records` — AuditLedgerRecord rows exist after success, tagged with correct tenant_id and cycle_kind
+- `test_audit_cycle_run_retrievable_via_sessions` — GET /audit/sessions returns the created session_id
+- `test_audit_cycle_run_no_key_rejected` — 401/403 without API key
+- `test_audit_cycle_run_wrong_scope_rejected` — read-only key → 403
+- `test_audit_cycle_run_unbound_tenant_rejected` — unbound key → 400
+- `test_audit_cycle_run_tenant_not_in_registry_fails` — tenant absent from registry → 422 TENANT_NOT_FOUND
+- `test_audit_cycle_run_invalid_cycle_kind_fails` — unknown cycle_kind → 422 INVALID_CYCLE_KIND
+- `test_audit_cycle_run_extra_fields_rejected` — unknown body fields → 422
+- `test_audit_cycle_run_cross_tenant_sessions_invisible` — tenant-b cannot see tenant-a's sessions
+- `test_audit_cycle_run_tampered_chain_returns_409` — tampered ledger → 409 AUDIT_TAMPER_DETECTED
+
+**Files changed:**
+- `services/audit_engine/engine.py` — `run_cycle()` accepts optional `tenant_id` parameter
+- `api/audit.py` — `CycleRunRequest` model, `POST /audit/cycle/run` endpoint, import `AuditTamperDetected`
+- `tests/test_audit_cycle_run.py` — 11 new deterministic regression tests
+- `contracts/core/openapi.json` — regenerated (new `/audit/cycle/run` POST endpoint added)
+- `schemas/api/openapi.json` — regenerated (mirror of core)
+- `tools/ci/route_inventory.json` — regenerated (new route added)
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/plane_registry_snapshot.sha256` — regenerated
+- `tools/ci/contract_routes.json` — regenerated
+- `tools/ci/build_meta.json` — regenerated
+- `tools/ci/attestation_bundle.sha256` — regenerated
+- `tools/ci/topology.sha256` — regenerated
+- `artifacts/route_inventory_summary.json` — regenerated
+- `artifacts/plane_registry_snapshot.json` — regenerated
+- `artifacts/plane_registry_snapshot.sha256` — regenerated
+- `artifacts/contract_routes.json` — regenerated
+- `artifacts/build_meta.json` — regenerated
+- `artifacts/attestation_bundle.sha256` — regenerated
+- `artifacts/topology.sha256` — regenerated
+- `tools/ci/contract_authority.json` — refreshed (authority markers updated for new route)
+
+**Validation evidence:**
+- `pytest -q tests/test_audit_cycle_run.py` → 11 passed
+- `pytest -q tests -k 'audit or control or flow'` → 672 passed, 2 pre-existing failures (async plugin missing in test env, unrelated to this change)
+- `python scripts/contracts_diff_core.py` → ✅ Core OpenAPI contract matches committed version
+- `python tools/ci/check_route_inventory.py` → route inventory: OK
+- `python scripts/contract_authority_check.py` → ✅ Contract authority markers match prod OpenAPI spec
+- `ruff check .` → All checks passed
+- `python tools/ci/check_security_regression_gates.py` → security regression gates: OK
+- `python tools/ci/check_soc_invariants.py` → soc invariants: OK
+
+---
+
 ### 2026-04-13 — Task 9.1 Addendum: Atomic Tenant Create + Strict Gateway Validation
 
 **Area:** Tenant Registry · API Correctness · Gateway Validation

@@ -972,6 +972,18 @@
         "title": "CreditNoteCreateRequest",
         "type": "object"
       },
+      "CycleRunRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "cycle_kind": {
+            "default": "light",
+            "title": "Cycle Kind",
+            "type": "string"
+          }
+        },
+        "title": "CycleRunRequest",
+        "type": "object"
+      },
       "DecisionExplain": {
         "properties": {
           "anomaly_score": {
@@ -5574,6 +5586,66 @@
         "summary": "List Approvals",
         "tags": [
           "attestation"
+        ]
+      }
+    },
+    "/audit/cycle/run": {
+      "post": {
+        "operationId": "audit_cycle_run_audit_cycle_run_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CycleRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Audit Cycle Run Audit Cycle Run Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Audit Cycle Run",
+        "tags": [
+          "audit"
         ]
       }
     },
