@@ -12,6 +12,104 @@ Entries in this log are **final** unless explicitly reversed.
 
 ---
 
+### 2026-04-13 — F401 Lint Repair: Remove Unused `import pytest` in Route Inventory Tests
+
+**Area:** Lint · Test Hygiene
+
+**Issue:**  
+`ruff check` reported `F401: 'pytest' imported but unused` in `tests/tools/test_route_inventory_summary.py`. The `import pytest` statement (line 3) was introduced during the route-drift governance commit but was never actually used: `monkeypatch` is injected as a pytest fixture parameter, not accessed via the module. No `pytest.raises`, `pytest.mark`, or any explicit `pytest.*` symbol appears in the file.
+
+**Resolution:**  
+Removed the single unused `import pytest` line. No test logic changed. No assertions weakened. All 11 tests continue to pass. `ruff check` and `ruff format --check` both exit 0.
+
+**Root cause:**  
+`import pytest` was included by reflex during the route-governance commit that introduced six new `monkeypatch`-parameterised test functions. Pytest fixture injection does not require the module to be imported.
+
+**Files updated:**  
+- `tests/tools/test_route_inventory_summary.py` — removed `import pytest` (line 3)
+
+**AI Notes:**  
+- `monkeypatch`, `tmp_path`, and other built-in pytest fixtures are injected by name; `import pytest` is only needed when referencing `pytest.*` symbols directly (e.g., `pytest.raises`, `pytest.mark.parametrize`).
+
+---
+
+### 2026-04-13 — Contract Authority Marker Sync After AI Route Promotion
+
+**Area:** CI · Contract Authority · Governance Sync
+
+**Issue:**  
+After promoting AI plane routes into `contracts/core/openapi.json` (adding `POST /ai/infer`, `GET /ai-plane/policies`, `POST /ai-plane/policies`, `GET /ai-plane/inference`), the contract file changed. `BLUEPRINT_STAGED.md` and `CONTRACT.md` carried the stale `Contract-Authority-SHA256: 261b9ec5fcb271efa9a8eb42ae8a150249453948f9917edd6dc37c8d8047b373`. `scripts/contract_authority_check.py` hard-failed because both authority marker documents referenced the pre-promotion hash, which no longer matched the committed contract file.
+
+**Resolution:**  
+Ran `scripts/refresh_contract_authority.py` (repo-native authority sync tool). The script: (1) hashed `contracts/core/openapi.json` → `465e44f71fef6423523294f05236de9499f6a12a1376f61c73f8b78aebc58750`; (2) mirrored bytes to `schemas/api/openapi.json`; (3) replaced `Contract-Authority-SHA256` marker in `BLUEPRINT_STAGED.md` line 8 and `CONTRACT.md` line 8 with the current hash. `scripts/contract_authority_check.py` now exits 0. No authority enforcement was weakened. Route-governance hardening from prior commits is intact.
+
+**Root cause:**  
+Regenerating `contracts/core/openapi.json` (via `scripts/contracts_gen_core.py`) changes the file's hash. The authority marker documents must be synchronised after every contract regeneration; this synchronisation step was not included in the previous commit.
+
+**Authority source of truth:** `contracts/core/openapi.json` (SHA256 computed by `_hash_file()` in `scripts/contract_authority_check.py` using raw file bytes).
+
+**Files updated:**  
+- `BLUEPRINT_STAGED.md` — `Contract-Authority-SHA256` updated (line 8)  
+- `CONTRACT.md` — `Contract-Authority-SHA256` updated (line 8)  
+- `schemas/api/openapi.json` — bytes mirrored from `contracts/core/openapi.json` by `refresh_contract_authority.py`
+
+**AI Notes:**  
+- After ANY contract regeneration, run `scripts/refresh_contract_authority.py` before committing.  
+- Do NOT hand-edit the SHA256 hash; always derive it from `contracts/core/openapi.json` via the repo-native script.  
+- Do NOT weaken `scripts/contract_authority_check.py`; it is a required governance gate.  
+- Both `BLUEPRINT_STAGED.md` and `CONTRACT.md` must carry identical hashes matching the committed contract file.
+
+### 2026-04-13 — Route Drift Governance Hardening: Narrow /ai/ Allowlist + Promote AI Routes to Contract
+
+**Area:** CI · Route Governance · Contract Completeness · Drift Enforcement
+
+**Issue:**  
+`ALLOWED_INTERNAL_PREFIXES` in `tools/ci/check_route_inventory.py` included `/ai/` and `/ai-plane/` as blanket-allowlisted prefixes. Both `/ai/infer` (customer-facing, `compliance:read` scope, tenant-bound) and `/ai-plane/*` routes (tenant-scoped customer APIs) are production-intended surfaces tested by `tests/security/test_new_routes_security_contract.py` with `FG_AI_PLANE_ENABLED=1`. Blanket allowlisting customer-facing routes as "allowed_internal" is incorrect policy. `build_contract_app()` in `api/main.py` already conditionally includes `ai_plane_extension_router` when `FG_AI_PLANE_ENABLED=1`; contract generation simply failed to set this flag.
+
+**Resolution:**  
+Updated `scripts/contracts_gen_core.py::generate_openapi()` to set `FG_AI_PLANE_ENABLED=1` (with proper save/restore) so that all four AI plane routes (`POST /ai/infer`, `GET /ai-plane/policies`, `POST /ai-plane/policies`, `GET /ai-plane/inference`) are included in the generated `contracts/core/openapi.json`. Removed `/ai/` and `/ai-plane/` from `ALLOWED_INTERNAL_PREFIXES`. `ALLOWED_INTERNAL_PREFIXES` now contains exactly five prefixes with precise evidence: `/admin/`, `/ui/`, `/dev/`, `/control/testing/`, `/_debug/`. Regenerated `contracts/core/openapi.json` and `schemas/api/openapi.json` (contract route count: 150 → 154). Regenerated `tools/ci/route_inventory_summary.json` (`allowed_internal: 70 routes`, `unauthorized_runtime_only: []`, `contract_only: []`). Updated test `test_classify_runtime_only_all_allowed` to remove `/ai*` paths; added `test_classify_runtime_only_ai_routes_are_unauthorized` to prove `/ai/` and `/ai-plane/` are now unauthorized.
+
+**Root cause of prior warning-only drift:**  
+The 2026-03-01 fix ("Route Inventory Runtime-Only Drift") downgraded all `runtime_only` to warning because no classification machinery existed. The 2026-04-13 (earlier entry this date) added that machinery with an initial allowlist that was too broad (included `/ai/` and `/ai-plane/`). This entry narrows the allowlist to exactly the justified set and promotes AI routes into the public contract.
+
+**Final ALLOWED_INTERNAL_PREFIXES (exact set):**  
+- `/admin/` — `ADMIN_PREFIX_POLICY="control_only"` (registry.py); `build_contract_app()` excludes via `FG_ADMIN_ENABLED=0`; `_filter_admin_paths()` strips leaks  
+- `/ui/` — ui plane (production-grade); `build_contract_app()` does NOT include ui router; intentionally internal aggregation  
+- `/dev/` — `build_contract_app()` does NOT include `dev_events_router`; dev seeding only  
+- `/control/testing/` — CI testing infrastructure, not customer-facing; `FG_TESTING_CONTROL_TOWER_ENABLED` defaults off in contract gen  
+- `/_debug/` — `class_name="bootstrap"`, "blocked in prod-like mode" (registry.py global_routes)  
+
+**Routes moved into contract:**  
+- `POST /ai/infer` — customer-facing AI inference API (`compliance:read`, tenant-bound)  
+- `GET /ai-plane/policies` — tenant AI policy retrieval (`compliance:read`, tenant-bound)  
+- `POST /ai-plane/policies` — tenant AI policy update (`admin:write`, tenant-bound)  
+- `GET /ai-plane/inference` — tenant AI inference history (`compliance:read`, tenant-bound)  
+
+**Contracts modified (stating explicitly):**  
+- `contracts/core/openapi.json` — 4 AI plane paths added  
+- `schemas/api/openapi.json` — mirror of above  
+
+**AI Notes:**  
+- Do NOT add `/ai/` or `/ai-plane/` back to `ALLOWED_INTERNAL_PREFIXES`; these routes are now in contract.  
+- Do NOT remove `FG_AI_PLANE_ENABLED=1` from `contracts_gen_core.py::generate_openapi()` while these routes remain production-intended.  
+- Do NOT add prefixes to `ALLOWED_INTERNAL_PREFIXES` without explicit evidence from `services/plane_registry/registry.py` and `scripts/contracts_gen_core.py`.  
+- Do NOT downgrade unauthorized drift back to warning.
+
+### 2026-04-13 — Route Drift Governance: Explicit allowed_internal Policy + Unauthorized Drift Hard-Fail
+
+**Area:** CI · Route Governance · Drift Enforcement
+
+**Issue:**  
+`check_route_inventory.py` treated all `runtime_only` drift as a WARNING regardless of whether routes were intentionally internal (admin, ui, dev, testing, debug) or genuinely unauthorized.
+
+**Resolution:**  
+Added `ALLOWED_INTERNAL_PREFIXES` constant, `_classify_runtime_only()` function, updated `_summary_payload()` and `main()` to hard-fail on unauthorized runtime_only drift. (NOTE: initial allowlist included `/ai/` and `/ai-plane/` which were subsequently narrowed — see entry above.)
+
+**AI Notes:**  
+- Do NOT remove `ALLOWED_INTERNAL_PREFIXES` or revert `_classify_runtime_only()`.  
+- Do NOT downgrade unauthorized drift back to warning; the hard-fail is intentional.  
+- `runtime_only` field in summary is preserved for backward compatibility; enforcement uses `_classify_runtime_only()` at check time.
+
 ### 2026-04-12 — Route Contract Drift Reduction + G001 Waiver Retirement
 
 **Area:** CI · Route Governance · Production Readiness

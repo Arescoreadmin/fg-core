@@ -38,6 +38,65 @@ ARTIFACT_TOPOLOGY_HASH = REPO / "artifacts" / "topology.sha256"
 SCHEMA_VERSION = "v1"
 TOOL_NAME = "tools/ci/check_route_inventory.py"
 
+# ---------------------------------------------------------------------------
+# Allowed-internal route prefix policy (explicit, evidence-backed).
+#
+# Routes whose paths match one of these prefixes are classified as
+# ``allowed_internal`` and are permitted to be runtime-only (i.e. absent from
+# the public core OpenAPI contract).  Any runtime-only route whose path does
+# NOT match this allowlist is classified as ``unauthorized`` and causes a HARD
+# FAIL in check_route_inventory.
+#
+# Evidence for each family (see services/plane_registry/registry.py and
+# scripts/contracts_gen_core.py):
+#
+#   /admin/           — control plane operator surfaces;
+#                       ADMIN_PREFIX_POLICY = "control_only" (registry.py);
+#                       build_contract_app() mounts admin only when
+#                       FG_ADMIN_ENABLED=1 (disabled in contract gen);
+#                       scripts/contracts_gen_core.py::_filter_admin_paths()
+#                       strips any /admin/* paths that leak through.
+#
+#   /ui/              — ui plane (production-grade), internal UI aggregation
+#                       layer; plane_id="ui" in PLANE_REGISTRY;
+#                       build_contract_app() does NOT include the ui router
+#                       at all; intentionally excluded from public contract.
+#
+#   /dev/             — control plane dev seeding surfaces;
+#                       build_contract_app() does NOT include dev_events_router;
+#                       _dev_enabled() gate (FG_DEV_EVENTS_ENABLED) is never
+#                       set in contract gen environment.
+#
+#   /control/testing/ — control plane testing CI surfaces;
+#                       build_contract_app() conditionally includes testing
+#                       control tower only when FG_TESTING_CONTROL_TOWER_ENABLED=1;
+#                       not customer-facing; default off in contract gen.
+#
+#   /_debug/          — control plane debug endpoint;
+#                       class_name="bootstrap"; justification "blocked in
+#                       prod-like mode" (registry.py global_routes).
+#
+# EXCLUDED prefixes — these were previously allowlisted but have been
+# REMOVED because their routes are customer-facing production-intended APIs:
+#
+#   /ai/              — NOT allowed_internal.  POST /ai/infer is customer-
+#                       facing (compliance:read scope, tenant-bound).
+#                       contracts_gen_core.py now sets FG_AI_PLANE_ENABLED=1
+#                       so these routes appear in the public contract.
+#
+#   /ai-plane/        — NOT allowed_internal.  GET/POST /ai-plane/policies and
+#                       GET /ai-plane/inference are tenant-scoped customer APIs.
+#                       Same: promoted to contract by FG_AI_PLANE_ENABLED=1 in
+#                       contracts_gen_core.py.
+# ---------------------------------------------------------------------------
+ALLOWED_INTERNAL_PREFIXES: tuple[str, ...] = (
+    "/admin/",
+    "/ui/",
+    "/dev/",
+    "/control/testing/",
+    "/_debug/",
+)
+
 
 # -----------------------------
 # small, boring, correct utils
@@ -227,6 +286,31 @@ def _as_list_of_dicts(value: object, *, label: str) -> list[dict[str, Any]]:
     return out
 
 
+def _classify_runtime_only(
+    runtime_only: list[str],
+) -> tuple[list[str], list[str]]:
+    """
+    Classify runtime_only entries ("METHOD /path") against ALLOWED_INTERNAL_PREFIXES.
+
+    Returns (allowed_internal, unauthorized):
+      allowed_internal  — path matches an explicit allowlisted prefix; informational only.
+      unauthorized      — path outside the allowlist; causes HARD FAIL in main().
+    """
+    allowed: list[str] = []
+    unauthorized: list[str] = []
+    for entry in runtime_only:
+        parts = entry.split(" ", 1)
+        path = parts[1] if len(parts) == 2 else entry
+        if any(
+            path.startswith(prefix) or path == prefix.rstrip("/")
+            for prefix in ALLOWED_INTERNAL_PREFIXES
+        ):
+            allowed.append(entry)
+        else:
+            unauthorized.append(entry)
+    return sorted(allowed), sorted(unauthorized)
+
+
 # -----------------------------
 # inventory building
 # -----------------------------
@@ -365,13 +449,19 @@ def _summary_payload(
     if expected is not None:
         removed, added, changed = _route_diff(expected, cur)
 
+    runtime_only_list = sorted(
+        [f"{m} {p}" for (m, p) in (runtime_keys - contract_keys)]
+    )
+    allowed_internal, unauthorized_runtime_only = _classify_runtime_only(
+        runtime_only_list
+    )
     return {
         "plane_coverage": plane_coverage_summary(cur),
         "runtime_count": len(cur),
         "contract_count": len(contract_list),
-        "runtime_only": sorted(
-            [f"{m} {p}" for (m, p) in (runtime_keys - contract_keys)]
-        ),
+        "runtime_only": runtime_only_list,
+        "allowed_internal": allowed_internal,
+        "unauthorized_runtime_only": unauthorized_runtime_only,
         "contract_only": sorted(
             [f"{m} {p}" for (m, p) in (contract_keys - runtime_keys)]
         ),
@@ -537,11 +627,22 @@ def main() -> int:
     summary_payload = _read_data(SUMMARY, "route_inventory_summary")
     summary = summary_payload if isinstance(summary_payload, dict) else {}
 
-    if summary.get("runtime_only"):
-        print(
-            "route inventory: WARNING runtime vs contract drift (runtime_only): "
-            f"{summary['runtime_only']}"
-        )
+    runtime_only: list[str] = summary.get("runtime_only") or []
+    if runtime_only:
+        # Reclassify at check time so enforcement is correct even when the
+        # summary was written by an older tool version.
+        allowed_internal, unauthorized = _classify_runtime_only(runtime_only)
+        if allowed_internal:
+            print(
+                f"route inventory: INFO allowed_internal runtime_only "
+                f"({len(allowed_internal)} routes match ALLOWED_INTERNAL_PREFIXES)"
+            )
+        if unauthorized:
+            failures.append(
+                "UNAUTHORIZED runtime_only drift outside ALLOWED_INTERNAL_PREFIXES "
+                f"(hard fail): {unauthorized}"
+            )
+
     if summary.get("contract_only"):
         failures.append(
             f"runtime vs contract drift (contract_only): {summary['contract_only']}"
