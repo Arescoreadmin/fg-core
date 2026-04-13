@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from tools.ci import check_route_inventory
 
 

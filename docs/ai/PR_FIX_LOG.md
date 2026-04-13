@@ -12,6 +12,27 @@ Entries in this log are **final** unless explicitly reversed.
 
 ---
 
+### 2026-04-13 — F401 Lint Repair: Remove Unused `import pytest` in Route Inventory Tests
+
+**Area:** Lint · Test Hygiene
+
+**Issue:**  
+`ruff check` reported `F401: 'pytest' imported but unused` in `tests/tools/test_route_inventory_summary.py`. The `import pytest` statement (line 3) was introduced during the route-drift governance commit but was never actually used: `monkeypatch` is injected as a pytest fixture parameter, not accessed via the module. No `pytest.raises`, `pytest.mark`, or any explicit `pytest.*` symbol appears in the file.
+
+**Resolution:**  
+Removed the single unused `import pytest` line. No test logic changed. No assertions weakened. All 11 tests continue to pass. `ruff check` and `ruff format --check` both exit 0.
+
+**Root cause:**  
+`import pytest` was included by reflex during the route-governance commit that introduced six new `monkeypatch`-parameterised test functions. Pytest fixture injection does not require the module to be imported.
+
+**Files updated:**  
+- `tests/tools/test_route_inventory_summary.py` — removed `import pytest` (line 3)
+
+**AI Notes:**  
+- `monkeypatch`, `tmp_path`, and other built-in pytest fixtures are injected by name; `import pytest` is only needed when referencing `pytest.*` symbols directly (e.g., `pytest.raises`, `pytest.mark.parametrize`).
+
+---
+
 ### 2026-04-13 — Contract Authority Marker Sync After AI Route Promotion
 
 **Area:** CI · Contract Authority · Governance Sync
