@@ -955,6 +955,24 @@
         "tenant"
       ],
       "file": "api/audit.py",
+      "method": "POST",
+      "path": "/audit/cycle/run",
+      "plane": "evidence",
+      "plane_id": "evidence",
+      "scoped": true,
+      "scopes": [
+        "audit:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/audit.py",
       "method": "GET",
       "path": "/audit/exam-snapshot",
       "plane": "evidence",
@@ -3917,7 +3935,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-04-13T03:17:41.955961+00:00",
+  "generated_at": "2026-04-13T16:51:02.265591+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
