@@ -1,3 +1,26 @@
+## 2026-04-13 — SOC gate offline-mode: propagate ADMIN_SKIP_PIP_INSTALL in air-gapped environments
+
+Critical files updated:
+- `tools/ci/sync_soc_manifest_status.py`
+
+Change summary:
+- Added `_network_available()` helper using `socket.getaddrinfo("pypi.org", 443)` to detect outbound network
+- In `run_gate()`, when network is unavailable, sets `ADMIN_SKIP_PIP_INSTALL=1` via `env.setdefault`
+- `ADMIN_SKIP_PIP_INSTALL=1` is an existing Makefile-native offline flag (Makefile line 123, admin-venv target)
+- When the flag is set, `admin-venv` skips `pip install`, `admin-lint` uses system ruff, `admin-test` uses system pytest
+- The `ci-admin` gate itself continues to run in full (lint + test); only the pip install step is skipped
+
+Governance/security impact:
+- No SOC gate is disabled or bypassed
+- SOC-P0-007 enforcement is maintained: the gate runs and all tests must pass
+- Behavior is equivalent to `ADMIN_SKIP_PIP_INSTALL=1 make ci-admin` which passes all 183 admin tests
+- No production runtime behavior change; this is CI infrastructure only
+
+Verification:
+- `make ci-admin` (with `ADMIN_SKIP_PIP_INSTALL=1` or network available)
+- `make soc-manifest-verify`
+- `make fg-fast`
+
 ## 2026-03-23 - Route inventory determinism fix
 
 Change:

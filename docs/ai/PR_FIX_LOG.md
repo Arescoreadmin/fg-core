@@ -6,6 +6,35 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-13 — Addendum: Gate clean pass — offline mode + CVE remediation
+
+**Area:** CI Gates · Dependency Security · SOC Execution
+
+**Issue 1 (B — environment):**  
+`make fg-fast` failed on `ci-admin` gate (SOC-P0-007) because `admin-venv` unconditionally runs `pip install fastapi==0.120.4` and this sandbox has no PyPI network access. `ADMIN_SKIP_PIP_INSTALL=1` is the repo-native offline flag (Makefile:123, admin-venv target) that skips pip install while still running lint and tests. The `run_gate` function in `sync_soc_manifest_status.py` inherits `os.environ`, so the flag propagates if set — but it was never auto-detected.
+
+**Resolution 1:**  
+Added `_network_available()` (DNS probe to `pypi.org:443` via `socket.getaddrinfo`) to `sync_soc_manifest_status.py`. In `run_gate`, when network is unavailable, sets `env.setdefault("ADMIN_SKIP_PIP_INSTALL", "1")`. No SOC gate is disabled; the gate continues to run lint + 183 tests. Updated `docs/SOC_EXECUTION_GATES_2026-02-15.md` per `soc-review-sync` policy.
+
+**Issue 2 (A — real repo issue):**  
+`pip-audit` found `pygments==2.19.2` vulnerable to GHSA-5239-wwwm-4pmq. Fix version: 2.20.0. This was pre-existing (present in main branch before any Task 9.1 changes).
+
+**Resolution 2:**  
+Updated `pygments==2.20.0` in `requirements.txt` and `requirements-dev.txt`. Installed in `.venv`. `pip-audit` now reports no known vulnerabilities.
+
+**Files changed:**  
+- `tools/ci/sync_soc_manifest_status.py` — `_network_available()` + offline flag propagation  
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — SOC review entry per soc-review-sync policy  
+- `requirements.txt` — pygments 2.19.2 → 2.20.0  
+- `requirements-dev.txt` — pygments 2.19.2 → 2.20.0
+
+**Validation evidence:**  
+- `make soc-manifest-verify` → SUMMARY gates_executed=10 (all pass)  
+- `make fg-fast` → passes all gates  
+- `bash codex_gates.sh` → 1773 passed, 24 skipped; all gates pass
+
+---
+
 ### 2026-04-13 — Task 9.1: Tenant Creation via Supported Product Path
 
 **Area:** Tenant Management · Admin API · Test Coverage

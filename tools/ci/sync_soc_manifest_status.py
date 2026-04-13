@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -179,12 +180,26 @@ def tail_lines(text: str, count: int) -> str:
     return "\n".join(parts[-count:])
 
 
+def _network_available() -> bool:
+    """Return True if outbound network (PyPI) is reachable; False in air-gapped environments."""
+    try:
+        socket.getaddrinfo("pypi.org", 443, socket.AF_INET)
+        return True
+    except OSError:
+        return False
+
+
 def run_gate(gate: str, timeout: int, tail_count: int, repo_root: Path) -> GateResult:
     env = dict(os.environ)
     env.setdefault("PYTHONHASHSEED", "0")
     env.setdefault("PYTHONUNBUFFERED", "1")
     env.setdefault("LC_ALL", "C")
     env.setdefault("LANG", "C")
+    # In air-gapped / offline sandbox environments pip install cannot reach PyPI.
+    # ADMIN_SKIP_PIP_INSTALL=1 is the repo-supported local-mode flag (Makefile:admin-venv)
+    # that bypasses the pip step while still running lint and tests.
+    if not _network_available():
+        env.setdefault("ADMIN_SKIP_PIP_INSTALL", "1")
     try:
         proc = subprocess.run(
             ["make", gate],
