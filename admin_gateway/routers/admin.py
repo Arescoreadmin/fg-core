@@ -576,6 +576,80 @@ async def list_tenants(
     }
 
 
+class AdminCreateTenantRequest(BaseModel):
+    """Request model for tenant provisioning."""
+
+    tenant_id: str = Field(..., min_length=1, max_length=128)
+    name: Optional[str] = Field(None, max_length=256)
+
+
+@router.post(
+    "/tenants",
+    dependencies=[
+        Depends(require_scope_dependency(Scope.CONSOLE_ADMIN)),
+        Depends(verify_csrf),
+    ],
+    status_code=201,
+)
+async def create_tenant(
+    request: Request,
+    payload: AdminCreateTenantRequest,
+    session: Session = Depends(get_current_session),
+) -> dict[str, Any]:
+    """Provision a new tenant (proxied to core).
+
+    Requires console:admin scope and CSRF token.
+    """
+    response = await _proxy_to_core(
+        request,
+        "POST",
+        "/admin/tenants",
+        json_body=payload.model_dump(exclude_none=True),
+    )
+
+    audit_logger = getattr(request.app.state, "audit_logger", None)
+    if audit_logger:
+        await audit_logger.log(
+            request_id=getattr(request.state, "request_id", "unknown"),
+            action="create_tenant",
+            resource="tenants",
+            outcome="success",
+            actor=session.user_id,
+            details={"tenant_id": payload.tenant_id},
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+
+    return response
+
+
+@router.get(
+    "/tenants/{tenant_id}",
+    dependencies=[Depends(require_scope_dependency(Scope.PRODUCT_READ))],
+)
+async def get_tenant(
+    tenant_id: str,
+    request: Request,
+    session: Session = Depends(get_current_session),
+) -> dict[str, Any]:
+    """Get a single tenant by ID (proxied to core).
+
+    Requires product:read scope. Access restricted to allowed tenants.
+    """
+    allowed = get_allowed_tenants(session)
+    if tenant_id not in allowed:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Access denied to tenant: {tenant_id}",
+        )
+
+    return await _proxy_to_core(
+        request,
+        "GET",
+        f"/admin/tenants/{tenant_id}",
+    )
+
+
 @router.get(
     "/keys",
     dependencies=[Depends(require_scope_dependency(Scope.KEYS_READ))],

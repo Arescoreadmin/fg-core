@@ -4,6 +4,60 @@
 
 This log records **completed, intentional fixes**.
 
+---
+
+### 2026-04-13 — Task 9.1: Tenant Creation via Supported Product Path
+
+**Area:** Tenant Management · Admin API · Test Coverage
+
+**Issue:**  
+No supported product-facing API path existed for tenant provisioning. The only tenant creation mechanism was a dev CLI tool (`tools/tenants/__main__.py`), which is not a supported product path. The core API had tenant lifecycle endpoints (suspend, activate, quota, tier) but no create endpoint. Tests could not create tenants through an intended supported surface.
+
+**Resolution:**  
+Added `POST /admin/tenants` (create), `GET /admin/tenants` (list), and `GET /admin/tenants/{tenant_id}` (get) to `api/admin.py`, all protected by the existing `require_internal_admin_gateway` router-level dependency. Added proxy endpoints for `POST /admin/tenants` (requires `console:admin` + CSRF) and `GET /admin/tenants/{tenant_id}` (requires `product:read`) to `admin_gateway/routers/admin.py`. Added `tests/test_tenant_create.py` with 14 deterministic regression tests covering: happy-path creation (201), persistence verification (registry file written), readback via GET single and list, name default, invalid payload (422 for missing/invalid tenant_id, extra fields), unauthorized access (401/403), and duplicate creation (409). Regenerated `contracts/admin/openapi.json` and `tools/ci/route_inventory.json` to reflect the new routes.
+
+**Supported path selected:** `POST /admin/tenants` in `api/admin.py` (the existing admin control-plane router, protected by `require_internal_admin_gateway`), accessed through `admin_gateway/routers/admin.py` for product-facing requests. This is the correct path because: (1) the `/admin` router already owns all tenant lifecycle operations; (2) the admin gateway is the product-facing surface for admin operations; (3) `/admin/` is in `ALLOWED_INTERNAL_PREFIXES` so these routes are excluded from the public contract by design.
+
+**Auth enforcement:**  
+- Core API: `require_internal_admin_gateway` (router group dependency) + `require_scopes("admin:write")` on create  
+- Admin gateway: `console:admin` scope + `verify_csrf` on create; `product:read` on get  
+- Global API key auth fallback: `actor_id` defaults to `"global"` to satisfy audit required fields
+
+**Invariants enforced:**  
+- `tenant_id` validated against `_TENANT_ID_RE` regex (alphanumeric, dash, underscore, max 128)  
+- `extra="forbid"` on `TenantCreateRequest` to reject unknown fields  
+- Uniqueness check: `load_registry()` → `409` if already exists  
+- Audit log via `audit_admin_action` on every create (with actor_id/scope fallback for global key)  
+- Structured log on create with `tenant_id` and `request_id`
+
+**Persistence + readback:**  
+- Persists to `state/tenants.json` via `tools.tenants.registry.ensure_tenant`  
+- Read: `GET /admin/tenants` (list) and `GET /admin/tenants/{tenant_id}` (single)
+
+**Tests added:**  
+- `tests/test_tenant_create.py` — 14 tests, all deterministic, covering all required paths
+
+**Contracts modified (explicit):**  
+- `contracts/admin/openapi.json` — 3 new paths added: `POST /admin/tenants`, `GET /admin/tenants`, `GET /admin/tenants/{tenant_id}`  
+- `tools/ci/route_inventory.json` — 3 new route entries under `/admin/` (allowed_internal)
+
+**Files changed:**  
+- `api/admin.py` — `TenantCreateRequest`, `TenantRecord`, `create_tenant`, `list_tenants`, `get_tenant`  
+- `admin_gateway/routers/admin.py` — `AdminCreateTenantRequest`, `create_tenant`, `get_tenant`  
+- `tests/test_tenant_create.py` — new regression test file  
+- `contracts/admin/openapi.json` — regenerated  
+- `tools/ci/route_inventory.json` — regenerated  
+- `tools/ci/route_inventory_summary.json` — regenerated  
+- `tools/ci/plane_registry_snapshot.json` — regenerated  
+- `tools/ci/topology.sha256` — regenerated
+
+**AI Notes:**  
+- Do NOT add `/admin/tenants` to `ALLOWED_INTERNAL_PREFIXES` separately; it's already covered by `/admin/` prefix.  
+- The global API key auth path (`reason="global_key"`) has no `key_prefix` or `scopes`; the `audit_admin_action` actor fallback (`"global"`) is intentional and only applies to this endpoint.  
+- Do NOT remove the uniqueness check (409 guard); `ensure_tenant` is idempotent but tenant provisioning should be explicit.
+
+---
+
 Each entry documents **one issue and one resolution**.
 
 If multiple issues were fixed, they **MUST be logged as separate entries**.

@@ -42,6 +42,34 @@
         "title": "AdminCreateKeyRequest",
         "type": "object"
       },
+      "AdminCreateTenantRequest": {
+        "description": "Request model for tenant provisioning.",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "tenant_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id"
+        ],
+        "title": "AdminCreateTenantRequest",
+        "type": "object"
+      },
       "AdminRotateKeyRequest": {
         "description": "Request model for admin key rotation.",
         "properties": {
@@ -1596,6 +1624,91 @@
           }
         },
         "summary": "List Tenants",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "description": "Provision a new tenant (proxied to core).\n\nRequires console:admin scope and CSRF token.",
+        "operationId": "create_tenant_admin_tenants_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminCreateTenantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Create Tenant Admin Tenants Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Tenant",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/tenants/{tenant_id}": {
+      "get": {
+        "description": "Get a single tenant by ID (proxied to core).\n\nRequires product:read scope. Access restricted to allowed tenants.",
+        "operationId": "get_tenant_admin_tenants__tenant_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "title": "Tenant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Tenant Admin Tenants  Tenant Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Tenant",
         "tags": [
           "admin"
         ]

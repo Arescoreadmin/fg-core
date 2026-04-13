@@ -748,6 +748,190 @@ async def activate_tenant(
 
 
 # =============================================================================
+# Tenant Create / Read Endpoints
+# =============================================================================
+
+_TENANT_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
+
+
+class TenantCreateRequest(BaseModel):
+    """Request to provision a new tenant."""
+
+    model_config = {"extra": "forbid"}
+
+    tenant_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        description="Globally unique tenant identifier (alphanumeric, dash, underscore)",
+    )
+    name: Optional[str] = Field(
+        default=None,
+        max_length=256,
+        description="Human-readable tenant display name",
+    )
+
+
+class TenantRecord(BaseModel):
+    """Tenant record response."""
+
+    tenant_id: str
+    name: str
+    status: str
+    created_at: str
+    updated_at: str
+
+
+@router.post(
+    "/tenants",
+    response_model=TenantRecord,
+    status_code=201,
+    dependencies=[Depends(require_scopes("admin:write"))],
+)
+async def create_tenant(
+    req: TenantCreateRequest,
+    request: Request,
+) -> TenantRecord:
+    """Provision a new tenant.
+
+    Enforces:
+    - tenant_id format validation (alphanumeric, dash, underscore, max 128)
+    - Uniqueness: returns 409 if tenant_id already exists
+    - Audit log on creation
+    - Persists to tenant registry
+    """
+    if not _TENANT_ID_RE.fullmatch(req.tenant_id):
+        raise HTTPException(
+            status_code=422,
+            detail="tenant_id contains invalid characters (alphanumeric, dash, underscore only, max 128)",
+        )
+
+    try:
+        from tools.tenants.registry import ensure_tenant, load_registry
+    except ImportError:
+        raise HTTPException(
+            status_code=501,
+            detail="Tenant registry not available",
+        )
+
+    existing = load_registry()
+    if req.tenant_id in existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Tenant already exists: {req.tenant_id}",
+        )
+
+    record = ensure_tenant(
+        tenant_id=req.tenant_id,
+        name=req.name or req.tenant_id,
+    )
+
+    # Derive actor from auth context; global API key has no key_prefix or scopes.
+    _auth_ctx = getattr(getattr(request, "state", None), "auth", None)
+    _actor_id: str = (
+        getattr(_auth_ctx, "key_prefix", None)
+        or getattr(_auth_ctx, "subject", None)
+        or "global"
+    )
+    _scope_values: list[str] = sorted(getattr(_auth_ctx, "scopes", set()) or {"admin:write"})
+
+    audit_admin_action(
+        action="tenant_created",
+        tenant_id=req.tenant_id,
+        request=request,
+        details={
+            "name": record.name,
+            "actor_id": _actor_id,
+            "scope": _scope_values,
+        },
+    )
+
+    log.info(
+        "tenant.created",
+        extra={
+            "tenant_id": req.tenant_id,
+            "request_id": getattr(request.state, "request_id", None),
+        },
+    )
+
+    return TenantRecord(
+        tenant_id=record.tenant_id,
+        name=record.name,
+        status=record.status,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
+
+
+@router.get(
+    "/tenants",
+    dependencies=[Depends(require_scopes("admin:read"))],
+)
+async def list_tenants(
+    request: Request,
+    include_revoked: bool = Query(default=False),
+) -> Dict[str, Any]:
+    """List all provisioned tenants."""
+    try:
+        from tools.tenants.registry import list_tenants as _list_tenants
+    except ImportError:
+        raise HTTPException(
+            status_code=501,
+            detail="Tenant registry not available",
+        )
+
+    records = _list_tenants(include_revoked=include_revoked)
+    return {
+        "tenants": [
+            {
+                "tenant_id": r.tenant_id,
+                "name": r.name,
+                "status": r.status,
+                "created_at": r.created_at,
+                "updated_at": r.updated_at,
+            }
+            for r in records
+        ],
+        "total": len(records),
+    }
+
+
+@router.get(
+    "/tenants/{tenant_id}",
+    response_model=TenantRecord,
+    dependencies=[Depends(require_scopes("admin:read"))],
+)
+async def get_tenant(
+    tenant_id: str,
+    request: Request,
+) -> TenantRecord:
+    """Get a single tenant by ID."""
+    if not _TENANT_ID_RE.fullmatch(tenant_id):
+        raise HTTPException(status_code=422, detail="Invalid tenant_id format")
+
+    try:
+        from tools.tenants.registry import load_registry
+    except ImportError:
+        raise HTTPException(
+            status_code=501,
+            detail="Tenant registry not available",
+        )
+
+    records = load_registry()
+    record = records.get(tenant_id)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Tenant not found: {tenant_id}")
+
+    return TenantRecord(
+        tenant_id=record.tenant_id,
+        name=record.name,
+        status=record.status,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
+
+
+# =============================================================================
 # API Key Admin Endpoints
 # =============================================================================
 
