@@ -6,6 +6,44 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-13 — Task 9.2 Addendum: Revoked-Tenant Guard on POST /audit/cycle/run
+
+**Branch:** `claude/production-closeout-tal0p`
+
+**Area:** Audit Engine · Tenant Revocation · API Correctness
+
+---
+
+**Root cause:**
+`POST /audit/cycle/run` checked auth/tenant binding via `require_bound_tenant` but never checked the tenant's revocation status. `TenantRecord.status` is `"active" | "revoked"`, and `revoke_tenant()` writes `status="revoked"` to the registry. No path in `require_bound_tenant` or the audit middleware verified this field — the auth layer's revocation check (`api/main.py:468`) is dead because `get_tenant()` always returns `None` (function not exported by registry). A revoked tenant with a valid API key could create new `AuditLedgerRecord` rows.
+
+**Fix:** Added active-tenant precondition check in `run_audit_cycle()` immediately after `require_bound_tenant()`, before any call to `engine.run_cycle()`:
+- Loads registry via `tools.tenants.registry.load_registry()`
+- If record found AND `status != "active"`: `403 {"code": "TENANT_REVOKED", "message": "tenant is not active"}`
+- If record not found (tenant not in registry): allows through — auth-layer binding already validated, no revocation recorded
+- On registry exception: allows through — fail-safe for unavailable registry, auth-layer validation stands
+- `HTTPException` is re-raised explicitly so the guard cannot be swallowed
+
+**SOC review sync:** No `tools/ci/` artifacts change in this fix (endpoint body only); SOC doc update already covers the Task 9.2 initial commit. `soc-review-sync` passes with `GITHUB_BASE_REF=main`.
+
+**Files changed:**
+- `api/audit.py` — active-tenant precondition (10 lines)
+- `tests/test_audit_cycle_run.py` — 4 new tests (23 total, up from 19)
+
+**Tests added (4 new):**
+- `test_revoked_tenant_denied_on_cycle_run` — 403 TENANT_REVOKED for registry-revoked tenant
+- `test_revoked_tenant_creates_no_ledger_state` — no `AuditLedgerRecord` rows created on denial
+- `test_active_tenant_in_registry_allowed` — active status in registry → cycle succeeds
+- `test_tenant_not_in_registry_allowed` — not-in-registry → cycle succeeds (auth-layer valid)
+
+**Validation evidence:**
+- `.venv/bin/pytest -q tests/test_audit_cycle_run.py` → 23 passed
+- `.venv/bin/pytest -q tests -k 'audit or control or flow'` → 686 passed, 1 skipped
+- `make fg-fast` → PASS (all gates green, soc-review-sync OK)
+- `bash codex_gates.sh` → in progress
+
+---
+
 ### 2026-04-13 — Task 9.2 Production-Quality Closeout: POST /audit/cycle/run
 
 **Branch:** `claude/production-closeout-tal0p`

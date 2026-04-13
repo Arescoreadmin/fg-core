@@ -84,6 +84,20 @@ def audit_sessions(request: Request) -> dict[str, object]:
 )
 def run_audit_cycle(body: CycleRunRequest, request: Request) -> dict[str, str]:
     tenant_id = require_bound_tenant(request)
+    # Enforce active-tenant precondition: revoked tenants must not create audit state
+    try:
+        from tools.tenants.registry import load_registry as _load_registry
+
+        _rec = _load_registry().get(tenant_id)
+        if _rec is not None and _rec.status != "active":
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "TENANT_REVOKED", "message": "tenant is not active"},
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # registry unavailable — auth-layer validation stands
     engine = AuditEngine()
     try:
         session_id = engine.run_cycle(body.cycle_kind, tenant_id=tenant_id)
