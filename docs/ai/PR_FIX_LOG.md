@@ -12,6 +12,32 @@ Entries in this log are **final** unless explicitly reversed.
 
 ---
 
+### 2026-04-13 — Contract Authority Marker Sync After AI Route Promotion
+
+**Area:** CI · Contract Authority · Governance Sync
+
+**Issue:**  
+After promoting AI plane routes into `contracts/core/openapi.json` (adding `POST /ai/infer`, `GET /ai-plane/policies`, `POST /ai-plane/policies`, `GET /ai-plane/inference`), the contract file changed. `BLUEPRINT_STAGED.md` and `CONTRACT.md` carried the stale `Contract-Authority-SHA256: 261b9ec5fcb271efa9a8eb42ae8a150249453948f9917edd6dc37c8d8047b373`. `scripts/contract_authority_check.py` hard-failed because both authority marker documents referenced the pre-promotion hash, which no longer matched the committed contract file.
+
+**Resolution:**  
+Ran `scripts/refresh_contract_authority.py` (repo-native authority sync tool). The script: (1) hashed `contracts/core/openapi.json` → `465e44f71fef6423523294f05236de9499f6a12a1376f61c73f8b78aebc58750`; (2) mirrored bytes to `schemas/api/openapi.json`; (3) replaced `Contract-Authority-SHA256` marker in `BLUEPRINT_STAGED.md` line 8 and `CONTRACT.md` line 8 with the current hash. `scripts/contract_authority_check.py` now exits 0. No authority enforcement was weakened. Route-governance hardening from prior commits is intact.
+
+**Root cause:**  
+Regenerating `contracts/core/openapi.json` (via `scripts/contracts_gen_core.py`) changes the file's hash. The authority marker documents must be synchronised after every contract regeneration; this synchronisation step was not included in the previous commit.
+
+**Authority source of truth:** `contracts/core/openapi.json` (SHA256 computed by `_hash_file()` in `scripts/contract_authority_check.py` using raw file bytes).
+
+**Files updated:**  
+- `BLUEPRINT_STAGED.md` — `Contract-Authority-SHA256` updated (line 8)  
+- `CONTRACT.md` — `Contract-Authority-SHA256` updated (line 8)  
+- `schemas/api/openapi.json` — bytes mirrored from `contracts/core/openapi.json` by `refresh_contract_authority.py`
+
+**AI Notes:**  
+- After ANY contract regeneration, run `scripts/refresh_contract_authority.py` before committing.  
+- Do NOT hand-edit the SHA256 hash; always derive it from `contracts/core/openapi.json` via the repo-native script.  
+- Do NOT weaken `scripts/contract_authority_check.py`; it is a required governance gate.  
+- Both `BLUEPRINT_STAGED.md` and `CONTRACT.md` must carry identical hashes matching the committed contract file.
+
 ### 2026-04-13 — Route Drift Governance Hardening: Narrow /ai/ Allowlist + Promote AI Routes to Contract
 
 **Area:** CI · Route Governance · Contract Completeness · Drift Enforcement
