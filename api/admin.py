@@ -807,13 +807,19 @@ async def create_tenant(
         )
 
     try:
-        from tools.tenants.registry import ensure_tenant, load_registry
+        from tools.tenants.registry import (
+            TenantAlreadyExistsError,
+            create_tenant_exclusive,
+            load_registry,
+        )
     except ImportError:
         raise HTTPException(
             status_code=501,
             detail="Tenant registry not available",
         )
 
+    # Non-authoritative fast path: avoid lock acquisition for obvious duplicates.
+    # The authoritative uniqueness check is inside create_tenant_exclusive (under lock).
     existing = load_registry()
     if req.tenant_id in existing:
         raise HTTPException(
@@ -821,10 +827,13 @@ async def create_tenant(
             detail=f"Tenant already exists: {req.tenant_id}",
         )
 
-    record = ensure_tenant(
-        tenant_id=req.tenant_id,
-        name=req.name or req.tenant_id,
-    )
+    try:
+        record = create_tenant_exclusive(
+            tenant_id=req.tenant_id,
+            name=req.name or req.tenant_id,
+        )
+    except TenantAlreadyExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     # Derive actor from auth context; global API key has no key_prefix or scopes.
     _auth_ctx = getattr(getattr(request, "state", None), "auth", None)

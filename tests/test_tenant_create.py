@@ -358,3 +358,185 @@ class TestTenantReadPath:
 
         # bad.id doesn't match _TENANT_ID_RE → 422
         assert resp.status_code in (404, 422)
+
+
+class TestAtomicDuplicateProtection:
+    """Authoritative uniqueness enforcement must live at the write boundary.
+
+    The duplicate check inside create_tenant_exclusive (under _REGISTRY_LOCK)
+    is the canonical guard.  These tests verify the lock + re-check protects
+    against races where the pre-flight read-before-write would otherwise allow
+    two concurrent callers to both succeed.
+    """
+
+    def test_sequential_duplicate_returns_409_at_write_boundary(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Second create for same tenant_id hits the lock-protected check → 409."""
+        from tools.tenants.registry import (
+            TenantAlreadyExistsError,
+            create_tenant_exclusive,
+        )
+
+        registry_path = tmp_path / "tenants.json"
+        import tools.tenants.registry as _reg
+
+        monkeypatch.setattr(_reg, "REGISTRY_PATH", registry_path)
+
+        # First create must succeed and persist.
+        rec1 = create_tenant_exclusive("dup-lock-test", name="First")
+        assert rec1.tenant_id == "dup-lock-test"
+        assert registry_path.exists()
+
+        # Second create must raise — duplicate found inside the lock.
+        with pytest.raises(TenantAlreadyExistsError) as exc_info:
+            create_tenant_exclusive("dup-lock-test", name="Second")
+        assert "dup-lock-test" in str(exc_info.value)
+
+        # Registry must contain exactly one entry.
+        data = _json.loads(registry_path.read_text())
+        assert list(data.keys()) == ["dup-lock-test"]
+
+    def test_simulated_race_pre_check_bypassed_lock_still_rejects(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Simulate a race: tenant written to registry after API pre-check but before
+        create_tenant_exclusive acquires the lock.  The lock's re-read inside the
+        critical section must still catch the duplicate and raise.
+        """
+        import tools.tenants.registry as _reg
+        from tools.tenants.registry import TenantAlreadyExistsError
+
+        registry_path = tmp_path / "tenants.json"
+        monkeypatch.setattr(_reg, "REGISTRY_PATH", registry_path)
+
+        # Seed the registry directly — simulates what the "winning" concurrent
+        # request wrote between our pre-check and lock acquisition.
+        _reg._save_raw(
+            {
+                "race-tenant": {
+                    "name": "Race Winner",
+                    "api_key": "dummy-key",
+                    "status": "active",
+                    "created_at": "2026-01-01T00:00:00+00:00",
+                    "updated_at": "2026-01-01T00:00:00+00:00",
+                }
+            }
+        )
+
+        # Even though the API pre-check would have seen nothing (before seeding),
+        # create_tenant_exclusive re-reads inside the lock and must reject.
+        with pytest.raises(TenantAlreadyExistsError):
+            _reg.create_tenant_exclusive("race-tenant", name="Race Loser")
+
+        # Registry still has exactly one entry — not two.
+        data = _json.loads(registry_path.read_text())
+        assert list(data.keys()) == ["race-tenant"]
+        assert data["race-tenant"]["name"] == "Race Winner"
+
+    def test_concurrent_creates_exactly_one_succeeds(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Thread-level concurrency: two threads call create_tenant_exclusive
+        simultaneously; exactly one must succeed and one must raise."""
+        import threading
+
+        import tools.tenants.registry as _reg
+        from tools.tenants.registry import TenantAlreadyExistsError
+
+        registry_path = tmp_path / "tenants.json"
+        monkeypatch.setattr(_reg, "REGISTRY_PATH", registry_path)
+
+        outcomes: list[str] = []
+        lock = threading.Lock()
+
+        def _attempt() -> None:
+            try:
+                _reg.create_tenant_exclusive("concurrent-tenant")
+                with lock:
+                    outcomes.append("success")
+            except TenantAlreadyExistsError:
+                with lock:
+                    outcomes.append("conflict")
+
+        threads = [threading.Thread(target=_attempt) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert outcomes.count("success") == 1, (
+            f"Expected exactly 1 success, got: {outcomes}"
+        )
+        assert outcomes.count("conflict") == 1, (
+            f"Expected exactly 1 conflict, got: {outcomes}"
+        )
+
+        data = _json.loads(registry_path.read_text())
+        assert list(data.keys()) == ["concurrent-tenant"]
+
+    def test_api_duplicate_create_returns_409_via_write_boundary(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """POST /admin/tenants duplicate is caught at write boundary → 409 with contract detail."""
+        app = _build_admin_app(tmp_path, monkeypatch)
+        _patch_registry(tmp_path, monkeypatch)
+
+        with TestClient(app) as client:
+            resp1 = client.post(
+                "/admin/tenants",
+                json={"tenant_id": "atomic-dup"},
+                headers=_admin_headers(),
+            )
+            assert resp1.status_code == 201, resp1.text
+
+            resp2 = client.post(
+                "/admin/tenants",
+                json={"tenant_id": "atomic-dup"},
+                headers=_admin_headers(),
+            )
+            assert resp2.status_code == 409
+            detail = resp2.json().get("detail", "")
+            assert "already exists" in detail.lower() or "duplicate" in detail.lower()
+
+
+class TestGatewayStrictValidation:
+    """Gateway tenant-create model must reject unknown fields (extra=forbid)."""
+
+    def test_gateway_model_rejects_extra_fields(self) -> None:
+        """AdminCreateTenantRequest with unknown field raises Pydantic ValidationError."""
+        from pydantic import ValidationError
+
+        from admin_gateway.routers.admin import AdminCreateTenantRequest
+
+        with pytest.raises(ValidationError) as exc_info:
+            AdminCreateTenantRequest(tenant_id="valid-id", unknown_field="bad")  # type: ignore[call-arg]
+        errors = exc_info.value.errors()
+        assert any(e.get("type") == "extra_forbidden" for e in errors)
+
+    def test_gateway_model_accepts_valid_payload(self) -> None:
+        """AdminCreateTenantRequest accepts known fields without error."""
+        from admin_gateway.routers.admin import AdminCreateTenantRequest
+
+        req = AdminCreateTenantRequest(tenant_id="ok-tenant", name="OK Tenant")
+        assert req.tenant_id == "ok-tenant"
+        assert req.name == "OK Tenant"
+
+    def test_gateway_model_name_optional(self) -> None:
+        """AdminCreateTenantRequest accepts tenant_id without name."""
+        from admin_gateway.routers.admin import AdminCreateTenantRequest
+
+        req = AdminCreateTenantRequest(tenant_id="no-name")  # type: ignore[call-arg]
+        assert req.tenant_id == "no-name"
+        assert req.name is None
+
+    def test_core_and_gateway_models_both_reject_extra_fields(self) -> None:
+        """Both core and gateway tenant-create models must forbid extra fields consistently."""
+        from pydantic import ValidationError
+
+        from admin_gateway.routers.admin import AdminCreateTenantRequest
+        from api.admin import TenantCreateRequest
+
+        for ModelClass in (TenantCreateRequest, AdminCreateTenantRequest):
+            with pytest.raises(ValidationError, match="extra_forbidden|Extra inputs"):
+                ModelClass(tenant_id="test", rogue_field="injection")  # type: ignore[call-arg]

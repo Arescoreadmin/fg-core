@@ -43,6 +43,7 @@
         "type": "object"
       },
       "AdminCreateTenantRequest": {
+        "additionalProperties": false,
         "description": "Request model for tenant provisioning.",
         "properties": {
           "name": {

@@ -6,6 +6,57 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-13 — Task 9.1 Addendum: Atomic Tenant Create + Strict Gateway Validation
+
+**Area:** Tenant Registry · API Correctness · Gateway Validation
+
+**Issue 1 — Non-atomic duplicate check (race condition):**
+`api/admin.py:create_tenant()` performed a `load_registry()` read-before-write to detect duplicates. Under concurrent `POST /admin/tenants` for the same `tenant_id`, both callers could read "not exists" and both proceed to `ensure_tenant()`. `ensure_tenant()` itself also had no lock, so both could write and both return 201 — violating the API contract (duplicate creates must 409).
+
+**Root cause:** Uniqueness check was not authoritative at the write boundary; `ensure_tenant` had no mutex protecting the load+check+save sequence.
+
+**Fix:**
+- Added `threading.Lock` (`_REGISTRY_LOCK`) and `TenantAlreadyExistsError` to `tools/tenants/registry.py`
+- Added `create_tenant_exclusive()`: acquires `_REGISTRY_LOCK`, re-reads registry inside the lock, raises `TenantAlreadyExistsError` if duplicate found, then writes atomically
+- `api/admin.py:create_tenant()` now calls `create_tenant_exclusive()` and catches `TenantAlreadyExistsError` → 409
+- API-layer pre-check (`load_registry()` before lock) retained as non-authoritative fast path only (avoids lock overhead for obvious duplicates); not the authoritative guarantee
+- `ensure_tenant()` unchanged — still idempotent for CLI / ops callers
+
+**Issue 2 — Gateway model allows unknown fields:**
+`AdminCreateTenantRequest` in `admin_gateway/routers/admin.py` had no `model_config = {"extra": "forbid"}`, so extra keys in the JSON body were silently dropped. Core's `TenantCreateRequest` already had `extra="forbid"`. The inconsistency made malformed payloads appear valid at the gateway.
+
+**Fix:** Added `model_config = {"extra": "forbid"}` to `AdminCreateTenantRequest`.
+
+**Contract impact (explicit):**
+- `contracts/admin/openapi.json` regenerated: `"additionalProperties": false` added to `AdminCreateTenantRequest` schema — direct consequence of `extra="forbid"`
+- `scripts/refresh_contract_authority.py` re-run; authority markers updated
+
+**Tests added (8 new tests):**
+- `TestAtomicDuplicateProtection.test_sequential_duplicate_returns_409_at_write_boundary` — lock + re-check catches sequential duplicate
+- `TestAtomicDuplicateProtection.test_simulated_race_pre_check_bypassed_lock_still_rejects` — registry written after API pre-check; lock's re-read still rejects
+- `TestAtomicDuplicateProtection.test_concurrent_creates_exactly_one_succeeds` — two threads compete; exactly one 201, one conflict
+- `TestAtomicDuplicateProtection.test_api_duplicate_create_returns_409_via_write_boundary` — end-to-end API test confirms write-boundary 409
+- `TestGatewayStrictValidation.test_gateway_model_rejects_extra_fields` — Pydantic raises `extra_forbidden`
+- `TestGatewayStrictValidation.test_gateway_model_accepts_valid_payload` — happy path unaffected
+- `TestGatewayStrictValidation.test_gateway_model_name_optional` — name still optional
+- `TestGatewayStrictValidation.test_core_and_gateway_models_both_reject_extra_fields` — alignment verified
+
+**Files changed:**
+- `tools/tenants/registry.py` — `_REGISTRY_LOCK`, `TenantAlreadyExistsError`, `create_tenant_exclusive()`
+- `tools/tenants/__init__.py` — export new symbols
+- `api/admin.py` — switch to `create_tenant_exclusive`, catch `TenantAlreadyExistsError`
+- `admin_gateway/routers/admin.py` — `model_config = {"extra": "forbid"}`
+- `contracts/admin/openapi.json` — regenerated (contract change: `additionalProperties: false`)
+- `tests/test_tenant_create.py` — 8 new tests (22 total, up from 14)
+
+**Validation evidence:**
+- `pytest -q tests/test_tenant_create.py` → 22 passed
+- `pytest -q tests -k 'tenant and create'` → 25 passed
+- `make fg-fast` → passes
+- `bash codex_gates.sh` → see final gate run result
+
+---
+
 ### 2026-04-13 — Addendum: Gate clean pass — offline mode + CVE remediation
 
 **Area:** CI Gates · Dependency Security · SOC Execution

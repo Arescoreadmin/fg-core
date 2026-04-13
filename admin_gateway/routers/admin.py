@@ -579,6 +579,8 @@ async def list_tenants(
 class AdminCreateTenantRequest(BaseModel):
     """Request model for tenant provisioning."""
 
+    model_config = {"extra": "forbid"}
+
     tenant_id: str = Field(..., min_length=1, max_length=128)
     name: Optional[str] = Field(None, max_length=256)
 
