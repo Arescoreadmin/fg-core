@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 
@@ -29,7 +30,7 @@ os.environ.setdefault("FG_API_KEY", "ci-test-key-0000000000000000000000000000000
 # ---------------------------------------------------------------------------
 
 
-def _build_admin_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> object:
+def _build_admin_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FastAPI:
     """Build the core API app with admin routes enabled."""
     from api.db import init_db, reset_engine_cache
     from api.main import build_app

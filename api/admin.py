@@ -833,7 +833,9 @@ async def create_tenant(
         or getattr(_auth_ctx, "subject", None)
         or "global"
     )
-    _scope_values: list[str] = sorted(getattr(_auth_ctx, "scopes", set()) or {"admin:write"})
+    _scope_values: list[str] = sorted(
+        getattr(_auth_ctx, "scopes", set()) or {"admin:write"}
+    )
 
     audit_admin_action(
         action="tenant_created",
