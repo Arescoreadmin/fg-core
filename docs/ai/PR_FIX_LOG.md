@@ -56,6 +56,12 @@ Added `POST /admin/tenants` (create), `GET /admin/tenants` (list), and `GET /adm
 - The global API key auth path (`reason="global_key"`) has no `key_prefix` or `scopes`; the `audit_admin_action` actor fallback (`"global"`) is intentional and only applies to this endpoint.  
 - Do NOT remove the uniqueness check (409 guard); `ensure_tenant` is idempotent but tenant provisioning should be explicit.
 
+**Follow-on fixes (same session):**  
+- `services/plane_registry/registry.py`: Added `global_admin` exceptions for `POST /admin/tenants`, `GET /admin/tenants`, `GET /admin/tenants/{tenant_id}` in the control plane. These routes have `tenant_bound=false` because they operate at platform level (creating/enumerating tenants, no prior tenant context). Without the exception, `test_plane_registry_checker_passes` failed.  
+- `artifacts/platform_inventory.det.json`: Regenerated after plane registry update.  
+- `tests/test_tenant_create.py`: Changed `_build_admin_app` return type from `object` to `FastAPI` to fix 14 mypy errors.  
+- `api/admin.py`, `tools/ci/check_no_plaintext_secrets.py`: Reformatted by `ruff format`.
+
 ---
 
 Each entry documents **one issue and one resolution**.
