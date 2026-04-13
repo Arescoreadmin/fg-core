@@ -515,6 +515,57 @@
     {
       "dependency_categories": [
         "auth",
+        "rate"
+      ],
+      "file": "api/admin.py",
+      "method": "GET",
+      "path": "/admin/tenants",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate"
+      ],
+      "file": "api/admin.py",
+      "method": "POST",
+      "path": "/admin/tenants",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate"
+      ],
+      "file": "api/admin.py",
+      "method": "GET",
+      "path": "/admin/tenants/{tenant_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "admin:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
         "rate",
         "tenant"
       ],
@@ -3866,7 +3917,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-04-12T21:44:00.978439+00:00",
+  "generated_at": "2026-04-13T03:17:41.955961+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

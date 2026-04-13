@@ -21,6 +21,7 @@ Exit codes
   0  no violations found
   1  one or more violations found (details printed to stderr)
 """
+
 from __future__ import annotations
 
 import re
@@ -98,6 +99,7 @@ ENV_GLOBS: list[str] = [
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _is_secret_var(key: str) -> bool:
     return bool(_SECRET_SUFFIXES.search(key))
@@ -199,6 +201,7 @@ def _scan_file(path: Path) -> list[str]:
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def main() -> int:
     repo_root = Path(__file__).resolve().parents[2]

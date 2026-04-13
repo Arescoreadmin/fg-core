@@ -107,6 +107,24 @@ PLANE_REGISTRY: list[PlaneDef] = [
             ),
             ex("GET", "/admin/usage/all", "global_admin", "Global usage summary."),
             ex(
+                "POST",
+                "/admin/tenants",
+                "global_admin",
+                "Tenant creation is a system-level operation with no prior tenant context.",
+            ),
+            ex(
+                "GET",
+                "/admin/tenants",
+                "global_admin",
+                "Tenant listing is global platform operator metadata.",
+            ),
+            ex(
+                "GET",
+                "/admin/tenants/{tenant_id}",
+                "global_admin",
+                "Tenant inspection is global platform operator metadata.",
+            ),
+            ex(
                 "GET",
                 "/control-plane/v2/delegation",
                 "global_admin",

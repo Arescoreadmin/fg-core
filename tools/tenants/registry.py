@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,18 @@ STATE_DIR.mkdir(parents=True, exist_ok=True)
 # Allow override in tests / ops via env
 DEFAULT_REGISTRY_PATH = STATE_DIR / "tenants.json"
 REGISTRY_PATH = Path(os.getenv("FG_TENANT_REGISTRY_PATH", str(DEFAULT_REGISTRY_PATH)))
+
+# In-process mutex protecting load+check+save sequences.
+# Prevents intra-process duplicate-create races under concurrent async workers.
+_REGISTRY_LOCK = threading.Lock()
+
+
+class TenantAlreadyExistsError(ValueError):
+    """Raised by create_tenant_exclusive when tenant_id is already registered."""
+
+    def __init__(self, tenant_id: str) -> None:
+        super().__init__(f"Tenant already exists: {tenant_id}")
+        self.tenant_id = tenant_id
 
 
 @dataclass
@@ -125,6 +138,38 @@ def ensure_tenant(
     )
     records[tenant_id] = rec
     save_registry(records)
+    logger.info("tenant_created", tenant_id=tenant_id)
+    return rec
+
+
+def create_tenant_exclusive(
+    tenant_id: str,
+    name: Optional[str] = None,
+    api_key: Optional[str] = None,
+) -> TenantRecord:
+    """Atomically create a tenant; raise TenantAlreadyExistsError if already registered.
+
+    Authoritative uniqueness guarantee: the duplicate check and write occur
+    inside _REGISTRY_LOCK, preventing double-create under concurrent callers.
+    Unlike ensure_tenant, this function never silently returns an existing record.
+    """
+    with _REGISTRY_LOCK:
+        raw = _load_raw()
+        if tenant_id in raw:
+            raise TenantAlreadyExistsError(tenant_id)
+        now = _now_iso()
+        rec = TenantRecord(
+            tenant_id=tenant_id,
+            name=name or tenant_id,
+            api_key=api_key or generate_api_key(),
+            status="active",
+            created_at=now,
+            updated_at=now,
+        )
+        payload = asdict(rec)
+        payload.pop("tenant_id", None)
+        raw[tenant_id] = payload
+        _save_raw(raw)
     logger.info("tenant_created", tenant_id=tenant_id)
     return rec
 
