@@ -11,18 +11,27 @@ from tools.ci import check_route_inventory
 
 
 def test_classify_runtime_only_all_allowed():
+    # Only the 5 explicit allowed_internal prefixes; /ai/ and /ai-plane/ are
+    # NOT allowed (routes in those prefixes belong in the public contract).
     routes = [
         "GET /admin/keys",
         "GET /ui/dash",
         "POST /dev/seed",
         "GET /control/testing/health",
         "GET /_debug/routes",
-        "GET /ai-plane/policies",
-        "POST /ai/infer",
     ]
     allowed, unauthorized = check_route_inventory._classify_runtime_only(routes)
     assert unauthorized == [], f"expected no unauthorized routes, got: {unauthorized}"
     assert set(allowed) == set(routes)
+
+
+def test_classify_runtime_only_ai_routes_are_unauthorized():
+    # /ai/ and /ai-plane/ are no longer allowed_internal;
+    # those routes belong in the contract (contracts_gen_core.py FG_AI_PLANE_ENABLED=1).
+    routes = ["POST /ai/infer", "GET /ai-plane/policies", "GET /ai-plane/inference"]
+    allowed, unauthorized = check_route_inventory._classify_runtime_only(routes)
+    assert allowed == [], f"expected no allowed routes for /ai* paths, got: {allowed}"
+    assert set(unauthorized) == set(routes)
 
 
 def test_classify_runtime_only_unauthorized():

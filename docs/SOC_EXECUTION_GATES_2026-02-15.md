@@ -2130,3 +2130,43 @@ Validation:
 - `PYTHONPATH=. python3 tools/ci/check_route_inventory.py --write` → writes inventory
 - `PYTHONPATH=. python3 tools/ci/check_route_inventory.py` → INFO (74 allowed_internal), OK
 - `pytest tests/tools/test_route_inventory_summary.py` → 10 passed
+
+## 2026-04-13 — Route Drift Governance Hardening: Narrow Allowlist + AI Routes Promoted to Contract
+
+Critical files changed:
+- `scripts/contracts_gen_core.py`
+- `tools/ci/check_route_inventory.py`
+- `contracts/core/openapi.json` (contract surface change — stating explicitly)
+- `schemas/api/openapi.json` (mirror)
+- `tools/ci/route_inventory_summary.json`
+- `tests/tools/test_route_inventory_summary.py`
+
+Change type: governance hardening — allowlist narrowing + contract promotion for customer-facing AI routes
+
+Change summary:
+- Removed `/ai/` and `/ai-plane/` from `ALLOWED_INTERNAL_PREFIXES` in `tools/ci/check_route_inventory.py`. These prefixes contained customer-facing, production-intended routes (`POST /ai/infer` has `compliance:read` scope + tenant binding; tested in `tests/security/test_new_routes_security_contract.py`). Blanket allowlisting customer-facing routes as "allowed_internal" is incorrect policy.
+- Updated `scripts/contracts_gen_core.py::generate_openapi()` to set `FG_AI_PLANE_ENABLED=1` (with prior-value save/restore in the try/finally block) so `build_contract_app()` conditionally includes `ai_plane_extension_router`. This promotes all 4 AI plane routes into the public core OpenAPI contract.
+- Regenerated `contracts/core/openapi.json` and `schemas/api/openapi.json`. Contract route count: 150 → 154. Added: `POST /ai/infer`, `GET /ai-plane/policies`, `POST /ai-plane/policies`, `GET /ai-plane/inference`.
+- Regenerated `tools/ci/route_inventory_summary.json`: `allowed_internal=70`, `unauthorized_runtime_only=[]`, `contract_only=[]`.
+- Added test `test_classify_runtime_only_ai_routes_are_unauthorized` proving `/ai/` and `/ai-plane/` paths now hard-fail if they appear as runtime_only.
+- Updated `test_classify_runtime_only_all_allowed` to remove `/ai*` entries (they are no longer in the allowlist).
+
+Final ALLOWED_INTERNAL_PREFIXES (5 prefixes, all evidence-backed):
+- `/admin/` — ADMIN_PREFIX_POLICY="control_only"; excluded from contract by FG_ADMIN_ENABLED=0 + _filter_admin_paths()
+- `/ui/` — ui plane; build_contract_app() does NOT include ui router; intentionally internal
+- `/dev/` — build_contract_app() does NOT include dev_events_router; dev seeding
+- `/control/testing/` — CI testing surfaces; FG_TESTING_CONTROL_TOWER_ENABLED defaults off in contract gen
+- `/_debug/` — class_name="bootstrap", prod-blocked
+
+Security / governance impact:
+- Public contract now accurately reflects all AI plane customer-facing APIs.
+- No customer-facing route is hidden inside allowed_internal reporting.
+- Unauthorized runtime_only drift hard-fails (exit code 1); cannot hide in warning noise.
+- `unauthorized_runtime_only: []` and `contract_only: []` confirm clean state.
+
+Validation:
+- `PYTHONPATH=. python3 tools/ci/check_route_inventory.py --write` → inventory regenerated
+- `PYTHONPATH=. python3 tools/ci/check_route_inventory.py` → INFO (70 allowed_internal), OK
+- `pytest tests/tools/test_route_inventory_summary.py` → 11 passed
+- `pytest tests/tools/` → 48 passed
+- Contract: `GET /ai-plane/inference`, `GET /ai-plane/policies`, `POST /ai-plane/policies`, `POST /ai/infer` confirmed present in `contracts/core/openapi.json`

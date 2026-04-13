@@ -12,34 +12,56 @@ Entries in this log are **final** unless explicitly reversed.
 
 ---
 
+### 2026-04-13 — Route Drift Governance Hardening: Narrow /ai/ Allowlist + Promote AI Routes to Contract
+
+**Area:** CI · Route Governance · Contract Completeness · Drift Enforcement
+
+**Issue:**  
+`ALLOWED_INTERNAL_PREFIXES` in `tools/ci/check_route_inventory.py` included `/ai/` and `/ai-plane/` as blanket-allowlisted prefixes. Both `/ai/infer` (customer-facing, `compliance:read` scope, tenant-bound) and `/ai-plane/*` routes (tenant-scoped customer APIs) are production-intended surfaces tested by `tests/security/test_new_routes_security_contract.py` with `FG_AI_PLANE_ENABLED=1`. Blanket allowlisting customer-facing routes as "allowed_internal" is incorrect policy. `build_contract_app()` in `api/main.py` already conditionally includes `ai_plane_extension_router` when `FG_AI_PLANE_ENABLED=1`; contract generation simply failed to set this flag.
+
+**Resolution:**  
+Updated `scripts/contracts_gen_core.py::generate_openapi()` to set `FG_AI_PLANE_ENABLED=1` (with proper save/restore) so that all four AI plane routes (`POST /ai/infer`, `GET /ai-plane/policies`, `POST /ai-plane/policies`, `GET /ai-plane/inference`) are included in the generated `contracts/core/openapi.json`. Removed `/ai/` and `/ai-plane/` from `ALLOWED_INTERNAL_PREFIXES`. `ALLOWED_INTERNAL_PREFIXES` now contains exactly five prefixes with precise evidence: `/admin/`, `/ui/`, `/dev/`, `/control/testing/`, `/_debug/`. Regenerated `contracts/core/openapi.json` and `schemas/api/openapi.json` (contract route count: 150 → 154). Regenerated `tools/ci/route_inventory_summary.json` (`allowed_internal: 70 routes`, `unauthorized_runtime_only: []`, `contract_only: []`). Updated test `test_classify_runtime_only_all_allowed` to remove `/ai*` paths; added `test_classify_runtime_only_ai_routes_are_unauthorized` to prove `/ai/` and `/ai-plane/` are now unauthorized.
+
+**Root cause of prior warning-only drift:**  
+The 2026-03-01 fix ("Route Inventory Runtime-Only Drift") downgraded all `runtime_only` to warning because no classification machinery existed. The 2026-04-13 (earlier entry this date) added that machinery with an initial allowlist that was too broad (included `/ai/` and `/ai-plane/`). This entry narrows the allowlist to exactly the justified set and promotes AI routes into the public contract.
+
+**Final ALLOWED_INTERNAL_PREFIXES (exact set):**  
+- `/admin/` — `ADMIN_PREFIX_POLICY="control_only"` (registry.py); `build_contract_app()` excludes via `FG_ADMIN_ENABLED=0`; `_filter_admin_paths()` strips leaks  
+- `/ui/` — ui plane (production-grade); `build_contract_app()` does NOT include ui router; intentionally internal aggregation  
+- `/dev/` — `build_contract_app()` does NOT include `dev_events_router`; dev seeding only  
+- `/control/testing/` — CI testing infrastructure, not customer-facing; `FG_TESTING_CONTROL_TOWER_ENABLED` defaults off in contract gen  
+- `/_debug/` — `class_name="bootstrap"`, "blocked in prod-like mode" (registry.py global_routes)  
+
+**Routes moved into contract:**  
+- `POST /ai/infer` — customer-facing AI inference API (`compliance:read`, tenant-bound)  
+- `GET /ai-plane/policies` — tenant AI policy retrieval (`compliance:read`, tenant-bound)  
+- `POST /ai-plane/policies` — tenant AI policy update (`admin:write`, tenant-bound)  
+- `GET /ai-plane/inference` — tenant AI inference history (`compliance:read`, tenant-bound)  
+
+**Contracts modified (stating explicitly):**  
+- `contracts/core/openapi.json` — 4 AI plane paths added  
+- `schemas/api/openapi.json` — mirror of above  
+
+**AI Notes:**  
+- Do NOT add `/ai/` or `/ai-plane/` back to `ALLOWED_INTERNAL_PREFIXES`; these routes are now in contract.  
+- Do NOT remove `FG_AI_PLANE_ENABLED=1` from `contracts_gen_core.py::generate_openapi()` while these routes remain production-intended.  
+- Do NOT add prefixes to `ALLOWED_INTERNAL_PREFIXES` without explicit evidence from `services/plane_registry/registry.py` and `scripts/contracts_gen_core.py`.  
+- Do NOT downgrade unauthorized drift back to warning.
+
 ### 2026-04-13 — Route Drift Governance: Explicit allowed_internal Policy + Unauthorized Drift Hard-Fail
 
 **Area:** CI · Route Governance · Drift Enforcement
 
 **Issue:**  
-`check_route_inventory.py` treated all `runtime_only` drift as a WARNING regardless of whether routes were intentionally internal (admin, ui, dev, testing, debug) or genuinely unauthorized. Silent entropy accumulated as internal route families grew without an explicit policy. Any future unauthorized route could hide inside the warning noise without causing a CI failure.
+`check_route_inventory.py` treated all `runtime_only` drift as a WARNING regardless of whether routes were intentionally internal (admin, ui, dev, testing, debug) or genuinely unauthorized.
 
 **Resolution:**  
-Added `ALLOWED_INTERNAL_PREFIXES` constant to `tools/ci/check_route_inventory.py` with explicitly evidence-backed prefixes: `/admin/`, `/ui/`, `/dev/`, `/control/testing/`, `/_debug/`, `/ai-plane/`, `/ai/`. Added `_classify_runtime_only()` function that partitions `runtime_only` entries into `allowed_internal` (matches allowlist; informational only) and `unauthorized` (outside allowlist; HARD FAIL). Updated `_summary_payload()` to emit `allowed_internal` and `unauthorized_runtime_only` fields in the summary artifact. Updated `main()` to reclassify at check time and append unauthorized drift to `failures`, causing exit code 1. Regenerated `tools/ci/route_inventory_summary.json` with new fields (`allowed_internal: [74 routes]`, `unauthorized_runtime_only: []`). Added 7 new tests to `tests/tools/test_route_inventory_summary.py` covering classification invariants and the hard-fail path.
-
-**Root cause of prior warning-only drift:**  
-The 2026-03-01 fix ("Route Inventory Runtime-Only Drift") downgraded all `runtime_only` to warning because no classification machinery existed. This entry adds that machinery: internal routes remain non-failing (consistent with 2026-03-01), while routes outside the explicit allowlist now hard-fail.
-
-**Classification evidence:**  
-- `/admin/` — `ADMIN_PREFIX_POLICY = "control_only"` in `services/plane_registry/registry.py`; filtered from core contract by `scripts/contracts_gen_core.py::_filter_admin_paths()`  
-- `/ui/` — `plane_id="ui"`, production-grade internal UI aggregation layer; not part of public contract by design  
-- `/dev/` — control plane route prefix (`"/dev"` in `PLANE_REGISTRY[control].route_prefixes`); dev seeding only  
-- `/control/testing/` — control plane route prefix (`"/control/testing"` in `PLANE_REGISTRY[control].route_prefixes`)  
-- `/_debug/` — control plane `global_routes`, `class_name="bootstrap"`, "blocked in prod-like mode"  
-- `/ai-plane/` — ai plane internal management prefix; `maturity_tag="tester-ready"`, exclusively internal  
-- `/ai/` — ai plane (`maturity_tag="tester-ready"`); not yet promoted to public contract  
+Added `ALLOWED_INTERNAL_PREFIXES` constant, `_classify_runtime_only()` function, updated `_summary_payload()` and `main()` to hard-fail on unauthorized runtime_only drift. (NOTE: initial allowlist included `/ai/` and `/ai-plane/` which were subsequently narrowed — see entry above.)
 
 **AI Notes:**  
 - Do NOT remove `ALLOWED_INTERNAL_PREFIXES` or revert `_classify_runtime_only()`.  
-- Do NOT add prefixes to `ALLOWED_INTERNAL_PREFIXES` without explicit `services/plane_registry/registry.py` evidence.  
 - Do NOT downgrade unauthorized drift back to warning; the hard-fail is intentional.  
-- `runtime_only` field in summary is preserved for backward compatibility; enforcement uses `_classify_runtime_only()` at check time.  
-- If the ai plane graduates to `production-grade`, move `/ai/` routes to contract and remove `/ai/` from the allowlist.
+- `runtime_only` field in summary is preserved for backward compatibility; enforcement uses `_classify_runtime_only()` at check time.
 
 ### 2026-04-12 — Route Contract Drift Reduction + G001 Waiver Retirement
 

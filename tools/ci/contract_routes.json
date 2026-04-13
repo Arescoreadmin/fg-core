@@ -79,6 +79,30 @@
       "source": "contract"
     },
     {
+      "method": "GET",
+      "path": "/ai-plane/inference",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ai-plane/policies",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/ai-plane/policies",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/ai/infer",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "POST",
       "path": "/approvals",
       "scopes": [],
@@ -901,7 +925,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-04-12T21:44:15.320182+00:00",
+  "generated_at": "2026-04-13T00:30:21.442542+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

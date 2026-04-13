@@ -47,23 +47,47 @@ TOOL_NAME = "tools/ci/check_route_inventory.py"
 # NOT match this allowlist is classified as ``unauthorized`` and causes a HARD
 # FAIL in check_route_inventory.
 #
-# Evidence for each family (see services/plane_registry/registry.py):
+# Evidence for each family (see services/plane_registry/registry.py and
+# scripts/contracts_gen_core.py):
+#
 #   /admin/           — control plane operator surfaces;
-#                       ADMIN_PREFIX_POLICY = "control_only";
-#                       explicitly filtered from contracts_gen_core.py
+#                       ADMIN_PREFIX_POLICY = "control_only" (registry.py);
+#                       build_contract_app() mounts admin only when
+#                       FG_ADMIN_ENABLED=1 (disabled in contract gen);
+#                       scripts/contracts_gen_core.py::_filter_admin_paths()
+#                       strips any /admin/* paths that leak through.
+#
 #   /ui/              — ui plane (production-grade), internal UI aggregation
-#                       layer; plane_id="ui"; not part of public contract
-#   /dev/             — control plane, dev seeding surfaces;
-#                       route_prefix "/dev" registered in PLANE_REGISTRY
-#   /control/testing/ — control plane, testing surfaces;
-#                       route_prefix "/control/testing" registered in PLANE_REGISTRY
-#   /_debug/          — control plane, prod-blocked debug endpoint;
-#                       class_name="bootstrap"; "blocked in prod-like mode"
-# Narrowly justified additional prefix (repository evidence required):
-#   /ai-plane/        — ai plane internal plane management routes;
-#                       exclusively internal; plane maturity_tag="tester-ready"
-#   /ai/              — ai plane user-facing routes not yet promoted to public
-#                       contract; plane maturity_tag="tester-ready"
+#                       layer; plane_id="ui" in PLANE_REGISTRY;
+#                       build_contract_app() does NOT include the ui router
+#                       at all; intentionally excluded from public contract.
+#
+#   /dev/             — control plane dev seeding surfaces;
+#                       build_contract_app() does NOT include dev_events_router;
+#                       _dev_enabled() gate (FG_DEV_EVENTS_ENABLED) is never
+#                       set in contract gen environment.
+#
+#   /control/testing/ — control plane testing CI surfaces;
+#                       build_contract_app() conditionally includes testing
+#                       control tower only when FG_TESTING_CONTROL_TOWER_ENABLED=1;
+#                       not customer-facing; default off in contract gen.
+#
+#   /_debug/          — control plane debug endpoint;
+#                       class_name="bootstrap"; justification "blocked in
+#                       prod-like mode" (registry.py global_routes).
+#
+# EXCLUDED prefixes — these were previously allowlisted but have been
+# REMOVED because their routes are customer-facing production-intended APIs:
+#
+#   /ai/              — NOT allowed_internal.  POST /ai/infer is customer-
+#                       facing (compliance:read scope, tenant-bound).
+#                       contracts_gen_core.py now sets FG_AI_PLANE_ENABLED=1
+#                       so these routes appear in the public contract.
+#
+#   /ai-plane/        — NOT allowed_internal.  GET/POST /ai-plane/policies and
+#                       GET /ai-plane/inference are tenant-scoped customer APIs.
+#                       Same: promoted to contract by FG_AI_PLANE_ENABLED=1 in
+#                       contracts_gen_core.py.
 # ---------------------------------------------------------------------------
 ALLOWED_INTERNAL_PREFIXES: tuple[str, ...] = (
     "/admin/",
@@ -71,8 +95,6 @@ ALLOWED_INTERNAL_PREFIXES: tuple[str, ...] = (
     "/dev/",
     "/control/testing/",
     "/_debug/",
-    "/ai-plane/",
-    "/ai/",
 )
 
 
