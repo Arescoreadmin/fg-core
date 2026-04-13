@@ -492,3 +492,80 @@ def test_tenant_not_in_registry_allowed(isolated_db, monkeypatch):
         CycleRunRequest(cycle_kind="light"), _bound_request("tenant-unknown")
     )
     assert "session_id" in result
+
+
+# ---------------------------------------------------------------------------
+# 9. Fail-closed registry exception (Fix B)
+# ---------------------------------------------------------------------------
+
+
+def test_registry_exception_returns_503(isolated_db, monkeypatch):
+    """Registry errors must not be swallowed; they must yield 503 TENANT_STATE_UNAVAILABLE."""
+    import tools.tenants.registry as _reg_mod
+
+    def _boom():
+        raise OSError("registry disk read failure")
+
+    monkeypatch.setattr(_reg_mod, "load_registry", _boom)
+    eng = _make_mocked_engine(isolated_db, monkeypatch)
+    monkeypatch.setattr("api.audit.AuditEngine", lambda: eng)
+
+    with pytest.raises(HTTPException) as exc:
+        run_audit_cycle(CycleRunRequest(cycle_kind="light"), _bound_request("tenant-a"))
+    assert exc.value.status_code == 503
+    assert exc.value.detail["code"] == "TENANT_STATE_UNAVAILABLE"
+
+
+def test_registry_exception_creates_no_ledger_state(isolated_db, monkeypatch):
+    """On registry I/O error, no AuditLedgerRecord rows are written."""
+    import tools.tenants.registry as _reg_mod
+
+    def _boom():
+        raise RuntimeError("registry unavailable")
+
+    monkeypatch.setattr(_reg_mod, "load_registry", _boom)
+    eng = _make_mocked_engine(isolated_db, monkeypatch)
+    monkeypatch.setattr("api.audit.AuditEngine", lambda: eng)
+
+    try:
+        run_audit_cycle(CycleRunRequest(cycle_kind="light"), _bound_request("tenant-a"))
+    except HTTPException:
+        pass
+
+    from api.db_models import AuditLedgerRecord
+
+    with Session(get_engine()) as s:
+        rows = (
+            s.query(AuditLedgerRecord)
+            .filter(AuditLedgerRecord.tenant_id == "tenant-a")
+            .all()
+        )
+    assert rows == []
+
+
+# ---------------------------------------------------------------------------
+# 10. Literal type schema validation (Fix A)
+# ---------------------------------------------------------------------------
+
+
+def test_invalid_cycle_kind_rejected_at_schema_level():
+    """Literal type must reject invalid values with a schema validation error."""
+    with pytest.raises(Exception) as exc:
+        CycleRunRequest(cycle_kind="extreme_sweep")
+    err = str(exc.value).lower()
+    # Pydantic Literal validation names the field and the allowed values
+    assert "cycle_kind" in err or "light" in err or "full" in err
+
+
+def test_valid_cycle_kinds_accepted():
+    """Both allowed literal values must parse without error."""
+    req_light = CycleRunRequest(cycle_kind="light")
+    req_full = CycleRunRequest(cycle_kind="full")
+    assert req_light.cycle_kind == "light"
+    assert req_full.cycle_kind == "full"
+
+
+def test_default_cycle_kind_is_light():
+    """Default cycle_kind must be 'light'."""
+    req = CycleRunRequest()
+    assert req.cycle_kind == "light"

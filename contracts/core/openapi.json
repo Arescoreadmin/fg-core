@@ -977,6 +977,10 @@
         "properties": {
           "cycle_kind": {
             "default": "light",
+            "enum": [
+              "light",
+              "full"
+            ],
             "title": "Cycle Kind",
             "type": "string"
           }

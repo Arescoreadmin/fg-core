@@ -6,6 +6,52 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-13 — Task 9.2 Addendum: Literal Type + Fail-Closed Guard + pytest CVE Fix
+
+**Branch:** `claude/production-closeout-tal0p`
+
+**Area:** Audit API · Pydantic Model Contract · Dependency Security
+
+---
+
+**Root causes (three issues):**
+
+**Fix A — `cycle_kind` contract/runtime mismatch:**
+`CycleRunRequest.cycle_kind` was typed as plain `str` with a runtime `@field_validator` restricting values to `{"light", "full"}`. This meant the OpenAPI schema advertised any string as valid while the runtime rejected most values — an OpenAPI/runtime drift. The `@field_validator` is redundant and non-standard when Pydantic `Literal` types cover the invariant at schema level.
+
+**Fix B — fail-open revoked-tenant guard:**
+The `except Exception: pass` in the registry look-up block silently swallowed all registry errors and proceeded to create audit state. Any I/O error, file-not-found, or permission denial on the registry would allow the request through as if the tenant were active. This violates the precondition the guard was meant to enforce.
+
+**Fix C — pip-audit CVE `pytest 8.4.2` → CVE-2025-71176:**
+`pytest==8.4.2` is affected by CVE-2025-71176. The fix version per pip-audit is `9.0.3`. `pytest-asyncio==0.24.0` (and 0.25.0 / 0.26.0) require `pytest<9`; upgrading required bumping to `pytest-asyncio==1.3.0` which lifts that cap.
+
+**Fixes applied:**
+- `api/audit.py` — `cycle_kind: str` + `@field_validator` → `cycle_kind: Literal["light", "full"] = "light"`; removed `_VALID_CYCLE_KINDS` frozenset, `field_validator` import; added `Literal` import
+- `api/audit.py` — `except Exception: pass` → `raise HTTPException(503, {"code": "TENANT_STATE_UNAVAILABLE", "message": "tenant state verification failed"}) from exc`
+- `requirements-dev.txt` — `pytest==8.4.2` → `pytest==9.0.3`; `pytest-asyncio==0.24.0` → `pytest-asyncio==1.3.0`
+
+**Files changed:**
+- `api/audit.py` — Fix A + Fix B
+- `requirements-dev.txt` — Fix C
+- `tests/test_audit_cycle_run.py` — 5 new tests (28 total, up from 23)
+- `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md` — contract authority re-generated (Literal type changes schema)
+
+**Tests added (5 new):**
+- `test_registry_exception_returns_503` — registry I/O error → 503 TENANT_STATE_UNAVAILABLE
+- `test_registry_exception_creates_no_ledger_state` — no rows written on registry exception
+- `test_invalid_cycle_kind_rejected_at_schema_level` — Literal type rejects invalid values
+- `test_valid_cycle_kinds_accepted` — both "light" and "full" parse without error
+- `test_default_cycle_kind_is_light` — default is "light"
+
+**Validation evidence:**
+- `.venv/bin/pytest -q tests/test_audit_cycle_run.py` → 28 passed
+- `.venv/bin/pytest -q tests -k 'audit or control or flow'` → 691 passed, 1 skipped
+- `make fg-fast` → PASS (all gates green)
+- `make contract-authority-refresh` → ✅ refreshed (sha256=f58b959a75a3e0cf9f028ff0721ad5701eff22a2b2fafd9f5ec1edc56506e663)
+- `bash codex_gates.sh` → in progress
+
+---
+
 ### 2026-04-13 — Task 9.2 Addendum: Revoked-Tenant Guard on POST /audit/cycle/run
 
 **Branch:** `claude/production-closeout-tal0p`

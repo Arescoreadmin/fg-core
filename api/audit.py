@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -15,20 +17,11 @@ from services.compliance_registry import ComplianceRegistry
 
 router = APIRouter(tags=["audit"])
 
-_VALID_CYCLE_KINDS: frozenset[str] = frozenset({"light", "full"})
-
 
 class CycleRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    cycle_kind: str = "light"
-
-    @field_validator("cycle_kind")
-    @classmethod
-    def validate_cycle_kind(cls, v: str) -> str:
-        if v not in _VALID_CYCLE_KINDS:
-            raise ValueError(f"cycle_kind must be one of {sorted(_VALID_CYCLE_KINDS)}")
-        return v
+    cycle_kind: Literal["light", "full"] = "light"
 
 
 class ReproduceRequest(BaseModel):
@@ -96,8 +89,14 @@ def run_audit_cycle(body: CycleRunRequest, request: Request) -> dict[str, str]:
             )
     except HTTPException:
         raise
-    except Exception:
-        pass  # registry unavailable — auth-layer validation stands
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "TENANT_STATE_UNAVAILABLE",
+                "message": "tenant state verification failed",
+            },
+        ) from exc
     engine = AuditEngine()
     try:
         session_id = engine.run_cycle(body.cycle_kind, tenant_id=tenant_id)
