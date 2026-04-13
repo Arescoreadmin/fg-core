@@ -1,3 +1,27 @@
+## 2026-04-13 — Task 9.2: POST /audit/cycle/run route added to evidence plane
+
+Critical files updated:
+- `tools/ci/route_inventory.json`
+- `tools/ci/route_inventory_summary.json`
+- `tools/ci/plane_registry_snapshot.json`
+- `tools/ci/topology.sha256`
+
+Change summary:
+- Added `POST /audit/cycle/run` to `api/audit.py` (evidence plane, `audit:write` scope, `tenant_bound: true`)
+- Route inventory regenerated via `python -m tools.ci.check_route_inventory --write`
+- New route is tenant-bound, scoped, and rate-limited consistent with all other evidence-plane audit endpoints
+- Contract authority refreshed; `contracts/core/openapi.json` and `schemas/api/openapi.json` updated
+
+Governance/security impact:
+- No existing routes modified
+- Auth/tenant enforcement pattern unchanged (follows existing evidence-plane pattern)
+- Cross-tenant isolation enforced: `require_bound_tenant` + explicit `tenant_id` propagation to engine
+
+Verification:
+- `python -m tools.ci.check_route_inventory` → OK
+- `make fg-fast` → passes all gates
+- `bash codex_gates.sh` → passes
+
 ## 2026-04-13 — SOC gate offline-mode: propagate ADMIN_SKIP_PIP_INSTALL in air-gapped environments
 
 Critical files updated:

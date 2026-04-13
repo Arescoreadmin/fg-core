@@ -6,6 +6,90 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-13 — Task 9.2 Production-Quality Closeout: POST /audit/cycle/run
+
+**Branch:** `claude/production-closeout-tal0p`
+
+**Area:** Audit Engine · Evidence Plane · Tenant Isolation · API Correctness
+
+---
+
+**Repository evidence for primary flow:**
+- `services/audit_engine/engine.py:run_cycle()` is the single writer of `AuditLedgerRecord` rows, grouped by `session_id`
+- `api/audit.py:audit_sessions()` reads `AuditLedgerRecord` grouped by `session_id` — confirmed as the supported retrieval path (present in `tools/ci/route_inventory.json` as evidence-plane route `audit:read` scoped)
+- `scripts/run_audit_engine.py` and `scripts/verify_audit_chain.py` confirm `run_cycle("light")` as the canonical operational trigger
+- `LIGHT_EVERY_SECONDS` / `FULL_SWEEP_EVERY_SECONDS` constants prove "light" and "full" are the only valid cycle kinds
+
+---
+
+**Gap 1 — Missing API endpoint (CRITICAL):**
+`POST /audit/cycle/run` did not exist. `run_cycle()` was only callable from scripts with no tenant isolation.
+
+**Fix:** Added `POST /audit/cycle/run` to `api/audit.py` with:
+- `require_scopes("audit:write")` + `Depends(require_bound_tenant)` on the router
+- `CycleRunRequest` model: `cycle_kind: str` with `@field_validator` against `{"light", "full"}`, `extra="forbid"`
+- API-provided `tenant_id` propagated explicitly to `engine.run_cycle(cycle_kind, tenant_id=tenant_id)`
+- `AuditTamperDetected` → `409 {"code": "AUDIT_CHAIN_TAMPERED"}` (explicit, repo-consistent)
+- `audit_admin_action` called for audit trail
+
+**Gap 2 — Tenant context isolation (CRITICAL):**
+`engine.run_cycle()` always read tenant from `os.getenv("FG_AUDIT_TENANT_ID", host_id)`. Any API call would silently write ledger records tagged with the host/env tenant instead of the caller's tenant — a cross-tenant data contamination risk.
+
+**Fix:** Added `tenant_id: Optional[str] = None` parameter to `run_cycle()`. When `None` (legacy CLI/ops callers), falls back to env (backward compat). When provided and non-empty (API callers), uses the provided value. Blank/whitespace raises `AuditIntegrityError("AUDIT_TENANT_REQUIRED", ...)` fail-closed.
+
+---
+
+**Files changed (minimal surface):**
+- `services/audit_engine/engine.py` — `run_cycle()` signature + tenant resolution (5 lines)
+- `api/audit.py` — `CycleRunRequest` model + `run_audit_cycle` endpoint + imports (28 lines)
+- `tests/test_audit_cycle_run.py` — new test file (19 tests)
+- `tools/ci/route_inventory.json` — regenerated (new route registered)
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/topology.sha256` — regenerated
+- `contracts/core/openapi.json` — regenerated (new endpoint)
+- `schemas/api/openapi.json` — regenerated (new endpoint)
+- `BLUEPRINT_STAGED.md` — contract authority refreshed
+- `CONTRACT.md` — contract authority refreshed
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — SOC review entry for `tools/ci/` changes
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Tests added (19 new tests in `tests/test_audit_cycle_run.py`):**
+1. `test_run_cycle_returns_session_id` — happy path, session_id in response
+2. `test_run_cycle_persists_records` — ledger records tagged with correct tenant_id
+3. `test_run_cycle_then_sessions_retrieval` — end-to-end: POST → GET /audit/sessions
+4. `test_sessions_retrieval_contains_correct_cycle_kind` — cycle_kind and records count correct
+5. `test_run_cycle_full_kind` — "full" cycle_kind accepted
+6. `test_invalid_cycle_kind_rejected_by_model` — Pydantic rejects unknown cycle_kind
+7. `test_extra_request_fields_rejected_by_model` — `extra="forbid"` enforced
+8. `test_engine_blank_tenant_raises_explicit_error` — blank tenant → `AUDIT_TENANT_REQUIRED`
+9. `test_engine_whitespace_tenant_raises_explicit_error` — whitespace tenant → same
+10. `test_engine_none_tenant_uses_env_fallback` — legacy callers still get env fallback
+11. `test_api_provided_tenant_overrides_env` — API tenant never falls back to env tenant
+12. `test_tampered_chain_returns_409` — tampered chain → 409 `AUDIT_CHAIN_TAMPERED`
+13. `test_unbound_tenant_rejected_by_guard` — unbound request → 400
+14. `test_bound_tenant_accepted_by_guard` — bound request accepted
+15. `test_cross_tenant_execution_isolation` — run for tenant-a writes no tenant-b rows
+16. `test_cross_tenant_retrieval_denied_on_sessions` — GET returns empty for wrong tenant
+17. `test_sessions_returns_only_own_tenant_records` — two tenants, no cross-visibility
+18. `test_sessions_empty_before_any_run` — clean-slate retrieval
+19. `test_sessions_records_count_matches_invariants` — records count is exact
+
+**Validation evidence:**
+- `.venv/bin/pytest -q tests/test_audit_cycle_run.py` → 19 passed
+- `.venv/bin/pytest -q tests -k 'audit or control or flow'` → 682 passed, 1 skipped
+- `make fg-fast` → PASS (all gates green)
+- `bash codex_gates.sh` → in progress (mypy: 0 errors, ruff: 0 errors at time of logging)
+
+**AI Notes:**
+- `run_cycle()` backward compat: passing `tenant_id=None` continues to use env. Do NOT remove env fallback — it is required for `scripts/run_audit_engine.py` and `scripts/verify_audit_chain.py`.
+- `AuditTamperDetected` vs `AuditIntegrityError`: tampered chain on write path uses `AuditTamperDetected`; code maps to `AUDIT_CHAIN_TAMPERED`. Do not conflate with `AUDIT_CHAIN_BROKEN` (used on read/export path).
+- `_VALID_CYCLE_KINDS = frozenset({"light", "full"})` — if new cycle kinds are added to the engine, update this constant and the validator in `api/audit.py`.
+
+---
+
+---
+
 ### 2026-04-13 — Task 9.1 Addendum: Atomic Tenant Create + Strict Gateway Validation
 
 **Area:** Tenant Registry · API Correctness · Gateway Validation

@@ -13,7 +13,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
@@ -177,14 +177,22 @@ class AuditEngine:
         )
         return results
 
-    def run_cycle(self, cycle_kind: str = "light") -> str:
+    def run_cycle(
+        self, cycle_kind: str = "light", tenant_id: Optional[str] = None
+    ) -> str:
         with Session(self.engine) as session:
             if not self.verify_chain_integrity(session):
                 raise AuditTamperDetected("audit ledger tampering detected")
 
             session_id = str(uuid.uuid4())
             host_id = os.getenv("FG_AUDIT_HOST_ID", socket.gethostname())
-            tenant_id = os.getenv("FG_AUDIT_TENANT_ID", host_id)
+            # API callers supply tenant_id explicitly; legacy CLI/ops callers fall back to env
+            if tenant_id is None:
+                tenant_id = os.getenv("FG_AUDIT_TENANT_ID", host_id)
+            if not tenant_id or not tenant_id.strip():
+                raise AuditIntegrityError(
+                    "AUDIT_TENANT_REQUIRED", "tenant_id required for audit cycle"
+                )
             key_id, keys = _audit_keys()
             key = keys[key_id]
             last = (
