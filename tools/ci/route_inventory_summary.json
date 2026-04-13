@@ -84,12 +84,12 @@
     "connector": 14,
     "control": 114,
     "data": 32,
-    "evidence": 22,
+    "evidence": 23,
     "security": 6,
     "ui": 30
   },
   "removed": [],
-  "runtime_count": 235,
+  "runtime_count": 236,
   "runtime_only": [
     "GET /_debug/routes",
     "GET /admin/agent/devices",
@@ -155,6 +155,7 @@
     "POST /admin/tenants",
     "POST /admin/tenants/{tenant_id}/activate",
     "POST /admin/tenants/{tenant_id}/suspend",
+    "POST /audit/cycle/run",
     "POST /control/testing/runs/register",
     "POST /dev/emit",
     "POST /dev/seed",
@@ -165,5 +166,7 @@
     "PUT /admin/tenants/{tenant_id}/quota",
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
-  "unauthorized_runtime_only": []
+  "unauthorized_runtime_only": [
+    "POST /audit/cycle/run"
+  ]
 }

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func
@@ -10,10 +12,16 @@ from api.db import get_engine
 from api.db_models import AuditLedgerRecord
 from api.security_audit import audit_admin_action
 from services.audit_engine import AuditEngine
-from services.audit_engine.engine import AuditIntegrityError
+from services.audit_engine.engine import AuditIntegrityError, AuditTamperDetected
 from services.compliance_registry import ComplianceRegistry
 
 router = APIRouter(tags=["audit"])
+
+
+class CycleRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cycle_kind: Literal["light", "full"] = "light"
 
 
 class ReproduceRequest(BaseModel):
@@ -58,6 +66,52 @@ def audit_sessions(request: Request) -> dict[str, object]:
             for r in rows
         ]
     }
+
+
+@router.post(
+    "/audit/cycle/run",
+    dependencies=[
+        Depends(require_scopes("audit:write")),
+        Depends(require_bound_tenant),
+    ],
+)
+def run_audit_cycle(body: CycleRunRequest, request: Request) -> dict[str, str]:
+    tenant_id = require_bound_tenant(request)
+    # Enforce active-tenant precondition: revoked tenants must not create audit state
+    try:
+        from tools.tenants.registry import load_registry as _load_registry
+
+        _rec = _load_registry().get(tenant_id)
+        if _rec is not None and _rec.status != "active":
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "TENANT_REVOKED", "message": "tenant is not active"},
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "TENANT_STATE_UNAVAILABLE",
+                "message": "tenant state verification failed",
+            },
+        ) from exc
+    engine = AuditEngine()
+    try:
+        session_id = engine.run_cycle(body.cycle_kind, tenant_id=tenant_id)
+    except AuditTamperDetected as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "AUDIT_CHAIN_TAMPERED", "message": str(exc)},
+        )
+    audit_admin_action(
+        action="audit_cycle_run",
+        tenant_id=tenant_id,
+        request=request,
+        details={"cycle_kind": body.cycle_kind, "session_id": session_id},
+    )
+    return {"session_id": session_id, "cycle_kind": body.cycle_kind}
 
 
 @router.get("/audit/export", dependencies=[Depends(require_scopes("audit:export"))])

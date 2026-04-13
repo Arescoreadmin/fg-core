@@ -6,6 +6,174 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-13 — Task 9.2 Addendum: Literal Type + Fail-Closed Guard + pytest CVE Fix
+
+**Branch:** `claude/production-closeout-tal0p`
+
+**Area:** Audit API · Pydantic Model Contract · Dependency Security
+
+---
+
+**Root causes (three issues):**
+
+**Fix A — `cycle_kind` contract/runtime mismatch:**
+`CycleRunRequest.cycle_kind` was typed as plain `str` with a runtime `@field_validator` restricting values to `{"light", "full"}`. This meant the OpenAPI schema advertised any string as valid while the runtime rejected most values — an OpenAPI/runtime drift. The `@field_validator` is redundant and non-standard when Pydantic `Literal` types cover the invariant at schema level.
+
+**Fix B — fail-open revoked-tenant guard:**
+The `except Exception: pass` in the registry look-up block silently swallowed all registry errors and proceeded to create audit state. Any I/O error, file-not-found, or permission denial on the registry would allow the request through as if the tenant were active. This violates the precondition the guard was meant to enforce.
+
+**Fix C — pip-audit CVE `pytest 8.4.2` → CVE-2025-71176:**
+`pytest==8.4.2` is affected by CVE-2025-71176. The fix version per pip-audit is `9.0.3`. `pytest-asyncio==0.24.0` (and 0.25.0 / 0.26.0) require `pytest<9`; upgrading required bumping to `pytest-asyncio==1.3.0` which lifts that cap.
+
+**Fixes applied:**
+- `api/audit.py` — `cycle_kind: str` + `@field_validator` → `cycle_kind: Literal["light", "full"] = "light"`; removed `_VALID_CYCLE_KINDS` frozenset, `field_validator` import; added `Literal` import
+- `api/audit.py` — `except Exception: pass` → `raise HTTPException(503, {"code": "TENANT_STATE_UNAVAILABLE", "message": "tenant state verification failed"}) from exc`
+- `requirements-dev.txt` — `pytest==8.4.2` → `pytest==9.0.3`; `pytest-asyncio==0.24.0` → `pytest-asyncio==1.3.0`
+
+**Files changed:**
+- `api/audit.py` — Fix A + Fix B
+- `requirements-dev.txt` — Fix C
+- `tests/test_audit_cycle_run.py` — 5 new tests (28 total, up from 23)
+- `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md` — contract authority re-generated (Literal type changes schema)
+
+**Tests added (5 new):**
+- `test_registry_exception_returns_503` — registry I/O error → 503 TENANT_STATE_UNAVAILABLE
+- `test_registry_exception_creates_no_ledger_state` — no rows written on registry exception
+- `test_invalid_cycle_kind_rejected_at_schema_level` — Literal type rejects invalid values
+- `test_valid_cycle_kinds_accepted` — both "light" and "full" parse without error
+- `test_default_cycle_kind_is_light` — default is "light"
+
+**Validation evidence:**
+- `.venv/bin/pytest -q tests/test_audit_cycle_run.py` → 28 passed
+- `.venv/bin/pytest -q tests -k 'audit or control or flow'` → 691 passed, 1 skipped
+- `make fg-fast` → PASS (all gates green)
+- `make contract-authority-refresh` → ✅ refreshed (sha256=f58b959a75a3e0cf9f028ff0721ad5701eff22a2b2fafd9f5ec1edc56506e663)
+- `bash codex_gates.sh` → in progress
+
+---
+
+### 2026-04-13 — Task 9.2 Addendum: Revoked-Tenant Guard on POST /audit/cycle/run
+
+**Branch:** `claude/production-closeout-tal0p`
+
+**Area:** Audit Engine · Tenant Revocation · API Correctness
+
+---
+
+**Root cause:**
+`POST /audit/cycle/run` checked auth/tenant binding via `require_bound_tenant` but never checked the tenant's revocation status. `TenantRecord.status` is `"active" | "revoked"`, and `revoke_tenant()` writes `status="revoked"` to the registry. No path in `require_bound_tenant` or the audit middleware verified this field — the auth layer's revocation check (`api/main.py:468`) is dead because `get_tenant()` always returns `None` (function not exported by registry). A revoked tenant with a valid API key could create new `AuditLedgerRecord` rows.
+
+**Fix:** Added active-tenant precondition check in `run_audit_cycle()` immediately after `require_bound_tenant()`, before any call to `engine.run_cycle()`:
+- Loads registry via `tools.tenants.registry.load_registry()`
+- If record found AND `status != "active"`: `403 {"code": "TENANT_REVOKED", "message": "tenant is not active"}`
+- If record not found (tenant not in registry): allows through — auth-layer binding already validated, no revocation recorded
+- On registry exception: allows through — fail-safe for unavailable registry, auth-layer validation stands
+- `HTTPException` is re-raised explicitly so the guard cannot be swallowed
+
+**SOC review sync:** No `tools/ci/` artifacts change in this fix (endpoint body only); SOC doc update already covers the Task 9.2 initial commit. `soc-review-sync` passes with `GITHUB_BASE_REF=main`.
+
+**Files changed:**
+- `api/audit.py` — active-tenant precondition (10 lines)
+- `tests/test_audit_cycle_run.py` — 4 new tests (23 total, up from 19)
+
+**Tests added (4 new):**
+- `test_revoked_tenant_denied_on_cycle_run` — 403 TENANT_REVOKED for registry-revoked tenant
+- `test_revoked_tenant_creates_no_ledger_state` — no `AuditLedgerRecord` rows created on denial
+- `test_active_tenant_in_registry_allowed` — active status in registry → cycle succeeds
+- `test_tenant_not_in_registry_allowed` — not-in-registry → cycle succeeds (auth-layer valid)
+
+**Validation evidence:**
+- `.venv/bin/pytest -q tests/test_audit_cycle_run.py` → 23 passed
+- `.venv/bin/pytest -q tests -k 'audit or control or flow'` → 686 passed, 1 skipped
+- `make fg-fast` → PASS (all gates green, soc-review-sync OK)
+- `bash codex_gates.sh` → in progress
+
+---
+
+### 2026-04-13 — Task 9.2 Production-Quality Closeout: POST /audit/cycle/run
+
+**Branch:** `claude/production-closeout-tal0p`
+
+**Area:** Audit Engine · Evidence Plane · Tenant Isolation · API Correctness
+
+---
+
+**Repository evidence for primary flow:**
+- `services/audit_engine/engine.py:run_cycle()` is the single writer of `AuditLedgerRecord` rows, grouped by `session_id`
+- `api/audit.py:audit_sessions()` reads `AuditLedgerRecord` grouped by `session_id` — confirmed as the supported retrieval path (present in `tools/ci/route_inventory.json` as evidence-plane route `audit:read` scoped)
+- `scripts/run_audit_engine.py` and `scripts/verify_audit_chain.py` confirm `run_cycle("light")` as the canonical operational trigger
+- `LIGHT_EVERY_SECONDS` / `FULL_SWEEP_EVERY_SECONDS` constants prove "light" and "full" are the only valid cycle kinds
+
+---
+
+**Gap 1 — Missing API endpoint (CRITICAL):**
+`POST /audit/cycle/run` did not exist. `run_cycle()` was only callable from scripts with no tenant isolation.
+
+**Fix:** Added `POST /audit/cycle/run` to `api/audit.py` with:
+- `require_scopes("audit:write")` + `Depends(require_bound_tenant)` on the router
+- `CycleRunRequest` model: `cycle_kind: str` with `@field_validator` against `{"light", "full"}`, `extra="forbid"`
+- API-provided `tenant_id` propagated explicitly to `engine.run_cycle(cycle_kind, tenant_id=tenant_id)`
+- `AuditTamperDetected` → `409 {"code": "AUDIT_CHAIN_TAMPERED"}` (explicit, repo-consistent)
+- `audit_admin_action` called for audit trail
+
+**Gap 2 — Tenant context isolation (CRITICAL):**
+`engine.run_cycle()` always read tenant from `os.getenv("FG_AUDIT_TENANT_ID", host_id)`. Any API call would silently write ledger records tagged with the host/env tenant instead of the caller's tenant — a cross-tenant data contamination risk.
+
+**Fix:** Added `tenant_id: Optional[str] = None` parameter to `run_cycle()`. When `None` (legacy CLI/ops callers), falls back to env (backward compat). When provided and non-empty (API callers), uses the provided value. Blank/whitespace raises `AuditIntegrityError("AUDIT_TENANT_REQUIRED", ...)` fail-closed.
+
+---
+
+**Files changed (minimal surface):**
+- `services/audit_engine/engine.py` — `run_cycle()` signature + tenant resolution (5 lines)
+- `api/audit.py` — `CycleRunRequest` model + `run_audit_cycle` endpoint + imports (28 lines)
+- `tests/test_audit_cycle_run.py` — new test file (19 tests)
+- `tools/ci/route_inventory.json` — regenerated (new route registered)
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `tools/ci/plane_registry_snapshot.json` — regenerated
+- `tools/ci/topology.sha256` — regenerated
+- `contracts/core/openapi.json` — regenerated (new endpoint)
+- `schemas/api/openapi.json` — regenerated (new endpoint)
+- `BLUEPRINT_STAGED.md` — contract authority refreshed
+- `CONTRACT.md` — contract authority refreshed
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — SOC review entry for `tools/ci/` changes
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Tests added (19 new tests in `tests/test_audit_cycle_run.py`):**
+1. `test_run_cycle_returns_session_id` — happy path, session_id in response
+2. `test_run_cycle_persists_records` — ledger records tagged with correct tenant_id
+3. `test_run_cycle_then_sessions_retrieval` — end-to-end: POST → GET /audit/sessions
+4. `test_sessions_retrieval_contains_correct_cycle_kind` — cycle_kind and records count correct
+5. `test_run_cycle_full_kind` — "full" cycle_kind accepted
+6. `test_invalid_cycle_kind_rejected_by_model` — Pydantic rejects unknown cycle_kind
+7. `test_extra_request_fields_rejected_by_model` — `extra="forbid"` enforced
+8. `test_engine_blank_tenant_raises_explicit_error` — blank tenant → `AUDIT_TENANT_REQUIRED`
+9. `test_engine_whitespace_tenant_raises_explicit_error` — whitespace tenant → same
+10. `test_engine_none_tenant_uses_env_fallback` — legacy callers still get env fallback
+11. `test_api_provided_tenant_overrides_env` — API tenant never falls back to env tenant
+12. `test_tampered_chain_returns_409` — tampered chain → 409 `AUDIT_CHAIN_TAMPERED`
+13. `test_unbound_tenant_rejected_by_guard` — unbound request → 400
+14. `test_bound_tenant_accepted_by_guard` — bound request accepted
+15. `test_cross_tenant_execution_isolation` — run for tenant-a writes no tenant-b rows
+16. `test_cross_tenant_retrieval_denied_on_sessions` — GET returns empty for wrong tenant
+17. `test_sessions_returns_only_own_tenant_records` — two tenants, no cross-visibility
+18. `test_sessions_empty_before_any_run` — clean-slate retrieval
+19. `test_sessions_records_count_matches_invariants` — records count is exact
+
+**Validation evidence:**
+- `.venv/bin/pytest -q tests/test_audit_cycle_run.py` → 19 passed
+- `.venv/bin/pytest -q tests -k 'audit or control or flow'` → 682 passed, 1 skipped
+- `make fg-fast` → PASS (all gates green)
+- `bash codex_gates.sh` → in progress (mypy: 0 errors, ruff: 0 errors at time of logging)
+
+**AI Notes:**
+- `run_cycle()` backward compat: passing `tenant_id=None` continues to use env. Do NOT remove env fallback — it is required for `scripts/run_audit_engine.py` and `scripts/verify_audit_chain.py`.
+- `AuditTamperDetected` vs `AuditIntegrityError`: tampered chain on write path uses `AuditTamperDetected`; code maps to `AUDIT_CHAIN_TAMPERED`. Do not conflate with `AUDIT_CHAIN_BROKEN` (used on read/export path).
+- `_VALID_CYCLE_KINDS = frozenset({"light", "full"})` — if new cycle kinds are added to the engine, update this constant and the validator in `api/audit.py`.
+
+---
+
+---
+
 ### 2026-04-13 — Task 9.1 Addendum: Atomic Tenant Create + Strict Gateway Validation
 
 **Area:** Tenant Registry · API Correctness · Gateway Validation
