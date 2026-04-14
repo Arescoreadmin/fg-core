@@ -21,41 +21,44 @@ phases:
               - "Known boundary/auth/audit compatibility paths may remain optional"
               - "Fast lane passes"
             validation_commands:
-             - "rg -n 'Optional\\[.*tenant_id|tenant_id:\\s*Optional' api/auth_scopes/validation.py api/tenant_usage.py api/middleware/dos_guard.py api/key_rotation.py || true"
+              - "rg -n 'Optional\\[.*tenant_id|tenant_id:\\s*Optional' api/auth_scopes/validation.py api/tenant_usage.py api/middleware/dos_guard.py api/key_rotation.py"
+              - "make fg-fast"
 
           - id: "1.2"
-            title: Enforce tenant_id at entry points
+            title: "Enforce tenant_id at entry points"
+            status: "pending"
+            depends_on: ["1.1"]
 
             definition_of_done:
-              - Unscoped entry points reject missing tenant_id
-              - Scoped auth-derived tenant binding still works where intended
+              - "Unscoped entry points reject missing tenant_id"
+              - "Scoped auth-derived tenant binding still works where intended"
 
             validation:
-              - Unscoped requests fail when tenant_id is missing
-              - Scoped requests without explicit tenant_id still succeed where auth binding is intended
-              - Fast lane passes
+              - "Unscoped requests fail when tenant_id is missing"
+              - "Scoped requests without explicit tenant_id still succeed where auth binding is intended"
+              - "Fast lane passes"
 
             validation_commands:
-              - pytest -q tests/test_tenant_binding.py tests/security/test_tenant_contract_endpoints.py || true
-              - make fg-fast
+              - ".venv/bin/pytest -q tests/test_tenant_binding.py tests/security/test_tenant_contract_endpoints.py"
+              - "make fg-fast"
 
             allowed_files:
-              - api/admin.py
-              - api/control_plane_v2.py
-              - api/decisions.py
-              - api/dev_events.py
-              - api/ingest.py
-              - api/keys.py
-              - api/stats.py
-              - api/ui_dashboards.py
-              - tests/**
+              - "api/admin.py"
+              - "api/control_plane_v2.py"
+              - "api/decisions.py"
+              - "api/dev_events.py"
+              - "api/ingest.py"
+              - "api/keys.py"
+              - "api/stats.py"
+              - "api/ui_dashboards.py"
+              - "tests/**"
 
             max_files_changed: 20
 
             forbidden_files:
-              - contracts/**
-              - schemas/api/openapi.json
-              - .github/workflows/**
+              - "contracts/**"
+              - "schemas/api/openapi.json"
+              - ".github/workflows/**"
 
           - id: "1.3"
             title: "Audit read paths"
@@ -67,7 +70,7 @@ phases:
               - "Cross-tenant read returns empty or not-found"
               - "Fast lane passes"
             validation_commands:
-              - "pytest -q tests/security -k 'tenant and read' || true"
+              - ".venv/bin/pytest -q tests/security -k 'tenant and read'"
               - "make fg-fast"
 
           - id: "1.4"
@@ -80,7 +83,7 @@ phases:
               - "Cannot export other tenant data"
               - "Fast lane passes"
             validation_commands:
-              - "pytest -q tests/security -k 'tenant and export' || true"
+              - ".venv/bin/pytest -q tests/security -k 'tenant and export'"
               - "make fg-fast"
 
           - id: "1.5"
@@ -93,7 +96,7 @@ phases:
               - "Job fails without tenant_id"
               - "Fast lane passes"
             validation_commands:
-              - "pytest -q tests -k 'tenant and job' || true"
+              - ".venv/bin/pytest -q tests -k 'tenant and job'"
               - "make fg-fast"
 
       - id: "2.0"
@@ -110,7 +113,7 @@ phases:
               - "Direct human-auth path to core is rejected"
               - "Fast lane passes"
             validation_commands:
-              - "pytest -q tests -k 'auth and core' || true"
+              - ".venv/bin/pytest -q tests -k 'auth and core'"
               - "make fg-fast"
 
           - id: "2.2"
@@ -123,7 +126,7 @@ phases:
               - "Gateway path works and direct core path is rejected"
               - "Fast lane passes"
             validation_commands:
-              - "pytest -q tests -k 'gateway and auth' || true"
+              - ".venv/bin/pytest -q tests -k 'gateway and auth'"
               - "make fg-fast"
 
       - id: "3.0"
@@ -153,6 +156,7 @@ phases:
             validation_commands:
               - "make fg-fast"
               - "make fg-fast"
+              - "git diff --exit-code"
 
           - id: "3.3"
             title: "Lock fg-fast"
@@ -206,11 +210,15 @@ phases:
 
             validation_commands:
               - "! env FG_ENV=production python tools/ci/check_required_env.py"
-              - pytest -q tests -k "required_env or prod_startup or startup_config or silent_default"
-              - docker compose --env-file .env.ci -f docker-compose.yml -f docker-compose.lockdown.yml config >/tmp/fg.compose.rendered.yml
+              - ".venv/bin/pytest -q tests -k 'required_env or prod_startup or startup_config or silent_default'"
+              - "docker compose --env-file .env.ci -f docker-compose.yml -f docker-compose.lockdown.yml config >/tmp/fg.compose.rendered.yml"
               - "! rg -n 'FG_API_KEY:.*:-|FG_WEBHOOK_SECRET:.*:-|FG_SIGNING_SECRET:.*:-|FG_INTERNAL_AUTH_SECRET:.*:-|DATABASE_URL:.*:-' docker-compose.yml docker-compose.lockdown.yml"
-              - make fg-fast
+              - "make fg-fast"
 
+      - id: "5.0"
+        name: "Infrastructure"
+
+        tasks:
           - id: "5.1"
             title: "Docker compose cleanup"
             status: "pending"
@@ -234,7 +242,7 @@ phases:
               - "docker compose --env-file .env.ci --profile core -f docker-compose.yml -f docker-compose.lockdown.yml config >/tmp/fg.compose.rendered.yml"
               - "docker compose --env-file .env.ci --profile core down -v"
               - "docker compose --env-file .env.ci --profile core up -d --build"
-              - "timeout 120 sh -c 'until docker ps --filter name=fg-core-frostgate-core-1 --filter health=healthy --format \"{{.Names}}\" | grep -q frostgate-core; do sleep 3; done'"
+              - "timeout 120 sh -c 'until docker inspect $(docker compose --env-file .env.ci --profile core ps -q frostgate-core) --format \"{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}\" | grep -q healthy; do sleep 3; done'"
               - "docker compose --env-file .env.ci --profile core ps >/tmp/fg.compose.ps.txt"
               - "docker compose --env-file .env.ci --profile core logs frostgate-migrate --tail=200 >/tmp/fg.migrate.log"
               - "docker compose --env-file .env.ci --profile core logs frostgate-core --tail=200 >/tmp/fg.core.log"
@@ -270,31 +278,31 @@ phases:
               - ".venv/bin/pytest -q tests -k 'keycloak or oidc or auth_flow'"
               - "make fg-fast"
 
-      - id: "6.2"
-        title: "End-to-end auth flow"
-        status: "pending"
-        depends_on: ["6.1"]
-        definition_of_done:
-          - "A Keycloak-issued token for the configured realm/client is accepted on the intended gateway entry path"
-          - "Gateway-authenticated requests reach protected core functionality without local bypasses or alternate trust paths"
-          - "JWT validation enforces issuer, audience, signature, and expiry"
-          - "Authorization enforces required scopes and tenant isolation on protected routes"
-          - "Misconfigured OIDC discovery, JWKS, issuer, audience, or client wiring fails explicitly"
-        validation:
-          - "Valid token request to a protected endpoint returns success"
-          - "Request without token returns 401 or repository-defined equivalent"
-          - "Request with tampered token returns 401 or repository-defined equivalent"
-          - "Request with wrong issuer or audience returns 401 or repository-defined equivalent"
-          - "Request with valid token but insufficient scope returns 403 or repository-defined equivalent"
-          - "Request with valid token for the wrong tenant is denied"
-          - "OIDC/JWKS misconfiguration fails closed and does not fall back silently"
-          - "Fast lane and codex gates remain green"
-        validation_commands:
-          - "make fg-idp-validate"
-          - ".venv/bin/pytest -q tests -k 'auth_flow or keycloak or oidc or jwt'"
-          - ".venv/bin/pytest -q tests/security -k 'tenant or scope or auth'"
-          - "make fg-fast"
-          - "bash codex_gates.sh"
+          - id: "6.2"
+            title: "End-to-end auth flow"
+            status: "pending"
+            depends_on: ["6.1"]
+            definition_of_done:
+              - "A Keycloak-issued token for the configured realm/client is accepted on the intended gateway entry path"
+              - "Gateway-authenticated requests reach protected core functionality without local bypasses or alternate trust paths"
+              - "JWT validation enforces issuer, audience, signature, and expiry"
+              - "Authorization enforces required scopes and tenant isolation on protected routes"
+              - "Misconfigured OIDC discovery, JWKS, issuer, audience, or client wiring fails explicitly"
+            validation:
+              - "Valid token request to a protected endpoint returns success"
+              - "Request without token returns 401 or repository-defined equivalent"
+              - "Request with tampered token returns 401 or repository-defined equivalent"
+              - "Request with wrong issuer or audience returns 401 or repository-defined equivalent"
+              - "Request with valid token but insufficient scope returns 403 or repository-defined equivalent"
+              - "Request with valid token for the wrong tenant is denied"
+              - "OIDC/JWKS misconfiguration fails closed and does not fall back silently"
+              - "Fast lane and codex gates remain green"
+            validation_commands:
+              - "make fg-idp-validate"
+              - ".venv/bin/pytest -q tests -k 'auth_flow or keycloak or oidc or jwt'"
+              - ".venv/bin/pytest -q tests/security -k 'tenant or scope or auth'"
+              - "make fg-fast"
+              - "bash codex_gates.sh"
 
       - id: "7.0"
         name: "Observability"
@@ -432,18 +440,22 @@ phases:
             depends_on: ["8.1"]
 
             definition_of_done:
-              - "A tester can create a tenant through the intended supported API/gateway path"
+              - "A tester can create a tenant through the intended supported API or gateway path only"
               - "Tenant creation enforces auth, tenant model invariants, and input validation"
-              - "Created tenant is persisted and observable through the intended read path"
+              - "Created tenant is persisted and observable through the intended supported read path"
+              - "Duplicate create behavior is explicit and deterministic"
               - "Errors are explicit and actionable"
 
             validation:
               - "Happy-path tenant creation succeeds"
               - "Invalid payload fails explicitly"
               - "Unauthorized tenant creation is rejected"
+              - "Duplicate tenant creation returns explicit conflict behavior"
+              - "Created tenant is retrievable through supported read path"
               - "Fast lane remains green"
 
             validation_commands:
+              - ".venv/bin/pytest -q tests/test_tenant_create.py"
               - ".venv/bin/pytest -q tests -k 'tenant and create'"
               - "make fg-fast"
               - "bash codex_gates.sh"
@@ -454,19 +466,22 @@ phases:
             depends_on: ["9.1"]
 
             definition_of_done:
-              - "A tester can trigger the intended core audit/control flow through supported interfaces"
+              - "A tester can trigger the intended core audit/control flow through supported interfaces only"
+              - "The exact primary flow is identified from repository evidence and validated on that intended surface only"
               - "Flow enforces auth, tenant isolation, and required preconditions"
-              - "Resulting state or artifacts are persisted and retrievable"
-              - "Failure modes are explicit"
+              - "Resulting state or artifacts are persisted and retrievable through the intended supported read path"
+              - "Failure modes are explicit and repository-consistent"
 
             validation:
               - "Primary flow completes successfully end-to-end"
               - "Cross-tenant or unauthorized execution is denied"
               - "Missing prerequisites fail explicitly"
+              - "Resulting state or artifacts are persisted and retrievable"
               - "Fast lane remains green"
 
             validation_commands:
-              - ".venv/bin/pytest -q tests -k 'audit or control or flow'"
+              - ".venv/bin/pytest -q tests/test_audit_cycle_run.py"
+              - ".venv/bin/pytest -q tests -k 'audit and tenant'"
               - "make fg-fast"
               - "bash codex_gates.sh"
 
@@ -476,19 +491,24 @@ phases:
             depends_on: ["9.2"]
 
             definition_of_done:
-              - "Tester can retrieve/export resulting artifacts without manual DB or shell intervention"
-              - "Export/retrieval paths preserve tenant boundaries and auth checks"
-              - "Export payload or artifact shape is stable enough for tester use"
-              - "Errors are explicit when result is missing or unauthorized"
+              - "Tester can retrieve and export the artifacts produced by the primary audit/control flow using supported API or gateway surfaces only, with no manual DB or shell intervention"
+              - "The exact retrieval path and export path are identified from repository evidence and validated on those intended surfaces only"
+              - "Retrieval and export paths preserve tenant boundaries and auth checks for list, item fetch, and export operations"
+              - "Export payload or artifact shape is stable, explicit, and usable for tester workflows"
+              - "Errors are explicit and distinguish unauthorized, cross-tenant, and missing-result cases"
 
             validation:
-              - "End-to-end tester flow from create → run → export succeeds"
-              - "Unauthorized export is denied"
-              - "Missing result returns explicit not-found/error path"
+              - "End-to-end tester flow from create -> run -> retrieve/export succeeds through supported interfaces only"
+              - "Unauthorized retrieval/export is denied"
+              - "Cross-tenant retrieval/export is denied"
+              - "Missing result returns explicit not-found or equivalent repository-consistent error path"
+              - "Export payload or artifact shape is consistent enough for repeat tester use"
               - "Fast lane remains green"
 
             validation_commands:
-              - ".venv/bin/pytest -q tests -k 'export or result or retrieval'"
+              - ".venv/bin/pytest -q tests/test_audit_exam_api.py"
+              - ".venv/bin/pytest -q tests/test_audit_cycle_run.py"
+              - ".venv/bin/pytest -q tests/security -k 'export or tenant'"
               - "make fg-fast"
               - "bash codex_gates.sh"
 
@@ -515,6 +535,9 @@ phases:
 
             validation_commands:
               - ".venv/bin/pytest -q tests -k 'seed or bootstrap'"
+              - "python tools/seed/run_seed.py"
+              - "python tools/seed/run_seed.py"
+              - ".venv/bin/pytest -q tests/test_audit_cycle_run.py"
               - "make fg-fast"
               - "bash codex_gates.sh"
 
@@ -560,7 +583,7 @@ phases:
               - "Fast lane remains green"
 
             validation_commands:
-              - ".venv/bin/pytest -q tests -k 'error or explicit or failure'"
+              - ".venv/bin/pytest -q tests/test_audit_exam_api.py -k 'error or not_found or forbidden'"
               - "make fg-fast"
               - "bash codex_gates.sh"
 
