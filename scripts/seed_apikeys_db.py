@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from typing import Iterable, Tuple
 
-from api.db import get_db_no_request, init_db
-from api.db_models import ApiKey, hash_api_key
+from api.db import init_db
+from api.db_models import hash_api_key
 
 
 def _raw_key(s: str) -> str:
@@ -23,7 +24,7 @@ def _pairs_from_env() -> Iterable[Tuple[str, str]]:
     """
     admin = _raw_key(os.getenv("FG_ADMIN_KEY", ""))
     agent = _raw_key(os.getenv("FG_AGENT_KEY", ""))
-    audit_gw = _raw_key(os.getenv("FG_AUDIT_GW_KEY", "seedaudit_gw_key_000000000000"))
+    audit_gw = _raw_key(os.getenv("FG_AUDIT_GW_KEY", "seedauditgwkey0_000000000000"))
 
     if not admin or not agent:
         raise SystemExit("Missing FG_ADMIN_KEY and/or FG_AGENT_KEY in env.")
@@ -40,38 +41,60 @@ def _prefix(raw: str) -> str:
 
 
 def upsert_key(raw: str, scopes_csv: str) -> None:
+    """
+    Upsert a seeded API key using raw sqlite3 to avoid SQLAlchemy ORM type
+    conversion errors (e.g. DateTime coercion when last_used_at is an integer
+    set by _update_key_usage). Always idempotent.
+    """
     init_db()
-    for db in get_db_no_request():
-        prefix = _prefix(raw)
-        key_h = hash_api_key(raw)
+    sqlite_path = (os.getenv("FG_SQLITE_PATH") or "").strip()
+    if not sqlite_path:
+        raise SystemExit("FG_SQLITE_PATH not set — cannot upsert seed keys.")
 
-        row = db.query(ApiKey).filter(ApiKey.key_hash == key_h).first()
-        if row:
-            # exact key already exists; just ensure enabled/scopes
-            row.enabled = True
-            row.scopes_csv = scopes_csv
-            db.add(row)
-            db.commit()
+    prefix = _prefix(raw)
+    key_h = hash_api_key(raw)
+
+    con = sqlite3.connect(sqlite_path)
+    try:
+        # Exact hash match: key already exists — just re-enable and sync scopes.
+        existing = con.execute(
+            "SELECT prefix FROM api_keys WHERE key_hash=? LIMIT 1", (key_h,)
+        ).fetchone()
+        if existing:
+            con.execute(
+                "UPDATE api_keys SET enabled=1, scopes_csv=? WHERE key_hash=?",
+                (scopes_csv, key_h),
+            )
+            con.commit()
             print(
-                f"ok existing key_hash match prefix={row.prefix} scopes={row.scopes_csv}"
+                f"ok existing key_hash match prefix={existing[0]} scopes={scopes_csv}"
             )
             return
 
-        # else: upsert by prefix (ONLY safe here during seeding)
-        row = db.query(ApiKey).filter(ApiKey.prefix == prefix).first()
-        if not row:
-            row = ApiKey(
-                prefix=prefix, key_hash=key_h, scopes_csv=scopes_csv, enabled=True
+        # Prefix match: same prefix, different secret — replace hash and scopes.
+        prefix_row = con.execute(
+            "SELECT id FROM api_keys WHERE prefix=? LIMIT 1", (prefix,)
+        ).fetchone()
+        if prefix_row:
+            con.execute(
+                "UPDATE api_keys SET key_hash=?, scopes_csv=?, enabled=1 WHERE id=?",
+                (key_h, scopes_csv, prefix_row[0]),
             )
-        else:
-            row.key_hash = key_h
-            row.scopes_csv = scopes_csv
-            row.enabled = True
+            con.commit()
+            print(f"ok upserted prefix={prefix} scopes={scopes_csv}")
+            return
 
-        db.add(row)
-        db.commit()
+        # No match: insert new row with minimal required fields.
+        # created_at defaults via SQLite server_default (func.now()).
+        con.execute(
+            "INSERT INTO api_keys(prefix, key_hash, scopes_csv, enabled)"
+            " VALUES (?, ?, ?, 1)",
+            (prefix, key_h, scopes_csv),
+        )
+        con.commit()
         print(f"ok upserted prefix={prefix} scopes={scopes_csv}")
-        return
+    finally:
+        con.close()
 
 
 def main() -> None:

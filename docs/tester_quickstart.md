@@ -47,11 +47,11 @@ KC_TEARDOWN=0 bash tools/auth/validate_keycloak_runtime.sh
 ```
 
 The seed admin key (`seedadmin_`) has `decisions:read,defend:write,ingest:write` scopes only. The audit
-proxy endpoints require `audit:read`. The seed also provisions a gateway API key (`seedaudit_gw_`)
+proxy endpoints require `audit:read`. The seed also provisions a gateway API key (`seedauditgwkey0_`)
 with `audit:read,audit:export` scopes. Set it now:
 
 ```bash
-export AG_CORE_API_KEY=seedaudit_gw_key_000000000000
+export AG_CORE_API_KEY=seedauditgwkey0_000000000000
 ```
 
 **Checkpoint:** Keycloak healthy at `http://localhost:8081`. `AG_CORE_API_KEY` is set.
@@ -76,7 +76,7 @@ export FG_KEYCLOAK_REALM=FrostGate
 export FG_KEYCLOAK_CLIENT_ID=fg-service
 export FG_KEYCLOAK_CLIENT_SECRET=fg-service-ci-secret
 export AG_CORE_BASE_URL=http://localhost:8000
-export AG_CORE_API_KEY=seedaudit_gw_key_000000000000
+export AG_CORE_API_KEY=seedauditgwkey0_000000000000
 uvicorn admin_gateway.asgi:app --host 0.0.0.0 --port 8100
 ```
 
