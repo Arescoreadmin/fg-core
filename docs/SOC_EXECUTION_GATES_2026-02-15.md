@@ -44,6 +44,25 @@ Verification:
 - `make route-inventory-generate` → writes synced artifacts
 - `make soc-review-sync` → passes after this SOC entry
 
+## 2026-04-14 — Task 9.3 PR #226 addendum: coupled governance snapshot/hash refresh
+
+Critical files updated:
+- `tools/ci/plane_registry_snapshot.json`
+- `tools/ci/topology.sha256`
+
+Change summary:
+- Ran repository-native generation (`make route-inventory-generate`) on the PR #226 branch.
+- Runtime route scope for `POST /audit/reproduce` was already `audit:read`; generation refreshed coupled governance snapshot/hash outputs.
+- No runtime/auth/tenant behavior changes were made in this addendum.
+
+Governance/security impact:
+- Restores governance artifact consistency for CI inventory/hash checks.
+- Keeps route-governance truth deterministic and aligned to current generated state.
+
+Verification:
+- `make route-inventory-generate` → writes updated snapshot/hash
+- `make soc-review-sync` → passes after this entry
+
 ## 2026-04-13 — SOC gate offline-mode: propagate ADMIN_SKIP_PIP_INSTALL in air-gapped environments
 
 Critical files updated:
