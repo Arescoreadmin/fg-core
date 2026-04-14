@@ -3121,3 +3121,67 @@ Kept the active-gap table empty-state row unchanged and added a separate closed-
 - `make gap-audit` → PASS (`Production-blocking: 0`, `Launch-risk: 0`, `Post-launch: 0`)  
 - `make fg-fast` → stops at `prod-profile-check` due missing Docker CLI (environment limitation)  
 - `bash codex_gates.sh` → ruff lint passes; format-check fails on pre-existing unrelated file
+
+### 2026-04-14 — Task 10.1: Canonical repeatable seed/bootstrap command
+
+**Area:** Seed/Bootstrap · Tester Readiness · Determinism
+
+**Root cause:**
+The Task 10.1 validation command `python tools/seed/run_seed.py` did not exist. Existing bootstrap/seed helpers were fragmented (`scripts/bootstrap.sh`, `scripts/seed_apikeys_db.py`, `scripts/seed_demo_decisions.sh`) and required manual sequencing/environment assumptions, so there was no single supported command that seeded tenant + audit flow + retrieval/export readiness with deterministic rerun behavior.
+
+**Fix:**
+- Added canonical bootstrap entry point: `tools/seed/run_seed.py`.
+- Script validates prerequisite `.venv/bin/python` and re-execs internally under project venv.
+- Script sets deterministic defaults when env is absent (`FG_SQLITE_PATH`, tenant registry path, seed tenant id, seed API keys, audit HMAC key).
+- Reuses existing repo-native helpers:
+  - `tools.tenants.registry.ensure_tenant` for tenant availability
+  - `scripts/seed_apikeys_db.py` for API key DB seeding
+  - `AuditEngine.run_cycle()` for audit/control flow state
+  - `AuditEngine.reproduce_session()` + `AuditEngine.export_bundle()` as smoke/readiness proof
+- Added deterministic seed marker `state/seed/bootstrap_state.json` and rerun semantics:
+  - rerun validates marker + tenant + API key prefixes + audit ledger presence
+  - returns explicit `SEED_CONFLICT:*` errors for invalid rerun state
+  - otherwise exits successfully with `status=already_seeded`
+
+**Files changed:**
+- `tools/seed/run_seed.py`
+- `docs/AUDIT_ENGINE.md`
+
+**Validation evidence:**
+- `.venv/bin/pytest -q tests -k 'seed or bootstrap'` → pass
+- `python tools/seed/run_seed.py` → pass (seeded)
+- `python tools/seed/run_seed.py` → pass (already_seeded)
+- `.venv/bin/pytest -q tests/test_audit_cycle_run.py` → pass
+- `make fg-fast` → fails in this environment at `prod-profile-check` (missing `docker` binary)
+- `bash codex_gates.sh` → pass
+
+### 2026-04-14 — Task 10.1 Addendum: seed key-prefix collision fail-closed fix
+
+**Area:** Seed/Bootstrap · Auth Seed Integrity
+
+**Root cause:**
+`tools/seed/run_seed.py` default keys used `fg_*` for both admin and agent. The seed upsert helper derives identity as `raw.split("_", 1)[0] + "_"`, so both defaults collapsed to `fg_` and targeted the same API-key identity. This allowed one seed write to overwrite the other and let rerun checks pass despite incomplete dual-key auth seeding.
+
+**Fix:**
+- Updated canonical seed defaults to distinct first-token identities:
+  - admin: `seedadmin_primary_key_000000000000`
+  - agent: `seedagent_primary_key_000000000000`
+- Added explicit fail-closed guard in `tools/seed/run_seed.py`:
+  - `_seed_key_prefix_identity(raw)` implements repo-consistent prefix derivation.
+  - `_assert_distinct_key_prefixes(admin_key, agent_key)` raises deterministic `SEED_CONFLICT:key_prefix_collision ...` on collision.
+  - Guard is executed during env setup before any mutation.
+- Updated rerun validation to use `_seed_key_prefix_identity(...)` consistently.
+- Added focused tests covering non-collision defaults and collision guard failure behavior.
+
+**Files changed:**
+- `tools/seed/run_seed.py`
+- `tests/test_seed_bootstrap_key_prefix_guard.py`
+
+**Validation evidence:**
+- `.venv/bin/pytest -q tests/test_seed_bootstrap_key_prefix_guard.py` → pass
+- `.venv/bin/pytest -q tests -k 'seed or bootstrap'` → pass
+- `python tools/seed/run_seed.py` → explicit conflict on stale prior-seeded state (`SEED_CONFLICT:seeded api keys missing on rerun`)
+- `python tools/seed/run_seed.py` with isolated state paths → pass then `already_seeded`
+- `.venv/bin/pytest -q tests/test_audit_cycle_run.py` → pass
+- `make fg-fast` → fails in this environment at `prod-profile-check` (missing `docker` binary)
+- `bash codex_gates.sh` → pass
