@@ -15,8 +15,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 VENV_PYTHON = ROOT / ".venv" / "bin" / "python"
 DEFAULT_TENANT_ID = "tenant-seed-primary"
-DEFAULT_ADMIN_KEY = "fg_admin_seed_primary_key_000000000000"
-DEFAULT_AGENT_KEY = "fg_agent_seed_primary_key_000000000000"
+DEFAULT_ADMIN_KEY = "seedadmin_primary_key_000000000000"
+DEFAULT_AGENT_KEY = "seedagent_primary_key_000000000000"
 DEFAULT_AUDIT_HMAC_KEY = "seed-audit-hmac-key-material-000000"
 DEFAULT_AUDIT_HMAC_KEY_ID = "seed-ak1"
 
@@ -31,6 +31,20 @@ class SeedConfig:
     registry_path: str
     state_path: str
     tenant_id: str
+
+
+def _seed_key_prefix_identity(raw: str) -> str:
+    return raw.split("_", 1)[0] + "_"
+
+
+def _assert_distinct_key_prefixes(admin_key: str, agent_key: str) -> None:
+    admin_prefix = _seed_key_prefix_identity(admin_key)
+    agent_prefix = _seed_key_prefix_identity(agent_key)
+    if admin_prefix == agent_prefix:
+        raise SeedBootstrapError(
+            "SEED_CONFLICT:key_prefix_collision "
+            f"admin_prefix={admin_prefix} agent_prefix={agent_prefix}"
+        )
 
 
 def _json_dump(payload: dict[str, Any]) -> str:
@@ -57,6 +71,10 @@ def _set_default_env() -> SeedConfig:
     os.environ["FG_TENANT_REGISTRY_PATH"] = registry_path
     os.environ.setdefault("FG_ADMIN_KEY", DEFAULT_ADMIN_KEY)
     os.environ.setdefault("FG_AGENT_KEY", DEFAULT_AGENT_KEY)
+    _assert_distinct_key_prefixes(
+        admin_key=os.environ["FG_ADMIN_KEY"],
+        agent_key=os.environ["FG_AGENT_KEY"],
+    )
     os.environ.setdefault("FG_AUDIT_HMAC_KEY_CURRENT", DEFAULT_AUDIT_HMAC_KEY)
     os.environ.setdefault("FG_AUDIT_HMAC_KEY_ID_CURRENT", DEFAULT_AUDIT_HMAC_KEY_ID)
     return SeedConfig(
@@ -104,8 +122,8 @@ def _validate_existing_seed(config: SeedConfig) -> None:
             raise SeedBootstrapError("SEED_CONFLICT:audit ledger rows missing on rerun")
 
         required_prefixes = {
-            os.environ["FG_ADMIN_KEY"].split("_", 1)[0] + "_",
-            os.environ["FG_AGENT_KEY"].split("_", 1)[0] + "_",
+            _seed_key_prefix_identity(os.environ["FG_ADMIN_KEY"]),
+            _seed_key_prefix_identity(os.environ["FG_AGENT_KEY"]),
         }
         existing = {row[0] for row in db.query(ApiKey.prefix).all()}
         if not required_prefixes.issubset(existing):

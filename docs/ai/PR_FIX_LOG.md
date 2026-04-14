@@ -3154,3 +3154,34 @@ The Task 10.1 validation command `python tools/seed/run_seed.py` did not exist. 
 - `.venv/bin/pytest -q tests/test_audit_cycle_run.py` → pass
 - `make fg-fast` → fails in this environment at `prod-profile-check` (missing `docker` binary)
 - `bash codex_gates.sh` → pass
+
+### 2026-04-14 — Task 10.1 Addendum: seed key-prefix collision fail-closed fix
+
+**Area:** Seed/Bootstrap · Auth Seed Integrity
+
+**Root cause:**
+`tools/seed/run_seed.py` default keys used `fg_*` for both admin and agent. The seed upsert helper derives identity as `raw.split("_", 1)[0] + "_"`, so both defaults collapsed to `fg_` and targeted the same API-key identity. This allowed one seed write to overwrite the other and let rerun checks pass despite incomplete dual-key auth seeding.
+
+**Fix:**
+- Updated canonical seed defaults to distinct first-token identities:
+  - admin: `seedadmin_primary_key_000000000000`
+  - agent: `seedagent_primary_key_000000000000`
+- Added explicit fail-closed guard in `tools/seed/run_seed.py`:
+  - `_seed_key_prefix_identity(raw)` implements repo-consistent prefix derivation.
+  - `_assert_distinct_key_prefixes(admin_key, agent_key)` raises deterministic `SEED_CONFLICT:key_prefix_collision ...` on collision.
+  - Guard is executed during env setup before any mutation.
+- Updated rerun validation to use `_seed_key_prefix_identity(...)` consistently.
+- Added focused tests covering non-collision defaults and collision guard failure behavior.
+
+**Files changed:**
+- `tools/seed/run_seed.py`
+- `tests/test_seed_bootstrap_key_prefix_guard.py`
+
+**Validation evidence:**
+- `.venv/bin/pytest -q tests/test_seed_bootstrap_key_prefix_guard.py` → pass
+- `.venv/bin/pytest -q tests -k 'seed or bootstrap'` → pass
+- `python tools/seed/run_seed.py` → explicit conflict on stale prior-seeded state (`SEED_CONFLICT:seeded api keys missing on rerun`)
+- `python tools/seed/run_seed.py` with isolated state paths → pass then `already_seeded`
+- `.venv/bin/pytest -q tests/test_audit_cycle_run.py` → pass
+- `make fg-fast` → fails in this environment at `prod-profile-check` (missing `docker` binary)
+- `bash codex_gates.sh` → pass
