@@ -3185,3 +3185,44 @@ The Task 10.1 validation command `python tools/seed/run_seed.py` did not exist. 
 - `.venv/bin/pytest -q tests/test_audit_cycle_run.py` → pass
 - `make fg-fast` → fails in this environment at `prod-profile-check` (missing `docker` binary)
 - `bash codex_gates.sh` → pass
+
+---
+
+## Task 10.2 addendum — canonical tester journey gap (2026-04-14)
+
+**Branch:** `blitz/task-10.2-tester-collection`
+
+### Problem
+
+The prior Task 10.2 pass (PR) produced a gateway-facing collection and quickstart biased toward admin/operator surfaces. It was missing:
+1. One explicit canonical tester journey folder at the top of the collection (labeled "0 — Canonical Tester Journey")
+2. A minimal quickstart section that a fresh tester can execute top-to-bottom: seed → create audit key → start services → authenticate → retrieve audit log → export bundle → verify with tools/verify_bundle.py
+3. Documentation of a critical missing precondition: the seed admin key has `decisions:read,defend:write,ingest:write` only — the admin gateway audit proxy endpoints (search/export) require `audit:read` on `AG_CORE_API_KEY`; without it they return 403. The quickstart omitted the `mint_key` step.
+4. No pytest test matching `pytest -k 'quickstart and audit'` — the validation contract was unenforceable.
+
+### Fix
+
+**`docs/tester_collection.json`**
+- Added folder "0 — Canonical Tester Journey" as the first item in the collection
+- Contains 5 requests in mandatory order: CTJ-1 health, CTJ-2 auth, CTJ-3 identity, CTJ-4 audit search, CTJ-5 audit export
+- Each request has explicit description with expected outcome and failure diagnosis
+
+**`docs/tester_quickstart.md`**
+- Added "Canonical Tester Journey (Quick Path)" section at the top (before Prerequisites)
+- 7 steps: seed → create audit key via `mint_key` → start services → authenticate → retrieve audit log → export bundle → verify evidence bundle via `tools/verify_bundle.py`
+- Documents the `AG_CORE_API_KEY` audit scope requirement explicitly
+- Each step has a Checkpoint for pass/fail verification
+
+**`tests/test_tester_quickstart_alignment.py`** (new)
+- 19 deterministic alignment tests
+- Covers: seed script + verify_bundle tool exist; quickstart mentions run_seed, verify_bundle, export_path, session_id, audit search, audit export, audit:read, mint_key, seed tenant; collection has canonical journey folder first; canonical folder has health/auth/audit steps; collection uses variables; no direct core routes
+
+### Validation evidence
+
+```
+pytest -q tests -k 'quickstart and audit': 10 passed
+pytest -q tests -k 'docs or collection or quickstart': 25 passed
+python tools/seed/run_seed.py: status=already_seeded OK
+make fg-fast: SUMMARY gates_executed=10 (no failures)
+ruff check . && ruff format --check .: RUFF OK
+```
