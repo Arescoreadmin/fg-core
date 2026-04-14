@@ -23,6 +23,7 @@ def _pairs_from_env() -> Iterable[Tuple[str, str]]:
     """
     admin = _raw_key(os.getenv("FG_ADMIN_KEY", ""))
     agent = _raw_key(os.getenv("FG_AGENT_KEY", ""))
+    audit_gw = _raw_key(os.getenv("FG_AUDIT_GW_KEY", "seedaudit_gw_key_000000000000"))
 
     if not admin or not agent:
         raise SystemExit("Missing FG_ADMIN_KEY and/or FG_AGENT_KEY in env.")
@@ -30,6 +31,7 @@ def _pairs_from_env() -> Iterable[Tuple[str, str]]:
     return [
         (admin, "decisions:read,defend:write,ingest:write"),
         (agent, "decisions:read,ingest:write"),
+        (audit_gw, "audit:read,audit:export"),
     ]
 
 

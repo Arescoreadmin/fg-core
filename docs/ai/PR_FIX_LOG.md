@@ -3226,3 +3226,41 @@ python tools/seed/run_seed.py: status=already_seeded OK
 make fg-fast: SUMMARY gates_executed=10 (no failures)
 ruff check . && ruff format --check .: RUFF OK
 ```
+
+---
+
+### 2026-04-14 — Task 10.2 Auth Canonical: Production-Aligned Tester Auth Path
+
+**Branch:** `blitz/task-10.2-auth-canonical`
+
+**Area:** Tester Quickstart · Postman Collection · Auth Path Alignment
+
+---
+
+**Root causes (three defects):**
+
+**Defect A — FG_DEV_AUTH_BYPASS in canonical tester journey:**
+The canonical tester journey (CTJ) required env block included `FG_DEV_AUTH_BYPASS=1` and related dev-only vars. This path is forbidden in production and not a valid tester onboarding for production-like environments.
+
+**Defect B — Inline ad-hoc key minting in CTJ-2:**
+The canonical journey called `mint_key` inline via a Python one-liner to create an `audit:read` key. This is an ad-hoc dev mechanism, not a reproducible or production-aligned provisioning path.
+
+**Defect C — Collection CTJ-2 used dev-bypass GET /auth/login:**
+The Postman canonical folder's authentication step targeted `GET /auth/login` with `FG_DEV_AUTH_BYPASS=1` semantics — not the production OIDC token-exchange endpoint.
+
+**Fixes applied:**
+
+- `scripts/seed_apikeys_db.py` — Added third seeded key: `FG_AUDIT_GW_KEY` (default `seedaudit_gw_key_000000000000`) with `audit:read,audit:export` scopes. The seed now provisions the gateway API key during bootstrap, eliminating the need for inline minting.
+- `docs/tester_quickstart.md` — CTJ Required env: removed `FG_DEV_AUTH_BYPASS=1`, `FG_DEV_AUTH_TENANT_ID`, `FG_DEV_AUTH_TENANTS`; added `FG_KEYCLOAK_*` vars. CTJ-2: replaced inline `mint_key` with IdP startup (`KC_TEARDOWN=0 bash tools/auth/validate_keycloak_runtime.sh`) and static key export from seed. CTJ-3: gateway startup now uses OIDC env vars, no dev bypass. CTJ-4: authentication uses Keycloak `client_credentials` + `POST /auth/token-exchange`.
+- `docs/tester_collection.json` — CTJ-2 replaced with two items: "Get IdP Token (client_credentials)" (POST to KC token endpoint, test script saves `kc_access_token`) and "Token Exchange → Gateway Session" (POST `/auth/token-exchange` with Bearer header). Added collection variables: `kc_base_url`, `kc_realm`, `kc_client_id`, `kc_client_secret`, `kc_access_token`.
+- `tests/test_tester_quickstart_alignment.py` — Replaced `test_quickstart_audit_mint_key_documented` with `test_quickstart_canonical_path_uses_token_exchange` (asserts `/auth/token-exchange` is present in quickstart).
+
+**Validation evidence:**
+
+```
+pytest -q tests/test_tester_quickstart_alignment.py: 19 passed
+pytest -q tests -k 'seed or bootstrap': 8 passed, 3 skipped
+make fg-idp-validate: ALL CHECKS PASSED (A–D)
+make fg-fast: All checks passed! (all gates green)
+ruff check . && ruff format --check .: OK
+```
