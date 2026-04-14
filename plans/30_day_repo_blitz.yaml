@@ -540,27 +540,32 @@ phases:
               - ".venv/bin/pytest -q tests/test_audit_cycle_run.py"
               - "make fg-fast"
               - "bash codex_gates.sh"
+      - id: "10.2"
+        title: "Tester collection and quickstart"
+        status: "pending"
+        depends_on: ["10.1"]
 
-          - id: "10.2"
-            title: "Tester collection and quickstart"
-            status: "pending"
-            depends_on: ["10.1"]
+        definition_of_done:
+          - "A tester has one working request collection and one minimal quickstart path for the primary journey"
+          - "Collection uses current supported endpoints only and does not rely on deprecated, internal-only, or bypass paths"
+          - "Collection examples align with the canonical seeded/testable environment from 10.1"
+          - "Quickstart instructions are sufficient for a fresh operator to seed, authenticate, execute the core flow, and retrieve/export results without hidden steps"
+          - "Collection and quickstart stay aligned with current auth expectations, tenant scoping, and supported surfaces"
 
-            definition_of_done:
-              - "A tester has a working request collection and minimal quickstart path"
-              - "Collection uses current supported endpoints only"
-              - "Collection examples align with seeded/testable environment"
-              - "Instructions are sufficient for a fresh operator to execute the core flow"
+        validation:
+          - "Collection aligns with current supported endpoints and auth expectations"
+          - "Quickstart steps work against the canonical seeded environment from 10.1"
+          - "Primary tester journey can be executed from quickstart/collection with no manual DB or shell intervention beyond the documented supported commands"
+          - "No stale or broken tester docs remain for the main journey"
+          - "Fast lane remains green"
 
-            validation:
-              - "Collection aligns with current endpoints and auth expectations"
-              - "Quickstart steps work against seeded environment"
-              - "No stale or broken tester docs remain for the main journey"
-
-            validation_commands:
-              - "test -f plans/30_day_repo_blitz_index.md"
-              - ".venv/bin/pytest -q tests -k 'docs or collection or quickstart'"
-              - "make fg-fast"
+        validation_commands:
+          - "test -f plans/30_day_repo_blitz_index.md"
+          - "test -f tools/seed/run_seed.py"
+          - ".venv/bin/pytest -q tests -k 'docs or collection or quickstart'"
+          - "python tools/seed/run_seed.py"
+          - "make fg-fast"
+          - "bash codex_gates.sh"
 
       - id: "11.0"
         name: "Error Quality"
