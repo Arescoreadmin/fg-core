@@ -61,7 +61,7 @@ echo "Audit key: $AUDIT_KEY"
 export FG_SQLITE_PATH=state/frostgate.db
 export FG_ADMIN_KEY=seedadmin_primary_key_000000000000
 export FG_AGENT_KEY=seedagent_primary_key_000000000000
-uvicorn api.asgi:app --host 0.0.0.0 --port 8000
+uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
 
 **Admin gateway** (in a separate terminal, with audit key):
@@ -250,7 +250,7 @@ export FG_SQLITE_PATH=state/frostgate.db
 export FG_ADMIN_KEY=seedadmin_primary_key_000000000000
 export FG_AGENT_KEY=seedagent_primary_key_000000000000
 
-uvicorn api.asgi:app --host 0.0.0.0 --port 8000
+uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
 
 ---
