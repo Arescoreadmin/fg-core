@@ -22,6 +22,28 @@ Verification:
 - `make fg-fast` → passes all gates
 - `bash codex_gates.sh` → passes
 
+## 2026-04-14 — Task 9.3 addendum: route inventory/scope sync for `/audit/reproduce`
+
+Critical files updated:
+- `tools/ci/route_inventory.json`
+- `tools/ci/route_inventory_summary.json`
+- `tools/ci/contract_routes.json`
+- `tools/ci/plane_registry_snapshot.json`
+- `tools/ci/topology.sha256`
+
+Change summary:
+- Regenerated route-governance artifacts via `make route-inventory-generate` after runtime scope change on `POST /audit/reproduce` (`audit:write` → `audit:read`).
+- Synced inventory and topology hashes to repository truth; no runtime route behavior changes in this sync.
+- Runtime-only drift cleared in summary (`unauthorized_runtime_only: []`) and governance artifacts now match current route metadata.
+
+Governance/security impact:
+- No auth/tenant semantic change in this step; runtime behavior was already correct.
+- Restores deterministic governance truth so route-inventory-audit reflects the checked-in runtime AST inventory.
+
+Verification:
+- `make route-inventory-generate` → writes synced artifacts
+- `make soc-review-sync` → passes after this SOC entry
+
 ## 2026-04-13 — SOC gate offline-mode: propagate ADMIN_SKIP_PIP_INSTALL in air-gapped environments
 
 Critical files updated:

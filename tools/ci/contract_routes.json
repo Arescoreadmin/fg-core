@@ -121,6 +121,12 @@
       "source": "contract"
     },
     {
+      "method": "POST",
+      "path": "/audit/cycle/run",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "GET",
       "path": "/audit/exam-snapshot",
       "scopes": [],
@@ -925,7 +931,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-04-13T00:30:21.442542+00:00",
+  "generated_at": "2026-04-14T00:39:48.908273+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

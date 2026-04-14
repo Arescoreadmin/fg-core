@@ -83,6 +83,35 @@ The `except Exception: pass` in the registry look-up block silently swallowed al
 
 ---
 
+### 2026-04-14 — Task 9.3 Addendum: route-inventory/governance artifact sync
+
+**Area:** Route Governance · CI Inventory Authority
+
+**Root cause:**
+Runtime scope metadata for `POST /audit/reproduce` was updated (`audit:write` → `audit:read`) but the route-governance artifacts were not regenerated. `route-inventory-audit` therefore compared updated runtime AST metadata to stale generated inventory and reported mismatch.
+
+**Fix:**
+- Regenerated governance artifacts using repository-native flow: `make route-inventory-generate`.
+- Synced directly coupled files:
+  - `tools/ci/route_inventory.json`
+  - `tools/ci/route_inventory_summary.json`
+  - `tools/ci/contract_routes.json`
+  - `tools/ci/plane_registry_snapshot.json`
+  - `tools/ci/topology.sha256`
+- Added minimal SOC review entry because governance-critical `tools/ci/*` artifacts changed.
+
+**Scope control:**
+- No runtime route behavior changes in this addendum.
+- No auth/tenant semantics changed in this addendum.
+
+**Validation evidence:**
+- `make route-inventory-generate` → regenerated inventory artifacts
+- `make soc-review-sync` → pass
+- `bash codex_gates.sh` → pass
+- `make fg-fast` → blocked at `prod-profile-check` in this environment (missing `docker` binary)
+
+---
+
 ### 2026-04-13 — Task 9.2 Addendum: Revoked-Tenant Guard on POST /audit/cycle/run
 
 **Branch:** `claude/production-closeout-tal0p`
