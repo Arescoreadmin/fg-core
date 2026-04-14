@@ -52,6 +52,37 @@ The `except Exception: pass` in the registry look-up block silently swallowed al
 
 ---
 
+### 2026-04-14 — Task 9.3: Explicit retrieval error semantics for audit results
+
+**Area:** Audit API · Retrieval/Auth Semantics · Tenant Isolation
+
+**Root cause:**
+`POST /audit/reproduce` was wired as an `audit:write` operation even though it is a retrieval/read surface for cycle-run results. It also collapsed missing-session and cross-tenant-session outcomes into the same generic 409 path (`AUDIT_REPRO_FAILED`), so tester workflows could not reliably distinguish missing-result vs cross-tenant denial from supported API responses.
+
+**Fix:**
+- Changed `/audit/reproduce` scope requirement from `audit:write` to `audit:read`.
+- Added explicit branching for `session_not_found`:
+  - returns **403** `AUDIT_RESULT_CROSS_TENANT_FORBIDDEN` when the session exists under a different tenant.
+  - returns **404** `AUDIT_RESULT_NOT_FOUND` when no tenant owns that session id.
+- Kept existing 409 path for integrity/repro mismatch failures.
+
+**Files changed:**
+- `api/audit.py`
+- `tests/test_audit_exam_api.py`
+
+**Tests added/updated:**
+- `test_reproduce_missing_session_returns_404`
+- `test_reproduce_cross_tenant_returns_403`
+- request stub updated with auth metadata consistent with middleware-backed audit calls
+
+**Validation evidence:**
+- `.venv/bin/pytest -q tests/test_audit_exam_api.py tests/test_audit_cycle_run.py` → 32 passed
+- `.venv/bin/pytest -q tests -k 'export or result or retrieval'` → 53 passed
+- `make fg-fast` → fails in this environment at `prod-profile-check` (missing `docker` binary)
+- `bash codex_gates.sh` → 1810 passed, 25 skipped
+
+---
+
 ### 2026-04-13 — Task 9.2 Addendum: Revoked-Tenant Guard on POST /audit/cycle/run
 
 **Branch:** `claude/production-closeout-tal0p`

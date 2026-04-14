@@ -145,7 +145,7 @@ def audit_export(
 @router.post(
     "/audit/reproduce",
     dependencies=[
-        Depends(require_scopes("audit:write")),
+        Depends(require_scopes("audit:read")),
         Depends(require_bound_tenant),
     ],
 )
@@ -154,6 +154,32 @@ def audit_reproduce(body: ReproduceRequest, request: Request) -> dict[str, objec
     engine = AuditEngine()
     result = engine.reproduce_session(body.session_id, tenant_id=tenant_id)
     if not result.get("ok"):
+        if result.get("reason") == "session_not_found":
+            with Session(get_engine()) as session:
+                exists_other_tenant = (
+                    session.query(AuditLedgerRecord.id)
+                    .filter(
+                        AuditLedgerRecord.session_id == body.session_id,
+                        AuditLedgerRecord.tenant_id != tenant_id,
+                    )
+                    .first()
+                    is not None
+                )
+            if exists_other_tenant:
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "code": "AUDIT_RESULT_CROSS_TENANT_FORBIDDEN",
+                        "message": "audit result belongs to another tenant",
+                    },
+                )
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "code": "AUDIT_RESULT_NOT_FOUND",
+                    "message": "audit result not found",
+                },
+            )
         raise HTTPException(
             status_code=409,
             detail={"code": result.get("code", "AUDIT_REPRO_FAILED"), **result},

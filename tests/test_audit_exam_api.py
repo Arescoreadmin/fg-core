@@ -12,7 +12,15 @@ from services.audit_engine.engine import InvariantResult
 
 def _bound_request(tenant_id: str) -> object:
     return SimpleNamespace(
-        state=SimpleNamespace(tenant_id=tenant_id, tenant_is_key_bound=True),
+        state=SimpleNamespace(
+            tenant_id=tenant_id,
+            tenant_is_key_bound=True,
+            auth=SimpleNamespace(
+                key_prefix="test-key-audit-repro",
+                scopes={"audit:read"},
+            ),
+            request_id="test-req-audit-repro-001",
+        ),
         app=SimpleNamespace(openapi=lambda: {"openapi": "3.1.0"}),
     )
 
@@ -97,3 +105,45 @@ def test_export_chain_failure_returns_non_200(monkeypatch, isolated_audit_env):
         audit_export(DummyReq(), "1970-01-01T00:00:00Z", "9999-12-31T23:59:59Z")
     assert exc.value.status_code == 409
     assert exc.value.detail["code"] == "AUDIT_CHAIN_BROKEN"
+
+
+def test_reproduce_missing_session_returns_404(monkeypatch, isolated_audit_env):
+    from services.audit_engine.engine import AuditEngine
+
+    monkeypatch.setenv(
+        "FG_AUDIT_HMAC_KEY_CURRENT", "api-audit-key-api-audit-key-api-0000"
+    )
+    monkeypatch.setenv("FG_AUDIT_HMAC_KEY_ID_CURRENT", "ak-api")
+    eng = AuditEngine()
+    monkeypatch.setattr("api.audit.AuditEngine", lambda: eng)
+
+    with pytest.raises(HTTPException) as exc:
+        audit_reproduce(
+            ReproduceRequest(session_id="00000000-0000-0000-0000-000000000099"),
+            _bound_request("tenant-a"),
+        )
+    assert exc.value.status_code == 404
+    assert exc.value.detail["code"] == "AUDIT_RESULT_NOT_FOUND"
+
+
+def test_reproduce_cross_tenant_returns_403(monkeypatch, isolated_audit_env):
+    from services.audit_engine.engine import AuditEngine
+
+    monkeypatch.setenv(
+        "FG_AUDIT_HMAC_KEY_CURRENT", "api-audit-key-api-audit-key-api-0000"
+    )
+    monkeypatch.setenv("FG_AUDIT_HMAC_KEY_ID_CURRENT", "ak-api")
+    monkeypatch.setenv("FG_AUDIT_TENANT_ID", "tenant-a")
+    eng = AuditEngine()
+    monkeypatch.setattr(
+        eng,
+        "_invariants",
+        lambda: [InvariantResult("soc-invariants", "pass", "ok")],
+    )
+    sid = eng.run_cycle("light", tenant_id="tenant-a")
+    monkeypatch.setattr("api.audit.AuditEngine", lambda: eng)
+
+    with pytest.raises(HTTPException) as exc:
+        audit_reproduce(ReproduceRequest(session_id=sid), _bound_request("tenant-b"))
+    assert exc.value.status_code == 403
+    assert exc.value.detail["code"] == "AUDIT_RESULT_CROSS_TENANT_FORBIDDEN"
