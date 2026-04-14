@@ -1,0 +1,389 @@
+{
+  "info": {
+    "name": "FrostGate Admin Gateway — Tester Collection",
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "description": "End-to-end tester journey for FrostGate Admin Gateway. Requires a freshly seeded environment from `python tools/seed/run_seed.py`. Auth uses dev-bypass (FG_DEV_AUTH_BYPASS=1). All requests are gateway-facing; no direct core API access.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8100",
+      "description": "Admin gateway base URL. Change to match your deployment."
+    },
+    {
+      "key": "tenant_id",
+      "value": "tenant-seed-primary",
+      "description": "Primary seed tenant. Matches DEFAULT_TENANT_ID in tools/seed/run_seed.py."
+    },
+    {
+      "key": "csrf_token",
+      "value": "",
+      "description": "Populated automatically by the 'Get CSRF Token' request."
+    }
+  ],
+  "item": [
+    {
+      "name": "1 — Health Check",
+      "item": [
+        {
+          "name": "Gateway Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Verify the admin gateway is running. No authentication required. Expected: 200 {\"status\": \"ok\", ...}."
+          },
+          "response": []
+        },
+        {
+          "name": "Gateway Version",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/version",
+              "host": ["{{base_url}}"],
+              "path": ["version"]
+            },
+            "description": "Check service version metadata. No authentication required."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2 — Authentication (Dev Bypass)",
+      "item": [
+        {
+          "name": "Login (Dev Bypass)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Initiates authentication. In dev-bypass mode (FG_DEV_AUTH_BYPASS=1 + no OIDC), the gateway responds 302 and sets a signed session cookie. Postman follows the redirect and stores the cookie automatically via its Cookie Jar. After this request succeeds, all subsequent requests in this collection are authenticated. Expected final status: 200 (redirected to /admin/me)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3 — Identity & Session",
+      "item": [
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/me",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "me"]
+            },
+            "description": "Returns authenticated user identity, granted scopes, and accessible tenants. Requires session cookie (set by Login step). Expected: 200 with user_id, scopes, and tenants fields."
+          },
+          "response": []
+        },
+        {
+          "name": "Get CSRF Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var data = pm.response.json();",
+                  "if (data && data.csrf_token) {",
+                  "    pm.collectionVariables.set('csrf_token', data.csrf_token);",
+                  "    console.log('CSRF token stored: ' + data.csrf_token);",
+                  "} else {",
+                  "    console.warn('csrf_token not found in response');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/csrf-token",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "csrf-token"]
+            },
+            "description": "Fetch a CSRF token. The test script stores it in the {{csrf_token}} collection variable for use in POST/PATCH/DELETE requests. Requires session cookie. Expected: 200 with csrf_token and header_name fields."
+          },
+          "response": []
+        },
+        {
+          "name": "List Scopes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/scopes",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "scopes"]
+            },
+            "description": "Returns all available scopes and the user's current scope grants. Useful for verifying the dev-bypass session has full console:admin scope hierarchy. Requires session cookie."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4 — Tenant Access",
+      "item": [
+        {
+          "name": "List Tenants",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/tenants",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "tenants"]
+            },
+            "description": "List all tenants the authenticated user can access. Requires session + product:read scope (granted via console:admin). Expected: 200 with tenants array including 'tenant-seed-primary'."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Tenant Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/tenants/{{tenant_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "tenants", "{{tenant_id}}"]
+            },
+            "description": "Proxies to core GET /admin/tenants/{tenant_id}. Requires session + product:read. Expected: 200 with tenant metadata."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Tenant Usage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/tenants/{{tenant_id}}/usage",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "tenants", "{{tenant_id}}", "usage"]
+            },
+            "description": "Tenant-scoped usage counters proxied from core. Requires session + product:read. Expected: 200 with request_count, decision_count, quota_remaining, quota_limit, tier."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5 — API Key Inventory",
+      "item": [
+        {
+          "name": "List Keys for Tenant",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/keys?tenant_id={{tenant_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "keys"],
+              "query": [
+                {
+                  "key": "tenant_id",
+                  "value": "{{tenant_id}}"
+                }
+              ]
+            },
+            "description": "List API keys scoped to the seed tenant. Proxied to core GET /admin/keys. Requires session + keys:read. After seeding, expect to see the seedadmin_ and seedagent_ prefixes."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "6 — Audit Log (Primary Action Flow)",
+      "item": [
+        {
+          "name": "Search Audit Events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/audit/search?tenant_id={{tenant_id}}&page_size=25",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "audit", "search"],
+              "query": [
+                {
+                  "key": "tenant_id",
+                  "value": "{{tenant_id}}"
+                },
+                {
+                  "key": "page_size",
+                  "value": "25"
+                }
+              ]
+            },
+            "description": "Search audit events for the seed tenant. Proxied to core GET /admin/audit/search. Requires session + audit:read. Expected: 200 with items array. After seeding, items should include audit events from the seed bootstrap (run_cycle, export_bundle)."
+          },
+          "response": []
+        },
+        {
+          "name": "Search Audit Events — Filtered by Action",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/audit/search?tenant_id={{tenant_id}}&page_size=10&action=list_keys",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "audit", "search"],
+              "query": [
+                {
+                  "key": "tenant_id",
+                  "value": "{{tenant_id}}"
+                },
+                {
+                  "key": "page_size",
+                  "value": "10"
+                },
+                {
+                  "key": "action",
+                  "value": "list_keys"
+                }
+              ]
+            },
+            "description": "Filter audit events by action=list_keys. Shows audit entries generated by the 'List Keys for Tenant' request above. Requires session + audit:read."
+          },
+          "response": []
+        },
+        {
+          "name": "Export Audit Events (JSON)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"format\": \"json\",\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"page_size\": 100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/audit/export",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "audit", "export"]
+            },
+            "description": "Streaming export of audit events as NDJSON. Proxied to core POST /admin/audit/export. Requires session + audit:read. No CSRF token required for this endpoint. Expected: 200 with Content-Type application/x-ndjson and Content-Disposition attachment."
+          },
+          "response": []
+        },
+        {
+          "name": "Export Audit Events (CSV)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"format\": \"csv\",\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"page_size\": 100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/audit/export",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "audit", "export"]
+            },
+            "description": "Streaming export of audit events as CSV. Same endpoint as JSON export, different format. Expected: 200 with Content-Type text/csv."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "7 — Product Registry",
+      "item": [
+        {
+          "name": "List Products",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/products",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "products"]
+            },
+            "description": "List products registered for the tenant. Tenant resolved from X-Tenant-ID header. Requires session + product:read. Expected: 200 with products array and total."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Product",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrf_token}}",
+                "description": "Required for state-changing requests. Populated by 'Get CSRF Token'."
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"slug\": \"tester-product\",\n  \"name\": \"Tester Product\",\n  \"env\": \"development\",\n  \"owner\": \"tester@example.com\",\n  \"enabled\": true,\n  \"endpoints\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/products",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "products"]
+            },
+            "description": "Create a product under the seed tenant. Requires session + product:write + X-CSRF-Token header (run 'Get CSRF Token' first). Expected: 201 with product object. Note: slug must be unique per tenant — re-running returns 409."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
