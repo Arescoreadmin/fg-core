@@ -5,6 +5,144 @@ No manual DB access. No hidden steps. No shell hacks beyond documented commands.
 
 ---
 
+## Canonical Tester Journey (Quick Path)
+
+This is the minimum-viable path that proves the system works end-to-end. Execute top-to-bottom.
+
+**Required env:**
+
+```
+FG_ENV=dev
+FG_DEV_AUTH_BYPASS=1
+FG_DEV_AUTH_TENANT_ID=tenant-seed-primary
+FG_DEV_AUTH_TENANTS=tenant-seed-primary
+FG_SQLITE_PATH=state/frostgate.db
+AG_CORE_BASE_URL=http://localhost:8000
+```
+
+### CTJ-1: Seed the system
+
+```bash
+python tools/seed/run_seed.py
+```
+
+Captures from output (or from state file after first run):
+
+```bash
+EXPORT_PATH=$(python -c "import json; d=json.load(open('state/seed/bootstrap_state.json')); print(d['export_path'])")
+SEED_SESSION_ID=$(python -c "import json; d=json.load(open('state/seed/bootstrap_state.json')); print(d['session_id'])")
+```
+
+Expected: JSON output with `"status": "seeded"` (or `"already_seeded"`), `session_id`, and `export_path`.
+
+**Checkpoint:** `state/seed/bootstrap_state.json` exists. Audit cycle ran. Evidence bundle exported.
+
+### CTJ-2: Create an audit API key
+
+The seed admin key (`seedadmin_`) has `decisions:read,defend:write,ingest:write` scopes only. The audit proxy endpoints require `audit:read`. Create a scoped key:
+
+```bash
+AUDIT_KEY=$(python -c "
+import os
+os.environ.setdefault('FG_SQLITE_PATH', 'state/frostgate.db')
+from api.auth_scopes import mint_key
+print(mint_key('audit:read', 'audit:export', tenant_id='tenant-seed-primary', ttl_seconds=86400))
+")
+echo "Audit key: $AUDIT_KEY"
+```
+
+**Checkpoint:** `AUDIT_KEY` is set (format: `fgk.<base64>.<secret>`).
+
+### CTJ-3: Start services
+
+**Core API:**
+
+```bash
+export FG_SQLITE_PATH=state/frostgate.db
+export FG_ADMIN_KEY=seedadmin_primary_key_000000000000
+export FG_AGENT_KEY=seedagent_primary_key_000000000000
+uvicorn api.asgi:app --host 0.0.0.0 --port 8000
+```
+
+**Admin gateway** (in a separate terminal, with audit key):
+
+```bash
+export AG_CORE_BASE_URL=http://localhost:8000
+export AG_CORE_API_KEY=$AUDIT_KEY
+uvicorn admin_gateway.asgi:app --host 0.0.0.0 --port 8100
+```
+
+**Checkpoint:** `curl -s http://localhost:8100/health | python -m json.tool` → `"status": "ok"`.
+
+### CTJ-4: Authenticate
+
+```bash
+curl -s -c cookies.txt -L http://localhost:8100/auth/login -o /dev/null -w "%{http_code}"
+```
+
+Expected: `200`
+
+**Checkpoint:** `cookies.txt` contains a session cookie.
+
+### CTJ-5: Retrieve audit log (proves seed data is visible)
+
+```bash
+curl -s -b cookies.txt \
+  "http://localhost:8100/admin/audit/search?tenant_id=tenant-seed-primary&page_size=5" \
+  | python -m json.tool
+```
+
+Expected: `200` with `items` array. At least one entry from the seed authentication and audit cycle.
+
+**Checkpoint:** `items` array is non-empty. Tenant isolation: all items have `tenant_id = "tenant-seed-primary"`.
+
+### CTJ-6: Export audit bundle (retrieve result)
+
+```bash
+curl -s -b cookies.txt \
+  -X POST http://localhost:8100/admin/audit/export \
+  -H "Content-Type: application/json" \
+  -d '{"format":"json","tenant_id":"tenant-seed-primary","page_size":100}' \
+  -o /tmp/audit_export.ndjson
+echo "Exit: $?"
+```
+
+Expected: exit 0, `/tmp/audit_export.ndjson` written (Content-Type: application/x-ndjson).
+
+**Checkpoint:** File is non-empty. Each line is a valid JSON object.
+
+```bash
+head -1 /tmp/audit_export.ndjson | python -m json.tool
+```
+
+### CTJ-7: Reproduce and verify evidence bundle
+
+The seed ran `engine.run_cycle()` and stored the evidence bundle at `$EXPORT_PATH`. Verify its integrity:
+
+```bash
+python tools/verify_bundle.py --bundle "$EXPORT_PATH"
+```
+
+Expected output:
+
+```
+============================================================
+FrostGate Evidence Bundle Verifier
+...
+Result: PASS: N passed, 0 failed
+============================================================
+```
+
+**Checkpoint:** Exit code 0. Zero failures. `Merkle (actual)` matches `Merkle (stored)`.
+
+This proves:
+- Seed ran correctly (audit cycle completed)
+- Evidence chain is intact (hash linkage verified)
+- Tenant isolation holds (all events scoped to `tenant-seed-primary`)
+- Export is reproducible (deterministic Merkle root)
+
+---
+
 ## Prerequisites
 
 | Requirement | Version |

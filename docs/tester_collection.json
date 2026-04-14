@@ -24,6 +24,100 @@
   ],
   "item": [
     {
+      "name": "0 — Canonical Tester Journey",
+      "description": "Minimum required sequence for a fresh tester. Run these requests top-to-bottom to prove the system works end-to-end: seed output exists, auth works, audit data is retrievable, and bundle export succeeds.\n\nPREREQUISITES (run once before this folder):\n1. python tools/seed/run_seed.py\n   -> Runs audit cycle, captures session_id + export_path in state/seed/bootstrap_state.json\n2. Create audit API key (needed for steps 4-5):\n   python -c \"\nimport os; os.environ.setdefault('FG_SQLITE_PATH','state/frostgate.db')\nfrom api.auth_scopes import mint_key\nprint(mint_key('audit:read','audit:export',tenant_id='tenant-seed-primary',ttl_seconds=86400))\"\n3. Start admin gateway with that key as AG_CORE_API_KEY (see quickstart Step 2)\n4. (Offline) Verify bundle: python tools/verify_bundle.py --bundle <export_path from seed output>",
+      "item": [
+        {
+          "name": "CTJ-1: Gateway Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "STEP 1 — Confirm the admin gateway is reachable. No authentication required. Expected: 200 {\"status\": \"ok\", ...}. If this fails, the gateway is not running — see quickstart Step 2."
+          },
+          "response": []
+        },
+        {
+          "name": "CTJ-2: Authenticate (Dev Bypass)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "STEP 2 — Authenticate. In dev mode (FG_DEV_AUTH_BYPASS=1, no OIDC configured), the gateway returns 302 + sets a signed session cookie. Postman follows the redirect and stores the cookie automatically. All subsequent steps in this folder use that cookie. Expected final: 200 at /admin/me."
+          },
+          "response": []
+        },
+        {
+          "name": "CTJ-3: Verify Identity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/me",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "me"]
+            },
+            "description": "STEP 3 — Confirm session is active and scopes are correct. Expected: 200 with user_id='dev-user', tenants=['tenant-seed-primary'], scopes containing 'console:admin'. If 401: re-run CTJ-2."
+          },
+          "response": []
+        },
+        {
+          "name": "CTJ-4: Retrieve Audit Log (seed session visible)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/audit/search?tenant_id={{tenant_id}}&page_size=5",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "audit", "search"],
+              "query": [
+                {"key": "tenant_id", "value": "{{tenant_id}}"},
+                {"key": "page_size", "value": "5"}
+              ]
+            },
+            "description": "STEP 4 — Retrieve the security audit log entries generated during and after seeding. Proxied to core GET /admin/audit/search (requires audit:read on AG_CORE_API_KEY — see prerequisites). Expected: 200 with items array. After seeding and authenticating, there will be at least one audit entry. If 503: AG_CORE_BASE_URL not configured. If 403: AG_CORE_API_KEY lacks audit:read — create an audit key (see prerequisites)."
+          },
+          "response": []
+        },
+        {
+          "name": "CTJ-5: Export Audit Bundle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"format\": \"json\",\n  \"tenant_id\": \"{{tenant_id}}\",\n  \"page_size\": 100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/audit/export",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "audit", "export"]
+            },
+            "description": "STEP 5 — Export audit events as streaming NDJSON. Proxied to core POST /admin/audit/export (requires audit:read on AG_CORE_API_KEY — see prerequisites). Expected: 200, Content-Type application/x-ndjson, Content-Disposition attachment. Save the response body to a file for offline inspection.\n\nNote: To verify the AuditEngine evidence bundle (the compliance chain from the seed), use the offline tool:\n  python tools/verify_bundle.py --bundle <export_path from state/seed/bootstrap_state.json>"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "1 — Health Check",
       "item": [
         {
