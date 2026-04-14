@@ -59,6 +59,7 @@ UI summaries:
 
 ## Local checks
 
+- `python tools/seed/run_seed.py` (canonical local tester bootstrap)
 - `make audit-chain-verify`
 - `make compliance-chain-verify`
 - `make compliance-registry-test`
