@@ -52,6 +52,92 @@ The `except Exception: pass` in the registry look-up block silently swallowed al
 
 ---
 
+### 2026-04-14 — Task 9.3: Explicit retrieval error semantics for audit results
+
+**Area:** Audit API · Retrieval/Auth Semantics · Tenant Isolation
+
+**Root cause:**
+`POST /audit/reproduce` was wired as an `audit:write` operation even though it is a retrieval/read surface for cycle-run results. It also collapsed missing-session and cross-tenant-session outcomes into the same generic 409 path (`AUDIT_REPRO_FAILED`), so tester workflows could not reliably distinguish missing-result vs cross-tenant denial from supported API responses.
+
+**Fix:**
+- Changed `/audit/reproduce` scope requirement from `audit:write` to `audit:read`.
+- Added explicit branching for `session_not_found`:
+  - returns **403** `AUDIT_RESULT_CROSS_TENANT_FORBIDDEN` when the session exists under a different tenant.
+  - returns **404** `AUDIT_RESULT_NOT_FOUND` when no tenant owns that session id.
+- Kept existing 409 path for integrity/repro mismatch failures.
+
+**Files changed:**
+- `api/audit.py`
+- `tests/test_audit_exam_api.py`
+
+**Tests added/updated:**
+- `test_reproduce_missing_session_returns_404`
+- `test_reproduce_cross_tenant_returns_403`
+- request stub updated with auth metadata consistent with middleware-backed audit calls
+
+**Validation evidence:**
+- `.venv/bin/pytest -q tests/test_audit_exam_api.py tests/test_audit_cycle_run.py` → 32 passed
+- `.venv/bin/pytest -q tests -k 'export or result or retrieval'` → 53 passed
+- `make fg-fast` → fails in this environment at `prod-profile-check` (missing `docker` binary)
+- `bash codex_gates.sh` → 1810 passed, 25 skipped
+
+---
+
+### 2026-04-14 — Task 9.3 Addendum: route-inventory/governance artifact sync
+
+**Area:** Route Governance · CI Inventory Authority
+
+**Root cause:**
+Runtime scope metadata for `POST /audit/reproduce` was updated (`audit:write` → `audit:read`) but the route-governance artifacts were not regenerated. `route-inventory-audit` therefore compared updated runtime AST metadata to stale generated inventory and reported mismatch.
+
+**Fix:**
+- Regenerated governance artifacts using repository-native flow: `make route-inventory-generate`.
+- Synced directly coupled files:
+  - `tools/ci/route_inventory.json`
+  - `tools/ci/route_inventory_summary.json`
+  - `tools/ci/contract_routes.json`
+  - `tools/ci/plane_registry_snapshot.json`
+  - `tools/ci/topology.sha256`
+- Added minimal SOC review entry because governance-critical `tools/ci/*` artifacts changed.
+
+**Scope control:**
+- No runtime route behavior changes in this addendum.
+- No auth/tenant semantics changed in this addendum.
+
+**Validation evidence:**
+- `make route-inventory-generate` → regenerated inventory artifacts
+- `make soc-review-sync` → pass
+- `bash codex_gates.sh` → pass
+- `make fg-fast` → blocked at `prod-profile-check` in this environment (missing `docker` binary)
+
+---
+
+### 2026-04-14 — Task 9.3 PR #226 Addendum: coupled governance snapshot/hash sync
+
+**Area:** Route Governance · Generated Artifact Consistency
+
+**Root cause:**
+On this branch state, `POST /audit/reproduce` route scope is already correct in runtime inventory (`audit:read`). The remaining mismatch was stale coupled generated governance outputs (`plane_registry_snapshot.json` and `topology.sha256`) not refreshed to the current generation state.
+
+**Fix:**
+- Ran repository-native generation command: `make route-inventory-generate`.
+- Synced only the files generation updated:
+  - `tools/ci/plane_registry_snapshot.json`
+  - `tools/ci/topology.sha256`
+- Added minimal SOC review-sync documentation update required for critical `tools/ci/*` changes.
+
+**Scope control:**
+- No runtime route/auth/tenant behavior changes in this addendum.
+- No test/runtime service changes.
+
+**Validation evidence:**
+- `make route-inventory-generate` → pass (writes regenerated files)
+- `make soc-review-sync` → pass
+- `bash codex_gates.sh` → pass
+- `make fg-fast` → blocked in this environment at `prod-profile-check` (missing `docker` binary)
+
+---
+
 ### 2026-04-13 — Task 9.2 Addendum: Revoked-Tenant Guard on POST /audit/cycle/run
 
 **Branch:** `claude/production-closeout-tal0p`
