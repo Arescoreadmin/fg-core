@@ -130,6 +130,20 @@ def _validate_existing_seed(config: SeedConfig) -> None:
             raise SeedBootstrapError("SEED_CONFLICT:seeded api keys missing on rerun")
 
 
+def _run_seed_apikeys() -> None:
+    """Upsert all seeded API keys (idempotent). Called on both fresh and re-runs."""
+    script_path = ROOT / "scripts" / "seed_apikeys_db.py"
+    env = dict(os.environ)
+    python_path = env.get("PYTHONPATH", "").strip()
+    env["PYTHONPATH"] = str(ROOT) if not python_path else f"{str(ROOT)}:{python_path}"
+    subprocess.run(
+        [sys.executable, str(script_path)],
+        check=True,
+        cwd=str(ROOT),
+        env=env,
+    )
+
+
 def _seed_once(config: SeedConfig) -> dict[str, Any]:
     from api.db import init_db, reset_engine_cache
     from services.audit_engine.engine import AuditEngine
@@ -138,6 +152,8 @@ def _seed_once(config: SeedConfig) -> dict[str, Any]:
     seed_marker = Path(config.state_path)
     if seed_marker.exists():
         _validate_existing_seed(config)
+        # Backfill any new seeded keys added after initial bootstrap (idempotent).
+        _run_seed_apikeys()
         payload = _load_json(seed_marker)
         payload["status"] = "already_seeded"
         return payload
@@ -153,16 +169,7 @@ def _seed_once(config: SeedConfig) -> dict[str, Any]:
         api_key=os.environ["FG_ADMIN_KEY"],
     )
 
-    script_path = ROOT / "scripts" / "seed_apikeys_db.py"
-    env = dict(os.environ)
-    python_path = env.get("PYTHONPATH", "").strip()
-    env["PYTHONPATH"] = str(ROOT) if not python_path else f"{str(ROOT)}:{python_path}"
-    subprocess.run(
-        [sys.executable, str(script_path)],
-        check=True,
-        cwd=str(ROOT),
-        env=env,
-    )
+    _run_seed_apikeys()
 
     engine = AuditEngine()
     session_id = engine.run_cycle("light", tenant_id=config.tenant_id)

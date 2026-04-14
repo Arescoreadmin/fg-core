@@ -13,11 +13,12 @@ This is the minimum-viable path that proves the system works end-to-end. Execute
 
 ```
 FG_ENV=dev
-FG_DEV_AUTH_BYPASS=1
-FG_DEV_AUTH_TENANT_ID=tenant-seed-primary
-FG_DEV_AUTH_TENANTS=tenant-seed-primary
 FG_SQLITE_PATH=state/frostgate.db
 AG_CORE_BASE_URL=http://localhost:8000
+FG_KEYCLOAK_BASE_URL=http://localhost:8081
+FG_KEYCLOAK_REALM=FrostGate
+FG_KEYCLOAK_CLIENT_ID=fg-service
+FG_KEYCLOAK_CLIENT_SECRET=fg-service-ci-secret
 ```
 
 ### CTJ-1: Seed the system
@@ -37,21 +38,23 @@ Expected: JSON output with `"status": "seeded"` (or `"already_seeded"`), `sessio
 
 **Checkpoint:** `state/seed/bootstrap_state.json` exists. Audit cycle ran. Evidence bundle exported.
 
-### CTJ-2: Create an audit API key
+### CTJ-2: Start the IdP and set the gateway API key
 
-The seed admin key (`seedadmin_`) has `decisions:read,defend:write,ingest:write` scopes only. The audit proxy endpoints require `audit:read`. Create a scoped key:
+Start Keycloak (Docker required). This provisions the OIDC endpoint used for authentication.
 
 ```bash
-AUDIT_KEY=$(python -c "
-import os
-os.environ.setdefault('FG_SQLITE_PATH', 'state/frostgate.db')
-from api.auth_scopes import mint_key
-print(mint_key('audit:read', 'audit:export', tenant_id='tenant-seed-primary', ttl_seconds=86400))
-")
-echo "Audit key: $AUDIT_KEY"
+KC_TEARDOWN=0 bash tools/auth/validate_keycloak_runtime.sh
 ```
 
-**Checkpoint:** `AUDIT_KEY` is set (format: `fgk.<base64>.<secret>`).
+The seed admin key (`seedadmin_`) has `decisions:read,defend:write,ingest:write` scopes only. The audit
+proxy endpoints require `audit:read`. The seed also provisions a gateway API key (`seedauditgwkey0_`)
+with `audit:read,audit:export` scopes. Set it now:
+
+```bash
+export AG_CORE_API_KEY=seedauditgwkey0_000000000000
+```
+
+**Checkpoint:** Keycloak healthy at `http://localhost:8081`. `AG_CORE_API_KEY` is set.
 
 ### CTJ-3: Start services
 
@@ -64,23 +67,40 @@ export FG_AGENT_KEY=seedagent_primary_key_000000000000
 uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
 
-**Admin gateway** (in a separate terminal, with audit key):
+**Admin gateway** (in a separate terminal, OIDC-configured, no dev bypass):
 
 ```bash
+export FG_ENV=dev
+export FG_KEYCLOAK_BASE_URL=http://localhost:8081
+export FG_KEYCLOAK_REALM=FrostGate
+export FG_KEYCLOAK_CLIENT_ID=fg-service
+export FG_KEYCLOAK_CLIENT_SECRET=fg-service-ci-secret
 export AG_CORE_BASE_URL=http://localhost:8000
-export AG_CORE_API_KEY=$AUDIT_KEY
+export AG_CORE_API_KEY=seedauditgwkey0_000000000000
 uvicorn admin_gateway.asgi:app --host 0.0.0.0 --port 8100
 ```
 
 **Checkpoint:** `curl -s http://localhost:8100/health | python -m json.tool` → `"status": "ok"`.
 
-### CTJ-4: Authenticate
+### CTJ-4: Authenticate (OIDC token exchange)
 
 ```bash
-curl -s -c cookies.txt -L http://localhost:8100/auth/login -o /dev/null -w "%{http_code}"
+# Obtain an OIDC access token from Keycloak (client_credentials flow)
+KC_TOKEN=$(curl -fsS -X POST \
+  "http://localhost:8081/realms/FrostGate/protocol/openid-connect/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "grant_type=client_credentials" \
+  --data-urlencode "client_id=fg-service" \
+  --data-urlencode "client_secret=fg-service-ci-secret" \
+  | python -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+# Exchange for a gateway session cookie
+curl -s -c cookies.txt -X POST http://localhost:8100/auth/token-exchange \
+  -H "Authorization: Bearer $KC_TOKEN" \
+  | python -m json.tool
 ```
 
-Expected: `200`
+Expected: `200` with `session_id` and `user_id`.
 
 **Checkpoint:** `cookies.txt` contains a session cookie.
 

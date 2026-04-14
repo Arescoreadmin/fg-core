@@ -3226,3 +3226,100 @@ python tools/seed/run_seed.py: status=already_seeded OK
 make fg-fast: SUMMARY gates_executed=10 (no failures)
 ruff check . && ruff format --check .: RUFF OK
 ```
+
+---
+
+### 2026-04-14 — Task 10.2 Auth Canonical: Production-Aligned Tester Auth Path
+
+**Branch:** `blitz/task-10.2-auth-canonical`
+
+**Area:** Tester Quickstart · Postman Collection · Auth Path Alignment
+
+---
+
+**Root causes (three defects):**
+
+**Defect A — FG_DEV_AUTH_BYPASS in canonical tester journey:**
+The canonical tester journey (CTJ) required env block included `FG_DEV_AUTH_BYPASS=1` and related dev-only vars. This path is forbidden in production and not a valid tester onboarding for production-like environments.
+
+**Defect B — Inline ad-hoc key minting in CTJ-2:**
+The canonical journey called `mint_key` inline via a Python one-liner to create an `audit:read` key. This is an ad-hoc dev mechanism, not a reproducible or production-aligned provisioning path.
+
+**Defect C — Collection CTJ-2 used dev-bypass GET /auth/login:**
+The Postman canonical folder's authentication step targeted `GET /auth/login` with `FG_DEV_AUTH_BYPASS=1` semantics — not the production OIDC token-exchange endpoint.
+
+**Fixes applied:**
+
+- `scripts/seed_apikeys_db.py` — Added third seeded key: `FG_AUDIT_GW_KEY` (default `seedaudit_gw_key_000000000000`) with `audit:read,audit:export` scopes. The seed now provisions the gateway API key during bootstrap, eliminating the need for inline minting.
+- `docs/tester_quickstart.md` — CTJ Required env: removed `FG_DEV_AUTH_BYPASS=1`, `FG_DEV_AUTH_TENANT_ID`, `FG_DEV_AUTH_TENANTS`; added `FG_KEYCLOAK_*` vars. CTJ-2: replaced inline `mint_key` with IdP startup (`KC_TEARDOWN=0 bash tools/auth/validate_keycloak_runtime.sh`) and static key export from seed. CTJ-3: gateway startup now uses OIDC env vars, no dev bypass. CTJ-4: authentication uses Keycloak `client_credentials` + `POST /auth/token-exchange`.
+- `docs/tester_collection.json` — CTJ-2 replaced with two items: "Get IdP Token (client_credentials)" (POST to KC token endpoint, test script saves `kc_access_token`) and "Token Exchange → Gateway Session" (POST `/auth/token-exchange` with Bearer header). Added collection variables: `kc_base_url`, `kc_realm`, `kc_client_id`, `kc_client_secret`, `kc_access_token`.
+- `tests/test_tester_quickstart_alignment.py` — Replaced `test_quickstart_audit_mint_key_documented` with `test_quickstart_canonical_path_uses_token_exchange` (asserts `/auth/token-exchange` is present in quickstart).
+
+**Validation evidence:**
+
+```
+pytest -q tests/test_tester_quickstart_alignment.py: 19 passed
+pytest -q tests -k 'seed or bootstrap': 8 passed, 3 skipped
+make fg-idp-validate: ALL CHECKS PASSED (A–D)
+make fg-fast: All checks passed! (all gates green)
+ruff check . && ruff format --check .: OK
+```
+
+---
+
+### 2026-04-14 — Task 10.2 Addendum: Seeded Audit Gateway Key Correction + Backfill
+
+**Branch:** `blitz/task-10.2-auth-canonical`
+
+**Area:** Seed Bootstrap · Core Auth Key Resolution · Already-Seeded Backfill
+
+---
+
+**Root causes (two defects):**
+
+**Defect A — Seeded AG_CORE key prefix mismatch:**
+`scripts/seed_apikeys_db.py` stored keys under the prefix derived from `raw.split("_", 1)[0] + "_"` (split on first underscore). Core auth (`api/auth_scopes/resolution.py`) derives the lookup prefix from `raw[:16]` for plain (non-JWT) keys. For `seedaudit_gw_key_000000000000`:
+- Stored prefix: `"seedaudit_"` (10 chars, from first `_` split)
+- Auth lookup prefix: `"seedaudit_gw_key"` (16 chars, from `raw[:16]`)
+- DB query `WHERE prefix='seedaudit_gw_key'` found no row → `key_not_found` → 401 on all audit proxy calls
+
+**Defect B — Already-seeded environments not backfilled:**
+`tools/seed/run_seed.py`'s `_seed_once()` returned early on already-seeded environments without calling `seed_apikeys_db.py`. Environments seeded before the audit gateway key was added never received that key, causing 403 on audit proxy routes without any self-diagnosing error.
+
+**Secondary defect — ORM DateTime coercion crash:**
+`seed_apikeys_db.py`'s `upsert_key` used SQLAlchemy ORM for key lookup. After any auth call updates `last_used_at` via `_update_key_usage` (which stores a Unix integer, not a datetime string), the ORM `db.query(ApiKey).first()` raised `TypeError: fromisoformat: argument must be str`. Replaced ORM with raw sqlite3 throughout `upsert_key`.
+
+**Fixes applied:**
+
+- `scripts/seed_apikeys_db.py` — Changed default `FG_AUDIT_GW_KEY` from `seedaudit_gw_key_000000000000` to `seedauditgwkey0_000000000000` (first underscore at index 15, so `_prefix(raw) == raw[:16]` = `"seedauditgwkey0_"`). Replaced SQLAlchemy ORM in `upsert_key` with raw sqlite3 (avoids DateTime coercion crash on already-used keys).
+- `tools/seed/run_seed.py` — Extracted key upsert into `_run_seed_apikeys()` helper. Called from both fresh seed path AND already-seeded path (backfill). Already-seeded environments now receive the corrected audit gateway key automatically on next `run_seed.py` invocation.
+- `docs/tester_quickstart.md` — Updated CTJ-2 and CTJ-3 to use `seedauditgwkey0_000000000000` (matches the auth-resolvable format). Updated prefix description from `seedaudit_gw_` to `seedauditgwkey0_`.
+
+**Proof that fresh and already-seeded environments converge:**
+Running `python tools/seed/run_seed.py` twice on an already-seeded environment:
+```
+ok existing key_hash match prefix=seedadmin_ scopes=...
+ok existing key_hash match prefix=seedagent_ scopes=...
+ok existing key_hash match prefix=seedauditgwkey0_ scopes=audit:read,audit:export
+status: already_seeded
+```
+(repeated identically on second run — fully idempotent)
+
+**Auth verification:**
+`verify_api_key_detailed(raw='seedauditgwkey0_000000000000', required_scopes={'audit:read'})` → `valid: True | reason: valid | scopes: {'audit:read', 'audit:export'}`
+
+**Task 10.2 invariants preserved:**
+- No FG_DEV_AUTH_BYPASS in canonical path ✓
+- No inline mint_key in canonical tester flow ✓
+- Auth remains OIDC token-exchange (production-aligned) ✓
+
+**Validation evidence:**
+```
+pytest -q tests/test_tester_quickstart_alignment.py: 19 passed
+pytest -q tests -k 'seed or bootstrap': 8 passed, 3 skipped
+pytest -q tests -k 'auth_scopes or key or audit': 383 passed
+python tools/seed/run_seed.py (x2): ok (all keys, status: already_seeded)
+make fg-idp-validate: ALL CHECKS PASSED (A–D)
+make fg-fast: All checks passed!
+bash codex_gates.sh: (in progress)
+```

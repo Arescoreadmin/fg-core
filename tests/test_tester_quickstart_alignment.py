@@ -111,10 +111,11 @@ def test_quickstart_audit_key_requirement_documented(quickstart_text: str) -> No
     )
 
 
-def test_quickstart_audit_mint_key_documented(quickstart_text: str) -> None:
-    """Quickstart must document how to create an audit-scoped key via mint_key."""
-    assert "mint_key" in quickstart_text, (
-        "Quickstart must document 'mint_key' as the mechanism to create an audit-scoped key"
+def test_quickstart_canonical_path_uses_token_exchange(quickstart_text: str) -> None:
+    """Quickstart canonical journey must use OIDC token-exchange, not dev bypass."""
+    assert "/auth/token-exchange" in quickstart_text, (
+        "Quickstart canonical journey must reference POST /auth/token-exchange "
+        "as the production-aligned authentication path"
     )
 
 
