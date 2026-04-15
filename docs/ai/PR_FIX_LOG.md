@@ -6,6 +6,52 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-15 — Task 10.2 Addendum: Authorization Closure — tenant_id Claim + Scope Verification
+
+**Branch:** `blitz/task-10.2-rewrite-canonical`
+
+**Area:** Keycloak Realm · Canonical Tester Authorization · Scope/Tenant Claim Shape
+
+---
+
+**Root cause:**
+The `fg-tester` client realm definition was missing the `tenant_id` claim. The gateway's token-exchange path sets `session.tenant_id = claims.get("tenant_id")`. Without this claim, `session.tenant_id = None`, so `/admin/me` returned `current_tenant: null` instead of `"tenant-seed-primary"`. This diverged from the quickstart checkpoint (`current_tenant: "tenant-seed-primary"`).
+
+**Claim shape the gateway actually consumes (`extract_scopes_from_claims` + `get_allowed_tenants`):**
+
+| Claim | Path in gateway | Effect |
+|---|---|---|
+| `fg_scopes: ["console:admin"]` | `extract_scopes_from_claims` → `Session.__post_init__` → `expand_scopes` | `{"console:admin", "audit:read", "product:read", ...}` |
+| `tenant_id: "tenant-seed-primary"` | `claims.get("tenant_id")` → `session.tenant_id` → `/admin/me` `current_tenant` | Sets active tenant; auto-resolution without explicit query param |
+| `allowed_tenants: ["tenant-seed-primary"]` | `get_allowed_tenants` → `session.claims.get("allowed_tenants")` | Tenant access control list |
+
+**Fixes applied:**
+- `keycloak/realms/frostgate-realm.json` — added `tenant_id: "tenant-seed-primary"` hardcoded claim mapper to `fg-tester` client (String type, access token only)
+- `tests/test_canonical_tester_flow.py` — updated `_canonical_claims()` to include `tenant_id`; added 3 new realm structure tests (`fg_scopes` value, `tenant_id` mapper existence, `tenant_id` value); strengthened `/admin/me` test to assert `current_tenant == "tenant-seed-primary"`; fixed negative-test to delete both `tenant_id` and `allowed_tenants`
+- `tools/auth/validate_tester_flow.sh` — step [3] now asserts `current_tenant == canonical_tenant`
+
+**Files changed:** 3
+
+**Full token claim shape after fix:**
+```json
+{
+  "fg_scopes": ["console:admin"],
+  "tenant_id": "tenant-seed-primary",
+  "allowed_tenants": ["tenant-seed-primary"]
+}
+```
+→ gateway extracts scopes `{console:admin}` → `expand_scopes` → `{console:admin, audit:read, product:read, product:write, keys:read, keys:write, policies:write}`  
+→ tenant access: `{"tenant-seed-primary"}`  
+→ `session.tenant_id = "tenant-seed-primary"` → `/admin/me` `current_tenant: "tenant-seed-primary"`
+
+**Validation evidence:**
+- `.venv/bin/pytest -q tests/test_canonical_tester_flow.py tests/test_keycloak_oidc.py tests/test_tester_quickstart_alignment.py` → 52 passed
+- `make fg-fast` → PASS
+
+**Runtime proof:** `validate_tester_flow.sh` exits 0 (SKIP — services not running). Full proof requires running Keycloak + gateway + core.
+
+---
+
 ### 2026-04-15 — Task 10.2 Addendum: Runtime Proof + Gate Enforcement + Tenant Assertion Tests
 
 **Branch:** `blitz/task-10.2-rewrite-canonical`

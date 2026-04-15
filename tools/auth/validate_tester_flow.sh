@@ -162,6 +162,7 @@ if status != '200':
     print(f'FAIL: /admin/me returned HTTP {status}: {body}', file=sys.stderr); sys.exit(1)
 body = json.load(open(path))
 tenants = body.get('tenants', [])
+current_tenant = body.get('current_tenant')
 if tenant not in tenants:
     print(
         f'FAIL: /admin/me tenants does not include {tenant!r}\n'
@@ -170,7 +171,14 @@ if tenant not in tenants:
         file=sys.stderr,
     )
     sys.exit(1)
-print(f'    /admin/me OK  tenants={tenants}  current_tenant={body.get("current_tenant")}')
+if current_tenant != tenant:
+    print(
+        f'FAIL: /admin/me current_tenant={current_tenant!r} expected {tenant!r}\n'
+        f'      Token must carry tenant_id="{tenant}" claim (fg-tester client protocol mapper)',
+        file=sys.stderr,
+    )
+    sys.exit(1)
+print(f'    /admin/me OK  tenants={tenants}  current_tenant={current_tenant}')
 PY
 
 # ---------------------------------------------------------------------------

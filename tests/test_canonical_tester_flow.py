@@ -55,7 +55,13 @@ _OIDC_ENV: dict[str, str] = {
 
 
 def _canonical_claims(**overrides: Any) -> dict[str, Any]:
-    """Claims representing a valid fg-tester-admin token."""
+    """Claims representing a valid fg-tester-admin token.
+
+    Mirrors what the Keycloak fg-tester client protocol mappers emit:
+      fg_scopes         → ["console:admin"]  (gateway scope path)
+      tenant_id         → "tenant-seed-primary"  (session.tenant_id → current_tenant)
+      allowed_tenants   → ["tenant-seed-primary"]  (multi-tenant access list)
+    """
     now = int(time.time())
     claims: dict[str, Any] = {
         "sub": _TESTER_USER,
@@ -65,6 +71,7 @@ def _canonical_claims(**overrides: Any) -> dict[str, Any]:
         "iat": now,
         "preferred_username": _TESTER_USER,
         "fg_scopes": ["console:admin"],
+        "tenant_id": _CANONICAL_TENANT,
         "allowed_tenants": [_CANONICAL_TENANT],
     }
     claims.update(overrides)
@@ -206,6 +213,52 @@ class TestRealmStructure:
             "(needed for console:admin → audit:read scope expansion)"
         )
 
+    def test_fg_tester_fg_scopes_value_is_console_admin(self) -> None:
+        mappers: list[dict[str, Any]] = self.tester_client.get("protocolMappers", [])
+        scopes_mapper = next(
+            (
+                m
+                for m in mappers
+                if m.get("config", {}).get("claim.name") == "fg_scopes"
+            ),
+            None,
+        )
+        assert scopes_mapper is not None, "fg_scopes mapper not found"
+        raw_value: str = scopes_mapper.get("config", {}).get("claim.value", "")
+        try:
+            value = json.loads(raw_value)
+        except json.JSONDecodeError:
+            value = [raw_value]
+        assert "console:admin" in value, (
+            f"fg_scopes mapper must include 'console:admin', got: {value}\n"
+            f"'console:admin' expands via SCOPE_HIERARCHY to include audit:read"
+        )
+
+    def test_fg_tester_has_tenant_id_claim_mapper(self) -> None:
+        """tenant_id claim required so session.tenant_id is set → current_tenant in /admin/me."""
+        mappers: list[dict[str, Any]] = self.tester_client.get("protocolMappers", [])
+        claim_names = [m.get("config", {}).get("claim.name", "") for m in mappers]
+        assert "tenant_id" in claim_names, (
+            "fg-tester client must have a 'tenant_id' protocol mapper; "
+            "without it session.tenant_id=None and /admin/me returns current_tenant=null"
+        )
+
+    def test_fg_tester_tenant_id_maps_to_canonical_seed_tenant(self) -> None:
+        mappers: list[dict[str, Any]] = self.tester_client.get("protocolMappers", [])
+        tid_mapper = next(
+            (
+                m
+                for m in mappers
+                if m.get("config", {}).get("claim.name") == "tenant_id"
+            ),
+            None,
+        )
+        assert tid_mapper is not None, "tenant_id mapper not found"
+        value: str = tid_mapper.get("config", {}).get("claim.value", "")
+        assert value == _CANONICAL_TENANT, (
+            f"tenant_id mapper must be {_CANONICAL_TENANT!r}, got: {value!r}"
+        )
+
     def test_realm_contains_fg_tester_admin_user(self) -> None:
         assert self.tester_user, f"Realm must define user '{_TESTER_USER}'"
 
@@ -257,7 +310,8 @@ class TestCanonicalTesterHTTP:
     def test_canonical_tester_session_admin_me_returns_canonical_tenant(
         self, oidc_client: TestClient
     ) -> None:
-        """Session from canonical tester token must show tenant-seed-primary in /admin/me."""
+        """Session from canonical tester token must show tenant-seed-primary in /admin/me,
+        including current_tenant (requires tenant_id claim in token)."""
         claims = _canonical_claims()
         with _patch_verify(claims):
             exchange = oidc_client.post(
@@ -272,13 +326,19 @@ class TestCanonicalTesterHTTP:
         assert _CANONICAL_TENANT in body.get("tenants", []), (
             f"/admin/me must include {_CANONICAL_TENANT!r} in tenants; got: {body.get('tenants')}"
         )
+        assert body.get("current_tenant") == _CANONICAL_TENANT, (
+            f"/admin/me current_tenant must be {_CANONICAL_TENANT!r}; "
+            f"got: {body.get('current_tenant')!r} — "
+            f"ensure fg-tester client emits tenant_id claim via protocol mapper"
+        )
 
     def test_canonical_tester_session_does_not_fall_back_to_default_tenant(
         self, oidc_client: TestClient
     ) -> None:
-        """Token without allowed_tenants claim must not grant access to any tenant."""
-        # Claims with NO tenant binding
-        claims = _canonical_claims(allowed_tenants=None)
+        """Token without any tenant claims must not grant access to tenant-seed-primary."""
+        # Strip ALL tenant claims — neither tenant_id nor allowed_tenants
+        claims = _canonical_claims()
+        del claims["tenant_id"]
         del claims["allowed_tenants"]
         with _patch_verify(claims):
             exchange = oidc_client.post(
@@ -287,7 +347,8 @@ class TestCanonicalTesterHTTP:
             )
         assert exchange.status_code == 200, exchange.text
 
-        # Requesting canonical tenant without having it in allowed_tenants must be denied
+        # No tenant claims → get_allowed_tenants returns {"default"} fallback
+        # Requesting tenant-seed-primary must be denied (not in allowed set)
         resp = oidc_client.get(
             f"/admin/audit/search?tenant_id={_CANONICAL_TENANT}&page_size=5"
         )
