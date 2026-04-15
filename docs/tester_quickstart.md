@@ -17,8 +17,8 @@ FG_SQLITE_PATH=state/frostgate.db
 AG_CORE_BASE_URL=http://localhost:8000
 FG_KEYCLOAK_BASE_URL=http://localhost:8081
 FG_KEYCLOAK_REALM=FrostGate
-FG_KEYCLOAK_CLIENT_ID=fg-service
-FG_KEYCLOAK_CLIENT_SECRET=fg-service-ci-secret
+FG_KEYCLOAK_CLIENT_ID=fg-tester
+FG_KEYCLOAK_CLIENT_SECRET=fg-tester-ci-secret
 ```
 
 ### CTJ-1: Seed the system
@@ -73,8 +73,8 @@ uvicorn api.main:app --host 0.0.0.0 --port 8000
 export FG_ENV=dev
 export FG_KEYCLOAK_BASE_URL=http://localhost:8081
 export FG_KEYCLOAK_REALM=FrostGate
-export FG_KEYCLOAK_CLIENT_ID=fg-service
-export FG_KEYCLOAK_CLIENT_SECRET=fg-service-ci-secret
+export FG_KEYCLOAK_CLIENT_ID=fg-tester
+export FG_KEYCLOAK_CLIENT_SECRET=fg-tester-ci-secret
 export AG_CORE_BASE_URL=http://localhost:8000
 export AG_CORE_API_KEY=seedauditgwkey0_000000000000
 uvicorn admin_gateway.asgi:app --host 0.0.0.0 --port 8100
@@ -85,13 +85,15 @@ uvicorn admin_gateway.asgi:app --host 0.0.0.0 --port 8100
 ### CTJ-4: Authenticate (OIDC token exchange)
 
 ```bash
-# Obtain an OIDC access token from Keycloak (client_credentials flow)
+# Obtain an OIDC access token from Keycloak (password grant for canonical tester user)
 KC_TOKEN=$(curl -fsS -X POST \
   "http://localhost:8081/realms/FrostGate/protocol/openid-connect/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  --data-urlencode "grant_type=client_credentials" \
-  --data-urlencode "client_id=fg-service" \
-  --data-urlencode "client_secret=fg-service-ci-secret" \
+  --data-urlencode "grant_type=password" \
+  --data-urlencode "username=fg-tester-admin" \
+  --data-urlencode "password=fg-tester-password" \
+  --data-urlencode "client_id=fg-tester" \
+  --data-urlencode "client_secret=fg-tester-ci-secret" \
   | python -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
 # Exchange for a gateway session cookie
@@ -215,21 +217,23 @@ If `"status": "already_seeded"` appears, the environment was already bootstrappe
 | SQLite database | `state/frostgate.db` |
 | Tenant registry | `state/tenants.json` |
 
-> The admin/agent API keys are for direct core API access. The admin gateway uses session-cookie auth (OIDC or dev bypass). The keys are not used in this tester flow.
+> The admin/agent API keys are for direct core API access. The admin gateway canonical tester flow uses OIDC session-cookie auth via token exchange. The keys are not used for tester authentication.
 
 ---
 
 ## Step 2 — Start the Admin Gateway
 
-### Environment variables (dev mode)
+### Environment variables (OIDC, no dev bypass)
 
 ```bash
 export FG_ENV=dev
-export FG_DEV_AUTH_BYPASS=1
-export FG_DEV_AUTH_TENANT_ID=tenant-seed-primary
-export FG_DEV_AUTH_TENANTS=tenant-seed-primary
-export AG_CORE_BASE_URL=http://localhost:8000   # core API address
-export AG_CORE_API_KEY=seedadmin_primary_key_000000000000
+export FG_DEV_AUTH_BYPASS=0
+export FG_KEYCLOAK_BASE_URL=http://localhost:8081
+export FG_KEYCLOAK_REALM=FrostGate
+export FG_KEYCLOAK_CLIENT_ID=fg-tester
+export FG_KEYCLOAK_CLIENT_SECRET=fg-tester-ci-secret
+export AG_CORE_BASE_URL=http://localhost:8000
+export AG_CORE_API_KEY=seedauditgwkey0_000000000000
 ```
 
 ### Start the gateway
@@ -245,23 +249,9 @@ Verify the gateway is up:
 curl -s http://localhost:8100/health | python -m json.tool
 ```
 
-Expected:
-
-```json
-{
-  "status": "ok",
-  "service": "admin-gateway",
-  "version": "0.2.0",
-  "timestamp": "...",
-  "request_id": "..."
-}
-```
-
----
-
 ## Step 3 — Start the Core API (required for proxied routes)
 
-The admin gateway proxies audit, key, and tenant routes to the core API. Skip this step only if you are testing gateway-only routes (health, auth, products).
+The admin gateway proxies audit, key, and tenant routes to the core API.
 
 ```bash
 export FG_ENV=dev
@@ -273,54 +263,27 @@ export FG_AGENT_KEY=seedagent_primary_key_000000000000
 uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
 
----
-
-## Step 4 — Authenticate via Admin Gateway
-
-The admin gateway uses session-cookie authentication. In dev mode (dev bypass), a session cookie is issued automatically at login with no OIDC setup required.
-
-### Option A — Browser
-
-Navigate to:
-
-```
-http://localhost:8100/auth/login
-```
-
-The gateway redirects to `/admin/me` and sets a signed session cookie automatically.
-
-### Option B — Postman
-
-Import `docs/tester_collection.json`. Run the **"Login (Dev Bypass)"** request.  
-Postman follows the 302 redirect and stores the session cookie via its Cookie Jar.  
-**Enable "Automatically follow redirects" in Postman settings** (default: on).
-
-### Option C — curl
+## Step 4 — Authenticate via Admin Gateway (OIDC token exchange)
 
 ```bash
-# Store cookies to a jar
-curl -s -c cookies.txt -L http://localhost:8100/auth/login
-# Verify session is active
+KC_TOKEN=$(curl -fsS -X POST \
+  "http://localhost:8081/realms/FrostGate/protocol/openid-connect/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "grant_type=password" \
+  --data-urlencode "client_id=fg-tester" \
+  --data-urlencode "client_secret=fg-tester-ci-secret" \
+  --data-urlencode "username=fg-tester-admin" \
+  --data-urlencode "password=fg-tester-password" \
+  | python -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+curl -s -c cookies.txt -X POST http://localhost:8100/auth/token-exchange \
+  -H "Authorization: Bearer $KC_TOKEN" \
+  | python -m json.tool
+
 curl -s -b cookies.txt http://localhost:8100/admin/me | python -m json.tool
 ```
 
-Expected `/admin/me` response:
-
-```json
-{
-  "user_id": "dev-user",
-  "email": "dev@localhost",
-  "scopes": ["console:admin"],
-  "tenants": ["tenant-seed-primary"],
-  "current_tenant": "tenant-seed-primary",
-  "session_id": "...",
-  "expires_in": 3600
-}
-```
-
-> `console:admin` expands to all scopes: `product:read`, `product:write`, `keys:read`, `keys:write`, `audit:read`, `policies:write`.
-
----
+Expected `/admin/me` includes `tenants: ["tenant-seed-primary"]` and `current_tenant: "tenant-seed-primary"`.
 
 ## Step 5 — Execute the Primary Journey
 
@@ -437,9 +400,9 @@ Expected: `201 Created` with the product object. Repeating returns `409 Conflict
 | Variable | Required | Default | Notes |
 |---|---|---|---|
 | `FG_ENV` | Yes | — | `dev` for dev mode; `prod`/`staging` enforce OIDC |
-| `FG_DEV_AUTH_BYPASS` | Yes (dev only) | `0` | Set to `1` to enable dev session; forbidden in prod |
-| `FG_DEV_AUTH_TENANT_ID` | No | `default` | Default tenant for dev session |
-| `FG_DEV_AUTH_TENANTS` | No | (empty) | Comma-separated allowed tenants for dev session |
+| `FG_DEV_AUTH_BYPASS` | No | `0` | Keep disabled for canonical OIDC tester flow |
+| `FG_KEYCLOAK_CLIENT_ID` | Yes | `fg-tester` | Canonical tester OIDC client |
+| `FG_KEYCLOAK_CLIENT_SECRET` | Yes | `fg-tester-ci-secret` | Canonical tester OIDC client secret |
 | `AG_CORE_BASE_URL` | Yes (proxied routes) | — | Core API address, e.g. `http://localhost:8000` |
 | `AG_CORE_API_KEY` | Yes (proxied routes) | — | Core API key for gateway→core calls |
 | `FG_SQLITE_PATH` | Core only | `state/frostgate.db` | Overridable via env |
@@ -451,12 +414,12 @@ Expected: `201 Created` with the product object. Repeating returns `409 Conflict
 | Symptom | Cause | Fix |
 |---|---|---|
 | `GET /health` → connection refused | Gateway not started | Run uvicorn command in Step 2 |
-| `GET /admin/me` → 401 | Session cookie missing | Re-run `GET /auth/login` |
+| `GET /admin/me` → 401 | Session cookie missing | Re-run token issuance + `POST /auth/token-exchange` |
 | `POST /admin/products` → 403 | CSRF token missing or stale | Run `GET /admin/csrf-token` and retry |
 | `GET /admin/keys` → 503 | Core API not reachable | Set `AG_CORE_BASE_URL` correctly and start core API (Step 3) |
 | `GET /admin/audit/search` → 503 | Core API not reachable | Same as above |
 | Seed fails with `SEED_CONFLICT` | DB state conflicts with env | Clear `state/` directory and re-run `run_seed.py` |
-| `FG_DEV_AUTH_BYPASS=1` but 503 on login | OIDC partially configured | Unset all `FG_OIDC_*` and `FG_KEYCLOAK_*` vars |
+| Login returns auth config error | OIDC env incomplete | Set all required `FG_KEYCLOAK_*` (or `FG_OIDC_*`) vars and retry |
 
 ---
 
@@ -465,7 +428,7 @@ Expected: `201 Created` with the product object. Repeating returns `409 Conflict
 In production (`FG_ENV=prod`), dev bypass is forbidden. Auth uses OIDC:
 
 1. Configure `FG_OIDC_*` or `FG_KEYCLOAK_*` environment variables.
-2. For machine-to-machine: obtain an OIDC access token from your IdP using `client_credentials` flow, then exchange it:
+2. For token-backed sessions: obtain an OIDC access token from your IdP (human user token or M2M token), then exchange it:
    ```
    POST /auth/token-exchange
    Authorization: Bearer <access_token>

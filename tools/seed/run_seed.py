@@ -17,6 +17,7 @@ VENV_PYTHON = ROOT / ".venv" / "bin" / "python"
 DEFAULT_TENANT_ID = "tenant-seed-primary"
 DEFAULT_ADMIN_KEY = "seedadmin_primary_key_000000000000"
 DEFAULT_AGENT_KEY = "seedagent_primary_key_000000000000"
+DEFAULT_AUDIT_GW_KEY = "seedauditgwkey0_000000000000"
 DEFAULT_AUDIT_HMAC_KEY = "seed-audit-hmac-key-material-000000"
 DEFAULT_AUDIT_HMAC_KEY_ID = "seed-ak1"
 
@@ -71,6 +72,7 @@ def _set_default_env() -> SeedConfig:
     os.environ["FG_TENANT_REGISTRY_PATH"] = registry_path
     os.environ.setdefault("FG_ADMIN_KEY", DEFAULT_ADMIN_KEY)
     os.environ.setdefault("FG_AGENT_KEY", DEFAULT_AGENT_KEY)
+    os.environ.setdefault("FG_AUDIT_GW_KEY", DEFAULT_AUDIT_GW_KEY)
     _assert_distinct_key_prefixes(
         admin_key=os.environ["FG_ADMIN_KEY"],
         agent_key=os.environ["FG_AGENT_KEY"],
@@ -124,6 +126,7 @@ def _validate_existing_seed(config: SeedConfig) -> None:
         required_prefixes = {
             _seed_key_prefix_identity(os.environ["FG_ADMIN_KEY"]),
             _seed_key_prefix_identity(os.environ["FG_AGENT_KEY"]),
+            _seed_key_prefix_identity(os.environ["FG_AUDIT_GW_KEY"]),
         }
         existing = {row[0] for row in db.query(ApiKey.prefix).all()}
         if not required_prefixes.issubset(existing):

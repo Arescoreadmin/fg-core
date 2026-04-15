@@ -111,11 +111,33 @@ def test_quickstart_audit_key_requirement_documented(quickstart_text: str) -> No
     )
 
 
+def test_collection_canonical_path_does_not_require_inline_mint_key(
+    collection: dict,
+) -> None:
+    """Canonical collection docs must not require ad-hoc inline mint_key calls."""
+    serialized = json.dumps(collection)
+    assert "mint_key(" not in serialized, (
+        "Canonical tester collection must rely on seeded gateway key, "
+        "not ad-hoc inline mint_key provisioning"
+    )
+
+
 def test_quickstart_canonical_path_uses_token_exchange(quickstart_text: str) -> None:
     """Quickstart canonical journey must use OIDC token-exchange, not dev bypass."""
     assert "/auth/token-exchange" in quickstart_text, (
         "Quickstart canonical journey must reference POST /auth/token-exchange "
         "as the production-aligned authentication path"
+    )
+
+
+def test_quickstart_canonical_path_uses_oidc_user_token(quickstart_text: str) -> None:
+    """Quickstart canonical journey must use OIDC user token issuance (no dev bypass)."""
+    assert "grant_type=password" in quickstart_text, (
+        "Quickstart canonical journey must request a user OIDC token via "
+        "grant_type=password before token exchange"
+    )
+    assert "FG_DEV_AUTH_BYPASS=1" not in quickstart_text, (
+        "Quickstart canonical journey must not rely on dev bypass"
     )
 
 

@@ -3323,3 +3323,66 @@ make fg-idp-validate: ALL CHECKS PASSED (A–D)
 make fg-fast: All checks passed!
 bash codex_gates.sh: (in progress)
 ```
+
+### 2026-04-14 — Task 10.2 Addendum: canonical tester auth shifted to real OIDC tester user + tenant-claimed session
+
+**Area:** Admin Gateway Auth · Keycloak Provisioning · Tester Journey Fidelity
+
+**Root cause:**
+Canonical tester documentation and collection used Keycloak `client_credentials` for `fg-service`, producing `sub=service-account-fg-service` without tenant claims. Gateway tenant resolution then fell back to `default` (`allowed_tenants` absent), so canonical tester flows could not access `tenant-seed-primary`.
+
+**Fix:**
+- Added a dedicated human-style tester path in Keycloak realm import:
+  - client `fg-tester` (direct access grants enabled, no service account)
+  - user `fg-tester-admin` with seeded credentials
+  - access-token claim mappers for `tenant_id=tenant-seed-primary` and `allowed_tenants=["tenant-seed-primary"]`
+- Updated canonical tester docs/collection to use OIDC password-grant user token + `POST /auth/token-exchange` (no dev bypass path as canonical).
+- Added tests that enforce canonical quickstart uses user token issuance and that Keycloak realm provisioning includes tester client/user tenant claims.
+
+**Files changed:**
+- `keycloak/realms/frostgate-realm.json`
+- `docs/tester_quickstart.md`
+- `docs/tester_collection.json`
+- `tests/test_tester_quickstart_alignment.py`
+- `tests/test_keycloak_oidc.py`
+- `docs/ai/PR_FIX_LOG.md`
+
+**Validation results:**
+- Ran quickstart alignment tests, Keycloak OIDC tests, targeted auth/tenant test lanes, seed, keycloak runtime validation, fg-idp validate, fg-fast, and codex gates (see command output in PR checks).
+
+**Runtime proof results:**
+- Full container-backed runtime proof is blocked in this execution environment (`docker: command not found`), so IdP/core/gateway live verification could not be completed here.
+
+### 2026-04-15 — Task 10.2 Addendum: seed api_keys.name non-null/idempotency hardening + canonical prereq cleanup
+
+**Area:** Seed Bootstrap · API Key Upsert Safety · Canonical Tester Docs
+
+**Root cause:**
+`seed_apikeys_db.py` inserted new `api_keys` rows without `name` (and only a minimal column set), while the active `api_keys` schema in this environment enforced `name NOT NULL`. Fresh seed runs therefore crashed with `sqlite3.IntegrityError: NOT NULL constraint failed: api_keys.name`.
+
+**Fix:**
+- `scripts/seed_apikeys_db.py`
+  - Added deterministic key names (`seed:<prefix>`) for all seeded key rows.
+  - Introspects `PRAGMA table_info(api_keys)` and fills required non-default columns (`name`, `created_at`, `version`, `use_count` when required).
+  - Preserved raw-sqlite idempotent upsert flow (hash match update, prefix match update, no ORM path).
+- `tools/seed/run_seed.py`
+  - Added `DEFAULT_AUDIT_GW_KEY` env default and included audit gateway key prefix in rerun validation contract.
+- `docs/tester_collection.json`
+  - Removed inline `mint_key(...)` canonical prerequisite; now requires exported seeded gateway key (`seedauditgwkey0_000000000000`).
+- `tests/test_seed_apikeys_db.py` (new)
+  - Verifies insert populates required `name` and required non-null columns.
+  - Verifies upsert idempotency (same key twice -> one row).
+- `tests/test_seed_bootstrap_key_prefix_guard.py`
+  - Added assertion that audit gateway key prefix is distinct from admin/agent prefixes.
+- `tests/test_tester_quickstart_alignment.py`
+  - Added invariant preventing canonical collection from requiring inline `mint_key` provisioning.
+
+**Validation results:**
+- `python tools/seed/run_seed.py` → pass (fresh seed)
+- `python tools/seed/run_seed.py` → pass (`already_seeded`, all key matches)
+- `.venv/bin/pytest -q tests -k "seed or bootstrap or api_key"` → 27 passed, 3 skipped
+- `.venv/bin/pytest -q tests -k "auth or tenant or oidc or token_exchange"` → 438 passed, 8 skipped
+- `bash codex_gates.sh` → pass
+
+**Runtime proof status:**
+- Blocked in this execution environment: Docker unavailable (`docker: command not found`), so Keycloak/container-backed runtime proof commands cannot run here.

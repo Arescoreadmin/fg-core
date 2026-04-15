@@ -6,7 +6,9 @@ Covers: FG_KEYCLOAK_* derivation, oidc_enabled gate, negative-path (missing cred
 
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -26,6 +28,10 @@ _KC_ENV: dict[str, str] = {
     "FG_KEYCLOAK_CLIENT_SECRET": _KC_CLIENT_SECRET,
     "FG_OIDC_REDIRECT_URL": _REDIRECT,
 }
+
+_REALM_FILE = (
+    Path(__file__).resolve().parents[1] / "keycloak" / "realms" / "frostgate-realm.json"
+)
 
 
 @pytest.fixture(autouse=True)
@@ -180,3 +186,41 @@ class TestAuthFlowConfig:
             cfg = get_auth_config()
         assert cfg.oidc_issuer is not None
         assert "/realms/FrostGate" in cfg.oidc_issuer
+
+
+class TestCanonicalTesterRealmProvisioning:
+    """Realm provisioning must include canonical tester user/client tenant claims."""
+
+    def test_canonical_tester_client_exists(self) -> None:
+        data = json.loads(_REALM_FILE.read_text(encoding="utf-8"))
+        clients = data.get("clients", [])
+        client = next((c for c in clients if c.get("clientId") == "fg-tester"), None)
+        assert client is not None, "Expected fg-tester client in Keycloak realm import"
+        assert client.get("directAccessGrantsEnabled") is True
+        assert client.get("serviceAccountsEnabled") is False
+
+    def test_canonical_tester_claim_mappers_include_seed_tenant(self) -> None:
+        data = json.loads(_REALM_FILE.read_text(encoding="utf-8"))
+        clients = data.get("clients", [])
+        client = next((c for c in clients if c.get("clientId") == "fg-tester"), None)
+        assert client is not None, "Expected fg-tester client in Keycloak realm import"
+        mappers = client.get("protocolMappers", [])
+        by_name = {m.get("name"): m for m in mappers}
+
+        tenant_mapper = by_name.get("fg-tenant-id-mapper", {})
+        allowed_mapper = by_name.get("fg-allowed-tenants-mapper", {})
+        assert (
+            tenant_mapper.get("config", {}).get("claim.value") == "tenant-seed-primary"
+        )
+        assert (
+            allowed_mapper.get("config", {}).get("claim.value")
+            == '["tenant-seed-primary"]'
+        )
+
+    def test_canonical_tester_user_exists(self) -> None:
+        data = json.loads(_REALM_FILE.read_text(encoding="utf-8"))
+        users = data.get("users", [])
+        user = next((u for u in users if u.get("username") == "fg-tester-admin"), None)
+        assert user is not None, (
+            "Expected fg-tester-admin user in Keycloak realm import"
+        )

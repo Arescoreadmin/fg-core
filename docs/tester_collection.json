@@ -2,7 +2,7 @@
   "info": {
     "name": "FrostGate Admin Gateway \u2014 Tester Collection",
     "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-    "description": "End-to-end tester journey for FrostGate Admin Gateway. Requires a freshly seeded environment from `python tools/seed/run_seed.py`. Auth uses dev-bypass (FG_DEV_AUTH_BYPASS=1). All requests are gateway-facing; no direct core API access.",
+    "description": "End-to-end tester journey for FrostGate Admin Gateway. Requires a freshly seeded environment from `python tools/seed/run_seed.py`. Auth uses OIDC token exchange with the canonical tester user (no dev bypass). All requests are gateway-facing; no direct core API access.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -31,21 +31,29 @@
     },
     {
       "key": "kc_client_id",
-      "value": "fg-service"
+      "value": "fg-tester"
     },
     {
       "key": "kc_client_secret",
-      "value": "fg-service-ci-secret"
+      "value": "fg-tester-ci-secret"
     },
     {
       "key": "kc_access_token",
       "value": ""
+    },
+    {
+      "key": "kc_username",
+      "value": "fg-tester-admin"
+    },
+    {
+      "key": "kc_password",
+      "value": "fg-tester-password"
     }
   ],
   "item": [
     {
       "name": "0 \u2014 Canonical Tester Journey",
-      "description": "Minimum required sequence for a fresh tester. Run these requests top-to-bottom to prove the system works end-to-end: seed output exists, auth works, audit data is retrievable, and bundle export succeeds.\n\nPREREQUISITES (run once before this folder):\n1. python tools/seed/run_seed.py\n   -> Runs audit cycle, captures session_id + export_path in state/seed/bootstrap_state.json\n2. Create audit API key (needed for steps 4-5):\n   python -c \"\nimport os; os.environ.setdefault('FG_SQLITE_PATH','state/frostgate.db')\nfrom api.auth_scopes import mint_key\nprint(mint_key('audit:read','audit:export',tenant_id='tenant-seed-primary',ttl_seconds=86400))\"\n3. Start admin gateway with that key as AG_CORE_API_KEY (see quickstart Step 2)\n4. (Offline) Verify bundle: python tools/verify_bundle.py --bundle <export_path from seed output>",
+      "description": "Minimum required sequence for a fresh tester. Run these requests top-to-bottom to prove the system works end-to-end: seed output exists, auth works, audit data is retrievable, and bundle export succeeds.\n\nPREREQUISITES (run once before this folder):\n1. python tools/seed/run_seed.py\n   -> Runs audit cycle, captures session_id + export_path in state/seed/bootstrap_state.json\n2. Export AG_CORE_API_KEY from seeded gateway key:\n   export AG_CORE_API_KEY=seedauditgwkey0_000000000000\n3. Start admin gateway with that key as AG_CORE_API_KEY (see quickstart Step 2)\n4. (Offline) Verify bundle: python tools/verify_bundle.py --bundle <export_path from seed output>",
       "item": [
         {
           "name": "CTJ-1: Gateway Health",
@@ -66,7 +74,7 @@
           "response": []
         },
         {
-          "name": "CTJ-2: Get IdP Token (client_credentials)",
+          "name": "CTJ-2: Get IdP Token (password grant user)",
           "event": [
             {
               "listen": "test",
@@ -97,7 +105,7 @@
               "urlencoded": [
                 {
                   "key": "grant_type",
-                  "value": "client_credentials",
+                  "value": "password",
                   "type": "text"
                 },
                 {
@@ -108,6 +116,16 @@
                 {
                   "key": "client_secret",
                   "value": "{{kc_client_secret}}",
+                  "type": "text"
+                },
+                {
+                  "key": "username",
+                  "value": "{{kc_username}}",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "{{kc_password}}",
                   "type": "text"
                 }
               ]
@@ -125,9 +143,10 @@
                 "token"
               ]
             },
-            "description": "STEP 2 \u2014 Obtain an OIDC access token from Keycloak using client_credentials flow. Requires fg-idp (Keycloak) running: KC_TEARDOWN=0 bash tools/auth/validate_keycloak_runtime.sh. The test script extracts access_token into {{kc_access_token}} for use in CTJ-3."
+            "description": "STEP 2 \u2014 Obtain an OIDC access token from Keycloak using password grant flow. Requires fg-idp (Keycloak) running: KC_TEARDOWN=0 bash tools/auth/validate_keycloak_runtime.sh. The test script extracts access_token into {{kc_access_token}} for use in CTJ-3."
           },
-          "response": []
+          "response": [],
+          "description": ""
         },
         {
           "name": "CTJ-3: Token Exchange \u2192 Gateway Session",
@@ -184,7 +203,7 @@
                 "me"
               ]
             },
-            "description": "STEP 4 \u2014 Confirm session is active and scopes are correct. Expected: 200 with user_id='dev-user', tenants=['tenant-seed-primary'], scopes containing 'console:admin'. If 401: re-run CTJ-3."
+            "description": "STEP 4 \u2014 Confirm session is active and scopes are correct. Expected: 200 with user_id='fg-tester-admin', tenants=['tenant-seed-primary'], scopes containing 'console:admin'. If 401: re-run CTJ-3."
           },
           "response": []
         },
@@ -313,7 +332,7 @@
                 "login"
               ]
             },
-            "description": "Initiates authentication. In dev-bypass mode (FG_DEV_AUTH_BYPASS=1 + no OIDC), the gateway responds 302 and sets a signed session cookie. Postman follows the redirect and stores the cookie automatically via its Cookie Jar. After this request succeeds, all subsequent requests in this collection are authenticated. Expected final status: 200 (redirected to /admin/me)."
+            "description": "Initiates authentication. Initiates OIDC login redirect for interactive browser testing. Canonical automation path uses CTJ token exchange; this request is optional for manual browser verification. Expected final status: 200 (redirected to /admin/me)."
           },
           "response": []
         }
@@ -392,7 +411,7 @@
                 "scopes"
               ]
             },
-            "description": "Returns all available scopes and the user's current scope grants. Useful for verifying the dev-bypass session has full console:admin scope hierarchy. Requires session cookie."
+            "description": "Returns all available scopes and the user's current scope grants. Useful for verifying the canonical OIDC tester session has full console:admin scope hierarchy. Requires session cookie."
           },
           "response": []
         }

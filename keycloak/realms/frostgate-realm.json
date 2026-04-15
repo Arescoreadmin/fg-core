@@ -52,6 +52,80 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "fg-tester",
+      "name": "FrostGate Canonical Tester",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "fg-tester-ci-secret",
+      "serviceAccountsEnabled": false,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "attributes": {
+        "access.token.lifespan": "300"
+      },
+      "protocolMappers": [
+        {
+          "name": "fg-scopes-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "fg_scopes",
+            "claim.value": "[\"console:admin\"]",
+            "jsonType.label": "JSON",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false",
+            "access.tokenResponse.claim": "false"
+          }
+        },
+        {
+          "name": "fg-tenant-id-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "tenant_id",
+            "claim.value": "tenant-seed-primary",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false",
+            "access.tokenResponse.claim": "false"
+          }
+        },
+        {
+          "name": "fg-allowed-tenants-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "allowed_tenants",
+            "claim.value": "[\"tenant-seed-primary\"]",
+            "jsonType.label": "JSON",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false",
+            "access.tokenResponse.claim": "false"
+          }
+        },
+        {
+          "name": "fg-tester-audience-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "fg-tester",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
     }
   ],
   "roles": {
@@ -67,5 +141,23 @@
     ]
   },
   "scopeMappings": [],
-  "clientScopeMappings": {}
+  "clientScopeMappings": {},
+  "users": [
+    {
+      "username": "fg-tester-admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "FrostGate",
+      "lastName": "Tester",
+      "email": "tester@frostgate.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "fg-tester-password",
+          "temporary": false
+        }
+      ],
+      "requiredActions": []
+    }
+  ]
 }
