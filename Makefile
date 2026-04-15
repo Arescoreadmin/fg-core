@@ -1290,6 +1290,15 @@ spine-wait:
 fg-idp-validate:
 	@bash tools/auth/validate_keycloak_runtime.sh
 
+.PHONY: fg-tester-flow-validate
+
+## fg-tester-flow-validate: prove canonical tester path end-to-end
+##   Requires running: Keycloak (8081), admin-gateway (8100).
+##   SKIPs with clear message if services are not reachable.
+##   Steps: password-grant token → token-exchange → /admin/me → audit/search → audit/export → wrong-tenant denial
+fg-tester-flow-validate:
+	@bash tools/auth/validate_tester_flow.sh
+
 .PHONY: fg-auth-e2e-validate
 
 ## fg-auth-e2e-validate: prove full IdP→gateway auth chain (Task 6.2)

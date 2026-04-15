@@ -6,6 +6,45 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-15 — Task 10.2 Addendum: Runtime Proof + Gate Enforcement + Tenant Assertion Tests
+
+**Branch:** `blitz/task-10.2-rewrite-canonical`
+
+**Area:** Canonical Tester Flow · End-to-End Runtime Script · Test Coverage · CI Gate Wiring
+
+---
+
+**Root causes (four enforcement gaps):**
+
+**Gap A — No end-to-end runtime proof script existed:**
+No script proved the full canonical path: password-grant token → token-exchange → /admin/me tenant assertion → audit/search → audit/export → wrong-tenant denial. Validation was only IdP-level (token issuance), not gateway-level.
+
+**Gap B — Runtime proof not wired into any gate:**
+`validate_tester_flow.sh` didn't exist; `codex_gates.sh` had no call to prove the canonical tester path end-to-end. The path could be broken without any CI signal.
+
+**Gap C — Realm missing `fg_scopes` mapper for `fg-tester`:**
+`fg-tester` client lacked the `fg_scopes: ["console:admin"]` protocol mapper. Without it, the issued token carries no scopes, and `audit:read` (required for `/admin/audit/search`) would not be granted via the `console:admin → expand_scopes` hierarchy.
+
+**Gap D — No structural tests for realm completeness or tenant enforcement at HTTP layer:**
+No test asserted that `fg-tester` client has the required mappers, that `fg-tester-admin` user exists, or that wrong-tenant requests are denied at the HTTP layer with canonical tester claims.
+
+**Fixes applied:**
+- `tools/auth/validate_tester_flow.sh` (new) — end-to-end runtime proof: service availability check → OIDC password grant → token-exchange → /admin/me tenant assertion → audit/search → audit/export → wrong-tenant 403; SKIP (exit 0) if services not reachable
+- `codex_gates.sh` — added `bash tools/auth/validate_tester_flow.sh` gate (SKIPs if services unavailable, FAILs if services are up but assertions fail)
+- `Makefile` — added `fg-tester-flow-validate` target
+- `keycloak/realms/frostgate-realm.json` — added `fg_scopes: ["console:admin"]` mapper to `fg-tester` client
+- `tests/test_canonical_tester_flow.py` (new, 16 tests) — realm structure tests (fg-tester client config, fg-tester-admin user) + HTTP-layer tests (token exchange, /admin/me tenant assertion, audit/search success/403, no-dev-bypass requirement)
+
+**Files changed:** 5 (4 modified, 1 new)
+
+**Validation evidence:**
+- `.venv/bin/pytest -q tests/test_canonical_tester_flow.py` → 16 passed
+- `.venv/bin/pytest -q tests/test_tester_quickstart_alignment.py tests/test_keycloak_oidc.py tests/test_canonical_tester_flow.py` → 49 passed
+- `bash tools/auth/validate_tester_flow.sh` → SKIP (services not running — correct behavior)
+- `make fg-fast` → PASS
+
+---
+
 ### 2026-04-15 — Task 10.2 Rewrite: Canonical Tester Auth Path + Realm Completeness
 
 **Branch:** `blitz/task-10.2-rewrite-canonical`

@@ -70,6 +70,21 @@
       },
       "protocolMappers": [
         {
+          "name": "fg-tester-scopes-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "fg_scopes",
+            "claim.value": "[\"console:admin\"]",
+            "jsonType.label": "JSON",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false",
+            "access.tokenResponse.claim": "false"
+          }
+        },
+        {
           "name": "fg-tester-allowed-tenants-mapper",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-hardcoded-claim-mapper",
