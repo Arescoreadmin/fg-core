@@ -15,8 +15,8 @@ from admin_gateway.auth.config import get_auth_config, reset_auth_config
 
 _KC_BASE = "http://fg-idp.local:8081"
 _KC_REALM = "FrostGate"
-_KC_CLIENT_ID = "fg-service"
-_KC_CLIENT_SECRET = "fg-service-ci-secret"
+_KC_CLIENT_ID = "fg-tester"
+_KC_CLIENT_SECRET = "fg-tester-ci-secret"
 _REDIRECT = "http://localhost:18080/auth/callback"
 
 _KC_ENV: dict[str, str] = {

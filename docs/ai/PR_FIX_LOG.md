@@ -6,6 +6,41 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-15 — Task 10.2 Rewrite: Canonical Tester Auth Path + Realm Completeness
+
+**Branch:** `blitz/task-10.2-rewrite-canonical`
+
+**Area:** Keycloak Realm · Tester Validation · Plan Module Rewrite
+
+---
+
+**Root causes (three gaps):**
+
+**Gap A — `fg-tester` client missing from realm:**
+`keycloak/realms/frostgate-realm.json` only defined `fg-service` (service account, `client_credentials`). The canonical tester client `fg-tester` — required for `password` grant against `fg-tester-admin` — was absent. Any operator loading this realm would find the canonical tester path immediately broken.
+
+**Gap B — Keycloak runtime validation used stale `client_credentials` default:**
+`tools/auth/validate_keycloak_runtime.sh` step [C] defaulted to `fg-service` / `client_credentials`. The canonical tester path uses `password` grant. The script neither proved nor caught the canonical path; a broken `fg-tester` setup would silently pass CI.
+
+**Gap C — Task 10.2 module definition was pre-OIDC:**
+`plans/30_day_repo_blitz.yaml` task 10.2 definition_of_done and validation_commands predated the OIDC rewrite (no mention of `fg-tester`, password grant, `allowed_tenants` claim, or idempotent backfill requirements).
+
+**Fixes applied:**
+- `keycloak/realms/frostgate-realm.json` — added `fg-tester` client (`directAccessGrantsEnabled: true`, `serviceAccountsEnabled: false`, `allowed_tenants` hardcoded claim mapper → `["tenant-seed-primary"]`, audience mapper); added `fg-tester-admin` user (credentials: `fg-tester-password`, `realmRoles: ["frostgate-admin"]`)
+- `tools/auth/validate_keycloak_runtime.sh` — default client changed from `fg-service` to `fg-tester`; step [C] now tests `password` grant for `fg-tester-admin`; step [C2] added for `fg-service` service account (`client_credentials`); step [D] negative path now uses wrong password on canonical tester path; summary banner updated
+- `tests/test_keycloak_oidc.py` — constants updated from `fg-service`/`fg-service-ci-secret` to `fg-tester`/`fg-tester-ci-secret` (canonical tester client)
+- `plans/30_day_repo_blitz.yaml` task 10.2 — rewrote `definition_of_done` (16 items), `validation` (11 items), `validation_commands` (12 commands) to reflect OIDC password-grant canonical path, realm completeness requirement, and idempotent seed requirement
+
+**Files changed:** 4
+
+**Validation evidence:**
+- `.venv/bin/pytest -q tests/test_tester_quickstart_alignment.py tests/test_keycloak_oidc.py` → 33 passed
+- `.venv/bin/pytest -q tests -k 'seed or bootstrap or api_key'` → 24 passed, 3 skipped
+- `.venv/bin/pytest -q admin_gateway/tests -k 'auth or tenant or token or oidc'` → 125 passed
+- `make fg-fast` → PASS
+
+---
+
 ### 2026-04-13 — Task 9.2 Addendum: Literal Type + Fail-Closed Guard + pytest CVE Fix
 
 **Branch:** `claude/production-closeout-tal0p`
