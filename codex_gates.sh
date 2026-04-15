@@ -73,4 +73,7 @@ else
   pip-audit
 fi
 
+echo "==> Gates: canonical tester flow (skips if services unavailable)"
+bash tools/auth/validate_tester_flow.sh
+
 echo "==> All gates passed."

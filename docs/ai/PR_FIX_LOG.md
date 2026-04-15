@@ -6,6 +6,126 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-15 — Task 10.2 Addendum: Authorization Closure — tenant_id Claim + Scope Verification
+
+**Branch:** `blitz/task-10.2-rewrite-canonical`
+
+**Area:** Keycloak Realm · Canonical Tester Authorization · Scope/Tenant Claim Shape
+
+---
+
+**Root cause:**
+The `fg-tester` client realm definition was missing the `tenant_id` claim. The gateway's token-exchange path sets `session.tenant_id = claims.get("tenant_id")`. Without this claim, `session.tenant_id = None`, so `/admin/me` returned `current_tenant: null` instead of `"tenant-seed-primary"`. This diverged from the quickstart checkpoint (`current_tenant: "tenant-seed-primary"`).
+
+**Claim shape the gateway actually consumes (`extract_scopes_from_claims` + `get_allowed_tenants`):**
+
+| Claim | Path in gateway | Effect |
+|---|---|---|
+| `fg_scopes: ["console:admin"]` | `extract_scopes_from_claims` → `Session.__post_init__` → `expand_scopes` | `{"console:admin", "audit:read", "product:read", ...}` |
+| `tenant_id: "tenant-seed-primary"` | `claims.get("tenant_id")` → `session.tenant_id` → `/admin/me` `current_tenant` | Sets active tenant; auto-resolution without explicit query param |
+| `allowed_tenants: ["tenant-seed-primary"]` | `get_allowed_tenants` → `session.claims.get("allowed_tenants")` | Tenant access control list |
+
+**Fixes applied:**
+- `keycloak/realms/frostgate-realm.json` — added `tenant_id: "tenant-seed-primary"` hardcoded claim mapper to `fg-tester` client (String type, access token only)
+- `tests/test_canonical_tester_flow.py` — updated `_canonical_claims()` to include `tenant_id`; added 3 new realm structure tests (`fg_scopes` value, `tenant_id` mapper existence, `tenant_id` value); strengthened `/admin/me` test to assert `current_tenant == "tenant-seed-primary"`; fixed negative-test to delete both `tenant_id` and `allowed_tenants`
+- `tools/auth/validate_tester_flow.sh` — step [3] now asserts `current_tenant == canonical_tenant`
+
+**Files changed:** 3
+
+**Full token claim shape after fix:**
+```json
+{
+  "fg_scopes": ["console:admin"],
+  "tenant_id": "tenant-seed-primary",
+  "allowed_tenants": ["tenant-seed-primary"]
+}
+```
+→ gateway extracts scopes `{console:admin}` → `expand_scopes` → `{console:admin, audit:read, product:read, product:write, keys:read, keys:write, policies:write}`  
+→ tenant access: `{"tenant-seed-primary"}`  
+→ `session.tenant_id = "tenant-seed-primary"` → `/admin/me` `current_tenant: "tenant-seed-primary"`
+
+**Validation evidence:**
+- `.venv/bin/pytest -q tests/test_canonical_tester_flow.py tests/test_keycloak_oidc.py tests/test_tester_quickstart_alignment.py` → 52 passed
+- `make fg-fast` → PASS
+
+**Runtime proof:** `validate_tester_flow.sh` exits 0 (SKIP — services not running). Full proof requires running Keycloak + gateway + core.
+
+---
+
+### 2026-04-15 — Task 10.2 Addendum: Runtime Proof + Gate Enforcement + Tenant Assertion Tests
+
+**Branch:** `blitz/task-10.2-rewrite-canonical`
+
+**Area:** Canonical Tester Flow · End-to-End Runtime Script · Test Coverage · CI Gate Wiring
+
+---
+
+**Root causes (four enforcement gaps):**
+
+**Gap A — No end-to-end runtime proof script existed:**
+No script proved the full canonical path: password-grant token → token-exchange → /admin/me tenant assertion → audit/search → audit/export → wrong-tenant denial. Validation was only IdP-level (token issuance), not gateway-level.
+
+**Gap B — Runtime proof not wired into any gate:**
+`validate_tester_flow.sh` didn't exist; `codex_gates.sh` had no call to prove the canonical tester path end-to-end. The path could be broken without any CI signal.
+
+**Gap C — Realm missing `fg_scopes` mapper for `fg-tester`:**
+`fg-tester` client lacked the `fg_scopes: ["console:admin"]` protocol mapper. Without it, the issued token carries no scopes, and `audit:read` (required for `/admin/audit/search`) would not be granted via the `console:admin → expand_scopes` hierarchy.
+
+**Gap D — No structural tests for realm completeness or tenant enforcement at HTTP layer:**
+No test asserted that `fg-tester` client has the required mappers, that `fg-tester-admin` user exists, or that wrong-tenant requests are denied at the HTTP layer with canonical tester claims.
+
+**Fixes applied:**
+- `tools/auth/validate_tester_flow.sh` (new) — end-to-end runtime proof: service availability check → OIDC password grant → token-exchange → /admin/me tenant assertion → audit/search → audit/export → wrong-tenant 403; SKIP (exit 0) if services not reachable
+- `codex_gates.sh` — added `bash tools/auth/validate_tester_flow.sh` gate (SKIPs if services unavailable, FAILs if services are up but assertions fail)
+- `Makefile` — added `fg-tester-flow-validate` target
+- `keycloak/realms/frostgate-realm.json` — added `fg_scopes: ["console:admin"]` mapper to `fg-tester` client
+- `tests/test_canonical_tester_flow.py` (new, 16 tests) — realm structure tests (fg-tester client config, fg-tester-admin user) + HTTP-layer tests (token exchange, /admin/me tenant assertion, audit/search success/403, no-dev-bypass requirement)
+
+**Files changed:** 5 (4 modified, 1 new)
+
+**Validation evidence:**
+- `.venv/bin/pytest -q tests/test_canonical_tester_flow.py` → 16 passed
+- `.venv/bin/pytest -q tests/test_tester_quickstart_alignment.py tests/test_keycloak_oidc.py tests/test_canonical_tester_flow.py` → 49 passed
+- `bash tools/auth/validate_tester_flow.sh` → SKIP (services not running — correct behavior)
+- `make fg-fast` → PASS
+
+---
+
+### 2026-04-15 — Task 10.2 Rewrite: Canonical Tester Auth Path + Realm Completeness
+
+**Branch:** `blitz/task-10.2-rewrite-canonical`
+
+**Area:** Keycloak Realm · Tester Validation · Plan Module Rewrite
+
+---
+
+**Root causes (three gaps):**
+
+**Gap A — `fg-tester` client missing from realm:**
+`keycloak/realms/frostgate-realm.json` only defined `fg-service` (service account, `client_credentials`). The canonical tester client `fg-tester` — required for `password` grant against `fg-tester-admin` — was absent. Any operator loading this realm would find the canonical tester path immediately broken.
+
+**Gap B — Keycloak runtime validation used stale `client_credentials` default:**
+`tools/auth/validate_keycloak_runtime.sh` step [C] defaulted to `fg-service` / `client_credentials`. The canonical tester path uses `password` grant. The script neither proved nor caught the canonical path; a broken `fg-tester` setup would silently pass CI.
+
+**Gap C — Task 10.2 module definition was pre-OIDC:**
+`plans/30_day_repo_blitz.yaml` task 10.2 definition_of_done and validation_commands predated the OIDC rewrite (no mention of `fg-tester`, password grant, `allowed_tenants` claim, or idempotent backfill requirements).
+
+**Fixes applied:**
+- `keycloak/realms/frostgate-realm.json` — added `fg-tester` client (`directAccessGrantsEnabled: true`, `serviceAccountsEnabled: false`, `allowed_tenants` hardcoded claim mapper → `["tenant-seed-primary"]`, audience mapper); added `fg-tester-admin` user (credentials: `fg-tester-password`, `realmRoles: ["frostgate-admin"]`)
+- `tools/auth/validate_keycloak_runtime.sh` — default client changed from `fg-service` to `fg-tester`; step [C] now tests `password` grant for `fg-tester-admin`; step [C2] added for `fg-service` service account (`client_credentials`); step [D] negative path now uses wrong password on canonical tester path; summary banner updated
+- `tests/test_keycloak_oidc.py` — constants updated from `fg-service`/`fg-service-ci-secret` to `fg-tester`/`fg-tester-ci-secret` (canonical tester client)
+- `plans/30_day_repo_blitz.yaml` task 10.2 — rewrote `definition_of_done` (16 items), `validation` (11 items), `validation_commands` (12 commands) to reflect OIDC password-grant canonical path, realm completeness requirement, and idempotent seed requirement
+
+**Files changed:** 4
+
+**Validation evidence:**
+- `.venv/bin/pytest -q tests/test_tester_quickstart_alignment.py tests/test_keycloak_oidc.py` → 33 passed
+- `.venv/bin/pytest -q tests -k 'seed or bootstrap or api_key'` → 24 passed, 3 skipped
+- `.venv/bin/pytest -q admin_gateway/tests -k 'auth or tenant or token or oidc'` → 125 passed
+- `make fg-fast` → PASS
+
+---
+
 ### 2026-04-13 — Task 9.2 Addendum: Literal Type + Fail-Closed Guard + pytest CVE Fix
 
 **Branch:** `claude/production-closeout-tal0p`

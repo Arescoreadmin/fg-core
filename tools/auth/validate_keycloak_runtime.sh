@@ -8,10 +8,14 @@
 #   bash tools/auth/validate_keycloak_runtime.sh
 #
 # Env overrides:
-#   FG_KEYCLOAK_CLIENT_ID      (default: fg-service)
-#   FG_KEYCLOAK_CLIENT_SECRET  (default: fg-service-ci-secret)
-#   FG_KEYCLOAK_REALM          (default: FrostGate)
-#   KC_TEARDOWN                (default: 1; set to 0 to leave Keycloak running)
+#   FG_KEYCLOAK_CLIENT_ID        (default: fg-tester — canonical tester client)
+#   FG_KEYCLOAK_CLIENT_SECRET    (default: fg-tester-ci-secret)
+#   FG_KEYCLOAK_TESTER_USER      (default: fg-tester-admin)
+#   FG_KEYCLOAK_TESTER_PASSWORD  (default: fg-tester-password)
+#   FG_KEYCLOAK_SA_CLIENT_ID     (default: fg-service — service account client)
+#   FG_KEYCLOAK_SA_CLIENT_SECRET (default: fg-service-ci-secret)
+#   FG_KEYCLOAK_REALM            (default: FrostGate)
+#   KC_TEARDOWN                  (default: 1; set to 0 to leave Keycloak running)
 
 set -euo pipefail
 
@@ -19,9 +23,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "${ROOT}"
 
-KC_CLIENT_ID="${FG_KEYCLOAK_CLIENT_ID:-fg-service}"
-KC_CLIENT_SECRET="${FG_KEYCLOAK_CLIENT_SECRET:-fg-service-ci-secret}"
+KC_CLIENT_ID="${FG_KEYCLOAK_CLIENT_ID:-fg-tester}"
+KC_CLIENT_SECRET="${FG_KEYCLOAK_CLIENT_SECRET:-fg-tester-ci-secret}"
 KC_REALM="${FG_KEYCLOAK_REALM:-FrostGate}"
+KC_TESTER_USER="${FG_KEYCLOAK_TESTER_USER:-fg-tester-admin}"
+KC_TESTER_PASSWORD="${FG_KEYCLOAK_TESTER_PASSWORD:-fg-tester-password}"
+KC_SA_CLIENT_ID="${FG_KEYCLOAK_SA_CLIENT_ID:-fg-service}"
+KC_SA_CLIENT_SECRET="${FG_KEYCLOAK_SA_CLIENT_SECRET:-fg-service-ci-secret}"
 KC_HOST_URL="http://localhost:8081"
 KC_INTERNAL_URL="http://fg-idp:8080"
 KC_CONTAINER="fg-core-fg-idp-1"
@@ -110,14 +118,16 @@ PY
 
 # ---------------------------------------------------------------------------
 echo ""
-echo "==> [C] Token issuance (client_credentials, client_id=${KC_CLIENT_ID})"
+echo "==> [C] Canonical tester token issuance (password grant, user=${KC_TESTER_USER}, client=${KC_CLIENT_ID})"
 
 curl -fsS -X POST \
   "${KC_HOST_URL}/realms/${KC_REALM}/protocol/openid-connect/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  --data-urlencode "grant_type=client_credentials" \
+  --data-urlencode "grant_type=password" \
   --data-urlencode "client_id=${KC_CLIENT_ID}" \
   --data-urlencode "client_secret=${KC_CLIENT_SECRET}" \
+  --data-urlencode "username=${KC_TESTER_USER}" \
+  --data-urlencode "password=${KC_TESTER_PASSWORD}" \
   > /tmp/fg.oidc.token.json
 
 python3 - /tmp/fg.oidc.token.json <<'PY'
@@ -127,12 +137,34 @@ if not d.get('access_token'):
     print(f'FAIL: no access_token: {d}', file=sys.stderr); sys.exit(1)
 if d.get('token_type', '').lower() != 'bearer':
     print(f'FAIL: token_type not bearer: {d.get("token_type")}', file=sys.stderr); sys.exit(1)
-print(f'    Token issuance OK  token_type={d["token_type"]} access_token=<present>')
+print(f'    Canonical tester token OK  token_type={d["token_type"]} access_token=<present>')
 PY
 
 # ---------------------------------------------------------------------------
 echo ""
-echo "==> [D] Negative path — wrong client secret must be rejected"
+echo "==> [C2] Service account token issuance (client_credentials, client_id=${KC_SA_CLIENT_ID})"
+
+curl -fsS -X POST \
+  "${KC_HOST_URL}/realms/${KC_REALM}/protocol/openid-connect/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "grant_type=client_credentials" \
+  --data-urlencode "client_id=${KC_SA_CLIENT_ID}" \
+  --data-urlencode "client_secret=${KC_SA_CLIENT_SECRET}" \
+  > /tmp/fg.oidc.sa.token.json
+
+python3 - /tmp/fg.oidc.sa.token.json <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+if not d.get('access_token'):
+    print(f'FAIL: no access_token: {d}', file=sys.stderr); sys.exit(1)
+if d.get('token_type', '').lower() != 'bearer':
+    print(f'FAIL: token_type not bearer: {d.get("token_type")}', file=sys.stderr); sys.exit(1)
+print(f'    Service account token OK  token_type={d["token_type"]} access_token=<present>')
+PY
+
+# ---------------------------------------------------------------------------
+echo ""
+echo "==> [D] Negative path — wrong password must be rejected (canonical tester client)"
 
 HTTP_STATUS="$(curl \
   -o /tmp/fg.oidc.negative.json \
@@ -140,9 +172,11 @@ HTTP_STATUS="$(curl \
   -s -X POST \
   "${KC_HOST_URL}/realms/${KC_REALM}/protocol/openid-connect/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  --data-urlencode "grant_type=client_credentials" \
+  --data-urlencode "grant_type=password" \
   --data-urlencode "client_id=${KC_CLIENT_ID}" \
-  --data-urlencode "client_secret=wrong-secret-intentionally")"
+  --data-urlencode "client_secret=${KC_CLIENT_SECRET}" \
+  --data-urlencode "username=${KC_TESTER_USER}" \
+  --data-urlencode "password=wrong-password-intentionally")"
 
 python3 - /tmp/fg.oidc.negative.json "${HTTP_STATUS}" <<'PY'
 import json, sys
@@ -152,7 +186,7 @@ try:
 except Exception:
     d = {}
 if d.get('access_token'):
-    print('FAIL: wrong secret returned a valid token — auth NOT enforced', file=sys.stderr)
+    print('FAIL: wrong password returned a valid token — auth NOT enforced', file=sys.stderr)
     sys.exit(1)
 print(f'    Negative path OK  HTTP={status} error={d.get("error", "<no-token>")}')
 PY
@@ -161,8 +195,9 @@ PY
 echo ""
 echo "============================================================"
 echo " Keycloak runtime validation: ALL CHECKS PASSED"
-echo "   A) Host-side discovery:       OK"
-echo "   B) Container-network proof:   OK (via fg-core_internal)"
-echo "   C) Token issuance:            OK (client_credentials)"
-echo "   D) Negative path:             OK (wrong secret rejected)"
+echo "   A) Host-side discovery:              OK"
+echo "   B) Container-network proof:          OK (via fg-core_internal)"
+echo "   C) Canonical tester token issuance:  OK (password grant, fg-tester-admin)"
+echo "   C2) Service account token issuance:  OK (client_credentials, fg-service)"
+echo "   D) Negative path:                    OK (wrong password rejected)"
 echo "============================================================"
