@@ -46,7 +46,22 @@ except RuntimeError:
         pass
 
 # NATS configuration
-NATS_URL = os.getenv("FG_NATS_URL", "nats://localhost:4222")
+_fg_env_ingest = (os.getenv("FG_ENV") or "dev").strip().lower()
+_nats_enabled = (os.getenv("FG_NATS_ENABLED") or "").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+)
+_nats_url = (os.getenv("FG_NATS_URL") or "").strip()
+if (
+    _nats_enabled
+    and not _nats_url
+    and _fg_env_ingest not in ("dev", "development", "local", "test")
+):
+    raise RuntimeError(
+        "FG_NATS_URL must be set when FG_NATS_ENABLED=1 in non-dev environments."
+    )
+NATS_URL = _nats_url
 NATS_SUBJECT_PREFIX = os.getenv("FG_NATS_SUBJECT_PREFIX", "frostgate.ingest")
 NATS_QUEUE_GROUP = os.getenv("FG_NATS_QUEUE_GROUP", "frostgate-workers")
 

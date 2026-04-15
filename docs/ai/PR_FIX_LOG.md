@@ -6,6 +6,68 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-15 — Task 5.2: Service Networking Hardening — Eliminate Runtime Localhost Coupling
+
+**Branch:** `task/5.2-service-networking-hardening`
+
+**Area:** Service Configuration · Startup Validation · Runtime Networking
+
+---
+
+**Root cause:**
+Three runtime paths silently defaulted to localhost if their corresponding env vars were unset. In containerized deployments, this meant misconfigured services appeared to start but immediately failed to reach their dependencies — a silent misconfiguration rather than a fail-closed startup error. Additionally, `startup_validation.py` validated *presence* of service URLs but never validated *content* (localhost/loopback is always wrong in production).
+
+**Specific gaps:**
+
+**Gap A — `api/ingest_bus.py` silent NATS default:**
+`NATS_URL = os.getenv("FG_NATS_URL", "nats://localhost:4222")` — if `FG_NATS_URL` unset with `FG_NATS_ENABLED=1` in a non-dev environment, the bus silently targeted `localhost` inside a container where no NATS process exists.
+
+**Gap B — `api/ratelimit.py` silent Redis default:**
+`redis_url = os.getenv("FG_REDIS_URL", "redis://localhost:6379/0")` — if `FG_REDIS_URL` unset with `FG_RL_BACKEND=redis` (the default) in a non-dev environment, rate limiting silently targeted `localhost`.
+
+**Gap C — `agent/agent_main.py` silent core URL default:**
+`DEFAULT_CORE_URL = os.getenv("FG_CORE_URL", "http://localhost:18080")` — deployed agent containers without `FG_CORE_URL` set would silently attempt to reach the core API on their own loopback instead of the correct service hostname.
+
+**Gap D — `api/config/startup_validation.py` no loopback URL validation:**
+Existing startup checks validated whether service URLs were set, but never checked that set URLs didn't point to localhost/127.0.0.1/::1. A URL like `redis://localhost:6379` would pass all existing checks in production.
+
+**Behavioral change:**
+
+| Env | Before | After |
+|-----|--------|-------|
+| Dev (`FG_ENV=dev`) | Silent localhost fallback | Explicit localhost fallback (unchanged) |
+| Non-dev, URL unset | Silent localhost fallback (wrong host) | `RuntimeError` at startup |
+| Non-dev, URL = localhost | No startup warning | `severity=error` in `StartupValidationReport` |
+
+**Files changed:** 4
+
+- `api/ingest_bus.py` — removes `"nats://localhost:4222"` default; raises `RuntimeError` if `FG_NATS_ENABLED=1` and `FG_NATS_URL` unset in non-dev
+- `api/ratelimit.py` — removes `"redis://localhost:6379/0"` default; raises `RuntimeError` if `FG_RL_BACKEND=redis` and `FG_REDIS_URL` unset in non-dev
+- `agent/agent_main.py` — removes silent localhost default; raises `RuntimeError` if `FG_CORE_URL` unset and `FG_ENV` not in `{dev, development, local, test}`
+- `api/config/startup_validation.py` — adds `_check_localhost_urls()` called from `validate()`; rejects `localhost`, `127.0.0.1`, `::1` in `FG_DB_URL`, `DATABASE_URL`, `FG_REDIS_URL`, `FG_NATS_URL` with `severity=error` in production/staging
+
+**Why localhost defaults were removed:**
+In container networking, `localhost` always refers to the container's own loopback — not the redis, nats, or core containers. A silent localhost default means the service appears to start but then fails at first use. Fail-closed at startup is strictly better: the operator gets a clear error immediately rather than runtime failures under load.
+
+**Why production now fails closed:**
+`FG_ENV` not in `{dev, development, local, test}` → env is non-dev → all three services require explicit URLs. The `RuntimeError` fires before the application serves any requests. This matches the existing posture in `admin_gateway/main.py` (CORS raises in prod) and `startup_validation.py` (DB URL required in prod).
+
+**Dev experience preserved:**
+`FG_ENV=dev` (default when unset) retains the localhost fallback for all three. Existing dev quickstart and `fg-fast` continue to work without env changes.
+
+**Validation evidence:**
+- `make fg-fast` → PASS
+- `.venv/bin/pytest -q tests -k "startup"` → 20 passed
+- `.venv/bin/pytest -q tests -k "ingest_bus or nats or ratelimit or rate_limit or agent"` → 99 passed
+- `.venv/bin/pytest -q tests -k "network or compose or service_resolution"` → 6 passed
+- ruff lint/format → PASS
+- mypy (738 files) → no issues
+
+**Risk/tradeoff:**
+Low. The only behavioral change in non-dev is that previously-broken-but-silent misconfiguration now fails loudly. No interface changes, no new dependencies, no schema changes. Dev environments are unaffected.
+
+---
+
 ### 2026-04-15 — Task 10.2 Addendum: Authorization Closure — tenant_id Claim + Scope Verification
 
 **Branch:** `blitz/task-10.2-rewrite-canonical`

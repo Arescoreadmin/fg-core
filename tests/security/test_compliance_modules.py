@@ -22,7 +22,7 @@ def _seed_prod_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         "FG_API_KEY": "a" * 32,
         "FG_AUTH_ENABLED": "1",
         "FG_DB_BACKEND": "postgres",
-        "FG_DB_URL": "postgresql://user:pass@localhost:5432/frostgate",
+        "FG_DB_URL": "postgresql://user:pass@fg-db:5432/frostgate",
         "FG_TENANT_CONTEXT_MODE": "db_session",
         "FG_CORS_ORIGINS": "https://example.com",
         "FG_AUDIT_PERSIST_DB": "1",
@@ -50,7 +50,7 @@ def _seed_prod_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         "FG_MISSION_ENVELOPE_PATH": str(mission_path),
         "FG_RING_STATE_DIR": str(ring_state),
         "FG_RING_MODEL_DIR": str(ring_model),
-        "DATABASE_URL": "postgresql://user:pass@localhost:5432/frostgate",
+        "DATABASE_URL": "postgresql://user:pass@fg-db:5432/frostgate",
         "FG_SIGNING_SECRET": "test-signing-secret",
         "FG_INTERNAL_AUTH_SECRET": "test-internal-secret",
     }

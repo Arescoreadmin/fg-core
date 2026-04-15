@@ -208,7 +208,16 @@ def load_config() -> RLConfig:
     rate = _env_float("FG_RL_RATE_PER_SEC", 2.0)
     burst = _env_int("FG_RL_BURST", 60)
 
-    redis_url = os.getenv("FG_REDIS_URL", "redis://localhost:6379/0").strip()
+    redis_url = (os.getenv("FG_REDIS_URL") or "").strip()
+    _fg_env_rl = (os.getenv("FG_ENV") or "dev").strip().lower()
+    if (
+        backend == "redis"
+        and not redis_url
+        and _fg_env_rl not in ("dev", "development", "local", "test")
+    ):
+        raise RuntimeError(
+            "FG_REDIS_URL must be set when FG_RL_BACKEND=redis in non-dev environments."
+        )
     prefix = os.getenv("FG_RL_PREFIX", "fg:rl").strip()
 
     # Default to fail-closed unless explicitly enabled + acknowledged.
