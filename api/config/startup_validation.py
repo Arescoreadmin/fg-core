@@ -275,6 +275,7 @@ class StartupValidator:
         self._check_dos_hardening(report)
         self._check_opa_enforcement(report)
         self._check_nats_auth(report)
+        self._check_localhost_urls(report)
         self._check_migrations_required(report)
         self._check_connectors_router_wiring(report)
 
@@ -543,6 +544,37 @@ class StartupValidator:
                     passed=False,
                     message="FG_NATS_URL has no auth credentials and "
                     "FG_NATS_RISK_ACCEPTED is not set.",
+                    severity="error",
+                )
+
+    def _check_localhost_urls(self, report: StartupValidationReport) -> None:
+        """Reject localhost/loopback service URLs in production."""
+        if not self.is_production:
+            return
+        _loopback = {"localhost", "127.0.0.1", "::1"}
+        checks = [
+            ("FG_DB_URL", "database"),
+            ("DATABASE_URL", "database"),
+            ("FG_REDIS_URL", "Redis"),
+            ("FG_NATS_URL", "NATS"),
+        ]
+        for env_var, service in checks:
+            url = _env_str(env_var, "")
+            if not url:
+                continue
+            try:
+                parsed = urlparse(url)
+                host = (parsed.hostname or "").lower()
+            except Exception:
+                continue
+            if host in _loopback:
+                report.add(
+                    name=f"localhost_url_{env_var.lower()}",
+                    passed=False,
+                    message=(
+                        f"{env_var} points to localhost/loopback ({host!r}). "
+                        f"Production {service} must use a resolvable service hostname."
+                    ),
                     severity="error",
                 )
 

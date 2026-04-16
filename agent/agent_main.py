@@ -18,7 +18,16 @@ from urllib.error import URLError, HTTPError
 # Config
 # -----------------------------------------------------------------------------
 
-DEFAULT_CORE_URL = os.getenv("FG_CORE_URL", "http://localhost:18080").rstrip("/")
+_fg_env = (os.getenv("FG_ENV") or "dev").strip().lower()
+_core_url_raw = os.getenv("FG_CORE_URL") or ""
+if not _core_url_raw:
+    if _fg_env not in ("dev", "development", "local", "test"):
+        raise RuntimeError(
+            "FG_CORE_URL must be set in non-dev environments. "
+            "Current FG_ENV=%r" % _fg_env
+        )
+    _core_url_raw = "http://localhost:18080"
+DEFAULT_CORE_URL = _core_url_raw.rstrip("/")
 DEFAULT_QUEUE_DIR = os.getenv("FG_AGENT_QUEUE_DIR", "/var/lib/frostgate/agent_queue")
 DEFAULT_SOURCE = os.getenv("FG_AGENT_SOURCE", "edge1")
 DEFAULT_TENANT = os.getenv("FG_AGENT_TENANT_ID", "t1")

@@ -6,6 +6,147 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-15 — Task 5.2 Addendum: Fix Docker Compose DATABASE_URL Passthrough Causing Core Unhealthy
+
+**Branch:** `task/5.2-service-networking-hardening`
+
+**Area:** Docker Compose · CI Env Wiring · Startup Validation
+
+---
+
+**Root cause (Case C — startup validation rejects legitimate-in-context CI runner variable):**
+
+The CI workflow (`.github/workflows/docker-ci.yml`) sets `DATABASE_URL=postgres://ci:ci@localhost:5432/ci` as a runner step `env:` variable for pytest database connectivity. Docker Compose variable substitution injects host environment variables into container `environment:` blocks — so the compose binding `DATABASE_URL: ${DATABASE_URL:?...}` silently passed the runner's localhost URL into the `frostgate-core` container.
+
+Task 5.2's new `_check_localhost_urls()` validator correctly detected `localhost` in `DATABASE_URL` in production (`FG_ENV=prod`), logged two `severity=error` results, and raised `RuntimeError` via `validate_startup_config(fail_on_error=True)`. The application never reached the request-handling phase → `/health/ready` never responded → healthcheck timed out → container marked unhealthy.
+
+**Pre-existing compose wiring that was correct:**
+`FG_DB_URL` was already constructed from POSTGRES service-name vars (`postgresql+psycopg://${POSTGRES_APP_USER}:...@postgres:5432/${POSTGRES_APP_DB}`), not passed through from the host. `DATABASE_URL` was inconsistently using the passthrough pattern.
+
+**Files changed:** 1
+
+- `docker-compose.yml` — `frostgate-core` environment block: replaced `DATABASE_URL: ${DATABASE_URL:?...}` passthrough with explicit service-name construction matching `FG_DB_URL`
+
+**Exact fix:**
+```yaml
+# Before (leaks CI runner localhost URL into container)
+DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env or env/prod.env}
+
+# After (always uses compose-internal postgres service name)
+DATABASE_URL: postgresql+psycopg://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@postgres:5432/${POSTGRES_APP_DB}
+```
+
+**Why this preserves Task 5.2 hardening:**
+- The `_check_localhost_urls()` validator is unchanged — localhost is still rejected in production
+- The fix removes the path by which a localhost URL could enter the container, not the check itself
+- All other service URLs (`FG_REDIS_URL`, `FG_NATS_URL`, `FG_DB_URL`) already used service names correctly
+- `DATABASE_URL` now consistently uses `postgres` (the compose service name) — passes `_check_localhost_urls()`
+
+**Why the CI runner value was wrong for container use:**
+The runner's `localhost:5432` is the PostgreSQL service reachable from the GitHub Actions host. Inside the Docker network, the same database is reachable at `postgres:5432`. These are different addresses. Passing the host-side URL into the container was always incorrect; Task 5.2 made it a fatal startup error rather than a silent misconfiguration.
+
+**Validation evidence:**
+- `pytest -k "network or compose or service_resolution"` → 6 passed
+- `pytest -k "startup or ingest_bus or nats or ratelimit or rate_limit or agent"` → 119 passed
+- `make fg-fast` → PASS
+- `bash codex_gates.sh` → PASS (all gates)
+
+---
+
+### 2026-04-15 — Task 5.2 Addendum: Restore Dev Localhost Fallback for Redis and NATS
+
+**Branch:** `task/5.2-service-networking-hardening`
+
+**Area:** Service Configuration · Dev Ergonomics · Redis · NATS
+
+---
+
+**Root cause:**
+Task 5.2 removed unconditional localhost defaults for `FG_REDIS_URL` and `FG_NATS_URL`, replacing them with empty-string pass-through in dev and `RuntimeError` in non-dev. This regressed dev/local ergonomics: running with `FG_NATS_ENABLED=1` or `FG_RL_BACKEND=redis` without explicit URLs in a dev environment now produced empty-string behavior instead of a usable localhost fallback.
+
+**Files changed:** 2
+
+- `api/ingest_bus.py` — when `FG_NATS_ENABLED=1` and `FG_NATS_URL` unset: dev-like envs now explicitly assign `nats://localhost:4222`; non-dev raises `RuntimeError` (unchanged)
+- `api/ratelimit.py` — when `FG_RL_BACKEND=redis` and `FG_REDIS_URL` unset: dev-like envs now explicitly assign `redis://localhost:6379/0`; non-dev raises `RuntimeError` (unchanged)
+
+**Behavior after fix:**
+
+| Condition | Dev/local/test | Non-dev (prod/staging) |
+|-----------|---------------|----------------------|
+| NATS enabled, URL unset | `nats://localhost:4222` (explicit) | `RuntimeError` |
+| Redis backend, URL unset | `redis://localhost:6379/0` (explicit) | `RuntimeError` |
+| URL set (any env) | URL used as-is | URL used as-is |
+
+Production fail-closed behavior is unchanged. Dev fallback is now explicit in code rather than empty-string.
+
+**Validation evidence:**
+- `.venv/bin/pytest -q tests -k "ingest_bus or nats or ratelimit or rate_limit"` → 53 passed
+- `make fg-fast` → PASS
+
+---
+
+### 2026-04-15 — Task 5.2: Service Networking Hardening — Eliminate Runtime Localhost Coupling
+
+**Branch:** `task/5.2-service-networking-hardening`
+
+**Area:** Service Configuration · Startup Validation · Runtime Networking
+
+---
+
+**Root cause:**
+Three runtime paths silently defaulted to localhost if their corresponding env vars were unset. In containerized deployments, this meant misconfigured services appeared to start but immediately failed to reach their dependencies — a silent misconfiguration rather than a fail-closed startup error. Additionally, `startup_validation.py` validated *presence* of service URLs but never validated *content* (localhost/loopback is always wrong in production).
+
+**Specific gaps:**
+
+**Gap A — `api/ingest_bus.py` silent NATS default:**
+`NATS_URL = os.getenv("FG_NATS_URL", "nats://localhost:4222")` — if `FG_NATS_URL` unset with `FG_NATS_ENABLED=1` in a non-dev environment, the bus silently targeted `localhost` inside a container where no NATS process exists.
+
+**Gap B — `api/ratelimit.py` silent Redis default:**
+`redis_url = os.getenv("FG_REDIS_URL", "redis://localhost:6379/0")` — if `FG_REDIS_URL` unset with `FG_RL_BACKEND=redis` (the default) in a non-dev environment, rate limiting silently targeted `localhost`.
+
+**Gap C — `agent/agent_main.py` silent core URL default:**
+`DEFAULT_CORE_URL = os.getenv("FG_CORE_URL", "http://localhost:18080")` — deployed agent containers without `FG_CORE_URL` set would silently attempt to reach the core API on their own loopback instead of the correct service hostname.
+
+**Gap D — `api/config/startup_validation.py` no loopback URL validation:**
+Existing startup checks validated whether service URLs were set, but never checked that set URLs didn't point to localhost/127.0.0.1/::1. A URL like `redis://localhost:6379` would pass all existing checks in production.
+
+**Behavioral change:**
+
+| Env | Before | After |
+|-----|--------|-------|
+| Dev (`FG_ENV=dev`) | Silent localhost fallback | Explicit localhost fallback (unchanged) |
+| Non-dev, URL unset | Silent localhost fallback (wrong host) | `RuntimeError` at startup |
+| Non-dev, URL = localhost | No startup warning | `severity=error` in `StartupValidationReport` |
+
+**Files changed:** 4
+
+- `api/ingest_bus.py` — removes `"nats://localhost:4222"` default; raises `RuntimeError` if `FG_NATS_ENABLED=1` and `FG_NATS_URL` unset in non-dev
+- `api/ratelimit.py` — removes `"redis://localhost:6379/0"` default; raises `RuntimeError` if `FG_RL_BACKEND=redis` and `FG_REDIS_URL` unset in non-dev
+- `agent/agent_main.py` — removes silent localhost default; raises `RuntimeError` if `FG_CORE_URL` unset and `FG_ENV` not in `{dev, development, local, test}`
+- `api/config/startup_validation.py` — adds `_check_localhost_urls()` called from `validate()`; rejects `localhost`, `127.0.0.1`, `::1` in `FG_DB_URL`, `DATABASE_URL`, `FG_REDIS_URL`, `FG_NATS_URL` with `severity=error` in production/staging
+
+**Why localhost defaults were removed:**
+In container networking, `localhost` always refers to the container's own loopback — not the redis, nats, or core containers. A silent localhost default means the service appears to start but then fails at first use. Fail-closed at startup is strictly better: the operator gets a clear error immediately rather than runtime failures under load.
+
+**Why production now fails closed:**
+`FG_ENV` not in `{dev, development, local, test}` → env is non-dev → all three services require explicit URLs. The `RuntimeError` fires before the application serves any requests. This matches the existing posture in `admin_gateway/main.py` (CORS raises in prod) and `startup_validation.py` (DB URL required in prod).
+
+**Dev experience preserved:**
+`FG_ENV=dev` (default when unset) retains the localhost fallback for all three. Existing dev quickstart and `fg-fast` continue to work without env changes.
+
+**Validation evidence:**
+- `make fg-fast` → PASS
+- `.venv/bin/pytest -q tests -k "startup"` → 20 passed
+- `.venv/bin/pytest -q tests -k "ingest_bus or nats or ratelimit or rate_limit or agent"` → 99 passed
+- `.venv/bin/pytest -q tests -k "network or compose or service_resolution"` → 6 passed
+- ruff lint/format → PASS
+- mypy (738 files) → no issues
+
+**Risk/tradeoff:**
+Low. The only behavioral change in non-dev is that previously-broken-but-silent misconfiguration now fails loudly. No interface changes, no new dependencies, no schema changes. Dev environments are unaffected.
+
+---
+
 ### 2026-04-15 — Task 10.2 Addendum: Authorization Closure — tenant_id Claim + Scope Verification
 
 **Branch:** `blitz/task-10.2-rewrite-canonical`
