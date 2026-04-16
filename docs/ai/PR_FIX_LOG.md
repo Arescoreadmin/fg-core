@@ -6,6 +6,53 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-15 — Task 5.2 Addendum: Fix Docker Compose DATABASE_URL Passthrough Causing Core Unhealthy
+
+**Branch:** `task/5.2-service-networking-hardening`
+
+**Area:** Docker Compose · CI Env Wiring · Startup Validation
+
+---
+
+**Root cause (Case C — startup validation rejects legitimate-in-context CI runner variable):**
+
+The CI workflow (`.github/workflows/docker-ci.yml`) sets `DATABASE_URL=postgres://ci:ci@localhost:5432/ci` as a runner step `env:` variable for pytest database connectivity. Docker Compose variable substitution injects host environment variables into container `environment:` blocks — so the compose binding `DATABASE_URL: ${DATABASE_URL:?...}` silently passed the runner's localhost URL into the `frostgate-core` container.
+
+Task 5.2's new `_check_localhost_urls()` validator correctly detected `localhost` in `DATABASE_URL` in production (`FG_ENV=prod`), logged two `severity=error` results, and raised `RuntimeError` via `validate_startup_config(fail_on_error=True)`. The application never reached the request-handling phase → `/health/ready` never responded → healthcheck timed out → container marked unhealthy.
+
+**Pre-existing compose wiring that was correct:**
+`FG_DB_URL` was already constructed from POSTGRES service-name vars (`postgresql+psycopg://${POSTGRES_APP_USER}:...@postgres:5432/${POSTGRES_APP_DB}`), not passed through from the host. `DATABASE_URL` was inconsistently using the passthrough pattern.
+
+**Files changed:** 1
+
+- `docker-compose.yml` — `frostgate-core` environment block: replaced `DATABASE_URL: ${DATABASE_URL:?...}` passthrough with explicit service-name construction matching `FG_DB_URL`
+
+**Exact fix:**
+```yaml
+# Before (leaks CI runner localhost URL into container)
+DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env or env/prod.env}
+
+# After (always uses compose-internal postgres service name)
+DATABASE_URL: postgresql+psycopg://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@postgres:5432/${POSTGRES_APP_DB}
+```
+
+**Why this preserves Task 5.2 hardening:**
+- The `_check_localhost_urls()` validator is unchanged — localhost is still rejected in production
+- The fix removes the path by which a localhost URL could enter the container, not the check itself
+- All other service URLs (`FG_REDIS_URL`, `FG_NATS_URL`, `FG_DB_URL`) already used service names correctly
+- `DATABASE_URL` now consistently uses `postgres` (the compose service name) — passes `_check_localhost_urls()`
+
+**Why the CI runner value was wrong for container use:**
+The runner's `localhost:5432` is the PostgreSQL service reachable from the GitHub Actions host. Inside the Docker network, the same database is reachable at `postgres:5432`. These are different addresses. Passing the host-side URL into the container was always incorrect; Task 5.2 made it a fatal startup error rather than a silent misconfiguration.
+
+**Validation evidence:**
+- `pytest -k "network or compose or service_resolution"` → 6 passed
+- `pytest -k "startup or ingest_bus or nats or ratelimit or rate_limit or agent"` → 119 passed
+- `make fg-fast` → PASS
+- `bash codex_gates.sh` → PASS (all gates)
+
+---
+
 ### 2026-04-15 — Task 5.2 Addendum: Restore Dev Localhost Fallback for Redis and NATS
 
 **Branch:** `task/5.2-service-networking-hardening`
