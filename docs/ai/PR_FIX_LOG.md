@@ -6,6 +6,38 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-15 — Task 5.2 Addendum: Restore Dev Localhost Fallback for Redis and NATS
+
+**Branch:** `task/5.2-service-networking-hardening`
+
+**Area:** Service Configuration · Dev Ergonomics · Redis · NATS
+
+---
+
+**Root cause:**
+Task 5.2 removed unconditional localhost defaults for `FG_REDIS_URL` and `FG_NATS_URL`, replacing them with empty-string pass-through in dev and `RuntimeError` in non-dev. This regressed dev/local ergonomics: running with `FG_NATS_ENABLED=1` or `FG_RL_BACKEND=redis` without explicit URLs in a dev environment now produced empty-string behavior instead of a usable localhost fallback.
+
+**Files changed:** 2
+
+- `api/ingest_bus.py` — when `FG_NATS_ENABLED=1` and `FG_NATS_URL` unset: dev-like envs now explicitly assign `nats://localhost:4222`; non-dev raises `RuntimeError` (unchanged)
+- `api/ratelimit.py` — when `FG_RL_BACKEND=redis` and `FG_REDIS_URL` unset: dev-like envs now explicitly assign `redis://localhost:6379/0`; non-dev raises `RuntimeError` (unchanged)
+
+**Behavior after fix:**
+
+| Condition | Dev/local/test | Non-dev (prod/staging) |
+|-----------|---------------|----------------------|
+| NATS enabled, URL unset | `nats://localhost:4222` (explicit) | `RuntimeError` |
+| Redis backend, URL unset | `redis://localhost:6379/0` (explicit) | `RuntimeError` |
+| URL set (any env) | URL used as-is | URL used as-is |
+
+Production fail-closed behavior is unchanged. Dev fallback is now explicit in code rather than empty-string.
+
+**Validation evidence:**
+- `.venv/bin/pytest -q tests -k "ingest_bus or nats or ratelimit or rate_limit"` → 53 passed
+- `make fg-fast` → PASS
+
+---
+
 ### 2026-04-15 — Task 5.2: Service Networking Hardening — Eliminate Runtime Localhost Coupling
 
 **Branch:** `task/5.2-service-networking-hardening`
