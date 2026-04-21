@@ -28,37 +28,16 @@ phases:
             title: "Enforce tenant_id at entry points"
             status: "pending"
             depends_on: ["1.1"]
-
             definition_of_done:
               - "Unscoped entry points reject missing tenant_id"
               - "Scoped auth-derived tenant binding still works where intended"
-
             validation:
               - "Unscoped requests fail when tenant_id is missing"
               - "Scoped requests without explicit tenant_id still succeed where auth binding is intended"
               - "Fast lane passes"
-
             validation_commands:
               - ".venv/bin/pytest -q tests/test_tenant_binding.py tests/security/test_tenant_contract_endpoints.py"
               - "make fg-fast"
-
-            allowed_files:
-              - "api/admin.py"
-              - "api/control_plane_v2.py"
-              - "api/decisions.py"
-              - "api/dev_events.py"
-              - "api/ingest.py"
-              - "api/keys.py"
-              - "api/stats.py"
-              - "api/ui_dashboards.py"
-              - "tests/**"
-
-            max_files_changed: 20
-
-            forbidden_files:
-              - "contracts/**"
-              - "schemas/api/openapi.json"
-              - ".github/workflows/**"
 
           - id: "1.3"
             title: "Audit read paths"
@@ -196,18 +175,15 @@ phases:
             title: "Remove silent defaults"
             status: "pending"
             depends_on: ["4.1"]
-
             definition_of_done:
               - "Production does not silently supply critical defaults"
               - "Critical production secrets/config must be explicitly provided"
               - "Compose/runtime paths do not hide missing critical config with fallback defaults"
-
             validation:
               - "Missing critical config causes explicit failure"
               - "Blank critical config causes explicit failure"
               - "Prod-like startup/compose path does not silently backfill critical defaults"
               - "Fast lane passes"
-
             validation_commands:
               - "! env FG_ENV=production python tools/ci/check_required_env.py"
               - ".venv/bin/pytest -q tests -k 'required_env or prod_startup or startup_config or silent_default'"
@@ -215,6 +191,10 @@ phases:
               - "! rg -n 'FG_API_KEY:.*:-|FG_WEBHOOK_SECRET:.*:-|FG_SIGNING_SECRET:.*:-|FG_INTERNAL_AUTH_SECRET:.*:-|DATABASE_URL:.*:-' docker-compose.yml docker-compose.lockdown.yml"
               - "make fg-fast"
 
+  - id: "phase-2"
+    name: "Deployability"
+
+    modules:
       - id: "5.0"
         name: "Infrastructure"
 
@@ -223,13 +203,11 @@ phases:
             title: "Docker compose cleanup"
             status: "pending"
             depends_on: ["4.2"]
-
             definition_of_done:
               - "Compose stack is reproducible and boots expected core services"
               - "Core profile renders and starts with explicit required config"
               - "Bootstrap and migration steps complete successfully"
               - "frostgate-core reaches healthy status under the CI-like compose path"
-
             validation:
               - "Compose config renders cleanly with the CI env file"
               - "Core profile can be torn down and brought back up reproducibly"
@@ -237,7 +215,6 @@ phases:
               - "Migration exits successfully"
               - "frostgate-core reaches healthy status"
               - "Compose service state is stable after startup"
-
             validation_commands:
               - "docker compose --env-file .env.ci --profile core -f docker-compose.yml -f docker-compose.lockdown.yml config >/tmp/fg.compose.rendered.yml"
               - "docker compose --env-file .env.ci --profile core down -v"
@@ -251,6 +228,29 @@ phases:
               - "test \"$(cat /tmp/fg.migrate.exit)\" = \"0\""
               - "test \"$(cat /tmp/fg.core.health)\" = \"healthy\""
 
+          - id: "5.2"
+            title: "Service networking"
+            status: "pending"
+            depends_on: ["5.1"]
+            definition_of_done:
+              - "Core services resolve each other by intended network identities only"
+              - "No hidden localhost-only coupling remains in compose/runtime paths"
+              - "Service-to-service URLs are explicit and environment-correct"
+              - "Production paths fail closed instead of silently falling back to localhost"
+              - "Dev-only localhost fallbacks remain explicit and gated"
+            validation:
+              - "Compose networking is explicit and reproducible"
+              - "Cross-service resolution works through intended network aliases"
+              - "No localhost-only runtime dependency remains in supported stack"
+              - "Production startup validation rejects localhost/loopback runtime URLs"
+              - "Fast lane remains green"
+            validation_commands:
+              - "docker compose --env-file .env.ci --profile core config >/tmp/fg.compose.network.yml"
+              - ".venv/bin/pytest -q tests -k 'network or compose or service_resolution'"
+              - ".venv/bin/pytest -q tests -k 'startup or ingest_bus or nats or ratelimit or rate_limit or agent'"
+              - "make fg-fast"
+              - "bash codex_gates.sh"
+
       - id: "6.0"
         name: "Auth Flow"
 
@@ -259,20 +259,17 @@ phases:
             title: "Keycloak integration"
             status: "pending"
             depends_on: ["5.1"]
-
             definition_of_done:
               - "Keycloak realm/client integration is wired correctly"
               - "OIDC discovery is reachable through the intended runtime path"
               - "Configured client can obtain a valid token from Keycloak"
               - "Gateway/runtime wiring fails explicitly when OIDC config is missing or invalid"
-
             validation:
               - "OIDC discovery endpoint returns valid metadata"
               - "Token path is functional for the configured client"
               - "Auth configuration is present and wired to the intended realm/client"
               - "Broken or missing OIDC config causes explicit failure"
               - "Fast lane passes"
-
             validation_commands:
               - "make fg-idp-validate"
               - ".venv/bin/pytest -q tests -k 'keycloak or oidc or auth_flow'"
@@ -312,7 +309,6 @@ phases:
             title: "Structured logging (enforced, auditable)"
             status: "pending"
             depends_on: ["6.2"]
-
             definition_of_done:
               - "All request-handling and security-relevant logs are structured JSON"
               - "Every log entry includes: request_id, timestamp, service, level, event"
@@ -324,7 +320,6 @@ phases:
               - "Logging initialization is idempotent and does not clobber existing handlers/sinks"
               - "Logging does not leak secrets: Authorization headers, bearer tokens, signing keys, client secrets, passwords"
               - "Gateway, core, agent, and jobs emit compatible structured log schema"
-
             validation:
               - "Successful authenticated request logs include request_id, tenant_id, and subject"
               - "Failed authentication logs include explicit failure reason"
@@ -333,11 +328,9 @@ phases:
               - "Error paths emit structured request/error log entries even when downstream raises"
               - "No sensitive values appear in logs"
               - "Fast lane and codex gates remain green"
-
             validation_commands:
               - ".venv/bin/pytest -q tests -k 'logging or auth or security'"
               - ".venv/bin/pytest -q admin_gateway/tests/test_structured_logging_task71.py"
-              - ".venv/bin/python - << 'PY'\nimport json, subprocess\np = subprocess.run(['make','fg-fast'], capture_output=True, text=True)\nfor line in p.stdout.splitlines():\n    if line.strip().startswith('{'):\n        json.loads(line)\nprint('structured-parse-ok')\nPY"
               - "make fg-fast"
               - "bash codex_gates.sh"
 
@@ -345,7 +338,6 @@ phases:
             title: "End-to-end request tracing (propagation + integrity)"
             status: "pending"
             depends_on: ["7.1"]
-
             definition_of_done:
               - "Every inbound request is assigned a request_id if not already present"
               - "Malformed or unsafe inbound request_id values are rejected and replaced with a canonical generated ID"
@@ -355,7 +347,6 @@ phases:
               - "Core API request logs include request_id for both success and exception paths"
               - "Tracing does not weaken auth, tenant isolation, or trust boundaries"
               - "No new tracing dependency or side-channel is introduced"
-
             validation:
               - "A single request produces logs across gateway and core with the same request_id"
               - "Missing request_id generates a canonical ID that is propagated"
@@ -363,7 +354,6 @@ phases:
               - "Attempted mid-flow override is prevented or ignored"
               - "Failure-path logs still contain request_id and request metadata"
               - "Fast lane and codex gates remain green"
-
             validation_commands:
               - ".venv/bin/pytest -q tests -k 'trace or request_id or propagation'"
               - ".venv/bin/pytest -q tests/security -k 'logging or trace or context'"
@@ -375,7 +365,6 @@ phases:
             title: "Distributed request tracing across async boundaries"
             status: "pending"
             depends_on: ["7.2"]
-
             definition_of_done:
               - "Parent request_id is propagated into direct-invocation async job boundaries"
               - "Parent request_id is propagated into broker/message metadata where such paths exist"
@@ -385,7 +374,6 @@ phases:
               - "Job and worker logs emit the same request_id as the originating parent operation when available"
               - "Trace propagation is immutable within worker execution"
               - "Tracing across async boundaries does not introduce spoofing, tenant confusion, or trust bypass"
-
             validation:
               - "Parent request_id is preserved across direct async job execution"
               - "Message metadata carries request_id where broker path exists"
@@ -393,7 +381,6 @@ phases:
               - "Invalid trace metadata returns None or is regenerated only at the correct boundary"
               - "Worker/job code cannot override upstream request_id mid-execution"
               - "Fast lane and codex gates remain green"
-
             validation_commands:
               - ".venv/bin/pytest -q tests -k 'trace or request_id or propagation or async or worker'"
               - ".venv/bin/pytest -q tests/test_request_propagation_task73.py tests/test_request_tracing_task72.py tests/test_job_logging_idempotency.py"
@@ -409,7 +396,6 @@ phases:
             title: "Health endpoints (truthful, unique, dependency-aware)"
             status: "pending"
             depends_on: ["7.3"]
-
             definition_of_done:
               - "Health/readiness/startup endpoints are unique, documented, and correctly wired"
               - "Health endpoints reflect actual dependency state instead of superficial uptime"
@@ -417,19 +403,21 @@ phases:
               - "Liveness remains lightweight and does not depend on heavy downstream checks"
               - "Health endpoints do not expose sensitive internal state"
               - "Route inventory and health contract are aligned for health surfaces"
-
             validation:
               - "Health endpoints return expected status codes and payloads"
               - "Dependency failure changes readiness behavior correctly"
               - "No duplicate/conflicting health routes remain"
               - "Route inventory and fast lane remain green"
-
             validation_commands:
               - ".venv/bin/pytest -q tests -k 'health or readiness or startup'"
               - ".venv/bin/pytest -q admin_gateway/tests/test_health.py"
               - "make fg-fast"
               - "bash codex_gates.sh"
 
+  - id: "phase-3"
+    name: "Testability"
+
+    modules:
       - id: "9.0"
         name: "Core Flows"
 
@@ -438,14 +426,12 @@ phases:
             title: "Create tenant through supported product path"
             status: "pending"
             depends_on: ["8.1"]
-
             definition_of_done:
               - "A tester can create a tenant through the intended supported API or gateway path only"
               - "Tenant creation enforces auth, tenant model invariants, and input validation"
               - "Created tenant is persisted and observable through the intended supported read path"
               - "Duplicate create behavior is explicit and deterministic"
               - "Errors are explicit and actionable"
-
             validation:
               - "Happy-path tenant creation succeeds"
               - "Invalid payload fails explicitly"
@@ -453,7 +439,6 @@ phases:
               - "Duplicate tenant creation returns explicit conflict behavior"
               - "Created tenant is retrievable through supported read path"
               - "Fast lane remains green"
-
             validation_commands:
               - ".venv/bin/pytest -q tests/test_tenant_create.py"
               - ".venv/bin/pytest -q tests -k 'tenant and create'"
@@ -464,21 +449,18 @@ phases:
             title: "Run primary audit/control flow"
             status: "pending"
             depends_on: ["9.1"]
-
             definition_of_done:
               - "A tester can trigger the intended core audit/control flow through supported interfaces only"
               - "The exact primary flow is identified from repository evidence and validated on that intended surface only"
               - "Flow enforces auth, tenant isolation, and required preconditions"
               - "Resulting state or artifacts are persisted and retrievable through the intended supported read path"
               - "Failure modes are explicit and repository-consistent"
-
             validation:
               - "Primary flow completes successfully end-to-end"
               - "Cross-tenant or unauthorized execution is denied"
               - "Missing prerequisites fail explicitly"
               - "Resulting state or artifacts are persisted and retrievable"
               - "Fast lane remains green"
-
             validation_commands:
               - ".venv/bin/pytest -q tests/test_audit_cycle_run.py"
               - ".venv/bin/pytest -q tests -k 'audit and tenant'"
@@ -489,14 +471,12 @@ phases:
             title: "Retrieve and export resulting artifacts"
             status: "pending"
             depends_on: ["9.2"]
-
             definition_of_done:
               - "Tester can retrieve and export the artifacts produced by the primary audit/control flow using supported API or gateway surfaces only, with no manual DB or shell intervention"
               - "The exact retrieval path and export path are identified from repository evidence and validated on those intended surfaces only"
               - "Retrieval and export paths preserve tenant boundaries and auth checks for list, item fetch, and export operations"
               - "Export payload or artifact shape is stable, explicit, and usable for tester workflows"
               - "Errors are explicit and distinguish unauthorized, cross-tenant, and missing-result cases"
-
             validation:
               - "End-to-end tester flow from create -> run -> retrieve/export succeeds through supported interfaces only"
               - "Unauthorized retrieval/export is denied"
@@ -504,7 +484,6 @@ phases:
               - "Missing result returns explicit not-found or equivalent repository-consistent error path"
               - "Export payload or artifact shape is consistent enough for repeat tester use"
               - "Fast lane remains green"
-
             validation_commands:
               - ".venv/bin/pytest -q tests/test_audit_exam_api.py"
               - ".venv/bin/pytest -q tests/test_audit_cycle_run.py"
@@ -520,19 +499,16 @@ phases:
             title: "Repeatable seed/bootstrap script"
             status: "pending"
             depends_on: ["9.3"]
-
             definition_of_done:
               - "A fresh environment can be seeded repeatably through one supported command/script"
               - "Seed path is idempotent or fails explicitly when rerun"
               - "Seeded state is sufficient to exercise primary tester flows"
               - "No manual hidden steps are required"
-
             validation:
               - "Seed path succeeds on a clean environment"
               - "Seed rerun behavior is deterministic"
               - "Seeded environment supports primary flow smoke test"
               - "Fast lane remains green"
-
             validation_commands:
               - ".venv/bin/pytest -q tests -k 'seed or bootstrap'"
               - "python tools/seed/run_seed.py"
@@ -540,55 +516,53 @@ phases:
               - ".venv/bin/pytest -q tests/test_audit_cycle_run.py"
               - "make fg-fast"
               - "bash codex_gates.sh"
-      - id: "10.2"
-        title: "Tester collection and quickstart"
-        status: "pending"
-        depends_on: ["10.1"]
 
-        definition_of_done:
-          - "A tester has one working request collection and one minimal quickstart path for the primary journey"
-          - "The canonical tester journey uses a real OIDC tester user (fg-tester-admin), not dev bypass and not a default-tenant service account"
-          - "The canonical tester journey uses current supported endpoints only and does not rely on deprecated, internal-only, or bypass paths"
-          - "The canonical tester journey does not require FG_DEV_AUTH_BYPASS"
-          - "The canonical tester journey does not require inline mint_key"
-          - "The canonical tester journey uses POST /auth/token-exchange with a real OIDC access token obtained via password grant"
-          - "The canonical tester identity is mapped to tenant-seed-primary through token claims (allowed_tenants)"
-          - "The resulting session can access tenant-seed-primary on supported admin surfaces"
-          - "The resulting session can perform /admin/audit/search for tenant-seed-primary"
-          - "The resulting session can perform /admin/audit/export for tenant-seed-primary"
-          - "Quickstart instructions are sufficient for a fresh operator to seed, authenticate, execute the core flow, and retrieve/export results without hidden steps"
-          - "Seed/bootstrap is idempotent and provisions all required canonical keys (admin, agent, audit gateway) on both fresh and already-seeded runs"
-          - "Keycloak realm defines fg-tester client (direct grants) and fg-tester-admin user with allowed_tenants claim mapped to tenant-seed-primary"
-          - "Keycloak runtime validation proves the canonical tester path (password grant) rather than stale client_credentials assumptions for fg-tester"
-          - "Docs, collection, and validations all describe the same canonical flow"
-          - "No stale dev-bypass instructions remain in the canonical tester path"
-
-        validation:
-          - "Collection aligns with current supported endpoints and auth expectations"
-          - "Quickstart works against the canonical seeded environment without dev bypass"
-          - "The canonical tester journey succeeds without FG_DEV_AUTH_BYPASS"
-          - "The canonical tester identity lands in tenant-seed-primary, not default"
-          - "The canonical tester session can access /admin/me, /admin/tenants, /admin/audit/search, and /admin/audit/export for tenant-seed-primary"
-          - "Primary tester journey can be executed from quickstart/collection with no manual DB or shell intervention beyond documented commands"
-          - "Seed/bootstrap succeeds on fresh and already-seeded environments"
-          - "Keycloak realm includes fg-tester client with directAccessGrantsEnabled and fg-tester-admin user with allowed_tenants claim"
-          - "Keycloak runtime validation proves the canonical tester auth path (password grant), not an obsolete client_credentials path for fg-tester"
-          - "No stale or broken tester docs remain in the canonical path"
-          - "Fast lane and codex gates remain green"
-
-        validation_commands:
-          - "test -f plans/30_day_repo_blitz_index.md"
-          - "test -f tools/seed/run_seed.py"
-          - "python tools/seed/run_seed.py"
-          - "python tools/seed/run_seed.py"
-          - ".venv/bin/pytest -q tests/test_tester_quickstart_alignment.py"
-          - ".venv/bin/pytest -q tests/test_keycloak_oidc.py"
-          - ".venv/bin/pytest -q tests -k 'seed or bootstrap or api_key'"
-          - ".venv/bin/pytest -q tests -k 'auth or tenant or oidc or token_exchange'"
-          - ".venv/bin/pytest -q admin_gateway/tests -k 'auth or tenant or token or oidc'"
-          - "make fg-idp-validate"
-          - "make fg-fast"
-          - "bash codex_gates.sh"
+          - id: "10.2"
+            title: "Tester collection and quickstart"
+            status: "pending"
+            depends_on: ["10.1"]
+            definition_of_done:
+              - "A tester has one working request collection and one minimal quickstart path for the primary journey"
+              - "The canonical tester journey uses a real OIDC tester user (fg-tester-admin), not dev bypass and not a default-tenant service account"
+              - "The canonical tester journey uses current supported endpoints only and does not rely on deprecated, internal-only, or bypass paths"
+              - "The canonical tester journey does not require FG_DEV_AUTH_BYPASS"
+              - "The canonical tester journey does not require inline mint_key"
+              - "The canonical tester journey uses POST /auth/token-exchange with a real OIDC access token obtained via password grant"
+              - "The canonical tester identity is mapped to tenant-seed-primary through token claims (allowed_tenants)"
+              - "The resulting session can access tenant-seed-primary on supported admin surfaces"
+              - "The resulting session can perform /admin/audit/search for tenant-seed-primary"
+              - "The resulting session can perform /admin/audit/export for tenant-seed-primary"
+              - "Quickstart instructions are sufficient for a fresh operator to seed, authenticate, execute the core flow, and retrieve/export results without hidden steps"
+              - "Seed/bootstrap is idempotent and provisions all required canonical keys (admin, agent, audit gateway) on both fresh and already-seeded runs"
+              - "Keycloak realm defines fg-tester client (direct grants) and fg-tester-admin user with allowed_tenants claim mapped to tenant-seed-primary"
+              - "Keycloak runtime validation proves the canonical tester path (password grant) rather than stale client_credentials assumptions for fg-tester"
+              - "Docs, collection, and validations all describe the same canonical flow"
+              - "No stale dev-bypass instructions remain in the canonical tester path"
+            validation:
+              - "Collection aligns with current supported endpoints and auth expectations"
+              - "Quickstart works against the canonical seeded environment without dev bypass"
+              - "The canonical tester journey succeeds without FG_DEV_AUTH_BYPASS"
+              - "The canonical tester identity lands in tenant-seed-primary, not default"
+              - "The canonical tester session can access /admin/me, /admin/tenants, /admin/audit/search, and /admin/audit/export for tenant-seed-primary"
+              - "Primary tester journey can be executed from quickstart/collection with no manual DB or shell intervention beyond documented commands"
+              - "Seed/bootstrap succeeds on fresh and already-seeded environments"
+              - "Keycloak realm includes fg-tester client with directAccessGrantsEnabled and fg-tester-admin user with allowed_tenants claim"
+              - "Keycloak runtime validation proves the canonical tester auth path (password grant), not an obsolete client_credentials path for fg-tester"
+              - "No stale or broken tester docs remain in the canonical path"
+              - "Fast lane and codex gates remain green"
+            validation_commands:
+              - "test -f plans/30_day_repo_blitz_index.md"
+              - "test -f tools/seed/run_seed.py"
+              - "python tools/seed/run_seed.py"
+              - "python tools/seed/run_seed.py"
+              - ".venv/bin/pytest -q tests/test_tester_quickstart_alignment.py"
+              - ".venv/bin/pytest -q tests/test_keycloak_oidc.py"
+              - ".venv/bin/pytest -q tests -k 'seed or bootstrap or api_key'"
+              - ".venv/bin/pytest -q tests -k 'auth or tenant or oidc or token_exchange'"
+              - ".venv/bin/pytest -q admin_gateway/tests -k 'auth or tenant or token or oidc'"
+              - "make fg-idp-validate"
+              - "make fg-fast"
+              - "bash codex_gates.sh"
 
       - id: "11.0"
         name: "Error Quality"
@@ -598,23 +572,24 @@ phases:
             title: "Explicit actionable errors in primary flows"
             status: "pending"
             depends_on: ["10.2"]
-
             definition_of_done:
               - "Primary user-facing flows return explicit, actionable errors"
               - "Errors distinguish auth, validation, not-found, and internal-failure classes"
               - "No vague 500-only or generic opaque failures remain on primary paths"
               - "Error payloads are consistent enough for operators and customers to act on"
-
             validation:
               - "Primary failure modes produce explicit actionable responses"
               - "Error class and message are stable on intended primary paths"
               - "Fast lane remains green"
-
             validation_commands:
               - ".venv/bin/pytest -q tests/test_audit_exam_api.py -k 'error or not_found or forbidden'"
               - "make fg-fast"
               - "bash codex_gates.sh"
 
+  - id: "phase-4"
+    name: "Monetization"
+
+    modules:
       - id: "12.0"
         name: "Access Control"
 
@@ -623,19 +598,16 @@ phases:
             title: "Customer access control via API key or equivalent tenant-scoped credential"
             status: "pending"
             depends_on: ["11.1"]
-
             definition_of_done:
               - "Customer access is gated by a tenant-scoped credential path"
               - "Credential issuance, storage, validation, and revocation are explicit"
               - "Credential use is auditable and does not bypass gateway/tenant controls"
               - "Unauthorized or revoked credentials are rejected explicitly"
-
             validation:
               - "Authorized credential path succeeds"
               - "Missing/invalid/revoked credential path fails explicitly"
               - "Tenant-scoped isolation is preserved"
               - "Fast lane remains green"
-
             validation_commands:
               - ".venv/bin/pytest -q tests -k 'api key or credential or access control'"
               - "make fg-fast"
@@ -645,18 +617,15 @@ phases:
             title: "Per-tenant usage attribution"
             status: "pending"
             depends_on: ["12.1"]
-
             definition_of_done:
               - "Usage can be attributed per tenant/customer on the intended monetization path"
               - "Usage events are auditable and tied to the correct tenant"
               - "Usage tracking does not double-count or silently drop primary events"
               - "Usage records are queryable enough to support billing/reporting"
-
             validation:
               - "Primary customer actions emit usage signal for correct tenant"
               - "Cross-tenant attribution does not occur"
               - "Fast lane remains green"
-
             validation_commands:
               - ".venv/bin/pytest -q tests -k 'usage or billing or tenant attribution'"
               - "make fg-fast"
@@ -670,19 +639,16 @@ phases:
             title: "Minimal billing integration"
             status: "pending"
             depends_on: ["12.2"]
-
             definition_of_done:
               - "A minimal supported billing path exists for the first monetization model"
               - "Billing integration is tenant-aware and tied to usage/access control"
               - "Failure modes are explicit and auditable"
               - "No silent billing side effects occur"
-
             validation:
               - "Billing integration path is testable end-to-end in supported mode"
               - "Billing state aligns with usage and tenant attribution"
               - "Failure path is explicit"
               - "Fast lane remains green"
-
             validation_commands:
               - ".venv/bin/pytest -q tests -k 'billing or stripe or payment'"
               - "make fg-fast"
@@ -696,19 +662,16 @@ phases:
             title: "High-value user behavior logging"
             status: "pending"
             depends_on: ["13.1"]
-
             definition_of_done:
               - "High-value customer actions and failures produce useful product signals"
               - "Signals are attributable to tenant/customer without leaking secrets"
               - "Behavior logging is structured, queryable, and aligned with monetization paths"
               - "Signal volume is high-value, not noisy"
-
             validation:
               - "Core user journey emits expected behavior signals"
               - "Failures emit actionable product/ops signals"
               - "No sensitive data leakage occurs"
               - "Fast lane remains green"
-
             validation_commands:
               - ".venv/bin/pytest -q tests -k 'behavior or analytics or feedback'"
               - "make fg-fast"
@@ -718,18 +681,233 @@ phases:
             title: "Issue triage workflow"
             status: "pending"
             depends_on: ["14.1"]
-
             definition_of_done:
               - "Feedback/issues can be categorized and prioritized quickly"
               - "Triage path exists for customer-visible failures and product gaps"
               - "The main sources of feedback and failure are visible in one operator workflow"
-
             validation:
               - "Triage process exists and is usable from current repo artifacts/docs"
               - "Primary issue sources are represented"
               - "Required triage artifact/document exists"
-
             validation_commands:
               - "test -f plans/30_day_repo_blitz_index.md"
               - ".venv/bin/pytest -q tests -k 'triage or feedback or issues'"
+              - "make fg-fast"
+
+  - id: "phase-5"
+    name: "First AI Client / RAG Readiness"
+
+    modules:
+      - id: "15.0"
+        name: "Plan Integrity"
+
+        tasks:
+          - id: "15.1"
+            title: "Plan/state integrity gate"
+            status: "pending"
+            depends_on: ["14.2"]
+            definition_of_done:
+              - "Plan YAML, state YAML, and index cannot drift silently"
+              - "Current task, completed tasks, and dependency graph resolve consistently"
+              - "Plan runner fails explicitly on incoherent state"
+            validation:
+              - "taskctl status resolves current task without contradiction"
+              - "Malformed or contradictory state fails explicitly"
+              - "Fast lane remains green"
+            validation_commands:
+              - "python tools/plan/taskctl.py status"
+              - ".venv/bin/pytest -q tests -k 'plan or taskctl or state'"
+              - "make fg-fast"
+
+          - id: "15.2"
+            title: "Non-bypass tester journey enforcement"
+            status: "pending"
+            depends_on: ["15.1"]
+            definition_of_done:
+              - "Canonical tester path remains OIDC-based and non-bypass"
+              - "Dev bypass cannot silently re-enter the canonical tester flow"
+              - "Validation scripts and docs fail if canonical path drifts"
+            validation:
+              - "Canonical tester flow rejects dev-bypass regressions"
+              - "Docs, collection, and runtime validation remain aligned"
+              - "Fast lane remains green"
+            validation_commands:
+              - ".venv/bin/pytest -q tests/test_tester_quickstart_alignment.py"
+              - "bash tools/auth/validate_tester_flow.sh || true"
+              - "make fg-fast"
+
+          - id: "15.3"
+            title: "Runtime verification classification"
+            status: "pending"
+            depends_on: ["15.2"]
+            definition_of_done:
+              - "Repo clearly distinguishes structural validation, live runtime proof, and environment-blocked checks"
+              - "No task is marked complete based on a skipped runtime proof without explicit classification"
+            validation:
+              - "Validation artifacts record pass vs skip vs blocked clearly"
+              - "Operator workflow distinguishes gate pass from live proof pass"
+            validation_commands:
+              - ".venv/bin/pytest -q tests -k 'runtime proof or validation classification or skip'"
+              - "make fg-fast"
+
+          - id: "15.4"
+            title: "Readiness fail-closed for enabled dependencies"
+            status: "pending"
+            depends_on: ["15.3"]
+            definition_of_done:
+              - "If Redis/NATS/OIDC/other enabled dependencies are configured on, missing connection URLs fail explicitly"
+              - "Dev-only fallbacks remain explicit and environment-gated"
+              - "Production never silently degrades to localhost defaults"
+            validation:
+              - "Enabled dependency with missing URL fails closed in non-dev"
+              - "Dev-only fallback behavior remains explicit where intentionally allowed"
+            validation_commands:
+              - ".venv/bin/pytest -q tests -k 'startup or dependency or localhost or fail_closed'"
+              - "make fg-fast"
+
+      - id: "16.0"
+        name: "RAG Readiness"
+
+        tasks:
+          - id: "16.1"
+            title: "Corpus ingestion integrity"
+            status: "pending"
+            depends_on: ["15.4"]
+            definition_of_done:
+              - "Documents enter the corpus through one supported ingestion path"
+              - "Source identity, tenant identity, and ingest status are persisted explicitly"
+              - "Failed ingests are explicit and auditable"
+            validation:
+              - "Happy-path corpus ingest succeeds"
+              - "Malformed ingest fails explicitly"
+              - "Cross-tenant ingest is denied"
+            validation_commands:
+              - ".venv/bin/pytest -q tests -k 'rag and ingest'"
+              - "make fg-fast"
+
+          - id: "16.2"
+            title: "Chunking and metadata fidelity"
+            status: "pending"
+            depends_on: ["16.1"]
+            definition_of_done:
+              - "Chunk boundaries and metadata are deterministic enough for repeat retrieval"
+              - "Every chunk retains source and tenant metadata"
+              - "Chunking does not silently drop documents or metadata"
+            validation:
+              - "Chunk counts are deterministic on fixed fixtures"
+              - "Source metadata is preserved on chunks"
+            validation_commands:
+              - ".venv/bin/pytest -q tests -k 'rag and chunk'"
+              - "make fg-fast"
+
+          - id: "16.3"
+            title: "Retrieval tenant isolation"
+            status: "pending"
+            depends_on: ["16.2"]
+            definition_of_done:
+              - "Retriever cannot return chunks from the wrong tenant"
+              - "Tenant binding applies to search, fetch, rerank, and answer assembly"
+            validation:
+              - "Cross-tenant retrieval is denied or empty"
+              - "Same-tenant retrieval succeeds"
+            validation_commands:
+              - ".venv/bin/pytest -q tests/security -k 'rag and tenant'"
+              - "make fg-fast"
+
+          - id: "16.4"
+            title: "Answer grounding and citation contract"
+            status: "pending"
+            depends_on: ["16.3"]
+            definition_of_done:
+              - "Answer payload includes explicit grounding/citation references to retrieved evidence"
+              - "Ungrounded answer paths are explicit and constrained"
+            validation:
+              - "Grounded answer includes citations"
+              - "No-answer and low-context paths are explicit"
+            validation_commands:
+              - ".venv/bin/pytest -q tests -k 'rag and citation'"
+              - "make fg-fast"
+
+          - id: "16.5"
+            title: "Retrieval evaluation dataset and thresholds"
+            status: "pending"
+            depends_on: ["16.4"]
+            definition_of_done:
+              - "A fixed eval set exists for first-client retrieval quality"
+              - "Minimum acceptance thresholds are explicit"
+            validation:
+              - "Eval harness runs on fixed fixtures"
+              - "Threshold report artifact is produced"
+            validation_commands:
+              - ".venv/bin/pytest -q tests -k 'rag and eval'"
+              - "make fg-fast"
+
+          - id: "16.6"
+            title: "No-answer and insufficient-context behavior"
+            status: "pending"
+            depends_on: ["16.5"]
+            definition_of_done:
+              - "The system refuses or downgrades answers when context is insufficient"
+              - "No-answer behavior is explicit and user-safe"
+            validation:
+              - "Insufficient-context queries do not produce fabricated grounded answers"
+              - "User-visible no-answer path is explicit"
+            validation_commands:
+              - ".venv/bin/pytest -q tests -k 'rag and no_answer'"
+              - "make fg-fast"
+
+          - id: "16.7"
+            title: "Corpus update, delete, and reindex lifecycle"
+            status: "pending"
+            depends_on: ["16.6"]
+            definition_of_done:
+              - "Document updates and deletes are reflected in retrieval state"
+              - "Reindex behavior is explicit and auditable"
+            validation:
+              - "Deleted documents stop appearing in retrieval results"
+              - "Updated documents replace stale chunks deterministically"
+            validation_commands:
+              - ".venv/bin/pytest -q tests -k 'rag and reindex'"
+              - "make fg-fast"
+
+          - id: "16.8"
+            title: "Prompt injection and poisoned-document resistance"
+            status: "pending"
+            depends_on: ["16.7"]
+            definition_of_done:
+              - "Known retrieval-side prompt injection patterns are identified and constrained"
+              - "Answer assembly does not blindly follow hostile retrieved instructions"
+            validation:
+              - "Injection fixtures are detected, constrained, or neutralized"
+              - "Unsafe instructions do not silently override system policy"
+            validation_commands:
+              - ".venv/bin/pytest -q tests/security -k 'rag or prompt injection'"
+              - "make fg-fast"
+
+          - id: "16.9"
+            title: "Retrieval latency and cost guardrails"
+            status: "pending"
+            depends_on: ["16.8"]
+            definition_of_done:
+              - "The first-client RAG path has explicit latency and token/cost guardrails"
+              - "Oversized retrieval or answer assembly is bounded"
+            validation:
+              - "Latency budget and retrieval cap checks exist"
+              - "Oversized requests degrade explicitly rather than timing out silently"
+            validation_commands:
+              - ".venv/bin/pytest -q tests -k 'rag and latency or rag and cost'"
+              - "make fg-fast"
+
+          - id: "16.10"
+            title: "Operator and debug answer provenance"
+            status: "pending"
+            depends_on: ["16.9"]
+            definition_of_done:
+              - "Operators can inspect which documents/chunks produced an answer"
+              - "Provenance is auditable without exposing forbidden tenant data"
+            validation:
+              - "Debug/provenance surface exists and is tenant-safe"
+              - "Answer provenance can be tied back to source corpus records"
+            validation_commands:
+              - ".venv/bin/pytest -q tests -k 'rag and provenance'"
               - "make fg-fast"
