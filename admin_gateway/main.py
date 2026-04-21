@@ -147,8 +147,24 @@ def build_app() -> FastAPI:
 
     # P0: Validate config and fail startup on any errors (including env typos)
     config_errors = config.validate() or []
+
+    env = (os.getenv("FG_ENV") or "dev").strip().lower()
+    dev_bypass = (os.getenv("FG_DEV_AUTH_BYPASS") or "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
     if contract_ctx:
         config_errors = _filter_contract_ctx_config_errors(config_errors)
+
+    # In dev/test and dev-bypass flows, do not fail app startup solely because
+    # OIDC is partially configured. Production/staging must still fail closed.
+    if env in {"dev", "development", "local", "test"} or dev_bypass:
+        config_errors = [
+            err for err in config_errors if "OIDC partially configured" not in err
+        ]
 
     if config_errors:
         error_msg = "; ".join(config_errors)
