@@ -89,6 +89,7 @@ class TestRequireInternalAdminGateway:
         """If gateway token is not configured in hosted profile, request must be rejected."""
         monkeypatch.setenv("FG_ENV", env)
         monkeypatch.delenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN", raising=False)
+        monkeypatch.delenv("FG_INTERNAL_AUTH_SECRET", raising=False)
         monkeypatch.delenv("FG_INTERNAL_TOKEN", raising=False)
         monkeypatch.delenv("FG_API_KEY", raising=False)
         from fastapi import HTTPException
@@ -102,6 +103,82 @@ class TestRequireInternalAdminGateway:
             f"FG_ENV={env!r}: unconfigured gateway token must reject all /admin "
             "requests (fail-closed)."
         )
+
+    @pytest.mark.parametrize("env", ["prod", "production", "staging"])
+    def test_hosted_accepts_fg_internal_auth_secret_fallback(self, env, monkeypatch):
+        """FG_INTERNAL_AUTH_SECRET must be accepted when FG_ADMIN_GATEWAY_INTERNAL_TOKEN is absent.
+
+        This is the compose-native path: docker-compose.oidc.yml sets
+        AG_CORE_INTERNAL_TOKEN = FG_INTERNAL_AUTH_SECRET on the gateway side, and
+        core has FG_INTERNAL_AUTH_SECRET set. Both guards must use the same secret.
+        """
+        monkeypatch.setenv("FG_ENV", env)
+        monkeypatch.delenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN", raising=False)
+        monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "shared-compose-secret")
+        monkeypatch.delenv("FG_INTERNAL_TOKEN", raising=False)
+        monkeypatch.delenv("FG_API_KEY", raising=False)
+        from api.admin import require_internal_admin_gateway
+
+        req = self._make_request(internal_token_header="shared-compose-secret")
+        # Must not raise — FG_INTERNAL_AUTH_SECRET is the compose-native fallback
+        require_internal_admin_gateway(req)
+
+    @pytest.mark.parametrize("env", ["prod", "production", "staging"])
+    def test_hosted_rejects_api_key_when_internal_auth_secret_differs(
+        self, env, monkeypatch
+    ):
+        """FG_API_KEY must NOT act as an internal auth fallback.
+
+        Sending FG_API_KEY as X-FG-Internal-Token must be rejected when
+        FG_INTERNAL_AUTH_SECRET is set to a different value. Conflating the
+        global API key with the internal trust token is a security anti-pattern.
+        """
+        monkeypatch.setenv("FG_ENV", env)
+        monkeypatch.delenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN", raising=False)
+        monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "shared-compose-secret")
+        monkeypatch.delenv("FG_INTERNAL_TOKEN", raising=False)
+        monkeypatch.setenv("FG_API_KEY", "global-api-key-different-from-internal")
+        from fastapi import HTTPException
+
+        from api.admin import require_internal_admin_gateway
+
+        # Sending the global API key value as the internal token must be rejected
+        req = self._make_request(
+            internal_token_header="global-api-key-different-from-internal"
+        )
+        with pytest.raises(HTTPException) as exc_info:
+            require_internal_admin_gateway(req)
+        assert exc_info.value.status_code == 403, (
+            "Global API key must not be accepted as internal gateway token "
+            "when FG_INTERNAL_AUTH_SECRET is configured."
+        )
+
+    @pytest.mark.parametrize("env", ["prod", "production", "staging"])
+    def test_fallback_chain_consistent_with_resolution_py(self, env, monkeypatch):
+        """require_internal_admin_gateway and _admin_gateway_internal_token must agree.
+
+        Both functions compute the expected internal token. If they diverge,
+        the auth_gate middleware accepts the request but the router dependency
+        rejects it — resulting in 403 on valid internal admin calls.
+        """
+        monkeypatch.setenv("FG_ENV", env)
+        monkeypatch.delenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN", raising=False)
+        monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "shared-compose-secret")
+        monkeypatch.delenv("FG_INTERNAL_TOKEN", raising=False)
+        monkeypatch.delenv("FG_API_KEY", raising=False)
+
+        from api.admin import require_internal_admin_gateway
+        from api.auth_scopes.resolution import _admin_gateway_internal_token
+
+        resolution_token = _admin_gateway_internal_token()
+        assert resolution_token == "shared-compose-secret", (
+            "_admin_gateway_internal_token() must resolve FG_INTERNAL_AUTH_SECRET"
+        )
+
+        # The same token that resolution.py accepts must be accepted by the guard
+        req = self._make_request(internal_token_header=resolution_token)
+        # Must not raise — both guards must agree on the expected value
+        require_internal_admin_gateway(req)
 
 
 # ---------------------------------------------------------------------------

@@ -3636,3 +3636,48 @@ make fg-idp-validate: ALL CHECKS PASSED (A–D)
 make fg-fast: All checks passed!
 bash codex_gates.sh: (in progress)
 ```
+
+---
+
+### 2026-04-23 — Proxy contract hardening: require_internal_admin_gateway fallback alignment
+
+**Area:** Canonical Tester Auth Path · Gateway→Core Proxy Contract · Production Alignment
+
+**Root cause (three defects):**
+
+**Defect A — `require_internal_admin_gateway()` fallback chain mismatch (CRITICAL):**
+`api/admin.py`'s guard used `FG_ADMIN_GATEWAY_INTERNAL_TOKEN → FG_INTERNAL_TOKEN → FG_API_KEY`.
+`api/auth_scopes/resolution.py`'s `_admin_gateway_internal_token()` used `FG_ADMIN_GATEWAY_INTERNAL_TOKEN → FG_INTERNAL_AUTH_SECRET`.
+In the compose setup (`docker-compose.oidc.yml` sets `AG_CORE_INTERNAL_TOKEN = FG_INTERNAL_AUTH_SECRET`), the auth_gate middleware accepted the request (resolution.py matched `FG_INTERNAL_AUTH_SECRET`) but the router dependency rejected it (admin.py fell through to `FG_API_KEY`, a different value) → **403 on all audit search/export calls**.
+
+**Defect B — Misleading "JWT passthrough" docstrings:**
+`admin_gateway/auth/session.py` and `admin_gateway/routers/auth.py` described `upstream_access_token` as "for gateway→core JWT passthrough." The token is stored but is intentionally NOT forwarded to core. Misleading documentation creates future regression risk.
+
+**Defect C — Dead code:**
+`_core_internal_token()` in `admin_gateway/routers/admin.py` was defined but never called.
+
+**Fixes applied:**
+
+- `api/admin.py` — `require_internal_admin_gateway()` fallback: added `FG_INTERNAL_AUTH_SECRET` as position-2 fallback; removed `FG_API_KEY` (conflating global API key with internal trust token is insecure). Fallback chain now matches `resolution.py` exactly.
+- `admin_gateway/auth/session.py` — Docstring: "NOT forwarded to core; stored for future use (token refresh, user-info)."
+- `admin_gateway/routers/auth.py` — Same correction in `token_exchange` docstring and `callback()` inline comment.
+- `admin_gateway/routers/admin.py` — Removed dead `_core_internal_token()` function.
+- `contracts/admin/openapi.json` — Regenerated (docstring change reflected in OpenAPI description).
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — SOC review entry for `admin_gateway/auth/session.py` change.
+- `tests/security/test_gateway_only_admin_access.py` — Added 4 tests: `FG_INTERNAL_AUTH_SECRET` fallback accepted; wrong secret rejected; `FG_API_KEY` not accepted when `FG_INTERNAL_AUTH_SECRET` differs; `resolution.py` alignment proof.
+
+**Files changed:**
+- `api/admin.py`
+- `admin_gateway/auth/session.py`
+- `admin_gateway/routers/auth.py`
+- `admin_gateway/routers/admin.py`
+- `contracts/admin/openapi.json`
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md`
+- `tests/security/test_gateway_only_admin_access.py`
+
+**Validation:**
+```
+pytest -q tests/security/test_gateway_only_admin_access.py: 32 passed
+pytest -q tests/test_canonical_tester_flow.py: 23 passed
+make fg-fast: All checks passed! (all gates green, soc-review-sync OK)
+```

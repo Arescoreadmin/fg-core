@@ -2286,3 +2286,35 @@ Validation:
 
 SOC review outcome:
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+## 2026-04-23 — Proxy contract hardening: require_internal_admin_gateway fallback alignment + docstring corrections
+
+### Critical-path files reviewed (SOC-HIGH-002)
+- `admin_gateway/auth/session.py`
+
+### Summary
+
+**`admin_gateway/auth/session.py`** — Corrected `upstream_access_token` docstring: removed misleading "JWT passthrough" language. The field stores the OIDC bearer token for future use (token refresh, user-info) but is **not forwarded to core**. Prior docstring implied the token was used for gateway→core passthrough, which is architecturally incorrect and created regression risk. No behavioral change.
+
+**`admin_gateway/routers/auth.py`** — Same docstring correction in `token_exchange` endpoint description and `callback()` comment. Contract artifact regenerated accordingly.
+
+**`api/admin.py`** — `require_internal_admin_gateway()` fallback chain aligned with `_admin_gateway_internal_token()` in `resolution.py`. Added `FG_INTERNAL_AUTH_SECRET` as position-2 fallback (before `FG_INTERNAL_TOKEN`). Removed `FG_API_KEY` from the fallback to prevent conflating the global API key with the internal trust token. Compose-native setup (`docker-compose.oidc.yml` sets `AG_CORE_INTERNAL_TOKEN = FG_INTERNAL_AUTH_SECRET`) now works end-to-end: both auth layers compute the same expected token.
+
+**`admin_gateway/routers/admin.py`** — Removed dead `_core_internal_token()` function (defined but never called).
+
+### Security impact assessment
+
+- No auth logic weakened. `require_internal_admin_gateway()` is now strictly aligned with `resolution.py` — the same secret that passes the auth_gate middleware now also passes the router-level dependency. Prior mismatch caused valid internal requests to be rejected with 403 in the compose setup.
+- `FG_API_KEY` removal from the fallback is a hardening: it prevents accidental acceptance of the global API key on the internal gateway path.
+- Docstring fixes eliminate the future regression risk of a developer adding JWT forwarding based on misleading inline comments.
+
+### Verification
+- `pytest tests/security/test_gateway_only_admin_access.py` → 32 passed
+- `pytest tests/test_canonical_tester_flow.py` → 23 passed
+- `make fg-fast` → all gates green
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.

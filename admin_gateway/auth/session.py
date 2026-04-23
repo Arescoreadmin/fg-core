@@ -35,8 +35,9 @@ class Session:
         claims: Raw OIDC token claims
         tenant_id: Current active tenant
         upstream_access_token: Original validated OIDC bearer token used to
-            create this gateway session. This is used for gateway -> core
-            JWT passthrough on trusted internal requests.
+            create this gateway session. Stored for future use (e.g., token
+            refresh, user-info lookups). NOT forwarded to core — gateway→core
+            proxied /admin calls use AG_CORE_INTERNAL_TOKEN, not user JWTs.
         created_at: Session creation timestamp
         expires_at: Session expiration timestamp
         session_id: Unique session identifier
@@ -230,8 +231,9 @@ class SessionManager:
             scopes: Authorization scopes
             claims: OIDC token claims
             tenant_id: Default tenant
-            upstream_access_token: Original validated OIDC bearer token for
-                downstream gateway -> core passthrough
+            upstream_access_token: Original validated OIDC bearer token.
+                Stored for future use (token refresh, user-info). NOT
+                forwarded to core on proxied /admin calls.
 
         Returns:
             New Session object

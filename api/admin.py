@@ -61,15 +61,25 @@ log = logging.getLogger("frostgate.admin")
 
 
 def require_internal_admin_gateway(request: Request) -> None:
-    """Allow core /admin routes only for trusted internal gateway calls."""
+    """Allow core /admin routes only for trusted internal gateway calls.
+
+    Token resolution order (must match _admin_gateway_internal_token() in
+    api/auth_scopes/resolution.py so both guards compute the same expected value):
+      1. FG_ADMIN_GATEWAY_INTERNAL_TOKEN — explicit production secret (preferred)
+      2. FG_INTERNAL_AUTH_SECRET         — shared compose secret; set on both core
+                                           and gateway via docker-compose.oidc.yml
+      3. FG_INTERNAL_TOKEN               — legacy compat alias
+    FG_API_KEY is intentionally NOT a fallback — conflating the global API key
+    with the internal trust token is a security anti-pattern.
+    """
     fg_env = (os.getenv("FG_ENV") or "").strip().lower()
     if fg_env not in {"prod", "production", "staging"}:
         return
 
     expected = (
         (os.getenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN") or "").strip()
+        or (os.getenv("FG_INTERNAL_AUTH_SECRET") or "").strip()
         or (os.getenv("FG_INTERNAL_TOKEN") or "").strip()
-        or (os.getenv("FG_API_KEY") or "").strip()
     )
     provided = (request.headers.get("x-fg-internal-token") or "").strip()
     if not expected or not provided or not hmac.compare_digest(provided, expected):

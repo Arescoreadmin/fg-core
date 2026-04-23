@@ -169,16 +169,6 @@ def _core_proxy_headers(
     return headers
 
 
-def _core_internal_token() -> str:
-    token = (os.getenv("AG_CORE_INTERNAL_TOKEN") or "").strip() or _core_api_key()[0]
-    if not token:
-        raise HTTPException(
-            status_code=503,
-            detail="Core service unavailable: AG_CORE_INTERNAL_TOKEN not configured",
-        )
-    return token
-
-
 async def _proxy_to_core(
     request: Request,
     method: str,

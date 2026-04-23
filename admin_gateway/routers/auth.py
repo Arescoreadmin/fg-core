@@ -119,9 +119,9 @@ async def callback(
         tokens = await oidc.exchange_code(code, state)
         session = await oidc.create_session_from_tokens(tokens)
 
-        # Preserve upstream access token in the gateway session so downstream
-        # gateway -> core requests can forward the original validated bearer
-        # token instead of losing authenticated tenant context.
+        # Store the upstream token in session for future use (token refresh,
+        # user-info lookups). It is NOT forwarded to core — gateway→core
+        # proxied /admin calls use AG_CORE_INTERNAL_TOKEN exclusively.
         access_token = tokens.get("access_token")
         if access_token:
             session.upstream_access_token = access_token
@@ -179,8 +179,10 @@ async def token_exchange(
     """Exchange a bearer token for a gateway session cookie.
 
     Accepts an OIDC access token in the Authorization header and issues a
-    signed session cookie. The original validated bearer token is preserved
-    in the session for trusted gateway -> core passthrough.
+    signed session cookie. The original validated bearer token is stored in
+    the session (for future token refresh / user-info use) but is NOT
+    forwarded to core — all gateway→core proxy calls use the internal trust
+    credential (AG_CORE_INTERNAL_TOKEN), not the user bearer token.
 
     Headers:
         Authorization: Bearer <access_token>
