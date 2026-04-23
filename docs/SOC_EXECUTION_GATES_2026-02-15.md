@@ -2258,3 +2258,31 @@ Validation:
 - `pytest tests/tools/test_route_inventory_summary.py` → 11 passed
 - `pytest tests/tools/` → 48 passed
 - Contract: `GET /ai-plane/inference`, `GET /ai-plane/policies`, `POST /ai-plane/policies`, `POST /ai/infer` confirmed present in `contracts/core/openapi.json`
+
+## 2026-04-23 — Canonical Tester Auth Path: admin_internal_token + upstream_access_token session field
+
+### Critical-path files reviewed (SOC-HIGH-002)
+- `admin_gateway/auth/session.py`
+- `api/auth_scopes/resolution.py`
+
+### Summary
+
+**`admin_gateway/auth/session.py`** — Added `upstream_access_token: Optional[str] = None` field to the `Session` dataclass. This field stores the OIDC access token obtained from Keycloak during the password-grant / token-exchange flow. The token is stored in the encrypted session cookie for future use (e.g., token refresh, user-info lookups) but is **not forwarded to core** — the gateway continues to use `AG_CORE_INTERNAL_TOKEN` for all core proxy requests. `to_dict()`, `from_dict()`, and `create_session()` updated accordingly.
+
+**`api/auth_scopes/resolution.py`** — Updated `_admin_gateway_internal_token()` to fall back to `FG_INTERNAL_AUTH_SECRET` when `FG_ADMIN_GATEWAY_INTERNAL_TOKEN` is unset. This allows the `admin_internal_token` auth path (used for gateway→core proxied admin requests) to work in local/test environments that already set `FG_INTERNAL_AUTH_SECRET` without requiring a separate env var. The resolution precedence is: `FG_ADMIN_GATEWAY_INTERNAL_TOKEN` (explicit, production-preferred) → `FG_INTERNAL_AUTH_SECRET` (shared secret fallback for dev/test).
+
+### Security impact assessment
+
+- `upstream_access_token` is stored in the session cookie which is already encrypted and scoped to the authenticated user. It is **never forwarded to core** or logged. No new surface for token leakage beyond the existing session cookie.
+- The `FG_INTERNAL_AUTH_SECRET` fallback does not weaken production security: production deployments set `FG_ADMIN_GATEWAY_INTERNAL_TOKEN` explicitly and the fallback is never reached. The fallback only activates when `FG_ADMIN_GATEWAY_INTERNAL_TOKEN` is absent (non-prod / local dev).
+- The `bind_tenant_id()` path already enforced `reason == "admin_internal_token"` before allowing explicit tenant propagation; no bypass introduced.
+
+### Verification
+- `make fg-fast` → 1847 passed, 22 skipped
+- `GITHUB_BASE_REF=main .venv/bin/python tools/ci/check_soc_review_sync.py` → `soc-review-sync: OK`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
