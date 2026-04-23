@@ -6,6 +6,57 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-15 — Canonical Tester Auth Path: Gateway→Core Internal Token Contract
+
+**Branch:** `blitz/canonical-tester-auth`
+
+**Area:** Admin Gateway · Core Auth · Canonical Tester Flow · Docker Compose OIDC
+
+---
+
+**Root cause:**
+
+`docker-compose.oidc.yml` wired `AG_CORE_API_KEY: "${FG_API_KEY}"`.  When the admin-gateway proxied to core's `/admin/audit/search` and `/admin/audit/export` routes, `verify_api_key_detailed` matched the global `FG_API_KEY` and returned `AuthResult(reason="global_key")`.  `bind_tenant_id()` has no case for `reason="global_key"` when the key has no bound tenant — it falls through to `raise HTTPException(400, "tenant_id required for unscoped keys")` even when an explicit `tenant_id` is supplied in the query params.  Gateway received 400 → `validate_tester_flow.sh` steps 4 and 5 failed.
+
+**Secondary finding:**
+
+`_core_api_key()` in `admin_gateway/routers/admin.py` only used `AG_CORE_INTERNAL_TOKEN` in prod-like envs.  In dev (`FG_ENV=dev`), even if `AG_CORE_INTERNAL_TOKEN` was set, it was silently ignored — falling through to `AG_CORE_API_KEY` and the broken global-key path.
+
+**Fixes applied:**
+
+- `admin_gateway/routers/admin.py` — `_core_api_key()` now uses `AG_CORE_INTERNAL_TOKEN` whenever it is set (any env).  Dev fallback to `AG_CORE_API_KEY` is preserved for setups that predate the internal token.  In prod, `AG_CORE_INTERNAL_TOKEN` is required.  Also added `session`/`tenant_id` params to `_core_proxy_headers` / `_proxy_to_core` / `_proxy_to_core_raw` and updated all call sites; proxy sends `X-Tenant-Id` + `X-Admin-Gateway-Internal: true` + `X-FG-Internal-Token` when using the internal token.
+
+- `admin_gateway/auth/session.py` — Added `upstream_access_token` field (stored in session from OIDC token-exchange / callback, **not forwarded** to core — gateway always uses internal credentials for core calls).
+
+- `admin_gateway/routers/auth.py` — `token_exchange` and OIDC callback now store `upstream_access_token` in the session; docstring updated to clarify internal-credentials-only contract.
+
+- `api/auth_scopes/resolution.py` — `_admin_gateway_internal_token()` now falls back to `FG_INTERNAL_AUTH_SECRET` so the two-service compose setup needs only one shared secret variable.
+
+- `docker-compose.oidc.yml` — Replaced `AG_CORE_API_KEY: "${FG_API_KEY}"` with `AG_CORE_INTERNAL_TOKEN: "${FG_INTERNAL_AUTH_SECRET}"`.  This activates the `admin_internal_token` auth path in core for all gateway proxy calls.
+
+- `keycloak/realms/frostgate-realm.json` — Added `"requiredActions": []` to `fg-tester-admin` user to prevent Keycloak from blocking the password grant with a required-action prompt.
+
+- `contracts/admin/openapi.json` — Regenerated to reflect updated `token_exchange` docstring (contract drift from auth.py change).
+
+- `tests/test_canonical_tester_flow.py` — Updated `_OIDC_ENV` to use `AG_CORE_INTERNAL_TOKEN`; updated `_mock_proxy` to accept new `session`/`tenant_id` kwargs; added `TestGatewayCoreProxyContract` class (4 new tests covering: internal token used in any env, dev API-key fallback, internal marker headers, no JWT passthrough).
+
+**Auth invariants preserved:**
+- No FG_DEV_AUTH_BYPASS in canonical path ✓
+- No inline mint_key in canonical tester flow ✓
+- Gateway never forwards user OIDC JWT to core ✓
+- Wrong-tenant denial enforced at gateway layer (before core is called) ✓
+- `admin_internal_token` path in core accepts explicit tenant_id only ✓
+
+**Validation evidence:**
+```
+pytest -q tests/test_canonical_tester_flow.py: 23 passed
+pytest -q tests/test_admin_gateway_middleware.py tests/test_admin_audit_tenant_binding.py tests/test_auth_hardening.py tests/security/test_gateway_only_admin_access.py: 61 passed
+make fg-fast: (pending gates pass)
+bash codex_gates.sh: (pending)
+```
+
+---
+
 ### 2026-04-15 — Task 5.2 Addendum: Fix Docker Compose DATABASE_URL Passthrough Causing Core Unhealthy
 
 **Branch:** `task/5.2-service-networking-hardening`

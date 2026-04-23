@@ -45,7 +45,9 @@ _OIDC_ENV: dict[str, str] = {
     "FG_OIDC_REDIRECT_URL": "http://localhost:18080/auth/callback",
     "FG_DEV_AUTH_BYPASS": "false",
     "AG_CORE_BASE_URL": "http://core.local",
-    "AG_CORE_API_KEY": "test-core-key",
+    # Internal token: activates admin_internal_token auth path in core so
+    # bind_tenant_id() accepts an explicit tenant_id from query params.
+    "AG_CORE_INTERNAL_TOKEN": "test-internal-token-value",
 }
 
 
@@ -109,8 +111,11 @@ def oidc_app(tmp_path, monkeypatch):
     reset_auth_config()
     app = build_app()
 
-    # Mock core proxy — not testing core API, testing gateway enforcement
-    async def _mock_proxy(request, method, path, params=None, json_body=None):
+    # Mock core proxy — not testing core API, testing gateway enforcement.
+    # Must accept session and tenant_id kwargs added by the gateway proxy layer.
+    async def _mock_proxy(
+        request, method, path, params=None, json_body=None, session=None, tenant_id=None
+    ):
         if "audit/search" in path:
             tenant = (params or {}).get("tenant_id", _CANONICAL_TENANT)
             return {
@@ -406,4 +411,133 @@ class TestCanonicalTesterHTTP:
             )
         assert resp.status_code == 200, (
             f"Token exchange must succeed without FG_DEV_AUTH_BYPASS; got {resp.status_code}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Part 3 — Gateway→core proxy auth contract
+# ---------------------------------------------------------------------------
+
+
+class TestGatewayCoreProxyContract:
+    """Gateway→core proxy must use internal token, not forward user JWT.
+
+    Verifies:
+    - AG_CORE_INTERNAL_TOKEN activates is_internal=True proxy headers
+    - AG_CORE_API_KEY fallback used only when AG_CORE_INTERNAL_TOKEN is absent
+    - User upstream_access_token is stored in session but NOT forwarded to core
+    - proxy headers include X-Admin-Gateway-Internal when internal token is used
+    """
+
+    def test_core_api_key_uses_internal_token_when_set(
+        self, monkeypatch: Any
+    ) -> None:
+        """AG_CORE_INTERNAL_TOKEN must return (token, True) in any env."""
+        import sys
+
+        mods = [m for m in sys.modules if m.startswith("admin_gateway")]
+        for m in mods:
+            del sys.modules[m]
+
+        monkeypatch.setenv("FG_ENV", "dev")
+        monkeypatch.setenv("AG_CORE_BASE_URL", "http://core.test")
+        monkeypatch.setenv("AG_CORE_INTERNAL_TOKEN", "test-internal-token-dev")
+        monkeypatch.delenv("AG_CORE_API_KEY", raising=False)
+
+        from admin_gateway.routers.admin import _core_api_key
+
+        token, is_internal = _core_api_key()
+        assert token == "test-internal-token-dev"
+        assert is_internal is True, (
+            "_core_api_key must return is_internal=True when AG_CORE_INTERNAL_TOKEN is set"
+        )
+
+    def test_core_api_key_falls_back_to_api_key_in_dev(
+        self, monkeypatch: Any
+    ) -> None:
+        """When AG_CORE_INTERNAL_TOKEN is absent in dev, falls back to AG_CORE_API_KEY."""
+        import sys
+
+        mods = [m for m in sys.modules if m.startswith("admin_gateway")]
+        for m in mods:
+            del sys.modules[m]
+
+        monkeypatch.setenv("FG_ENV", "dev")
+        monkeypatch.setenv("AG_CORE_BASE_URL", "http://core.test")
+        monkeypatch.delenv("AG_CORE_INTERNAL_TOKEN", raising=False)
+        monkeypatch.setenv("AG_CORE_API_KEY", "test-api-key")
+
+        from admin_gateway.routers.admin import _core_api_key
+
+        token, is_internal = _core_api_key()
+        assert token == "test-api-key"
+        assert is_internal is False
+
+    def test_proxy_headers_include_internal_markers_when_is_internal(
+        self, monkeypatch: Any
+    ) -> None:
+        """When internal token is used, proxy headers must carry X-Admin-Gateway-Internal."""
+        import sys
+        from unittest.mock import MagicMock
+
+        mods = [m for m in sys.modules if m.startswith("admin_gateway")]
+        for m in mods:
+            del sys.modules[m]
+
+        monkeypatch.setenv("FG_ENV", "dev")
+        monkeypatch.setenv("AG_CORE_BASE_URL", "http://core.test")
+        monkeypatch.setenv("AG_CORE_INTERNAL_TOKEN", "test-internal-token")
+
+        from admin_gateway.routers.admin import _core_proxy_headers
+
+        fake_request = MagicMock()
+        fake_request.state.request_id = "req-abc"
+
+        headers = _core_proxy_headers(fake_request, tenant_id="tenant-seed-primary")
+
+        assert headers.get("X-Admin-Gateway-Internal") == "true", (
+            "Internal token path must send X-Admin-Gateway-Internal: true"
+        )
+        assert headers.get("X-FG-Internal-Token") == "test-internal-token"
+        assert headers.get("X-API-Key") == "test-internal-token"
+        assert headers.get("X-Tenant-Id") == "tenant-seed-primary"
+
+    def test_proxy_headers_do_not_forward_user_jwt(
+        self, monkeypatch: Any
+    ) -> None:
+        """User OIDC bearer token must NOT appear in gateway→core proxy headers."""
+        import sys
+        from unittest.mock import MagicMock
+
+        mods = [m for m in sys.modules if m.startswith("admin_gateway")]
+        for m in mods:
+            del sys.modules[m]
+
+        monkeypatch.setenv("FG_ENV", "dev")
+        monkeypatch.setenv("AG_CORE_BASE_URL", "http://core.test")
+        monkeypatch.setenv("AG_CORE_INTERNAL_TOKEN", "test-internal-token")
+
+        from admin_gateway.auth.session import Session
+        from admin_gateway.routers.admin import _core_proxy_headers
+
+        fake_request = MagicMock()
+        fake_request.state.request_id = "req-xyz"
+
+        session = Session(
+            user_id="fg-tester-admin",
+            tenant_id="tenant-seed-primary",
+            upstream_access_token="user-oidc-bearer-token-must-not-be-forwarded",
+        )
+
+        headers = _core_proxy_headers(
+            fake_request, session=session, tenant_id="tenant-seed-primary"
+        )
+
+        for _header_name, header_value in headers.items():
+            assert "user-oidc-bearer-token-must-not-be-forwarded" not in str(
+                header_value
+            ), "User OIDC token must not appear in any proxy header"
+
+        assert "Authorization" not in headers, (
+            "Proxy headers must not include Authorization (no user JWT passthrough)"
         )

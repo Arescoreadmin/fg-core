@@ -34,6 +34,9 @@ class Session:
         scopes: Set of authorization scopes
         claims: Raw OIDC token claims
         tenant_id: Current active tenant
+        upstream_access_token: Original validated OIDC bearer token used to
+            create this gateway session. This is used for gateway -> core
+            JWT passthrough on trusted internal requests.
         created_at: Session creation timestamp
         expires_at: Session expiration timestamp
         session_id: Unique session identifier
@@ -45,16 +48,16 @@ class Session:
     scopes: Set[str] = field(default_factory=set)
     claims: dict[str, Any] = field(default_factory=dict)
     tenant_id: Optional[str] = None
+    upstream_access_token: Optional[str] = None
     created_at: float = field(default_factory=time.time)
     expires_at: float = 0
     session_id: str = field(default_factory=lambda: secrets.token_urlsafe(16))
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Initialize derived fields."""
         if self.expires_at == 0:
             config = get_auth_config()
             self.expires_at = self.created_at + config.session_ttl_seconds
-        # Expand scopes based on hierarchy
         self.scopes = expand_scopes(self.scopes)
 
     @property
@@ -76,6 +79,7 @@ class Session:
             "scopes": list(self.scopes),
             "claims": self.claims,
             "tenant_id": self.tenant_id,
+            "upstream_access_token": self.upstream_access_token,
             "created_at": self.created_at,
             "expires_at": self.expires_at,
             "session_id": self.session_id,
@@ -91,6 +95,7 @@ class Session:
             scopes=set(data.get("scopes", [])),
             claims=data.get("claims", {}),
             tenant_id=data.get("tenant_id"),
+            upstream_access_token=data.get("upstream_access_token"),
             created_at=data.get("created_at", time.time()),
             expires_at=data.get("expires_at", 0),
             session_id=data.get("session_id", secrets.token_urlsafe(16)),
@@ -123,7 +128,7 @@ class SessionManager:
 
         Format: base64(json) + "." + hmac_signature
         """
-        data = json.dumps(session.to_dict()).encode()
+        data = json.dumps(session.to_dict(), separators=(",", ":")).encode()
         encoded = base64.urlsafe_b64encode(data).decode()
         signature = self._sign(data)
         return f"{encoded}.{signature}"
@@ -212,8 +217,9 @@ class SessionManager:
         email: Optional[str] = None,
         name: Optional[str] = None,
         scopes: Optional[Set[str]] = None,
-        claims: Optional[dict] = None,
+        claims: Optional[dict[str, Any]] = None,
         tenant_id: Optional[str] = None,
+        upstream_access_token: Optional[str] = None,
     ) -> Session:
         """Create a new session.
 
@@ -224,6 +230,8 @@ class SessionManager:
             scopes: Authorization scopes
             claims: OIDC token claims
             tenant_id: Default tenant
+            upstream_access_token: Original validated OIDC bearer token for
+                downstream gateway -> core passthrough
 
         Returns:
             New Session object
@@ -236,6 +244,7 @@ class SessionManager:
             scopes=scopes or set(),
             claims=claims or {},
             tenant_id=tenant_id,
+            upstream_access_token=upstream_access_token,
             created_at=now,
             expires_at=now + self.config.session_ttl_seconds,
         )

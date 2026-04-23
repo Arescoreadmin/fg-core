@@ -133,6 +133,7 @@
       "username": "fg-tester-admin",
       "enabled": true,
       "emailVerified": true,
+      "requiredActions": [],
       "email": "fg-tester-admin@frostgate.local",
       "credentials": [
         {
