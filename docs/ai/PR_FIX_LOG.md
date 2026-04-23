@@ -50,9 +50,10 @@ This log records **completed, intentional fixes**.
 **Validation evidence:**
 ```
 pytest -q tests/test_canonical_tester_flow.py: 23 passed
-pytest -q tests/test_admin_gateway_middleware.py tests/test_admin_audit_tenant_binding.py tests/test_auth_hardening.py tests/security/test_gateway_only_admin_access.py: 61 passed
-make fg-fast: (pending gates pass)
-bash codex_gates.sh: (pending)
+pytest -q admin_gateway/tests/: 183 passed
+pytest -q tests/test_admin_audit_tenant_binding.py tests/test_auth_hardening.py tests/security/: 391 passed
+make fg-fast: All checks passed!
+bash codex_gates.sh: 1847 passed, 22 skipped
 ```
 
 ---
