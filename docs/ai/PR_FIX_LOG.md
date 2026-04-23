@@ -3741,3 +3741,83 @@ admin_internal_token path, hiding auth contract divergence that only manifests a
 pytest -q tests/security/test_gateway_only_admin_access.py: 44 passed
 make fg-fast-pytest: 7 passed, 2 skipped (smoke/contract suite — OK)
 ```
+
+### 2026-04-23 — Addendum: Align Canonical Tester Harness With Session + CSRF Export Contract
+
+**Branch:** `blitz/canonical-tester-auth`
+
+**Area:** Admin Gateway · Runtime Validation Harness · Canonical Tester Flow
+
+---
+
+**Gap description:**
+
+`tools/auth/validate_tester_flow.sh` no longer matched the actual admin-gateway runtime contract for
+authenticated export operations.
+
+The script correctly validated:
+
+- Keycloak password grant
+- token exchange
+- `/admin/me`
+- `/admin/audit/search`
+
+But it failed on `/admin/audit/export` because the harness still behaved like export was a simple
+stateless JSON/NDJSON endpoint.
+
+Runtime proof showed the real contract is stricter:
+
+- `/auth/token-exchange` requires `Authorization: Bearer <access_token>`
+- successful token exchange sets:
+  - `fg_admin_session`
+  - `fg_csrf_token`
+- `/admin/audit/export` requires:
+  - authenticated session cookie
+  - matching `X-CSRF-Token` header
+  - request body field `format`
+- successful export returns CSV, not NDJSON
+
+Because the harness omitted CSRF handling and validated the wrong response format, it produced false
+failures even though the actual gateway/core flow was working.
+
+**Fixes applied:**
+
+- `tools/auth/validate_tester_flow.sh`
+  - preserved a cookie jar across authenticated gateway steps
+  - kept token exchange on the real runtime contract using bearer auth
+  - extracted `fg_csrf_token` from the cookie jar after session issuance
+  - sent `X-CSRF-Token` on `/admin/audit/export`
+  - updated export payload to include required `format`
+  - switched export validation from NDJSON/JSON-line parsing to CSV validation
+  - retained wrong-tenant denial validation as the final negative-path proof
+
+**Behavior after fix:**
+
+| Step | Before | After |
+|------|--------|-------|
+| Token exchange | Partially validated | Validated against real bearer/session contract |
+| Session persistence | Incomplete | Cookie jar preserved across all gateway steps |
+| Audit export auth | Failed due to missing CSRF handling | Passed |
+| Export payload validation | Expected old JSON/NDJSON shape | Validates real CSV response |
+| Canonical tester runtime proof | False-negative on export | Full end-to-end pass |
+
+**Files changed:** 1
+
+- `tools/auth/validate_tester_flow.sh`
+
+**Validation:**
+```text
+bash tools/auth/validate_tester_flow.sh
+
+==> [pre] Service availability check
+Keycloak: reachable
+Admin gateway: reachable
+
+1) OIDC token: OK
+2) Token exchange → session cookie: OK
+3) /admin/me tenant membership: OK
+4) /admin/audit/search canonical tenant: OK
+5) /admin/audit/export canonical tenant: OK
+6) Wrong-tenant request denied: OK
+
+Canonical tester flow: ALL ASSERTIONS PASSED
