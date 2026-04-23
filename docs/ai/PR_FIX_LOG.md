@@ -3681,3 +3681,63 @@ pytest -q tests/security/test_gateway_only_admin_access.py: 32 passed
 pytest -q tests/test_canonical_tester_flow.py: 23 passed
 make fg-fast: All checks passed! (all gates green, soc-review-sync OK)
 ```
+
+---
+
+### 2026-04-23 — Addendum: Close Dev/Local Auth Drift Gap in Internal Admin Token Path
+
+**Branch:** `blitz/canonical-tester-auth`
+
+**Area:** Core Auth · Admin Router · Dev Enforcement Alignment
+
+---
+
+**Gap description:**
+
+Both `require_internal_admin_gateway()` (`api/admin.py`) and the `admin_internal_token` path in
+`verify_api_key_detailed()` (`api/auth_scopes/resolution.py`) used `_is_production_env()` as their
+sole gate. In `FG_ENV=dev/local/test`, both bypassed enforcement entirely — even when
+`FG_INTERNAL_AUTH_SECRET` was explicitly set. This meant a developer running core locally with a
+configured internal secret would silently hit the global-key fallback path instead of the real
+admin_internal_token path, hiding auth contract divergence that only manifests at runtime.
+
+**Fixes applied:**
+
+- `api/admin.py` — `require_internal_admin_gateway()`: changed from env-only bypass
+  (`if fg_env not in prod_set: return`) to token-presence check:
+  `if not expected and not is_prod_like: return`.
+  Enforcement is now active whenever any internal token is configured (any env), not only prod/staging.
+
+- `api/auth_scopes/resolution.py` — `verify_api_key_detailed()`: hoisted
+  `_configured_internal = _admin_gateway_internal_token()` before the branch condition;
+  changed `if _is_production_env() and ...` to `if (_is_production_env() or bool(_configured_internal)) and ...`.
+  Same trigger semantics: enforce when prod, OR when a local internal token is present.
+
+**Behavior after fix:**
+
+| Condition | Before | After |
+|-----------|--------|-------|
+| Prod/staging, any token | Enforced | Enforced (unchanged) |
+| Dev, no internal token | Bypassed | Bypassed (unchanged) |
+| Dev, `FG_INTERNAL_AUTH_SECRET` set | Bypassed (bug) | Enforced (fixed) |
+
+**Files changed:** 3
+
+- `api/admin.py`
+- `api/auth_scopes/resolution.py`
+- `tests/security/test_gateway_only_admin_access.py`
+
+**Tests added (3 new + 1 updated):**
+
+- Updated `test_non_hosted_allows_direct_admin_access`: now explicitly clears all internal token env vars
+  to represent the "no token configured" case (previously relied on ambient env state).
+- Added `TestDevWithConfiguredTokenEnforces` (3 tests):
+  - `test_dev_with_configured_token_rejects_missing_header` — dev + `FG_INTERNAL_AUTH_SECRET` set → 403 without header
+  - `test_dev_with_configured_token_rejects_wrong_token` — dev + token set → 403 on wrong token
+  - `test_dev_with_configured_token_accepts_correct_token` — dev + token set → accepts correct token
+
+**Validation:**
+```
+pytest -q tests/security/test_gateway_only_admin_access.py: 44 passed
+make fg-fast-pytest: 7 passed, 2 skipped (smoke/contract suite — OK)
+```

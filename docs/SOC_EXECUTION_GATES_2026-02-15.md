@@ -2318,3 +2318,49 @@ SOC review outcome:
 
 SOC review outcome:
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+---
+
+## 2026-04-23 — PR #233 Addendum: Close Dev/Local Auth Drift Gap
+
+### Trigger
+Changes to critical-path auth files:
+- `api/admin.py`
+- `api/auth_scopes/resolution.py`
+
+### Critical-path files reviewed (SOC-HIGH-002)
+- `api/admin.py`
+- `api/auth_scopes/resolution.py`
+
+### Summary
+
+**`api/admin.py`** — `require_internal_admin_gateway()` enforcement trigger changed from purely env-based
+(`prod/staging only`) to token-presence-based: enforcement is now active whenever any internal token
+is configured (`FG_ADMIN_GATEWAY_INTERNAL_TOKEN`, `FG_INTERNAL_AUTH_SECRET`, or `FG_INTERNAL_TOKEN`),
+regardless of `FG_ENV`. Dev bypass is preserved only when **no internal token is configured AND env is
+non-prod**. This closes the gap where a developer running with `FG_INTERNAL_AUTH_SECRET` set would
+silently bypass enforcement.
+
+**`api/auth_scopes/resolution.py`** — `verify_api_key_detailed()` `admin_internal_token` branch:
+condition changed from `_is_production_env() and ...` to `(_is_production_env() or bool(_configured_internal)) and ...`.
+Token lookup hoisted to `_configured_internal` before the branch. Enforcement now active whenever
+a local internal token is configured, matching the updated `api/admin.py` logic.
+
+### Security impact assessment
+
+- **No weakening.** Prod/staging enforcement is unchanged.
+- **Hardening in dev.** A developer running with `FG_INTERNAL_AUTH_SECRET` set now gets real auth
+  enforcement instead of a silent bypass. This prevents local dev configs from hiding auth contract
+  divergence.
+- **Bypass preserved for zero-config dev.** When no internal token is set AND env is non-prod,
+  both guards still return early. Existing dev-without-internal-token workflows are unaffected.
+
+### Verification
+- `pytest tests/security/test_gateway_only_admin_access.py` → 44 passed
+- `make fg-fast-pytest` → 7 passed, 2 skipped
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.

@@ -4,8 +4,9 @@ Task 2.2 — Enforce gateway-only access.
 Regression tests proving:
 A) Hosted profiles (prod/staging) reject direct /admin access without gateway token
 B) Hosted profiles accept /admin access with valid gateway token
-C) Non-hosted profiles do not enforce gateway token (dev/test convenience preserved)
+C) Non-hosted profiles without a configured token skip enforcement (dev convenience)
 D) require_internal_admin_gateway correctly classifies all hosted profiles
+E) Non-hosted profiles WITH a configured internal token enforce the real contract
 """
 
 from __future__ import annotations
@@ -201,12 +202,15 @@ class TestNonHostedAdminGatewayNotEnforced:
 
     @pytest.mark.parametrize("env", ["dev", "test", "development", "local"])
     def test_non_hosted_allows_direct_admin_access(self, env, monkeypatch):
-        """Gateway token must NOT be required in non-hosted profiles."""
+        """Gateway token must NOT be required in non-hosted profiles when no token is configured."""
         monkeypatch.setenv("FG_ENV", env)
+        monkeypatch.delenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN", raising=False)
+        monkeypatch.delenv("FG_INTERNAL_AUTH_SECRET", raising=False)
+        monkeypatch.delenv("FG_INTERNAL_TOKEN", raising=False)
         from api.admin import require_internal_admin_gateway
 
         req = self._make_request()
-        # Must not raise — no enforcement in non-hosted profiles
+        # Must not raise — no token configured AND non-prod → dev bypass preserved
         require_internal_admin_gateway(req)
 
 
@@ -238,3 +242,76 @@ class TestGatewayHostedClassificationConsistency:
         from api.config.env import is_production_env
 
         assert not is_production_env(), f"FG_ENV={env!r} must NOT be a production env."
+
+
+# ---------------------------------------------------------------------------
+# E) Dev/local WITH a configured internal token must enforce the real contract
+# ---------------------------------------------------------------------------
+
+
+class TestDevWithConfiguredTokenEnforces:
+    """
+    When FG_INTERNAL_AUTH_SECRET (or another internal token) is configured,
+    require_internal_admin_gateway must enforce it regardless of FG_ENV.
+
+    This closes the dev/local auth drift gap: a developer running core locally
+    with a configured internal secret should get production-aligned enforcement,
+    not a silent bypass that can hide auth contract problems.
+    """
+
+    def _make_request(self, token_header: str | None = None):
+        from unittest.mock import MagicMock
+
+        req = MagicMock()
+        req.headers = {}
+        if token_header is not None:
+            req.headers["x-fg-internal-token"] = token_header
+        return req
+
+    @pytest.mark.parametrize("env", ["dev", "test", "development", "local"])
+    def test_dev_with_configured_token_rejects_missing_header(self, env, monkeypatch):
+        """Dev env with internal token configured must reject calls without the header."""
+        monkeypatch.setenv("FG_ENV", env)
+        monkeypatch.delenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN", raising=False)
+        monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "dev-internal-secret")
+        monkeypatch.delenv("FG_INTERNAL_TOKEN", raising=False)
+        from fastapi import HTTPException
+
+        from api.admin import require_internal_admin_gateway
+
+        req = self._make_request()  # no token header
+        with pytest.raises(HTTPException) as exc_info:
+            require_internal_admin_gateway(req)
+        assert exc_info.value.status_code == 403, (
+            f"FG_ENV={env!r} with FG_INTERNAL_AUTH_SECRET configured must enforce "
+            "the internal token requirement. Silent bypass hides auth drift."
+        )
+
+    @pytest.mark.parametrize("env", ["dev", "test", "development", "local"])
+    def test_dev_with_configured_token_rejects_wrong_token(self, env, monkeypatch):
+        """Dev env with internal token configured must reject wrong token values."""
+        monkeypatch.setenv("FG_ENV", env)
+        monkeypatch.delenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN", raising=False)
+        monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "dev-internal-secret")
+        monkeypatch.delenv("FG_INTERNAL_TOKEN", raising=False)
+        from fastapi import HTTPException
+
+        from api.admin import require_internal_admin_gateway
+
+        req = self._make_request(token_header="wrong-token")
+        with pytest.raises(HTTPException) as exc_info:
+            require_internal_admin_gateway(req)
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.parametrize("env", ["dev", "test", "development", "local"])
+    def test_dev_with_configured_token_accepts_correct_token(self, env, monkeypatch):
+        """Dev env with internal token configured must accept the correct token."""
+        monkeypatch.setenv("FG_ENV", env)
+        monkeypatch.delenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN", raising=False)
+        monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "dev-internal-secret")
+        monkeypatch.delenv("FG_INTERNAL_TOKEN", raising=False)
+        from api.admin import require_internal_admin_gateway
+
+        req = self._make_request(token_header="dev-internal-secret")
+        # Must not raise
+        require_internal_admin_gateway(req)

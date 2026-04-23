@@ -73,14 +73,20 @@ def require_internal_admin_gateway(request: Request) -> None:
     with the internal trust token is a security anti-pattern.
     """
     fg_env = (os.getenv("FG_ENV") or "").strip().lower()
-    if fg_env not in {"prod", "production", "staging"}:
-        return
+    is_prod_like = fg_env in {"prod", "production", "staging"}
 
     expected = (
         (os.getenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN") or "").strip()
         or (os.getenv("FG_INTERNAL_AUTH_SECRET") or "").strip()
         or (os.getenv("FG_INTERNAL_TOKEN") or "").strip()
     )
+
+    # Enforce when: (a) any internal token is configured, OR (b) prod/staging env.
+    # Skip only when no token is configured AND non-prod — preserves dev convenience
+    # while closing the gap for devs running with a configured internal secret.
+    if not expected and not is_prod_like:
+        return
+
     provided = (request.headers.get("x-fg-internal-token") or "").strip()
     if not expected or not provided or not hmac.compare_digest(provided, expected):
         raise HTTPException(status_code=403, detail="admin_gateway_internal_required")
