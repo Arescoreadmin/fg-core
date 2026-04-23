@@ -12,7 +12,9 @@ def test_admin_keys_list_proxies(client, monkeypatch):
 
     calls = {}
 
-    async def _mock_proxy(request, method, path, params=None, json_body=None, session=None, tenant_id=None):
+    async def _mock_proxy(
+        request, method, path, params=None, json_body=None, session=None, tenant_id=None
+    ):
         calls["method"] = method
         calls["path"] = path
         calls["params"] = params
@@ -34,7 +36,9 @@ def test_admin_keys_scope_enforced(app, monkeypatch):
     from admin_gateway.auth.dependencies import get_current_session
     from admin_gateway.routers import admin as admin_router
 
-    async def _mock_proxy(request, method, path, params=None, json_body=None, session=None, tenant_id=None):
+    async def _mock_proxy(
+        request, method, path, params=None, json_body=None, session=None, tenant_id=None
+    ):
         return {"keys": [], "total": 0}
 
     def _override_session():
