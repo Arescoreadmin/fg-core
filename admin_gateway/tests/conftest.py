@@ -16,7 +16,9 @@ DEFAULT_SCOPES = [
 ]
 
 
-async def _mock_proxy_to_core(request, method, path, params=None, json_body=None):
+async def _mock_proxy_to_core(
+    request, method, path, params=None, json_body=None, session=None, tenant_id=None
+):
     if path == "/admin/keys" and method == "GET":
         return {
             "keys": [],
@@ -73,7 +75,9 @@ async def _mock_proxy_to_core(request, method, path, params=None, json_body=None
     return {}
 
 
-async def _mock_proxy_to_core_raw(request, method, path, params=None, json_body=None):
+async def _mock_proxy_to_core_raw(
+    request, method, path, params=None, json_body=None, session=None, tenant_id=None
+):
     if path == "/admin/audit/export" and method == "POST":
         format = (json_body or {}).get("format", "csv")
         if format == "csv":
