@@ -429,9 +429,7 @@ class TestGatewayCoreProxyContract:
     - proxy headers include X-Admin-Gateway-Internal when internal token is used
     """
 
-    def test_core_api_key_uses_internal_token_when_set(
-        self, monkeypatch: Any
-    ) -> None:
+    def test_core_api_key_uses_internal_token_when_set(self, monkeypatch: Any) -> None:
         """AG_CORE_INTERNAL_TOKEN must return (token, True) in any env."""
         import sys
 
@@ -452,9 +450,7 @@ class TestGatewayCoreProxyContract:
             "_core_api_key must return is_internal=True when AG_CORE_INTERNAL_TOKEN is set"
         )
 
-    def test_core_api_key_falls_back_to_api_key_in_dev(
-        self, monkeypatch: Any
-    ) -> None:
+    def test_core_api_key_falls_back_to_api_key_in_dev(self, monkeypatch: Any) -> None:
         """When AG_CORE_INTERNAL_TOKEN is absent in dev, falls back to AG_CORE_API_KEY."""
         import sys
 
@@ -502,9 +498,7 @@ class TestGatewayCoreProxyContract:
         assert headers.get("X-API-Key") == "test-internal-token"
         assert headers.get("X-Tenant-Id") == "tenant-seed-primary"
 
-    def test_proxy_headers_do_not_forward_user_jwt(
-        self, monkeypatch: Any
-    ) -> None:
+    def test_proxy_headers_do_not_forward_user_jwt(self, monkeypatch: Any) -> None:
         """User OIDC bearer token must NOT appear in gateway→core proxy headers."""
         import sys
         from unittest.mock import MagicMock

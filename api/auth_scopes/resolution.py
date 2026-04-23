@@ -48,10 +48,9 @@ def _admin_gateway_internal_token() -> str:
     Prefers FG_ADMIN_GATEWAY_INTERNAL_TOKEN; falls back to FG_INTERNAL_AUTH_SECRET
     so that the two-service compose setup only needs one shared secret variable.
     """
-    return (
-        (os.getenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN") or "").strip()
-        or (os.getenv("FG_INTERNAL_AUTH_SECRET") or "").strip()
-    )
+    return (os.getenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN") or "").strip() or (
+        os.getenv("FG_INTERNAL_AUTH_SECRET") or ""
+    ).strip()
 
 
 def _internal_admin_scopes() -> Set[str]:
