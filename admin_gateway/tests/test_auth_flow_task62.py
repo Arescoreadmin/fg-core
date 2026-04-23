@@ -136,7 +136,9 @@ def oidc_app(tmp_path, monkeypatch):
     app = build_app()
 
     # Mock core proxy (no real core service in tests)
-    async def _mock_proxy(request, method, path, params=None, json_body=None):
+    async def _mock_proxy(
+        request, method, path, params=None, json_body=None, session=None, tenant_id=None
+    ):
         return {}
 
     monkeypatch.setattr(admin_router, "_proxy_to_core", _mock_proxy, raising=False)

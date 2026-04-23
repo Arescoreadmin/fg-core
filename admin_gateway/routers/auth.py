@@ -51,9 +51,7 @@ async def login(
     If OIDC is not configured and dev bypass is enabled, creates a dev session.
     Otherwise, redirects to the OIDC provider.
     """
-    # Check for dev bypass first
     if config.dev_bypass_allowed and not config.oidc_enabled:
-        # Create dev session and redirect to return_to or /admin/me
         session_manager = SessionManager(config)
         csrf = CSRFProtection(config)
 
@@ -65,18 +63,14 @@ async def login(
             csrf.set_token_cookie(response)
             return response
 
-    # OIDC login flow
     if not config.oidc_enabled:
         raise HTTPException(
             status_code=503,
             detail="Authentication not configured. Set FG_OIDC_* environment variables.",
         )
 
-    # Generate authorization URL
     url, state, _ = await oidc.get_authorization_url()
 
-    # Store return_to in session (using state as key)
-    # In a real implementation, you'd store this in a more persistent way
     if return_to:
         request.app.state.pending_returns = getattr(
             request.app.state, "pending_returns", {}
@@ -114,7 +108,6 @@ async def callback(
 
     Exchanges authorization code for tokens and creates session.
     """
-    # Handle error from IdP
     if error:
         log.warning("OIDC error: %s - %s", error, error_description)
         raise HTTPException(
@@ -123,19 +116,21 @@ async def callback(
         )
 
     try:
-        # Exchange code for tokens
         tokens = await oidc.exchange_code(code, state)
-
-        # Create session from tokens
         session = await oidc.create_session_from_tokens(tokens)
 
-        # Get return URL
+        # Store the upstream token in session for future use (token refresh,
+        # user-info lookups). It is NOT forwarded to core — gateway→core
+        # proxied /admin calls use AG_CORE_INTERNAL_TOKEN exclusively.
+        access_token = tokens.get("access_token")
+        if access_token:
+            session.upstream_access_token = access_token
+
         return_to = "/admin/me"
         pending_returns = getattr(request.app.state, "pending_returns", {})
         if state in pending_returns:
             return_to = pending_returns.pop(state)
 
-        # Set session cookie and redirect
         response = RedirectResponse(url=return_to, status_code=302)
         session_manager.set_session_cookie(response, session)
         csrf.set_token_cookie(response)
@@ -162,17 +157,14 @@ async def logout(
 
     Clears session cookie and optionally redirects to IdP logout.
     """
-    # Get current session for logging
     session = session_manager.get_session(request)
     if session:
         log.info("User logged out: %s", session.user_id)
 
-    # Clear cookies
     response = RedirectResponse(url="/", status_code=302)
     session_manager.clear_session_cookie(response)
     csrf.clear_token_cookie(response)
 
-    # TODO: Optionally redirect to IdP end_session_endpoint
     return response
 
 
@@ -184,11 +176,13 @@ async def token_exchange(
     csrf: CSRFProtection = Depends(get_csrf),
     config: AuthConfig = Depends(get_auth_config),
 ):
-    """Exchange a machine bearer token for a gateway session cookie.
+    """Exchange a bearer token for a gateway session cookie.
 
-    Accepts an OIDC access token (e.g. from client_credentials flow) in the
-    Authorization header and issues a signed session cookie.  Used by
-    machine-to-machine callers and the Task 6.2 e2e validation script.
+    Accepts an OIDC access token in the Authorization header and issues a
+    signed session cookie. The original validated bearer token is stored in
+    the session (for future token refresh / user-info use) but is NOT
+    forwarded to core — all gateway→core proxy calls use the internal trust
+    credential (AG_CORE_INTERNAL_TOKEN), not the user bearer token.
 
     Headers:
         Authorization: Bearer <access_token>
@@ -206,7 +200,9 @@ async def token_exchange(
     if not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Bearer token required")
 
-    access_token = auth_header[len("Bearer ") :]
+    access_token = auth_header[len("Bearer ") :].strip()
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Bearer token required")
 
     try:
         # verify_access_token enforces signature, issuer, audience, and expiry.
@@ -221,6 +217,7 @@ async def token_exchange(
             scopes=scopes,
             claims=claims,
             tenant_id=claims.get("tenant_id"),
+            upstream_access_token=access_token,
         )
 
         response = JSONResponse(
@@ -249,7 +246,6 @@ async def logout_post(
     csrf: CSRFProtection = Depends(get_csrf),
 ):
     """Log out user (POST version for CSRF-safe logout)."""
-    # Validate CSRF for POST
     csrf.validate_request(request)
 
     session = session_manager.get_session(request)

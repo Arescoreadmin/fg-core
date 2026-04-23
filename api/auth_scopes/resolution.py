@@ -43,7 +43,14 @@ def _is_admin_route_path(request_path: Optional[str]) -> bool:
 
 
 def _admin_gateway_internal_token() -> str:
-    return (os.getenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN") or "").strip()
+    """Return the expected internal token for admin-gateway→core requests.
+
+    Prefers FG_ADMIN_GATEWAY_INTERNAL_TOKEN; falls back to FG_INTERNAL_AUTH_SECRET
+    so that the two-service compose setup only needs one shared secret variable.
+    """
+    return (os.getenv("FG_ADMIN_GATEWAY_INTERNAL_TOKEN") or "").strip() or (
+        os.getenv("FG_INTERNAL_AUTH_SECRET") or ""
+    ).strip()
 
 
 def _internal_admin_scopes() -> Set[str]:
@@ -294,13 +301,17 @@ def verify_api_key_detailed(
 
     raw = (raw or raw_key or "").strip()
 
-    # Dedicated admin-gateway -> core token enforcement for production admin paths.
+    # Dedicated admin-gateway -> core token enforcement for admin paths.
+    # Active when: prod/staging env, OR when a local internal token is configured.
+    # This closes the dev/local drift gap — a dev running with FG_INTERNAL_AUTH_SECRET
+    # set will get real enforcement, not a silent bypass.
+    _configured_internal = _admin_gateway_internal_token()
     if (
-        _is_production_env()
+        (_is_production_env() or bool(_configured_internal))
         and _is_admin_route_path(request_path)
         and _is_gateway_internal_admin_request(request)
     ):
-        required_internal = _admin_gateway_internal_token()
+        required_internal = _configured_internal
         if not required_internal:
             _log_auth_event(
                 "admin_internal_auth",

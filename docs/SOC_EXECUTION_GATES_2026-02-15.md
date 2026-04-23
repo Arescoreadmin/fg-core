@@ -2258,3 +2258,109 @@ Validation:
 - `pytest tests/tools/test_route_inventory_summary.py` → 11 passed
 - `pytest tests/tools/` → 48 passed
 - Contract: `GET /ai-plane/inference`, `GET /ai-plane/policies`, `POST /ai-plane/policies`, `POST /ai/infer` confirmed present in `contracts/core/openapi.json`
+
+## 2026-04-23 — Canonical Tester Auth Path: admin_internal_token + upstream_access_token session field
+
+### Critical-path files reviewed (SOC-HIGH-002)
+- `admin_gateway/auth/session.py`
+- `api/auth_scopes/resolution.py`
+
+### Summary
+
+**`admin_gateway/auth/session.py`** — Added `upstream_access_token: Optional[str] = None` field to the `Session` dataclass. This field stores the OIDC access token obtained from Keycloak during the password-grant / token-exchange flow. The token is stored in the encrypted session cookie for future use (e.g., token refresh, user-info lookups) but is **not forwarded to core** — the gateway continues to use `AG_CORE_INTERNAL_TOKEN` for all core proxy requests. `to_dict()`, `from_dict()`, and `create_session()` updated accordingly.
+
+**`api/auth_scopes/resolution.py`** — Updated `_admin_gateway_internal_token()` to fall back to `FG_INTERNAL_AUTH_SECRET` when `FG_ADMIN_GATEWAY_INTERNAL_TOKEN` is unset. This allows the `admin_internal_token` auth path (used for gateway→core proxied admin requests) to work in local/test environments that already set `FG_INTERNAL_AUTH_SECRET` without requiring a separate env var. The resolution precedence is: `FG_ADMIN_GATEWAY_INTERNAL_TOKEN` (explicit, production-preferred) → `FG_INTERNAL_AUTH_SECRET` (shared secret fallback for dev/test).
+
+### Security impact assessment
+
+- `upstream_access_token` is stored in the session cookie which is already encrypted and scoped to the authenticated user. It is **never forwarded to core** or logged. No new surface for token leakage beyond the existing session cookie.
+- The `FG_INTERNAL_AUTH_SECRET` fallback does not weaken production security: production deployments set `FG_ADMIN_GATEWAY_INTERNAL_TOKEN` explicitly and the fallback is never reached. The fallback only activates when `FG_ADMIN_GATEWAY_INTERNAL_TOKEN` is absent (non-prod / local dev).
+- The `bind_tenant_id()` path already enforced `reason == "admin_internal_token"` before allowing explicit tenant propagation; no bypass introduced.
+
+### Verification
+- `make fg-fast` → 1847 passed, 22 skipped
+- `GITHUB_BASE_REF=main .venv/bin/python tools/ci/check_soc_review_sync.py` → `soc-review-sync: OK`
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+## 2026-04-23 — Proxy contract hardening: require_internal_admin_gateway fallback alignment + docstring corrections
+
+### Critical-path files reviewed (SOC-HIGH-002)
+- `admin_gateway/auth/session.py`
+
+### Summary
+
+**`admin_gateway/auth/session.py`** — Corrected `upstream_access_token` docstring: removed misleading "JWT passthrough" language. The field stores the OIDC bearer token for future use (token refresh, user-info) but is **not forwarded to core**. Prior docstring implied the token was used for gateway→core passthrough, which is architecturally incorrect and created regression risk. No behavioral change.
+
+**`admin_gateway/routers/auth.py`** — Same docstring correction in `token_exchange` endpoint description and `callback()` comment. Contract artifact regenerated accordingly.
+
+**`api/admin.py`** — `require_internal_admin_gateway()` fallback chain aligned with `_admin_gateway_internal_token()` in `resolution.py`. Added `FG_INTERNAL_AUTH_SECRET` as position-2 fallback (before `FG_INTERNAL_TOKEN`). Removed `FG_API_KEY` from the fallback to prevent conflating the global API key with the internal trust token. Compose-native setup (`docker-compose.oidc.yml` sets `AG_CORE_INTERNAL_TOKEN = FG_INTERNAL_AUTH_SECRET`) now works end-to-end: both auth layers compute the same expected token.
+
+**`admin_gateway/routers/admin.py`** — Removed dead `_core_internal_token()` function (defined but never called).
+
+### Security impact assessment
+
+- No auth logic weakened. `require_internal_admin_gateway()` is now strictly aligned with `resolution.py` — the same secret that passes the auth_gate middleware now also passes the router-level dependency. Prior mismatch caused valid internal requests to be rejected with 403 in the compose setup.
+- `FG_API_KEY` removal from the fallback is a hardening: it prevents accidental acceptance of the global API key on the internal gateway path.
+- Docstring fixes eliminate the future regression risk of a developer adding JWT forwarding based on misleading inline comments.
+
+### Verification
+- `pytest tests/security/test_gateway_only_admin_access.py` → 32 passed
+- `pytest tests/test_canonical_tester_flow.py` → 23 passed
+- `make fg-fast` → all gates green
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+---
+
+## 2026-04-23 — PR #233 Addendum: Close Dev/Local Auth Drift Gap
+
+### Trigger
+Changes to critical-path auth files:
+- `api/admin.py`
+- `api/auth_scopes/resolution.py`
+
+### Critical-path files reviewed (SOC-HIGH-002)
+- `api/admin.py`
+- `api/auth_scopes/resolution.py`
+
+### Summary
+
+**`api/admin.py`** — `require_internal_admin_gateway()` enforcement trigger changed from purely env-based
+(`prod/staging only`) to token-presence-based: enforcement is now active whenever any internal token
+is configured (`FG_ADMIN_GATEWAY_INTERNAL_TOKEN`, `FG_INTERNAL_AUTH_SECRET`, or `FG_INTERNAL_TOKEN`),
+regardless of `FG_ENV`. Dev bypass is preserved only when **no internal token is configured AND env is
+non-prod**. This closes the gap where a developer running with `FG_INTERNAL_AUTH_SECRET` set would
+silently bypass enforcement.
+
+**`api/auth_scopes/resolution.py`** — `verify_api_key_detailed()` `admin_internal_token` branch:
+condition changed from `_is_production_env() and ...` to `(_is_production_env() or bool(_configured_internal)) and ...`.
+Token lookup hoisted to `_configured_internal` before the branch. Enforcement now active whenever
+a local internal token is configured, matching the updated `api/admin.py` logic.
+
+### Security impact assessment
+
+- **No weakening.** Prod/staging enforcement is unchanged.
+- **Hardening in dev.** A developer running with `FG_INTERNAL_AUTH_SECRET` set now gets real auth
+  enforcement instead of a silent bypass. This prevents local dev configs from hiding auth contract
+  divergence.
+- **Bypass preserved for zero-config dev.** When no internal token is set AND env is non-prod,
+  both guards still return early. Existing dev-without-internal-token workflows are unaffected.
+
+### Verification
+- `pytest tests/security/test_gateway_only_admin_access.py` → 44 passed
+- `make fg-fast-pytest` → 7 passed, 2 skipped
+
+### Reviewer
+- Jason (repo owner / final authority)
+
+SOC review outcome:
+- `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.

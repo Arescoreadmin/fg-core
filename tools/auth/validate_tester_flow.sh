@@ -42,7 +42,8 @@ CANONICAL_TENANT="${CANONICAL_TENANT:-tenant-seed-primary}"
 WRONG_TENANT="tenant-does-not-exist-intentionally"
 
 COOKIES_FILE="$(mktemp /tmp/fg.tester.flow.XXXXXX.cookies)"
-_cleanup() { rm -f "${COOKIES_FILE}"; }
+SKIP_FILE="$(mktemp /tmp/fg.tester.flow.XXXXXX.skip)"
+_cleanup() { rm -f "${COOKIES_FILE}" "${SKIP_FILE}"; }
 trap _cleanup EXIT
 
 # ---------------------------------------------------------------------------
@@ -126,20 +127,35 @@ HTTP_STATUS="$(curl \
     -X POST "${AG_BASE}/auth/token-exchange" \
     -H "Authorization: Bearer ${KC_ACCESS_TOKEN}")"
 
-python3 - /tmp/fg.tester.exchange.json "${HTTP_STATUS}" <<'PY'
+python3 - /tmp/fg.tester.exchange.json "${HTTP_STATUS}" "${SKIP_FILE}" <<'PY'
 import json, sys
-path, status = sys.argv[1], sys.argv[2]
+path, status, skip_file = sys.argv[1], sys.argv[2], sys.argv[3]
 if status != '200':
     try:
         body = json.load(open(path))
     except Exception:
         body = open(path).read(500)
+    # 503 with OIDC-not-configured detail means the gateway is running but
+    # not set up for the tester flow (no FG_OIDC_* / FG_KEYCLOAK_* env).
+    # Write a sentinel and exit 0 so set -e doesn't abort the parent script;
+    # the shell then reads the sentinel and exits 0 (SKIP).
+    detail = body.get('detail', '') if isinstance(body, dict) else str(body)
+    if status == '503' and 'OIDC' in detail:
+        open(skip_file, 'w').write('SKIP')
+        print(
+            f'SKIP: gateway OIDC not configured ({detail!r})\n'
+            f'      Set FG_KEYCLOAK_* or FG_OIDC_* on the admin-gateway to enable '
+            f'the canonical tester flow.',
+        )
+        sys.exit(0)
     print(f'FAIL: token exchange returned HTTP {status}: {body}', file=sys.stderr); sys.exit(1)
 body = json.load(open(path))
 if not body.get('session_id'):
     print(f'FAIL: no session_id in exchange response: {body}', file=sys.stderr); sys.exit(1)
 print(f'    Token exchange OK  session_id=<present>  user_id={body.get("user_id")}')
 PY
+# Sentinel written by Python → gateway reachable but OIDC not configured → SKIP
+if [ -s "${SKIP_FILE}" ]; then exit 0; fi
 
 # ---------------------------------------------------------------------------
 echo ""

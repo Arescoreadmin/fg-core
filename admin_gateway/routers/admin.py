@@ -106,10 +106,21 @@ def _core_base_url() -> str:
 
 
 def _core_api_key() -> tuple[str, bool]:
+    """Return (token, is_internal) for gateway→core requests.
+
+    Uses AG_CORE_INTERNAL_TOKEN whenever set (any env).  This activates the
+    admin_internal_token auth path in core, which allows bind_tenant_id() to
+    accept an explicit tenant_id from query params.
+
+    In non-prod envs, falls back to AG_CORE_API_KEY for backward-compat with
+    setups that pre-date the internal token (e.g. local dev without compose).
+    In prod, AG_CORE_INTERNAL_TOKEN is required — no API key fallback.
+    """
     internal_token = (os.getenv("AG_CORE_INTERNAL_TOKEN") or "").strip()
+    if internal_token:
+        return internal_token, True
+
     if _is_prod_like_env():
-        if internal_token:
-            return internal_token, True
         raise HTTPException(
             status_code=503,
             detail=(
@@ -124,31 +135,38 @@ def _core_api_key() -> tuple[str, bool]:
 
     raise HTTPException(
         status_code=503,
-        detail=("Core service unavailable: AG_CORE_API_KEY not configured"),
+        detail="Core service unavailable: AG_CORE_API_KEY not configured",
     )
 
 
-def _core_proxy_headers(request: Request) -> dict[str, str]:
+def _core_proxy_headers(
+    request: Request,
+    session: Optional[Session] = None,
+    tenant_id: Optional[str] = None,
+) -> dict[str, str]:
+    """Build headers for gateway -> core proxy calls.
+
+    IMPORTANT:
+    Do not forward the user's upstream bearer token to core on /admin proxy
+    calls. Core expects gateway/internal auth on this surface, not human OIDC
+    bearer auth. Forward only the gateway credential plus explicit tenant
+    context and request correlation headers.
+    """
     token, is_internal = _core_api_key()
     headers = {
         "X-API-Key": token,
         "X-Request-Id": getattr(request.state, "request_id", ""),
     }
+
+    if tenant_id:
+        headers["X-Tenant-Id"] = tenant_id
+
     if is_internal:
         headers[_CORE_INTERNAL_HEADER] = _CORE_INTERNAL_HEADER_VALUE
-        # Core's require_internal_admin_gateway checks x-fg-internal-token (Task 6.2).
+        # Core's require_internal_admin_gateway checks x-fg-internal-token.
         headers["X-FG-Internal-Token"] = token
+
     return headers
-
-
-def _core_internal_token() -> str:
-    token = (os.getenv("AG_CORE_INTERNAL_TOKEN") or "").strip() or _core_api_key()[0]
-    if not token:
-        raise HTTPException(
-            status_code=503,
-            detail="Core service unavailable: AG_CORE_INTERNAL_TOKEN not configured",
-        )
-    return token
 
 
 async def _proxy_to_core(
@@ -158,9 +176,11 @@ async def _proxy_to_core(
     *,
     params: Optional[dict[str, Any]] = None,
     json_body: Optional[dict[str, Any]] = None,
+    session: Optional[Session] = None,
+    tenant_id: Optional[str] = None,
 ) -> dict[str, Any]:
     base_url = _core_base_url()
-    headers = _core_proxy_headers(request)
+    headers = _core_proxy_headers(request, session=session, tenant_id=tenant_id)
 
     async with httpx.AsyncClient(base_url=base_url, timeout=15.0) as client:
         response = await client.request(
@@ -188,9 +208,11 @@ async def _proxy_to_core_raw(
     *,
     params: Optional[dict[str, Any]] = None,
     json_body: Optional[dict[str, Any]] = None,
+    session: Optional[Session] = None,
+    tenant_id: Optional[str] = None,
 ) -> Response:
     base_url = _core_base_url()
-    headers = _core_proxy_headers(request)
+    headers = _core_proxy_headers(request, session=session, tenant_id=tenant_id)
 
     async with httpx.AsyncClient(base_url=base_url, timeout=None) as client:
         async with client.stream(
@@ -288,7 +310,6 @@ async def get_csrf_token(
     config = get_auth_config()
     csrf = CSRFProtection(config)
 
-    # Get token from cookie or generate new one
     token = request.cookies.get(config.csrf_cookie_name)
     if not token:
         token = csrf._generate_token()
@@ -557,7 +578,6 @@ async def list_tenants(
     """
     allowed = get_allowed_tenants(session)
 
-    # Audit log
     audit_logger = getattr(request.app.state, "audit_logger", None)
     if audit_logger:
         await audit_logger.log(
@@ -607,6 +627,8 @@ async def create_tenant(
         "POST",
         "/admin/tenants",
         json_body=payload.model_dump(exclude_none=True),
+        session=session,
+        tenant_id=payload.tenant_id,
     )
 
     audit_logger = getattr(request.app.state, "audit_logger", None)
@@ -649,6 +671,8 @@ async def get_tenant(
         request,
         "GET",
         f"/admin/tenants/{tenant_id}",
+        session=session,
+        tenant_id=tenant_id,
     )
 
 
@@ -677,6 +701,8 @@ async def list_keys(
         "GET",
         "/admin/keys",
         params={"tenant_id": tenant_id} if tenant_id else None,
+        session=session,
+        tenant_id=tenant_id,
     )
 
     audit_logger = getattr(request.app.state, "audit_logger", None)
@@ -710,6 +736,8 @@ async def get_usage(
         request,
         "GET",
         f"/admin/tenants/{effective}/usage",
+        session=session,
+        tenant_id=effective,
     )
     payload["request_id"] = getattr(request.state, "request_id", "unknown")
     return payload
@@ -743,6 +771,8 @@ async def create_key(
         "POST",
         "/admin/keys",
         json_body=payload.model_dump(),
+        session=session,
+        tenant_id=payload.tenant_id,
     )
 
     audit_logger = getattr(request.app.state, "audit_logger", None)
@@ -787,6 +817,8 @@ async def revoke_key(
         "POST",
         f"/admin/keys/{prefix}/revoke",
         params={"tenant_id": tenant_id},
+        session=session,
+        tenant_id=tenant_id,
     )
 
     audit_logger = getattr(request.app.state, "audit_logger", None)
@@ -833,6 +865,8 @@ async def rotate_key(
         f"/admin/keys/{prefix}/rotate",
         params={"tenant_id": tenant_id},
         json_body=payload.model_dump(),
+        session=session,
+        tenant_id=tenant_id,
     )
 
     audit_logger = getattr(request.app.state, "audit_logger", None)
@@ -897,6 +931,8 @@ async def search_audit_events(
         "GET",
         "/admin/audit/search",
         params=params,
+        session=session,
+        tenant_id=effective_tenant_id,
     )
 
     if "items" in response and isinstance(response["items"], list):
@@ -966,4 +1002,6 @@ async def export_audit_events(
         "POST",
         "/admin/audit/export",
         json_body=body,
+        session=session,
+        tenant_id=effective_tenant_id,
     )

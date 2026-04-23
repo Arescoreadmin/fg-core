@@ -12,7 +12,9 @@ def test_admin_keys_list_proxies(client, monkeypatch):
 
     calls = {}
 
-    async def _mock_proxy(request, method, path, params=None, json_body=None):
+    async def _mock_proxy(
+        request, method, path, params=None, json_body=None, session=None, tenant_id=None
+    ):
         calls["method"] = method
         calls["path"] = path
         calls["params"] = params
@@ -34,7 +36,9 @@ def test_admin_keys_scope_enforced(app, monkeypatch):
     from admin_gateway.auth.dependencies import get_current_session
     from admin_gateway.routers import admin as admin_router
 
-    async def _mock_proxy(request, method, path, params=None, json_body=None):
+    async def _mock_proxy(
+        request, method, path, params=None, json_body=None, session=None, tenant_id=None
+    ):
         return {"keys": [], "total": 0}
 
     def _override_session():
@@ -81,8 +85,12 @@ def test_core_api_key_non_prod_falls_back_to_legacy(monkeypatch):
     assert not is_internal
 
 
-def test_core_api_key_non_prod_uses_legacy_even_if_internal_present(monkeypatch):
-    """Non-production should keep AG_CORE_API_KEY behavior for compatibility."""
+def test_core_api_key_dev_uses_internal_token_when_set(monkeypatch):
+    """AG_CORE_INTERNAL_TOKEN takes priority over AG_CORE_API_KEY in any env.
+
+    This activates the admin_internal_token auth path in core which allows
+    bind_tenant_id() to accept an explicit tenant_id from query params.
+    """
     from admin_gateway.routers import admin as admin_router
 
     monkeypatch.setenv("FG_ENV", "dev")
@@ -90,5 +98,5 @@ def test_core_api_key_non_prod_uses_legacy_even_if_internal_present(monkeypatch)
     monkeypatch.setenv("AG_CORE_API_KEY", "legacy-shared-key")
 
     token, is_internal = admin_router._core_api_key()
-    assert token == "legacy-shared-key"
-    assert not is_internal
+    assert token == "internal-token"
+    assert is_internal is True

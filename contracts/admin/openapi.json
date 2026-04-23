@@ -2111,7 +2111,7 @@
     },
     "/auth/token-exchange": {
       "post": {
-        "description": "Exchange a machine bearer token for a gateway session cookie.\n\nAccepts an OIDC access token (e.g. from client_credentials flow) in the\nAuthorization header and issues a signed session cookie.  Used by\nmachine-to-machine callers and the Task 6.2 e2e validation script.\n\nHeaders:\n    Authorization: Bearer <access_token>\n\nReturns:\n    JSON {\"session_id\", \"expires_in\", \"user_id\"} and sets Set-Cookie.",
+        "description": "Exchange a bearer token for a gateway session cookie.\n\nAccepts an OIDC access token in the Authorization header and issues a\nsigned session cookie. The original validated bearer token is stored in\nthe session (for future token refresh / user-info use) but is NOT\nforwarded to core \u2014 all gateway\u2192core proxy calls use the internal trust\ncredential (AG_CORE_INTERNAL_TOKEN), not the user bearer token.\n\nHeaders:\n    Authorization: Bearer <access_token>\n\nReturns:\n    JSON {\"session_id\", \"expires_in\", \"user_id\"} and sets Set-Cookie.",
         "operationId": "token_exchange_auth_token_exchange_post",
         "responses": {
           "200": {
