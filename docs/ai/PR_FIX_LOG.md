@@ -6,6 +6,54 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-24 — Task 16.4: Answer Grounding and Citation Contract
+
+**Branch:** `task/16.4-answer-grounding-citation`
+
+**Task ID:** 16.4
+
+**Area:** RAG / Answer Assembly / Citation Contract
+
+---
+
+**Gap description:**
+
+No answer assembly surface existed. Retrieval results from 16.3 had no downstream path to produce grounded answers with explicit citations or structured no-answer payloads. `pytest -q tests -k 'rag and citation'` selected zero tests.
+
+**Files changed:**
+
+- `api/rag/answering.py` — new: `CitationReference`, `GroundedAnswer`, `NoAnswer`, `AnswerAssemblyResult`, `AnsweringError`, `assemble_answer_from_context()`, `build_no_answer()`
+- `tests/rag/test_answer_grounding_citation_contract.py` — new: 14 test functions, 16 cases (3 parametrized)
+
+**Security impact:**
+
+- `trusted_tenant_id` sourced from caller execution context only; citation identity never originates from context item claims
+- Mixed-tenant context raises `ANSWER_ERR_MIXED_TENANT` — hard gate at answer assembly layer (independent of retrieval layer guard)
+- `GroundedAnswer` invariants: `citations` always non-empty, `grounded` always `True`, all citations belong to `trusted_tenant_id`
+- `NoAnswer` invariants: `citations` always `[]`, `grounded` always `False`, structured reason code
+- Citation IDs are deterministic SHA-256 of canonical JSON of (chunk_id, chunk_index, document_id, parent_content_hash, source_id, tenant_id) — sort_keys=True, no randomness
+- Error messages contain no raw foreign chunk text, no foreign tenant ID, no foreign source_id
+- No LLM calls, no embeddings, no vector DB, no external services
+
+**Validation results:**
+
+```
+pytest -q tests -k 'rag and citation'  → 16 passed
+pytest -k 'rag and ingest'             → 14 passed (regression-free)
+pytest -k 'rag and chunk'              → 30 passed (regression-free)
+pytest -q tests/security -k 'rag and tenant' → 14 passed (regression-free)
+make fg-fast                           → All checks passed!
+```
+
+**Remaining blocker:**
+
+`python tools/plan/taskctl.py validate` reports:
+`Task 15.2 cannot proceed; unmet dependencies: 14.2`
+
+Pre-existing plan pointer/dependency drift. Not caused by this task.
+
+---
+
 ### 2026-04-24 — Task 16.3: Retrieval Tenant Isolation
 
 **Branch:** `task/16.3-retrieval-tenant-isolation`

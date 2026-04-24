@@ -1,3 +1,21 @@
+## 2026-04-24 — Task 16.4: RAG Answer Grounding and Citation Contract surface added
+
+New module: `api/rag/answering.py`
+
+Answer assembly guarantees:
+- `trusted_tenant_id` required from caller context; citation identity never sourced from context item claims
+- Mixed-tenant context rejected with `ANSWER_ERR_MIXED_TENANT` — independent guard at answer layer (in addition to retrieval layer)
+- `GroundedAnswer`: `citations` always non-empty, `grounded` always `True`, all citations bound to `trusted_tenant_id`
+- `NoAnswer`: `citations` always `[]`, `grounded` always `False`, stable reason code (`RAG_NO_ANSWER_xxx`)
+- Citation IDs are deterministic SHA-256 of canonical JSON of identity fields — no randomness, no clock dependency
+- Error messages contain no raw foreign chunk text, no foreign tenant/source/document identity
+- No LLM calls, no embeddings, no vector DB, no external services
+
+No routes added. No DB migrations. No OpenAPI changes.
+Validation: `pytest -q tests -k 'rag and citation'` → 16 passed. `make fg-fast` → passed.
+
+---
+
 ## 2026-04-24 — Task 16.3: RAG Retrieval Tenant Isolation surface added
 
 New module: `api/rag/retrieval.py`
