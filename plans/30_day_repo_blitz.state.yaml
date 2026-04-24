@@ -1,7 +1,7 @@
 plan_id: frostgate-30-day-repo-blitz
 current_phase_id: phase-2
 current_module_id: '5.0'
-current_task_id: '15.1'
+current_task_id: '15.2'
 completed_tasks:
 - '1.1'
 - '1.2'
@@ -30,6 +30,7 @@ completed_tasks:
 - '5.2'
 - '5.3'
 - '6.3'
+- '15.1'
 blocked: false
 blocker_reason: ''
 blocked_reason: null
@@ -149,6 +150,11 @@ validations:
     timestamp: 20260424T133107Z
     artifact: artifacts/plan/6.3_validate_latest.json
     working_tree_fingerprint: ebc764436f7a08fbf29c7a40d5905d76a47174004d6d7d24fa12e9a45782e652
+  '15.1':
+    status: pass
+    timestamp: 20260424T151240Z
+    artifact: artifacts/plan/15.1_validate_latest.json
+    working_tree_fingerprint: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 history:
 - event: complete
   task_id: '9.3'
@@ -168,3 +174,13 @@ history:
 - event: complete
   task_id: '6.3'
   timestamp: 20260424T133110Z
+- event: complete
+  task_id: '15.1'
+  timestamp: 20260424T151240Z
+- event: block
+  task_id: '15.2'
+  reason: 'state drift detected: rewinding to 16.1'
+  timestamp: 20260424T155228Z
+- event: unblock
+  task_id: '15.2'
+  timestamp: 20260424T162517Z
