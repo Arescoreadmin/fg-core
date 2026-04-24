@@ -189,9 +189,7 @@ def _split_text(text: str, max_chars: int, overlap_chars: int) -> list[str]:
                     else:
                         break
                 current_words = list(reversed(overlap_words_rev))
-                current_len = sum(len(w) for w in current_words) + max(
-                    len(current_words) - 1, 0
-                )
+                current_len = overlap_len
             else:
                 current_words = []
                 current_len = 0
