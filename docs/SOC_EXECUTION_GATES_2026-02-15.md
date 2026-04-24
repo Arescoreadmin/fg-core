@@ -1,3 +1,21 @@
+## 2026-04-24 — Task 16.3: RAG Retrieval Tenant Isolation surface added
+
+New module: `api/rag/retrieval.py`
+
+Tenant-isolation guarantees:
+- `trusted_tenant_id` required from caller context; query text/payload/metadata cannot supply or override it
+- `search_chunks`: tenant filter applied BEFORE scoring — foreign chunks never enter candidate set
+- `fetch_chunk`: foreign chunk_id returns `RETRIEVAL_ERR_CHUNK_NOT_FOUND` (same as absent ID — no existence side channel)
+- `prepare_answer_context`: rejects any mixed-tenant result set with `RETRIEVAL_ERR_MIXED_TENANT` — hard gate against bypass via pre-assembled inputs
+- Error messages contain no raw chunk text, no foreign tenant/source/document identity
+- Sort order deterministic: score DESC → chunk_index ASC → chunk_id ASC
+- No external services, no embeddings, no vector DB, no LLM calls
+
+No routes added. No DB migrations. No OpenAPI changes.
+Validation: `pytest -q tests/security -k 'rag and tenant'` → 14 passed. `make fg-fast` → passed.
+
+---
+
 ## 2026-04-24 — Task 16.2: RAG Chunking and Metadata Fidelity surface added
 
 New module: `api/rag/chunking.py`

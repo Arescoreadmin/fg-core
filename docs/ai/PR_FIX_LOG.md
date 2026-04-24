@@ -6,6 +6,53 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-24 — Task 16.3: Retrieval Tenant Isolation
+
+**Branch:** `task/16.3-retrieval-tenant-isolation`
+
+**Task ID:** 16.3
+
+**Area:** RAG / Retrieval / Tenant Isolation
+
+---
+
+**Gap description:**
+
+No retrieval surface existed. `pytest -q tests/security -k 'rag and tenant'` selected zero tests. Chunks produced by 16.2 had no search, fetch, or answer-context path with tenant enforcement.
+
+**Files changed:**
+
+- `api/rag/retrieval.py` — new: `RetrievalQuery`, `RetrievalResult`, `AnswerContextItem`, `RetrievalError`, `search_chunks()`, `fetch_chunk()`, `prepare_answer_context()`
+- `tests/security/test_rag_retrieval_tenant_isolation.py` — new: 12 test functions, 14 cases
+
+**Security impact:**
+
+- `trusted_tenant_id` sourced from caller execution context only; query text/payload/metadata cannot supply or override it
+- `search_chunks`: filters candidates by tenant BEFORE scoring; foreign chunks never score or surface
+- `fetch_chunk`: foreign chunk_id returns `RETRIEVAL_ERR_CHUNK_NOT_FOUND` — identical to absent ID; prevents cross-tenant existence side channel
+- `prepare_answer_context`: any foreign-tenant item in input raises `RETRIEVAL_ERR_MIXED_TENANT` — hard gate against bypass via pre-assembled result sets
+- Error messages contain no raw chunk text, no foreign tenant ID, no foreign source_id
+- Deterministic sort order: score DESC → chunk_index ASC → chunk_id ASC; no randomness
+- No external services, no embeddings, no LLM calls
+
+**Validation results:**
+
+```
+pytest -q tests/security -k 'rag and tenant' → 14 passed
+pytest -k 'rag and ingest'                   → 14 passed (regression-free)
+pytest -k 'rag and chunk'                    → 30 passed (regression-free)
+make fg-fast                                 → All checks passed!
+```
+
+**Remaining blocker:**
+
+`python tools/plan/taskctl.py validate` reports:
+`Task 15.2 cannot proceed; unmet dependencies: 14.2`
+
+Pre-existing plan pointer/dependency drift. Not caused by this task.
+
+---
+
 ### 2026-04-24 — Task 16.2 Hardening (Review Pass): max_chars enforcement + long-token rejection
 
 **Branch:** `task/16.2-hardening`
@@ -4197,3 +4244,11 @@ Admin gateway: reachable
 6) Wrong-tenant request denied: OK
 
 Canonical tester flow: ALL ASSERTIONS PASSED
+
+2026-04-XX — Addendum: Fix overlap reseed length determinism bug
+
+- Issue: current_len incorrectly reused overlap_len, causing nondeterministic chunk sizing
+- Fix: recompute current_len from actual words
+- Impact: ensures deterministic chunk counts and stable chunk boundaries
+- Tests: added regression for empty overlap reseed case
+- Validation: rag+chunk, rag+ingest, fg-fast all pass
