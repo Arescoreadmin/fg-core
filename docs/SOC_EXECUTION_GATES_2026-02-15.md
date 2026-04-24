@@ -1,3 +1,22 @@
+## 2026-04-24 — Task 16.6: No-Answer and Insufficient-Context Behavior
+
+`api/rag/answering.py` extended with `AnswerConfidencePolicy` and policy-governed assembly.
+
+Non-fabrication guarantees:
+- Empty context → `NO_ANSWER_EMPTY_CONTEXT` (structured payload, no fabrication)
+- All-zero-score context → `NO_ANSWER_INSUFFICIENT_CONTEXT`
+- Context below policy thresholds → `NO_ANSWER_LOW_SCORE`
+- Mixed-tenant context rejected before policy evaluation
+- Query text and `answer_text` cannot override policy or tenant
+- Invalid policy values raise `ANSWER_ERR_INVALID_POLICY` — fail closed
+- `NoAnswer.evidence_count` and `NoAnswer.tenant_id` added for auditability
+- All no-answer payloads: `grounded=False`, `citations=[]`, stable reason code
+
+No routes added. No DB migrations. No OpenAPI changes.
+Validation: `pytest -q tests -k 'rag and no_answer'` → 21 passed. `make fg-fast` → passed.
+
+---
+
 ## 2026-04-24 — Task 16.3/16.4 Addendum: Fail-closed input validation for tenant and limit guards
 
 `api/rag/retrieval.py` and `api/rag/answering.py` updated to reject non-string tenant IDs and non-integer limits with stable error codes before calling `.strip()` or bounds checks. Non-string inputs now raise `RETRIEVAL_ERR_MISSING_TENANT` / `ANSWER_ERR_MISSING_TENANT`; non-integer/bool limits raise `RETRIEVAL_ERR_INVALID_LIMIT`. No new routes, no DB migrations.
