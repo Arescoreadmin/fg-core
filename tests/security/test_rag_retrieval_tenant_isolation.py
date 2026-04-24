@@ -324,3 +324,28 @@ def test_rag_tenant_limit_is_bounded_and_deterministic(all_chunks):
 
 # Need this import for the parametrize test above
 _MAX_LIMIT = 100
+
+
+def test_rag_tenant_rejects_non_string_trusted_tenant(all_chunks) -> None:
+    with pytest.raises(RetrievalError) as exc:
+        search_chunks(
+            all_chunks,
+            RetrievalQuery(query_text="alpha"),
+            trusted_tenant_id=True,  # type: ignore[arg-type]
+        )
+
+    assert exc.value.error_code == RETRIEVAL_ERR_MISSING_TENANT
+
+
+@pytest.mark.parametrize("bad_limit", [1.5, True, "3", None])
+def test_rag_tenant_limit_rejects_non_integer_values(
+    all_chunks, bad_limit: object
+) -> None:
+    with pytest.raises(RetrievalError) as exc:
+        search_chunks(
+            all_chunks,
+            RetrievalQuery(query_text="alpha", limit=bad_limit),  # type: ignore[arg-type]
+            trusted_tenant_id="tenant-rag-a",
+        )
+
+    assert exc.value.error_code == RETRIEVAL_ERR_INVALID_LIMIT
