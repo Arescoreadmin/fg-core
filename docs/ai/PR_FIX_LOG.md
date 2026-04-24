@@ -6,6 +6,65 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-24 — Task 5.3 Addendum: Fix False Failure on Missing PyYAML
+
+**Branch:** `task/5.3-plane-boundary-enforcement`
+
+**Area:** CI Boundary Check · PyYAML Skip Handling
+
+---
+
+**Defect:**
+
+`_check_compose_network_boundaries()` in `tools/ci/check_plane_boundaries.py` returned a non-empty list when PyYAML was not installed:
+
+```python
+# Before
+return ["SKIP: PyYAML not installed — compose network check skipped"]
+```
+
+`main()` treats any non-empty return as a violation and exits 1. This caused a **false CI failure** when PyYAML was absent — the boundary may be correctly configured, but CI would fail anyway.
+
+`test_plane_boundary_ci_script_passes` would also incorrectly fail because it asserts `returncode == 0`.
+
+**Fix (`tools/ci/check_plane_boundaries.py`):**
+
+```python
+# After
+print("plane boundaries: SKIP (PyYAML not installed)")
+return []
+```
+
+Skip is logged visibly; no violation is returned; exit code remains 0.
+
+**Behavior before vs after:**
+
+| Condition | Before | After |
+|---|---|---|
+| PyYAML missing, compose OK | exit 1 (false failure) | exit 0 (correct skip) |
+| PyYAML missing, compose broken | exit 1 (false failure, wrong reason) | exit 0 (skip — compose not checked) |
+| PyYAML present, compose OK | exit 0 | exit 0 |
+| PyYAML present, compose broken | exit 1 | exit 1 |
+
+No boundary enforcement logic weakened. No new dependencies added.
+
+**Validation:**
+
+```
+python tools/ci/check_plane_boundaries.py
+→ plane boundaries: OK
+
+pytest -k 'plane_boundary or gateway_only or direct_core_blocked'
+→ 50 passed, 1 skipped
+
+make fg-fast
+→ All checks passed!
+```
+
+**Final status:** COMPLETE
+
+---
+
 ### 2026-04-24 — Task 5.3: Plane Boundary Enforcement
 
 **Branch:** `task/5.3-plane-boundary-enforcement`

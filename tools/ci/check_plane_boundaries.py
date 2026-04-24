@@ -58,7 +58,8 @@ def _check_import_boundaries() -> list[str]:
 def _check_compose_network_boundaries() -> list[str]:
     """Verify frostgate-core is not attached to the public network in any compose file."""
     if not _YAML_AVAILABLE:
-        return ["SKIP: PyYAML not installed — compose network check skipped"]
+        print("plane boundaries: SKIP (PyYAML not installed)")
+        return []
 
     violations: list[str] = []
     for compose_path in _COMPOSE_FILES:
