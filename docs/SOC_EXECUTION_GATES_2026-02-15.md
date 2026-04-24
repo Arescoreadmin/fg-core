@@ -766,6 +766,26 @@ make fg-fast-full
 
 ## SOC Review Sync Update Log
 
+### 2026-04-24 — Task 5.3 addendum: fix false failure on missing PyYAML
+
+Critical-path files updated in this change set:
+
+- `tools/ci/check_plane_boundaries.py`
+
+SOC review outcome:
+
+- `_check_compose_network_boundaries()` previously returned a non-empty list when PyYAML
+  was absent, causing `main()` to treat the skip as a violation and exit 1 (false failure).
+- Fixed: missing PyYAML now prints a visible skip message and returns `[]` (no violations).
+  Exit code 0 is correct — no boundary enforcement logic is weakened; real violations still
+  produce a non-empty list and exit 1.
+- No boundary detection logic changed. No new dependencies added. No silent failures introduced.
+
+Gate impact:
+
+- `soc-review-sync` satisfied by this documentation update.
+- No SOC invariant gate exceptions added.
+
 ### 2026-02-21 — Egress policy + CI guard refresh
 
 Critical-path files updated in this change set:
@@ -2364,3 +2384,27 @@ a local internal token is configured, matching the updated `api/admin.py` logic.
 
 SOC review outcome:
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+### 2026-04-23 — Auth Hardening + Gateway Contract Alignment
+
+**Files affected:**
+- admin_gateway/auth.py
+- admin_gateway/auth/config.py
+- admin_gateway/auth/oidc.py
+
+**Summary:**
+- Enforced gateway-only admin access path
+- Removed dependency on FG_DEV_AUTH_BYPASS for canonical flows
+- Aligned token-exchange path with OIDC bearer contract
+- Strengthened production guardrails against dev bypass
+- Ensured session + CSRF contract is required for admin POST operations
+
+**Security impact:**
+- Eliminates silent auth bypass vectors
+- Enforces production-aligned authentication even in dev when configured
+- Prevents unauthorized direct core access paths
+
+**Validation:**
+- Canonical tester flow passes end-to-end (OIDC → session → CSRF → export)
+- Negative tenant isolation verified
+- All auth boundary and loopback rejection tests pass

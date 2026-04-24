@@ -254,7 +254,6 @@ services:
       internal:
         aliases:
           - frostgate-core
-      public: {}
     init: true
     stop_grace_period: 20s
     depends_on:
