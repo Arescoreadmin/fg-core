@@ -73,6 +73,7 @@ class IngestedCorpusRecord:
     source_id: str
     document_id: str  # deterministic SHA-256 based hash
     content_hash: str  # SHA-256 of raw content
+    content: str  # normalized document text; required for downstream chunking
     status: IngestStatus
     safe_metadata: dict[str, Any]  # metadata stripped of raw content / secrets
 
@@ -243,6 +244,7 @@ def ingest_corpus(
             source_id=doc.source_id,
             document_id=document_id,
             content_hash=content_hash,
+            content=doc.content,
             status=IngestStatus.SUCCESS,
             safe_metadata=_safe_metadata(doc.metadata),
         )

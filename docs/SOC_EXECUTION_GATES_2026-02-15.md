@@ -1,3 +1,21 @@
+## 2026-04-24 — Task 16.2: RAG Chunking and Metadata Fidelity surface added
+
+New module: `api/rag/chunking.py`
+
+Tenant-safety and determinism guarantees:
+- `tenant_id` propagated from trusted `IngestedCorpusRecord` only; no override accepted at chunk layer
+- Missing/blank `tenant_id` fails closed with `CHUNK_ERR_MISSING_TENANT`
+- Chunk IDs are deterministic SHA-256 of `(tenant_id, document_id, chunk_index, text_hash)` — no random UUIDs or timestamps
+- Raw document text never appears in error payloads or log output
+- All failure paths emit stable `RAG_CHUNK_Exxx` error codes
+- `IngestedCorpusRecord.content` field added (additive) to carry normalized text for downstream chunking; no security semantics changed
+
+No external services, no embeddings, no vector DB, no LLM calls introduced.
+No routes added. No DB migrations. No OpenAPI changes.
+Validation: `pytest -k 'rag and chunk'` → 19 passed. `make fg-fast` → passed.
+
+---
+
 ## 2026-04-24 — Task 16.1: RAG Corpus Ingestion Integrity surface added
 
 New module: `api/rag/ingest.py`

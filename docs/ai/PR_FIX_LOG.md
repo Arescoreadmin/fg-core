@@ -6,6 +6,52 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-24 — Task 16.2: Chunking and Metadata Fidelity
+
+**Branch:** `task/16.2-chunking-metadata-fidelity`
+
+**Task ID:** 16.2
+
+**Area:** RAG / Chunking / Metadata Fidelity / Tenant Safety
+
+---
+
+**Gap description:**
+
+No chunking surface existed. `pytest -k 'rag and chunk'` selected zero tests. Documents ingested via Task 16.1 had no downstream chunking path, and `IngestedCorpusRecord` did not expose document content needed for splitting.
+
+**Files changed:**
+
+- `api/rag/ingest.py` — additive: added `content: str` field to `IngestedCorpusRecord` and populated it in `ingest_corpus()`. No security semantics changed.
+- `api/rag/chunking.py` — new: `ChunkingConfig`, `CorpusChunk`, `ChunkingError`, `chunk_ingested_records()`
+- `tests/rag/test_chunking_metadata_fidelity.py` — new: 12 tests (19 including parametrized cases)
+
+**Security impact:**
+
+- `tenant_id` propagated exclusively from trusted `IngestedCorpusRecord`; chunking layer accepts no tenant override
+- Missing/blank `tenant_id` on any record → `CHUNK_ERR_MISSING_TENANT` (fail-closed)
+- Raw document text never appears in error messages or log output
+- All error paths use stable `RAG_CHUNK_Exxx` error codes
+- Chunk IDs deterministic: SHA-256 of `(tenant_id, document_id, chunk_index, text_hash)`
+- No external services, no embeddings, no LLM calls
+
+**Validation results:**
+
+```
+pytest -k 'rag and chunk'   → 19 passed, 1908 deselected
+pytest -k 'rag and ingest'  → 14 passed, 1913 deselected  (16.1 regression-free)
+make fg-fast                → All checks passed!
+```
+
+**Remaining blocker:**
+
+`python tools/plan/taskctl.py validate` reports:
+`Task 15.2 cannot proceed; unmet dependencies: 14.2`
+
+Pre-existing plan pointer/dependency drift. Not caused by this task.
+
+---
+
 ### 2026-04-24 — Task 16.1: Corpus Ingestion Integrity
 
 **Branch:** `task/16.1-corpus-ingestion-integrity`
