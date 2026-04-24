@@ -1,10 +1,10 @@
 """
-RAG Retrieval Tenant Isolation — Task 16.3
+RAG Retrieval Tenant Isolation and Ranking Determinism — Tasks 16.3 / 16.5
 
-Minimal in-memory retrieval surface with strict tenant binding.
+Minimal in-memory retrieval surface with strict tenant binding and deterministic
+enhanced ranking.
 No embeddings, no vector DB, no LLM calls, no external services.
-Scope: search, fetch-by-ID, and answer-context preparation only.
-Reranking, citation assembly, provenance, and no-answer behavior are later tasks.
+Scope: search, fetch-by-ID, answer-context preparation, and deterministic ranking.
 """
 
 from __future__ import annotations
@@ -131,24 +131,55 @@ def _filter_by_tenant(chunks: list[CorpusChunk], tenant_id: str) -> list[CorpusC
     return [c for c in chunks if c.tenant_id == tenant_id]
 
 
-def _lexical_score(chunk_text: str, query_text: str) -> float:
-    """Deterministic lexical relevance score: fraction of query terms present.
+def _score_chunk(query_text: str, chunk_text: str) -> float:
+    """Enhanced deterministic relevance score for a single chunk.
 
-    Score is in [0.0, 1.0]. Ties broken by chunk_index then chunk_id in callers.
-    No randomness. No external calls.
+    Three additive components — all deterministic, no randomness, no external calls:
+      coverage   — fraction of distinct query terms present in chunk (0.0–1.0)
+      tf         — total query-term occurrences normalised by chunk length (0.0–1.0+)
+      exact_boost — 1.0 if full query phrase appears as a substring of chunk text
+
+    Returns 0.0 for an empty query or when no query term matches.
+    Score is always >= 0.0.  Same inputs always yield the same output.
     """
-    if not query_text.strip():
+    query_stripped = query_text.strip()
+    if not query_stripped:
         return 0.0
-    query_terms = set(query_text.lower().split())
-    chunk_terms = set(chunk_text.lower().split())
-    matches = len(query_terms & chunk_terms)
-    return matches / len(query_terms) if query_terms else 0.0
+
+    query_lower = query_stripped.lower()
+    chunk_lower = chunk_text.lower()
+
+    query_terms = query_lower.split()
+    chunk_words = chunk_lower.split()
+
+    if not query_terms or not chunk_words:
+        return 0.0
+
+    query_term_set = set(query_terms)
+    chunk_word_set = set(chunk_words)
+
+    # Coverage: fraction of unique query terms that appear anywhere in the chunk.
+    matching_terms = query_term_set & chunk_word_set
+    coverage = len(matching_terms) / len(query_term_set)
+
+    if coverage == 0.0:
+        return 0.0
+
+    # Term frequency: total occurrences of all query terms, normalised by chunk
+    # word count to avoid bias towards longer chunks.
+    tf_sum = sum(chunk_words.count(term) for term in query_term_set)
+    tf_normalised = tf_sum / (len(chunk_words) + 1)
+
+    # Exact phrase boost: chunk contains the full query as a contiguous substring.
+    exact_boost = 1.0 if query_lower in chunk_lower else 0.0
+
+    return coverage + tf_normalised + exact_boost
 
 
 def _chunks_to_results(
     chunks: list[CorpusChunk], query_text: str
 ) -> list[RetrievalResult]:
-    """Score and sort chunks deterministically.
+    """Score and sort chunks deterministically using enhanced ranking.
 
     Sort order: score DESC → chunk_index ASC → chunk_id ASC.
     """
@@ -162,7 +193,7 @@ def _chunks_to_results(
             chunk_index=c.chunk_index,
             text=c.text,
             safe_metadata=dict(c.safe_metadata),
-            score=_lexical_score(c.text, query_text),
+            score=_score_chunk(query_text, c.text),
         )
         for c in chunks
     ]
@@ -185,6 +216,54 @@ def _validate_limit(limit: int) -> None:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+
+def rank_chunks(
+    results: list[RetrievalResult],
+    query_text: str,
+) -> list[RetrievalResult]:
+    """Re-rank already tenant-filtered retrieval results with enhanced deterministic scoring.
+
+    Operates ONLY on the provided results — never accesses any external corpus.
+    Tenant filtering MUST have been applied before calling this function.
+
+    Scoring uses three additive components (see _score_chunk for full details):
+      - coverage: fraction of distinct query terms present
+      - tf: normalised term-frequency across the chunk
+      - exact_boost: full-phrase substring match bonus
+
+    Args:
+        results: Tenant-filtered RetrievalResult list (e.g. from search_chunks).
+        query_text: The original query string.
+
+    Returns:
+        New list of RetrievalResult with updated scores, ordered by
+        (score DESC, chunk_index ASC, chunk_id ASC).
+        The result set (chunk_ids) is identical to the input.
+
+    Security invariants:
+        - Input tenant composition is unchanged; no new chunks are introduced.
+        - No external corpus, no randomness, no external calls.
+        - Deterministic: same inputs always produce the same output order.
+    """
+    if not results:
+        return []
+
+    rescored = [
+        RetrievalResult(
+            tenant_id=r.tenant_id,
+            source_id=r.source_id,
+            document_id=r.document_id,
+            parent_content_hash=r.parent_content_hash,
+            chunk_id=r.chunk_id,
+            chunk_index=r.chunk_index,
+            text=r.text,
+            safe_metadata=dict(r.safe_metadata),
+            score=_score_chunk(query_text, r.text),
+        )
+        for r in results
+    ]
+    return sorted(rescored, key=lambda r: (-r.score, r.chunk_index, r.chunk_id))
 
 
 def search_chunks(
