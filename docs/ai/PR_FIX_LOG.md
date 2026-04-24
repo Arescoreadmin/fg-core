@@ -6,6 +6,52 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-24 — Task 16.6: No-Answer and Insufficient-Context Behavior
+
+**Branch:** `task/16.6-no-answer-insufficient-context`
+
+**Task ID:** 16.6
+
+**Area:** RAG / No-Answer / Insufficient Context / User Safety
+
+---
+
+**Gap description:**
+
+Answer assembly refused low-quality context via a simple all-zero-score check, but there was no explicit confidence policy, no `NO_ANSWER_LOW_SCORE` reason code, no threshold enforcement, and no structured `evidence_count`/`tenant_id` in `NoAnswer` payloads.
+
+**Files changed:**
+
+- `api/rag/answering.py` — added `ANSWER_ERR_INVALID_POLICY`, `NO_ANSWER_LOW_SCORE`, `NO_ANSWER_MISSING_TENANT`; extended `NoAnswer` with `evidence_count` and `tenant_id`; added `AnswerConfidencePolicy`, `_validate_policy()`, `evaluate_context_sufficiency()`, `build_answer_or_no_answer()`
+- `tests/rag/test_no_answer_insufficient_context.py` — new: 12 test functions, 21 cases
+
+**Security impact:**
+
+- `build_answer_or_no_answer()`: mixed-tenant rejected before policy evaluation; query text/answer_text cannot override policy or tenant
+- `AnswerConfidencePolicy`: `min_evidence_count`, `min_top_score`, `min_total_score` — all deterministic, bounded, no randomness, no external calls; invalid values raise `ANSWER_ERR_INVALID_POLICY`
+- `evaluate_context_sufficiency()`: all failure paths return structured `NoAnswer` (never raises for context deficiency); same inputs always produce identical payloads
+- `NoAnswer.evidence_count` and `NoAnswer.tenant_id` added for auditability; tenant_id only populated when pre-validated
+- No fabricated grounded answers from empty, zero-score, or below-threshold context
+- Error messages contain no foreign chunk text, no foreign tenant ID, no foreign source ID
+
+**Validation results:**
+
+```
+pytest -q tests -k 'rag and no_answer'   → 21 passed
+pytest -q tests -k 'rag and citation'    → 20 passed (regression-free)
+pytest -q tests -k 'rag and tenant'      → 21 passed (regression-free)
+pytest -q tests -k 'rag and ingest'      → 14 passed (regression-free)
+pytest -q tests -k 'rag and chunk'       → 31 passed (regression-free)
+pytest -q tests -k 'rag and ranking'     →  8 passed (regression-free)
+make fg-fast                             → All checks passed!
+```
+
+**Remaining blocker:**
+
+`python tools/plan/taskctl.py validate` reports pre-existing plan pointer/dependency drift (`Task 15.2 cannot proceed; unmet dependencies: 14.2`). Not caused by this task.
+
+---
+
 ### 2026-04-24 — Task 16.5: Retrieval Quality and Ranking Determinism
 
 **Branch:** `task/16.5-retrieval-ranking-determinism`
