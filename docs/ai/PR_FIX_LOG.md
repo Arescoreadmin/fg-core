@@ -6,6 +6,42 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-24 — Task 16.2 Hardening (Review Pass): max_chars enforcement + long-token rejection
+
+**Branch:** `task/16.2-hardening`
+
+**Area:** RAG / Chunking / Determinism / max_chars Contract
+
+---
+
+**Gap description (review findings):**
+
+1. **Long-token silent overflow** (`HIGH`): a single word exceeding `max_chars` bypassed the flush guard (first word always added unconditionally). The emitted chunk's text exceeded `max_chars`, breaking the contract. No error was raised.
+
+2. **Overlap-plus-word overflow** (`HIGH`): after overlap re-seeding, appending the trigger word could produce a `current_len` exceeding `max_chars`. The chunk was not immediately emitted, but would be over-limit when eventually flushed.
+
+3. **`test_rag_chunk_single_oversized_word_produces_one_chunk` was wrong** (`HIGH`): test pinned the incorrect behavior (expected a successful oversized chunk instead of a rejection).
+
+**Files changed:**
+
+- `api/rag/chunking.py` — added `CHUNK_ERR_TOKEN_TOO_LONG = "RAG_CHUNK_E007"`; pre-pass in `_split_text` rejects any token > max_chars before emitting anything; post-overlap guard discards overlap seed if seed + trigger word > max_chars; fixed off-by-one in `current_len` after overlap reset.
+- `tests/rag/test_chunking_metadata_fidelity.py` — corrected oversized-word test (now expects `CHUNK_ERR_TOKEN_TOO_LONG`); added 3 new tests.
+
+**New/updated tests:**
+- `test_rag_chunk_rejects_token_exceeding_max_chars` (replaces old oversized-word test)
+- `test_rag_chunk_every_emitted_chunk_respects_max_chars`
+- `test_rag_chunk_overlap_near_max_chars_does_not_exceed_limit`
+
+**Validation results:**
+
+```
+pytest -k 'rag and chunk'  → 27 passed
+pytest -k 'rag and ingest' → 14 passed (regression-free)
+make fg-fast               → All checks passed!
+```
+
+---
+
 ### 2026-04-24 — Task 16.2 Hardening: Chunking Gap Closure
 
 **Branch:** `task/16.2-hardening`

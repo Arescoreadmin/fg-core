@@ -13,6 +13,7 @@ from api.rag.chunking import (
     CHUNK_ERR_INVALID_CONFIG,
     CHUNK_ERR_MISSING_SOURCE,
     CHUNK_ERR_MISSING_TENANT,
+    CHUNK_ERR_TOKEN_TOO_LONG,
     ChunkingConfig,
     ChunkingError,
     CorpusChunk,
@@ -341,15 +342,19 @@ def test_rag_chunk_overlap_does_not_produce_word_fragments() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_rag_chunk_single_oversized_word_produces_one_chunk() -> None:
+def test_rag_chunk_rejects_token_exceeding_max_chars() -> None:
+    # A single token longer than max_chars cannot fit in any chunk.
+    # The implementation must reject it with a stable error code rather than
+    # silently producing an oversized chunk.
     long_word = "x" * 200
     config = ChunkingConfig(max_chars=50, overlap_chars=0)
     record = _make_record(content=long_word)
-    chunks = chunk_ingested_records([record], config=config)
+    with pytest.raises(ChunkingError) as exc_info:
+        chunk_ingested_records([record], config=config)
 
-    # Must produce exactly one chunk containing the full word — no silent drop
-    assert len(chunks) == 1
-    assert long_word in chunks[0].text
+    assert exc_info.value.error_code == CHUNK_ERR_TOKEN_TOO_LONG
+    # Error message must not leak the raw token text
+    assert long_word not in exc_info.value.message
 
 
 # ---------------------------------------------------------------------------
@@ -447,4 +452,61 @@ def test_rag_chunk_safe_metadata_is_independent_per_chunk() -> None:
     for chunk in chunks[1:]:
         assert "injected" not in chunk.safe_metadata, (
             "safe_metadata is shared across chunks — mutation leaked"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Review finding 2: every emitted chunk respects max_chars
+# ---------------------------------------------------------------------------
+
+
+def test_rag_chunk_every_emitted_chunk_respects_max_chars() -> None:
+    """No emitted chunk may have len(text) > max_chars under any valid input."""
+    # Use many different max_chars and overlap combinations to stress the
+    # boundary conditions (overlap near max_chars, dense word packing).
+    configs = [
+        ChunkingConfig(max_chars=20, overlap_chars=0),
+        ChunkingConfig(max_chars=20, overlap_chars=10),
+        ChunkingConfig(max_chars=20, overlap_chars=19),
+        ChunkingConfig(max_chars=50, overlap_chars=30),
+        ChunkingConfig(max_chars=100, overlap_chars=90),
+    ]
+    # Mix of short and medium-length words (all <= 19 chars so they fit)
+    content = " ".join(
+        ["short", "mediumword", "another", "word", "here", "testing", "bounds"] * 10
+    )
+    record = _make_record(content=content)
+
+    for config in configs:
+        chunks = chunk_ingested_records([record], config=config)
+        for chunk in chunks:
+            assert len(chunk.text) <= config.max_chars, (
+                f"Chunk len={len(chunk.text)} exceeds max_chars={config.max_chars} "
+                f"with overlap={config.overlap_chars}: '{chunk.text[:40]}...'"
+            )
+
+
+def test_rag_chunk_overlap_near_max_chars_does_not_exceed_limit() -> None:
+    """Overlap seed + appended word must never produce a chunk > max_chars.
+
+    This specifically exercises the case where overlap_chars is close to
+    max_chars (overlap = max_chars - 1), which previously could cause the
+    overlap seed plus the next word to silently exceed the limit.
+    """
+    max_c = 15
+    # overlap_chars = max_chars - 1: the tightest valid config
+    config = ChunkingConfig(max_chars=max_c, overlap_chars=max_c - 1)
+    # Words are all 5 chars; with max_chars=15 we fit exactly 3 per chunk
+    # (5 + 1 + 5 + 1 + 5 = 17? no: "aaaaa bbbbb ccccc" = 17 chars > 15)
+    # Actually "aaaaa bbbbb" = 11 chars, "aaaaa bbbbb ccccc" = 17 > 15
+    # so each flush happens after 2 words.  overlap = 14 chars → reseeds
+    # with up to 2 words (11 chars).  Adding the next 5-char word: 11+1+5=17 > 15
+    # → overlap must be discarded (fallback to empty seed).
+    content = " ".join(["aaaaa", "bbbbb", "ccccc", "ddddd", "eeeee", "fffff"])
+    record = _make_record(content=content)
+    chunks = chunk_ingested_records([record], config=config)
+
+    for chunk in chunks:
+        assert len(chunk.text) <= max_c, (
+            f"Chunk len={len(chunk.text)} exceeds max_chars={max_c}: '{chunk.text}'"
         )

@@ -28,6 +28,7 @@ CHUNK_ERR_EMPTY_CONTENT = "RAG_CHUNK_E003"
 CHUNK_ERR_INVALID_CONFIG = "RAG_CHUNK_E004"
 CHUNK_ERR_MALFORMED_RECORD = "RAG_CHUNK_E005"
 CHUNK_ERR_EMPTY_OUTPUT = "RAG_CHUNK_E006"
+CHUNK_ERR_TOKEN_TOO_LONG = "RAG_CHUNK_E007"
 
 # ---------------------------------------------------------------------------
 # Config
@@ -136,12 +137,30 @@ def _split_text(text: str, max_chars: int, overlap_chars: int) -> list[str]:
     Guarantees:
     - No text is silently discarded.
     - Trailing content always appears in the last chunk.
+    - Every emitted chunk satisfies len(chunk) <= max_chars.
     - Output is deterministic for identical (text, max_chars, overlap_chars).
     - Same word order is preserved.
+    - No chunk starts with a partial/truncated token.
+
+    Raises:
+        ChunkingError(CHUNK_ERR_TOKEN_TOO_LONG): if any single token exceeds
+            max_chars.  Callers must pre-process documents with oversized tokens
+            before chunking.
     """
     words = text.split()
     if not words:
         return []
+
+    # Pre-pass: reject any token that cannot fit in a single chunk.
+    # Checked before emitting anything so the caller gets a clean failure.
+    # Token text is NOT included in the message (raw document text must not leak).
+    for w in words:
+        if len(w) > max_chars:
+            raise ChunkingError(
+                CHUNK_ERR_TOKEN_TOO_LONG,
+                f"A token of length {len(w)} exceeds max_chars={max_chars}; "
+                "split or pre-process the document to remove oversized tokens",
+            )
 
     chunks: list[str] = []
     current_words: list[str] = []
@@ -174,8 +193,19 @@ def _split_text(text: str, max_chars: int, overlap_chars: int) -> list[str]:
             else:
                 current_words = []
                 current_len = 0
+
+            # Safety: if the overlap seed is so large that appending the
+            # current word would still exceed max_chars, discard the overlap
+            # and start fresh.  This can happen when overlap_chars is close to
+            # max_chars and the next token is long.  Without this guard the
+            # emitted chunk could exceed max_chars.
+            new_needed = len(word) if not current_words else len(word) + 1
+            if current_words and current_len + new_needed > max_chars:
+                current_words = []
+                current_len = 0
+
         current_words.append(word)
-        current_len += needed
+        current_len += len(word) if len(current_words) == 1 else len(word) + 1
 
     # Always flush remaining content (no trailing drop)
     if current_words:
