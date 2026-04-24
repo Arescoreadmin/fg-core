@@ -1,3 +1,28 @@
+## 2026-04-24 — Task 16.3/16.4 Addendum: Fail-closed input validation for tenant and limit guards
+
+`api/rag/retrieval.py` and `api/rag/answering.py` updated to reject non-string tenant IDs and non-integer limits with stable error codes before calling `.strip()` or bounds checks. Non-string inputs now raise `RETRIEVAL_ERR_MISSING_TENANT` / `ANSWER_ERR_MISSING_TENANT`; non-integer/bool limits raise `RETRIEVAL_ERR_INVALID_LIMIT`. No new routes, no DB migrations.
+Validation: `make fg-fast` → passed. `GATES_MODE=fast bash codex_gates.sh` → passed.
+
+---
+
+## 2026-04-24 — Task 16.4: RAG Answer Grounding and Citation Contract surface added
+
+New module: `api/rag/answering.py`
+
+Answer assembly guarantees:
+- `trusted_tenant_id` required from caller context; citation identity never sourced from context item claims
+- Mixed-tenant context rejected with `ANSWER_ERR_MIXED_TENANT` — independent guard at answer layer (in addition to retrieval layer)
+- `GroundedAnswer`: `citations` always non-empty, `grounded` always `True`, all citations bound to `trusted_tenant_id`
+- `NoAnswer`: `citations` always `[]`, `grounded` always `False`, stable reason code (`RAG_NO_ANSWER_xxx`)
+- Citation IDs are deterministic SHA-256 of canonical JSON of identity fields — no randomness, no clock dependency
+- Error messages contain no raw foreign chunk text, no foreign tenant/source/document identity
+- No LLM calls, no embeddings, no vector DB, no external services
+
+No routes added. No DB migrations. No OpenAPI changes.
+Validation: `pytest -q tests -k 'rag and citation'` → 16 passed. `make fg-fast` → passed.
+
+---
+
 ## 2026-04-24 — Task 16.3: RAG Retrieval Tenant Isolation surface added
 
 New module: `api/rag/retrieval.py`

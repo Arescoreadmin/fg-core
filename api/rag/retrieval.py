@@ -112,8 +112,13 @@ class RetrievalError(Exception):
 
 
 def _require_trusted_tenant(trusted_tenant_id: str) -> str:
-    """Validate and return stripped trusted tenant. Raises on missing/blank."""
-    if not trusted_tenant_id or not trusted_tenant_id.strip():
+    """Validate and return stripped trusted tenant. Raises on missing/blank/non-string."""
+    if not isinstance(trusted_tenant_id, str):
+        raise RetrievalError(
+            RETRIEVAL_ERR_MISSING_TENANT,
+            "trusted_tenant_id is required and must not be blank",
+        )
+    if not trusted_tenant_id.strip():
         raise RetrievalError(
             RETRIEVAL_ERR_MISSING_TENANT,
             "trusted_tenant_id is required and must not be blank",
@@ -165,6 +170,11 @@ def _chunks_to_results(
 
 
 def _validate_limit(limit: int) -> None:
+    if not isinstance(limit, int) or isinstance(limit, bool):
+        raise RetrievalError(
+            RETRIEVAL_ERR_INVALID_LIMIT,
+            f"limit must be an integer between {_MIN_LIMIT} and {_MAX_LIMIT}",
+        )
     if limit < _MIN_LIMIT or limit > _MAX_LIMIT:
         raise RetrievalError(
             RETRIEVAL_ERR_INVALID_LIMIT,

@@ -6,6 +6,92 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-24 — Task 16.3/16.4 Addendum: Input type-guard contract gaps
+
+**Branch:** `task/16.4-answer-grounding-citation`
+
+**Task ID:** 16.3/16.4 post-review fix
+
+**Area:** RAG / Retrieval + Answer Assembly / Input Validation
+
+---
+
+**Gap description:**
+
+Codex review identified three P2 input-validation defects where non-string/non-integer values bypassed guards and caused `AttributeError` or `TypeError` instead of the expected stable error codes:
+
+1. `retrieval._require_trusted_tenant` — non-string tenant IDs (e.g. `True`, `123`) called `.strip()` on a non-string → `AttributeError`
+2. `retrieval._validate_limit` — non-integer limits (e.g. `1.5`, `True`, `"3"`) passed min/max check → crash on slice
+3. `answering._require_trusted_tenant` — same as (1) for the answer assembly layer
+
+**Files changed:**
+
+- `api/rag/retrieval.py` — `_require_trusted_tenant`: isinstance(str) check before `.strip()`; `_validate_limit`: isinstance(int) + not bool check before bounds
+- `api/rag/answering.py` — `_require_trusted_tenant`: isinstance(str) check before `.strip()`
+- `tests/security/test_rag_retrieval_tenant_isolation.py` — added `test_rag_tenant_rejects_non_string_trusted_tenant`, `test_rag_tenant_limit_rejects_non_integer_values`
+- `tests/rag/test_answer_grounding_citation_contract.py` — added `test_rag_citation_rejects_non_string_trusted_tenant`
+
+**Validation results:**
+
+```
+pytest -q tests/security -k 'rag and tenant' → 21 passed
+pytest -q tests -k 'rag and citation'        → 19 passed
+pytest -q tests -k 'rag and ingest'          → 14 passed (regression-free)
+pytest -q tests -k 'rag and chunk'           → 31 passed (regression-free)
+make fg-fast                                 → All checks passed!
+GATES_MODE=fast bash codex_gates.sh          → All checks passed!
+```
+
+---
+
+### 2026-04-24 — Task 16.4: Answer Grounding and Citation Contract
+
+**Branch:** `task/16.4-answer-grounding-citation`
+
+**Task ID:** 16.4
+
+**Area:** RAG / Answer Assembly / Citation Contract
+
+---
+
+**Gap description:**
+
+No answer assembly surface existed. Retrieval results from 16.3 had no downstream path to produce grounded answers with explicit citations or structured no-answer payloads. `pytest -q tests -k 'rag and citation'` selected zero tests.
+
+**Files changed:**
+
+- `api/rag/answering.py` — new: `CitationReference`, `GroundedAnswer`, `NoAnswer`, `AnswerAssemblyResult`, `AnsweringError`, `assemble_answer_from_context()`, `build_no_answer()`
+- `tests/rag/test_answer_grounding_citation_contract.py` — new: 14 test functions, 16 cases (3 parametrized)
+
+**Security impact:**
+
+- `trusted_tenant_id` sourced from caller execution context only; citation identity never originates from context item claims
+- Mixed-tenant context raises `ANSWER_ERR_MIXED_TENANT` — hard gate at answer assembly layer (independent of retrieval layer guard)
+- `GroundedAnswer` invariants: `citations` always non-empty, `grounded` always `True`, all citations belong to `trusted_tenant_id`
+- `NoAnswer` invariants: `citations` always `[]`, `grounded` always `False`, structured reason code
+- Citation IDs are deterministic SHA-256 of canonical JSON of (chunk_id, chunk_index, document_id, parent_content_hash, source_id, tenant_id) — sort_keys=True, no randomness
+- Error messages contain no raw foreign chunk text, no foreign tenant ID, no foreign source_id
+- No LLM calls, no embeddings, no vector DB, no external services
+
+**Validation results:**
+
+```
+pytest -q tests -k 'rag and citation'  → 16 passed
+pytest -k 'rag and ingest'             → 14 passed (regression-free)
+pytest -k 'rag and chunk'              → 30 passed (regression-free)
+pytest -q tests/security -k 'rag and tenant' → 14 passed (regression-free)
+make fg-fast                           → All checks passed!
+```
+
+**Remaining blocker:**
+
+`python tools/plan/taskctl.py validate` reports:
+`Task 15.2 cannot proceed; unmet dependencies: 14.2`
+
+Pre-existing plan pointer/dependency drift. Not caused by this task.
+
+---
+
 ### 2026-04-24 — Task 16.3: Retrieval Tenant Isolation
 
 **Branch:** `task/16.3-retrieval-tenant-isolation`
