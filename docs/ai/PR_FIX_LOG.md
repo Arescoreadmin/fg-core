@@ -6,6 +6,53 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-24 — Task 16.5: Retrieval Quality and Ranking Determinism
+
+**Branch:** `task/16.5-retrieval-ranking-determinism`
+
+**Task ID:** 16.5
+
+**Area:** RAG / Retrieval / Ranking
+
+---
+
+**Gap description:**
+
+Retrieval used a binary coverage score (fraction of distinct query terms present). No term frequency weighting, no exact phrase boosting. Results were sorted but not ranked by relevance quality.
+
+**Ranking approach:**
+
+Enhanced `_score_chunk(query_text, chunk_text)` with three additive components (all deterministic, no randomness, no external calls):
+1. **coverage** — fraction of distinct query terms present in chunk (0.0–1.0)
+2. **tf** — total query-term occurrences normalised by chunk word count (bounds drift)
+3. **exact_boost** — +1.0 if the full query phrase appears as a contiguous substring
+
+Returns 0.0 immediately for empty query or zero coverage. Final sort: score DESC → chunk_index ASC → chunk_id ASC.
+
+**Determinism guarantees:**
+
+- No randomness, no timestamps, no UUIDs, no external calls
+- Floating-point arithmetic is bounded: sum of integer counts divided by integer lengths; exact_boost is always 0.0 or 1.0
+- Same inputs always produce identical scores and identical sort order
+
+**Files changed:**
+
+- `api/rag/retrieval.py` — replaced `_lexical_score` with `_score_chunk`; added public `rank_chunks()` function; integrated enhanced scoring into `_chunks_to_results`
+- `tests/rag/test_retrieval_ranking_determinism.py` — new: 8 test functions
+
+**Validation results:**
+
+```
+pytest -q tests -k 'rag and ranking'  → 8 passed
+pytest -q tests -k 'rag and citation' → 19 passed (regression-free)
+pytest -q tests -k 'rag and tenant'   → 39 passed (regression-free)
+pytest -q tests -k 'rag and ingest'   → 14 passed (regression-free)
+pytest -q tests -k 'rag and chunk'    → 31 passed (regression-free)
+make fg-fast                          → All checks passed!
+```
+
+---
+
 ### 2026-04-24 — Task 16.3/16.4 Addendum: Input type-guard contract gaps
 
 **Branch:** `task/16.4-answer-grounding-citation`
