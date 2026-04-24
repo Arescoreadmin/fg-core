@@ -6,6 +6,44 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-24 — Task 16.3/16.4 Addendum: Input type-guard contract gaps
+
+**Branch:** `task/16.4-answer-grounding-citation`
+
+**Task ID:** 16.3/16.4 post-review fix
+
+**Area:** RAG / Retrieval + Answer Assembly / Input Validation
+
+---
+
+**Gap description:**
+
+Codex review identified three P2 input-validation defects where non-string/non-integer values bypassed guards and caused `AttributeError` or `TypeError` instead of the expected stable error codes:
+
+1. `retrieval._require_trusted_tenant` — non-string tenant IDs (e.g. `True`, `123`) called `.strip()` on a non-string → `AttributeError`
+2. `retrieval._validate_limit` — non-integer limits (e.g. `1.5`, `True`, `"3"`) passed min/max check → crash on slice
+3. `answering._require_trusted_tenant` — same as (1) for the answer assembly layer
+
+**Files changed:**
+
+- `api/rag/retrieval.py` — `_require_trusted_tenant`: isinstance(str) check before `.strip()`; `_validate_limit`: isinstance(int) + not bool check before bounds
+- `api/rag/answering.py` — `_require_trusted_tenant`: isinstance(str) check before `.strip()`
+- `tests/security/test_rag_retrieval_tenant_isolation.py` — added `test_rag_tenant_rejects_non_string_trusted_tenant`, `test_rag_tenant_limit_rejects_non_integer_values`
+- `tests/rag/test_answer_grounding_citation_contract.py` — added `test_rag_citation_rejects_non_string_trusted_tenant`
+
+**Validation results:**
+
+```
+pytest -q tests/security -k 'rag and tenant' → 21 passed
+pytest -q tests -k 'rag and citation'        → 19 passed
+pytest -q tests -k 'rag and ingest'          → 14 passed (regression-free)
+pytest -q tests -k 'rag and chunk'           → 31 passed (regression-free)
+make fg-fast                                 → All checks passed!
+GATES_MODE=fast bash codex_gates.sh          → All checks passed!
+```
+
+---
+
 ### 2026-04-24 — Task 16.4: Answer Grounding and Citation Contract
 
 **Branch:** `task/16.4-answer-grounding-citation`

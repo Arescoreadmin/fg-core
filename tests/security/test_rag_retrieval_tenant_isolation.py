@@ -322,5 +322,40 @@ def test_rag_tenant_limit_is_bounded_and_deterministic(all_chunks):
         assert exc_info.value.error_code == RETRIEVAL_ERR_INVALID_LIMIT
 
 
+# ---------------------------------------------------------------------------
+# test_rag_tenant_rejects_non_string_trusted_tenant
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad_tenant", [True, 123, object()])
+def test_rag_tenant_rejects_non_string_trusted_tenant(all_chunks, bad_tenant):
+    query = RetrievalQuery(query_text="security")
+
+    with pytest.raises(RetrievalError) as exc_info:
+        search_chunks(all_chunks, query, trusted_tenant_id=bad_tenant)  # type: ignore[arg-type]
+    assert exc_info.value.error_code == RETRIEVAL_ERR_MISSING_TENANT
+
+    if all_chunks:
+        with pytest.raises(RetrievalError) as exc_info2:
+            fetch_chunk(
+                all_chunks, all_chunks[0].chunk_id, trusted_tenant_id=bad_tenant
+            )  # type: ignore[arg-type]
+        assert exc_info2.value.error_code == RETRIEVAL_ERR_MISSING_TENANT
+
+
+# ---------------------------------------------------------------------------
+# test_rag_tenant_limit_rejects_non_integer_values
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad_limit", [1.5, True, "3", None])
+def test_rag_tenant_limit_rejects_non_integer_values(all_chunks, bad_limit):
+    bad_query = RetrievalQuery(query_text="security", limit=bad_limit)  # type: ignore[arg-type]
+
+    with pytest.raises(RetrievalError) as exc_info:
+        search_chunks(all_chunks, bad_query, trusted_tenant_id=_TENANT_A)
+    assert exc_info.value.error_code == RETRIEVAL_ERR_INVALID_LIMIT
+
+
 # Need this import for the parametrize test above
 _MAX_LIMIT = 100

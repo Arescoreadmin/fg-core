@@ -1,3 +1,10 @@
+## 2026-04-24 — Task 16.3/16.4 Addendum: Fail-closed input validation for tenant and limit guards
+
+`api/rag/retrieval.py` and `api/rag/answering.py` updated to reject non-string tenant IDs and non-integer limits with stable error codes before calling `.strip()` or bounds checks. Non-string inputs now raise `RETRIEVAL_ERR_MISSING_TENANT` / `ANSWER_ERR_MISSING_TENANT`; non-integer/bool limits raise `RETRIEVAL_ERR_INVALID_LIMIT`. No new routes, no DB migrations.
+Validation: `make fg-fast` → passed. `GATES_MODE=fast bash codex_gates.sh` → passed.
+
+---
+
 ## 2026-04-24 — Task 16.4: RAG Answer Grounding and Citation Contract surface added
 
 New module: `api/rag/answering.py`

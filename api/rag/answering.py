@@ -185,7 +185,12 @@ def _make_citation(item: AnswerContextItem) -> CitationReference:
 
 
 def _require_trusted_tenant(trusted_tenant_id: str) -> str:
-    if not trusted_tenant_id or not trusted_tenant_id.strip():
+    if not isinstance(trusted_tenant_id, str):
+        raise AnsweringError(
+            ANSWER_ERR_MISSING_TENANT,
+            "trusted_tenant_id is required and must not be blank",
+        )
+    if not trusted_tenant_id.strip():
         raise AnsweringError(
             ANSWER_ERR_MISSING_TENANT,
             "trusted_tenant_id is required and must not be blank",

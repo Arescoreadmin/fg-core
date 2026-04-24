@@ -384,3 +384,15 @@ def test_rag_citation_no_answer_has_empty_citations():
     )
     assert no_ans.citations == []
     assert no_ans.grounded is False
+
+
+# ---------------------------------------------------------------------------
+# test_rag_citation_rejects_non_string_trusted_tenant
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad_tenant", [True, 123, object()])
+def test_rag_citation_rejects_non_string_trusted_tenant(context_a, bad_tenant):
+    with pytest.raises(AnsweringError) as exc_info:
+        assemble_answer_from_context(context_a, trusted_tenant_id=bad_tenant)  # type: ignore[arg-type]
+    assert exc_info.value.error_code == ANSWER_ERR_MISSING_TENANT
