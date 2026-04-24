@@ -510,3 +510,33 @@ def test_rag_chunk_overlap_near_max_chars_does_not_exceed_limit() -> None:
         assert len(chunk.text) <= max_c, (
             f"Chunk len={len(chunk.text)} exceeds max_chars={max_c}: '{chunk.text}'"
         )
+
+
+def test_rag_chunk_overlap_empty_reseed_does_not_create_extra_chunks() -> None:
+    """Regression: overlap shorter than trailing word must not poison next chunk sizing."""
+    from api.rag.chunking import ChunkingConfig, chunk_ingested_records
+    from api.rag.ingest import CorpusDocument, IngestRequest, ingest_corpus
+
+    request = IngestRequest(
+        documents=[
+            CorpusDocument(
+                source_id="source-overlap-empty-reseed",
+                content="AAAAAAA aaa bbb ccc ddd",
+            )
+        ]
+    )
+    record = ingest_corpus(request, trusted_tenant_id="tenant-rag-a").records[0]
+
+    config = ChunkingConfig(max_chars=10, overlap_chars=3)
+
+    chunks_first = chunk_ingested_records([record], config=config)
+    chunks_second = chunk_ingested_records([record], config=config)
+
+    assert [chunk.text for chunk in chunks_first] == [
+        "AAAAAAA",
+        "aaa bbb",
+        "bbb ccc",
+        "ccc ddd",
+    ]
+    assert chunks_first == chunks_second
+    assert all(len(chunk.text) <= config.max_chars for chunk in chunks_first)
