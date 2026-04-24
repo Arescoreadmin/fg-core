@@ -6,6 +6,50 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-24 — Task 16.2 Hardening: Chunking Gap Closure
+
+**Branch:** `task/16.2-hardening`
+
+**Area:** RAG / Chunking / Determinism / Metadata Safety
+
+---
+
+**Gap description:**
+
+Three correctness bugs identified in the 16.2 chunking implementation, plus five test coverage holes:
+
+1. **Word fragment in overlap seed** (`MEDIUM`): overlap was derived via `joined_text[-overlap_chars:]`, which slices mid-word. The split of that slice produces a word fragment (e.g., `"orld"` from `"world"`) at the start of the next chunk, violating the "whole words only" docstring claim.
+2. **Shared `safe_metadata` dict reference** (`MEDIUM`): all chunks from a single record shared the same dict object. Mutating `chunk.safe_metadata` on any one chunk silently mutated all sibling chunks and the parent record.
+3. **Unused `_MAX_OVERLAP_RATIO` constant** (`LOW`): defined as `0.5` with a comment claiming enforcement, but never used in validation. Misleading dead code.
+
+**Files changed:**
+
+- `api/rag/chunking.py` — fixed overlap seed (whole-word walk), fixed `safe_metadata` copy (`dict(record.safe_metadata)`), removed dead `_MAX_OVERLAP_RATIO` constant
+- `tests/rag/test_chunking_metadata_fidelity.py` — 6 new hardening tests added
+
+**New tests:**
+- `test_rag_chunk_overlap_does_not_produce_word_fragments`
+- `test_rag_chunk_single_oversized_word_produces_one_chunk`
+- `test_rag_chunk_unicode_content_is_deterministic`
+- `test_rag_chunk_whitespace_is_normalized_deterministically`
+- `test_rag_chunk_zero_overlap_produces_clean_boundaries`
+- `test_rag_chunk_safe_metadata_is_independent_per_chunk`
+
+**Security impact:**
+
+- No security semantics changed. Fixes are correctness/isolation only.
+- `safe_metadata` isolation prevents accidental cross-chunk metadata mutation (defensive depth).
+
+**Validation results:**
+
+```
+pytest -k 'rag and chunk'  → 25 passed
+pytest -k 'rag and ingest' → 14 passed (regression-free)
+make fg-fast               → All checks passed!
+```
+
+---
+
 ### 2026-04-24 — Task 16.2: Chunking and Metadata Fidelity
 
 **Branch:** `task/16.2-chunking-metadata-fidelity`

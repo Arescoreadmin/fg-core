@@ -37,7 +37,6 @@ _DEFAULT_MAX_CHARS = 1000
 _DEFAULT_OVERLAP_CHARS = 100
 _MIN_CHUNK_SIZE = 1
 _MAX_CHUNK_SIZE = 32_768
-_MAX_OVERLAP_RATIO = 0.5  # overlap must be < 50% of max_chars
 
 _CANONICAL_ENCODING = "utf-8"
 
@@ -154,15 +153,24 @@ def _split_text(text: str, max_chars: int, overlap_chars: int) -> list[str]:
         if current_words and current_len + needed > max_chars:
             # Flush current chunk
             chunks.append(" ".join(current_words))
-            # Compute overlap prefix from the end of the flushed chunk
+            # Compute overlap prefix from whole words at the end of the flushed
+            # chunk.  Walk backwards through current_words and accumulate words
+            # until adding the next word would exceed overlap_chars.  This
+            # guarantees the seed for the next chunk never contains a word
+            # fragment (a character-slice would risk splitting mid-word).
             if overlap_chars > 0:
-                overlap_text = " ".join(current_words)[-overlap_chars:]
-                # Re-seed current_words from overlap text (whole words only)
-                overlap_words = overlap_text.split()
-                current_words = overlap_words
-                current_len = sum(len(w) for w in current_words) + max(
-                    0, len(current_words) - 1
-                )
+                overlap_words_rev: list[str] = []
+                overlap_len = 0
+                for w in reversed(current_words):
+                    # +1 for the space separator between words
+                    needed_for_word = len(w) + (1 if overlap_words_rev else 0)
+                    if overlap_len + needed_for_word <= overlap_chars:
+                        overlap_words_rev.append(w)
+                        overlap_len += needed_for_word
+                    else:
+                        break
+                current_words = list(reversed(overlap_words_rev))
+                current_len = overlap_len
             else:
                 current_words = []
                 current_len = 0
@@ -287,7 +295,11 @@ def chunk_ingested_records(
                     chunk_index=idx,
                     chunk_id=chunk_id,
                     text=chunk_text,
-                    safe_metadata=record.safe_metadata,
+                    # Shallow copy: prevents caller mutation of one chunk's
+                    # safe_metadata from silently affecting sibling chunks or
+                    # the parent record (all share the same underlying dict
+                    # object without this copy).
+                    safe_metadata=dict(record.safe_metadata),
                 )
             )
             log.debug(
