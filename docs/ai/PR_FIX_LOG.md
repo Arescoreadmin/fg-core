@@ -6,6 +6,86 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-24 — Task 16.2 Hardening (Review Pass): max_chars enforcement + long-token rejection
+
+**Branch:** `task/16.2-hardening`
+
+**Area:** RAG / Chunking / Determinism / max_chars Contract
+
+---
+
+**Gap description (review findings):**
+
+1. **Long-token silent overflow** (`HIGH`): a single word exceeding `max_chars` bypassed the flush guard (first word always added unconditionally). The emitted chunk's text exceeded `max_chars`, breaking the contract. No error was raised.
+
+2. **Overlap-plus-word overflow** (`HIGH`): after overlap re-seeding, appending the trigger word could produce a `current_len` exceeding `max_chars`. The chunk was not immediately emitted, but would be over-limit when eventually flushed.
+
+3. **`test_rag_chunk_single_oversized_word_produces_one_chunk` was wrong** (`HIGH`): test pinned the incorrect behavior (expected a successful oversized chunk instead of a rejection).
+
+**Files changed:**
+
+- `api/rag/chunking.py` — added `CHUNK_ERR_TOKEN_TOO_LONG = "RAG_CHUNK_E007"`; pre-pass in `_split_text` rejects any token > max_chars before emitting anything; post-overlap guard discards overlap seed if seed + trigger word > max_chars; fixed off-by-one in `current_len` after overlap reset.
+- `tests/rag/test_chunking_metadata_fidelity.py` — corrected oversized-word test (now expects `CHUNK_ERR_TOKEN_TOO_LONG`); added 3 new tests.
+
+**New/updated tests:**
+- `test_rag_chunk_rejects_token_exceeding_max_chars` (replaces old oversized-word test)
+- `test_rag_chunk_every_emitted_chunk_respects_max_chars`
+- `test_rag_chunk_overlap_near_max_chars_does_not_exceed_limit`
+
+**Validation results:**
+
+```
+pytest -k 'rag and chunk'  → 27 passed
+pytest -k 'rag and ingest' → 14 passed (regression-free)
+make fg-fast               → All checks passed!
+```
+
+---
+
+### 2026-04-24 — Task 16.2 Hardening: Chunking Gap Closure
+
+**Branch:** `task/16.2-hardening`
+
+**Area:** RAG / Chunking / Determinism / Metadata Safety
+
+---
+
+**Gap description:**
+
+Three correctness bugs identified in the 16.2 chunking implementation, plus five test coverage holes:
+
+1. **Word fragment in overlap seed** (`MEDIUM`): overlap was derived via `joined_text[-overlap_chars:]`, which slices mid-word. The split of that slice produces a word fragment (e.g., `"orld"` from `"world"`) at the start of the next chunk, violating the "whole words only" docstring claim.
+2. **Shared `safe_metadata` dict reference** (`MEDIUM`): all chunks from a single record shared the same dict object. Mutating `chunk.safe_metadata` on any one chunk silently mutated all sibling chunks and the parent record.
+3. **Unused `_MAX_OVERLAP_RATIO` constant** (`LOW`): defined as `0.5` with a comment claiming enforcement, but never used in validation. Misleading dead code.
+
+**Files changed:**
+
+- `api/rag/chunking.py` — fixed overlap seed (whole-word walk), fixed `safe_metadata` copy (`dict(record.safe_metadata)`), removed dead `_MAX_OVERLAP_RATIO` constant
+- `tests/rag/test_chunking_metadata_fidelity.py` — 6 new hardening tests added
+
+**New tests:**
+- `test_rag_chunk_overlap_does_not_produce_word_fragments`
+- `test_rag_chunk_single_oversized_word_produces_one_chunk`
+- `test_rag_chunk_unicode_content_is_deterministic`
+- `test_rag_chunk_whitespace_is_normalized_deterministically`
+- `test_rag_chunk_zero_overlap_produces_clean_boundaries`
+- `test_rag_chunk_safe_metadata_is_independent_per_chunk`
+
+**Security impact:**
+
+- No security semantics changed. Fixes are correctness/isolation only.
+- `safe_metadata` isolation prevents accidental cross-chunk metadata mutation (defensive depth).
+
+**Validation results:**
+
+```
+pytest -k 'rag and chunk'  → 25 passed
+pytest -k 'rag and ingest' → 14 passed (regression-free)
+make fg-fast               → All checks passed!
+```
+
+---
+
 ### 2026-04-24 — Task 16.2: Chunking and Metadata Fidelity
 
 **Branch:** `task/16.2-chunking-metadata-fidelity`

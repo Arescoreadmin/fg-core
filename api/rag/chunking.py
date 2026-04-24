@@ -28,6 +28,7 @@ CHUNK_ERR_EMPTY_CONTENT = "RAG_CHUNK_E003"
 CHUNK_ERR_INVALID_CONFIG = "RAG_CHUNK_E004"
 CHUNK_ERR_MALFORMED_RECORD = "RAG_CHUNK_E005"
 CHUNK_ERR_EMPTY_OUTPUT = "RAG_CHUNK_E006"
+CHUNK_ERR_TOKEN_TOO_LONG = "RAG_CHUNK_E007"
 
 # ---------------------------------------------------------------------------
 # Config
@@ -37,7 +38,6 @@ _DEFAULT_MAX_CHARS = 1000
 _DEFAULT_OVERLAP_CHARS = 100
 _MIN_CHUNK_SIZE = 1
 _MAX_CHUNK_SIZE = 32_768
-_MAX_OVERLAP_RATIO = 0.5  # overlap must be < 50% of max_chars
 
 _CANONICAL_ENCODING = "utf-8"
 
@@ -137,12 +137,30 @@ def _split_text(text: str, max_chars: int, overlap_chars: int) -> list[str]:
     Guarantees:
     - No text is silently discarded.
     - Trailing content always appears in the last chunk.
+    - Every emitted chunk satisfies len(chunk) <= max_chars.
     - Output is deterministic for identical (text, max_chars, overlap_chars).
     - Same word order is preserved.
+    - No chunk starts with a partial/truncated token.
+
+    Raises:
+        ChunkingError(CHUNK_ERR_TOKEN_TOO_LONG): if any single token exceeds
+            max_chars.  Callers must pre-process documents with oversized tokens
+            before chunking.
     """
     words = text.split()
     if not words:
         return []
+
+    # Pre-pass: reject any token that cannot fit in a single chunk.
+    # Checked before emitting anything so the caller gets a clean failure.
+    # Token text is NOT included in the message (raw document text must not leak).
+    for w in words:
+        if len(w) > max_chars:
+            raise ChunkingError(
+                CHUNK_ERR_TOKEN_TOO_LONG,
+                f"A token of length {len(w)} exceeds max_chars={max_chars}; "
+                "split or pre-process the document to remove oversized tokens",
+            )
 
     chunks: list[str] = []
     current_words: list[str] = []
@@ -154,20 +172,40 @@ def _split_text(text: str, max_chars: int, overlap_chars: int) -> list[str]:
         if current_words and current_len + needed > max_chars:
             # Flush current chunk
             chunks.append(" ".join(current_words))
-            # Compute overlap prefix from the end of the flushed chunk
+            # Compute overlap prefix from whole words at the end of the flushed
+            # chunk.  Walk backwards through current_words and accumulate words
+            # until adding the next word would exceed overlap_chars.  This
+            # guarantees the seed for the next chunk never contains a word
+            # fragment (a character-slice would risk splitting mid-word).
             if overlap_chars > 0:
-                overlap_text = " ".join(current_words)[-overlap_chars:]
-                # Re-seed current_words from overlap text (whole words only)
-                overlap_words = overlap_text.split()
-                current_words = overlap_words
-                current_len = sum(len(w) for w in current_words) + max(
-                    0, len(current_words) - 1
-                )
+                overlap_words_rev: list[str] = []
+                overlap_len = 0
+                for w in reversed(current_words):
+                    # +1 for the space separator between words
+                    needed_for_word = len(w) + (1 if overlap_words_rev else 0)
+                    if overlap_len + needed_for_word <= overlap_chars:
+                        overlap_words_rev.append(w)
+                        overlap_len += needed_for_word
+                    else:
+                        break
+                current_words = list(reversed(overlap_words_rev))
+                current_len = overlap_len
             else:
                 current_words = []
                 current_len = 0
+
+            # Safety: if the overlap seed is so large that appending the
+            # current word would still exceed max_chars, discard the overlap
+            # and start fresh.  This can happen when overlap_chars is close to
+            # max_chars and the next token is long.  Without this guard the
+            # emitted chunk could exceed max_chars.
+            new_needed = len(word) if not current_words else len(word) + 1
+            if current_words and current_len + new_needed > max_chars:
+                current_words = []
+                current_len = 0
+
         current_words.append(word)
-        current_len += needed
+        current_len += len(word) if len(current_words) == 1 else len(word) + 1
 
     # Always flush remaining content (no trailing drop)
     if current_words:
@@ -287,7 +325,11 @@ def chunk_ingested_records(
                     chunk_index=idx,
                     chunk_id=chunk_id,
                     text=chunk_text,
-                    safe_metadata=record.safe_metadata,
+                    # Shallow copy: prevents caller mutation of one chunk's
+                    # safe_metadata from silently affecting sibling chunks or
+                    # the parent record (all share the same underlying dict
+                    # object without this copy).
+                    safe_metadata=dict(record.safe_metadata),
                 )
             )
             log.debug(
