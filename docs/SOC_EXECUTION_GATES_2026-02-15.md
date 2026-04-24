@@ -1,3 +1,21 @@
+## 2026-04-24 — Task 16.1: RAG Corpus Ingestion Integrity surface added
+
+New module: `api/rag/ingest.py`
+
+Tenant-safety guarantees:
+- `trusted_tenant_id` must be supplied from trusted execution context; document body cannot supply or override it
+- Document `tenant_hint` that conflicts with `trusted_tenant_id` is rejected with `RAG_INGEST_E005`
+- Missing/blank trusted tenant fails closed with `RAG_INGEST_E001`
+- Raw document text never appears in error payloads or structured log output
+- Record identity (`document_id`) is deterministic SHA-256 of `(tenant_id, source_id, content_hash)` — no random UUIDs
+- All failure paths emit stable `RAG_INGEST_Exxx` error codes for audit traceability
+
+No external services, no vector DB, no LLM calls introduced.
+No routes added. No DB migrations. No OpenAPI changes.
+Validation: `pytest -k 'rag and ingest'` → 13 passed. `make fg-fast` → passed.
+
+---
+
 ## 2026-04-13 — Task 9.2: POST /audit/cycle/run route added to evidence plane
 
 Critical files updated:

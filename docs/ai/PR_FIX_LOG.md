@@ -6,6 +6,55 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-24 — Task 16.1: Corpus Ingestion Integrity
+
+**Branch:** `task/16.1-corpus-ingestion-integrity`
+
+**Task ID:** 16.1
+
+**Area:** RAG / Corpus Ingestion / Tenant Isolation
+
+---
+
+**Gap description:**
+
+`pytest -k 'rag and ingest'` selected zero tests. No ingestion integrity surface existed. Documents had no enforced tenant binding on the ingest path, no deterministic record identity, no explicit failure modes, and no audit fields.
+
+**Files changed:**
+
+- `api/rag/__init__.py` — new module init
+- `api/rag/ingest.py` — new: `CorpusDocument`, `IngestRequest`, `IngestedCorpusRecord`, `IngestResult`, `CorpusIngestError`, `ingest_corpus()`
+- `tests/rag/__init__.py` — new test package init
+- `tests/rag/test_ingest_integrity.py` — new: 9 tests covering happy path, tenant guards, cross-tenant rejection, determinism, safe metadata, error leakage, stable error codes
+
+**Security impact:**
+
+- Tenant identity sourced exclusively from `trusted_tenant_id` parameter; never from document body or metadata
+- Cross-tenant `tenant_hint` conflict → `RAG_INGEST_E005` rejection
+- Missing/blank trusted tenant → `RAG_INGEST_E001` rejection (fail-closed)
+- Raw document text never appears in raised error messages or log output
+- All error paths use stable `RAG_INGEST_Exxx` error codes
+- Document IDs are deterministic SHA-256 of `(tenant_id, source_id, content_hash)` — no timestamps or random UUIDs
+
+**Validation results:**
+
+```
+pytest -k 'rag and ingest'
+→ 13 passed, 1895 deselected
+
+make fg-fast
+→ All checks passed!
+```
+
+**Remaining blocker:**
+
+`python tools/plan/taskctl.py validate` reports:
+`Task 15.2 cannot proceed; unmet dependencies: 14.2`
+
+This is pre-existing plan pointer / dependency drift unrelated to this implementation. Task 16.1 implementation surface is complete and validated.
+
+---
+
 ### 2026-04-24 — Task 5.3 Addendum: Fix False Failure on Missing PyYAML
 
 **Branch:** `task/5.3-plane-boundary-enforcement`
