@@ -2364,3 +2364,27 @@ a local internal token is configured, matching the updated `api/admin.py` logic.
 
 SOC review outcome:
 - `soc-review-sync` (SOC-HIGH-002): satisfied by this documentation update.
+
+### 2026-04-23 — Auth Hardening + Gateway Contract Alignment
+
+**Files affected:**
+- admin_gateway/auth.py
+- admin_gateway/auth/config.py
+- admin_gateway/auth/oidc.py
+
+**Summary:**
+- Enforced gateway-only admin access path
+- Removed dependency on FG_DEV_AUTH_BYPASS for canonical flows
+- Aligned token-exchange path with OIDC bearer contract
+- Strengthened production guardrails against dev bypass
+- Ensured session + CSRF contract is required for admin POST operations
+
+**Security impact:**
+- Eliminates silent auth bypass vectors
+- Enforces production-aligned authentication even in dev when configured
+- Prevents unauthorized direct core access paths
+
+**Validation:**
+- Canonical tester flow passes end-to-end (OIDC → session → CSRF → export)
+- Negative tenant isolation verified
+- All auth boundary and loopback rejection tests pass
