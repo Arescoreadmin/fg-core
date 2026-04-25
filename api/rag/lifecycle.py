@@ -13,7 +13,7 @@ Scope: in-process lifecycle store only.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from api.rag.chunking import ChunkingConfig, CorpusChunk, chunk_ingested_records
 from api.rag.ingest import (
@@ -190,12 +190,12 @@ def upsert_document(
     """
     tenant_id = _require_trusted_tenant(trusted_tenant_id)
 
-    if not document.source_id or not document.source_id.strip():
+    if not isinstance(document.source_id, str) or not document.source_id.strip():
         raise LifecycleError(
             LIFECYCLE_ERR_INVALID_DOCUMENT,
             "source_id is required and must not be blank",
         )
-    if not document.content or not document.content.strip():
+    if not isinstance(document.content, str) or not document.content.strip():
         raise LifecycleError(
             LIFECYCLE_ERR_INVALID_DOCUMENT, "content is required and must not be blank"
         )
@@ -398,4 +398,7 @@ def list_active_records(
         LifecycleError(LIFECYCLE_ERR_MISSING_TENANT): missing/blank/non-string tenant.
     """
     tenant_id = _require_trusted_tenant(trusted_tenant_id)
-    return list(store._get_active_records(tenant_id))
+    return [
+        replace(record, safe_metadata=dict(record.safe_metadata))
+        for record in store._get_active_records(tenant_id)
+    ]

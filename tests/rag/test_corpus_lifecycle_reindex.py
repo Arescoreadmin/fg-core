@@ -456,3 +456,65 @@ def test_rag_reindex_does_not_mutate_caller_inputs():
     assert original_doc.source_id == _SOURCE_A
     assert original_doc.content == _DOC_A_V1_CONTENT
     assert original_doc.metadata == {"key": "value"}
+
+
+# ---------------------------------------------------------------------------
+# test_rag_reindex_rejects_non_string_source_id
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad_source_id", [None, 123, True, b"bytes"])
+def test_rag_reindex_rejects_non_string_source_id(bad_source_id):
+    from api.rag.lifecycle import LIFECYCLE_ERR_INVALID_DOCUMENT
+
+    s = CorpusLifecycleStore()
+    doc = CorpusDocument(source_id=bad_source_id, content=_DOC_A_V1_CONTENT)  # type: ignore[arg-type]
+
+    with pytest.raises(LifecycleError) as exc_info:
+        upsert_document(s, doc, trusted_tenant_id=_TENANT_A, chunk_config=_CHUNK_CONFIG)
+
+    assert exc_info.value.error_code == LIFECYCLE_ERR_INVALID_DOCUMENT
+
+
+# ---------------------------------------------------------------------------
+# test_rag_reindex_rejects_non_string_content
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad_content", [None, 123, True, b"bytes"])
+def test_rag_reindex_rejects_non_string_content(bad_content):
+    from api.rag.lifecycle import LIFECYCLE_ERR_INVALID_DOCUMENT
+
+    s = CorpusLifecycleStore()
+    doc = CorpusDocument(source_id=_SOURCE_A, content=bad_content)  # type: ignore[arg-type]
+
+    with pytest.raises(LifecycleError) as exc_info:
+        upsert_document(s, doc, trusted_tenant_id=_TENANT_A, chunk_config=_CHUNK_CONFIG)
+
+    assert exc_info.value.error_code == LIFECYCLE_ERR_INVALID_DOCUMENT
+
+
+# ---------------------------------------------------------------------------
+# test_rag_reindex_list_active_records_returns_detached_metadata
+# ---------------------------------------------------------------------------
+
+
+def test_rag_reindex_list_active_records_returns_detached_metadata():
+    s = CorpusLifecycleStore()
+    upsert_document(
+        s,
+        CorpusDocument(source_id=_SOURCE_A, content=_DOC_A_V1_CONTENT),
+        trusted_tenant_id=_TENANT_A,
+        chunk_config=_CHUNK_CONFIG,
+    )
+
+    records = list_active_records(s, _TENANT_A)
+    assert len(records) == 1
+
+    # Mutating the returned record's safe_metadata must not affect the store
+    records[0].safe_metadata["injected"] = "evil"  # type: ignore[index]
+
+    records_again = list_active_records(s, _TENANT_A)
+    assert "injected" not in records_again[0].safe_metadata, (
+        "Mutating returned safe_metadata must not affect stored record"
+    )
