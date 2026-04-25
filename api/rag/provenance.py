@@ -135,8 +135,16 @@ def build_provenance_report(
         - tenant_id is the only source of tenant authority.
         - Deterministic: no timestamps, no randomness, no UUIDs.
     """
-    # Canonical ranked order: prefer ranked_results if non-empty
-    canonical_ranked = ranked_results if ranked_results else retrieval_results
+    # Canonical ranked order: prefer ranked_results if non-empty.
+    # Fix 2: filter to trusted tenant before building any index — foreign chunks
+    # must not influence rank_map, ranked_chunk_ids, or context lookups.
+    _raw_ranked = ranked_results if ranked_results else retrieval_results
+    canonical_ranked = [
+        r for r in _raw_ranked if getattr(r, "tenant_id", tenant_id) == tenant_id
+    ]
+    context_items = [
+        c for c in context_items if getattr(c, "tenant_id", tenant_id) == tenant_id
+    ]
 
     # Build lookup sets for O(1) membership tests
     ranked_chunk_ids: set[str] = {r.chunk_id for r in canonical_ranked}
@@ -186,9 +194,14 @@ def build_provenance_report(
     )
     injection_detected = agg_injection or len(injection_flagged_ids) > 0
 
-    # Build per-chunk provenance for every retrieved result
+    # Build per-chunk provenance for every retrieved result.
+    # Fix 2: skip foreign-tenant results entirely — never emit, never log.
     prov_chunks: list[ProvenanceChunk] = []
     for i, result in enumerate(retrieval_results):
+        # Tenant guard: foreign chunks must not appear in this tenant's provenance.
+        if getattr(result, "tenant_id", tenant_id) != tenant_id:
+            continue
+
         chunk_id = result.chunk_id
 
         if chunk_id in rank_map:
@@ -197,14 +210,18 @@ def build_provenance_report(
             rank = 0  # not in ranked output
             score = result.score
 
-        # Determine inclusion and exclusion reason
+        # Determine inclusion and exclusion reason.
+        # Fix 1: citations always win — if a chunk is in the answer citations it is
+        # included regardless of injection signal.  Provenance = what happened.
         if chunk_id in context_chunk_ids:
-            if chunk_id in injection_flagged_ids:
-                included = False
-                reason: str | None = EXCLUSION_INJECTION_FLAGGED
-            elif chunk_id in cited_chunk_ids:
+            if chunk_id in cited_chunk_ids:
+                # Cited chunks are included; injection_detected flag at report level
+                # preserves the signal without contradicting reality.
                 included = True
-                reason = None
+                reason: str | None = None
+            elif chunk_id in injection_flagged_ids:
+                included = False
+                reason = EXCLUSION_INJECTION_FLAGGED
             else:
                 # In context but not cited: either no_answer or zero-score
                 included = False
