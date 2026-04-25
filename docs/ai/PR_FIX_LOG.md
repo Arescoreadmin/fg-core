@@ -6,6 +6,67 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-25 — Task 16.9 Addendum: Guardrail Semantics Closure
+
+**Branch:** `task/16.9-retrieval-latency-cost-guardrails`
+
+**Area:** RAG / Latency / Cost Guardrails / Semantic Correctness
+
+---
+
+**Gap description (three reviewed gaps):**
+
+1. **Candidate budget applied after scoring** — `apply_retrieval_budget` received already-scored results, so scoring was not bounded. Fixed by adding `apply_candidate_budget(candidates, policy)` that takes tenant-filtered `CorpusChunk` objects and caps them before scoring/ranking.
+
+2. **Char-budget loop stopped at first oversized item** — `break` discarded all later items including smaller ones that would fit. Fixed by changing to `continue`: oversized items are skipped, scanning proceeds, later small items are retained. `degraded=True` emitted when any item is skipped.
+
+3. **`max_citation_count` validated but not enforced** — effective count cap is now `min(max_context_items, max_citation_count)`. `degraded=True` when citation cap is binding and causes truncation.
+
+**Files changed:**
+
+- `api/rag/guardrails.py` — new `apply_candidate_budget()`; `apply_answer_context_budget()` rewritten: `break` → `continue`, citation cap applied, `degraded` flag logic
+- `tests/rag/test_latency_cost_guardrails.py` — 3 new tests: `test_rag_latency_candidate_cap_applies_before_scoring`, `test_rag_latency_context_budget_skips_oversized_and_keeps_later_fit`, `test_rag_latency_max_citation_count_limits_retained_context`
+
+**Validation:**
+
+`pytest -q tests -k 'rag and latency or rag and cost'` → 21 passed. All prior selectors (ranking/citation/tenant/prompt_injection) green. `make fg-fast` → passed.
+
+---
+
+### 2026-04-25 — Task 16.9: Retrieval Latency and Cost Guardrails
+
+**Branch:** `task/16.9-retrieval-latency-cost-guardrails`
+
+**Task ID:** 16.9
+
+**Area:** RAG / Latency / Cost Guardrails / Bounded Work
+
+---
+
+**Gap description:**
+
+No explicit bounds existed on candidate chunks inspected, results returned, context items assembled, total context characters, query size, or estimated token/character cost. Oversized requests could silently consume unbounded CPU or future provider cost with no audit trail.
+
+**Files changed:**
+
+- `api/rag/guardrails.py` — new: `RagBudgetPolicy`, `RagBudgetReport`, `RagGuardrailError`, `apply_retrieval_budget()`, `apply_answer_context_budget()`, `estimate_context_cost_chars()`, `validate_query_budget()`, `build_budget_exceeded_no_answer()`
+- `tests/rag/test_latency_cost_guardrails.py` — new: 18 test cases covering all 14 required test names plus extras for edge cases
+
+**Security/product impact:**
+
+- Deterministic, in-process, no LLM/network/randomness
+- Candidate limit enforced after tenant filter — foreign chunks never inspected
+- Context budget enforced before answer assembly — injection_assessment preserved on retained items
+- All truncation is explicit: `truncated=True` in `RagBudgetReport`, no silent best-effort
+- Budget degradation produces `NoAnswer` with stable reason code, not a silently degraded grounded answer
+- `RagBudgetReport` exposes `inspected_candidate_count`, `returned_result_count`, `context_item_count`, `total_context_chars`, `truncated`, `degraded`, `reason_code` for full auditability
+
+**Validation:**
+
+`pytest -q tests -k 'rag and latency or rag and cost'` → 18 passed. All prior RAG selectors green (14/33/23/22/9/24/25/41 passed). `make fg-fast` → passed.
+
+---
+
 ### 2026-04-24 — Task 16.8: RAG Prompt Injection and Poisoned-Document Resistance
 
 **Branch:** `task/16.8-prompt-injection-resistance`
