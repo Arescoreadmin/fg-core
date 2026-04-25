@@ -1,3 +1,20 @@
+## 2026-04-25 — Task 16.10: Operator / Debug Answer Provenance
+
+`api/rag/provenance.py` added; `api/rag/answering.py` extended with `build_answer_with_provenance()`.
+
+Provenance guarantees:
+- Read-only and observational — no pipeline behavior altered
+- `ProvenanceReport` captures: retrieved_count, ranked_count, context_count, per-chunk provenance, answer_status, no_answer_reason, injection_detected, guardrail_applied, truncated, degraded
+- Per-chunk `ProvenanceChunk`: chunk_id, source_id, score, rank, included_in_answer, exclusion_reason
+- Five stable exclusion reasons: filtered_out, low_score, budget_exceeded, injection_flagged, not_selected
+- No raw document text in report; no foreign tenant chunk_ids or metadata
+- Frozen dataclasses — immutable once produced; deterministic
+
+No routes added. No DB migrations. No OpenAPI changes.
+Validation: `pytest -q tests -k 'rag and provenance'` → 14 passed. `make fg-fast` → passed.
+
+---
+
 ## 2026-04-25 — Task 16.9: Retrieval Latency and Cost Guardrails
 
 `api/rag/guardrails.py` added with deterministic budget enforcement for all RAG pipeline stages.

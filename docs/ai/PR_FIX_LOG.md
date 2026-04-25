@@ -6,6 +6,42 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-25 — Task 16.10: Operator / Debug Answer Provenance
+
+**Branch:** `task/16.10-operator-debug-answer-provenance`
+
+**Task ID:** 16.10
+
+**Area:** RAG / Provenance / Operator Debug Surface / Tenant-Safe
+
+---
+
+**Gap description:**
+
+No operator-visible record existed explaining how an answer or no-answer was produced: which chunks were retrieved, which were ranked, which entered context, why non-selected chunks were excluded, whether injection was detected, or whether a guardrail budget was applied.
+
+**Files changed:**
+
+- `api/rag/provenance.py` — new: `ProvenanceChunk`, `ProvenanceReport`, `build_provenance_report()`; five stable exclusion reason codes (filtered_out, low_score, budget_exceeded, injection_flagged, not_selected)
+- `api/rag/answering.py` — new `build_answer_with_provenance()` function; added imports for `ProvenanceReport`, `build_provenance_report`, `RetrievalResult`, `assess_context_items`
+- `tests/rag/test_provenance_debug_surface.py` — new: 14 test cases
+
+**Security/product impact:**
+
+- Read-only and observational — no retrieval, ranking, answering, safety, or guardrail behavior modified
+- No raw document text in `ProvenanceChunk` or `ProvenanceReport`
+- No foreign tenant chunk_ids, source_ids, or metadata exposed
+- `ProvenanceReport` is frozen — immutable once produced
+- Deterministic: same inputs always produce identical report
+- Injection-flagged chunks correctly annotated without leaking matched pattern text
+- `build_answer_with_provenance` produces identical answer to `build_answer_or_no_answer`
+
+**Validation:**
+
+`pytest -q tests -k 'rag and provenance'` → 14 passed. All prior RAG selectors green. `make fg-fast` → passed.
+
+---
+
 ### 2026-04-25 — Task 16.9 Addendum: Guardrail Semantics Closure
 
 **Branch:** `task/16.9-retrieval-latency-cost-guardrails`
