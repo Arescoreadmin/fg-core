@@ -6,6 +6,40 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-25 — Task 16.9: Retrieval Latency and Cost Guardrails
+
+**Branch:** `task/16.9-retrieval-latency-cost-guardrails`
+
+**Task ID:** 16.9
+
+**Area:** RAG / Latency / Cost Guardrails / Bounded Work
+
+---
+
+**Gap description:**
+
+No explicit bounds existed on candidate chunks inspected, results returned, context items assembled, total context characters, query size, or estimated token/character cost. Oversized requests could silently consume unbounded CPU or future provider cost with no audit trail.
+
+**Files changed:**
+
+- `api/rag/guardrails.py` — new: `RagBudgetPolicy`, `RagBudgetReport`, `RagGuardrailError`, `apply_retrieval_budget()`, `apply_answer_context_budget()`, `estimate_context_cost_chars()`, `validate_query_budget()`, `build_budget_exceeded_no_answer()`
+- `tests/rag/test_latency_cost_guardrails.py` — new: 18 test cases covering all 14 required test names plus extras for edge cases
+
+**Security/product impact:**
+
+- Deterministic, in-process, no LLM/network/randomness
+- Candidate limit enforced after tenant filter — foreign chunks never inspected
+- Context budget enforced before answer assembly — injection_assessment preserved on retained items
+- All truncation is explicit: `truncated=True` in `RagBudgetReport`, no silent best-effort
+- Budget degradation produces `NoAnswer` with stable reason code, not a silently degraded grounded answer
+- `RagBudgetReport` exposes `inspected_candidate_count`, `returned_result_count`, `context_item_count`, `total_context_chars`, `truncated`, `degraded`, `reason_code` for full auditability
+
+**Validation:**
+
+`pytest -q tests -k 'rag and latency or rag and cost'` → 18 passed. All prior RAG selectors green (14/33/23/22/9/24/25/41 passed). `make fg-fast` → passed.
+
+---
+
 ### 2026-04-24 — Task 16.8: RAG Prompt Injection and Poisoned-Document Resistance
 
 **Branch:** `task/16.8-prompt-injection-resistance`

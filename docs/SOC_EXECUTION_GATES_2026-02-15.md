@@ -1,3 +1,21 @@
+## 2026-04-25 — Task 16.9: Retrieval Latency and Cost Guardrails
+
+`api/rag/guardrails.py` added with deterministic budget enforcement for all RAG pipeline stages.
+
+Bounded-work guarantees:
+- `RagBudgetPolicy` controls: max_candidate_chunks, max_results, max_context_items, max_total_context_chars, max_query_chars, max_citation_count, max_chunk_chars_inspected
+- Candidate limit enforced after tenant filter — foreign chunks never inspected or counted
+- Context budget enforced after injection assessment — `injection_assessment` preserved on all retained items
+- `RagBudgetReport` provides fully auditable: inspected_candidate_count, returned_result_count, context_item_count, total_context_chars, truncated, degraded, reason_code
+- Silent truncation is prohibited — `truncated=True` always emitted when items are dropped
+- Budget degradation triggers `NoAnswer` with stable `NO_ANSWER_CONTEXT_BUDGET_EXCEEDED` or `NO_ANSWER_QUERY_TOO_LARGE` reason code
+- Invalid policy values raise `RagGuardrailError(GUARDRAIL_ERR_INVALID_POLICY)` — fail closed
+
+No routes added. No DB migrations. No OpenAPI changes.
+Validation: `pytest -q tests -k 'rag and latency or rag and cost'` → 18 passed. `make fg-fast` → passed.
+
+---
+
 ## 2026-04-24 — Task 16.8: RAG Prompt Injection and Poisoned-Document Resistance
 
 `api/rag/safety.py` added; `api/rag/answering.py` integrated.
