@@ -571,7 +571,13 @@ def build_answer_or_no_answer(
     safe_context = constrain_answer_context(context, tenant_id)
     safe_context = sorted(
         safe_context,
-        key=lambda item: 1 if item.safe_metadata.get("prompt_injection_risk") else 0,
+        key=lambda item: (
+            1
+            if item.injection_assessment is not None
+            and item.injection_assessment.is_suspicious
+            else 0,
+            item.score * -1,
+        ),
     )
 
     effective_policy = policy if policy is not None else AnswerConfidencePolicy()

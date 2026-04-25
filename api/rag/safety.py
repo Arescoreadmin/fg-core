@@ -245,9 +245,9 @@ def constrain_answer_context(
     """Return context items with injection-risk annotations applied.
 
     Suspicious items are returned with:
+      - injection_assessment set to the PromptInjectionAssessment (trusted signal,
+        separate from user/ingest metadata)
       - score set to 0.0 (prevents them from supporting grounded evidence)
-      - safe_metadata["prompt_injection_risk"] = True
-      - safe_metadata["injection_rule_ids"] = sorted list of matched rule IDs
 
     Clean items are returned unchanged.
 
@@ -262,6 +262,8 @@ def constrain_answer_context(
     Security invariants:
         - tenant_id of each item is never altered.
         - trusted_tenant_id cannot be overridden by document content.
+        - injection_assessment is a trusted field set only by this guard —
+          it is never sourced from safe_metadata or document payload.
         - Suspicious item score is zeroed; existing policy evaluation then
           determines whether remaining evidence is sufficient.
         - Log output does not include raw item text or tenant identifiers.
@@ -281,9 +283,6 @@ def constrain_answer_context(
                     # NOT logging item.text, item.tenant_id, or item.source_id
                 },
             )
-            new_metadata = dict(item.safe_metadata)
-            new_metadata["prompt_injection_risk"] = True
-            new_metadata["injection_rule_ids"] = sorted(assessment.matched_rule_ids)
             result.append(
                 AnswerContextItem(
                     tenant_id=item.tenant_id,
@@ -293,8 +292,9 @@ def constrain_answer_context(
                     chunk_id=item.chunk_id,
                     chunk_index=item.chunk_index,
                     text=item.text,
-                    safe_metadata=new_metadata,
+                    safe_metadata=item.safe_metadata,
                     score=0.0,
+                    injection_assessment=assessment,
                 )
             )
         else:
