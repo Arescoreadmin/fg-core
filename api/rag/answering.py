@@ -20,6 +20,7 @@ from enum import Enum
 from typing import Any
 
 from api.rag.retrieval import AnswerContextItem
+from api.rag.safety import constrain_answer_context
 
 log = logging.getLogger("frostgate.rag.answering")
 
@@ -565,15 +566,25 @@ def build_answer_or_no_answer(
     tenant_id = _require_trusted_tenant(trusted_tenant_id)
     _check_mixed_tenant(context, tenant_id)
 
+    # Prompt-injection guard: annotate and zero-score suspicious items.
+    # Clean items first so policy evaluation uses the strongest evidence.
+    safe_context = constrain_answer_context(context, tenant_id)
+    safe_context = sorted(
+        safe_context,
+        key=lambda item: 1 if item.safe_metadata.get("prompt_injection_risk") else 0,
+    )
+
     effective_policy = policy if policy is not None else AnswerConfidencePolicy()
     _validate_policy(effective_policy)
 
-    insufficient = evaluate_context_sufficiency(context, effective_policy, tenant_id)
+    insufficient = evaluate_context_sufficiency(
+        safe_context, effective_policy, tenant_id
+    )
     if insufficient is not None:
         return insufficient
 
     # Context passed all policy checks — assemble grounded answer
-    return assemble_answer_from_context(context, trusted_tenant_id, answer_text)
+    return assemble_answer_from_context(safe_context, trusted_tenant_id, answer_text)
 
 
 def build_no_answer(
