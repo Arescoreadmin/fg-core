@@ -6,6 +6,55 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-24 — Task 16.7: Corpus Update/Delete/Reindex Lifecycle
+
+**Branch:** `task/16.7-corpus-lifecycle-reindex`
+
+**Task ID:** 16.7
+
+**Area:** RAG / Corpus Lifecycle / Update Delete Reindex / Tenant Safety
+
+---
+
+**Gap description:**
+
+No corpus lifecycle surface existed. Documents could be ingested but not updated, deleted, or reindexed. Stale chunks from old document versions would persist indefinitely in any in-memory corpus pool.
+
+**Files changed:**
+
+- `api/rag/lifecycle.py` — new: `CorpusLifecycleStore`, `LifecycleOperationResult`, `LifecycleError`, `upsert_document()`, `delete_document()`, `reindex()`, `list_active_chunks()`, `list_active_records()`
+- `tests/rag/test_corpus_lifecycle_reindex.py` — new: 12 test functions, 16 cases
+
+**Security impact:**
+
+- `trusted_tenant_id` required for all operations; non-string/blank fails with `LIFECYCLE_ERR_MISSING_TENANT`
+- Store keyed by `(tenant_id, source_id)` — cross-tenant upsert creates a separate key, never overwrites foreign record
+- Cross-tenant delete returns `LIFECYCLE_ERR_DOCUMENT_NOT_FOUND` — same as absent document; no existence side channel
+- Reindex operates only on `_active` records — deleted documents are never resurrected
+- `LifecycleOperationResult` contains `tenant_id`, `operation`, `source_id`, `document_id`, `prior_content_hash`, `new_content_hash`, `affected_chunk_count`, `status` — full audit trail without raw document text
+- `list_active_records()` returns a copy — caller mutation does not affect store state
+- Error messages contain no raw document text, foreign tenant ID, or foreign source ID
+- No external services, no DB, no embeddings, no LLM calls
+
+**Validation results:**
+
+```
+pytest -q tests -k 'rag and reindex'   → 16 passed
+pytest -q tests -k 'rag and no_answer' → 22 passed (regression-free)
+pytest -q tests -k 'rag and citation'  → 20 passed (regression-free)
+pytest -q tests -k 'rag and tenant'    → 21 passed (regression-free)
+pytest -q tests -k 'rag and ingest'    → 14 passed (regression-free)
+pytest -q tests -k 'rag and chunk'     → 33 passed (regression-free)
+pytest -q tests -k 'rag and ranking'   →  8 passed (regression-free)
+make fg-fast                           → All checks passed!
+```
+
+**Remaining blocker:**
+
+`python tools/plan/taskctl.py validate` reports pre-existing plan pointer/dependency drift (`Task 15.2 cannot proceed; unmet dependencies: 14.2`). Not caused by this task.
+
+---
+
 ### 2026-04-24 — Task 16.6: No-Answer and Insufficient-Context Behavior
 
 **Branch:** `task/16.6-no-answer-insufficient-context`

@@ -1,3 +1,20 @@
+## 2026-04-24 — Task 16.7: Corpus Update/Delete/Reindex Lifecycle
+
+`api/rag/lifecycle.py` added with `CorpusLifecycleStore` and tenant-safe lifecycle operations.
+
+Lifecycle guarantees:
+- `trusted_tenant_id` required for all operations — document payload cannot supply tenant authority
+- Store keyed by `(tenant_id, source_id)` — cross-tenant upsert never overwrites foreign records
+- Cross-tenant delete returns `LIFECYCLE_ERR_DOCUMENT_NOT_FOUND` — no existence side channel
+- Delete removes record from active set — reindex never resurfaces deleted documents
+- `LifecycleOperationResult` provides full audit trail: tenant, operation, source_id, document_id, content hashes, chunk count, status — without raw document text
+- `list_active_records()` returns a copy — store internal state is not exposed to callers
+
+No routes added. No DB migrations. No OpenAPI changes.
+Validation: `pytest -q tests -k 'rag and reindex'` → 16 passed. `make fg-fast` → passed.
+
+---
+
 ## 2026-04-24 — Task 16.6: No-Answer and Insufficient-Context Behavior
 
 `api/rag/answering.py` extended with `AnswerConfidencePolicy` and policy-governed assembly.
