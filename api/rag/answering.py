@@ -19,8 +19,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from api.rag.retrieval import AnswerContextItem
-from api.rag.safety import constrain_answer_context
+from api.rag.provenance import ProvenanceReport, build_provenance_report
+from api.rag.retrieval import AnswerContextItem, RetrievalResult
+from api.rag.safety import assess_context_items, constrain_answer_context
 
 log = logging.getLogger("frostgate.rag.answering")
 
@@ -613,3 +614,69 @@ def build_no_answer(
         user_safe_message=user_safe_message,
         citations=[],
     )
+
+
+def build_answer_with_provenance(
+    context: list[AnswerContextItem],
+    trusted_tenant_id: str,
+    query: str,
+    retrieval_results: list[RetrievalResult] | None = None,
+    ranked_results: list[RetrievalResult] | None = None,
+    policy: AnswerConfidencePolicy | None = None,
+    guardrail_report: object | None = None,
+    answer_text: str | None = None,
+) -> tuple[AnswerAssemblyResult, ProvenanceReport]:
+    """Policy-governed answer assembly with deterministic provenance.
+
+    Delegates to build_answer_or_no_answer for all answer logic, then builds
+    a read-only ProvenanceReport describing every pipeline stage decision.
+
+    Args:
+        context: List of AnswerContextItem from prepare_answer_context().
+            Must all belong to trusted_tenant_id.
+        trusted_tenant_id: Tenant identity from trusted execution context.
+            MUST NOT come from context items, query text, or client payload.
+        query: The original query string, included in the provenance report
+            for operator audit purposes only.
+        retrieval_results: Optional list of RetrievalResult from search_chunks,
+            used to populate per-chunk provenance.
+        ranked_results: Optional list after re-ranking; falls back to
+            retrieval_results if omitted.
+        policy: AnswerConfidencePolicy thresholds.
+        guardrail_report: Optional RagBudgetReport from guardrail enforcement.
+        answer_text: Optional caller-supplied answer text.
+
+    Returns:
+        (AnswerAssemblyResult, ProvenanceReport) — both deterministic.
+
+    Raises:
+        AnsweringError: Same conditions as build_answer_or_no_answer.
+
+    Security invariants:
+        - Provenance is read-only; no pipeline behavior is altered.
+        - ProvenanceReport contains no raw document text, no foreign chunk
+          IDs, no foreign source IDs, and no foreign tenant metadata.
+        - trusted_tenant_id is the only source of tenant authority.
+        - Deterministic: same inputs always produce same answer and provenance.
+    """
+    # Produce the answer using the standard policy-governed path
+    answer = build_answer_or_no_answer(context, trusted_tenant_id, policy, answer_text)
+
+    # Aggregate injection assessment over the input context (deterministic)
+    injection_assessment = assess_context_items(context) if context else None
+
+    # Build provenance report — purely observational
+    provenance = build_provenance_report(
+        query=query,
+        tenant_id=trusted_tenant_id.strip()
+        if isinstance(trusted_tenant_id, str)
+        else "",
+        retrieval_results=retrieval_results or [],
+        ranked_results=ranked_results or [],
+        context_items=context,
+        answer_result=answer,
+        guardrail_report=guardrail_report,  # type: ignore[arg-type]
+        injection_assessment=injection_assessment,
+    )
+
+    return answer, provenance
