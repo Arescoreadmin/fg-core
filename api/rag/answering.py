@@ -225,6 +225,12 @@ def _require_trusted_tenant(trusted_tenant_id: str) -> str:
 
 def _validate_policy(policy: AnswerConfidencePolicy) -> None:
     """Validate policy field types and bounds. Raises AnsweringError on invalid input."""
+    if not isinstance(policy, AnswerConfidencePolicy):
+        raise AnsweringError(
+            ANSWER_ERR_INVALID_POLICY,
+            "policy must be an AnswerConfidencePolicy",
+        )
+
     if not isinstance(policy.min_evidence_count, int) or isinstance(
         policy.min_evidence_count, bool
     ):

@@ -386,3 +386,14 @@ def test_rag_no_answer_invalid_policy_rejected(context_a, bad_policy):
             context_a, trusted_tenant_id=_TENANT_A, policy=bad_policy
         )
     assert exc_info.value.error_code == ANSWER_ERR_INVALID_POLICY
+
+
+def test_rag_no_answer_rejects_non_policy_object() -> None:
+    with pytest.raises(AnsweringError) as exc:
+        build_answer_or_no_answer(
+            [],
+            trusted_tenant_id="tenant-rag-a",
+            policy={"min_evidence_count": 1},  # type: ignore[arg-type]
+        )
+
+    assert exc.value.error_code == ANSWER_ERR_INVALID_POLICY
