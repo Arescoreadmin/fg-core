@@ -6,6 +6,41 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-24 — Task 16.8: RAG Prompt Injection and Poisoned-Document Resistance
+
+**Branch:** `task/16.8-prompt-injection-resistance`
+
+**Task ID:** 16.8
+
+**Area:** RAG / Safety / Prompt Injection / Poisoned Document
+
+---
+
+**Gap description:**
+
+Retrieved context items could carry adversarial instruction-override text (prompt injection) into the answer assembly pipeline. No guard existed to detect or constrain such items before they influenced policy evaluation or citation generation.
+
+**Files changed:**
+
+- `api/rag/safety.py` — new: `PromptInjectionRule`, `PromptInjectionFinding`, `PromptInjectionAssessment`, `assess_prompt_injection()`, `assess_context_items()`, `constrain_answer_context()`
+- `api/rag/answering.py` — `build_answer_or_no_answer()` now calls `constrain_answer_context()` before policy evaluation; suspicious items are score-zeroed and sorted to the back
+- `tests/security/test_rag_prompt_injection_resistance.py` — new: 19 test cases covering all 6 rule families, annotation invariants, tenant isolation, and integration with answer assembly
+
+**Security impact:**
+
+- Deterministic, local, in-process guard — no LLM calls, no network, no randomness
+- Six rule families (PI001–PI006): instruction override, citation bypass, exfiltration, tenant switch, system override, grounding bypass
+- Suspicious items: score set to 0.0, `safe_metadata["prompt_injection_risk"] = True`, rule IDs recorded; tenant_id never altered
+- Clean items returned unchanged and sorted before suspicious ones for policy evaluation
+- `matched_pattern` in findings contains only predefined rule strings — never raw document content
+- Log output does not include item text or tenant identifiers
+
+**Validation:**
+
+`pytest -q tests/security -k 'prompt_injection'` → 19 passed. All 151 RAG + security tests pass. `make fg-fast` → passed. `bash codex_gates.sh` → passed.
+
+---
+
 ### 2026-04-24 — Task 16.7: Corpus Update/Delete/Reindex Lifecycle
 
 **Branch:** `task/16.7-corpus-lifecycle-reindex`

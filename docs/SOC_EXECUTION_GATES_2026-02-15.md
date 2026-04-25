@@ -1,3 +1,20 @@
+## 2026-04-24 — Task 16.8: RAG Prompt Injection and Poisoned-Document Resistance
+
+`api/rag/safety.py` added; `api/rag/answering.py` integrated.
+
+Injection resistance guarantees:
+- Deterministic, in-process guard — no LLM, no network, no external classifiers
+- Six rule families (PI001–PI006) cover instruction override, citation bypass, secret exfiltration, tenant switch, system prompt override, and grounding bypass
+- Suspicious items: score zeroed, `safe_metadata["prompt_injection_risk"]=True`, `injection_rule_ids` set — tenant_id never altered
+- `constrain_answer_context()` called in `build_answer_or_no_answer()` before policy evaluation; clean items sorted first
+- `matched_pattern` fields contain only predefined rule strings — never raw document content
+- Non-string/empty inputs return safe assessment without raising
+
+No routes added. No DB migrations. No OpenAPI changes.
+Validation: `pytest -q tests/security -k 'prompt_injection'` → 19 passed. `make fg-fast` → passed.
+
+---
+
 ## 2026-04-24 — Task 16.7: Corpus Update/Delete/Reindex Lifecycle
 
 `api/rag/lifecycle.py` added with `CorpusLifecycleStore` and tenant-safe lifecycle operations.

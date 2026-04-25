@@ -10,8 +10,11 @@ Scope: search, fetch-by-ID, answer-context preparation, and deterministic rankin
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from api.rag.safety import PromptInjectionAssessment
 
 from api.rag.chunking import CorpusChunk
 
@@ -86,6 +89,9 @@ class AnswerContextItem:
     text: str
     safe_metadata: dict[str, Any]
     score: float
+    injection_assessment: PromptInjectionAssessment | None = field(
+        default=None, compare=False
+    )
 
 
 # ---------------------------------------------------------------------------
