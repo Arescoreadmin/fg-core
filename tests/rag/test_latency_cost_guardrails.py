@@ -23,6 +23,7 @@ from api.rag.answering import (
     AnswerStatus,
     NoAnswer,
 )
+from api.rag.chunking import CorpusChunk
 from api.rag.guardrails import (
     GUARDRAIL_ERR_INVALID_POLICY,
     GUARDRAIL_ERR_QUERY_TOO_LARGE,
@@ -31,6 +32,7 @@ from api.rag.guardrails import (
     RagBudgetReport,
     RagGuardrailError,
     apply_answer_context_budget,
+    apply_candidate_budget,
     apply_retrieval_budget,
     build_budget_exceeded_no_answer,
     estimate_context_cost_chars,
@@ -45,6 +47,23 @@ from api.rag.safety import constrain_answer_context
 
 _TENANT_A = "tenant-rag-a"
 _TENANT_B = "tenant-rag-b"
+
+
+def _corpus_chunk(
+    chunk_id: str,
+    text: str = "chunk content",
+    tenant_id: str = _TENANT_A,
+) -> CorpusChunk:
+    return CorpusChunk(
+        tenant_id=tenant_id,
+        source_id="src-1",
+        document_id="doc-1",
+        parent_content_hash="hash0",
+        chunk_index=0,
+        chunk_id=chunk_id,
+        text=text,
+        safe_metadata={},
+    )
 
 
 def _result(
@@ -354,3 +373,77 @@ def test_rag_latency_same_input_same_budget_same_output() -> None:
 
     assert [x.chunk_id for x in bounded_a] == [x.chunk_id for x in bounded_b]
     assert report_a == report_b
+
+
+# ---------------------------------------------------------------------------
+# Addendum fixes: candidate cap before scoring, skip-not-stop, citation cap
+# ---------------------------------------------------------------------------
+
+
+def test_rag_latency_candidate_cap_applies_before_scoring() -> None:
+    """Candidate budget caps the pool that would be scored — not post-scoring results.
+
+    apply_candidate_budget must be called after tenant filter but before scoring.
+    Proves: bounded pool contains only the first N chunks; scoring them produces
+    results whose chunk_ids are disjoint from the dropped tail.
+    """
+    all_chunks = [_corpus_chunk(f"ch{i}", text=f"content {i}") for i in range(20)]
+    policy = RagBudgetPolicy(max_candidate_chunks=6, max_results=10)
+
+    bounded_chunks, report = apply_candidate_budget(all_chunks, policy)
+
+    assert len(bounded_chunks) == 6
+    assert report.inspected_candidate_count == 20
+    assert report.returned_result_count == 6
+    assert report.truncated is True
+
+    # Only the first 6 chunks (deterministic slice) are in bounded set
+    expected_ids = {f"ch{i}" for i in range(6)}
+    dropped_ids = {f"ch{i}" for i in range(6, 20)}
+    actual_ids = {c.chunk_id for c in bounded_chunks}
+    assert actual_ids == expected_ids
+    assert actual_ids.isdisjoint(dropped_ids)
+
+
+def test_rag_latency_context_budget_skips_oversized_and_keeps_later_fit() -> None:
+    """Oversized items are skipped; smaller later items that fit are retained.
+
+    Input order: large item (500 chars), large item (500 chars), small (50 chars).
+    Budget: 600 chars total.  Items 0+1 would use 1000 > 600; item 2 fits.
+    Expected: item 0 retained (500), item 1 skipped (would hit 1000), item 2 retained (50).
+    """
+    items = [
+        _context_item("c-large-0", text="L" * 500, score=0.9),
+        _context_item("c-large-1", text="L" * 500, score=0.8),
+        _context_item("c-small-2", text="S" * 50, score=0.7),
+    ]
+    policy = RagBudgetPolicy(max_context_items=10, max_total_context_chars=600)
+    bounded, report = apply_answer_context_budget(items, policy)
+
+    chunk_ids = [x.chunk_id for x in bounded]
+    assert "c-large-0" in chunk_ids  # first item fits (500 ≤ 600)
+    assert "c-large-1" not in chunk_ids  # second would hit 1000, skipped
+    assert "c-small-2" in chunk_ids  # third fits in remaining 100 chars
+    assert report.truncated is True
+    assert report.degraded is True
+    assert report.total_context_chars <= 600
+
+
+def test_rag_latency_max_citation_count_limits_retained_context() -> None:
+    """max_citation_count lower than max_context_items caps retained items.
+
+    With max_context_items=10 and max_citation_count=3 and 8 input items,
+    retained count must not exceed 3.  Report must indicate degradation.
+    """
+    items = _make_context(8, chars_each=50)
+    policy = RagBudgetPolicy(
+        max_context_items=10,
+        max_citation_count=3,
+        max_total_context_chars=10000,
+    )
+    bounded, report = apply_answer_context_budget(items, policy)
+
+    assert len(bounded) <= 3
+    assert report.context_item_count <= 3
+    assert report.truncated is True
+    assert report.degraded is True

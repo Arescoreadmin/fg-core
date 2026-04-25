@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from api.rag.chunking import CorpusChunk
 from api.rag.retrieval import AnswerContextItem, RetrievalResult
 
 log = logging.getLogger("frostgate.rag.guardrails")
@@ -200,6 +201,65 @@ def validate_query_budget(query_text: str, policy: RagBudgetPolicy) -> None:
         )
 
 
+def apply_candidate_budget(
+    candidates: list[CorpusChunk],
+    policy: RagBudgetPolicy | None = None,
+) -> tuple[list[CorpusChunk], RagBudgetReport]:
+    """Cap tenant-filtered candidates before scoring/ranking.
+
+    This MUST be called after tenant filtering and BEFORE scoring/ranking so
+    that the scoring work itself is bounded.  Calling after scoring defeats the
+    latency/work-bound contract.
+
+    Args:
+        candidates: Tenant-filtered CorpusChunk list — must not contain foreign
+            tenant chunks.
+        policy: Budget policy to enforce.  Defaults to RagBudgetPolicy().
+
+    Returns:
+        (bounded_candidates, RagBudgetReport)
+
+    Raises:
+        RagGuardrailError(GUARDRAIL_ERR_INVALID_POLICY): invalid policy.
+
+    Security invariants:
+        - Must only receive tenant-filtered candidates.  Never inspect foreign
+          chunks — that filtering is the caller's responsibility (e.g. retrieval.py).
+        - Candidate order is preserved (deterministic if input is deterministic).
+        - truncated=True when candidates are dropped.
+        - Deterministic: same inputs + same policy → same output.
+    """
+    effective_policy = policy if policy is not None else RagBudgetPolicy()
+    _validate_policy(effective_policy)
+
+    total = len(candidates)
+    bounded = candidates[: effective_policy.max_candidate_chunks]
+    truncated = len(bounded) < total
+
+    report = RagBudgetReport(
+        max_candidate_chunks=effective_policy.max_candidate_chunks,
+        inspected_candidate_count=total,
+        returned_result_count=len(bounded),
+        context_item_count=0,
+        total_context_chars=0,
+        truncated=truncated,
+        degraded=False,
+        reason_code=None,
+    )
+
+    if truncated:
+        log.info(
+            "rag.guardrails: candidate pool truncated by budget",
+            extra={
+                "total_candidates": total,
+                "candidate_limit": effective_policy.max_candidate_chunks,
+                "bounded_count": len(bounded),
+            },
+        )
+
+    return bounded, report
+
+
 def apply_retrieval_budget(
     results: list[RetrievalResult],
     policy: RagBudgetPolicy | None = None,
@@ -297,21 +357,38 @@ def apply_answer_context_budget(
     effective_policy = policy if policy is not None else RagBudgetPolicy()
     _validate_policy(effective_policy)
 
-    # Bound by item count first
-    count_bounded = context_items[: effective_policy.max_context_items]
+    # Fix 3: effective count cap = min(max_context_items, max_citation_count).
+    # Citation cap is binding when it is lower than the context-item cap.
+    effective_count_cap = min(
+        effective_policy.max_context_items, effective_policy.max_citation_count
+    )
+    count_bounded = context_items[:effective_count_cap]
 
-    # Then bound by total character budget (greedy — keep items until budget full)
+    # citation_cap_is_binding: the citation limit (not context-item limit) caused
+    # items to be dropped — this constitutes degradation.
+    citation_cap_is_binding = (
+        effective_policy.max_citation_count < effective_policy.max_context_items
+        and len(context_items) > effective_policy.max_citation_count
+    )
+
+    # Fix 2: Skip oversized individual items instead of stopping at the first one.
+    # Items that exceed the remaining char budget are skipped; later smaller items
+    # that fit are retained.  Deterministic order is preserved for retained items.
     char_bounded: list[AnswerContextItem] = []
     running_chars = 0
+    char_skipped = 0
     for item in count_bounded:
         item_chars = len(item.text)
         if running_chars + item_chars > effective_policy.max_total_context_chars:
-            break
+            char_skipped += 1
+            continue  # skip this item, keep scanning for smaller ones that fit
         char_bounded.append(item)
         running_chars += item_chars
 
-    total_chars = sum(len(item.text) for item in char_bounded)
+    total_chars = running_chars
     truncated = len(char_bounded) < len(context_items)
+    # degraded when any item was actively skipped (char budget or citation cap)
+    degraded = char_skipped > 0 or citation_cap_is_binding
 
     report = RagBudgetReport(
         max_candidate_chunks=effective_policy.max_candidate_chunks,
@@ -320,7 +397,7 @@ def apply_answer_context_budget(
         context_item_count=len(char_bounded),
         total_context_chars=total_chars,
         truncated=truncated,
-        degraded=False,
+        degraded=degraded,
         reason_code=None,
     )
 
@@ -331,7 +408,10 @@ def apply_answer_context_budget(
                 "input_count": len(context_items),
                 "output_count": len(char_bounded),
                 "total_chars": total_chars,
+                "char_skipped": char_skipped,
+                "citation_cap_is_binding": citation_cap_is_binding,
                 "max_context_items": effective_policy.max_context_items,
+                "max_citation_count": effective_policy.max_citation_count,
                 "max_total_context_chars": effective_policy.max_total_context_chars,
             },
         )
