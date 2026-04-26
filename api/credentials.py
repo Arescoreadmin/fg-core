@@ -121,52 +121,24 @@ def _emit(
     )
 
 
-def _api_keys_columns(con: sqlite3.Connection) -> set[str]:
-    """Return the set of column names present in the api_keys table."""
-    rows = con.execute("PRAGMA table_info(api_keys)").fetchall()
-    return {row[1] for row in rows}
-
-
 def _lookup_row(credential_id: str, tenant_id: str) -> tuple[int, bool, str | None]:
     """Return (db_id, enabled, name) for the credential or raise NOT_FOUND.
 
     Enforces tenant ownership: if the row exists but belongs to a different
     tenant, the same NOT_FOUND response is returned — no existence side channel.
-
-    Probes schema before querying so that legacy api_keys tables without the
-    optional `name` column do not cause sqlite3.OperationalError.
     """
     path = _db_path()
     con = sqlite3.connect(path)
     try:
-        cols = _api_keys_columns(con)
-        if "name" in cols:
-            row = con.execute(
-                "SELECT id, enabled, name, tenant_id FROM api_keys"
-                " WHERE key_lookup = ? LIMIT 1",
-                (credential_id,),
-            ).fetchone()
-            # (id, enabled, name, tenant_id)
-            if row is None or row[3] != tenant_id:
-                row = None
-            else:
-                db_id, enabled, name, _ = int(row[0]), bool(row[1]), row[2], None
-        else:
-            row = con.execute(
-                "SELECT id, enabled, tenant_id FROM api_keys"
-                " WHERE key_lookup = ? LIMIT 1",
-                (credential_id,),
-            ).fetchone()
-            # (id, enabled, tenant_id)
-            if row is None or row[2] != tenant_id:
-                row = None
-            else:
-                db_id, enabled, name = int(row[0]), bool(row[1]), None
+        row = con.execute(
+            "SELECT id, enabled, name, tenant_id FROM api_keys WHERE key_lookup = ? LIMIT 1",
+            (credential_id,),
+        ).fetchone()
     finally:
         con.close()
 
-    if row is None:
-        # Same response whether credential doesn't exist or belongs to another
+    if row is None or row[3] != tenant_id:
+        # Same response whether the credential doesn't exist or belongs to another
         # tenant — no existence side channel.
         raise HTTPException(
             status_code=404,
@@ -175,6 +147,7 @@ def _lookup_row(credential_id: str, tenant_id: str) -> tuple[int, bool, str | No
                 "credential not found",
             ),
         )
+    db_id, enabled, name = int(row[0]), bool(row[1]), row[2]
     return db_id, enabled, name
 
 
@@ -402,14 +375,7 @@ def rotate_credential(
 ) -> tuple[CredentialRecord, str]:
     """Revoke the current credential and issue a replacement.
 
-    Fail-safe order:
-      1. Verify old credential exists and belongs to the tenant.
-      2. Mint the replacement credential.
-      3. Revoke the old credential only after the new one exists in the DB.
-      4. If minting fails, old credential remains active — customer retains access.
-      5. If revocation fails after a successful mint, raise loudly; the caller
-         must retry revocation manually.  Do not silently pretend rotation completed.
-
+    The old credential is revoked atomically before the new one is issued.
     The new CredentialRecord carries rotated_from=credential_id linking back
     to the revoked credential.
 
@@ -426,16 +392,11 @@ def rotate_credential(
 
     Raises:
         HTTPException 404 CREDENTIAL_NOT_FOUND — old credential not found.
-        HTTPException 500 CREDENTIAL_ROTATION_REVOKE_FAILED — new credential
-            was minted but old credential could not be revoked.  The new
-            credential is active; the caller must retry revocation.
     """
-    # Step 1: Verify old credential exists and belongs to this tenant.
-    # Raises NOT_FOUND if absent or wrong tenant — no side effect yet.
-    old_db_id, _enabled, _name = _lookup_row(credential_id, tenant_id)
+    # Revoke old credential first (raises if not found or wrong tenant)
+    revoke_credential(credential_id, tenant_id)
 
-    # Step 2: Mint replacement credential BEFORE touching the old one.
-    # If this fails, old credential is untouched and customer retains access.
+    # Issue new credential
     now = int(time.time())
     raw_key = mint_key(
         _CREDENTIAL_SCOPE,
@@ -447,28 +408,6 @@ def rotate_credential(
     secret_part = raw_key.rsplit(".", 1)[-1]
     pepper = _get_key_pepper()
     new_credential_id = _key_lookup_hash(secret_part, pepper)
-
-    # Step 3: Revoke old credential now that new one is safely stored.
-    # If this fails, raise loudly — do not return success with old still active.
-    try:
-        _revoke_by_db_id(old_db_id)
-    except Exception as exc:
-        log.error(
-            "credential rotation: new credential minted but old revocation failed "
-            "tenant=%s old_prefix=%s new_prefix=%s err=%s",
-            tenant_id,
-            credential_id[:8],
-            new_credential_id[:8],
-            exc,
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=api_error(
-                "CREDENTIAL_ROTATION_REVOKE_FAILED",
-                "new credential was issued but old credential could not be revoked",
-                action="retain the new credential and retry revocation of the old credential",
-            ),
-        ) from exc
 
     record = CredentialRecord(
         credential_id=new_credential_id,
