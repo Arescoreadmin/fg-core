@@ -20,8 +20,16 @@ Severity levels:
 Backlog rule:
   HIGH severity   → always backlog_required = True
   MEDIUM severity → backlog_required = True only when the same (tenant, event_type)
-                    has occurred >= MEDIUM_REPEAT_THRESHOLD times in stored events.
+                    has occurred >= MEDIUM_REPEAT_THRESHOLD times in stored events
+                    up to and including the current event, ordered by
+                    (created_at, event_id).
   LOW severity    → backlog_required = False
+
+Determinism guarantee:
+  Pattern detection counts only events with (created_at, event_id) <=
+  (event.created_at, event.event_id).  Events added after the current event
+  are excluded, preventing retroactive escalation.
+  Same input → same output, always — regardless of when classify_event() runs.
 """
 
 from __future__ import annotations
@@ -134,13 +142,27 @@ def _classify_severity(event_type: str) -> tuple[str, str]:
     return SEVERITY_LOW, REASON_UNKNOWN_TYPE
 
 
-def _count_tenant_events(tenant_id: str, event_type: str) -> int:
-    """Return the number of stored events matching (tenant_id, event_type).
+def _count_events_up_to(event: EventRecord) -> int:
+    """Return the number of stored events with the same (tenant_id, event_type)
+    that were recorded at or before the given event, using the composite key
+    (created_at, event_id) for ordering.
 
-    Uses query_events() — never accesses _store directly.
-    Strictly tenant-scoped: no cross-tenant aggregation possible.
+    This is the same ordering used by query_events() sort — deterministic and
+    stable.  Events with a later (created_at, event_id) pair are excluded,
+    preventing retroactive escalation: adding new events after this event
+    cannot change its triage decision on reclassification.
+
+    Same input → same output, always — regardless of when classify_event()
+    is called relative to other event ingestion.
+
+    Strictly tenant-scoped via query_events() — no cross-tenant aggregation.
     """
-    return len(query_events(tenant_id, event_type=event_type))
+    boundary = (event.created_at, event.event_id)
+    return sum(
+        1
+        for r in query_events(event.tenant_id, event_type=event.event_type)
+        if (r.created_at, r.event_id) <= boundary
+    )
 
 
 def classify_event(event: EventRecord) -> TriageDecision:
@@ -160,6 +182,7 @@ def classify_event(event: EventRecord) -> TriageDecision:
         - LOW:    action_required=False, backlog_required=False
         - No cross-tenant data accessed
         - Source event is never mutated
+        - Count is bounded by event_id order — no retroactive escalation
     """
     sev, _ = _classify_severity(event.event_type)
 
@@ -175,7 +198,7 @@ def classify_event(event: EventRecord) -> TriageDecision:
         )
 
     if sev == SEVERITY_MEDIUM:
-        count = _count_tenant_events(event.tenant_id, event.event_type)
+        count = _count_events_up_to(event)
         repeated = count >= MEDIUM_REPEAT_THRESHOLD
         return TriageDecision(
             event_id=event.event_id,

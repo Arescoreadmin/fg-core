@@ -369,3 +369,59 @@ def test_all_registered_event_types_have_explicit_severity_mapping():
             SEVERITY_MEDIUM,
             SEVERITY_HIGH,
         )
+
+
+# ---------------------------------------------------------------------------
+# 13) test_no_retroactive_escalation — event_id boundary fix
+# ---------------------------------------------------------------------------
+
+
+def test_no_retroactive_escalation():
+    """Adding events after event-2 must not change event-2's triage decision.
+
+    Reproduces the time-instability bug: if count uses all stored events,
+    a later event can push an earlier event's count over the threshold,
+    causing the same input to produce a different output on reclassification.
+
+    The fix (event_id boundary): count only events whose event_id <= target
+    event_id. Later events have different (larger) event_ids and are excluded.
+    """
+    # Log two MEDIUM events — below threshold (3)
+    log_event(
+        "tenant-a",
+        EVENT_AUTH_CREDENTIAL_REJECTED,
+        "api.credentials",
+        idempotency_key="cred-early-1",
+        now=1_000_000,
+    )
+    ev2 = log_event(
+        "tenant-a",
+        EVENT_AUTH_CREDENTIAL_REJECTED,
+        "api.credentials",
+        idempotency_key="cred-early-2",
+        now=1_000_001,
+    ).record
+
+    # Classify ev2 now — should be MEDIUM/single (count=2, below threshold=3)
+    decision_before = classify_event(ev2)
+    assert decision_before.backlog_required is False
+    assert decision_before.reason_code == REASON_MEDIUM_SINGLE
+
+    # Now add more events that push the total count over threshold
+    for i in range(MEDIUM_REPEAT_THRESHOLD):
+        log_event(
+            "tenant-a",
+            EVENT_AUTH_CREDENTIAL_REJECTED,
+            "api.credentials",
+            idempotency_key=f"cred-later-{i}",
+            now=2_000_000 + i,
+        )
+
+    # Reclassify ev2 — must produce the SAME decision as before
+    decision_after = classify_event(ev2)
+    assert decision_after.backlog_required is False, (
+        "Retroactive escalation detected: classifying ev2 after later events "
+        "were added changed its backlog_required from False to True"
+    )
+    assert decision_after.reason_code == REASON_MEDIUM_SINGLE
+    assert decision_before == decision_after
