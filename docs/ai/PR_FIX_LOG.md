@@ -6,6 +6,44 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-25 — Task 11.1: Explicit Actionable Errors in Primary Flows
+
+**Branch:** `task/11.1-explicit-actionable-errors`
+
+**Task ID:** 11.1
+
+**Area:** API Error Contracts / Admin / Audit / Tenant Routes
+
+---
+
+**Gap description:**
+
+Primary admin and tenant routes raised `HTTPException` with raw string `detail` (Pattern B), producing opaque error codes in the middleware (`E403_admin_gateway_internal_required`) that were not stable, not machine-readable, and provided no operator action hint.
+
+**Files changed:**
+
+- `api/error_contracts.py` — new: `api_error(code, message, *, action)` helper; returns structured `dict[str, str]` for use as HTTPException detail
+- `api/admin.py` — normalized 4 Pattern B sites to Pattern A via `api_error()`:
+  - `require_internal_admin_gateway` → code `ADMIN_GATEWAY_FORBIDDEN`, action hint for missing header
+  - `_require_elevated_config_scope` → code `ADMIN_SCOPE_INSUFFICIENT`, action hint for scope upgrade
+  - `get_tenant` invalid format → code `TENANT_ID_FORMAT_INVALID`, action hint with allowed charset
+  - `get_tenant` not found → code `TENANT_NOT_FOUND`
+- `tests/test_audit_exam_api.py` — 11 new tests covering: missing token, wrong token, structured detail, action field, no-secrets-in-message, correct-token success path, invalid tenant_id format, not-found, `api_error` unit tests (stable code, action field, idempotent)
+
+**Security/product impact:**
+
+- No raw exception text, stack traces, or secret values in error messages
+- Stable error codes allow operators to write deterministic alerting rules
+- `action` field provides explicit remediation guidance at the call site
+- `require_internal_admin_gateway` guard behavior unchanged — only error payload structure changed
+- No routes added. No DB migrations. No OpenAPI schema changes.
+
+**Validation:**
+
+`pytest -q tests/test_audit_exam_api.py` → 15 passed (4 original + 11 new). `make fg-fast` → passed. `ruff check + format` → clean.
+
+---
+
 ### 2026-04-25 — Task 16.10: Operator / Debug Answer Provenance
 
 **Branch:** `task/16.10-operator-debug-answer-provenance`

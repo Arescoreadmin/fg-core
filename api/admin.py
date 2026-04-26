@@ -41,6 +41,7 @@ from api.auth_scopes import (
     revoke_api_key,
     rotate_api_key_by_prefix,
 )
+from api.error_contracts import api_error
 from api.db import get_engine
 from api.db_models import SecurityAuditLog
 from api.keys import (
@@ -89,7 +90,14 @@ def require_internal_admin_gateway(request: Request) -> None:
 
     provided = (request.headers.get("x-fg-internal-token") or "").strip()
     if not expected or not provided or not hmac.compare_digest(provided, expected):
-        raise HTTPException(status_code=403, detail="admin_gateway_internal_required")
+        raise HTTPException(
+            status_code=403,
+            detail=api_error(
+                "ADMIN_GATEWAY_FORBIDDEN",
+                "internal admin gateway authentication required",
+                action="provide X-FG-Internal-Token header with the configured internal secret",
+            ),
+        )
 
 
 router = APIRouter(
@@ -292,7 +300,14 @@ def _require_elevated_config_scope(request: Request) -> str:
         return "admin:config"
     if "admin:write" in scopes and _allow_admin_write_config_fallback():
         return "admin:write"
-    raise HTTPException(status_code=403, detail="Insufficient scope")
+    raise HTTPException(
+        status_code=403,
+        detail=api_error(
+            "ADMIN_SCOPE_INSUFFICIENT",
+            "admin:config scope required; admin:write accepted only in non-production environments",
+            action="request admin:config scope from your administrator",
+        ),
+    )
 
 
 def _config_change_dir() -> Path:
@@ -934,7 +949,14 @@ async def get_tenant(
 ) -> TenantRecord:
     """Get a single tenant by ID."""
     if not _TENANT_ID_RE.fullmatch(tenant_id):
-        raise HTTPException(status_code=422, detail="Invalid tenant_id format")
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "TENANT_ID_FORMAT_INVALID",
+                "tenant_id does not match required format",
+                action="use only alphanumeric characters, hyphens, and underscores (max 128 chars)",
+            ),
+        )
 
     try:
         from tools.tenants.registry import load_registry
@@ -947,7 +969,13 @@ async def get_tenant(
     records = load_registry()
     record = records.get(tenant_id)
     if not record:
-        raise HTTPException(status_code=404, detail=f"Tenant not found: {tenant_id}")
+        raise HTTPException(
+            status_code=404,
+            detail=api_error(
+                "TENANT_NOT_FOUND",
+                f"tenant not found: {tenant_id}",
+            ),
+        )
 
     return TenantRecord(
         tenant_id=record.tenant_id,

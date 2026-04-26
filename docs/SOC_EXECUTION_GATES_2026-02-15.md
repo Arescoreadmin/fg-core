@@ -1,3 +1,18 @@
+## 2026-04-25 — Task 11.1: Explicit Actionable Errors in Primary Flows
+
+`api/error_contracts.py` added; `api/admin.py` primary routes normalized from Pattern B (raw string detail) to Pattern A (structured dict).
+
+Error contract guarantees:
+- `api_error(code, message, *, action)` is the single source of structured error shape
+- Stable error codes: `ADMIN_GATEWAY_FORBIDDEN`, `ADMIN_SCOPE_INSUFFICIENT`, `TENANT_ID_FORMAT_INVALID`, `TENANT_NOT_FOUND`
+- `action` field carries operator-visible remediation hint at call site — never guessed by the caller
+- No raw exception text, stack traces, or configured secret values in any error payload
+
+No routes added. No DB migrations. No OpenAPI schema changes.
+Validation: `pytest -q tests/test_audit_exam_api.py` → 15 passed. `make fg-fast` → passed.
+
+---
+
 ## 2026-04-25 — Task 16.10: Operator / Debug Answer Provenance
 
 `api/rag/provenance.py` added; `api/rag/answering.py` extended with `build_answer_with_provenance()`.
