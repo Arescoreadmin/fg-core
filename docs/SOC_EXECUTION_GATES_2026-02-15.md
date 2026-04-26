@@ -1,3 +1,16 @@
+## 2026-04-25 — Task 11.1 Addendum: Gateway Guard Test Contract Alignment
+
+`tests/security/test_gateway_only_admin_access.py` updated to assert structured error payload from `require_internal_admin_gateway`.
+
+This is test-contract drift alignment, not a behavior relaxation:
+- Guard enforcement unchanged — missing/wrong token still rejected in all hosted profiles
+- Stale `detail == "admin_gateway_internal_required"` assertion replaced with structured checks: code, message, action field, secret non-leakage
+- `_assert_admin_gateway_forbidden_detail()` helper added for consistent assertion across 3 parametrized env cases
+
+Validation: `pytest -q tests/security/test_gateway_only_admin_access.py` → 44 passed. `make fg-fast` → passed.
+
+---
+
 ## 2026-04-25 — Task 11.1: Explicit Actionable Errors in Primary Flows
 
 `api/error_contracts.py` added; `api/admin.py` primary routes normalized from Pattern B (raw string detail) to Pattern A (structured dict).
