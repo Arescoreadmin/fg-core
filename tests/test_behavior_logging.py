@@ -26,6 +26,7 @@ import pytest
 from fastapi import HTTPException
 
 from api.behavior_logging import (
+    ERR_EVENT_IDEMPOTENCY_REQUIRED,
     ERR_EXPORT_INVALID_FORMAT,
     ERR_INVALID_EVENT_TYPE,
     ERR_TENANT_REQUIRED,
@@ -538,3 +539,89 @@ def test_query_events_filters_by_event_type_severity_source():
     ranged = query_events("tenant-a", from_ts=1_000_001, to_ts=1_000_001)
     assert len(ranged) == 1
     assert ranged[0].event_type == EVENT_RAG_LOW_CONFIDENCE
+
+
+# ---------------------------------------------------------------------------
+# Hardening tests — Task 14.1 addendum
+# ---------------------------------------------------------------------------
+
+
+def test_behavior_logging_rejects_missing_idempotency_key():
+    """None idempotency_key must raise BEHAVIOR_EVENT_IDEMPOTENCY_REQUIRED (400)."""
+    with pytest.raises(HTTPException) as exc:
+        log_event(
+            "tenant-a",
+            EVENT_RAG_NO_ANSWER,
+            "api.rag",
+            idempotency_key=None,
+            now=1_000_000,
+        )
+    assert exc.value.status_code == 400
+    assert exc.value.detail["code"] == ERR_EVENT_IDEMPOTENCY_REQUIRED
+
+
+def test_behavior_logging_rejects_blank_idempotency_key():
+    """Blank/whitespace idempotency_key must raise BEHAVIOR_EVENT_IDEMPOTENCY_REQUIRED (400)."""
+    for bad in ("", "   ", "\t"):
+        with pytest.raises(HTTPException) as exc:
+            log_event(
+                "tenant-a",
+                EVENT_RAG_NO_ANSWER,
+                "api.rag",
+                idempotency_key=bad,
+                now=1_000_000,
+            )
+        assert exc.value.status_code == 400
+        assert exc.value.detail["code"] == ERR_EVENT_IDEMPOTENCY_REQUIRED
+
+
+def test_behavior_logging_same_second_events_do_not_silently_dedupe():
+    """Two distinct events with unique idempotency_keys must both be stored,
+    even when they share the same tenant, event_type, source, and timestamp."""
+    r1 = log_event(
+        "tenant-a",
+        EVENT_RAG_NO_ANSWER,
+        "api.rag",
+        idempotency_key="occurrence-001",
+        now=1_000_000,
+    )
+    r2 = log_event(
+        "tenant-a",
+        EVENT_RAG_NO_ANSWER,
+        "api.rag",
+        idempotency_key="occurrence-002",
+        now=1_000_000,  # same second
+    )
+    assert r1.created is True
+    assert r2.created is True
+    assert r1.record.event_id != r2.record.event_id
+
+    # Both events are stored and queryable
+    events = query_events("tenant-a")
+    assert len(events) == 2
+
+
+def test_behavior_logging_query_returns_detached_metadata():
+    """Mutating metadata on a queried EventRecord must not alter the stored record."""
+    log_event(
+        "tenant-a",
+        EVENT_RAG_NO_ANSWER,
+        "api.rag",
+        idempotency_key="det-001",
+        metadata={"reason_code": "low_score", "score": 0},
+        now=1_000_000,
+    )
+
+    # First query — get a copy
+    results1 = query_events("tenant-a")
+    assert len(results1) == 1
+    copy1 = results1[0]
+
+    # Mutate the returned metadata
+    copy1.metadata["reason_code"] = "MUTATED"
+    copy1.metadata["injected"] = "bad_value"
+
+    # Second query — stored record must be unchanged
+    results2 = query_events("tenant-a")
+    assert results2[0].metadata["reason_code"] == "low_score"
+    assert "injected" not in results2[0].metadata

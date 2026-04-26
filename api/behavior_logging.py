@@ -35,7 +35,7 @@ import io
 import json
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from fastapi import HTTPException
@@ -51,6 +51,7 @@ log = logging.getLogger("frostgate.behavior_logging")
 ERR_TENANT_REQUIRED = "BEHAVIOR_TENANT_REQUIRED"
 ERR_INVALID_EVENT_TYPE = "BEHAVIOR_INVALID_EVENT_TYPE"
 ERR_EXPORT_INVALID_FORMAT = "BEHAVIOR_EXPORT_INVALID_FORMAT"
+ERR_EVENT_IDEMPOTENCY_REQUIRED = "BEHAVIOR_EVENT_IDEMPOTENCY_REQUIRED"
 
 _VALID_EXPORT_FORMATS = frozenset({"json", "csv"})
 
@@ -210,6 +211,19 @@ def _require_tenant(tenant_id: Any) -> str:
     return str(tenant_id).strip()
 
 
+def _require_idempotency_key(idempotency_key: Any) -> str:
+    if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+        raise HTTPException(
+            status_code=400,
+            detail=api_error(
+                ERR_EVENT_IDEMPOTENCY_REQUIRED,
+                "idempotency_key is required for behavior event logging",
+                action="supply a stable caller-assigned idempotency_key; do not use timestamps or random values",
+            ),
+        )
+    return idempotency_key.strip()
+
+
 def _require_event_type(event_type: Any) -> str:
     if not isinstance(event_type, str) or event_type not in _VALID_EVENT_TYPES:
         raise HTTPException(
@@ -254,6 +268,24 @@ def _sanitize_metadata(metadata: Any) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Record copy helper — detaches mutable metadata from stored record
+# ---------------------------------------------------------------------------
+
+
+def _copy_event(record: EventRecord) -> EventRecord:
+    """Return a shallow copy of record with a detached metadata dict.
+
+    EventRecord is a frozen dataclass, but its metadata field is a plain dict
+    and therefore mutable. Returning the stored object directly would allow
+    callers to modify metadata after query, bypassing sanitization.
+
+    This helper produces a new EventRecord with a copied metadata dict so
+    callers cannot affect the canonical stored record.
+    """
+    return replace(record, metadata=dict(record.metadata))
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -276,8 +308,11 @@ def log_event(
                            Unregistered types are rejected — no noise logging.
         source:            Originating component (e.g. "api.rag", "api.billing").
         severity:          "low", "medium", or "high". Default "medium".
-        idempotency_key:   Caller-supplied idempotency key. If None, derived from
-                           tenant + event_type + source + timestamp (unique per call).
+        idempotency_key:   Required caller-supplied idempotency key. Must be a
+                           non-empty string. No timestamp fallback is provided —
+                           callers must supply a stable, unique key per event
+                           occurrence to prevent silent deduplication of distinct
+                           events that share the same tenant/type/source/second.
         metadata:          Safe key/value pairs only. Sanitized on write.
                            NEVER pass raw queries, content, tokens, or secrets here.
         now:               Unix timestamp override for tests.
@@ -287,12 +322,14 @@ def log_event(
         EventWriteResult(record, created=False) for idempotent no-ops.
 
     Raises:
-        HTTPException 400 BEHAVIOR_TENANT_REQUIRED    — missing tenant.
-        HTTPException 400 BEHAVIOR_INVALID_EVENT_TYPE — unregistered event type.
+        HTTPException 400 BEHAVIOR_TENANT_REQUIRED          — missing tenant.
+        HTTPException 400 BEHAVIOR_INVALID_EVENT_TYPE       — unregistered event type.
+        HTTPException 400 BEHAVIOR_EVENT_IDEMPOTENCY_REQUIRED — missing/blank key.
 
     Security invariants:
         - trusted_tenant_id required; missing → structured 400
         - event_type validated against registered set; noise rejected
+        - idempotency_key required; timestamp fallback removed to prevent silent dedup
         - metadata sanitized: forbidden keys dropped, long values truncated
         - metadata shallow-copied: caller mutation cannot alter stored record
         - event_id is deterministic: same (tenant, event_type, idempotency_key) → same id
@@ -300,21 +337,18 @@ def log_event(
     """
     tid = _require_tenant(trusted_tenant_id)
     etype = _require_event_type(event_type)
+    ikey = _require_idempotency_key(idempotency_key)
     sev = severity if severity in _VALID_SEVERITIES else SEVERITY_MEDIUM
     src = str(source).strip() or "unknown"
     meta = _sanitize_metadata(metadata)
     ts = int(now) if now is not None else int(time.time())
-
-    if not idempotency_key or not str(idempotency_key).strip():
-        idempotency_key = f"{tid}:{etype}:{src}:{ts}"
-    ikey = str(idempotency_key).strip()
 
     event_id = _derive_event_id(tid, etype, ikey)
 
     if event_id in _store:
         existing = _store[event_id]
         log.debug("behavior.idempotent tenant=%s event_id=%s", tid, event_id[:8])
-        return EventWriteResult(record=existing, created=False)
+        return EventWriteResult(record=_copy_event(existing), created=False)
 
     record = EventRecord(
         event_id=event_id,
@@ -357,7 +391,10 @@ def query_events(
     """
     tid = _require_tenant(trusted_tenant_id)
 
-    results = [r for r in _store.values() if r.tenant_id == tid]
+    # Return detached copies — EventRecord is frozen but metadata is a mutable dict.
+    # Returning stored references directly would allow callers to modify metadata
+    # after query, bypassing sanitization on the canonical stored record.
+    results = [_copy_event(r) for r in _store.values() if r.tenant_id == tid]
 
     if event_type is not None:
         results = [r for r in results if r.event_type == event_type]
