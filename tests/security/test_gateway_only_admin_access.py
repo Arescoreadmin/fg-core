@@ -14,6 +14,19 @@ from __future__ import annotations
 import pytest
 
 
+def _assert_admin_gateway_forbidden_detail(
+    detail: object, *, secret: str | None = None
+) -> None:
+    assert isinstance(detail, dict)
+    assert detail["code"] == "ADMIN_GATEWAY_FORBIDDEN"
+    assert detail["message"] == "internal admin gateway authentication required"
+    assert "action" in detail
+    assert "X-FG-Internal-Token" in detail["action"]
+    if secret:
+        serialized = repr(detail)
+        assert secret not in serialized
+
+
 # ---------------------------------------------------------------------------
 # A+B) require_internal_admin_gateway enforces gateway token in hosted profiles
 # ---------------------------------------------------------------------------
@@ -58,7 +71,10 @@ class TestRequireInternalAdminGateway:
             "must return 403. If this fails, staging was dropped from the "
             "hosted enforcement set and admin routes are directly accessible."
         )
-        assert exc_info.value.detail == "admin_gateway_internal_required"
+        _assert_admin_gateway_forbidden_detail(
+            exc_info.value.detail,
+            secret="valid-internal-token",
+        )
 
     @pytest.mark.parametrize("env", ["prod", "production", "staging"])
     def test_hosted_rejects_wrong_token(self, env, monkeypatch):

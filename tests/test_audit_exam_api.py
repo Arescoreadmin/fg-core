@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException
 
+from api.admin import get_tenant, require_internal_admin_gateway
 from api.audit import ReproduceRequest, audit_reproduce
 from api.db import init_db, reset_engine_cache
+from api.error_contracts import api_error
 from services.audit_engine.engine import InvariantResult
 
 
@@ -147,3 +150,138 @@ def test_reproduce_cross_tenant_returns_403(monkeypatch, isolated_audit_env):
         audit_reproduce(ReproduceRequest(session_id=sid), _bound_request("tenant-b"))
     assert exc.value.status_code == 403
     assert exc.value.detail["code"] == "AUDIT_RESULT_CROSS_TENANT_FORBIDDEN"
+
+
+# ---------------------------------------------------------------------------
+# Task 11.1 — explicit actionable error contract tests
+# ---------------------------------------------------------------------------
+
+
+def _admin_request(
+    *,
+    token: str | None = None,
+    scopes: set | None = None,
+) -> object:
+    """Build a minimal fake Request for admin guard tests."""
+    headers: dict[str, str] = {}
+    if token is not None:
+        headers["x-fg-internal-token"] = token
+    return SimpleNamespace(
+        headers=headers,
+        state=SimpleNamespace(
+            request_id="test-req-11-1-001",
+            auth=SimpleNamespace(scopes=scopes or set()),
+        ),
+    )
+
+
+# --- gateway auth guard ---
+
+
+def test_admin_gateway_missing_token_returns_403(monkeypatch):
+    """No token header → 403 when internal secret is configured."""
+    monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "test-internal-secret-abcdef")
+    with pytest.raises(HTTPException) as exc:
+        require_internal_admin_gateway(_admin_request(token=None))
+    assert exc.value.status_code == 403
+
+
+def test_admin_gateway_wrong_token_returns_403(monkeypatch):
+    """Wrong token → 403 when internal secret is configured."""
+    monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "test-internal-secret-abcdef")
+    with pytest.raises(HTTPException) as exc:
+        require_internal_admin_gateway(_admin_request(token="wrong-token"))
+    assert exc.value.status_code == 403
+
+
+def test_admin_gateway_error_has_structured_detail(monkeypatch):
+    """Gateway auth failure must carry a stable structured error code."""
+    monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "test-internal-secret-abcdef")
+    with pytest.raises(HTTPException) as exc:
+        require_internal_admin_gateway(_admin_request(token=None))
+    assert isinstance(exc.value.detail, dict)
+    assert exc.value.detail["code"] == "ADMIN_GATEWAY_FORBIDDEN"
+
+
+def test_admin_gateway_error_has_action_field(monkeypatch):
+    """Gateway auth failure detail must include an actionable operator hint."""
+    monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "test-internal-secret-abcdef")
+    with pytest.raises(HTTPException) as exc:
+        require_internal_admin_gateway(_admin_request(token=None))
+    assert "action" in exc.value.detail
+    assert exc.value.detail["action"]  # non-empty
+
+
+def test_admin_gateway_error_message_no_secrets(monkeypatch):
+    """Gateway auth error message must not contain the configured secret value."""
+    secret = "test-internal-secret-abcdef"
+    monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", secret)
+    with pytest.raises(HTTPException) as exc:
+        require_internal_admin_gateway(_admin_request(token="bad"))
+    detail = exc.value.detail
+    assert secret not in detail.get("message", "")
+    assert secret not in detail.get("action", "")
+
+
+def test_admin_gateway_correct_token_passes(monkeypatch):
+    """Correct token must not raise."""
+    secret = "test-internal-secret-abcdef"
+    monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", secret)
+    # should return None, no exception
+    result = require_internal_admin_gateway(_admin_request(token=secret))
+    assert result is None
+
+
+# --- tenant endpoint validation ---
+
+
+def test_get_tenant_invalid_format_returns_422_structured(monkeypatch):
+    """Invalid tenant_id format → 422 with structured error code."""
+    monkeypatch.setenv("FG_INTERNAL_AUTH_SECRET", "")
+    req = _admin_request(scopes={"admin:read"})
+    with pytest.raises(HTTPException) as exc:
+        import asyncio
+
+        asyncio.run(get_tenant("bad tenant id!", req))
+    assert exc.value.status_code == 422
+    assert isinstance(exc.value.detail, dict)
+    assert exc.value.detail["code"] == "TENANT_ID_FORMAT_INVALID"
+
+
+def test_get_tenant_not_found_returns_404_structured(monkeypatch):
+    """Non-existent tenant → 404 with structured error code."""
+    req = _admin_request(scopes={"admin:read"})
+    fake_registry: dict = {}
+    with patch("api.admin.get_tenant.__wrapped__", None, create=True):
+        with patch("tools.tenants.registry.load_registry", return_value=fake_registry):
+            with pytest.raises(HTTPException) as exc:
+                import asyncio
+
+                asyncio.run(get_tenant("tenant-does-not-exist", req))
+    assert exc.value.status_code == 404
+    assert isinstance(exc.value.detail, dict)
+    assert exc.value.detail["code"] == "TENANT_NOT_FOUND"
+
+
+# --- error_contracts unit tests ---
+
+
+def test_api_error_returns_stable_code():
+    """api_error always returns dict with exact code field."""
+    d = api_error("MY_CODE", "some message")
+    assert d["code"] == "MY_CODE"
+    assert d["message"] == "some message"
+    assert "action" not in d
+
+
+def test_api_error_includes_action_when_provided():
+    """api_error includes action field only when explicitly given."""
+    d = api_error("MY_CODE", "msg", action="do this")
+    assert d["action"] == "do this"
+
+
+def test_api_error_idempotent():
+    """Same inputs → same output (deterministic)."""
+    a = api_error("CODE", "message", action="hint")
+    b = api_error("CODE", "message", action="hint")
+    assert a == b
