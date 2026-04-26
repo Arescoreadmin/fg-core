@@ -6,6 +6,81 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-26 — Task 14.1: High-Value User Behavior Logging
+
+**Branch:** `task/14.1-behavior-logging`
+
+**Task ID:** 14.1
+
+**Area:** Observability / Behavior Signals / Tenant-Scoped Logging
+
+---
+
+**Gap description:**
+
+No curated, tenant-scoped behavioral signal layer existed. RAG no-answers, injection detections, guardrail triggers, credential rejections, and billing events were logged only to unstructured Python loggers with no queryable structure, no metadata sanitization, and no tenant isolation.
+
+**Files changed:**
+
+- `api/behavior_logging.py` — new: `log_event()`, `query_events()`, `export_events()`, `_reset_store()`; `EventRecord` frozen dataclass; 7 registered high-value event type constants; `SEVERITY_LOW/MEDIUM/HIGH`; `_sanitize_metadata()` with forbidden key fragments; stable error codes `BEHAVIOR_TENANT_REQUIRED`, `BEHAVIOR_INVALID_EVENT_TYPE`, `BEHAVIOR_EXPORT_INVALID_FORMAT`
+- `tests/test_behavior_logging.py` — new: 15 tests
+
+**Architecture:**
+
+- `event_id` = `SHA-256(tenant_id + ":" + event_type + ":" + idempotency_key)[:32]` — deterministic, cross-tenant collision-free
+- In-memory `_store: dict[str, EventRecord]` — same pattern as usage/billing; `_reset_store()` for test isolation
+- Event type registry (`_VALID_EVENT_TYPES`): exhaustive, closed set — unregistered types rejected with structured 400; no noise logging possible
+- Metadata sanitization: forbidden key fragments (`query`, `content`, `text`, `document`, `token`, `secret`, `password`, `hash`, `credential`, `embedding`, `raw`, `key`) silently dropped; oversized string values truncated to 256 chars; complex types (dict, list) dropped; shallow copy on write
+- Idempotent: same `(tenant, event_type, idempotency_key)` → same `event_id` → existing record returned with `created=False`
+
+**Registered high-value event types (7):**
+
+| Event type | Trigger |
+|---|---|
+| `rag.no_answer` | RAG returned no answer (low context / insufficient evidence) |
+| `rag.low_confidence` | Grounded answer with low confidence score |
+| `rag.injection_detected` | Prompt injection flagged in retrieval context |
+| `rag.guardrail_triggered` | Guardrail applied (cost, latency, or injection budget) |
+| `billing.invoice_generated` | Billing invoice successfully generated |
+| `auth.credential_rejected` | Credential rejected (invalid, revoked, or missing scope) |
+| `auth.repeated_failure` | Same tenant/failure pattern repeated above threshold |
+
+**Security invariants preserved:**
+
+- All events tenant-scoped; `query_events()` never returns foreign tenant records
+- Raw queries, document text, tokens, secrets, hashes never logged — metadata sanitized on write
+- No external calls, no analytics pipelines, no async systems
+- Core flows (usage, billing, RAG) not modified
+
+**Tests added:** 15 (all passing)
+
+1. High-value event logged and returned correctly
+2. Events are tenant-scoped (cross-tenant invisible)
+3. Raw query keys stripped from metadata
+4. Secret/token/credential keys stripped from metadata
+5. Metadata sanitized: complex types dropped, oversized strings truncated, copy-on-write
+6. query_events returns only trusted tenant events
+7. Cross-tenant query returns empty
+8. Logging does not break core flow (usage + billing)
+9. event_id is deterministic (same inputs → same id; different tenant → different id)
+10. Unregistered (noise) event types rejected
+11. Missing tenant fails closed with BEHAVIOR_TENANT_REQUIRED
+12. Idempotency returns existing event
+13. All 7 registered event types accepted
+14. export_events produces safe output (no metadata in flat export)
+15. (Extra) query_events filters by event_type, source, severity, time range
+
+**Validation:**
+
+`pytest -q tests -k 'behavior or logging or events'` → 62 passed.
+`pytest -q tests -k 'rag or usage or billing'` → 258 passed.
+`pytest -q tests/security -k 'tenant or forbidden or auth'` → 154 passed.
+`make fg-fast` → all checks passed.
+`bash codex_gates.sh` → passed.
+`python tools/plan/taskctl.py validate` → no blocking dependency violations for 14.1.
+
+---
+
 ### 2026-04-26 — Task 13.1 Addendum: Billing Idempotency and Rebilling Hardening
 
 **Branch:** `task/13.1-billing-integration`
