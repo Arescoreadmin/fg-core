@@ -310,3 +310,72 @@ def test_gateway_only_access_still_enforced(monkeypatch):
         require_internal_admin_gateway(req)
     assert exc.value.status_code == 403
     assert exc.value.detail["code"] == "ADMIN_GATEWAY_FORBIDDEN"
+
+
+# ---------------------------------------------------------------------------
+# 13) test_credential_validation_rejects_non_customer_scope_key
+# ---------------------------------------------------------------------------
+
+
+def test_credential_validation_rejects_non_customer_scope_key(
+    credential_env, monkeypatch
+):
+    """A valid API key without credential:use scope must be rejected by validate_credential.
+
+    Simulates an internal/admin key being presented as a customer credential.
+    verify_api_key_detailed returns valid=False when required_scopes are not met.
+    """
+    from unittest.mock import patch
+
+    from api.auth_scopes.definitions import AuthResult
+
+    # Simulate a key that is otherwise valid but lacks credential:use scope
+    wrong_scope_result = AuthResult(
+        valid=False,
+        reason="missing_required_scopes",
+        tenant_id="tenant-a",
+        scopes={"admin:read"},  # admin scope, not credential:use
+    )
+
+    with patch(
+        "api.credentials.verify_api_key_detailed", return_value=wrong_scope_result
+    ):
+        with pytest.raises(HTTPException) as exc:
+            validate_credential("fgk.sometoken.somesecret")
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail["code"] == ERR_AUTH_INVALID
+
+
+# ---------------------------------------------------------------------------
+# 14) test_credential_validation_rejects_key_without_tenant_binding
+# ---------------------------------------------------------------------------
+
+
+def test_credential_validation_rejects_key_without_tenant_binding(
+    credential_env, monkeypatch
+):
+    """A credential that passes validation but has no tenant_id must fail closed.
+
+    Guards against keys minted without a tenant binding slipping through.
+    """
+    from unittest.mock import patch
+
+    from api.auth_scopes.definitions import AuthResult
+
+    # Simulate a structurally valid key with credential:use but no tenant_id
+    no_tenant_result = AuthResult(
+        valid=True,
+        reason="",
+        tenant_id=None,  # missing tenant binding
+        scopes={"credential:use"},
+    )
+
+    with patch(
+        "api.credentials.verify_api_key_detailed", return_value=no_tenant_result
+    ):
+        with pytest.raises(HTTPException) as exc:
+            validate_credential("fgk.sometoken.somesecret")
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail["code"] == ERR_AUTH_INVALID

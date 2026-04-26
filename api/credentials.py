@@ -286,7 +286,9 @@ def validate_credential(
             ),
         )
 
-    result = verify_api_key_detailed(raw=raw_key.strip())
+    result = verify_api_key_detailed(
+        raw=raw_key.strip(), required_scopes={_CREDENTIAL_SCOPE}
+    )
 
     if not result.valid:
         reason = getattr(result, "reason", "") or ""
@@ -308,7 +310,17 @@ def validate_credential(
             ),
         )
 
-    authenticated_tenant = result.tenant_id or ""
+    if not result.tenant_id:
+        _emit(EventType.AUTH_FAILURE, False, None, ERR_AUTH_INVALID)
+        raise HTTPException(
+            status_code=401,
+            detail=api_error(
+                ERR_AUTH_INVALID,
+                "credential is invalid",
+            ),
+        )
+
+    authenticated_tenant = result.tenant_id
 
     if expected_tenant_id is not None and authenticated_tenant != expected_tenant_id:
         _emit(
