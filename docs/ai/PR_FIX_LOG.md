@@ -6,6 +6,76 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-26 — Task 14.2: Triage Workflow
+
+**Branch:** `task/14.2-triage-workflow`
+
+**Task ID:** 14.2
+
+**Area:** Observability / Triage / Severity Classification / Backlog Rule
+
+---
+
+**Gap description:**
+
+Behavior events from Task 14.1 had no classification layer — no deterministic severity assignment, no backlog escalation rule, and no operator workflow. Signals were queryable but not actionable.
+
+**Files changed:**
+
+- `api/triage.py` — new: `classify_event(event)`, `should_create_backlog(decision)`; `TriageDecision` frozen dataclass; `_EVENT_SEVERITY_MAP` closed severity mapping for all 7 event types; `MEDIUM_REPEAT_THRESHOLD = 3`; stable reason codes `REASON_HIGH_SEVERITY`, `REASON_MEDIUM_REPEATED`, `REASON_MEDIUM_SINGLE`, `REASON_LOW_SEVERITY`, `REASON_UNKNOWN_TYPE`
+- `docs/TRIAGE_WORKFLOW.md` — new: operator workflow document with severity rubric, event→severity table, backlog rule, step-by-step workflow, and 4 example scenarios
+- `tests/test_triage_workflow.py` — new: 14 tests
+
+**Architecture:**
+
+- Severity is determined solely by `event_type` via `_EVENT_SEVERITY_MAP` — deterministic, never time-based or random
+- Backlog rule: `HIGH` → always backlog; `MEDIUM` → backlog only when `count(tenant, event_type) >= MEDIUM_REPEAT_THRESHOLD`; `LOW` → never backlog
+- Pattern detection uses `query_events()` — strictly tenant-scoped, no cross-tenant aggregation
+- Unknown event types default to `LOW` — never silently escalate noise
+- `TriageDecision` contains no metadata, no raw content, no secrets
+- Source `EventRecord` is never mutated
+
+**Severity mapping:**
+
+| Event type | Severity |
+|---|---|
+| `rag.no_answer` | LOW |
+| `rag.low_confidence` | MEDIUM |
+| `rag.injection_detected` | HIGH |
+| `rag.guardrail_triggered` | MEDIUM |
+| `billing.invoice_generated` | LOW |
+| `auth.credential_rejected` | MEDIUM |
+| `auth.repeated_failure` | HIGH |
+
+**Tests added:** 14 (all passing)
+
+1. HIGH severity triggers action + backlog
+2. MEDIUM severity (single) requires action, no backlog
+3. LOW severity: no action, no backlog
+4. Classification is deterministic
+5. Unknown event type defaults to LOW
+6. Repeated MEDIUM events (≥ threshold) trigger backlog
+7. Single MEDIUM event below threshold: no backlog
+8. Cross-tenant events do not mix repeat patterns
+9. No sensitive data in TriageDecision fields
+10. Triage does not mutate source EventRecord
+11. `should_create_backlog()` consistent with `decision.backlog_required`
+12. All 7 registered event types have explicit severity mapping
+13. `auth.repeated_failure` → HIGH
+14. `billing.invoice_generated` → LOW
+
+**Validation:**
+
+`pytest -q tests -k 'triage or severity or backlog'` → 25 passed.
+`pytest -q tests -k 'behavior or logging or events'` → 68 passed.
+`pytest -q tests -k 'rag or usage or billing'` → 259 passed.
+`make fg-fast` → all checks passed.
+`mypy api/triage.py` → no issues.
+`bash codex_gates.sh` → passed.
+`python tools/plan/taskctl.py validate` → no blocking violations for 14.2.
+
+---
+
 ### 2026-04-26 — Task 14.1: High-Value User Behavior Logging
 
 **Branch:** `task/14.1-behavior-logging`
