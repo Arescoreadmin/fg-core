@@ -6,6 +6,75 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-26 — Task 13.1 Addendum: Billing Idempotency and Rebilling Hardening
+
+**Branch:** `task/13.1-billing-integration`
+
+**Task ID:** 13.1 addendum
+
+**Area:** Billing / Rebilling Prevention / Idempotency Key Contract
+
+---
+
+**Gap description:**
+
+Two production correctness gaps in `api/billing_integration.py` identified in review:
+
+1. **Rebilling**: `generate_invoice()` queried all tenant/customer usage and could include usage_ids already billed in prior invoices. Repeated calls with new idempotency keys would double-bill previously invoiced events.
+
+2. **Timestamp fallback idempotency**: Missing `idempotency_key` silently derived a key from `tenant:customer:timestamp`, producing non-idempotent behavior and allowing per-second collision between legitimate calls.
+
+**Files changed:**
+
+- `api/billing_integration.py`:
+  - Added `ERR_IDEMPOTENCY_KEY_REQUIRED = "BILLING_IDEMPOTENCY_KEY_REQUIRED"` stable error code
+  - Added `_billed: dict[tuple[str, str], set[str]]` — tracks billed `usage_id`s per `(tenant_id, customer_id)` pair
+  - Updated `_reset_store()` to also clear `_billed`
+  - Added `_require_idempotency_key()` — rejects `None`, non-string, and blank/whitespace keys with structured 400
+  - Removed timestamp fallback from `generate_invoice()`
+  - `generate_invoice()` now filters out already-billed `usage_id`s before building line items
+  - After a new invoice is committed, all its `usage_id`s are recorded in `_billed[(tid, cid)]`
+  - Added mypy annotation: `already_billed: frozenset[str] | set[str]`
+- `tests/test_billing_integration.py`:
+  - Imported `ERR_IDEMPOTENCY_KEY_REQUIRED`
+  - Added 6 new hardening tests (23 total)
+
+**Architecture — rebilling prevention:**
+
+- `_billed[(tenant_id, customer_id)]` is a `set[str]` of all `usage_id`s that have been included in any committed invoice for that pair
+- On `generate_invoice()`: after loading usage from `query_usage()` and applying `billable_action` filter, `already_billed` usage_ids are excluded
+- On idempotent return (same invoice_id in `_store`): returns early before touching `_billed` — idempotent calls do not double-register usage_ids
+- Tenant isolation preserved: `_billed` is keyed by `(tid, cid)` — tenant-a's billed set never affects tenant-b
+
+**Security invariants preserved:**
+
+- Usage records never mutated
+- Tenant/customer scoping unchanged
+- No timestamps, UUIDs, or randomness introduced
+- No external calls, no DB migrations
+
+**Tests added:** 6 (23 total, all passing)
+
+1. `test_billing_excludes_already_invoiced_usage_from_new_invoice` — second invoice with no new usage raises NO_USAGE
+2. `test_billing_new_invoice_only_bills_new_usage_after_prior_invoice` — new usage after first invoice billed separately; u1 not re-included
+3. `test_billing_rejects_missing_idempotency_key` — None key → BILLING_IDEMPOTENCY_KEY_REQUIRED
+4. `test_billing_rejects_blank_idempotency_key` — blank/whitespace key → BILLING_IDEMPOTENCY_KEY_REQUIRED
+5. `test_billing_same_idempotency_key_still_returns_existing_invoice` — idempotency still works post-hardening; no double-registration
+6. `test_billing_same_idempotency_key_different_tenant_does_not_collide` — cross-tenant rebilling protection is isolated per tenant
+
+**Validation:**
+
+`pytest -q tests/test_billing_integration.py` → 23 passed.
+`pytest -q tests -k 'billing or stripe or payment'` → 36 passed.
+`pytest -q tests -k 'usage or billing'` → 68 passed.
+`pytest -q tests/security/test_credentials.py` → 14 passed.
+`pytest -q tests/security -k 'tenant or forbidden or auth'` → 154 passed.
+`make fg-fast` → all checks passed.
+`mypy api/billing_integration.py` → no issues.
+`bash codex_gates.sh` → passed.
+
+---
+
 ### 2026-04-25 — Task 13.1: Minimal Billing Integration (Flat Per-Unit Pricing)
 
 **Branch:** `task/13.1-billing-integration`

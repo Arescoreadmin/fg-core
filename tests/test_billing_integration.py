@@ -32,6 +32,7 @@ from fastapi import HTTPException
 from api.billing_integration import (
     ERR_CUSTOMER_REQUIRED,
     ERR_EXPORT_INVALID_FORMAT,
+    ERR_IDEMPOTENCY_KEY_REQUIRED,
     ERR_INVALID_PRICING_MODEL,
     ERR_NO_USAGE,
     ERR_TENANT_REQUIRED,
@@ -476,3 +477,125 @@ def test_negative_unit_amount_cents_rejected():
         )
     assert exc.value.status_code == 400
     assert exc.value.detail["code"] == ERR_INVALID_PRICING_MODEL
+
+
+# ---------------------------------------------------------------------------
+# Hardening tests — Task 13.1 addendum
+# ---------------------------------------------------------------------------
+
+
+def test_billing_excludes_already_invoiced_usage_from_new_invoice():
+    """A second invoice with a new idempotency_key must NOT include usage already billed."""
+    _seed_usage(
+        tenant_id="tenant-a", customer_id="cust-1", idempotency_key="u1", units=2
+    )
+    _seed_usage(
+        tenant_id="tenant-a", customer_id="cust-1", idempotency_key="u2", units=3
+    )
+
+    # First invoice bills both records
+    inv1 = generate_invoice("tenant-a", "cust-1", idempotency_key="inv-first")
+    assert inv1.invoice.source_usage_count == 2
+
+    # No new usage — second call must raise NO_USAGE (nothing unbilled left)
+    with pytest.raises(HTTPException) as exc:
+        generate_invoice("tenant-a", "cust-1", idempotency_key="inv-second")
+    assert exc.value.status_code == 400
+    assert exc.value.detail["code"] == ERR_NO_USAGE
+
+
+def test_billing_new_invoice_only_bills_new_usage_after_prior_invoice():
+    """New usage added after a prior invoice is billed in a subsequent invoice only."""
+    _seed_usage(
+        tenant_id="tenant-a",
+        customer_id="cust-1",
+        idempotency_key="u1",
+        units=5,
+        now=1_000_000,
+    )
+
+    # First invoice: bills u1
+    inv1 = generate_invoice(
+        "tenant-a", "cust-1", idempotency_key="inv-first", now=1_000_001
+    )
+    assert inv1.invoice.source_usage_count == 1
+    assert inv1.invoice.subtotal_cents == 5
+
+    # Add new usage after the first invoice
+    record_usage(
+        "tenant-a", "cust-1", "rag_query", units=7, idempotency_key="u2", now=1_000_002
+    )
+
+    # Second invoice: must bill ONLY u2, not u1 again
+    inv2 = generate_invoice(
+        "tenant-a", "cust-1", idempotency_key="inv-second", now=1_000_003
+    )
+    assert inv2.invoice.source_usage_count == 1
+    assert inv2.invoice.subtotal_cents == 7
+
+    # Confirm u1 is not in the second invoice's line items
+    billed_usage_ids = {li.usage_id for li in inv2.invoice.line_items}
+    first_usage_ids = {li.usage_id for li in inv1.invoice.line_items}
+    assert billed_usage_ids.isdisjoint(first_usage_ids)
+
+
+def test_billing_rejects_missing_idempotency_key():
+    """None idempotency_key must raise BILLING_IDEMPOTENCY_KEY_REQUIRED (400)."""
+    _seed_usage(idempotency_key="u1")
+    with pytest.raises(HTTPException) as exc:
+        generate_invoice("tenant-a", "cust-1", idempotency_key=None)
+    assert exc.value.status_code == 400
+    assert exc.value.detail["code"] == ERR_IDEMPOTENCY_KEY_REQUIRED
+
+
+def test_billing_rejects_blank_idempotency_key():
+    """Blank/whitespace-only idempotency_key must raise BILLING_IDEMPOTENCY_KEY_REQUIRED (400)."""
+    _seed_usage(idempotency_key="u1")
+    for bad in ("", "   ", "\t"):
+        with pytest.raises(HTTPException) as exc:
+            generate_invoice("tenant-a", "cust-1", idempotency_key=bad)
+        assert exc.value.status_code == 400
+        assert exc.value.detail["code"] == ERR_IDEMPOTENCY_KEY_REQUIRED
+
+
+def test_billing_same_idempotency_key_still_returns_existing_invoice():
+    """After rebilling protection is in place, idempotency still returns the existing invoice."""
+    _seed_usage(
+        tenant_id="tenant-a", customer_id="cust-1", idempotency_key="u1", units=4
+    )
+    _seed_usage(
+        tenant_id="tenant-a", customer_id="cust-1", idempotency_key="u2", units=6
+    )
+
+    r1 = generate_invoice("tenant-a", "cust-1", idempotency_key="inv-idem-hard")
+    r2 = generate_invoice("tenant-a", "cust-1", idempotency_key="inv-idem-hard")
+
+    assert r1.created is True
+    assert r2.created is False
+    assert r1.invoice.invoice_id == r2.invoice.invoice_id
+    # Idempotent return must not change the billed set or produce a new invoice
+    assert len(query_invoices("tenant-a")) == 1
+
+
+def test_billing_same_idempotency_key_different_tenant_does_not_collide():
+    """Same idempotency_key under different tenants must produce distinct invoices with no cross-tenant rebilling."""
+    _seed_usage(tenant_id="tenant-a", customer_id="cust-1", idempotency_key="u1")
+    _seed_usage(tenant_id="tenant-b", customer_id="cust-2", idempotency_key="u2")
+
+    r_a = generate_invoice("tenant-a", "cust-1", idempotency_key="shared-key")
+    r_b = generate_invoice("tenant-b", "cust-2", idempotency_key="shared-key")
+
+    assert r_a.created is True
+    assert r_b.created is True
+    assert r_a.invoice.invoice_id != r_b.invoice.invoice_id
+    assert r_a.invoice.tenant_id == "tenant-a"
+    assert r_b.invoice.tenant_id == "tenant-b"
+
+    # Each tenant's usage is rebilling-protected independently
+    with pytest.raises(HTTPException) as exc_a:
+        generate_invoice("tenant-a", "cust-1", idempotency_key="shared-key-2")
+    assert exc_a.value.detail["code"] == ERR_NO_USAGE
+
+    with pytest.raises(HTTPException) as exc_b:
+        generate_invoice("tenant-b", "cust-2", idempotency_key="shared-key-2")
+    assert exc_b.value.detail["code"] == ERR_NO_USAGE

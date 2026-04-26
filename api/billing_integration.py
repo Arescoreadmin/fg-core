@@ -12,6 +12,9 @@ Guarantees:
   produces the same invoice_id; repeated calls return the existing record.
 - Same idempotency_key under a different tenant produces a distinct invoice_id —
   no cross-tenant billing collision.
+- Rebilling prevention: each usage_id may only appear in one invoice per
+  (tenant, customer). generate_invoice() excludes already-billed usage_ids.
+- idempotency_key is required; missing/blank keys fail closed.
 - Usage records are never mutated; billing reads them as immutable source data.
 - No external provider calls (no Stripe, no network, no webhooks).
 - All money math uses integer cents only — no floats.
@@ -47,6 +50,7 @@ ERR_NO_USAGE = "BILLING_NO_USAGE"
 ERR_INVALID_PRICING_MODEL = "BILLING_INVALID_PRICING_MODEL"
 ERR_FORBIDDEN = "BILLING_FORBIDDEN"
 ERR_EXPORT_INVALID_FORMAT = "BILLING_EXPORT_INVALID_FORMAT"
+ERR_IDEMPOTENCY_KEY_REQUIRED = "BILLING_IDEMPOTENCY_KEY_REQUIRED"
 
 _VALID_EXPORT_FORMATS = frozenset({"json", "csv"})
 
@@ -170,10 +174,16 @@ class BillingWriteResult:
 # invoice_id → BillingInvoice
 _store: dict[str, BillingInvoice] = {}
 
+# (tenant_id, customer_id) → set of billed usage_ids
+# Tracks which usage_ids have already been invoiced per tenant/customer pair.
+# Prevents rebilling: a usage_id may only appear in one invoice.
+_billed: dict[tuple[str, str], set[str]] = {}
+
 
 def _reset_store() -> None:
     """Reset in-memory store.  For test isolation only."""
     _store.clear()
+    _billed.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +232,19 @@ def _require_customer(customer_id: Any) -> str:
     return str(customer_id).strip()
 
 
+def _require_idempotency_key(idempotency_key: Any) -> str:
+    if not isinstance(idempotency_key, str) or not idempotency_key.strip():
+        raise HTTPException(
+            status_code=400,
+            detail=api_error(
+                ERR_IDEMPOTENCY_KEY_REQUIRED,
+                "idempotency_key is required for invoice generation",
+                action="supply a stable caller-assigned idempotency_key; do not use timestamps or random values",
+            ),
+        )
+    return idempotency_key.strip()
+
+
 def _require_active_model(model: PricingModel) -> None:
     if not model.active:
         raise HTTPException(
@@ -259,13 +282,18 @@ def generate_invoice(
     Reads usage records from api/usage_attribution.query_usage() filtered by
     trusted_tenant_id and customer_id.  Usage records are never mutated.
 
+    Only uninvoiced usage records are included — usage_ids that already appear
+    in a prior invoice for this (tenant, customer) pair are excluded.  This
+    prevents double-billing when generate_invoice() is called multiple times
+    with different idempotency keys.
+
     Args:
         trusted_tenant_id: Pre-validated tenant from credential/session context.
                            Must NOT be sourced from request body.
         customer_id:       Customer identity from validated credential context.
-        idempotency_key:   Caller-supplied idempotency key.  If None, a unique
-                           key is derived from tenant + customer + timestamp
-                           (not idempotent for that call).
+        idempotency_key:   Required caller-supplied idempotency key.  Must be
+                           a non-empty string.  No timestamp fallback is
+                           provided — callers must supply a stable key.
         pricing_model:     Pricing model to apply.  Defaults to
                            default_pricing_model().
         now:               Unix timestamp override (for tests).
@@ -275,10 +303,11 @@ def generate_invoice(
         BillingWriteResult(invoice, created=False) for idempotent no-ops.
 
     Raises:
-        HTTPException 400 BILLING_TENANT_REQUIRED     — missing tenant.
-        HTTPException 400 BILLING_CUSTOMER_REQUIRED   — missing customer.
-        HTTPException 400 BILLING_NO_USAGE            — no usage records to bill.
-        HTTPException 400 BILLING_INVALID_PRICING_MODEL — inactive/invalid model.
+        HTTPException 400 BILLING_TENANT_REQUIRED          — missing tenant.
+        HTTPException 400 BILLING_CUSTOMER_REQUIRED        — missing customer.
+        HTTPException 400 BILLING_IDEMPOTENCY_KEY_REQUIRED — missing/blank key.
+        HTTPException 400 BILLING_NO_USAGE                 — no uninvoiced usage.
+        HTTPException 400 BILLING_INVALID_PRICING_MODEL    — inactive/invalid model.
 
     Security invariants:
         - trusted_tenant_id and customer_id from trusted context only
@@ -286,16 +315,14 @@ def generate_invoice(
         - foreign tenant/customer usage is never included
         - no mutation of source usage records
         - no external provider calls
+        - already-billed usage_ids are never included in a new invoice
     """
     tid = _require_tenant(trusted_tenant_id)
     cid = _require_customer(customer_id)
+    ikey = _require_idempotency_key(idempotency_key)
     model = pricing_model if pricing_model is not None else default_pricing_model()
     _require_active_model(model)
     ts = int(now) if now is not None else int(time.time())
-
-    if not idempotency_key or not str(idempotency_key).strip():
-        idempotency_key = f"{tid}:{cid}:{ts}"
-    ikey = str(idempotency_key).strip()
 
     invoice_id = _derive_invoice_id(tid, cid, ikey)
 
@@ -312,13 +339,17 @@ def generate_invoice(
     if model.billable_action is not None:
         usage_records = [r for r in usage_records if r.action == model.billable_action]
 
+    # Exclude already-billed usage_ids — prevents double-billing across invoice calls
+    already_billed: frozenset[str] | set[str] = _billed.get((tid, cid), frozenset())
+    usage_records = [r for r in usage_records if r.usage_id not in already_billed]
+
     if not usage_records:
         raise HTTPException(
             status_code=400,
             detail=api_error(
                 ERR_NO_USAGE,
-                "no usage records found for this tenant and customer",
-                action="record usage before generating an invoice",
+                "no uninvoiced usage records found for this tenant and customer",
+                action="record new usage before generating another invoice",
             ),
         )
 
@@ -357,6 +388,14 @@ def generate_invoice(
         line_items=tuple(line_items),
     )
     _store[invoice_id] = invoice
+
+    # Mark all included usage_ids as billed for this (tenant, customer) pair
+    key = (tid, cid)
+    if key not in _billed:
+        _billed[key] = set()
+    for li in line_items:
+        _billed[key].add(li.usage_id)
+
     log.debug(
         "billing.invoice tenant=%s customer_prefix=%s total_cents=%d items=%d",
         tid,
