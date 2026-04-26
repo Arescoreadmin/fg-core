@@ -6,6 +6,72 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-25 — Task 13.1: Minimal Billing Integration (Flat Per-Unit Pricing)
+
+**Branch:** `task/13.1-billing-integration`
+
+**Task ID:** 13.1
+
+**Area:** Billing / Invoice Generation / Tenant-Scoped / Idempotent
+
+---
+
+**Gap description:**
+
+No tenant-scoped billing layer existed to convert usage records into invoiceable billing records. The existing `api/billing.py` handles complex device/Stripe billing; a minimal, dependency-free surface was needed that reads from `api/usage_attribution` and produces deterministic invoice drafts.
+
+**Files changed:**
+
+- `api/billing_integration.py` — new: `generate_invoice()`, `query_invoices()`, `export_invoices()`, `_reset_store()`; `PricingModel`, `BillingLineItem`, `BillingInvoice`, `BillingWriteResult` frozen dataclasses; `default_pricing_model()` returning flat-per-unit-v1 (1 cent/unit, USD); stable error codes `BILLING_TENANT_REQUIRED`, `BILLING_CUSTOMER_REQUIRED`, `BILLING_NO_USAGE`, `BILLING_INVALID_PRICING_MODEL`, `BILLING_EXPORT_INVALID_FORMAT`
+- `tests/test_billing_integration.py` — new: 17 tests (16 required + 1 bonus)
+
+**Architecture:**
+
+- `invoice_id` = `SHA-256(tenant_id + ":" + customer_id + ":" + idempotency_key)[:32]` — deterministic, cross-tenant collision-free
+- `line_item_id` = `SHA-256(invoice_id + ":" + usage_id)[:24]` — stable per line item
+- All money math uses integer cents only — no floats anywhere
+- Reads from `api/usage_attribution.query_usage()` as immutable source data — never mutates usage records
+- In-memory `_store: dict[str, BillingInvoice]` — same pattern as usage attribution; `_reset_store()` for test isolation
+- `billable_action` filter on `PricingModel` allows action-scoped billing (e.g. bill only `rag_query` events)
+- No external provider calls (no Stripe, no network, no webhooks)
+- No DB migrations, no new dependencies
+
+**Security invariants preserved:**
+
+- `trusted_tenant_id` must come from validated credential/session context — not request body
+- Usage filtered by both tenant AND customer before billing — foreign tenant/customer usage never included
+- Idempotency: repeated `generate_invoice` with same key returns existing invoice, never double-bills
+- Same idempotency key under different tenant produces distinct invoice — no cross-tenant billing collision
+- Export output is safe columns only; no `line_items`, no secrets, no raw hashes in flat export
+
+**Tests added:** 17 (all passing)
+
+1. Invoice generated from tenant usage
+2. Missing tenant raises BILLING_TENANT_REQUIRED
+3. Missing customer raises BILLING_CUSTOMER_REQUIRED
+4. No usage raises BILLING_NO_USAGE
+5. Idempotency returns existing invoice
+6. Same idempotency key + different tenant → distinct invoice
+7. All money math uses integer cents
+8. Line items ordered by (created_at, usage_id)
+9. query_invoices returns only trusted-tenant invoices
+10. query_invoices filters by customer_id
+11. query_invoices filters by status
+12. export_invoices JSON correct and deterministic
+13. export_invoices CSV correct
+14. export_invoices rejects invalid format
+15. Inactive pricing model raises BILLING_INVALID_PRICING_MODEL
+16. billable_action filter excludes non-matching usage records
+17. (Bonus) Negative unit_amount_cents rejected
+
+**Validation:**
+
+`pytest -q tests/test_billing_integration.py` → 17 passed.
+`pytest -q tests -k 'billing or usage or credential'` → 80 passed.
+`make fg-fast` → all checks passed.
+
+---
+
 ### 2026-04-26 — Task 12.1: Customer Credential Issuance / Revoke / Rotate
 
 **Branch:** `task/12.1-customer-credential-issuance`
