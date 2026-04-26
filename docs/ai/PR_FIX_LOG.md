@@ -6,6 +6,59 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-26 — Task 12.2: Per-Tenant Usage Attribution With Query/Export Support
+
+**Branch:** `task/12.2-usage-attribution`
+
+**Task ID:** 12.2
+
+**Area:** Usage Attribution / Tenant Metering / Query Export
+
+---
+
+**Gap description:**
+
+No customer-attributed usage event system existed with idempotency, tenant-scoped query/export, and structured errors. `api/tenant_usage.py` tracks aggregate quota counts but lacks customer identity (credential_id), action-level attribution, idempotency, deterministic usage_id, or safe export surface.
+
+**Files changed:**
+
+- `api/usage_attribution.py` — new: `UsageRecord` frozen dataclass (usage_id, tenant_id, customer_id, action, units, source, idempotency_key, created_at, metadata, status); `UsageWriteResult`; `record_usage()`, `query_usage()`, `export_usage()` (json + csv); stable error codes USAGE_TENANT_REQUIRED, USAGE_CUSTOMER_REQUIRED, USAGE_INVALID_EVENT, USAGE_INVALID_UNITS, USAGE_FORBIDDEN, USAGE_EXPORT_INVALID_FORMAT
+- `tests/test_usage_attribution.py` — new: 14 required tests
+
+**Architecture:**
+
+- In-memory store (matches `tenant_usage.py` pattern) — no new DB migrations
+- `usage_id = SHA-256(tenant_id + ":" + idempotency_key)[:32]` — deterministic, cross-tenant collision-free
+- Idempotency: same (tenant, idempotency_key) returns existing record, no-op (created=False) — no double-counting
+- Same idempotency_key under different tenants produces distinct usage_ids by construction
+- `query_usage` / `export_usage` filter strictly to `trusted_tenant_id` — foreign records inaccessible
+- Metadata shallow-copied on write and on read — caller mutation cannot alter stored record
+- Export columns: usage_id, tenant_id, customer_id, action, units, source, idempotency_key, created_at, status — no metadata, no hashes, no foreign data
+- Structured errors via `api_error()` from 11.1
+
+**Security/product impact:**
+
+- trusted_tenant_id and customer_id required; missing → structured 400 fail-closed
+- No client-provided tenant_id can override trusted context
+- Cross-tenant query returns empty list (no existence side channel)
+- No Stripe, billing, payments, or external calls
+
+**Tests added:** 14 (all passing)
+
+**Validation:**
+
+`pytest -q tests -k 'usage or billing'` → 45 passed.
+`pytest -q tests/security/test_credentials.py` → 14 passed.
+`pytest -q tests/security -k 'tenant or forbidden or auth'` → 152 passed.
+`pytest -q tests/test_audit_exam_api.py -k 'error or not_found or forbidden'` → 7 passed.
+`make fg-fast` → all checks passed.
+
+**Note:** Selector `usage or billing or tenant attribution` from task spec contains a space that is invalid in pytest `-k` syntax. Ran equivalent `usage or billing` (covers all 45 relevant tests) and `tenant attribution` test names are included via `test_usage_records_are_attributed_to_trusted_tenant` in the `usage` selector.
+
+**taskctl status:** Task 15.2 reports unmet dependency 14.2 — known plan pointer drift, not caused by this task. No plan state edited.
+
+---
+
 ### 2026-04-26 — Task 12.1: Customer Credential Issuance / Revoke / Rotate
 
 **Branch:** `task/12.1-customer-credential-issuance`
