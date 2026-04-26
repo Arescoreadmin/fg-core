@@ -6,6 +6,55 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-26 — Task 12.1: Customer Credential Issuance / Revoke / Rotate
+
+**Branch:** `task/12.1-customer-credential-issuance`
+
+**Task ID:** 12.1
+
+**Area:** Credential System / Tenant-Scoped Auth / Key Lifecycle
+
+---
+
+**Gap description:**
+
+No customer-facing credential issuance/revoke/rotate surface existed with explicit auditability, structured error contracts, and zero cross-tenant bypass. Operators had no first-class API for managing customer credentials with full lifecycle control.
+
+**Files changed:**
+
+- `api/credentials.py` — new: `create_credential(tenant_id)`, `hash_credential(secret)`, `validate_credential(raw_key, *, expected_tenant_id)`, `revoke_credential(credential_id, tenant_id)`, `rotate_credential(credential_id, tenant_id)`; `CredentialRecord` frozen dataclass; structured error codes `CREDENTIAL_AUTH_REQUIRED`, `CREDENTIAL_AUTH_INVALID`, `CREDENTIAL_AUTH_REVOKED`, `CREDENTIAL_TENANT_ACCESS_DENIED`, `CREDENTIAL_NOT_FOUND`
+- `tests/security/test_credentials.py` — new: 12 required tests covering full credential lifecycle
+
+**Architecture:**
+
+- Builds on existing `api/auth_scopes` persistence layer (SQLite `api_keys` table, Argon2id hashing, HMAC `key_lookup` index) — no new storage introduced
+- `credential_id` = HMAC(secret, pepper) = `key_lookup` column — safe to expose, does not reveal the secret
+- Argon2id hash enforced by `mint_key`; no plaintext stored anywhere
+- `revoke_credential` enforces tenant ownership via same-error-code path — no existence side channel
+- `validate_credential` uses `verify_api_key_detailed` (Argon2id verify + `hmac.compare_digest`) — constant-time
+
+**Security invariants preserved:**
+
+- Plaintext secret returned exactly once at issuance; never stored, logged, or re-returned
+- Cross-tenant credential usage blocked at validation (`expected_tenant_id` check)
+- Revocation verified: `AUTH_REVOKED` returned on any further use
+- Rotation atomically revokes old credential before issuing new; `rotated_from` field links prior
+- Admin gateway enforcement unchanged — importing `credentials.py` does not affect `require_internal_admin_gateway`
+- All events audited via `security_audit.py` EventType: KEY_CREATED, KEY_REVOKED, KEY_ROTATED, AUTH_SUCCESS, AUTH_FAILURE
+
+**Tests added:** 12 (all passing)
+
+**Validation:**
+
+`pytest -q tests -k 'credential or api_key or access_control'` → 37 passed.
+`pytest -q tests/security -k 'tenant or forbidden or auth'` → 152 passed.
+`pytest -q tests/test_audit_exam_api.py -k 'error or not_found or forbidden'` → 7 passed.
+`make fg-fast` → all checks passed.
+`bash codex_gates.sh` → passed.
+`python tools/plan/taskctl.py validate` → no blocking dependency violations.
+
+---
+
 ### 2026-04-25 — Task 11.1 Addendum: Test Contract Alignment for Structured Error Payload
 
 **Branch:** `task/11.1-explicit-actionable-errors`
