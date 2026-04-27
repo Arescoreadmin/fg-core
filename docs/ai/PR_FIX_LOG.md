@@ -6,6 +6,71 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-27 — Task 15.3: Runtime verification classification
+
+**Branch:** `task/15.3-runtime-verification-classification`
+
+**Task ID:** 15.3
+
+**Area:** Plan tooling / Validation artifacts / Operator workflow
+
+---
+
+**Problem addressed:**
+
+Validation artifacts had only `pass|fail` status. Commands that exit 0 with a `SKIP:` signal (e.g. `validate_tester_flow.sh` when services are down) were indistinguishable from genuine pass outcomes. No `classification` field existed to distinguish structural checks from live runtime proofs. Gate pass and live proof pass were ambiguous to operators.
+
+**Classification model added:**
+
+- `structural` — offline checks; pass without live services
+- `runtime_proof` — requires live services; SKIP signal on exit 0 = skip, not pass
+- `environment_blocked` — required dependency unavailable
+- `skip` — explicit acceptable skip with reason
+
+**Status model expanded:**
+
+- `pass` — all assertions succeeded
+- `fail` — at least one assertion failed
+- `skip` — runtime proof skipped (services down); **not** equivalent to pass
+- `blocked` — required dependency unavailable; **not** equivalent to pass
+
+**Files changed:**
+
+- `tools/plan/validation_classification.py` — NEW: classification constants, `detect_skip_signal()`, `resolve_command_status()`, `resolve_task_status()`, `annotate_command_result()`, `is_runtime_proof_satisfied()`
+- `tools/plan/reconcile_completed_tasks.py` — MODIFIED: imports validation_classification; annotates command results with classification + status; detects SKIP signals; records skip/blocked in artifacts; never updates state on skip/blocked; `_print_report` now shows skip/blocked separately with NOTE
+- `tests/test_validation_classification.py` — NEW: 18 tests
+- `docs/validation_classification.md` — NEW: minimal operator reference
+- `plans/30_day_repo_blitz.yaml` — FIXED: task 15.3 validation_command had invalid pytest -k syntax (`runtime proof` → `runtime_proof`)
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Tests added (18):**
+
+- `test_validation_classification_constants_defined`
+- `test_validation_classification_pass_recorded_for_successful_command`
+- `test_validation_classification_skip_recorded_when_skip_signal_in_stdout`
+- `test_validation_classification_skip_not_recorded_as_pass`
+- `test_validation_classification_blocked_not_recorded_as_pass`
+- `test_runtime_proof_skipped_is_not_pass`
+- `test_runtime_proof_blocked_is_not_pass`
+- `test_skip_signal_detection_ignores_comments_and_empty_lines`
+- `test_skip_signal_detected_in_stderr`
+- `test_validation_classification_task_status_any_fail_is_fail`
+- `test_validation_classification_task_status_any_skip_is_not_pass`
+- `test_validation_classification_task_status_all_pass_is_pass`
+- `test_validation_classification_runtime_proof_not_satisfied_when_skipped`
+- `test_validation_classification_runtime_proof_satisfied_when_all_pass`
+- `test_validation_classification_annotate_adds_fields`
+- `test_reconcile_task_records_skip_not_pass_when_skip_signal`
+- `test_reconcile_task_artifact_contains_classification_field`
+- `test_reconcile_task_skip_does_not_update_state`
+
+**Validation results:**
+
+- `.venv/bin/pytest -q tests -k 'runtime_proof or validation_classification or skip'` → 38 passed, 13 skipped
+- `make fg-fast` → All checks passed
+
+---
+
 ### 2026-04-26 — Task: reconcile_completed_tasks — validation artifact reconciliation tool
 
 **Branch:** `task/reconcile-completed-tasks`

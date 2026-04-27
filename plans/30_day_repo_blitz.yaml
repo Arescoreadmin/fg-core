@@ -489,7 +489,7 @@ phases:
       - Validation artifacts record pass vs skip vs blocked clearly
       - Operator workflow distinguishes gate pass from live proof pass
       validation_commands:
-      - .venv/bin/pytest -q tests -k 'runtime proof or validation classification or skip'
+      - .venv/bin/pytest -q tests -k 'runtime_proof or validation_classification or skip'
       - make fg-fast
     - id: '15.4'
       title: Readiness fail-closed for enabled dependencies
