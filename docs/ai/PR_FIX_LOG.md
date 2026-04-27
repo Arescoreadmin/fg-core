@@ -6,6 +6,61 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-26 — Task: reconcile_completed_tasks — validation artifact reconciliation tool
+
+**Branch:** `task/reconcile-completed-tasks`
+
+**Task ID:** Reconcile completed tasks (prerequisite for integrity gate convergence)
+
+**Area:** Plan tooling / Validation artifacts / State repair
+
+---
+
+**What was built:**
+
+New tool `tools/plan/reconcile_completed_tasks.py` that re-runs `validation_commands` for every task marked complete in the plan state, then generates or repairs `_validate_latest.json` artifacts so `taskctl integrity` becomes truthful. This is NOT artifact fabrication — every artifact reflects a real command execution result.
+
+**Design invariants:**
+- Never returns `status=pass` if any command exited non-zero
+- Never writes an artifact on `--dry-run`
+- Never marks `no_commands` as pass
+- State updated only on genuine pass (never on fail/error/no_commands)
+- Exit 0=all pass, 1=validation failure, 2=tooling error (missing task, corrupt YAML)
+
+**CLI surface:**
+```
+reconcile_completed_tasks.py --all
+reconcile_completed_tasks.py --task TASK_ID
+reconcile_completed_tasks.py --all --dry-run
+reconcile_completed_tasks.py --all --continue-on-fail
+reconcile_completed_tasks.py --all --no-write-state
+```
+
+**Artifact schema (JSON):** `task_id`, `title`, `status`, `timestamp`, `validation_commands`, `command_results`, `repo_git_commit`, `dirty_working_tree`, `generated_by`
+
+**Files changed:**
+
+- `tools/plan/reconcile_completed_tasks.py` — new file (~270 lines): `_build_task_index`, `_run_command`, `_write_artifact`, `reconcile_task`, `update_state_validation`, `_print_report`, `main`
+- `tests/test_reconcile_completed_tasks.py` — new file, 10 tests
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Tests (10):**
+
+- `test_reconcile_task_pass` — pass command produces pass artifact
+- `test_reconcile_task_fail_does_not_write_pass` — fail command produces fail artifact (status never forged as pass)
+- `test_update_state_validation_on_pass` — state updated with correct fields
+- `test_reconcile_task_dry_run_no_artifact` — dry-run returns status=dry_run, writes nothing
+- `test_reconcile_missing_task_in_plan` — task in completed_tasks but not in plan → exit code 2
+- `test_reconcile_task_no_commands` — no validation_commands → status=no_commands, clear error
+- `test_reconcile_only_selected_task` — `--task 1.1` runs only task 1.1, not 1.2
+- `test_artifact_contains_required_fields` — all 9 required JSON fields present and correct
+- `test_generated_artifact_recognised_by_state_integrity` — taskctl.validate_state_integrity accepts generated artifacts
+- `test_continue_on_fail_processes_all_tasks` — both tasks run; exit 1; fail+pass artifacts both written
+
+**Test fix required:** All tests that patch `ARTIFACTS_DIR` also needed to patch `ROOT = tmp_path` so that `artifact_path.relative_to(ROOT)` resolves correctly under pytest's tmp directories. Test 5 expected `SystemExit` but `main()` returns exit code via `return 2` not `raise SystemExit` when a task is found in completed_tasks but missing from the plan index.
+
+---
+
 ### 2026-04-27 — Task 15.2 PR review fix: recursive bypass detection + hardened script inspection
 
 **Branch:** `task/15.2-non-bypass-tester-journey`
