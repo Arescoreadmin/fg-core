@@ -141,23 +141,26 @@ class CollectorScheduler:
             )
 
         # Validate events before accepting; any invalid event surfaces as 'failed'.
+        # Wraps the entire loop in except Exception so that TypeError (non-iterable
+        # return value) and AttributeError (e.g. list of dicts) are also caught and
+        # reported as 'failed' rather than escaping _run_one and breaking isolation.
         validated: list[CollectorEvent] = []
-        for evt in raw_events:
-            try:
+        try:
+            for evt in raw_events:
                 evt.validate()
                 validated.append(evt)
-            except ValueError as exc:
-                log.error(
-                    "collector_event_invalid collector=%s error=%s",
-                    collector.name,
-                    exc,
-                )
-                self._last_run[collector.name] = now
-                return SchedulerResult(
-                    collector_name=collector.name,
-                    outcome="failed",
-                    error=f"invalid event: {exc}",
-                )
+        except Exception as exc:
+            log.error(
+                "collector_event_invalid collector=%s error=%s",
+                collector.name,
+                exc,
+            )
+            self._last_run[collector.name] = now
+            return SchedulerResult(
+                collector_name=collector.name,
+                outcome="failed",
+                error=f"invalid event: {exc}",
+            )
 
         self._last_run[collector.name] = now
         return SchedulerResult(

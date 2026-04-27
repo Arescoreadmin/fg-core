@@ -662,3 +662,113 @@ def test_agent_collector_framework_tenant_safety_different_tenants_produce_disti
     events_t2 = results_t2[0].events
     assert all(e.tenant_id == "tenant-A" for e in events_t1)
     assert all(e.tenant_id == "tenant-B" for e in events_t2)
+
+
+# ---------------------------------------------------------------------------
+# Regression: P1 — malformed return type must not escape _run_one
+# ---------------------------------------------------------------------------
+
+
+def test_agent_collector_framework_scheduler_none_return_fails_not_crashes() -> None:
+    """
+    P1 regression: collector returning None instead of list[CollectorEvent] raises
+    TypeError during iteration. This must produce outcome='failed', not propagate
+    out of _run_one, so subsequent collectors still run.
+    """
+
+    class _NoneReturnCollector(Collector):
+        @property
+        def name(self) -> str:
+            return "none_return"
+
+        @property
+        def cadence_seconds(self) -> float:
+            return 1.0
+
+        def collect(self, tenant_id: str, agent_id: str) -> list[CollectorEvent]:
+            return None  # type: ignore[return-value]
+
+    scheduler, _ = _scheduler_with_clock(
+        _NoneReturnCollector(),
+        _GoodCollector(name="after"),
+    )
+    results = scheduler.tick("t1", "a1")
+    by_name = {r.collector_name: r for r in results}
+    assert by_name["none_return"].outcome == "failed"
+    assert by_name["none_return"].error is not None
+    # Failure isolation: subsequent collector still ran.
+    assert by_name["after"].outcome == "ran"
+
+
+def test_agent_collector_framework_scheduler_dict_events_fail_not_crash() -> None:
+    """
+    P1 regression: collector returning list[dict] (missing .validate) raises
+    AttributeError. Must produce outcome='failed', not break subsequent collectors.
+    """
+
+    class _DictEventsCollector(Collector):
+        @property
+        def name(self) -> str:
+            return "dict_events"
+
+        @property
+        def cadence_seconds(self) -> float:
+            return 1.0
+
+        def collect(self, tenant_id: str, agent_id: str) -> list[CollectorEvent]:
+            return [{"bad": "event"}]  # type: ignore[return-value]
+
+    scheduler, _ = _scheduler_with_clock(
+        _DictEventsCollector(),
+        _GoodCollector(name="after"),
+    )
+    results = scheduler.tick("t1", "a1")
+    by_name = {r.collector_name: r for r in results}
+    assert by_name["dict_events"].outcome == "failed"
+    assert by_name["dict_events"].error is not None
+    assert by_name["after"].outcome == "ran"
+
+
+# ---------------------------------------------------------------------------
+# Regression: P2 — zero/negative cadence must be rejected at registration
+# ---------------------------------------------------------------------------
+
+
+def test_agent_collector_framework_registry_zero_cadence_raises() -> None:
+    """P2 regression: cadence_seconds=0 is rejected by register()."""
+
+    class _ZeroCadence(Collector):
+        @property
+        def name(self) -> str:
+            return "zero_cadence"
+
+        @property
+        def cadence_seconds(self) -> float:
+            return 0.0
+
+        def collect(self, tenant_id: str, agent_id: str) -> list[CollectorEvent]:
+            return []
+
+    reg = CollectorRegistry()
+    with pytest.raises(ValueError, match="cadence_seconds"):
+        reg.register(_ZeroCadence())
+
+
+def test_agent_collector_framework_registry_negative_cadence_raises() -> None:
+    """P2 regression: cadence_seconds=-1 is rejected by register()."""
+
+    class _NegCadence(Collector):
+        @property
+        def name(self) -> str:
+            return "neg_cadence"
+
+        @property
+        def cadence_seconds(self) -> float:
+            return -1.0
+
+        def collect(self, tenant_id: str, agent_id: str) -> list[CollectorEvent]:
+            return []
+
+    reg = CollectorRegistry()
+    with pytest.raises(ValueError, match="cadence_seconds"):
+        reg.register(_NegCadence())

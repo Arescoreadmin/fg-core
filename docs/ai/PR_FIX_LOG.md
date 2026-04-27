@@ -5472,3 +5472,24 @@ Canonical tester flow: ALL ASSERTIONS PASSED
 **Validation results:**
 - `.venv/bin/pytest -q tests -k 'agent and collector and framework'` → 41 passed
 - `make fg-fast` → All checks passed
+
+---
+
+### 2026-04-27 — Task 17.1 post-review fixes: P1 scheduler isolation + P2 cadence validation
+
+**Branch:** `task/17.1-agent-collector-framework`
+
+**Review comments addressed:**
+
+1. **P1 — scheduler.py event validation loop only catches `ValueError`** — `for evt in raw_events: try: evt.validate() except ValueError` did not catch `TypeError` (collector returns `None` instead of list) or `AttributeError` (list of dicts, no `.validate`). These escaped `_run_one`, propagating to `tick()` and breaking failure isolation — subsequent collectors would not run. Fixed: wrapped the entire for loop in `try/except Exception`, matching the top-level failure isolation guarantee. Moved logging inside the handler.
+
+2. **P2 — registry.py does not validate cadence_seconds > 0** — `register()` accepted `cadence_seconds=0` or negative values without error. With `cadence_seconds=0`, the scheduler condition `(now - last) < 0` is always false, causing the collector to run on every tick. Fixed: added validation `if not isinstance(..., (int, float)) or cadence_seconds <= 0: raise ValueError(...)`.
+
+**Files changed:**
+- `agent/app/collector/scheduler.py` — replaced inner `except ValueError` with outer `try/except Exception` around full validation loop.
+- `agent/app/collector/registry.py` — added `cadence_seconds > 0` check in `register()`; updated docstring Raises section.
+- `tests/agent/test_collector_framework.py` — added 4 regression tests: `none_return_fails_not_crashes`, `dict_events_fail_not_crash`, `zero_cadence_raises`, `negative_cadence_raises`. Total: 45 tests.
+
+**Validation results:**
+- `.venv/bin/pytest tests/agent/test_collector_framework.py` → 45 passed
+- `make fg-fast` → All checks passed

@@ -37,10 +37,18 @@ class CollectorRegistry:
         Raises:
             ValueError: If a collector with the same name is already registered.
             ValueError: If collector.name is empty or not a string.
+            ValueError: If collector.cadence_seconds is not a positive number.
         """
         if not isinstance(collector.name, str) or not collector.name.strip():
             raise ValueError(
                 f"Collector name must be a non-empty string; got {collector.name!r}"
+            )
+        if (
+            not isinstance(collector.cadence_seconds, (int, float))
+            or collector.cadence_seconds <= 0
+        ):
+            raise ValueError(
+                f"Collector cadence_seconds must be > 0; got {collector.cadence_seconds!r}"
             )
         if collector.name in self._collectors:
             raise ValueError(
