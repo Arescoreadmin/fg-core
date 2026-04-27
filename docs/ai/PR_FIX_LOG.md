@@ -5493,3 +5493,44 @@ Canonical tester flow: ALL ASSERTIONS PASSED
 **Validation results:**
 - `.venv/bin/pytest tests/agent/test_collector_framework.py` → 45 passed
 - `make fg-fast` → All checks passed
+
+---
+
+### 2026-04-27 — Task 17.2: ProcessInventoryCollector (first real collector)
+
+**Branch:** `task/17.2-process-inventory-collector`
+
+**Collector type chosen:** Process Inventory (host inventory snapshot)
+- Reason: Offline-testable with stdlib only (no psutil required), injectable provider for test determinism, no network/service dependencies, meaningful non-heartbeat telemetry, aligns with existing collect_inventory() pattern.
+
+**Files changed:**
+- `agent/app/collector/process_inventory.py` (new) — ProcessInventoryCollector with injectable SnapshotProvider
+- `agent/app/collector/__init__.py` — export ProcessInventoryCollector
+- `tests/agent/test_collector_telemetry.py` (new, 33 tests)
+
+**Tenant-safety guarantees:**
+- tenant_id and agent_id passed explicitly by scheduler; no global mutable state
+- CollectorEvent.validate() enforces non-empty tenant_id/agent_id before acceptance
+- Two tick() calls with different tenant_ids produce fully distinct event bindings
+
+**Sensitive data minimization:**
+- Raw hostname NOT emitted; SHA-256 hashed (16 hex chars) only
+- No command lines, env vars, secrets, tokens, or process-owner identities emitted
+- Payload fields: schema_version, platform, os_release, os_version, machine, hostname_hash, cpu_count
+
+**Failure behavior:**
+- Snapshot provider exceptions propagate through collect(); scheduler records outcome='failed'
+- No broad except/pass; empty snapshot (empty dict) → outcome='ran' with empty payload (distinguishable from failure)
+- Broken collector does not stop sibling collectors (scheduler isolation preserved)
+
+**Tests added:**
+- 33 tests in tests/agent/test_collector_telemetry.py covering: identity, non-heartbeat assertion, tenant-safety, sensitive-data minimization (no raw hostname, no cmdline, no env, no secrets), failure via scheduler path, empty-snapshot-not-failure, registry integration, scheduler cadence, default snapshot shape
+- All 17.1 framework tests remain green (78/78 combined)
+
+**Validation results:**
+- `.venv/bin/pytest -q tests -k 'agent and collector and telemetry'` → 33 passed
+- `make fg-fast` → All checks passed
+
+**Local review performed:** yes
+**Local review issues found:** ruff F401 (SchedulerResult unused) + E402 (mid-file import); formatting mismatch
+**Fixes made after local review:** removed unused import, moved import to top, ran ruff format
