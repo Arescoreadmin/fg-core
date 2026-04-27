@@ -375,68 +375,129 @@ def next_incomplete_task(plan: dict[str, Any], state: dict[str, Any]) -> str | N
 # ---------------------------------------------------------------------------
 
 
+def _iter_tasks_safe(
+    plan: dict[str, Any],
+) -> list[tuple[str, str, str, str, dict[str, Any]]]:
+    """Iterate all tasks without KeyError on missing id/name fields.
+
+    Yields (phase_loc, module_loc, task_id_or_empty, location_hint, task_dict)
+    tuples. task_id_or_empty is '' when the task is missing the 'id' field.
+    location_hint is a human-readable context string for error messages.
+    """
+    rows = []
+    for pi, phase in enumerate(plan.get("phases", []) or []):
+        if not isinstance(phase, dict):
+            continue
+        phase_id = str(phase.get("id", f"phase[{pi}]"))
+        for mi, module in enumerate(phase.get("modules", []) or []):
+            if not isinstance(module, dict):
+                continue
+            module_id = str(module.get("id", f"module[{mi}]"))
+            for ti, task in enumerate(module.get("tasks", []) or []):
+                if not isinstance(task, dict):
+                    continue
+                task_id = str(task["id"]) if "id" in task else ""
+                location = f"phase={phase_id} module={module_id} " + (
+                    f"task={task_id!r}" if task_id else f"tasks[{ti}]"
+                )
+                rows.append((phase_id, module_id, task_id, location, task))
+    return rows
+
+
 def validate_plan_integrity(plan: dict[str, Any]) -> list[str]:
     """Validate plan YAML structure. Returns list of error strings (empty = valid).
 
     Checks:
+    - No task is missing the required 'id' field
     - Unique task IDs across all phases/modules
     - All dependency references resolve to known task IDs
     - Dependency graph is acyclic
-    - Required fields present on every task (id, title)
+    - Required fields present on every task (title)
+
+    Never raises SystemExit or KeyError — all structural problems become errors.
     """
     errors: list[str] = []
-    refs = flatten_tasks(plan)
-    known: dict[str, TaskRef] = {}
+    rows = _iter_tasks_safe(plan)
 
-    for ref in refs:
-        if ref.task_id in known:
-            errors.append(f"Duplicate task id in plan: {ref.task_id!r}")
+    # Pass 1 — collect IDs, flag missing/duplicate
+    known: dict[str, dict[str, Any]] = {}  # task_id → task dict
+    duplicate_ids: set[str] = set()
+
+    for _phase_id, _module_id, task_id, location, task in rows:
+        if not task_id:
+            errors.append(f"Task missing required field 'id' at {location}")
+            continue
+        if task_id in known:
+            if task_id not in duplicate_ids:
+                errors.append(f"Duplicate task id in plan: {task_id!r}")
+                duplicate_ids.add(task_id)
         else:
-            known[ref.task_id] = ref
+            known[task_id] = task
 
-    for ref in refs:
-        for dep in ref.task.get("depends_on", []):
+    # Pass 2 — dep resolution, required fields, acyclic (only over valid IDs)
+    for _phase_id, _module_id, task_id, _location, task in rows:
+        if not task_id or task_id in duplicate_ids:
+            continue
+        for dep in task.get("depends_on", []) or []:
             if str(dep) not in known:
-                errors.append(
-                    f"Task {ref.task_id!r} depends_on unknown task {dep!r}"
-                )
-        if not ref.task.get("title"):
-            errors.append(f"Task {ref.task_id!r} is missing required field 'title'")
-        if not isinstance(ref.task.get("validation_commands", []), list):
-            errors.append(
-                f"Task {ref.task_id!r} 'validation_commands' is not a list"
-            )
+                errors.append(f"Task {task_id!r} depends_on unknown task {dep!r}")
+        if not task.get("title"):
+            errors.append(f"Task {task_id!r} is missing required field 'title'")
+        if not isinstance(task.get("validation_commands", []), list):
+            errors.append(f"Task {task_id!r} 'validation_commands' is not a list")
 
-    # Acyclic check via DFS
+    # Acyclic check via DFS (only tasks with valid, non-duplicate IDs)
     adj: dict[str, list[str]] = {
-        ref.task_id: [str(d) for d in ref.task.get("depends_on", [])]
-        for ref in refs
+        tid: [str(d) for d in t.get("depends_on", []) or []]
+        for tid, t in known.items()
+        if tid not in duplicate_ids
     }
     visited: set[str] = set()
     in_stack: set[str] = set()
     cycle_reported: set[str] = set()
 
-    def _dfs(node: str) -> bool:
+    def _dfs(node: str) -> None:
         if node in in_stack:
             if node not in cycle_reported:
-                errors.append(f"Cycle detected in dependency graph involving task {node!r}")
+                errors.append(
+                    f"Cycle detected in dependency graph involving task {node!r}"
+                )
                 cycle_reported.add(node)
-            return True
+            return
         if node in visited:
-            return False
+            return
         in_stack.add(node)
         visited.add(node)
         for dep in adj.get(node, []):
             if dep in adj:
                 _dfs(dep)
         in_stack.discard(node)
-        return False
 
-    for task_id in list(known.keys()):
+    for task_id in list(adj.keys()):
         if task_id not in visited:
             _dfs(task_id)
 
     return errors
+
+
+def _safe_task_index(plan: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Build a task_id→task dict without calling die().
+
+    Skips tasks with missing or duplicate IDs (they are reported by
+    validate_plan_integrity). Safe to call even on a malformed plan.
+    """
+    seen: dict[str, dict[str, Any]] = {}
+    dupes: set[str] = set()
+    for _pi, _mi, task_id, _loc, task in _iter_tasks_safe(plan):
+        if not task_id:
+            continue
+        if task_id in seen:
+            dupes.add(task_id)
+        else:
+            seen[task_id] = task
+    for d in dupes:
+        seen.pop(d, None)
+    return seen
 
 
 def validate_state_integrity(plan: dict[str, Any], state: dict[str, Any]) -> list[str]:
@@ -447,36 +508,53 @@ def validate_state_integrity(plan: dict[str, Any], state: dict[str, Any]) -> lis
     - All completed_tasks IDs resolve to known plan tasks
     - Current task's dependencies are satisfied by completed_tasks
     - Validation artifacts referenced in state exist on disk
+
+    If the plan has duplicate or missing task IDs, task-reference checks that
+    require a valid index are skipped and a clear error is returned instead of
+    crashing. Artifact-existence checks always run.
     """
     errors: list[str] = []
-    idx = index_tasks(plan)
 
-    current_id = state.get("current_task_id")
-    if current_id is not None and str(current_id) not in idx:
+    # Detect plan-level ID problems first so we know whether the index is safe.
+    plan_errors = validate_plan_integrity(plan)
+    id_invalid = any(
+        "duplicate task id" in e.lower() or "missing required field 'id'" in e.lower()
+        for e in plan_errors
+    )
+
+    if id_invalid:
         errors.append(
-            f"state.current_task_id {current_id!r} does not resolve to a plan task"
+            "plan task index is invalid (duplicate or missing task IDs); "
+            "state task-reference checks skipped"
         )
+    else:
+        idx = _safe_task_index(plan)
 
-    done = completed_set(state)
-    for ct in state.get("completed_tasks", []):
-        if str(ct) not in idx:
+        current_id = state.get("current_task_id")
+        if current_id is not None and str(current_id) not in idx:
             errors.append(
-                f"state.completed_tasks contains unknown task {ct!r}"
+                f"state.current_task_id {current_id!r} does not resolve to a plan task"
             )
 
-    if current_id and str(current_id) in idx:
-        ref = idx[str(current_id)]
-        missing_deps = [
-            dep
-            for dep in ref.task.get("depends_on", [])
-            if str(dep) not in done and str(dep) in idx
-        ]
-        if missing_deps:
-            errors.append(
-                f"Current task {current_id!r} has unmet dependencies: "
-                + ", ".join(repr(d) for d in missing_deps)
-            )
+        done = completed_set(state)
+        for ct in state.get("completed_tasks", []):
+            if str(ct) not in idx:
+                errors.append(f"state.completed_tasks contains unknown task {ct!r}")
 
+        if current_id and str(current_id) in idx:
+            task = idx[str(current_id)]
+            missing_deps = [
+                dep
+                for dep in task.get("depends_on", []) or []
+                if str(dep) not in done and str(dep) in idx
+            ]
+            if missing_deps:
+                errors.append(
+                    f"Current task {current_id!r} has unmet dependencies: "
+                    + ", ".join(repr(d) for d in missing_deps)
+                )
+
+    # Artifact existence check always runs — independent of plan ID validity.
     for task_id, v in state.get("validations", {}).items():
         if not isinstance(v, dict):
             continue
@@ -507,7 +585,9 @@ def cmd_integrity(plan: dict[str, Any], state: dict[str, Any]) -> int:
     return 0
 
 
-def cmd_status(plan: dict[str, Any], state: dict[str, Any], explain: bool = False) -> int:
+def cmd_status(
+    plan: dict[str, Any], state: dict[str, Any], explain: bool = False
+) -> int:
     ref = get_current_task(plan, state)
     print(f"PHASE: {ref.phase_id}")
     print(f"MODULE: {ref.module_id}")
@@ -549,7 +629,7 @@ def cmd_status(plan: dict[str, Any], state: dict[str, Any], explain: bool = Fals
         done = completed_set(state)
         deps = ref.task.get("depends_on", [])
         print("\nEXPLAIN:")
-        print(f"  selection: first task in plan order not in completed_tasks")
+        print("  selection: first task in plan order not in completed_tasks")
         print(f"  task_id:   {ref.task_id}")
         if deps:
             print("  dependencies:")

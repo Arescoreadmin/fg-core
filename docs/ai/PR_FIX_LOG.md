@@ -6,6 +6,35 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-26 — Task 15.1 PR review fix: integrity validation crash safety
+
+**Branch:** `task/15.1-plan-state-integrity-gate`
+
+**Task ID:** 15.1 (PR review follow-up)
+
+**Area:** Plan Controller / Integrity Validation
+
+---
+
+**Gap description:**
+
+PR review identified two crash paths in the integrity validator:
+1. `validate_plan_integrity()` used `flatten_tasks()` which accesses `task["id"]` directly — raises `KeyError` when a task is missing the `id` field.
+2. `validate_state_integrity()` called `index_tasks(plan)` which calls `die()` on duplicate task IDs — raises `SystemExit` before any state errors could be aggregated.
+
+Both functions must collect and return all errors; they must never abort early.
+
+**Files changed:**
+
+- `tools/plan/taskctl.py` — added `_iter_tasks_safe()` helper that uses `task.get("id")` with fallback location hints; rewrote `validate_plan_integrity()` to use safe iterator (missing IDs reported as errors with location context, duplicates tracked via `duplicate_ids` set, subsequent passes skip invalid IDs); added `_safe_task_index()` helper that builds task map without `die()`; rewrote `validate_state_integrity()` to call `validate_plan_integrity()` first and short-circuit task-reference checks with a clear error when plan IDs are invalid — artifact-existence checks always run regardless
+- `tests/test_plan_integrity.py` — added 6 new tests: duplicate IDs do not abort early, missing `id` does not raise `KeyError`, missing `id` includes location context, multiple missing `id` fields all reported, state integrity with duplicate plan IDs does not `SystemExit`, malformed plan reports all errors in one pass
+
+**Architecture note:**
+
+`_iter_tasks_safe` and `_safe_task_index` are internal helpers used only by the integrity validators. The operational path (`flatten_tasks`, `index_tasks`) is unchanged — it still `die()`s on structural problems at runtime, which is the correct behavior for the plan controller's normal operation.
+
+---
+
 ### 2026-04-26 — Task 15.1: Plan/State Integrity Gate
 
 **Branch:** `task/15.1-plan-state-integrity-gate`
