@@ -157,9 +157,8 @@ validations:
     working_tree_fingerprint: c9f88d6ee5e20c43d76a481512ba8692b325e1848ad9e8a870b8b505ca212cac
   '5.3':
     status: pass
-    timestamp: 20260424T112423Z
+    timestamp: 20260427T173418Z
     artifact: artifacts/plan/5.3_validate_latest.json
-    working_tree_fingerprint: f1bcd2fbae46a31be8d942de81f7792f828172b49dff8a8310aeb06b4e9860fd
   '6.3':
     status: pass
     timestamp: 20260424T133107Z
@@ -167,9 +166,8 @@ validations:
     working_tree_fingerprint: ebc764436f7a08fbf29c7a40d5905d76a47174004d6d7d24fa12e9a45782e652
   '15.1':
     status: pass
-    timestamp: 20260424T151240Z
+    timestamp: 20260427T174951Z
     artifact: artifacts/plan/15.1_validate_latest.json
-    working_tree_fingerprint: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
   '15.2':
     status: pass
     timestamp: 20260427T131608Z
