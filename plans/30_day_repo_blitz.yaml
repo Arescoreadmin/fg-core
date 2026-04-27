@@ -809,14 +809,98 @@ phases:
       validation_commands:
       - .venv/bin/pytest -q tests -k 'agent health or last_seen or backlog'
       - make fg-fast
-  - id: '18.0'
-    name: Server-side Agent / Control Execution
-    tasks:
-    - id: '18.1'
-      title: Server-side job/worker identity
+    - id: '17.6'
+      title: Windows service + installer contract
       status: pending
       depends_on:
       - '17.5'
+      definition_of_done:
+      - Windows service wrapper contract is defined
+      - MSI installer build contract is defined
+      validation:
+      - Service and installer contracts exist and are reviewable
+      validation_commands:
+      - make fg-fast
+  - id: '18.0'
+    name: Agent Packaging / Enterprise Deployment
+    tasks:
+    - id: '18.1'
+      title: Windows service wrapper
+      status: pending
+      depends_on:
+      - '17.6'
+      definition_of_done:
+      - Agent runs as a Windows service under a non-privileged account
+      validation:
+      - Service wrapper installs, starts, and stops without errors
+      validation_commands:
+      - make fg-fast
+    - id: '18.2'
+      title: MSI installer contract
+      status: pending
+      depends_on:
+      - '18.1'
+      definition_of_done:
+      - MSI build contract is defined and reproducible
+      validation:
+      - MSI artifact is produced and passes smoke test
+      validation_commands:
+      - make fg-fast
+    - id: '18.3'
+      title: Silent enrollment install flow
+      status: pending
+      depends_on:
+      - '18.2'
+      definition_of_done:
+      - Agent can be enrolled silently via MSI with no interactive prompts
+      validation:
+      - Silent install flow succeeds with supplied enrollment parameters
+      validation_commands:
+      - make fg-fast
+    - id: '18.4'
+      title: Local credential storage hardening
+      status: pending
+      depends_on:
+      - '18.3'
+      definition_of_done:
+      - Agent credentials are stored in OS-protected storage (DPAPI/keychain)
+      - Credentials are not written to disk in plaintext
+      validation:
+      - Credential storage uses OS-protected path
+      validation_commands:
+      - make fg-fast
+    - id: '18.5'
+      title: Upgrade and uninstall hardening
+      status: pending
+      depends_on:
+      - '18.4'
+      definition_of_done:
+      - Upgrade preserves enrollment and collected state
+      - Uninstall removes agent data and credentials explicitly
+      validation:
+      - Upgrade and uninstall paths are tested and explicit
+      validation_commands:
+      - make fg-fast
+    - id: '18.6'
+      title: Release artifact signing and deployment guide
+      status: pending
+      depends_on:
+      - '18.5'
+      definition_of_done:
+      - Release artifacts are signed
+      - Deployment guide covers enterprise install and enrollment
+      validation:
+      - Signing pipeline and deployment guide exist
+      validation_commands:
+      - make fg-fast
+  - id: '19.0'
+    name: Server-side Agent / Control Execution
+    tasks:
+    - id: '19.1'
+      title: Server-side job/worker identity
+      status: pending
+      depends_on:
+      - '18.6'
       definition_of_done:
       - Server-side worker identity is explicit and authenticated
       validation:
@@ -824,11 +908,11 @@ phases:
       validation_commands:
       - .venv/bin/pytest -q tests -k 'worker identity or server agent'
       - make fg-fast
-    - id: '18.2'
+    - id: '19.2'
       title: Server-side control execution path
       status: pending
       depends_on:
-      - '18.1'
+      - '19.1'
       definition_of_done:
       - Supported server-side automated action exists for control flow
       validation:
@@ -836,11 +920,11 @@ phases:
       validation_commands:
       - .venv/bin/pytest -q tests -k 'server control execution'
       - make fg-fast
-    - id: '18.3'
+    - id: '19.3'
       title: Operator-triggered run path
       status: pending
       depends_on:
-      - '18.2'
+      - '19.2'
       definition_of_done:
       - Operator can trigger server-side run via supported product surface
       validation:
@@ -848,11 +932,11 @@ phases:
       validation_commands:
       - .venv/bin/pytest -q tests -k 'operator triggered run'
       - make fg-fast
-    - id: '18.4'
+    - id: '19.4'
       title: Audit trail for server-side actions
       status: pending
       depends_on:
-      - '18.3'
+      - '19.3'
       definition_of_done:
       - Server-side actions create attributable audit evidence
       validation:
@@ -860,14 +944,14 @@ phases:
       validation_commands:
       - .venv/bin/pytest -q tests -k 'server action audit trail'
       - make fg-fast
-  - id: '19.0'
+  - id: '20.0'
     name: Evidence and Operator Reporting
     tasks:
-    - id: '19.1'
+    - id: '20.1'
       title: Operator activity timeline
       status: pending
       depends_on:
-      - '18.4'
+      - '19.4'
       definition_of_done:
       - Timeline includes actor, tenant, subject, action, and outcome
       validation:
@@ -875,11 +959,11 @@ phases:
       validation_commands:
       - .venv/bin/pytest -q tests -k 'activity timeline or operator evidence'
       - make fg-fast
-    - id: '19.2'
+    - id: '20.2'
       title: Evidence export bundle
       status: pending
       depends_on:
-      - '19.1'
+      - '20.1'
       definition_of_done:
       - Stable export includes audit chain, query context, and artifacts
       validation:
@@ -887,11 +971,11 @@ phases:
       validation_commands:
       - .venv/bin/pytest -q tests -k 'evidence export bundle'
       - make fg-fast
-    - id: '19.3'
+    - id: '20.3'
       title: Usage evidence summary
       status: pending
       depends_on:
-      - '19.2'
+      - '20.2'
       definition_of_done:
       - Per-tenant counts by action type are available
       validation:
@@ -899,11 +983,11 @@ phases:
       validation_commands:
       - .venv/bin/pytest -q tests -k 'usage evidence summary'
       - make fg-fast
-    - id: '19.4'
+    - id: '20.4'
       title: Admin/operator evidence quickstart
       status: pending
       depends_on:
-      - '19.3'
+      - '20.3'
       definition_of_done:
       - One documented flow proves operator activity evidence end-to-end
       validation:
@@ -919,7 +1003,7 @@ phases:
       title: Real retrieval substrate
       status: pending
       depends_on:
-      - '19.4'
+      - '20.4'
       definition_of_done:
       - Canonical flow uses a real retrieval backend/index
       - Stub retrieval path is removed from canonical product flow
@@ -1096,14 +1180,14 @@ phases:
 - id: phase-6
   name: Regulated Readiness Controls
   modules:
-  - id: '20.0'
+  - id: '21.0'
     name: Regulated Readiness Controls
     tasks:
-    - id: '20.1'
+    - id: '21.1'
       title: Control mapping
       status: pending
       depends_on:
-      - '15.4'
+      - '20.4'
       definition_of_done:
       - Repo controls are mapped to HIPAA/banking-relevant safeguards
       - Each control is classified as implemented, partial, missing, or ops-only
@@ -1112,11 +1196,11 @@ phases:
       validation_commands:
       - test -f docs/regulated_readiness_control_map.md
       - make fg-fast
-    - id: '20.2'
+    - id: '21.2'
       title: Sensitive data handling
       status: pending
       depends_on:
-      - '20.1'
+      - '21.1'
       definition_of_done:
       - PII/PHI data classes are defined
       - Mask/redact rules and storage boundaries are explicit
@@ -1125,11 +1209,11 @@ phases:
       validation_commands:
       - .venv/bin/pytest -q tests -k 'pii or phi or redaction'
       - make fg-fast
-    - id: '20.3'
+    - id: '21.3'
       title: Retention and audit evidence policy surfaces
       status: pending
       depends_on:
-      - '20.2'
+      - '21.2'
       definition_of_done:
       - Retention expectations, exportability, and tamper evidence are documented
       validation:
@@ -1137,11 +1221,11 @@ phases:
       validation_commands:
       - .venv/bin/pytest -q tests -k 'retention or audit evidence'
       - make fg-fast
-    - id: '20.4'
+    - id: '21.4'
       title: Encryption and key management gaps
       status: pending
       depends_on:
-      - '20.3'
+      - '21.3'
       definition_of_done:
       - Field-level encryption needs are identified
       - Key rotation expectations and secret source-of-truth are explicit
@@ -1150,11 +1234,11 @@ phases:
       validation_commands:
       - .venv/bin/pytest -q tests -k 'encryption or key management'
       - make fg-fast
-    - id: '20.5'
+    - id: '21.5'
       title: Deployment/compliance prerequisites
       status: pending
       depends_on:
-      - '20.4'
+      - '21.4'
       definition_of_done:
       - BAA/vendor/infrastructure controls outside repo are listed
       - Operational runbooks required before regulated pilot are explicit
