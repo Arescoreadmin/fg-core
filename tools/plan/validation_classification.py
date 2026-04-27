@@ -90,6 +90,16 @@ def detect_skip_signal(stdout: str, stderr: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
+# Status precedence — higher number wins when aggregating across commands.
+# fail > blocked > skip > pass
+STATUS_PRECEDENCE: dict[str, int] = {
+    STATUS_FAIL: 4,
+    STATUS_BLOCKED: 3,
+    STATUS_SKIP: 2,
+    STATUS_PASS: 1,
+}
+
+
 def resolve_command_status(
     returncode: int,
     stdout: str,
@@ -101,9 +111,15 @@ def resolve_command_status(
 
     Rules:
       - Non-zero exit → fail (regardless of classification).
-      - runtime_proof + exit 0 + SKIP signal → skip, never pass.
-      - environment_blocked + exit 0 → blocked (the command reported it was blocked).
+      - environment_blocked + exit 0 + SKIP signal → blocked (required service/env
+        unavailable; this is a hard dependency, not an optional skip).
+      - runtime_proof + exit 0 + SKIP signal → skip (live proof not possible in
+        this environment, but not a hard dependency failure).
       - Otherwise exit 0 → pass.
+
+    The distinction between blocked and skip:
+      blocked  = environment_blocked classification; required runtime dependency absent.
+      skip     = runtime_proof classification; live proof optional in this environment.
 
     Returns:
         (status, skip_reason)  where skip_reason is the SKIP signal line or None.
@@ -111,11 +127,14 @@ def resolve_command_status(
     if returncode != 0:
         return STATUS_FAIL, None
 
-    if classification in (RUNTIME_PROOF, ENVIRONMENT_BLOCKED):
+    if classification == ENVIRONMENT_BLOCKED:
         reason = detect_skip_signal(stdout, stderr)
         if reason is not None:
-            # environment_blocked and runtime_proof both use "blocked" when the
-            # script itself signals it can't run (SKIP: prefix = services down).
+            return STATUS_BLOCKED, reason
+
+    if classification == RUNTIME_PROOF:
+        reason = detect_skip_signal(stdout, stderr)
+        if reason is not None:
             return STATUS_SKIP, reason
 
     return STATUS_PASS, None
@@ -123,24 +142,19 @@ def resolve_command_status(
 
 def resolve_task_status(command_statuses: list[str]) -> str:
     """
-    Aggregate per-command statuses into a single task status.
+    Aggregate per-command statuses into a single task status using precedence.
 
-    Rules (in priority order):
-      1. Any fail  → fail
-      2. Any skip  → skip
-      3. Any blocked → blocked
-      4. All pass  → pass
-      5. Empty     → no_commands (caller handles)
+    Precedence: fail(4) > blocked(3) > skip(2) > pass(1)
+
+    A later fail must not be hidden by an earlier skip or blocked.
+    All commands are assumed to have been executed (no early exit in caller).
     """
     if not command_statuses:
         return "no_commands"
-    if STATUS_FAIL in command_statuses:
-        return STATUS_FAIL
-    if STATUS_SKIP in command_statuses:
-        return STATUS_SKIP
-    if STATUS_BLOCKED in command_statuses:
-        return STATUS_BLOCKED
-    return STATUS_PASS
+    known = [s for s in command_statuses if s in STATUS_PRECEDENCE]
+    if not known:
+        return STATUS_PASS
+    return max(known, key=lambda s: STATUS_PRECEDENCE[s])
 
 
 # ---------------------------------------------------------------------------

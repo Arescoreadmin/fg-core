@@ -6,6 +6,52 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-27 — Task 15.3 PR review fix: blocked semantics + no-break-on-skip + precedence
+
+**Branch:** `task/15.3-runtime-verification-classification`
+
+**Area:** Plan tooling / Validation classification
+
+---
+
+**Review comments addressed:**
+
+1. **reconcile stopped on first skip** — `reconcile_completed_tasks.py` broke out of the command loop on `STATUS_SKIP`. A skipped runtime proof followed by a failing structural check would hide the failure. Fixed: skip/blocked no longer break the loop. Only `STATUS_FAIL` breaks (fail-fast). All commands execute; later fails are always recorded.
+
+2. **environment_blocked mapped to skip** — `resolve_command_status` mapped both `RUNTIME_PROOF` and `ENVIRONMENT_BLOCKED` to `STATUS_SKIP` when a SKIP signal was detected. Fixed: `ENVIRONMENT_BLOCKED` + SKIP signal → `STATUS_BLOCKED`. `RUNTIME_PROOF` + SKIP signal → `STATUS_SKIP`. The distinction: blocked = required hard dependency absent; skip = optional live proof not possible in this environment.
+
+3. **Status precedence was if-chain, not precedence table** — `resolve_task_status` used `if STATUS_FAIL in …; if STATUS_SKIP in …` ordering. Replaced with `STATUS_PRECEDENCE = {fail:4, blocked:3, skip:2, pass:1}` and `max(known, key=…)`. A later fail is now always surfaced regardless of earlier skip/blocked.
+
+**Files changed:**
+
+- `tools/plan/validation_classification.py` — added `STATUS_PRECEDENCE` dict; fixed `resolve_command_status` to return `STATUS_BLOCKED` for `ENVIRONMENT_BLOCKED` and `STATUS_SKIP` for `RUNTIME_PROOF`; replaced `resolve_task_status` if-chain with `max(…, key=STATUS_PRECEDENCE.__getitem__)`
+- `tools/plan/reconcile_completed_tasks.py` — removed `break` on skip/blocked in command loop; only `STATUS_FAIL` breaks
+- `tests/test_validation_classification.py` — added 11 tests (39 total); added `STATUS_PRECEDENCE` import
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Tests added (11 new, tests 28–38):**
+
+- `test_validation_classification_environment_blocked_skip_signal_is_blocked`
+- `test_validation_classification_runtime_proof_skip_signal_is_skip_not_blocked`
+- `test_validation_classification_status_precedence_ordering`
+- `test_validation_classification_task_status_skip_then_pass_is_skip`
+- `test_validation_classification_task_status_skip_then_fail_is_fail`
+- `test_validation_classification_task_status_blocked_then_pass_is_blocked`
+- `test_validation_classification_fail_has_highest_precedence`
+- `test_reconcile_continues_after_skip_records_all_results`
+- `test_reconcile_does_not_update_state_on_skip`
+- `test_reconcile_does_not_update_state_on_blocked`
+- `test_reconcile_does_not_update_state_on_fail`
+
+**Validation results:**
+
+- `.venv/bin/pytest -q tests/test_validation_classification.py` → 39 passed
+- `.venv/bin/pytest -q tests -k 'runtime_proof or validation_classification or skip or reconcile'` → 69 passed, 13 skipped
+- `make fg-fast` → All checks passed
+- `bash codex_gates.sh` → running
+
+---
+
 ### 2026-04-27 — Task 15.3 follow-up: explicit classification + inference rules
 
 **Branch:** `task/15.3-runtime-verification-classification`

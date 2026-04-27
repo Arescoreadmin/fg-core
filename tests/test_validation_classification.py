@@ -29,6 +29,17 @@ Proves:
 25) get_command_classification: invalid per-command class falls through to task-level
 26) reconcile_task uses inferred runtime_proof for bash tools/auth script (SKIP detected)
 27) reconcile_task per-command classification in YAML takes highest precedence
+28) environment_blocked + SKIP signal → blocked (not skip)
+29) runtime_proof + SKIP signal → skip (not blocked)
+30) status precedence: fail > blocked > skip > pass
+31) skip followed by pass → overall skip
+32) skip followed by fail → overall fail (not skip)
+33) blocked followed by pass → overall blocked
+34) fail has precedence over blocked and skip
+35) reconcile continues after skip and records all command results
+36) reconcile does not update state on skip
+37) reconcile does not update state on blocked
+38) reconcile does not update state on fail
 """
 
 from __future__ import annotations
@@ -46,6 +57,7 @@ from validation_classification import (  # noqa: E402
     RUNTIME_PROOF,
     SKIP,
     STATUSES,
+    STATUS_PRECEDENCE,
     STRUCTURAL,
     STATUS_BLOCKED,
     STATUS_FAIL,
@@ -624,3 +636,209 @@ def test_reconcile_task_per_command_classification_yaml(
     assert cmd_result["classification"] == RUNTIME_PROOF, (
         "per-command classification in YAML must override inference"
     )
+
+
+# ---------------------------------------------------------------------------
+# 28) environment_blocked + SKIP signal → blocked (not skip)
+# ---------------------------------------------------------------------------
+
+
+def test_validation_classification_environment_blocked_skip_signal_is_blocked() -> None:
+    """environment_blocked + SKIP signal must resolve to blocked, not skip."""
+    status, reason = resolve_command_status(
+        0, "SKIP: required service unavailable\n", "", ENVIRONMENT_BLOCKED
+    )
+    assert status == STATUS_BLOCKED
+    assert status != STATUS_SKIP
+    assert reason is not None
+
+
+# ---------------------------------------------------------------------------
+# 29) runtime_proof + SKIP signal → skip (not blocked)
+# ---------------------------------------------------------------------------
+
+
+def test_validation_classification_runtime_proof_skip_signal_is_skip_not_blocked() -> (
+    None
+):
+    """runtime_proof + SKIP signal must resolve to skip, not blocked."""
+    status, reason = resolve_command_status(
+        0, "SKIP: IdP not reachable\n", "", RUNTIME_PROOF
+    )
+    assert status == STATUS_SKIP
+    assert status != STATUS_BLOCKED
+    assert reason is not None
+
+
+# ---------------------------------------------------------------------------
+# 30) STATUS_PRECEDENCE: fail > blocked > skip > pass
+# ---------------------------------------------------------------------------
+
+
+def test_validation_classification_status_precedence_ordering() -> None:
+    """STATUS_PRECEDENCE must enforce fail > blocked > skip > pass."""
+    assert STATUS_PRECEDENCE[STATUS_FAIL] > STATUS_PRECEDENCE[STATUS_BLOCKED]
+    assert STATUS_PRECEDENCE[STATUS_BLOCKED] > STATUS_PRECEDENCE[STATUS_SKIP]
+    assert STATUS_PRECEDENCE[STATUS_SKIP] > STATUS_PRECEDENCE[STATUS_PASS]
+
+
+# ---------------------------------------------------------------------------
+# 31) skip followed by pass → overall skip
+# ---------------------------------------------------------------------------
+
+
+def test_validation_classification_task_status_skip_then_pass_is_skip() -> None:
+    """skip + pass → overall skip (skip takes precedence over pass)."""
+    result = resolve_task_status([STATUS_SKIP, STATUS_PASS])
+    assert result == STATUS_SKIP
+    assert result != STATUS_PASS
+
+
+# ---------------------------------------------------------------------------
+# 32) skip followed by fail → overall fail
+# ---------------------------------------------------------------------------
+
+
+def test_validation_classification_task_status_skip_then_fail_is_fail() -> None:
+    """skip + fail → overall fail (fail has highest precedence)."""
+    result = resolve_task_status([STATUS_SKIP, STATUS_FAIL])
+    assert result == STATUS_FAIL
+
+
+# ---------------------------------------------------------------------------
+# 33) blocked followed by pass → overall blocked
+# ---------------------------------------------------------------------------
+
+
+def test_validation_classification_task_status_blocked_then_pass_is_blocked() -> None:
+    """blocked + pass → overall blocked (blocked takes precedence over pass)."""
+    result = resolve_task_status([STATUS_BLOCKED, STATUS_PASS])
+    assert result == STATUS_BLOCKED
+    assert result != STATUS_PASS
+
+
+# ---------------------------------------------------------------------------
+# 34) fail has precedence over blocked and skip
+# ---------------------------------------------------------------------------
+
+
+def test_validation_classification_fail_has_highest_precedence() -> None:
+    """fail must win over any combination of blocked/skip/pass."""
+    assert resolve_task_status([STATUS_BLOCKED, STATUS_FAIL]) == STATUS_FAIL
+    assert resolve_task_status([STATUS_SKIP, STATUS_FAIL]) == STATUS_FAIL
+    assert (
+        resolve_task_status([STATUS_PASS, STATUS_SKIP, STATUS_BLOCKED, STATUS_FAIL])
+        == STATUS_FAIL
+    )
+
+
+# ---------------------------------------------------------------------------
+# 35) reconcile continues after skip and records all command results
+# ---------------------------------------------------------------------------
+
+
+def test_reconcile_continues_after_skip_records_all_results(
+    tmp_path: Path,
+) -> None:
+    """A skip must not short-circuit task validation. Later fail must be recorded."""
+    # Command 1: skip signal (runtime_proof)
+    skip_script = tmp_path / "runtime_check.sh"
+    skip_script.write_text("#!/usr/bin/env bash\necho 'SKIP: service down'\nexit 0\n")
+    skip_script.chmod(0o755)
+
+    # Command 2: always fails
+    fail_script = tmp_path / "fail_check.sh"
+    fail_script.write_text("#!/usr/bin/env bash\nexit 1\n")
+    fail_script.chmod(0o755)
+
+    task: dict[str, Any] = {
+        "id": "1.1",
+        "title": "Multi-command task",
+        "status": "pending",
+        "depends_on": [],
+        "definition_of_done": [],
+        "validation": [],
+        "validation_commands": [str(skip_script), str(fail_script)],
+        # per-command: first is runtime_proof (skip), second is structural (fail)
+        "validation_command_classes": [RUNTIME_PROOF, STRUCTURAL],
+    }
+    artifacts_dir = tmp_path / "artifacts" / "plan"
+    artifacts_dir.mkdir(parents=True)
+
+    orig_root = rct.ROOT
+    orig_artifacts = rct.ARTIFACTS_DIR
+    rct.ROOT = tmp_path
+    rct.ARTIFACTS_DIR = artifacts_dir
+    try:
+        result = reconcile_task(
+            "1.1",
+            task,
+            dry_run=False,
+            git_commit="abc1234",
+            dirty=False,
+            verbose=False,
+        )
+    finally:
+        rct.ROOT = orig_root
+        rct.ARTIFACTS_DIR = orig_artifacts
+
+    assert result["status"] == STATUS_FAIL, (
+        f"Expected fail (skip then fail), got {result['status']!r}. "
+        "Later fail must not be hidden by earlier skip."
+    )
+    assert len(result["command_results"]) == 2, (
+        "Both commands must be recorded — reconcile must not stop on skip."
+    )
+    assert result["command_results"][0]["status"] == STATUS_SKIP
+    assert result["command_results"][1]["status"] == STATUS_FAIL
+
+
+# ---------------------------------------------------------------------------
+# 36) reconcile does not update state on skip
+# ---------------------------------------------------------------------------
+
+
+def test_reconcile_does_not_update_state_on_skip() -> None:
+    """State must not be updated when overall task status is skip."""
+    state: dict[str, Any] = {"validations": {}}
+    result = {"status": STATUS_SKIP, "artifact_path": "artifacts/plan/1.1_latest.json"}
+    if result["status"] == STATUS_PASS:
+        update_state_validation(
+            state, "1.1", result["artifact_path"], "20260101T000000Z"
+        )
+    assert "1.1" not in state["validations"]
+
+
+# ---------------------------------------------------------------------------
+# 37) reconcile does not update state on blocked
+# ---------------------------------------------------------------------------
+
+
+def test_reconcile_does_not_update_state_on_blocked() -> None:
+    """State must not be updated when overall task status is blocked."""
+    state: dict[str, Any] = {"validations": {}}
+    result = {
+        "status": STATUS_BLOCKED,
+        "artifact_path": "artifacts/plan/1.1_latest.json",
+    }
+    if result["status"] == STATUS_PASS:
+        update_state_validation(
+            state, "1.1", result["artifact_path"], "20260101T000000Z"
+        )
+    assert "1.1" not in state["validations"]
+
+
+# ---------------------------------------------------------------------------
+# 38) reconcile does not update state on fail
+# ---------------------------------------------------------------------------
+
+
+def test_reconcile_does_not_update_state_on_fail() -> None:
+    """State must not be updated when overall task status is fail."""
+    state: dict[str, Any] = {"validations": {}}
+    result = {"status": STATUS_FAIL, "artifact_path": "artifacts/plan/1.1_latest.json"}
+    if result["status"] == STATUS_PASS:
+        update_state_validation(
+            state, "1.1", result["artifact_path"], "20260101T000000Z"
+        )
+    assert "1.1" not in state["validations"]

@@ -288,15 +288,16 @@ def reconcile_task(
                     f"  [FAIL] Command exited {result['returncode']}: {cmd}",
                     file=sys.stderr,
                 )
-            break  # fail-fast per task
-        if result["status"] == STATUS_SKIP:
+            break  # fail-fast: no point running further commands after a hard failure
+        if result["status"] in (STATUS_SKIP, STATUS_BLOCKED):
             if verbose:
-                reason = result.get("skip_reason") or "SKIP signal detected"
+                label = "SKIP" if result["status"] == STATUS_SKIP else "BLOCKED"
+                reason = result.get("skip_reason") or f"{label} signal detected"
                 print(
-                    f"  [SKIP] Runtime proof skipped (not pass): {reason}",
+                    f"  [{label}] Not pass — continuing to check remaining commands: {reason}",
                     file=sys.stderr,
                 )
-            break  # skip propagates immediately
+            # Do NOT break — later commands may fail and must be recorded.
 
     cmd_statuses = [str(r["status"]) for r in command_results]
     status = resolve_task_status(cmd_statuses) if cmd_statuses else "no_commands"
