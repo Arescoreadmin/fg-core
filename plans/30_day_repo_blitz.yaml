@@ -779,7 +779,7 @@ phases:
       - Agent evidence is queryable per tenant
       - Cross-tenant leakage is denied
       validation_commands:
-      - .venv/bin/pytest -q tests -k 'agent evidence or ingest and tenant'
+      - .venv/bin/pytest -q tests -k 'agent and evidence or ingest and tenant'
       - make fg-fast
     - id: '17.4'
       title: Agent lifecycle controls

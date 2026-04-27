@@ -5534,3 +5534,52 @@ Canonical tester flow: ALL ASSERTIONS PASSED
 **Local review performed:** yes
 **Local review issues found:** ruff F401 (SchedulerResult unused) + E402 (mid-file import); formatting mismatch
 **Fixes made after local review:** removed unused import, moved import to top, ran ruff format
+
+---
+
+### 2026-04-27 — Task 17.3: Agent evidence ingestion path
+
+**Branch:** `task/17.3-agent-evidence-ingestion`
+
+**Existing surface selected:** `POST /ingest` → `decisions` table → `GET /decisions`
+- Reason: Only established telemetry submission + query surface. Already enforces tenant isolation, idempotency via (tenant_id, event_id), and supports event_type-filtered operator queries via GET /decisions.
+
+**Files changed:**
+- `agent/app/collector/ingest_adapter.py` (new) — collector_event_to_ingest_payload() adapter
+- `agent/app/collector/__init__.py` — export collector_event_to_ingest_payload
+- `tests/agent/test_agent_evidence_ingest.py` (new, 33 tests)
+- `plans/30_day_repo_blitz.yaml` — fix invalid pytest -k expression (task 17.3: 'agent evidence or ingest and tenant' → 'agent and evidence or ingest and tenant')
+
+**Tenant-safety guarantees:**
+- tenant_id and agent_id come exclusively from CollectorEvent fields; never from payload
+- _FORBIDDEN_PAYLOAD_KEYS frozenset strips any tenant_id/agent_id keys from payload before conversion
+- GET /decisions enforces tenant via require_bound_tenant(); RLS via DB context
+- Bilateral isolation test proves neither tenant leaks to the other
+
+**Sensitive data minimization:**
+- Payload passed as-is after stripping identity override keys; no new sensitive fields added
+- 17.2 hostname-hash and no-cmdline guarantees preserved
+
+**Failure behavior:**
+- evt.validate() called before any conversion; raises ValueError on malformed event
+- No broad except/pass; failures propagate to caller
+- Adapter is pure function; no side effects; no silent drop
+
+**Tests added:**
+- 33 tests in tests/agent/test_agent_evidence_ingest.py:
+  - Adapter conversion, determinism, pattern compliance, source encoding
+  - tenant_id/agent_id override prevention (stripped from payload)
+  - Validation failures (empty tenant_id, empty agent_id, malformed payload, whitespace tenant)
+  - event_id unit tests (_derive_event_id)
+  - Integration: tenant can query own evidence; cross-tenant denied; empty result (not error); bilateral isolation; unauthenticated denied
+  - Decision metadata: event_type, tenant_id, source with agent_id all present
+
+**Validation results:**
+- `.venv/bin/pytest -q tests -k 'agent and evidence or ingest and tenant'` → 41 passed (2 skipped from existing suite)
+- `make fg-fast` → All checks passed
+
+**Local review performed:** yes
+**Local review issues found:**
+- pytest -k 'agent evidence or ingest and tenant' is invalid syntax (space = implicit AND not supported); plan file had this bug. Fixed in plans/30_day_repo_blitz.yaml line 782.
+- Test docstring referenced old expression; updated to match plan fix.
+**Fixes made after local review:** plan file expression corrected, docstring updated
