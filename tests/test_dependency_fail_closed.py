@@ -126,6 +126,24 @@ def test_nats_dependency_test_fallback_explicit():
     assert result == "nats://localhost:4222"
 
 
+def test_nats_dependency_development_env_fallback_explicit():
+    """NATS enabled + no URL in 'development' (long form) returns explicit localhost fallback."""
+    from api.ingest_bus import _resolve_nats_url
+
+    result = _resolve_nats_url(enabled=True, url="", env="development")
+    assert result == "nats://localhost:4222"
+
+
+def test_nats_dependency_unknown_env_is_fail_closed():
+    """NATS enabled + no URL + unknown env string raises RuntimeError (fail-closed)."""
+    from api.ingest_bus import _resolve_nats_url
+
+    # Unknown/empty env must never silently fall back to localhost.
+    for unknown_env in ("", "PROD", "STAGING", "qa", "uat", "preprod"):
+        with pytest.raises(RuntimeError, match="FG_NATS_URL must be set"):
+            _resolve_nats_url(enabled=True, url="", env=unknown_env)
+
+
 def test_nats_dependency_disabled_no_url_returns_empty():
     """NATS disabled + no URL returns empty string (not an error)."""
     from api.ingest_bus import _resolve_nats_url
@@ -242,6 +260,30 @@ def test_startup_redis_url_missing_is_error_in_production(monkeypatch):
     assert redis_results, "Expected redis_url_missing check in report"
     assert not redis_results[0].passed
     assert redis_results[0].severity == "error"
+
+
+def test_startup_fail_closed_actually_raises_on_nats_url_missing_in_prod(monkeypatch):
+    """validate_startup_config(fail_on_error=True) raises RuntimeError when NATS enabled+no URL in prod."""
+    monkeypatch.setenv("FG_ENV", "prod")
+    monkeypatch.setenv("FG_NATS_ENABLED", "1")
+    monkeypatch.delenv("FG_NATS_URL", raising=False)
+
+    from api.config.startup_validation import validate_startup_config
+
+    with pytest.raises(RuntimeError, match="FG_NATS_URL"):
+        validate_startup_config(fail_on_error=True, log_results=False)
+
+
+def test_startup_fail_closed_actually_raises_on_redis_url_missing_in_prod(monkeypatch):
+    """validate_startup_config(fail_on_error=True) raises RuntimeError when Redis backend+no URL in prod."""
+    monkeypatch.setenv("FG_ENV", "prod")
+    monkeypatch.setenv("FG_RL_BACKEND", "redis")
+    monkeypatch.delenv("FG_REDIS_URL", raising=False)
+
+    from api.config.startup_validation import validate_startup_config
+
+    with pytest.raises(RuntimeError, match="FG_REDIS_URL"):
+        validate_startup_config(fail_on_error=True, log_results=False)
 
 
 # ---------------------------------------------------------------------------

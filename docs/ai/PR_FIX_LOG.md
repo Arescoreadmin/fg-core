@@ -5385,3 +5385,42 @@ Canonical tester flow: ALL ASSERTIONS PASSED
 - Impact: ensures deterministic chunk counts and stable chunk boundaries
 - Tests: added regression for empty overlap reseed case
 - Validation: rag+chunk, rag+ingest, fg-fast all pass
+
+---
+
+### 2026-04-27 — Task 15.4: Readiness fail-closed for enabled dependencies
+
+**Branch:** `task/15.4-readiness-fail-closed`
+
+**Area:** Startup validation / Dependency configuration
+
+---
+
+**Changes made:**
+
+1. **`api/ingest_bus.py`** — Extracted module-level NATS fail-closed logic into `_resolve_nats_url(enabled, url, env)`. Behavior is identical: enabled+no URL in non-dev raises `RuntimeError`; dev/local/test returns explicit `nats://localhost:4222` fallback. Extraction makes the logic unit-testable without module reimport.
+
+2. **`tests/test_dependency_fail_closed.py`** (new, 26 tests) — Explicit coverage for:
+   - Redis: `FG_RL_BACKEND=redis` + no URL in staging/prod → `RuntimeError` from `load_config()`
+   - Redis: dev/test env → explicit `redis://localhost:6379/0` fallback (not silent)
+   - NATS: enabled + no URL for all non-dev envs (staging, prod, production, unknown) → `RuntimeError`
+   - NATS: dev/local/test/development → explicit `nats://localhost:4222` fallback
+   - NATS: unknown env strings (`qa`, `uat`, `preprod`, `""`) → fail-closed (raises)
+   - OIDC: `AuthConfig.validate()` errors in production; no bypass in staging; partial config fails; dev does not require OIDC
+   - Startup validation: `nats_url_missing` severity=error in prod, warning in dev
+   - Startup validation: `redis_url_missing` severity=error in production
+   - Startup validation: `validate_startup_config(fail_on_error=True)` actually raises on missing NATS/Redis URL in prod
+   - Localhost URLs rejected in production for Redis and NATS, allowed in dev
+
+**Review issues found and fixed:**
+
+- Match strings in `test_startup_fail_closed_actually_raises_*` initially targeted the check name (e.g. `"nats_url_missing"`) instead of the RuntimeError message text. Fixed to match `"FG_NATS_URL"` and `"FG_REDIS_URL"` which appear in the actual raised message.
+- Missing `"development"` env variant test for NATS `_DEV_ENVS` coverage. Added.
+- Missing test for unknown/empty env strings (fail-closed, not localhost fallback). Added `test_nats_dependency_unknown_env_is_fail_closed` covering `qa`, `uat`, `preprod`, `""`, `PROD`, `STAGING`.
+- Missing proof that `validate_startup_config(fail_on_error=True)` actually aborts (not just reports). Added two tests.
+
+**Validation results:**
+
+- `.venv/bin/pytest -q tests/test_dependency_fail_closed.py` → 26 passed
+- `.venv/bin/pytest -q tests -k 'startup or dependency or localhost or fail_closed'` → 82 passed
+- `make fg-fast` → All checks passed
