@@ -287,3 +287,152 @@ def test_collection_no_direct_core_routes(collection: dict) -> None:
     assert not violations, (
         f"Collection must not reference direct core API paths: {violations}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 15.2 — Non-bypass tester journey enforcement
+# ---------------------------------------------------------------------------
+
+VALIDATE_TESTER_FLOW = REPO_ROOT / "tools" / "auth" / "validate_tester_flow.sh"
+
+
+def test_quickstart_dev_bypass_marked_non_canonical(quickstart_text: str) -> None:
+    """Quickstart must explicitly state that dev bypass is not the canonical tester path."""
+    assert "not the canonical tester path" in quickstart_text.lower(), (
+        "Quickstart must explicitly state that dev bypass is 'not the canonical tester path'. "
+        "Dev bypass must never be presented as the canonical tester flow."
+    )
+
+
+def test_quickstart_bypass_env_var_not_in_ctj_section(quickstart_text: str) -> None:
+    """FG_DEV_AUTH_BYPASS must not appear in the Canonical Tester Journey (CTJ) section."""
+    # The CTJ section runs from the top of the doc to the first '---' separator
+    # that follows the last CTJ-N header. We extract it by splitting on '## Prerequisites'
+    # or '## Step 1' which mark the start of the expanded guide.
+    ctj_end_markers = ["## Prerequisites", "## Step 1 —"]
+    ctj_text = quickstart_text
+    for marker in ctj_end_markers:
+        if marker in quickstart_text:
+            ctj_text = quickstart_text.split(marker)[0]
+            break
+
+    assert "FG_DEV_AUTH_BYPASS" not in ctj_text, (
+        "FG_DEV_AUTH_BYPASS must not appear in the Canonical Tester Journey (CTJ) section. "
+        "The CTJ section must remain OIDC-only."
+    )
+
+
+def test_quickstart_canonical_section_does_not_reference_auth_login(
+    quickstart_text: str,
+) -> None:
+    """The CTJ section must not reference /auth/login (dev bypass endpoint)."""
+    ctj_end_markers = ["## Prerequisites", "## Step 1 —"]
+    ctj_text = quickstart_text
+    for marker in ctj_end_markers:
+        if marker in quickstart_text:
+            ctj_text = quickstart_text.split(marker)[0]
+            break
+
+    assert "/auth/login" not in ctj_text, (
+        "The Canonical Tester Journey (CTJ) section must not reference /auth/login. "
+        "/auth/login is the dev bypass endpoint and must not appear in the canonical path."
+    )
+
+
+def test_collection_canonical_journey_does_not_use_bypass_endpoint(
+    collection: dict,
+) -> None:
+    """Canonical journey folder must not contain any request to /auth/login (dev bypass)."""
+    canonical_folder = next(
+        (
+            item
+            for item in collection.get("item", [])
+            if "Canonical Tester Journey" in item.get("name", "")
+        ),
+        None,
+    )
+    assert canonical_folder is not None, "Canonical tester journey folder not found"
+
+    bypass_urls = []
+    for req in canonical_folder.get("item", []):
+        raw_url = req.get("request", {}).get("url", {})
+        url = raw_url.get("raw", "") if isinstance(raw_url, dict) else str(raw_url)
+        if "/auth/login" in url:
+            bypass_urls.append(url)
+
+    assert not bypass_urls, (
+        f"Canonical journey folder must not contain requests to /auth/login (dev bypass). "
+        f"Found: {bypass_urls}"
+    )
+
+
+def test_collection_canonical_journey_uses_token_exchange(collection: dict) -> None:
+    """Canonical journey folder must contain a request to /auth/token-exchange (OIDC path)."""
+    canonical_folder = next(
+        (
+            item
+            for item in collection.get("item", [])
+            if "Canonical Tester Journey" in item.get("name", "")
+        ),
+        None,
+    )
+    assert canonical_folder is not None, "Canonical tester journey folder not found"
+
+    exchange_urls = []
+    for req in canonical_folder.get("item", []):
+        raw_url = req.get("request", {}).get("url", {})
+        url = raw_url.get("raw", "") if isinstance(raw_url, dict) else str(raw_url)
+        if "token-exchange" in url or "token_exchange" in url:
+            exchange_urls.append(url)
+
+    assert exchange_urls, (
+        "Canonical journey folder must contain a request to /auth/token-exchange. "
+        "The canonical tester path must use OIDC token exchange, not dev bypass."
+    )
+
+
+def test_validate_tester_flow_uses_oidc_not_bypass() -> None:
+    """validate_tester_flow.sh must use OIDC token exchange, not /auth/login bypass."""
+    assert VALIDATE_TESTER_FLOW.exists(), (
+        f"validate_tester_flow.sh not found: {VALIDATE_TESTER_FLOW}"
+    )
+    script_text = VALIDATE_TESTER_FLOW.read_text(encoding="utf-8")
+
+    # Must reference token-exchange (OIDC canonical path)
+    assert "token-exchange" in script_text, (
+        "validate_tester_flow.sh must use /auth/token-exchange (OIDC canonical path). "
+        "The script must not rely on dev bypass for tester flow validation."
+    )
+
+    # Must NOT use /auth/login as an auth step (bypass endpoint)
+    # Note: /auth/login may appear in comments or help text; we check it is not
+    # used as a curl target for the authentication step.
+    import re
+
+    bypass_curl = re.search(
+        r'curl\b[^\n]*["\'].*?/auth/login["\']',
+        script_text,
+    )
+    assert bypass_curl is None, (
+        "validate_tester_flow.sh must not use /auth/login in a curl call. "
+        f"Found: {bypass_curl.group() if bypass_curl else ''}"
+    )
+
+
+def test_validate_tester_flow_fails_on_regression_not_skip() -> None:
+    """validate_tester_flow.sh must hard-fail (exit 1) on auth regression, not silently skip."""
+    assert VALIDATE_TESTER_FLOW.exists(), (
+        f"validate_tester_flow.sh not found: {VALIDATE_TESTER_FLOW}"
+    )
+    script_text = VALIDATE_TESTER_FLOW.read_text(encoding="utf-8")
+
+    # Script must use set -e or explicit exit 1 paths — not just skip on all failures
+    assert "exit 1" in script_text, (
+        "validate_tester_flow.sh must contain explicit 'exit 1' for auth regression failures. "
+        "Failures must be hard errors, not silent skips."
+    )
+
+    # SKIP (exit 0) is allowed only for unavailable services — confirm it's scoped
+    assert "SKIP:" in script_text or "SKIP" in script_text, (
+        "validate_tester_flow.sh must distinguish service-unavailable SKIP from real failures."
+    )

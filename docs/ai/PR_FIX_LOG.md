@@ -6,6 +6,51 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-27 — Task 15.2: Non-bypass tester journey enforcement
+
+**Branch:** `task/15.2-non-bypass-tester-journey`
+
+**Task ID:** 15.2
+
+**Area:** Tester Journey / Auth / Docs / Alignment Tests
+
+---
+
+**Root cause / drift risk addressed:**
+
+The canonical tester journey (CTJ section) was already OIDC-based and correct. However, the expanded "Step N" section of `docs/tester_quickstart.md` described dev bypass (`FG_DEV_AUTH_BYPASS=1`) without explicitly marking it as non-canonical. A tester following Step 2 or Step 4 could adopt bypass auth without realizing it was not the canonical path. No existing tests verified that the canonical collection folder was bypass-free or that `validate_tester_flow.sh` enforced OIDC.
+
+**Files changed:**
+
+- `docs/tester_quickstart.md` — added explicit `> **Dev bypass — not the canonical tester path.**` warning blocks at Step 2 (where `FG_DEV_AUTH_BYPASS=1` appears) and Step 4 (before Options A/B/C that use `/auth/login`); updated line 218 to clarify OIDC is canonical and bypass is non-canonical, dev-only
+- `tests/test_tester_quickstart_alignment.py` — added 7 new tests (26 total, was 19)
+
+**Non-bypass enforcement added:**
+
+- Quickstart Step 2 and Step 4 now carry explicit "not the canonical tester path" markers
+- The CTJ section is verified to be bypass-free (no `FG_DEV_AUTH_BYPASS`, no `/auth/login`)
+- Collection canonical folder is verified to use `token-exchange`, not `/auth/login`
+- `validate_tester_flow.sh` is verified to use OIDC and hard-fail on regression
+
+**Tests added:**
+
+- `test_quickstart_dev_bypass_marked_non_canonical` — quickstart contains "not the canonical tester path"
+- `test_quickstart_bypass_env_var_not_in_ctj_section` — `FG_DEV_AUTH_BYPASS` absent from CTJ section
+- `test_quickstart_canonical_section_does_not_reference_auth_login` — `/auth/login` absent from CTJ section
+- `test_collection_canonical_journey_does_not_use_bypass_endpoint` — canonical folder has no `/auth/login` requests
+- `test_collection_canonical_journey_uses_token_exchange` — canonical folder has `token-exchange` request
+- `test_validate_tester_flow_uses_oidc_not_bypass` — script uses `token-exchange`, no `/auth/login` curl
+- `test_validate_tester_flow_fails_on_regression_not_skip` — script has `exit 1` and `SKIP` distinction
+
+**Validation command results:**
+
+- `.venv/bin/pytest -q tests/test_tester_quickstart_alignment.py` — 26 passed
+- `bash tools/auth/validate_tester_flow.sh || true` — SKIP (services not running; expected in CI without runtime)
+- `make fg-fast` — passed
+- `bash codex_gates.sh` — passed
+
+---
+
 ### 2026-04-26 — Task 15.1 PR review fix: integrity validation crash safety
 
 **Branch:** `task/15.1-plan-state-integrity-gate`

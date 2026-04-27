@@ -215,11 +215,13 @@ If `"status": "already_seeded"` appears, the environment was already bootstrappe
 | SQLite database | `state/frostgate.db` |
 | Tenant registry | `state/tenants.json` |
 
-> The admin/agent API keys are for direct core API access. The admin gateway uses session-cookie auth (OIDC or dev bypass). The keys are not used in this tester flow.
+> The admin/agent API keys are for direct core API access. The admin gateway uses session-cookie auth via OIDC (canonical) or dev bypass (non-canonical, dev-only). The keys are not used in this tester flow.
 
 ---
 
 ## Step 2 — Start the Admin Gateway
+
+> **Dev bypass — not the canonical tester path.** The environment below uses `FG_DEV_AUTH_BYPASS=1`, which skips OIDC and issues a session automatically. This is a local development shortcut, not the canonical tester journey. For the canonical OIDC-based path, use the CTJ section above or the `0 — Canonical Tester Journey` collection folder.
 
 ### Environment variables (dev mode)
 
@@ -276,6 +278,8 @@ uvicorn api.main:app --host 0.0.0.0 --port 8000
 ---
 
 ## Step 4 — Authenticate via Admin Gateway
+
+> **Dev bypass — not the canonical tester path.** Options A, B, and C below use `FG_DEV_AUTH_BYPASS=1` (dev-only shortcut). This is not the canonical tester path. The canonical tester path requires OIDC token exchange (see CTJ-4 above). Dev bypass is forbidden in production (`FG_ENV=prod`).
 
 The admin gateway uses session-cookie authentication. In dev mode (dev bypass), a session cookie is issued automatically at login with no OIDC setup required.
 
