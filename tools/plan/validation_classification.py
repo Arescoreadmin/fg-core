@@ -144,6 +144,90 @@ def resolve_task_status(command_statuses: list[str]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Deterministic inference rules
+# ---------------------------------------------------------------------------
+
+# Commands that are always structural (offline, no live services needed).
+# Matched against the stripped command prefix (first token + common flags).
+_STRUCTURAL_PREFIXES: tuple[str, ...] = (
+    "pytest",
+    ".venv/bin/pytest",
+    "python -m pytest",
+    "make ",
+    "python tools/",
+    "python -m ",
+    "ruff ",
+    "mypy ",
+    "bash codex_gates.sh",
+    "bash tools/ci/",
+    "bash tools/plan/",
+)
+
+# Commands that are always runtime_proof (require live external services).
+_RUNTIME_PROOF_PREFIXES: tuple[str, ...] = (
+    "bash tools/auth/",
+    "sh tools/auth/",
+    "curl ",
+)
+
+
+def infer_classification_from_command(cmd: str) -> str:
+    """
+    Infer a deterministic classification for a command when no explicit annotation exists.
+
+    Precedence:
+      1. Matches a known structural prefix → structural.
+      2. Matches a known runtime_proof prefix → runtime_proof.
+      3. Is a bare shell-script invocation (bash/sh *.sh) → runtime_proof (conservative:
+         unknown scripts may need live services; explicit annotation overrides this).
+      4. Everything else → structural.
+
+    This is a fallback.  Explicit YAML annotation (validation_class or
+    validation_command_classes) always takes precedence.
+    """
+    stripped = cmd.strip()
+    for prefix in _STRUCTURAL_PREFIXES:
+        if stripped.startswith(prefix):
+            return STRUCTURAL
+    for prefix in _RUNTIME_PROOF_PREFIXES:
+        if stripped.startswith(prefix):
+            return RUNTIME_PROOF
+    # Conservative: bare shell scripts that don't match known structural patterns
+    # are treated as runtime_proof so SKIP signals are always detected.
+    for shell in ("bash ", "sh "):
+        if stripped.startswith(shell) and ".sh" in stripped:
+            return RUNTIME_PROOF
+    return STRUCTURAL
+
+
+def get_command_classification(
+    cmd: str,
+    task_class: str | None,
+    cmd_classes: list[str] | None,
+    idx: int,
+) -> str:
+    """
+    Resolve the effective classification for one command.
+
+    Precedence (highest to lowest):
+      1. Per-command explicit annotation: cmd_classes[idx] if present and valid.
+      2. Per-task explicit annotation: task_class if not None.
+      3. Deterministic inference: infer_classification_from_command(cmd).
+
+    This three-level resolution means a single YAML field is sufficient for
+    homogeneous tasks, per-command overrides handle mixed tasks, and inference
+    provides a safe fallback for unannotated commands.
+    """
+    if cmd_classes is not None and idx < len(cmd_classes):
+        candidate = str(cmd_classes[idx]).strip()
+        if candidate in CLASSIFICATIONS:
+            return candidate
+    if task_class is not None and task_class in CLASSIFICATIONS:
+        return task_class
+    return infer_classification_from_command(cmd)
+
+
+# ---------------------------------------------------------------------------
 # Artifact field helpers
 # ---------------------------------------------------------------------------
 

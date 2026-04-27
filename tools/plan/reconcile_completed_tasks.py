@@ -48,6 +48,7 @@ from validation_classification import (  # noqa: E402
     STATUS_SKIP,
     STATUS_BLOCKED,
     annotate_command_result,
+    get_command_classification,
     resolve_task_status,
 )
 
@@ -220,9 +221,18 @@ def reconcile_task(
     """
     title = task.get("title", "")
     cmds = [str(c) for c in (task.get("validation_commands") or [])]
-    # Per-task classification hint — tasks may declare validation_class: runtime_proof.
-    # Default is structural (offline checks).
-    task_classification = str(task.get("validation_class", STRUCTURAL))
+    # Per-task classification — tasks may declare validation_class: runtime_proof.
+    # None means "not explicitly set" — falls through to inference.
+    raw_task_class = task.get("validation_class")
+    task_classification: str | None = (
+        str(raw_task_class) if raw_task_class is not None else None
+    )
+    # Per-command classification overrides — parallel list to validation_commands.
+    # If absent, per-task or inferred classification is used per command.
+    raw_cmd_classes = task.get("validation_command_classes")
+    cmd_classes: list[str] | None = (
+        [str(c) for c in raw_cmd_classes] if raw_cmd_classes else None
+    )
 
     if verbose:
         print(f"\n{'=' * 60}")
@@ -257,12 +267,16 @@ def reconcile_task(
 
     command_results: list[dict[str, Any]] = []
 
-    for cmd in cmds:
+    for idx, cmd in enumerate(cmds):
         if verbose:
             print(f"\n  >>> {cmd}")
         raw = _run_command(cmd)
-        # Annotate with classification and resolved status (detects SKIP signals).
-        result = annotate_command_result(raw, task_classification)
+        # Resolve classification: per-command YAML > per-task YAML > inferred.
+        cmd_class = get_command_classification(
+            cmd, task_classification, cmd_classes, idx
+        )
+        # Annotate with resolved classification + status (detects SKIP signals).
+        result = annotate_command_result(raw, cmd_class)
         command_results.append(result)
         if result["stdout"] and verbose:
             print(result["stdout"], end="")
@@ -288,11 +302,24 @@ def reconcile_task(
     status = resolve_task_status(cmd_statuses) if cmd_statuses else "no_commands"
     timestamp = _utc_stamp()
 
+    # Top-level classification: explicit task annotation if set, otherwise
+    # "mixed" when commands have different inferred classifications, else the
+    # single inferred classification.
+    cmd_classes_used = [
+        str(r.get("classification", STRUCTURAL)) for r in command_results
+    ]
+    if task_classification is not None:
+        artifact_classification: str = task_classification
+    elif len(set(cmd_classes_used)) == 1:
+        artifact_classification = cmd_classes_used[0]
+    else:
+        artifact_classification = "mixed"
+
     artifact_payload: dict[str, Any] = {
         "task_id": task_id,
         "title": title,
         "status": status,
-        "classification": task_classification,
+        "classification": artifact_classification,
         "timestamp": timestamp,
         "validation_commands": cmds,
         "command_results": command_results,

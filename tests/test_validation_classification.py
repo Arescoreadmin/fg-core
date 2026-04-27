@@ -19,6 +19,16 @@ Proves:
 15) reconcile_task records skip when SKIP signal emitted (not pass)
 16) reconcile_task artifact contains classification field
 17) reconcile_task skip does not update state
+18) validation classification inference: pytest → structural
+19) validation classification inference: bash tools/auth/*.sh → runtime_proof
+20) validation classification inference: bash codex_gates.sh → structural
+21) validation classification inference: unknown shell script → runtime_proof (conservative)
+22) validation classification inference: make → structural
+23) get_command_classification: per-command YAML overrides per-task
+24) get_command_classification: per-task overrides inference
+25) get_command_classification: invalid per-command class falls through to task-level
+26) reconcile_task uses inferred runtime_proof for bash tools/auth script (SKIP detected)
+27) reconcile_task per-command classification in YAML takes highest precedence
 """
 
 from __future__ import annotations
@@ -43,6 +53,8 @@ from validation_classification import (  # noqa: E402
     STATUS_SKIP,
     annotate_command_result,
     detect_skip_signal,
+    get_command_classification,
+    infer_classification_from_command,
     is_runtime_proof_satisfied,
     resolve_command_status,
     resolve_task_status,
@@ -419,3 +431,196 @@ def test_reconcile_task_skip_does_not_update_state() -> None:
     assert "task_id" in state["validations"]
     assert len(state["validations"]) == 1
     assert state["validations"]["task_id"]["status"] == STATUS_PASS
+
+
+# ---------------------------------------------------------------------------
+# 18-22) Deterministic inference rules
+# ---------------------------------------------------------------------------
+
+
+def test_validation_classification_inference_pytest_is_structural() -> None:
+    """pytest commands must always infer as structural."""
+    assert infer_classification_from_command(".venv/bin/pytest -q tests/") == STRUCTURAL
+    assert infer_classification_from_command("pytest tests/foo.py") == STRUCTURAL
+    assert infer_classification_from_command("python -m pytest tests/") == STRUCTURAL
+
+
+def test_validation_classification_inference_bash_auth_is_runtime_proof() -> None:
+    """bash tools/auth/*.sh must always infer as runtime_proof."""
+    assert (
+        infer_classification_from_command("bash tools/auth/validate_tester_flow.sh")
+        == RUNTIME_PROOF
+    )
+    assert (
+        infer_classification_from_command("sh tools/auth/validate_keycloak_runtime.sh")
+        == RUNTIME_PROOF
+    )
+
+
+def test_validation_classification_inference_codex_gates_is_structural() -> None:
+    """bash codex_gates.sh must infer as structural (it's the CI gate, not a live proof)."""
+    assert infer_classification_from_command("bash codex_gates.sh") == STRUCTURAL
+
+
+def test_validation_classification_inference_unknown_shell_script_is_runtime_proof() -> (
+    None
+):
+    """Unknown bash *.sh commands infer runtime_proof (conservative fallback)."""
+    assert (
+        infer_classification_from_command("bash some_unknown_check.sh --arg")
+        == RUNTIME_PROOF
+    )
+    assert infer_classification_from_command("sh deploy_check.sh") == RUNTIME_PROOF
+
+
+def test_validation_classification_inference_make_is_structural() -> None:
+    """make commands infer as structural."""
+    assert infer_classification_from_command("make fg-fast") == STRUCTURAL
+    assert infer_classification_from_command("make test") == STRUCTURAL
+
+
+# ---------------------------------------------------------------------------
+# 23-25) get_command_classification resolution precedence
+# ---------------------------------------------------------------------------
+
+
+def test_validation_classification_per_command_overrides_per_task() -> None:
+    """Per-command YAML annotation takes highest precedence over task-level."""
+    # per-command says runtime_proof, task-level says structural
+    result = get_command_classification(
+        "pytest tests/",
+        task_class=STRUCTURAL,
+        cmd_classes=[RUNTIME_PROOF],
+        idx=0,
+    )
+    assert result == RUNTIME_PROOF
+
+
+def test_validation_classification_per_task_overrides_inference() -> None:
+    """Per-task annotation overrides inference when no per-command is set."""
+    # inference would say runtime_proof for bash *.sh, but task says structural
+    result = get_command_classification(
+        "bash some_script.sh",
+        task_class=STRUCTURAL,
+        cmd_classes=None,
+        idx=0,
+    )
+    assert result == STRUCTURAL
+
+
+def test_validation_classification_invalid_per_command_falls_through() -> None:
+    """Invalid per-command class is ignored; falls through to task-level."""
+    result = get_command_classification(
+        "pytest tests/",
+        task_class=RUNTIME_PROOF,
+        cmd_classes=["not_a_valid_class"],
+        idx=0,
+    )
+    assert result == RUNTIME_PROOF  # fell through to task-level
+
+
+# ---------------------------------------------------------------------------
+# 26) Inference: bash tools/auth script → SKIP detected without explicit annotation
+# ---------------------------------------------------------------------------
+
+
+def test_reconcile_task_infers_runtime_proof_for_auth_script(
+    tmp_path: Path,
+) -> None:
+    """reconcile_task must infer runtime_proof for bash tools/auth/*.sh
+    even without validation_class in YAML, and detect the SKIP signal."""
+    script = tmp_path / "validate_tester_flow.sh"
+    script.write_text(
+        "#!/usr/bin/env bash\n"
+        "echo 'SKIP: Keycloak not reachable at http://localhost:8081'\n"
+        "exit 0\n"
+    )
+    script.chmod(0o755)
+
+    # No validation_class set — relies on inference
+    task: dict[str, Any] = {
+        "id": "1.1",
+        "title": "Test task",
+        "status": "pending",
+        "depends_on": [],
+        "definition_of_done": [],
+        "validation": [],
+        # Command path matches bash tools/auth/ pattern → inferred runtime_proof
+        "validation_commands": [f"bash tools/auth/{script.name}"],
+    }
+    artifacts_dir = tmp_path / "artifacts" / "plan"
+    artifacts_dir.mkdir(parents=True)
+
+    orig_root = rct.ROOT
+    orig_artifacts = rct.ARTIFACTS_DIR
+    rct.ROOT = tmp_path
+    rct.ARTIFACTS_DIR = artifacts_dir
+    # Create the expected path so bash can find the script
+    auth_dir = tmp_path / "tools" / "auth"
+    auth_dir.mkdir(parents=True)
+    (auth_dir / script.name).write_text(script.read_text())
+    (auth_dir / script.name).chmod(0o755)
+    try:
+        result = reconcile_task(
+            "1.1",
+            task,
+            dry_run=False,
+            git_commit="abc1234",
+            dirty=False,
+            verbose=False,
+        )
+    finally:
+        rct.ROOT = orig_root
+        rct.ARTIFACTS_DIR = orig_artifacts
+
+    assert result["status"] == STATUS_SKIP, (
+        f"Expected skip (inferred runtime_proof), got {result['status']!r}. "
+        "Inference must classify bash tools/auth/*.sh as runtime_proof."
+    )
+
+
+# ---------------------------------------------------------------------------
+# 27) Per-command classification from YAML takes highest precedence
+# ---------------------------------------------------------------------------
+
+
+def test_reconcile_task_per_command_classification_yaml(
+    tmp_path: Path,
+) -> None:
+    """validation_command_classes in YAML overrides inference for that command."""
+    task: dict[str, Any] = {
+        "id": "1.1",
+        "title": "Test task",
+        "status": "pending",
+        "depends_on": [],
+        "definition_of_done": [],
+        "validation": [],
+        # pytest would infer structural, but per-command forces runtime_proof
+        "validation_commands": [_PASS_CMD],
+        "validation_command_classes": [RUNTIME_PROOF],
+    }
+    artifacts_dir = tmp_path / "artifacts" / "plan"
+    artifacts_dir.mkdir(parents=True)
+
+    orig_root = rct.ROOT
+    orig_artifacts = rct.ARTIFACTS_DIR
+    rct.ROOT = tmp_path
+    rct.ARTIFACTS_DIR = artifacts_dir
+    try:
+        reconcile_task(
+            "1.1",
+            task,
+            dry_run=False,
+            git_commit="abc1234",
+            dirty=False,
+            verbose=False,
+        )
+    finally:
+        rct.ROOT = orig_root
+        rct.ARTIFACTS_DIR = orig_artifacts
+
+    payload = json.loads((artifacts_dir / "1.1_validate_latest.json").read_text())
+    cmd_result = payload["command_results"][0]
+    assert cmd_result["classification"] == RUNTIME_PROOF, (
+        "per-command classification in YAML must override inference"
+    )

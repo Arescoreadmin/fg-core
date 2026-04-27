@@ -6,6 +6,62 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-27 — Task 15.3 follow-up: explicit classification + inference rules
+
+**Branch:** `task/15.3-runtime-verification-classification`
+
+**Area:** Plan tooling / Validation classification
+
+---
+
+**Problems addressed:**
+
+1. **Classification was implicit** — SKIP detection only fired for `runtime_proof` tasks, but no tasks in the plan had `validation_class` set. `validate_tester_flow.sh` defaulted to `structural` → SKIP signal ignored → recorded as `pass`. One regex change or message format drift would silently break detection.
+
+2. **Artifact shape audit** — Confirmed: `taskctl.py` never reads artifact content (existence-only). The one artifact read in `reconcile_completed_tasks.py` uses `.get("timestamp", ts)` with fallback. New fields are additive and safe.
+
+**Fixes:**
+
+1. Added `infer_classification_from_command(cmd)` — deterministic pattern rules:
+   - Known structural: `pytest`, `make`, `python tools/`, `ruff`, `mypy`, `bash codex_gates.sh`, `bash tools/ci/`, `bash tools/plan/`
+   - Known runtime proof: `bash tools/auth/`, `sh tools/auth/`, `curl`
+   - Unknown `bash *.sh` → `runtime_proof` (conservative: unknown scripts may need services)
+   - Default → `structural`
+
+2. Added `get_command_classification(cmd, task_class, cmd_classes, idx)` — three-level resolution:
+   - Highest: per-command `validation_command_classes` list in task YAML
+   - Middle: per-task `validation_class` in task YAML
+   - Fallback: `infer_classification_from_command(cmd)` (deterministic, documented)
+
+3. Updated `reconcile_completed_tasks.py` to read `validation_command_classes` parallel list and call `get_command_classification` per command.
+
+**Files changed:**
+
+- `tools/plan/validation_classification.py` — added `infer_classification_from_command()`, `get_command_classification()`, `_STRUCTURAL_PREFIXES`, `_RUNTIME_PROOF_PREFIXES`
+- `tools/plan/reconcile_completed_tasks.py` — updated `reconcile_task` to use `get_command_classification` per command
+- `tests/test_validation_classification.py` — added 10 tests (38 total)
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Tests added (10 new):**
+
+- `test_validation_classification_inference_pytest_is_structural`
+- `test_validation_classification_inference_bash_auth_is_runtime_proof`
+- `test_validation_classification_inference_codex_gates_is_structural`
+- `test_validation_classification_inference_unknown_shell_script_is_runtime_proof`
+- `test_validation_classification_inference_make_is_structural`
+- `test_validation_classification_per_command_overrides_per_task`
+- `test_validation_classification_per_task_overrides_inference`
+- `test_validation_classification_invalid_per_command_falls_through`
+- `test_reconcile_task_infers_runtime_proof_for_auth_script`
+- `test_reconcile_task_per_command_classification_yaml`
+
+**Validation results:**
+
+- `.venv/bin/pytest -q tests -k 'runtime_proof or validation_classification or skip'` → 48 passed, 13 skipped
+- `make fg-fast` → running
+
+---
+
 ### 2026-04-27 — Task 15.3: Runtime verification classification
 
 **Branch:** `task/15.3-runtime-verification-classification`
