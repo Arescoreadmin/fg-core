@@ -53,14 +53,30 @@ _nats_enabled = (os.getenv("FG_NATS_ENABLED") or "").strip().lower() in (
     "yes",
 )
 _nats_url = (os.getenv("FG_NATS_URL") or "").strip()
-if _nats_enabled and not _nats_url:
-    if _fg_env_ingest in ("dev", "development", "local", "test"):
-        _nats_url = "nats://localhost:4222"
-    else:
+
+_DEV_ENVS: frozenset[str] = frozenset({"dev", "development", "local", "test"})
+
+
+def _resolve_nats_url(enabled: bool, url: str, env: str) -> str:
+    """
+    Resolve the effective NATS URL, applying dev fallback or fail-closed enforcement.
+
+    If NATS is enabled and no URL is set:
+      - Dev/local/test: returns nats://localhost:4222 as an explicit fallback.
+      - All other environments: raises RuntimeError (fail-closed).
+
+    Extracted for unit-testability without module reimport.
+    """
+    if enabled and not url:
+        if env in _DEV_ENVS:
+            return "nats://localhost:4222"
         raise RuntimeError(
             "FG_NATS_URL must be set when FG_NATS_ENABLED=1 in non-dev environments."
         )
-NATS_URL = _nats_url
+    return url
+
+
+NATS_URL = _resolve_nats_url(_nats_enabled, _nats_url, _fg_env_ingest)
 NATS_SUBJECT_PREFIX = os.getenv("FG_NATS_SUBJECT_PREFIX", "frostgate.ingest")
 NATS_QUEUE_GROUP = os.getenv("FG_NATS_QUEUE_GROUP", "frostgate-workers")
 
