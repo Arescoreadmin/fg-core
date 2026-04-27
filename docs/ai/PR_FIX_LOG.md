@@ -5424,3 +5424,51 @@ Canonical tester flow: ALL ASSERTIONS PASSED
 - `.venv/bin/pytest -q tests/test_dependency_fail_closed.py` → 26 passed
 - `.venv/bin/pytest -q tests -k 'startup or dependency or localhost or fail_closed'` → 82 passed
 - `make fg-fast` → All checks passed
+
+---
+
+### 2026-04-27 — Task 17.1: Agent collector framework
+
+**Branch:** `task/17.1-agent-collector-framework`
+
+**Area:** Agent / Collector framework
+
+---
+
+**Changes made:**
+
+1. **`agent/app/collector/__init__.py`** (new) — Package public surface: exports `Collector`, `CollectorEvent`, `CollectorRegistry`, `CollectorScheduler`, `SchedulerResult`, `COLLECTOR_EVENT_SCHEMA_VERSION`.
+
+2. **`agent/app/collector/base.py`** (new) — `CollectorEvent` frozen dataclass (schema-versioned, tenant-safe); `Collector` ABC requiring `name`, `cadence_seconds`, `collect(tenant_id, agent_id)`. `validate()` enforces all required non-empty string fields and dict payload type. Cross-tenant leakage is structurally impossible: tenant_id and agent_id are explicit call-time arguments, never inferred from global state.
+
+3. **`agent/app/collector/registry.py`** (new) — `CollectorRegistry` with duplicate name rejection (ValueError) and unknown reference rejection (KeyError). Insertion-ordered. Not thread-safe (documented).
+
+4. **`agent/app/collector/scheduler.py`** (new) — `CollectorScheduler` with injected clock (ClockFn). Deterministic: clock is never read from wall time in tests. `tick()` returns one `SchedulerResult` per registered collector. Failed collectors advance `_last_run` to prevent spin. Event validation runs before SchedulerResult.events is populated — malformed events produce outcome='failed', not silent acceptance.
+
+5. **`tests/agent/test_collector_framework.py`** (new, 41 tests) — Offline deterministic tests covering: event schema validation, ABC enforcement, registry duplicate/unknown rejection, scheduler cadence gating, failure isolation, event propagation, tenant-safety structural proof.
+
+6. **`plans/30_day_repo_blitz.yaml`** — Fixed pytest -k expression: `'agent and collector framework'` → `'agent and collector and framework'` (invalid pytest expression syntax). Additional related expressions in 17.3–17.5 also corrected by plan guard.
+
+**Tenant-safety guarantees:**
+- `tenant_id` and `agent_id` are required non-empty fields on every `CollectorEvent`.
+- `validate()` rejects events with empty/whitespace-only `tenant_id` before they enter `SchedulerResult`.
+- `collect()` receives `tenant_id` and `agent_id` explicitly; no global mutable state inference.
+- Two `tick()` calls with different `tenant_id` values produce fully distinct event sets.
+
+**Scheduler behavior:**
+- outcome="ran": collector executed, all events validated and accepted.
+- outcome="skipped": cadence not yet elapsed; collector not run.
+- outcome="failed": exception from collect() or ValueError from validate(); error field contains detail; _last_run advanced to prevent spin.
+- Unrelated collectors always run regardless of one collector's failure.
+- No events silently dropped; all outcomes reported.
+
+**Local review issues found and fixed:**
+- Missing test for `registry.register()` with empty-name collector. Added `test_agent_collector_framework_registry_empty_name_raises`.
+- mypy flagged intentional "instantiate abstract class" test lines. Added `# type: ignore[abstract]` comments (3 lines).
+- ruff F401: unused `field` import in `base.py`. Removed.
+- ruff F401: `SchedulerResult` import unused. Resolved by adding explicit `isinstance` type-guard test.
+- Formatting: ruff reformatted `base.py`, `scheduler.py`, and the test file.
+
+**Validation results:**
+- `.venv/bin/pytest -q tests -k 'agent and collector and framework'` → 41 passed
+- `make fg-fast` → All checks passed

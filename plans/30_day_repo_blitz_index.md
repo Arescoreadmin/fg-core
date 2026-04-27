@@ -90,24 +90,8 @@ This is viable for controlled beta. It is **not** HIPAA-ready or bank-ready.
 
 ## Phase 5 — First Product Surface and RAG
 
-### 17.0 Local Agent MVP
-- 17.1 Agent collector framework
-- 17.2 First real collector (single telemetry class)
-- 17.3 Agent evidence ingestion path
-- 17.4 Agent lifecycle controls
-- 17.5 Agent observability
-
-### 18.0 Server-side Agent / Control Execution
-- 18.1 Server-side job/worker identity
-- 18.2 Server-side control execution path
-- 18.3 Operator-triggered run path
-- 18.4 Audit trail for server-side agent actions
-
-### 19.0 Evidence and Operator Reporting
-- 19.1 Operator activity timeline
-- 19.2 Evidence export bundle
-- 19.3 Usage evidence summary
-- 19.4 Admin/operator evidence quickstart
+### 11.0 Error Quality
+- 11.1 Explicit actionable errors in primary flows
 
 ### 16.0 RAG (usable-first, hardening-later)
 - 16.0 Real retrieval substrate
@@ -122,16 +106,41 @@ This is viable for controlled beta. It is **not** HIPAA-ready or bank-ready.
 - 16.9 Retrieval latency and cost guardrails
 - 16.10 Operator/debug answer provenance
 
-### 11.0 Error Quality
-- 11.1 Explicit actionable errors in primary flows
+### 17.0 Local Agent MVP
+- 17.1 Agent collector framework
+- 17.2 First real collector
+- 17.3 Agent evidence ingestion path
+- 17.4 Agent lifecycle controls
+- 17.5 Agent observability
+- 17.6 Windows service + installer contract
+
+### 18.0 Agent Packaging / Enterprise Deployment
+- 18.1 Windows service wrapper
+- 18.2 MSI installer contract
+- 18.3 Silent enrollment install flow
+- 18.4 Local credential storage hardening
+- 18.5 Upgrade and uninstall hardening
+- 18.6 Release artifact signing and deployment guide
+
+### 19.0 Server-side Agent / Control Execution
+- 19.1 Server-side job/worker identity
+- 19.2 Server-side control execution path
+- 19.3 Operator-triggered run path
+- 19.4 Audit trail for server-side agent actions
+
+### 20.0 Evidence and Operator Reporting
+- 20.1 Operator activity timeline
+- 20.2 Evidence export bundle
+- 20.3 Usage evidence summary
+- 20.4 Admin/operator evidence quickstart
 
 ---
 
 ## Phase 6 — Regulated Readiness Controls
 
-### 20.0 Regulated Readiness Controls
-- 20.1 Control mapping
-- 20.2 Sensitive data handling
-- 20.3 Retention and audit evidence policy surfaces
-- 20.4 Encryption and key management gaps
-- 20.5 Deployment/compliance prerequisites
+### 21.0 Regulated Readiness Controls
+- 21.1 Control mapping
+- 21.2 Sensitive data handling
+- 21.3 Retention and audit evidence policy surfaces
+- 21.4 Encryption and key management gaps
+- 21.5 Deployment/compliance prerequisites
