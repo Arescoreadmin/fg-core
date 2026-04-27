@@ -458,7 +458,7 @@ phases:
       - python tools/plan/taskctl.py status
       - .venv/bin/pytest -q tests -k 'plan or taskctl or state'
       - python tools/plan/taskctl.py status --explain
-      - .venv/bin/pytest -q tests -k 'plan artifact existence or deterministic current task'
+      - .venv/bin/pytest -q tests -k 'plan_artifact_existence or deterministic_current_task'
       - make fg-fast
     - id: '15.2'
       title: Non-bypass tester journey enforcement

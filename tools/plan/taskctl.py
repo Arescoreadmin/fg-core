@@ -370,7 +370,144 @@ def next_incomplete_task(plan: dict[str, Any], state: dict[str, Any]) -> str | N
     return None
 
 
-def cmd_status(plan: dict[str, Any], state: dict[str, Any]) -> int:
+# ---------------------------------------------------------------------------
+# Plan and state integrity validation
+# ---------------------------------------------------------------------------
+
+
+def validate_plan_integrity(plan: dict[str, Any]) -> list[str]:
+    """Validate plan YAML structure. Returns list of error strings (empty = valid).
+
+    Checks:
+    - Unique task IDs across all phases/modules
+    - All dependency references resolve to known task IDs
+    - Dependency graph is acyclic
+    - Required fields present on every task (id, title)
+    """
+    errors: list[str] = []
+    refs = flatten_tasks(plan)
+    known: dict[str, TaskRef] = {}
+
+    for ref in refs:
+        if ref.task_id in known:
+            errors.append(f"Duplicate task id in plan: {ref.task_id!r}")
+        else:
+            known[ref.task_id] = ref
+
+    for ref in refs:
+        for dep in ref.task.get("depends_on", []):
+            if str(dep) not in known:
+                errors.append(
+                    f"Task {ref.task_id!r} depends_on unknown task {dep!r}"
+                )
+        if not ref.task.get("title"):
+            errors.append(f"Task {ref.task_id!r} is missing required field 'title'")
+        if not isinstance(ref.task.get("validation_commands", []), list):
+            errors.append(
+                f"Task {ref.task_id!r} 'validation_commands' is not a list"
+            )
+
+    # Acyclic check via DFS
+    adj: dict[str, list[str]] = {
+        ref.task_id: [str(d) for d in ref.task.get("depends_on", [])]
+        for ref in refs
+    }
+    visited: set[str] = set()
+    in_stack: set[str] = set()
+    cycle_reported: set[str] = set()
+
+    def _dfs(node: str) -> bool:
+        if node in in_stack:
+            if node not in cycle_reported:
+                errors.append(f"Cycle detected in dependency graph involving task {node!r}")
+                cycle_reported.add(node)
+            return True
+        if node in visited:
+            return False
+        in_stack.add(node)
+        visited.add(node)
+        for dep in adj.get(node, []):
+            if dep in adj:
+                _dfs(dep)
+        in_stack.discard(node)
+        return False
+
+    for task_id in list(known.keys()):
+        if task_id not in visited:
+            _dfs(task_id)
+
+    return errors
+
+
+def validate_state_integrity(plan: dict[str, Any], state: dict[str, Any]) -> list[str]:
+    """Validate state YAML consistency. Returns list of error strings (empty = valid).
+
+    Checks:
+    - current_task_id resolves to a known plan task
+    - All completed_tasks IDs resolve to known plan tasks
+    - Current task's dependencies are satisfied by completed_tasks
+    - Validation artifacts referenced in state exist on disk
+    """
+    errors: list[str] = []
+    idx = index_tasks(plan)
+
+    current_id = state.get("current_task_id")
+    if current_id is not None and str(current_id) not in idx:
+        errors.append(
+            f"state.current_task_id {current_id!r} does not resolve to a plan task"
+        )
+
+    done = completed_set(state)
+    for ct in state.get("completed_tasks", []):
+        if str(ct) not in idx:
+            errors.append(
+                f"state.completed_tasks contains unknown task {ct!r}"
+            )
+
+    if current_id and str(current_id) in idx:
+        ref = idx[str(current_id)]
+        missing_deps = [
+            dep
+            for dep in ref.task.get("depends_on", [])
+            if str(dep) not in done and str(dep) in idx
+        ]
+        if missing_deps:
+            errors.append(
+                f"Current task {current_id!r} has unmet dependencies: "
+                + ", ".join(repr(d) for d in missing_deps)
+            )
+
+    for task_id, v in state.get("validations", {}).items():
+        if not isinstance(v, dict):
+            continue
+        artifact = v.get("artifact")
+        if artifact:
+            artifact_path = ROOT / artifact
+            if not artifact_path.exists():
+                errors.append(
+                    f"Validation artifact missing for task {task_id!r}: {artifact}"
+                )
+
+    return errors
+
+
+def cmd_integrity(plan: dict[str, Any], state: dict[str, Any]) -> int:
+    """Run full plan + state integrity checks and report results."""
+    plan_errors = validate_plan_integrity(plan)
+    state_errors = validate_state_integrity(plan, state)
+    all_errors = plan_errors + state_errors
+
+    if all_errors:
+        print("INTEGRITY: FAIL")
+        for err in all_errors:
+            print(f"  - {err}", file=sys.stderr)
+        return 2
+
+    print("INTEGRITY: OK")
+    return 0
+
+
+def cmd_status(plan: dict[str, Any], state: dict[str, Any], explain: bool = False) -> int:
     ref = get_current_task(plan, state)
     print(f"PHASE: {ref.phase_id}")
     print(f"MODULE: {ref.module_id}")
@@ -407,6 +544,23 @@ def cmd_status(plan: dict[str, Any], state: dict[str, Any]) -> int:
 
     if ref.task.get("max_files_changed") is not None:
         print(f"\nMAX_FILES_CHANGED: {ref.task.get('max_files_changed')}")
+
+    if explain:
+        done = completed_set(state)
+        deps = ref.task.get("depends_on", [])
+        print("\nEXPLAIN:")
+        print(f"  selection: first task in plan order not in completed_tasks")
+        print(f"  task_id:   {ref.task_id}")
+        if deps:
+            print("  dependencies:")
+            for dep in deps:
+                status_str = "satisfied" if str(dep) in done else "UNSATISFIED"
+                print(f"    {dep}: {status_str}")
+        else:
+            print("  dependencies: none")
+        completed_count = len(done)
+        total_count = len(index_tasks(plan))
+        print(f"  progress:  {completed_count}/{total_count} tasks completed")
 
     return 0
 
@@ -497,7 +651,14 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="FrostGate task plan controller")
     sub = p.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("status", help="Show current phase/module/task")
+    p_status = sub.add_parser("status", help="Show current phase/module/task")
+    p_status.add_argument(
+        "--explain",
+        action="store_true",
+        default=False,
+        help="Show why the current task was selected (deps, progress)",
+    )
+
     sub.add_parser("validate", help="Run validation_commands for current task")
     sub.add_parser("complete", help="Mark current task complete and advance")
 
@@ -505,6 +666,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_block.add_argument("reason", help="Human-readable block reason")
 
     sub.add_parser("unblock", help="Clear blocked state")
+    sub.add_parser(
+        "integrity",
+        help="Validate plan + state integrity (unique IDs, dep graph, artifact existence)",
+    )
     return p
 
 
@@ -517,7 +682,7 @@ def main() -> int:
 
     match args.command:
         case "status":
-            return cmd_status(plan, state)
+            return cmd_status(plan, state, explain=getattr(args, "explain", False))
         case "validate":
             return cmd_validate(plan, state)
         case "complete":
@@ -526,6 +691,8 @@ def main() -> int:
             return cmd_block(plan, state, args.reason)
         case "unblock":
             return cmd_unblock(plan, state)
+        case "integrity":
+            return cmd_integrity(plan, state)
         case _:
             die(f"Unknown command: {args.command}")
             return 1

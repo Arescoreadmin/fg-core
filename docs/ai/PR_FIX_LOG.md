@@ -6,6 +6,36 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-26 — Task 15.1: Plan/State Integrity Gate
+
+**Branch:** `task/15.1-plan-state-integrity-gate`
+
+**Task ID:** 15.1
+
+**Area:** Plan Controller / Integrity Validation / Tooling
+
+---
+
+**Gap description:**
+
+`taskctl.py` had no integrity validation layer — plan YAML and state YAML could drift silently. Duplicate task IDs were partially guarded but cyclic dependencies, unresolved dep references, unknown `current_task_id`, and missing validation artifacts were not checked. The `status` command had no `--explain` mode to show why a task was selected.
+
+**Files changed:**
+
+- `tools/plan/taskctl.py` — added `validate_plan_integrity(plan)` (unique IDs, dep resolution, acyclic DFS, required fields); `validate_state_integrity(plan, state)` (current_task_id resolves, completed tasks resolve, dep satisfaction, artifact existence); `cmd_integrity(plan, state)` subcommand; `--explain` flag on `status` subcommand showing dep satisfaction and progress
+- `tests/test_plan_integrity.py` — new: 16 tests covering plan integrity, state integrity, artifact existence, and deterministic current-task selection
+- `plans/30_day_repo_blitz.yaml` — fixed invalid pytest `-k` expression in task 15.1 validation_commands (spaces → underscores for multi-word test name matching)
+
+**Architecture:**
+
+- `validate_plan_integrity` is pure (no I/O) — validates plan dict in memory; returns error list
+- `validate_state_integrity` checks artifact paths on disk via `ROOT / artifact`
+- Integrity checks are additive — all errors are collected before reporting (not fail-fast)
+- `cmd_integrity` exits 0 (OK) or 2 (FAIL); mirrors the pattern used by `cmd_validate`
+- `status --explain` shows: selection rule, dep list with satisfied/UNSATISFIED status, and overall progress count
+
+---
+
 ### 2026-04-26 — Task 14.2: Triage Workflow
 
 **Branch:** `task/14.2-triage-workflow`
