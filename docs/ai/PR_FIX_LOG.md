@@ -6,6 +6,173 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-27 — Task 15.3 PR review fix: blocked semantics + no-break-on-skip + precedence
+
+**Branch:** `task/15.3-runtime-verification-classification`
+
+**Area:** Plan tooling / Validation classification
+
+---
+
+**Review comments addressed:**
+
+1. **reconcile stopped on first skip** — `reconcile_completed_tasks.py` broke out of the command loop on `STATUS_SKIP`. A skipped runtime proof followed by a failing structural check would hide the failure. Fixed: skip/blocked no longer break the loop. Only `STATUS_FAIL` breaks (fail-fast). All commands execute; later fails are always recorded.
+
+2. **environment_blocked mapped to skip** — `resolve_command_status` mapped both `RUNTIME_PROOF` and `ENVIRONMENT_BLOCKED` to `STATUS_SKIP` when a SKIP signal was detected. Fixed: `ENVIRONMENT_BLOCKED` + SKIP signal → `STATUS_BLOCKED`. `RUNTIME_PROOF` + SKIP signal → `STATUS_SKIP`. The distinction: blocked = required hard dependency absent; skip = optional live proof not possible in this environment.
+
+3. **Status precedence was if-chain, not precedence table** — `resolve_task_status` used `if STATUS_FAIL in …; if STATUS_SKIP in …` ordering. Replaced with `STATUS_PRECEDENCE = {fail:4, blocked:3, skip:2, pass:1}` and `max(known, key=…)`. A later fail is now always surfaced regardless of earlier skip/blocked.
+
+**Files changed:**
+
+- `tools/plan/validation_classification.py` — added `STATUS_PRECEDENCE` dict; fixed `resolve_command_status` to return `STATUS_BLOCKED` for `ENVIRONMENT_BLOCKED` and `STATUS_SKIP` for `RUNTIME_PROOF`; replaced `resolve_task_status` if-chain with `max(…, key=STATUS_PRECEDENCE.__getitem__)`
+- `tools/plan/reconcile_completed_tasks.py` — removed `break` on skip/blocked in command loop; only `STATUS_FAIL` breaks
+- `tests/test_validation_classification.py` — added 11 tests (39 total); added `STATUS_PRECEDENCE` import
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Tests added (11 new, tests 28–38):**
+
+- `test_validation_classification_environment_blocked_skip_signal_is_blocked`
+- `test_validation_classification_runtime_proof_skip_signal_is_skip_not_blocked`
+- `test_validation_classification_status_precedence_ordering`
+- `test_validation_classification_task_status_skip_then_pass_is_skip`
+- `test_validation_classification_task_status_skip_then_fail_is_fail`
+- `test_validation_classification_task_status_blocked_then_pass_is_blocked`
+- `test_validation_classification_fail_has_highest_precedence`
+- `test_reconcile_continues_after_skip_records_all_results`
+- `test_reconcile_does_not_update_state_on_skip`
+- `test_reconcile_does_not_update_state_on_blocked`
+- `test_reconcile_does_not_update_state_on_fail`
+
+**Validation results:**
+
+- `.venv/bin/pytest -q tests/test_validation_classification.py` → 39 passed
+- `.venv/bin/pytest -q tests -k 'runtime_proof or validation_classification or skip or reconcile'` → 69 passed, 13 skipped
+- `make fg-fast` → All checks passed
+- `bash codex_gates.sh` → running
+
+---
+
+### 2026-04-27 — Task 15.3 follow-up: explicit classification + inference rules
+
+**Branch:** `task/15.3-runtime-verification-classification`
+
+**Area:** Plan tooling / Validation classification
+
+---
+
+**Problems addressed:**
+
+1. **Classification was implicit** — SKIP detection only fired for `runtime_proof` tasks, but no tasks in the plan had `validation_class` set. `validate_tester_flow.sh` defaulted to `structural` → SKIP signal ignored → recorded as `pass`. One regex change or message format drift would silently break detection.
+
+2. **Artifact shape audit** — Confirmed: `taskctl.py` never reads artifact content (existence-only). The one artifact read in `reconcile_completed_tasks.py` uses `.get("timestamp", ts)` with fallback. New fields are additive and safe.
+
+**Fixes:**
+
+1. Added `infer_classification_from_command(cmd)` — deterministic pattern rules:
+   - Known structural: `pytest`, `make`, `python tools/`, `ruff`, `mypy`, `bash codex_gates.sh`, `bash tools/ci/`, `bash tools/plan/`
+   - Known runtime proof: `bash tools/auth/`, `sh tools/auth/`, `curl`
+   - Unknown `bash *.sh` → `runtime_proof` (conservative: unknown scripts may need services)
+   - Default → `structural`
+
+2. Added `get_command_classification(cmd, task_class, cmd_classes, idx)` — three-level resolution:
+   - Highest: per-command `validation_command_classes` list in task YAML
+   - Middle: per-task `validation_class` in task YAML
+   - Fallback: `infer_classification_from_command(cmd)` (deterministic, documented)
+
+3. Updated `reconcile_completed_tasks.py` to read `validation_command_classes` parallel list and call `get_command_classification` per command.
+
+**Files changed:**
+
+- `tools/plan/validation_classification.py` — added `infer_classification_from_command()`, `get_command_classification()`, `_STRUCTURAL_PREFIXES`, `_RUNTIME_PROOF_PREFIXES`
+- `tools/plan/reconcile_completed_tasks.py` — updated `reconcile_task` to use `get_command_classification` per command
+- `tests/test_validation_classification.py` — added 10 tests (38 total)
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Tests added (10 new):**
+
+- `test_validation_classification_inference_pytest_is_structural`
+- `test_validation_classification_inference_bash_auth_is_runtime_proof`
+- `test_validation_classification_inference_codex_gates_is_structural`
+- `test_validation_classification_inference_unknown_shell_script_is_runtime_proof`
+- `test_validation_classification_inference_make_is_structural`
+- `test_validation_classification_per_command_overrides_per_task`
+- `test_validation_classification_per_task_overrides_inference`
+- `test_validation_classification_invalid_per_command_falls_through`
+- `test_reconcile_task_infers_runtime_proof_for_auth_script`
+- `test_reconcile_task_per_command_classification_yaml`
+
+**Validation results:**
+
+- `.venv/bin/pytest -q tests -k 'runtime_proof or validation_classification or skip'` → 48 passed, 13 skipped
+- `make fg-fast` → running
+
+---
+
+### 2026-04-27 — Task 15.3: Runtime verification classification
+
+**Branch:** `task/15.3-runtime-verification-classification`
+
+**Task ID:** 15.3
+
+**Area:** Plan tooling / Validation artifacts / Operator workflow
+
+---
+
+**Problem addressed:**
+
+Validation artifacts had only `pass|fail` status. Commands that exit 0 with a `SKIP:` signal (e.g. `validate_tester_flow.sh` when services are down) were indistinguishable from genuine pass outcomes. No `classification` field existed to distinguish structural checks from live runtime proofs. Gate pass and live proof pass were ambiguous to operators.
+
+**Classification model added:**
+
+- `structural` — offline checks; pass without live services
+- `runtime_proof` — requires live services; SKIP signal on exit 0 = skip, not pass
+- `environment_blocked` — required dependency unavailable
+- `skip` — explicit acceptable skip with reason
+
+**Status model expanded:**
+
+- `pass` — all assertions succeeded
+- `fail` — at least one assertion failed
+- `skip` — runtime proof skipped (services down); **not** equivalent to pass
+- `blocked` — required dependency unavailable; **not** equivalent to pass
+
+**Files changed:**
+
+- `tools/plan/validation_classification.py` — NEW: classification constants, `detect_skip_signal()`, `resolve_command_status()`, `resolve_task_status()`, `annotate_command_result()`, `is_runtime_proof_satisfied()`
+- `tools/plan/reconcile_completed_tasks.py` — MODIFIED: imports validation_classification; annotates command results with classification + status; detects SKIP signals; records skip/blocked in artifacts; never updates state on skip/blocked; `_print_report` now shows skip/blocked separately with NOTE
+- `tests/test_validation_classification.py` — NEW: 18 tests
+- `docs/validation_classification.md` — NEW: minimal operator reference
+- `plans/30_day_repo_blitz.yaml` — FIXED: task 15.3 validation_command had invalid pytest -k syntax (`runtime proof` → `runtime_proof`)
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Tests added (18):**
+
+- `test_validation_classification_constants_defined`
+- `test_validation_classification_pass_recorded_for_successful_command`
+- `test_validation_classification_skip_recorded_when_skip_signal_in_stdout`
+- `test_validation_classification_skip_not_recorded_as_pass`
+- `test_validation_classification_blocked_not_recorded_as_pass`
+- `test_runtime_proof_skipped_is_not_pass`
+- `test_runtime_proof_blocked_is_not_pass`
+- `test_skip_signal_detection_ignores_comments_and_empty_lines`
+- `test_skip_signal_detected_in_stderr`
+- `test_validation_classification_task_status_any_fail_is_fail`
+- `test_validation_classification_task_status_any_skip_is_not_pass`
+- `test_validation_classification_task_status_all_pass_is_pass`
+- `test_validation_classification_runtime_proof_not_satisfied_when_skipped`
+- `test_validation_classification_runtime_proof_satisfied_when_all_pass`
+- `test_validation_classification_annotate_adds_fields`
+- `test_reconcile_task_records_skip_not_pass_when_skip_signal`
+- `test_reconcile_task_artifact_contains_classification_field`
+- `test_reconcile_task_skip_does_not_update_state`
+
+**Validation results:**
+
+- `.venv/bin/pytest -q tests -k 'runtime_proof or validation_classification or skip'` → 38 passed, 13 skipped
+- `make fg-fast` → All checks passed
+
+---
+
 ### 2026-04-26 — Task: reconcile_completed_tasks — validation artifact reconciliation tool
 
 **Branch:** `task/reconcile-completed-tasks`

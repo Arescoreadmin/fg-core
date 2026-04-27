@@ -36,6 +36,22 @@ from typing import Any
 
 yaml = importlib.import_module("yaml")
 
+# Ensure tools/plan is importable (sibling modules)
+_TOOLS_PLAN = str(Path(__file__).resolve().parent)
+if _TOOLS_PLAN not in sys.path:
+    sys.path.insert(0, _TOOLS_PLAN)
+
+from validation_classification import (  # noqa: E402
+    STRUCTURAL,
+    STATUS_PASS,
+    STATUS_FAIL,
+    STATUS_SKIP,
+    STATUS_BLOCKED,
+    annotate_command_result,
+    get_command_classification,
+    resolve_task_status,
+)
+
 ROOT = Path(__file__).resolve().parents[2]
 PLAN_PATH = ROOT / "plans" / "30_day_repo_blitz.yaml"
 STATE_PATH = ROOT / "plans" / "30_day_repo_blitz.state.yaml"
@@ -190,7 +206,7 @@ def reconcile_task(
         {
           "task_id": str,
           "title": str,
-          "status": "pass" | "fail" | "no_commands" | "error",
+          "status": "pass" | "fail" | "skip" | "blocked" | "no_commands" | "dry_run" | "error",
           "artifact_path": str | None,  (relative to ROOT)
           "command_results": list[dict],
           "error": str | None,
@@ -198,11 +214,25 @@ def reconcile_task(
 
     Safety:
     - Never returns status="pass" if any command failed.
+    - Never returns status="pass" if any runtime-proof command emitted a SKIP signal.
     - Never writes an artifact on dry_run.
     - Never marks no_commands as pass.
+    - skip and blocked are never treated as pass for state updates.
     """
     title = task.get("title", "")
     cmds = [str(c) for c in (task.get("validation_commands") or [])]
+    # Per-task classification — tasks may declare validation_class: runtime_proof.
+    # None means "not explicitly set" — falls through to inference.
+    raw_task_class = task.get("validation_class")
+    task_classification: str | None = (
+        str(raw_task_class) if raw_task_class is not None else None
+    )
+    # Per-command classification overrides — parallel list to validation_commands.
+    # If absent, per-task or inferred classification is used per command.
+    raw_cmd_classes = task.get("validation_command_classes")
+    cmd_classes: list[str] | None = (
+        [str(c) for c in raw_cmd_classes] if raw_cmd_classes else None
+    )
 
     if verbose:
         print(f"\n{'=' * 60}")
@@ -236,33 +266,61 @@ def reconcile_task(
         }
 
     command_results: list[dict[str, Any]] = []
-    failed = False
 
-    for cmd in cmds:
+    for idx, cmd in enumerate(cmds):
         if verbose:
             print(f"\n  >>> {cmd}")
-        result = _run_command(cmd)
+        raw = _run_command(cmd)
+        # Resolve classification: per-command YAML > per-task YAML > inferred.
+        cmd_class = get_command_classification(
+            cmd, task_classification, cmd_classes, idx
+        )
+        # Annotate with resolved classification + status (detects SKIP signals).
+        result = annotate_command_result(raw, cmd_class)
         command_results.append(result)
         if result["stdout"] and verbose:
             print(result["stdout"], end="")
         if result["stderr"] and verbose:
             print(result["stderr"], end="", file=sys.stderr)
-        if result["returncode"] != 0:
-            failed = True
+        if result["status"] == STATUS_FAIL:
             if verbose:
                 print(
                     f"  [FAIL] Command exited {result['returncode']}: {cmd}",
                     file=sys.stderr,
                 )
-            break  # fail-fast per task
+            break  # fail-fast: no point running further commands after a hard failure
+        if result["status"] in (STATUS_SKIP, STATUS_BLOCKED):
+            if verbose:
+                label = "SKIP" if result["status"] == STATUS_SKIP else "BLOCKED"
+                reason = result.get("skip_reason") or f"{label} signal detected"
+                print(
+                    f"  [{label}] Not pass — continuing to check remaining commands: {reason}",
+                    file=sys.stderr,
+                )
+            # Do NOT break — later commands may fail and must be recorded.
 
-    status = "fail" if failed else "pass"
+    cmd_statuses = [str(r["status"]) for r in command_results]
+    status = resolve_task_status(cmd_statuses) if cmd_statuses else "no_commands"
     timestamp = _utc_stamp()
+
+    # Top-level classification: explicit task annotation if set, otherwise
+    # "mixed" when commands have different inferred classifications, else the
+    # single inferred classification.
+    cmd_classes_used = [
+        str(r.get("classification", STRUCTURAL)) for r in command_results
+    ]
+    if task_classification is not None:
+        artifact_classification: str = task_classification
+    elif len(set(cmd_classes_used)) == 1:
+        artifact_classification = cmd_classes_used[0]
+    else:
+        artifact_classification = "mixed"
 
     artifact_payload: dict[str, Any] = {
         "task_id": task_id,
         "title": title,
         "status": status,
+        "classification": artifact_classification,
         "timestamp": timestamp,
         "validation_commands": cmds,
         "command_results": command_results,
@@ -275,7 +333,12 @@ def reconcile_task(
     rel_path = str(artifact_path.relative_to(ROOT))
 
     if verbose:
-        icon = "PASS" if status == "pass" else "FAIL"
+        icon = {
+            STATUS_PASS: "PASS",
+            STATUS_FAIL: "FAIL",
+            STATUS_SKIP: "SKIP",
+            STATUS_BLOCKED: "BLOCKED",
+        }.get(status, status.upper())
         print(f"\n  [{icon}] artifact: {rel_path}")
 
     return {
@@ -320,6 +383,8 @@ def _print_report(results: list[dict[str, Any]]) -> None:
     categories: dict[str, list[str]] = {
         "pass": [],
         "fail": [],
+        "skip": [],
+        "blocked": [],
         "no_commands": [],
         "dry_run": [],
         "error": [],
@@ -333,10 +398,16 @@ def _print_report(results: list[dict[str, Any]]) -> None:
 
     total = len(results)
     passed = len(categories["pass"]) + len(categories["dry_run"])
+    skipped = len(categories["skip"]) + len(categories["blocked"])
     print(
         f"\n  Total: {total}  Pass: {passed}  Fail: {len(categories['fail'])}"
-        f"  No-commands: {len(categories['no_commands'])}"
+        f"  Skip/Blocked: {skipped}  No-commands: {len(categories['no_commands'])}"
     )
+    if skipped:
+        print(
+            "  NOTE: skip/blocked != pass. "
+            "Runtime proof evidence is absent for skipped/blocked tasks."
+        )
     print("=" * 60)
 
 
@@ -437,17 +508,29 @@ def main() -> int:
         )
         results.append(result)
 
-        if result["status"] == "fail":
+        if result["status"] == STATUS_FAIL:
             any_fail = True
             if not args.continue_on_fail:
                 # Still print report for what ran so far
                 break
 
+        if result["status"] in (STATUS_SKIP, STATUS_BLOCKED):
+            # skip/blocked are not failures but also not passes.
+            # Do not update state — runtime proof was not completed.
+            any_tooling_error = True
+            if not args.continue_on_fail:
+                break
+            continue
+
         if result["status"] == "no_commands":
             any_tooling_error = True
 
-        # Update state only for genuine pass results
-        if result["status"] == "pass" and not args.dry_run and not args.no_write_state:
+        # Update state only for genuine pass results — never for skip/blocked/fail
+        if (
+            result["status"] == STATUS_PASS
+            and not args.dry_run
+            and not args.no_write_state
+        ):
             # Read timestamp from artifact file rather than re-generating
             artifact_abs = ROOT / result["artifact_path"]
             ts = _utc_stamp()
