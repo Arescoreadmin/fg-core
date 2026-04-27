@@ -5583,3 +5583,29 @@ Canonical tester flow: ALL ASSERTIONS PASSED
 - pytest -k 'agent evidence or ingest and tenant' is invalid syntax (space = implicit AND not supported); plan file had this bug. Fixed in plans/30_day_repo_blitz.yaml line 782.
 - Test docstring referenced old expression; updated to match plan fix.
 **Fixes made after local review:** plan file expression corrected, docstring updated
+
+---
+
+### 2026-04-27 — Task 17.3 Addendum: PR hardening — real ingest path + E2E test
+
+**Branch:** `task/17.3-agent-evidence-ingestion`
+
+**Area:** Agent collector / ingest path
+
+---
+
+**Addendum requirements addressed:**
+
+1. **REQUIRED CHANGE 2 — E2E test via real ingest route**: Added `test_agent_collector_event_reaches_ingest_and_is_queryable` to `tests/agent/test_agent_evidence_ingest.py`. Test flow: CollectorEvent → `collector_event_to_ingest_payload()` → POST /ingest (TestClient, `ingest:write` scope) → GET /decisions (`decisions:read` scope) → assert event_id, tenant_id, event_type, agent_id in source. Also asserts cross-tenant GET returns empty. Config version seeded via `create_config_version()` (same pattern as `tests/test_config_hash_binding.py`).
+2. **REQUIRED CHANGE 3 — Negative test**: Added `test_agent_collector_event_ingest_missing_event_id_returns_400`. Takes valid adapter output, removes `event_id`, POSTs to /ingest, asserts 400 — confirms malformed adapter output is explicitly rejected, not silently accepted.
+3. **REQUIRED CHANGE 4 — pytest expression parentheses**: Fixed plan YAML expression from `'agent and evidence or ingest and tenant'` → `'(agent and evidence) or (ingest and tenant)'`. Updated test file docstring to match.
+4. **REQUIRED CHANGE 5 — No direct storage bypass**: Verified — new E2E test writes exclusively via POST /ingest; existing tests use direct `DecisionRecord` seed only for isolation/query tests, not for E2E path.
+
+**Files changed:**
+- `tests/agent/test_agent_evidence_ingest.py` — added `create_config_version` import, 2 new tests, updated docstring
+- `plans/30_day_repo_blitz.yaml` — pytest expression parentheses fix
+
+**Verification:**
+- `.venv/bin/pytest -q tests/agent/test_agent_evidence_ingest.py` → 28 passed
+- `.venv/bin/pytest -q tests -k '(agent and evidence) or (ingest and tenant)'` → 43 passed, 2 skipped
+- `make fg-fast` → All checks passed

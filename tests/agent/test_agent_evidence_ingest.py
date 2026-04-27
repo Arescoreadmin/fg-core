@@ -3,7 +3,7 @@ tests/agent/test_agent_evidence_ingest.py
 
 Tests for task 17.3 — Agent evidence ingestion path.
 
-All tests in this file match pytest -k 'agent and evidence or ingest and tenant'
+All tests in this file match pytest -k '(agent and evidence) or (ingest and tenant)'
 because the file path contains "agent", "evidence", and "ingest".
 
 Coverage:
@@ -23,8 +23,10 @@ Coverage:
 - Decision record contains agent_id, event_type, tenant_id
 - Existing read-path tenant isolation tests remain green (regression)
 
-Integration tests use direct DB seeding (DecisionRecord) to avoid needing an active
-policy config, matching the pattern in tests/security/test_read_path_tenant_isolation.py.
+Integration tests use two patterns:
+- Direct DB seeding (DecisionRecord) for isolation/query tests — avoids config dependency.
+- Real POST /ingest via TestClient for E2E tests — requires seeding a config version first.
+  Uses create_config_version() following the pattern in tests/test_config_hash_binding.py.
 
 All tests are offline-safe and deterministic.
 """
@@ -47,6 +49,7 @@ from agent.app.collector.ingest_adapter import (
     collector_event_to_ingest_payload,
 )
 from api.auth_scopes import mint_key
+from api.config_versioning import create_config_version
 from api.db import get_engine
 from api.db_models import DecisionRecord
 
@@ -548,3 +551,113 @@ def test_agent_evidence_ingest_unauthenticated_denied(build_app) -> None:
     client = TestClient(app)
     resp = client.get("/decisions")
     assert resp.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# End-to-end: real ingest path (Addendum — REQUIRED CHANGE 2)
+# ---------------------------------------------------------------------------
+
+
+def test_agent_collector_event_reaches_ingest_and_is_queryable(build_app) -> None:
+    """
+    End-to-end: CollectorEvent → adapter → POST /ingest → GET /decisions.
+
+    Proves the collector-derived payload flows through the REAL ingest handler,
+    not a direct DB write.  Verifies:
+    - event_id from adapter output is persisted and queryable
+    - tenant_id is correct
+    - event_type is preserved
+    - agent_id identity is present in the source field
+    - Cross-tenant GET returns empty result (no leak)
+    """
+    suffix = uuid.uuid4().hex[:8]
+    tenant_e2e = f"ev-e2e-{suffix}"
+    tenant_other = f"ev-e2e-other-{suffix}"
+    agent_id = f"agent-e2e-{suffix}"
+    occurred_at = "2024-06-01T12:00:00+00:00"
+
+    app = build_app(auth_enabled=True)
+    client = TestClient(app)
+
+    # Seed an active config version so /ingest can resolve it (required by route).
+    engine = get_engine()
+    with Session(engine) as db:
+        create_config_version(
+            db,
+            tenant_id=tenant_e2e,
+            config_payload={"mode": "test"},
+            created_by="pytest",
+            set_active=True,
+        )
+        db.commit()
+
+    evt = _make_event(tenant_id=tenant_e2e, agent_id=agent_id, occurred_at=occurred_at)
+    ingest_payload = collector_event_to_ingest_payload(evt)
+    expected_event_id = ingest_payload["event_id"]
+
+    ingest_key = mint_key("ingest:write", tenant_id=tenant_e2e)
+    resp_ingest = client.post(
+        "/ingest",
+        json=ingest_payload,
+        headers={"X-API-Key": ingest_key, "X-Tenant-Id": tenant_e2e},
+    )
+    assert resp_ingest.status_code == 200, resp_ingest.text
+
+    read_key = mint_key("decisions:read", tenant_id=tenant_e2e)
+    resp_read = client.get(
+        "/decisions",
+        params={"event_type": "inventory.process_snapshot"},
+        headers={"X-API-Key": read_key, "X-Tenant-Id": tenant_e2e},
+    )
+    assert resp_read.status_code == 200
+    items = resp_read.json()["items"]
+    event_ids = [item["event_id"] for item in items]
+    assert expected_event_id in event_ids, "adapter-derived event_id must be queryable"
+
+    target = next(i for i in items if i["event_id"] == expected_event_id)
+    assert target["tenant_id"] == tenant_e2e
+    assert target["event_type"] == "inventory.process_snapshot"
+    assert agent_id in target["source"], "source must carry agent_id"
+
+    # Cross-tenant isolation: other tenant must not see this event.
+    other_key = mint_key("decisions:read", tenant_id=tenant_other)
+    resp_other = client.get(
+        "/decisions",
+        params={"event_type": "inventory.process_snapshot"},
+        headers={"X-API-Key": other_key, "X-Tenant-Id": tenant_other},
+    )
+    assert resp_other.status_code == 200
+    other_ids = [i["event_id"] for i in resp_other.json()["items"]]
+    assert expected_event_id not in other_ids, "cross-tenant must not see this event"
+
+
+# ---------------------------------------------------------------------------
+# Negative: malformed payload through ingest path (Addendum — REQUIRED CHANGE 3)
+# ---------------------------------------------------------------------------
+
+
+def test_agent_collector_event_ingest_missing_event_id_returns_400(build_app) -> None:
+    """
+    Malformed ingest payload (event_id removed) → POST /ingest returns 400.
+
+    Verifies the real ingest route rejects malformed adapter output explicitly
+    (not silently accepting or crashing). Simulates a hypothetical adapter bug
+    where the required event_id field is absent.
+    """
+    app = build_app(auth_enabled=True)
+    client = TestClient(app)
+    key = mint_key("ingest:write", tenant_id="tenant-neg")
+
+    # Start with valid adapter output, then strip event_id to simulate bad output.
+    evt = _make_event(tenant_id="tenant-neg", agent_id="agent-neg")
+    bad_payload = collector_event_to_ingest_payload(evt)
+    del bad_payload["event_id"]
+
+    resp = client.post(
+        "/ingest",
+        json=bad_payload,
+        headers={"X-API-Key": key, "X-Tenant-Id": "tenant-neg"},
+    )
+    assert resp.status_code == 400, (
+        f"missing event_id must return 400, got {resp.status_code}: {resp.text}"
+    )
