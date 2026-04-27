@@ -6,6 +6,46 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-27 — Task 15.2 PR review fix: recursive bypass detection + hardened script inspection
+
+**Branch:** `task/15.2-non-bypass-tester-journey`
+
+**Task ID:** 15.2 (PR review follow-up)
+
+**Area:** Tester Journey / Alignment Tests / Collection Traversal / Script Detection
+
+---
+
+**Review comments addressed:**
+
+1. **Canonical collection traversal** — Previous checks only inspected direct children of the canonical journey folder. Nested sub-folders containing `/auth/login` requests would have been missed. Fixed by adding `_iter_collection_items()` recursive generator and updating both collection checks to use it.
+
+2. **validate_tester_flow.sh bypass detection** — Previous regex `r'curl\b[^\n]*["\'].*?/auth/login["\']'` only matched single-line quoted curl calls. Added `_script_bypass_lines()` helper that joins backslash-continuation lines before inspection and flags any non-comment line containing `/auth/login`, catching: quoted URLs, unquoted URLs, variable assignments, and multiline curl.
+
+**Files changed:**
+
+- `tests/test_tester_quickstart_alignment.py` — added `_iter_collection_items()` recursive generator (typed `Sequence[Any]`); added `_item_url()` helper; replaced direct-child loops in bypass and token-exchange collection checks with recursive variants; added `_script_bypass_lines()` helper; updated `test_validate_tester_flow_uses_oidc_not_bypass` to use it; added 8 regression tests (34 total, was 26)
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Tests added (8 new):**
+
+- `test_collection_canonical_bypass_detection_catches_nested_folder` — nested `/auth/login` detected
+- `test_collection_canonical_bypass_detection_catches_direct_request` — direct `/auth/login` detected
+- `test_collection_canonical_token_exchange_detected_in_nested_folder` — token-exchange detected recursively
+- `test_script_bypass_detection_quoted_url` — `curl "…/auth/login"` caught
+- `test_script_bypass_detection_unquoted_url` — `curl http://…/auth/login` caught
+- `test_script_bypass_detection_variable_assignment` — `AUTH_URL="…/auth/login"` caught
+- `test_script_bypass_detection_multiline_curl` — backslash-continuation `/auth/login` caught
+- `test_script_bypass_detection_ignores_comments` — `# /auth/login` not flagged
+
+**Validation results:**
+
+- `.venv/bin/pytest -q tests/test_tester_quickstart_alignment.py` — 34 passed
+- `make fg-fast` — passed
+- `bash codex_gates.sh` — passed (ruff clean, mypy clean)
+
+---
+
 ### 2026-04-27 — Task 15.2: Non-bypass tester journey enforcement
 
 **Branch:** `task/15.2-non-bypass-tester-journey`

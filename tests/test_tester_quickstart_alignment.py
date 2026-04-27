@@ -13,7 +13,9 @@ Matches pytest -k 'quickstart and audit' and pytest -k 'docs or collection or qu
 from __future__ import annotations
 
 import json
+from collections.abc import Generator, Sequence
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -339,10 +341,28 @@ def test_quickstart_canonical_section_does_not_reference_auth_login(
     )
 
 
+def _iter_collection_items(
+    items: Sequence[Any],
+) -> Generator[dict[str, Any], None, None]:
+    """Recursively yield every item (request or folder) in a collection item list."""
+    for item in items:
+        yield item
+        nested = item.get("item")
+        if isinstance(nested, list):
+            yield from _iter_collection_items(nested)
+
+
+def _item_url(item: dict) -> str:
+    raw_url = item.get("request", {}).get("url", {})
+    if isinstance(raw_url, dict):
+        return raw_url.get("raw", "")
+    return str(raw_url) if raw_url else ""
+
+
 def test_collection_canonical_journey_does_not_use_bypass_endpoint(
     collection: dict,
 ) -> None:
-    """Canonical journey folder must not contain any request to /auth/login (dev bypass)."""
+    """Canonical journey folder must not contain /auth/login anywhere (recursive)."""
     canonical_folder = next(
         (
             item
@@ -353,21 +373,20 @@ def test_collection_canonical_journey_does_not_use_bypass_endpoint(
     )
     assert canonical_folder is not None, "Canonical tester journey folder not found"
 
-    bypass_urls = []
-    for req in canonical_folder.get("item", []):
-        raw_url = req.get("request", {}).get("url", {})
-        url = raw_url.get("raw", "") if isinstance(raw_url, dict) else str(raw_url)
-        if "/auth/login" in url:
-            bypass_urls.append(url)
+    bypass_urls = [
+        _item_url(item)
+        for item in _iter_collection_items(canonical_folder.get("item", []))
+        if "/auth/login" in _item_url(item)
+    ]
 
     assert not bypass_urls, (
-        f"Canonical journey folder must not contain requests to /auth/login (dev bypass). "
-        f"Found: {bypass_urls}"
+        f"Canonical journey folder must not contain requests to /auth/login (dev bypass) "
+        f"at any nesting level. Found: {bypass_urls}"
     )
 
 
 def test_collection_canonical_journey_uses_token_exchange(collection: dict) -> None:
-    """Canonical journey folder must contain a request to /auth/token-exchange (OIDC path)."""
+    """Canonical journey folder must contain /auth/token-exchange anywhere (recursive)."""
     canonical_folder = next(
         (
             item
@@ -378,21 +397,153 @@ def test_collection_canonical_journey_uses_token_exchange(collection: dict) -> N
     )
     assert canonical_folder is not None, "Canonical tester journey folder not found"
 
-    exchange_urls = []
-    for req in canonical_folder.get("item", []):
-        raw_url = req.get("request", {}).get("url", {})
-        url = raw_url.get("raw", "") if isinstance(raw_url, dict) else str(raw_url)
-        if "token-exchange" in url or "token_exchange" in url:
-            exchange_urls.append(url)
+    exchange_urls = [
+        _item_url(item)
+        for item in _iter_collection_items(canonical_folder.get("item", []))
+        if "token-exchange" in _item_url(item) or "token_exchange" in _item_url(item)
+    ]
 
     assert exchange_urls, (
-        "Canonical journey folder must contain a request to /auth/token-exchange. "
-        "The canonical tester path must use OIDC token exchange, not dev bypass."
+        "Canonical journey folder must contain a request to /auth/token-exchange "
+        "(searched recursively). The canonical tester path must use OIDC token exchange."
     )
 
 
+# ---------------------------------------------------------------------------
+# Regression: nested bypass detection
+# ---------------------------------------------------------------------------
+
+
+def test_collection_canonical_bypass_detection_catches_nested_folder() -> None:
+    """Regression: nested /auth/login inside a sub-folder of canonical journey is detected."""
+    synthetic_collection = {
+        "item": [
+            {
+                "name": "0 — Canonical Tester Journey",
+                "item": [
+                    {
+                        "name": "Top-level request",
+                        "request": {"url": {"raw": "{{base_url}}/health"}},
+                    },
+                    {
+                        "name": "Sub-folder",
+                        "item": [
+                            {
+                                "name": "Nested bypass request",
+                                "request": {"url": {"raw": "{{base_url}}/auth/login"}},
+                            }
+                        ],
+                    },
+                ],
+            }
+        ]
+    }
+    canonical_folder = synthetic_collection["item"][0]
+    bypass_urls = [
+        _item_url(item)
+        for item in _iter_collection_items(canonical_folder.get("item", []))
+        if "/auth/login" in _item_url(item)
+    ]
+    assert bypass_urls, (
+        "Recursive traversal must detect /auth/login nested inside a sub-folder "
+        "of the canonical tester journey folder."
+    )
+
+
+def test_collection_canonical_bypass_detection_catches_direct_request() -> None:
+    """Regression: direct /auth/login at top level of canonical journey is detected."""
+    synthetic_collection = {
+        "item": [
+            {
+                "name": "0 — Canonical Tester Journey",
+                "item": [
+                    {
+                        "name": "Bypass request",
+                        "request": {"url": {"raw": "{{base_url}}/auth/login"}},
+                    },
+                ],
+            }
+        ]
+    }
+    canonical_folder = synthetic_collection["item"][0]
+    bypass_urls = [
+        _item_url(item)
+        for item in _iter_collection_items(canonical_folder.get("item", []))
+        if "/auth/login" in _item_url(item)
+    ]
+    assert bypass_urls, (
+        "Recursive traversal must detect /auth/login at the direct level of the canonical folder."
+    )
+
+
+def test_collection_canonical_token_exchange_detected_in_nested_folder() -> None:
+    """Regression: token-exchange inside a sub-folder of canonical journey is detected."""
+    synthetic_collection = {
+        "item": [
+            {
+                "name": "0 — Canonical Tester Journey",
+                "item": [
+                    {
+                        "name": "Sub-folder",
+                        "item": [
+                            {
+                                "name": "OIDC step",
+                                "request": {
+                                    "url": {"raw": "{{base_url}}/auth/token-exchange"}
+                                },
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+    canonical_folder = synthetic_collection["item"][0]
+    exchange_urls = [
+        _item_url(item)
+        for item in _iter_collection_items(canonical_folder.get("item", []))
+        if "token-exchange" in _item_url(item)
+    ]
+    assert exchange_urls, (
+        "Recursive traversal must detect token-exchange nested inside a sub-folder."
+    )
+
+
+def _script_bypass_lines(script_text: str) -> list[str]:
+    """Return non-comment script lines that reference /auth/login.
+
+    Strategy:
+    1. Join continuation lines (backslash-newline) into logical lines.
+    2. Strip comment lines (starting with #).
+    3. Report any logical line containing /auth/login.
+
+    This catches:
+    - quoted URLs: curl "http://host/auth/login"
+    - unquoted URLs: curl http://host/auth/login
+    - variable assignments: AUTH_URL="$BASE_URL/auth/login"
+    - multiline curl with backslash continuation
+    """
+    # Join continuation lines
+    joined = script_text.replace("\\\n", " ")
+    hits = []
+    for line in joined.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if "/auth/login" in stripped:
+            hits.append(stripped)
+    return hits
+
+
 def test_validate_tester_flow_uses_oidc_not_bypass() -> None:
-    """validate_tester_flow.sh must use OIDC token exchange, not /auth/login bypass."""
+    """validate_tester_flow.sh must use OIDC token exchange, not /auth/login bypass.
+
+    Detects /auth/login in:
+    - quoted curl URLs
+    - unquoted curl URLs
+    - multiline curl commands (backslash continuation)
+    - variable assignments used by curl
+    """
     assert VALIDATE_TESTER_FLOW.exists(), (
         f"validate_tester_flow.sh not found: {VALIDATE_TESTER_FLOW}"
     )
@@ -400,23 +551,54 @@ def test_validate_tester_flow_uses_oidc_not_bypass() -> None:
 
     # Must reference token-exchange (OIDC canonical path)
     assert "token-exchange" in script_text, (
-        "validate_tester_flow.sh must use /auth/token-exchange (OIDC canonical path). "
-        "The script must not rely on dev bypass for tester flow validation."
+        "validate_tester_flow.sh must use /auth/token-exchange (OIDC canonical path)."
     )
 
-    # Must NOT use /auth/login as an auth step (bypass endpoint)
-    # Note: /auth/login may appear in comments or help text; we check it is not
-    # used as a curl target for the authentication step.
-    import re
+    # Must NOT contain any non-comment line with /auth/login
+    bypass_lines = _script_bypass_lines(script_text)
+    assert not bypass_lines, (
+        "validate_tester_flow.sh must not reference /auth/login in any executable line. "
+        f"Found: {bypass_lines}"
+    )
 
-    bypass_curl = re.search(
-        r'curl\b[^\n]*["\'].*?/auth/login["\']',
-        script_text,
+
+# ---------------------------------------------------------------------------
+# Regression: _script_bypass_lines detection hardening
+# ---------------------------------------------------------------------------
+
+
+def test_script_bypass_detection_quoted_url() -> None:
+    """_script_bypass_lines catches quoted /auth/login curl URLs."""
+    script = 'curl -s "http://localhost:8100/auth/login"\n'
+    assert _script_bypass_lines(script), "Must detect quoted /auth/login"
+
+
+def test_script_bypass_detection_unquoted_url() -> None:
+    """_script_bypass_lines catches unquoted /auth/login curl URLs."""
+    script = "curl -s http://localhost:8100/auth/login\n"
+    assert _script_bypass_lines(script), "Must detect unquoted /auth/login"
+
+
+def test_script_bypass_detection_variable_assignment() -> None:
+    """_script_bypass_lines catches AUTH_URL variable assigned /auth/login."""
+    script = 'AUTH_URL="$BASE_URL/auth/login"\ncurl "$AUTH_URL"\n'
+    assert _script_bypass_lines(script), (
+        "Must detect variable assignment with /auth/login"
     )
-    assert bypass_curl is None, (
-        "validate_tester_flow.sh must not use /auth/login in a curl call. "
-        f"Found: {bypass_curl.group() if bypass_curl else ''}"
+
+
+def test_script_bypass_detection_multiline_curl() -> None:
+    """_script_bypass_lines catches /auth/login in a multiline curl command."""
+    script = "curl \\\n  -s \\\n  http://localhost:8100/auth/login\n"
+    assert _script_bypass_lines(script), (
+        "Must detect /auth/login across continuation lines"
     )
+
+
+def test_script_bypass_detection_ignores_comments() -> None:
+    """_script_bypass_lines does not flag /auth/login in comment lines."""
+    script = "# Do not use /auth/login — it is dev bypass\ncurl http://host/health\n"
+    assert not _script_bypass_lines(script), "Must not flag /auth/login in comments"
 
 
 def test_validate_tester_flow_fails_on_regression_not_skip() -> None:
