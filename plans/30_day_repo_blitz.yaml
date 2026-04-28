@@ -751,7 +751,7 @@ phases:
       - Collector interface contract is enforced
       - Scheduler executes registered collector on expected cadence
       validation_commands:
-      - .venv/bin/pytest -q tests -k 'agent and collector framework'
+      - .venv/bin/pytest -q tests -k "agent and collector and framework"
       - make fg-fast
     - id: '17.2'
       title: First real collector (single telemetry class)
