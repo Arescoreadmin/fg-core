@@ -88,9 +88,9 @@ def _upsert_collector_statuses(
             "last_error": cs.error,
         }
         stmt = (
-            insert_fn(AgentCollectorStatus)
+            insert_fn(AgentCollectorStatus)  # type: ignore[operator]
             .values(**row)
-            .on_conflict_do_update(
+            .on_conflict_do_update(  # type: ignore[attr-defined]
                 index_elements=["device_id", "collector_name"],
                 set_={
                     "last_outcome": cs.outcome,

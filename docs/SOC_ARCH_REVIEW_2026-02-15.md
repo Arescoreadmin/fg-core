@@ -449,3 +449,22 @@ Task 17.5 adds an operator observability endpoint. The new route is under the ex
 ### Validation performed
 - `pytest -q tests/agent/test_agent_observability.py`: 18 passed
 - `make fg-fast`: All checks passed (post-refresh)
+
+---
+
+## Task 17.5 addendum — Docker CI: diagnostics hardening (2026-04-28)
+
+### Files changed
+- `.github/workflows/docker-ci.yml`: Added `FG_SIGNING_SECRET` and `FG_INTERNAL_AUTH_SECRET` to `.env.ci` generation; added `frostgate-core` and `frostgate-migrate` log/inspect collection to diagnostics step
+
+### Why
+Two issues fixed:
+1. The "Persist docker diagnostics" step ran `docker compose --env-file .env.ci ps/logs` but `.env.ci` did not contain `FG_SIGNING_SECRET` / `FG_INTERNAL_AUTH_SECRET`, causing compose to fail with interpolation errors because docker-compose.yml requires these vars via `${VAR:?}`. Added them to `.env.ci` (with CI placeholder values) so all compose invocations use a single self-contained env-file.
+2. `frostgate-core` and `frostgate-migrate` container logs were not captured in CI artifacts on failure, making root-cause analysis impossible. Added `docker logs` and `docker inspect` collection for both containers.
+
+### Risk
+- **Low.** No change to runtime security posture. `.env.ci` is ephemeral per-run (generated in CI, never committed). The values added (`ci-signing-secret-32-bytes-minimum`, `ci-internal-auth-secret-32-bytes`) are the same placeholder CI values already used by all other compose steps via step-level `env:` blocks. Diagnostics collection is `if: always()` and uses `|| true` so failures are non-blocking.
+
+### Validation performed
+- `make fg-fast`: All checks passed
+- `pytest -q tests/agent/test_agent_observability.py tests/agent/test_agent_lifecycle.py`: 45 passed
