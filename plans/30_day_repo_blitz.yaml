@@ -847,6 +847,7 @@ phases:
       validation:
       - MSI artifact is produced and passes smoke test
       validation_commands:
+      - .venv/bin/pytest -q tests/agent/test_msi_installer_contract.py
       - make fg-fast
     - id: '18.3'
       title: Silent enrollment install flow

@@ -323,11 +323,32 @@ Command plans are cross-platform and deterministic; actual SCM execution is plat
 - `agent/windows-requirements.txt` — pywin32 + pyinstaller declared
 - `agent/app/config.py` — `AgentConfig` load_config() (enforces required env vars via `os.environ[...]`)
 
-### Still required in 18.2 and later tasks
+### Implemented in task 18.2
+
+- `agent/app/installer/msi_contract.py` — Typed MSI build contract module:
+  - `MsiBuildContract` dataclass — product name, version, GUIDs, output dir, signing and manifest requirements
+  - `MsiArtifactManifest` dataclass — release metadata schema (SHA256 hashes, signing status, arch, OS floor)
+  - `validate_contract()` — GUID regex, no secrets in artifact name, sha256_manifest_required must be True
+  - `build_build_command_plan()` — deterministic WiX candle + light command plan (cross-platform generation)
+  - `build_smoke_test_plan()` — PowerShell SHA256 verification command
+  - `build_install_command_example()` — msiexec install command with `<placeholder>` values only (never real tokens)
+  - `build_uninstall_command_example()` — standard and `PURGE_DATA=1` variants; purge off by default
+  - `build_manifest_template()` — unsigned `MsiArtifactManifest` pre-build template
+  - `execute_live_build()` — platform-gated; raises `MsiToolchainError` on non-Windows or missing WiX toolchain
+  - `validate_msi_endpoint()` — rejects localhost, RFC 1918, link-local, HTTP; mirrors wrapper.py logic
+  - `validate_environment()` — rejects `dev` and `local` environment strings in production context
+  - `default_frostgate_msi_contract()` — factory with canonical upgrade GUID and signing defaults
+- `agent/app/installer/__init__.py` — package init re-exporting all public symbols
+- `tests/agent/test_msi_installer_contract.py` — 63 tests covering contract validation, command plan determinism, security invariants, manifest schema, endpoint/environment guards, platform behavior, and plan YAML cross-reference
+
+**Live MSI build was NOT tested** — WiX toolchain unavailable on Linux CI.
+Command plans are cross-platform and deterministic; actual toolchain execution is platform-gated.
+
+### Still required in 18.3 and later tasks
 
 - Credential Manager integration (DPAPI storage of device_key)
 - Enrollment flow with token deletion after exchange
-- MSI build toolchain (WiX or equivalent)
+- Silent enrollment install flow (task 18.3)
 - ACL setup in installer custom actions
 - Windows Event Log source registration
 - Config tampering / binary integrity check
