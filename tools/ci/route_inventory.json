@@ -56,6 +56,42 @@
       ],
       "file": "api/agent_tokens.py",
       "method": "POST",
+      "path": "/admin/agent/devices/{device_id}/disable",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "keys:admin"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/agent_tokens.py",
+      "method": "POST",
+      "path": "/admin/agent/devices/{device_id}/enable",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "keys:admin"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/agent_tokens.py",
+      "method": "POST",
       "path": "/admin/agent/devices/{device_id}/revoke",
       "plane": "control",
       "plane_id": "control",
@@ -183,6 +219,42 @@
       "file": "api/agent_phase2.py",
       "method": "POST",
       "path": "/admin/agent/update/rollout",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "keys:admin"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/agent_tokens.py",
+      "method": "GET",
+      "path": "/admin/agent/version-floor",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "keys:admin"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/agent_tokens.py",
+      "method": "PUT",
+      "path": "/admin/agent/version-floor",
       "plane": "control",
       "plane_id": "control",
       "scoped": true,
@@ -723,6 +795,18 @@
       "file": "api/agent_phase2.py",
       "method": "POST",
       "path": "/agent/commands/poll",
+      "plane": "agent",
+      "plane_id": "agent",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/agent_enrollment.py",
+      "method": "GET",
+      "path": "/agent/config",
       "plane": "agent",
       "plane_id": "agent",
       "scoped": false,
@@ -3935,7 +4019,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-04-14T00:39:48.890399+00:00",
+  "generated_at": "2026-04-28T10:01:52.858155+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

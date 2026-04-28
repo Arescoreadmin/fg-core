@@ -5609,3 +5609,24 @@ Canonical tester flow: ALL ASSERTIONS PASSED
 - `.venv/bin/pytest -q tests/agent/test_agent_evidence_ingest.py` → 28 passed
 - `.venv/bin/pytest -q tests -k '(agent and evidence) or (ingest and tenant)'` → 43 passed, 2 skipped
 - `make fg-fast` → All checks passed
+
+---
+
+## Task 17.4 — Agent lifecycle controls (2026-04-27)
+
+**Branch:** `task/17.4-agent-lifecycle-controls`
+
+**Changes:**
+- `api/db_models.py`: added `AgentTenantConfig` model (`agent_tenant_configs` table)
+- `api/agent_tokens.py`: added `POST /admin/agent/devices/{id}/disable`, `POST /admin/agent/devices/{id}/enable`, `GET /admin/agent/version-floor`, `PUT /admin/agent/version-floor`
+- `api/agent_enrollment.py`: disabled-device enforcement in `require_device_signature` + heartbeat handler; per-tenant + global version floor merge in heartbeat; new `GET /agent/config` endpoint
+- `api/security/public_paths.py`: added `/agent/config` to `PUBLIC_PATHS_EXACT`
+- `tests/agent/helpers.py`: added `method` parameter to `signed_headers()` for GET signing
+- `tests/agent/test_agent_lifecycle.py`: 27 new tests (disable/enable, version floor, config fetch, regression, tenant isolation)
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md`: SOC review entry for `public_paths.py` change
+- Contract artifacts regenerated via `make contract-authority-refresh` and `make route-inventory-generate`
+
+**Verification:**
+- `pytest -q tests/agent/test_agent_lifecycle.py` → 27 passed
+- `pytest -q tests -k '(agent and evidence) or (ingest and tenant) or lifecycle'` → 118 passed, 2 skipped
+- `make fg-fast` → All checks passed

@@ -284,6 +284,12 @@ PLANE_REGISTRY: list[PlaneDef] = [
             ),
             ex(
                 "GET",
+                "/agent/config",
+                "bootstrap",
+                "Config fetch uses device channel metadata.",
+            ),
+            ex(
+                "GET",
                 "/agent/policy/fetch",
                 "bootstrap",
                 "Policy fetch uses device channel metadata.",

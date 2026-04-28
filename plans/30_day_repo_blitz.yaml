@@ -793,7 +793,7 @@ phases:
       - Lifecycle actions are authenticated and audited
       - Revoked/disabled agent cannot continue submitting telemetry
       validation_commands:
-      - .venv/bin/pytest -q tests -k 'agent lifecycle or enrollment or revoke'
+      - .venv/bin/pytest -q tests -k '(agent and lifecycle) or enrollment or revoke'
       - make fg-fast
     - id: '17.5'
       title: Agent observability

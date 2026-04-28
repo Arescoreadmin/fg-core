@@ -44,13 +44,14 @@ def signed_headers(
     secret: str,
     ts: int | None = None,
     nonce: str | None = None,
+    method: str = "POST",
 ) -> dict[str, str]:
     ts_s = str(ts or int(time.time()))
     nonce_s = nonce or uuid.uuid4().hex[:24]
     body_hash = hashlib.sha256(
         json.dumps(body, separators=(",", ":"), sort_keys=True).encode("utf-8")
     ).hexdigest()
-    canonical = "\n".join(["POST", path, body_hash, ts_s, nonce_s])
+    canonical = "\n".join([method.upper(), path, body_hash, ts_s, nonce_s])
     sig = hmac.new(
         secret.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256
     ).hexdigest()

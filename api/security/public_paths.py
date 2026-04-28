@@ -26,6 +26,7 @@ PUBLIC_PATHS_EXACT: tuple[str, ...] = (
     "/agent/commands/ack",
     "/agent/policy/fetch",
     "/agent/log/anchor",
+    "/agent/config",
 )
 
 PUBLIC_PATHS_PREFIX: tuple[str, ...] = (

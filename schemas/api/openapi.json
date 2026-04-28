@@ -34,6 +34,35 @@
         "title": "AIPolicyUpsertRequest",
         "type": "object"
       },
+      "AgentConfigResponse": {
+        "properties": {
+          "action": {
+            "default": "none",
+            "title": "Action",
+            "type": "string"
+          },
+          "server_time": {
+            "title": "Server Time",
+            "type": "string"
+          },
+          "version_floor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Floor"
+          }
+        },
+        "required": [
+          "server_time"
+        ],
+        "title": "AgentConfigResponse",
+        "type": "object"
+      },
       "AgentEnrollRequest": {
         "additionalProperties": false,
         "properties": {
@@ -4568,6 +4597,42 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "VersionFloorRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "version_floor": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Floor"
+          }
+        },
+        "title": "VersionFloorRequest",
+        "type": "object"
+      },
+      "VersionFloorResponse": {
+        "properties": {
+          "version_floor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Floor"
+          }
+        },
+        "title": "VersionFloorResponse",
+        "type": "object"
       }
     }
   },
@@ -4793,6 +4858,62 @@
         "summary": "Poll Commands",
         "tags": [
           "agent-phase2"
+        ]
+      }
+    },
+    "/agent/config": {
+      "get": {
+        "description": "Return operational directives for this device: effective version floor and\nrequired action.  Revoked/disabled devices are rejected by the shared\nrequire_device_signature dependency before this handler is reached.",
+        "operationId": "agent_config_agent_config_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "agent_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Agent Config",
+        "tags": [
+          "agent"
         ]
       }
     },

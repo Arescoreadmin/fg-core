@@ -25,6 +25,7 @@ from api.db_models import (
     AgentDeviceNonce,
     AgentDeviceRegistry,
     AgentEnrollmentToken,
+    AgentTenantConfig,
 )
 from api.security_audit import audit_admin_action
 
@@ -372,6 +373,11 @@ async def require_device_signature(request: Request) -> DeviceAuthContext:
                 status_code=403,
                 detail={"code": "DEVICE_REVOKED", "message": "device revoked"},
             )
+        if device.status == "disabled":
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "DEVICE_DISABLED", "message": "device disabled"},
+            )
         if not key_row.enabled:
             raise HTTPException(
                 status_code=403,
@@ -542,6 +548,11 @@ def agent_heartbeat(
                 status_code=403,
                 detail={"code": "DEVICE_REVOKED", "message": "device revoked"},
             )
+        if reg.status == "disabled":
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "DEVICE_DISABLED", "message": "device disabled"},
+            )
 
         if body.signals.get("tamper"):
             reg.status = _transition_state(reg.status, "tamper")
@@ -566,11 +577,16 @@ def agent_heartbeat(
             details=details,
         )
 
-    min_version = (os.getenv("FG_AGENT_MIN_VERSION") or "").strip()
-    if min_version and body.agent_version < min_version:
+    global_floor = (os.getenv("FG_AGENT_MIN_VERSION") or "").strip()
+    engine2 = get_engine()
+    with Session(engine2) as s2:
+        tc = s2.get(AgentTenantConfig, device.tenant_id)
+        tenant_floor = (tc.version_floor or "").strip() if tc else ""
+    effective_floor = tenant_floor or global_floor
+    if effective_floor and body.agent_version < effective_floor:
         return AgentHeartbeatResponse(
             server_time=now.isoformat(),
-            required_min_version=min_version,
+            required_min_version=effective_floor,
             action="shutdown",
         )
 
@@ -638,3 +654,56 @@ def rotate_device_key(
         )
 
         return AgentRotateResponse(device_key=new_secret, device_key_prefix=new_prefix)
+
+
+class AgentConfigResponse(BaseModel):
+    version_floor: str | None = None
+    action: str = "none"
+    server_time: str
+
+
+@router.get(
+    "/config",
+    response_model=AgentConfigResponse,
+    responses={
+        401: {"description": "Unauthorized"},
+        403: {"description": "Forbidden"},
+    },
+)
+def agent_config(
+    request: Request,
+    agent_version: str | None = None,
+    device: DeviceAuthContext = Depends(require_device_signature),
+) -> AgentConfigResponse:
+    """
+    Return operational directives for this device: effective version floor and
+    required action.  Revoked/disabled devices are rejected by the shared
+    require_device_signature dependency before this handler is reached.
+    """
+    now = _utcnow()
+    global_floor = (os.getenv("FG_AGENT_MIN_VERSION") or "").strip()
+
+    engine = get_engine()
+    with Session(engine) as session:
+        tc = session.get(AgentTenantConfig, device.tenant_id)
+        tenant_floor = (tc.version_floor or "").strip() if tc else ""
+
+    effective_floor = tenant_floor or global_floor
+    action = "none"
+    ver = (agent_version or "").strip()
+    if effective_floor and ver and ver < effective_floor:
+        action = "shutdown"
+
+    log.info(
+        "agent_config device_id=%s tenant_id=%s version_floor=%s agent_version=%s action=%s",
+        device.device_id,
+        device.tenant_id,
+        effective_floor or None,
+        ver or None,
+        action,
+    )
+    return AgentConfigResponse(
+        version_floor=effective_floor or None,
+        action=action,
+        server_time=now.isoformat(),
+    )
