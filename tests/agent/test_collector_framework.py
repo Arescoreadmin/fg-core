@@ -716,7 +716,7 @@ def test_agent_collector_framework_scheduler_dict_events_fail_not_crash() -> Non
             return 1.0
 
         def collect(self, tenant_id: str, agent_id: str) -> list[CollectorEvent]:
-            return [{"bad": "event"}]  # type: ignore[return-value]
+            return [{"bad": "event"}]  # type: ignore[return-value, list-item]
 
     scheduler, _ = _scheduler_with_clock(
         _DictEventsCollector(),

@@ -2,12 +2,13 @@
 agent.app.collector — Supported collector framework.
 
 Public surface:
-  CollectorEvent           — typed event schema (tenant-safe, schema-versioned)
-  Collector                — abstract base class for all supported collectors
-  CollectorRegistry        — register/lookup with duplicate rejection
-  CollectorScheduler       — deterministic scheduler with injected clock
-  SchedulerResult          — per-collector execution result
-  ProcessInventoryCollector — host inventory snapshot collector (task 17.2)
+  CollectorEvent                 — typed event schema (tenant-safe, schema-versioned)
+  Collector                      — abstract base class for all supported collectors
+  CollectorRegistry              — register/lookup with duplicate rejection
+  CollectorScheduler             — deterministic scheduler with injected clock
+  SchedulerResult                — per-collector execution result
+  ProcessInventoryCollector      — host inventory snapshot collector (task 17.2)
+  collector_event_to_ingest_payload — bridge: CollectorEvent → POST /ingest payload (task 17.3)
 """
 
 from agent.app.collector.base import (
@@ -15,6 +16,7 @@ from agent.app.collector.base import (
     Collector,
     CollectorEvent,
 )
+from agent.app.collector.ingest_adapter import collector_event_to_ingest_payload
 from agent.app.collector.process_inventory import ProcessInventoryCollector
 from agent.app.collector.registry import CollectorRegistry
 from agent.app.collector.scheduler import CollectorScheduler, SchedulerResult
@@ -27,4 +29,5 @@ __all__ = [
     "CollectorScheduler",
     "SchedulerResult",
     "ProcessInventoryCollector",
+    "collector_event_to_ingest_payload",
 ]
