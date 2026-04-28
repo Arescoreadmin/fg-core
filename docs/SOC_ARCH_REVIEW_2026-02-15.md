@@ -414,3 +414,21 @@ PR #219 review identified that `RequestLoggingMiddleware.dispatch()` only emitte
 ### Validation performed
 - `pytest -q tests/test_request_tracing_task72.py`: 11 passed (includes 3 new failure-path tests)
 - `make fg-fast`: all gates passed
+
+---
+
+## Task 17.4 — Agent lifecycle controls: `/agent/config` added to public paths (2026-04-27)
+
+### Files changed
+- `api/security/public_paths.py`: added `/agent/config` to `PUBLIC_PATHS_EXACT`
+
+### Why
+Task 17.4 introduces a `GET /agent/config` endpoint that agents call using HMAC device-key signatures (same auth as `/agent/heartbeat` and `/agent/enroll`). The endpoint must be excluded from the global API-key auth middleware, identical to all other agent device endpoints. No change to the actual authentication model — `require_device_signature` still validates the HMAC before the handler runs.
+
+### Risk
+- **Low.** `/agent/config` is authenticated by `require_device_signature` (HMAC + nonce replay protection). Adding it to `PUBLIC_PATHS_EXACT` only bypasses the API-key gate, not device authentication. The pattern is identical to `/agent/heartbeat`, `/agent/enroll`, and the seven other agent paths already in the list.
+
+### Validation performed
+- `pytest -q tests/agent/test_agent_lifecycle.py`: 27 passed
+- `pytest -q tests -k '(agent and evidence) or (ingest and tenant) or (lifecycle)'`: 118 passed, 2 skipped
+- `git diff --check`: clean

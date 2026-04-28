@@ -292,6 +292,17 @@ class AgentDeviceIdentity(Base):
     )
 
 
+class AgentTenantConfig(Base):
+    """Per-tenant agent lifecycle configuration (version floor, etc.)."""
+
+    __tablename__ = "agent_tenant_configs"
+
+    tenant_id: Mapped[Any] = mapped_column(String(128), primary_key=True)
+    version_floor: Mapped[Any] = mapped_column(String(64), nullable=True)
+    updated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_by: Mapped[Any] = mapped_column(String(128), nullable=True)
+
+
 class AgentCommand(Base):
     __tablename__ = "agent_commands"
 

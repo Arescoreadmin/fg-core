@@ -15,7 +15,12 @@ from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes
 from api.db import get_engine
-from api.db_models import AgentDeviceKey, AgentDeviceRegistry, AgentEnrollmentToken
+from api.db_models import (
+    AgentDeviceKey,
+    AgentDeviceRegistry,
+    AgentEnrollmentToken,
+    AgentTenantConfig,
+)
 from api.security_audit import audit_admin_action
 
 router = APIRouter(
@@ -239,3 +244,163 @@ def revoke_device(device_id: str, request: Request) -> dict[str, bool]:
         details={"device_id": device_id},
     )
     return {"revoked": True}
+
+
+@router.post("/devices/{device_id}/disable")
+def disable_device(device_id: str, request: Request) -> dict[str, bool]:
+    """
+    Soft-disable a device.  Reversible via /enable.  All device keys are
+    disabled so the agent cannot authenticate.  Revoked devices cannot be
+    disabled (they are already permanently blocked).
+    """
+    tenant_id = require_bound_tenant(request)
+
+    engine = get_engine()
+    with Session(engine) as session:
+        device = (
+            session.query(AgentDeviceRegistry)
+            .filter(
+                AgentDeviceRegistry.device_id == device_id,
+                AgentDeviceRegistry.tenant_id == tenant_id,
+            )
+            .first()
+        )
+        if device is None:
+            raise HTTPException(status_code=404, detail="device not found")
+        if device.status == "revoked":
+            raise HTTPException(
+                status_code=409, detail="revoked device cannot be disabled"
+            )
+        device.status = "disabled"
+        session.query(AgentDeviceKey).filter(
+            AgentDeviceKey.device_id == device_id,
+            AgentDeviceKey.tenant_id == tenant_id,
+        ).update({"enabled": False})
+        session.commit()
+
+    audit_admin_action(
+        action=f"agent-disable:{device_id}",
+        tenant_id=tenant_id,
+        request=request,
+        details={"device_id": device_id},
+    )
+    return {"disabled": True}
+
+
+@router.post("/devices/{device_id}/enable")
+def enable_device(device_id: str, request: Request) -> dict[str, bool]:
+    """
+    Re-enable a previously disabled device.  Only the most recently created
+    device key is re-activated; older rotated keys remain inactive.
+    Revoked devices cannot be re-enabled.
+    """
+    tenant_id = require_bound_tenant(request)
+
+    engine = get_engine()
+    with Session(engine) as session:
+        device = (
+            session.query(AgentDeviceRegistry)
+            .filter(
+                AgentDeviceRegistry.device_id == device_id,
+                AgentDeviceRegistry.tenant_id == tenant_id,
+            )
+            .first()
+        )
+        if device is None:
+            raise HTTPException(status_code=404, detail="device not found")
+        if device.status == "revoked":
+            raise HTTPException(
+                status_code=409, detail="revoked device cannot be re-enabled"
+            )
+        if device.status != "disabled":
+            raise HTTPException(status_code=409, detail="device is not disabled")
+        device.status = "active"
+        # Re-enable only the most recently created key to avoid activating
+        # stale rotated keys that were intentionally disabled before the
+        # disable action.
+        latest_key = (
+            session.query(AgentDeviceKey)
+            .filter(
+                AgentDeviceKey.device_id == device_id,
+                AgentDeviceKey.tenant_id == tenant_id,
+            )
+            .order_by(AgentDeviceKey.created_at.desc())
+            .first()
+        )
+        if latest_key is not None:
+            latest_key.enabled = True
+        session.commit()
+
+    audit_admin_action(
+        action=f"agent-enable:{device_id}",
+        tenant_id=tenant_id,
+        request=request,
+        details={"device_id": device_id},
+    )
+    return {"enabled": True}
+
+
+class VersionFloorRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version_floor: str | None = Field(default=None, max_length=64)
+
+
+class VersionFloorResponse(BaseModel):
+    version_floor: str | None = None
+
+
+@router.get("/version-floor", response_model=VersionFloorResponse)
+def get_version_floor(request: Request) -> VersionFloorResponse:
+    """Return the per-tenant agent version floor, or null if unset."""
+    tenant_id = require_bound_tenant(request)
+
+    engine = get_engine()
+    with Session(engine) as session:
+        tc = session.get(AgentTenantConfig, tenant_id)
+        return VersionFloorResponse(
+            version_floor=(tc.version_floor or None) if tc else None
+        )
+
+
+@router.put("/version-floor", response_model=VersionFloorResponse)
+def set_version_floor(
+    body: VersionFloorRequest, request: Request
+) -> VersionFloorResponse:
+    """
+    Set (or clear) the per-tenant minimum agent version.
+    Agents below this floor will receive action='shutdown' on heartbeat and
+    config fetch.  Set version_floor=null to remove the per-tenant floor
+    (global FG_AGENT_MIN_VERSION env var still applies).
+    """
+    tenant_id = require_bound_tenant(request)
+    auth_ctx = getattr(request.state, "auth", None)
+    actor_id = getattr(auth_ctx, "key_prefix", None) or "admin"
+
+    engine = get_engine()
+    with Session(engine) as session:
+        tc = session.get(AgentTenantConfig, tenant_id)
+        if tc is None:
+            tc = AgentTenantConfig(
+                tenant_id=tenant_id,
+                version_floor=body.version_floor,
+                updated_at=_utcnow(),
+                updated_by=actor_id,
+            )
+            session.add(tc)
+        else:
+            tc.version_floor = body.version_floor
+            tc.updated_at = _utcnow()
+            tc.updated_by = actor_id
+        session.commit()
+
+    audit_admin_action(
+        action="agent-version-floor-set",
+        tenant_id=tenant_id,
+        request=request,
+        details={
+            "version_floor": body.version_floor,
+            "actor_id": actor_id,
+        },
+    )
+    return VersionFloorResponse(version_floor=body.version_floor)

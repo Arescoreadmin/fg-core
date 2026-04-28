@@ -27,13 +27,14 @@
     }
   ],
   "governance": {
-    "contract_count": 155,
+    "contract_count": 156,
     "contract_only": [],
-    "runtime_count": 236,
+    "runtime_count": 241,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
       "GET /admin/agent/evidence/export/{device_id}",
+      "GET /admin/agent/version-floor",
       "GET /admin/audit/search",
       "GET /admin/connectors/policy",
       "GET /admin/connectors/status",
@@ -76,6 +77,8 @@
       "GET /ui/scopes",
       "GET /ui/token",
       "POST /admin/agent/commands/issue",
+      "POST /admin/agent/devices/{device_id}/disable",
+      "POST /admin/agent/devices/{device_id}/enable",
       "POST /admin/agent/devices/{device_id}/revoke",
       "POST /admin/agent/enrollment-tokens",
       "POST /admin/agent/policy/publish",
@@ -102,6 +105,7 @@
       "POST /ui/audit/packet",
       "POST /ui/devices/{device_id}/disable",
       "POST /ui/devices/{device_id}/enable",
+      "PUT /admin/agent/version-floor",
       "PUT /admin/tenants/{tenant_id}/quota",
       "PUT /admin/tenants/{tenant_id}/tier"
     ],
@@ -112,7 +116,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "8a6dc605479b2bcbc59fa61e42439fb35c8d75d04899489821eba3da0e977ccc",
+  "governance_fingerprint": "8280ea3992ac5dd595dce05ec245402f27dc9547a14286fab9cf90c6a3ae1399",
   "planes": [
     {
       "compat": {
@@ -256,6 +260,7 @@
   "routes_by_plane": {
     "agent": [
       "GET /agent/cert/status",
+      "GET /agent/config",
       "GET /agent/policy/fetch",
       "GET /agent/update/manifest",
       "POST /agent/cert/enroll",
@@ -295,6 +300,7 @@
       "GET /_debug/routes",
       "GET /admin/agent/devices",
       "GET /admin/agent/evidence/export/{device_id}",
+      "GET /admin/agent/version-floor",
       "GET /admin/audit/search",
       "GET /admin/connectors/policy",
       "GET /admin/connectors/status",
@@ -347,6 +353,8 @@
       "GET /planes",
       "GET /status",
       "POST /admin/agent/commands/issue",
+      "POST /admin/agent/devices/{device_id}/disable",
+      "POST /admin/agent/devices/{device_id}/enable",
       "POST /admin/agent/devices/{device_id}/revoke",
       "POST /admin/agent/enrollment-tokens",
       "POST /admin/agent/policy/publish",
@@ -397,6 +405,7 @@
       "POST /governance/changes",
       "POST /governance/changes/{change_id}/approve",
       "POST /internal/connectors/{connector_id}/ingest",
+      "PUT /admin/agent/version-floor",
       "PUT /admin/tenants/{tenant_id}/quota",
       "PUT /admin/tenants/{tenant_id}/tier"
     ],

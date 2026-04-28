@@ -93,6 +93,14 @@
         {
           "class_name": "bootstrap",
           "expires_at": "",
+          "justification": "Config fetch uses device channel metadata.",
+          "method": "GET",
+          "path": "/agent/config",
+          "permanent": true
+        },
+        {
+          "class_name": "bootstrap",
+          "expires_at": "",
           "justification": "Policy fetch uses device channel metadata.",
           "method": "GET",
           "path": "/agent/policy/fetch",
@@ -885,7 +893,7 @@
       ]
     }
   ],
-  "generated_at": "2026-04-14T01:40:09.713394+00:00",
+  "generated_at": "2026-04-28T10:53:58.126895+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
