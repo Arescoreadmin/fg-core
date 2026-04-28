@@ -29,10 +29,11 @@
   "governance": {
     "contract_count": 156,
     "contract_only": [],
-    "runtime_count": 241,
+    "runtime_count": 242,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
+      "GET /admin/agent/devices/{device_id}/status",
       "GET /admin/agent/evidence/export/{device_id}",
       "GET /admin/agent/version-floor",
       "GET /admin/audit/search",
@@ -116,7 +117,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "8280ea3992ac5dd595dce05ec245402f27dc9547a14286fab9cf90c6a3ae1399",
+  "governance_fingerprint": "62f15bda6fab8ba584b53c5c2785e5667ee95aac4c6cb6159301541559f4ce89",
   "planes": [
     {
       "compat": {
@@ -299,6 +300,7 @@
       "DELETE /control-plane/v2/delegation/{delegation_id}",
       "GET /_debug/routes",
       "GET /admin/agent/devices",
+      "GET /admin/agent/devices/{device_id}/status",
       "GET /admin/agent/evidence/export/{device_id}",
       "GET /admin/agent/version-floor",
       "GET /admin/audit/search",
