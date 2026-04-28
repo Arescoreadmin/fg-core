@@ -297,14 +297,34 @@ The following guarantees MUST be maintained by any implementation:
 
 ## 4. Implementation Status
 
-This is a **forward contract document** for tasks 18.1 (Windows service wrapper) and 18.2 (MSI installer).
+This document drives tasks 18.1 (Windows service wrapper) and 18.2 (MSI installer).
 
-The following already exist in the repository and satisfy parts of this contract:
+### Implemented in task 18.1 (this task)
+
+- `agent/app/service/wrapper.py` — Typed service wrapper contract module:
+  - `WindowsServiceConfig` dataclass with all required fields
+  - `validate_service_config()` — enforces non-empty fields, forbidden accounts, no secret material in config path
+  - `build_install_command_plan()` — deterministic `sc create` command plan; no token material; uses non-privileged service account
+  - `build_start_command_plan()` — fails closed without config path and device credential
+  - `build_stop_command_plan()` — deterministic `sc stop` command plan
+  - `build_uninstall_command_plan()` — purge-off by default; explicit `purge=True` required to signal data removal
+  - `execute_live()` — platform-gated; raises `UnsupportedPlatformError` on non-Windows
+  - `validate_production_endpoint()` — rejects localhost, HTTP, and loopback addresses
+  - `default_frostgate_service_config()` — canonical defaults with `NT SERVICE\FrostGateAgent` account
+- `tests/agent/test_windows_service_wrapper.py` — 44 tests covering config, security, platform behavior, lifecycle compatibility, and regression invariants
+
+**Live Windows service execution was NOT tested** — implementation runs on Linux CI.
+Command plans are cross-platform and deterministic; actual SCM execution is platform-gated.
+**MSI packaging is NOT implemented** — that is task 18.2.
+
+### Existed before task 18.1
+
 - `agent/windows_service.py` — pywin32 service skeleton (implements service name, display name, SvcStop/SvcDoRun lifecycle)
 - `agent/windows-requirements.txt` — pywin32 + pyinstaller declared
 - `agent/app/config.py` — `AgentConfig` load_config() (enforces required env vars via `os.environ[...]`)
 
-The following MUST be implemented in 18.1 and 18.2:
+### Still required in 18.2 and later tasks
+
 - Credential Manager integration (DPAPI storage of device_key)
 - Enrollment flow with token deletion after exchange
 - MSI build toolchain (WiX or equivalent)

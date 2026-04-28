@@ -835,6 +835,7 @@ phases:
       validation:
       - Service wrapper installs, starts, and stops without errors
       validation_commands:
+      - .venv/bin/pytest -q tests/agent/test_windows_service_wrapper.py
       - make fg-fast
     - id: '18.2'
       title: MSI installer contract
