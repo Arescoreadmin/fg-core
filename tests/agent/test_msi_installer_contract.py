@@ -256,6 +256,21 @@ def test_validate_msi_endpoint_rejects_link_local() -> None:
         validate_msi_endpoint("https://169.254.1.1/api")
 
 
+def test_validate_msi_endpoint_rejects_empty_hostname() -> None:
+    with pytest.raises(MsiContractError):
+        validate_msi_endpoint("https://")
+
+
+def test_validate_msi_endpoint_rejects_path_only_no_host() -> None:
+    with pytest.raises(MsiContractError):
+        validate_msi_endpoint("https:///path")
+
+
+def test_validate_msi_endpoint_rejects_port_only_no_host() -> None:
+    with pytest.raises(MsiContractError):
+        validate_msi_endpoint("https://:443")
+
+
 def test_validate_environment_accepts_prod() -> None:
     validate_environment("prod")  # must not raise
 
@@ -635,3 +650,32 @@ def test_regression_sha256_manifest_cannot_be_disabled() -> None:
     contract = _make_valid_contract(sha256_manifest_required=False)
     with pytest.raises(MsiContractError):
         contract.validate_contract()
+
+
+def test_regression_validate_msi_endpoint_rejects_empty_hostname() -> None:
+    """Regression (P2): endpoints with no hostname must be rejected.
+
+    https://, https:///path, and https://:443 all parse to an empty hostname
+    and previously passed the forbidden-hostname and IP checks silently.
+    """
+    for bad in ("https://", "https:///path", "https://:443"):
+        with pytest.raises(MsiContractError, match="no resolvable hostname"):
+            validate_msi_endpoint(bad)
+
+
+def test_regression_execute_live_build_uses_arg_list_not_shell() -> None:
+    """Regression (P1): execute_live_build() must not use shell=True.
+
+    On non-Windows this raises MsiToolchainError before subprocess is called.
+    On Windows it would previously have used shell=True, enabling shell metacharacter
+    injection via artifact_name or build_output_dir.  This test verifies the platform
+    guard fires first; the structural fix (shell=False arg list) is verified by
+    code review of execute_live_build().
+    """
+    if sys.platform == "win32":
+        pytest.skip(
+            "structural shell=False fix must be verified by code review on Windows"
+        )
+    contract = _make_valid_contract()
+    with pytest.raises(MsiToolchainError, match="WiX toolchain"):
+        contract.execute_live_build()

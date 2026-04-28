@@ -390,8 +390,28 @@ class MsiBuildContract:
             )
         import subprocess
 
-        for cmd in self.build_build_command_plan():
-            subprocess.run(cmd, check=True, shell=True)
+        wixobj = f"{self.build_output_dir}\\{self.product_name}.wixobj"
+        candle_args = [
+            "candle.exe",
+            "-arch",
+            "x64",
+            "-out",
+            wixobj,
+            "installer\\Product.wxs",
+            "installer\\ServiceInstall.wxs",
+        ]
+        light_args = [
+            "light.exe",
+            "-ext",
+            "WixUIExtension",
+            "-ext",
+            "WixUtilExtension",
+            wixobj,
+            "-out",
+            f"{self.build_output_dir}\\{self.artifact_name}",
+        ]
+        for args in (candle_args, light_args):
+            subprocess.run(args, check=True, shell=False)
 
 
 # ---------------------------------------------------------------------------
@@ -404,6 +424,7 @@ def validate_msi_endpoint(endpoint: str) -> None:
 
     Raises MsiContractError if:
     - Scheme is not https://
+    - Hostname is empty (e.g. https://, https:///path, https://:443)
     - Hostname is 'localhost'
     - IP address is loopback, RFC 1918, or link-local
     """
@@ -414,6 +435,10 @@ def validate_msi_endpoint(endpoint: str) -> None:
         )
     parsed = urlparse(stripped)
     host = (parsed.hostname or "").lower()
+    if not host:
+        raise MsiContractError(
+            f"MSI control-plane endpoint has no resolvable hostname. Got: '{endpoint}'"
+        )
     if host in _FORBIDDEN_PROD_HOSTNAMES:
         raise MsiContractError(
             f"MSI control-plane endpoint cannot be a local or private address. "
