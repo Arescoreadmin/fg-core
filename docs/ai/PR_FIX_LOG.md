@@ -6,6 +6,74 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-28 — Task 18.1: Windows service wrapper foundation
+
+**Branch:** `task/18.1-windows-service-wrapper`
+
+**Area:** Agent / Windows service packaging
+
+---
+
+**Implementation added:**
+
+- `agent/app/service/wrapper.py` — typed service wrapper contract module:
+  - `WindowsServiceConfig` dataclass (12 required fields: service_name, display_name, description, executable_path, working_directory, config_path, log_directory, data_directory, service_account, start_type, restart_policy, stop_timeout_seconds)
+  - `validate_service_config()` — fails on empty required fields, forbidden accounts (LocalSystem/NT AUTHORITY\SYSTEM/SYSTEM), zero stop_timeout, secret material in config_path
+  - `build_install_command_plan()` — deterministic `sc create` plan; _assert_no_secret_material guard; no token args
+  - `build_start_command_plan()` — fail-closed: requires `config_path_exists=True` AND `device_credential_exists=True`
+  - `build_stop_command_plan()` — deterministic `sc stop`
+  - `build_uninstall_command_plan()` — purge off by default; `purge=True` produces distinct `--purge-data` plan
+  - `execute_live()` — raises `UnsupportedPlatformError` on non-Windows; Windows-only SCM execution
+  - `validate_production_endpoint()` — rejects non-HTTPS, localhost, 127.0.0.1, ::1
+  - `default_frostgate_service_config()` — canonical defaults with `NT SERVICE\FrostGateAgent`
+- `agent/app/service/__init__.py` — package re-exports
+
+**Platform behavior:** Live service operations fail explicitly on non-Windows via `UnsupportedPlatformError`. All `build_*_command_plan()` methods work cross-platform and are safe in Linux CI.
+
+**Non-privileged account behavior:** Default service_account is `NT SERVICE\FrostGateAgent`. LocalSystem, NT AUTHORITY\SYSTEM, and SYSTEM are explicitly forbidden by `validate_service_config()`.
+
+**Fail-closed guarantees:**
+- Missing config path blocks service start plan
+- Missing device credential blocks service start plan
+- Secret-like patterns in config_path are rejected at validation time
+- Secret-like patterns in generated install args are rejected by `_assert_no_secret_material`
+- Production localhost/HTTP endpoints are rejected by `validate_production_endpoint()`
+- Uninstall does not purge credentials by default; purge requires explicit `purge=True`
+
+**Tests added:**
+
+- `tests/agent/test_windows_service_wrapper.py` — 44 tests:
+  - Category 1 (Config/command plan): 12 tests — validate, install plan fields, start preconditions, stop determinism, uninstall/purge distinction
+  - Category 2 (Security): 13 tests — forbidden accounts, token patterns, endpoint rejection, independent config/credential requirements
+  - Category 3 (Platform behavior): 5 tests — live ops fail on non-Windows, plan mode cross-platform, determinism
+  - Category 4 (Lifecycle compatibility): 5 tests — no bypass of device credential, canonical config path, no parallel auth mechanism
+  - Category 5 (Regression): 6 tests — execute_live always raises on non-Windows, no token in plans, default is non-privileged, determinism
+- `plans/30_day_repo_blitz.yaml` — task 18.1 validation_commands tightened to include `.venv/bin/pytest -q tests/agent/test_windows_service_wrapper.py`
+- `docs/agent/windows_service_installer_contract.md` — Implementation Status section updated: lists what is implemented now vs future 18.2 work; no MSI or live Windows install claimed
+
+**Validation results:**
+
+- `.venv/bin/pytest -q tests/agent/test_windows_service_wrapper.py` → 44 passed
+- `make fg-fast` → All checks passed
+- Live Windows service execution: NOT claimed — environment is Linux
+
+**Local review performed:** yes
+
+**Local review issues found:**
+- ruff format check failed on initial test file write (trailing-expression formatting in long assert calls) — fixed by `ruff format`
+- ruff format check failed on wrapper.py (dict literal formatting) — fixed by `ruff format`
+
+**Fixes made after local review:**
+- Applied `ruff format` to `tests/agent/test_windows_service_wrapper.py` and `agent/app/service/wrapper.py`
+- Re-ran tests after format: 44 passed
+
+**Risks/notes:**
+- `execute_live()` is intentionally stubbed — actual Windows SCM invocation requires Windows CI which is out of scope for 18.1. The method is present and platform-gated as the integration point for future Windows CI.
+- DPAPI/Credential Manager integration deferred to 18.2/18.4 as specified.
+- MSI build toolchain deferred to 18.2.
+
+---
+
 ### 2026-04-27 — Task 15.3 PR review fix: blocked semantics + no-break-on-skip + precedence
 
 **Branch:** `task/15.3-runtime-verification-classification`
