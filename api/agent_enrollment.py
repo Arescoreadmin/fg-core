@@ -14,8 +14,12 @@ from threading import Lock
 from urllib.parse import urlencode
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from packaging.version import InvalidVersion
+from packaging.version import Version as _Version
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.dialects.postgresql import insert as _pg_insert
+from sqlalchemy.dialects.sqlite import insert as _sqlite_insert
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import hash_key
@@ -31,6 +35,73 @@ from api.db_models import (
 from api.security_audit import audit_admin_action
 
 log = logging.getLogger("frostgate.agent")
+
+
+def _agent_version_below_floor(version: str, floor: str) -> bool:
+    """
+    Return True if version is semantically below floor.
+
+    Uses packaging.version.Version so 10.0.0 > 2.0.0 (lexicographic comparison
+    would invert this for multi-digit major/minor numbers).
+    Fails closed: unparseable agent version is treated as below floor.
+    """
+    try:
+        return _Version(version) < _Version(floor)
+    except InvalidVersion:
+        log.warning(
+            "version_floor_compare_failed version=%r floor=%r; treating as below floor",
+            version,
+            floor,
+        )
+        return True
+
+
+def _upsert_collector_statuses(
+    session: Session,
+    *,
+    device_id: str,
+    tenant_id: str,
+    statuses: list,
+    now: datetime,
+) -> None:
+    """
+    Atomically upsert collector run outcomes using INSERT … ON CONFLICT DO UPDATE.
+
+    Safe under concurrent heartbeats: two requests for the same device_id /
+    collector_name will not race to double-insert because the conflict clause
+    converts the second insert into an update.
+
+    Supports SQLite (tests, single-node) and PostgreSQL (production).
+    Both dialects expose the same on_conflict_do_update() API in SQLAlchemy.
+    """
+    engine = session.get_bind()
+    dialect = engine.dialect.name
+    insert_fn = _pg_insert if dialect == "postgresql" else _sqlite_insert
+
+    for cs in statuses:
+        row = {
+            "device_id": device_id,
+            "tenant_id": tenant_id,
+            "collector_name": cs.collector_name,
+            "last_outcome": cs.outcome,
+            "last_run_at": now,
+            "last_error": cs.error,
+        }
+        stmt = (
+            insert_fn(AgentCollectorStatus)
+            .values(**row)
+            .on_conflict_do_update(
+                index_elements=["device_id", "collector_name"],
+                set_={
+                    "last_outcome": cs.outcome,
+                    "last_run_at": now,
+                    "last_error": cs.error,
+                },
+            )
+        )
+        session.execute(stmt)
+    session.commit()
+
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -578,32 +649,16 @@ def agent_heartbeat(
         session.commit()
 
         # Upsert collector statuses reported by the agent (may be empty list).
+        # Uses an atomic ON CONFLICT DO UPDATE to avoid the read-before-write
+        # race condition under concurrent heartbeats for the same device.
         if body.collector_statuses:
-            for cs in body.collector_statuses:
-                existing = (
-                    session.query(AgentCollectorStatus)
-                    .filter(
-                        AgentCollectorStatus.device_id == device.device_id,
-                        AgentCollectorStatus.collector_name == cs.collector_name,
-                    )
-                    .first()
-                )
-                if existing is not None:
-                    existing.last_outcome = cs.outcome
-                    existing.last_run_at = now
-                    existing.last_error = cs.error
-                else:
-                    session.add(
-                        AgentCollectorStatus(
-                            device_id=device.device_id,
-                            tenant_id=device.tenant_id,
-                            collector_name=cs.collector_name,
-                            last_outcome=cs.outcome,
-                            last_run_at=now,
-                            last_error=cs.error,
-                        )
-                    )
-            session.commit()
+            _upsert_collector_statuses(
+                session,
+                device_id=device.device_id,
+                tenant_id=device.tenant_id,
+                statuses=body.collector_statuses,
+                now=now,
+            )
 
         details = {
             "actor_id": device.device_id,
@@ -625,7 +680,9 @@ def agent_heartbeat(
         tc = s2.get(AgentTenantConfig, device.tenant_id)
         tenant_floor = (tc.version_floor or "").strip() if tc else ""
     effective_floor = tenant_floor or global_floor
-    if effective_floor and body.agent_version < effective_floor:
+    if effective_floor and _agent_version_below_floor(
+        body.agent_version, effective_floor
+    ):
         return AgentHeartbeatResponse(
             server_time=now.isoformat(),
             required_min_version=effective_floor,
@@ -733,7 +790,7 @@ def agent_config(
     effective_floor = tenant_floor or global_floor
     action = "none"
     ver = (agent_version or "").strip()
-    if effective_floor and ver and ver < effective_floor:
+    if effective_floor and ver and _agent_version_below_floor(ver, effective_floor):
         action = "shutdown"
 
     log.info(

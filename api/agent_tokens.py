@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import secrets
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from threading import Lock
+
+from packaging.version import InvalidVersion
+from packaging.version import Version as _Version
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -23,6 +27,8 @@ from api.db_models import (
     AgentTenantConfig,
 )
 from api.security_audit import audit_admin_action
+
+log = logging.getLogger("frostgate.agent.admin")
 
 router = APIRouter(
     prefix="/admin/agent",
@@ -449,6 +455,26 @@ class AgentObservabilityResponse(BaseModel):
     reasons: list[str]
 
 
+def _version_below_floor(version: str, floor: str) -> bool:
+    """
+    Return True if version is semantically below floor.
+
+    Uses packaging.version.Version for PEP 440 / semver-aware comparison so
+    that 10.0.0 > 2.0.0 (lexicographic comparison would invert this).
+    If either string is not parseable as a valid version, falls back to True
+    (fail-closed: treat unparseable agent version as below floor).
+    """
+    try:
+        return _Version(version) < _Version(floor)
+    except InvalidVersion:
+        log.warning(
+            "version_floor_compare_failed version=%r floor=%r; treating as below floor",
+            version,
+            floor,
+        )
+        return True
+
+
 def _derive_health(
     *,
     lifecycle_status: str,
@@ -474,7 +500,7 @@ def _derive_health(
         reasons.append("DEVICE_DISABLED")
         return _HEALTH_DISABLED, reasons
 
-    if effective_floor and version and version < effective_floor:
+    if effective_floor and version and _version_below_floor(version, effective_floor):
         reasons.append(f"VERSION_BELOW_FLOOR:{version}<{effective_floor}")
         return _HEALTH_OUTDATED, reasons
 
