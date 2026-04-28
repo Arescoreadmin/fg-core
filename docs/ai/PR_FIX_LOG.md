@@ -5851,3 +5851,45 @@ Canonical tester flow: ALL ASSERTIONS PASSED
 - `make fg-fast`: All checks passed
 
 **Local review:** Verified new forbidden-pattern test would have caught original `.enroll` file language (confirmed via isolation check).
+
+---
+
+### 2026-04-28 — Task 18.2: MSI installer build contract
+
+**Branch:** `task/18.2-msi-installer-contract`
+
+**Area:** Agent / MSI installer packaging
+
+---
+
+**What was implemented:**
+
+New typed MSI build contract module (`agent/app/installer/msi_contract.py`) and package init (`agent/app/installer/__init__.py`), with 63 tests in `tests/agent/test_msi_installer_contract.py`.
+
+**Key security invariants enforced:**
+
+1. `validate_msi_endpoint()` — rejects localhost, HTTP (non-TLS), loopback (127.0.0.0/8), RFC 1918 (10.x, 172.16-31.x, 192.168.x), and link-local (169.254.x) ranges; mirrors the RFC 1918 fix applied to wrapper.py in 18.1 P1 fix.
+
+2. `validate_environment()` — rejects `dev` and `local` environment strings; only `prod` and `staging` permitted in production context.
+
+3. `build_install_command_example()` — produces msiexec command with `<placeholder>` strings only; real token/endpoint values are never included in any generated plan.
+
+4. `PURGE_DATA` off by default — `build_uninstall_command_example(purge=False)` never emits `PURGE_DATA=1` unless explicitly requested.
+
+5. `validate_contract()` — sha256_manifest_required must be True; GUID fields validated against strict regex; no secret patterns in artifact name.
+
+6. `execute_live_build()` — platform-gated; raises `MsiToolchainError` on non-Windows or missing WiX toolchain (candle.exe/light.exe).
+
+**Exception hierarchy note:** `MsiContractError(ValueError)` and `MsiToolchainError(RuntimeError)` are deliberately separated to avoid the same `except ValueError` swallowing bug fixed in wrapper.py P1. IP address parsing is separated from network membership check.
+
+**Files changed:**
+- `agent/app/installer/__init__.py` — new (package init)
+- `agent/app/installer/msi_contract.py` — new (MSI build contract module)
+- `tests/agent/test_msi_installer_contract.py` — new (63 tests)
+- `plans/30_day_repo_blitz.yaml` — task 18.2 validation_commands updated to include dedicated test file
+- `docs/agent/windows_service_installer_contract.md` — Implementation Status section updated with 18.2 details
+
+**Validation results:**
+- `pytest -q tests/agent/test_msi_installer_contract.py`: 63 passed
+- `ruff format --check`: 2 files reformatted, then re-verified clean
+- `make fg-fast`: All checks passed (see gate run below)
