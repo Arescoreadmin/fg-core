@@ -19,9 +19,11 @@ Security invariants enforced by this module:
 
 from __future__ import annotations
 
+import ipaddress
 import sys
 from dataclasses import dataclass
 from typing import Literal
+from urllib.parse import urlparse
 
 StartType = Literal["auto", "demand", "disabled", "delayed-auto"]
 RestartPolicy = Literal["always", "on-failure", "never"]
@@ -46,8 +48,20 @@ _SECRET_PATTERNS: tuple[str, ...] = (
     "FG_API_KEY",
 )
 
-# Hosts that are forbidden in production service endpoint configuration.
-_FORBIDDEN_PROD_HOSTS: tuple[str, ...] = ("localhost", "127.0.0.1", "::1")
+# Hostnames forbidden in production endpoints (exact match after URL parse).
+_FORBIDDEN_PROD_HOSTNAMES: frozenset[str] = frozenset({"localhost"})
+
+# RFC 1918, loopback, and link-local networks forbidden in production endpoints.
+_FORBIDDEN_PROD_NETWORKS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = (
+    ipaddress.ip_network("127.0.0.0/8"),  # loopback
+    ipaddress.ip_network("10.0.0.0/8"),  # RFC 1918
+    ipaddress.ip_network("172.16.0.0/12"),  # RFC 1918
+    ipaddress.ip_network("192.168.0.0/16"),  # RFC 1918
+    ipaddress.ip_network("169.254.0.0/16"),  # link-local
+    ipaddress.ip_network("::1/128"),  # IPv6 loopback
+    ipaddress.ip_network("fc00::/7"),  # IPv6 unique local
+    ipaddress.ip_network("fe80::/10"),  # IPv6 link-local
+)
 
 
 class ServiceConfigError(ValueError):
@@ -100,8 +114,9 @@ class WindowsServiceConfig:
             "log_directory",
             "data_directory",
         ):
-            if not str(getattr(self, attr, "")).strip():
-                errors.append(f"'{attr}' must be non-empty")
+            val = getattr(self, attr)
+            if not isinstance(val, str) or not val.strip():
+                errors.append(f"'{attr}' must be a non-empty string")
 
         if self.service_account.lower().strip() in _FORBIDDEN_ACCOUNTS:
             errors.append(
@@ -242,19 +257,35 @@ def validate_production_endpoint(endpoint: str) -> None:
 
     Raises ServiceConfigError if:
     - The scheme is not https://
-    - The host matches a known local/private address (localhost, 127.0.0.1, ::1)
+    - The hostname is 'localhost'
+    - The host resolves to a loopback, RFC 1918, or link-local IP address
     """
-    stripped = endpoint.strip().lower()
-    if not stripped.startswith("https://"):
+    stripped = endpoint.strip()
+    if not stripped.lower().startswith("https://"):
         raise ServiceConfigError(
             f"Production endpoint must use HTTPS. Got: '{endpoint}'"
         )
-    for host in _FORBIDDEN_PROD_HOSTS:
-        if host in stripped:
-            raise ServiceConfigError(
-                f"Production endpoint cannot be a local or private address. "
-                f"Got: '{endpoint}' (matched forbidden host: '{host}')"
-            )
+    parsed = urlparse(stripped)
+    host = (parsed.hostname or "").lower()
+    if host in _FORBIDDEN_PROD_HOSTNAMES:
+        raise ServiceConfigError(
+            f"Production endpoint cannot be a local or private address. "
+            f"Got: '{endpoint}' (hostname: '{host}')"
+        )
+    try:
+        addr: ipaddress.IPv4Address | ipaddress.IPv6Address | None = (
+            ipaddress.ip_address(host)
+        )
+    except ValueError:
+        addr = None  # hostname, not a bare IP — name-based checks above are sufficient
+
+    if addr is not None:
+        for network in _FORBIDDEN_PROD_NETWORKS:
+            if addr in network:
+                raise ServiceConfigError(
+                    f"Production endpoint cannot be a loopback, RFC 1918, or "
+                    f"link-local address. Got: '{endpoint}' (host '{host}' is in {network})"
+                )
 
 
 def default_frostgate_service_config(

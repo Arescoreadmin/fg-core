@@ -279,6 +279,30 @@ def test_validate_production_endpoint_rejects_http() -> None:
         validate_production_endpoint("http://control-plane.frostgate.example.com")
 
 
+def test_validate_production_endpoint_rejects_rfc1918_10_block() -> None:
+    """RFC 1918 10.x.x.x addresses are rejected as production endpoints."""
+    with pytest.raises(ServiceConfigError):
+        validate_production_endpoint("https://10.0.0.5/api")
+
+
+def test_validate_production_endpoint_rejects_rfc1918_172_block() -> None:
+    """RFC 1918 172.16–31.x.x addresses are rejected as production endpoints."""
+    with pytest.raises(ServiceConfigError):
+        validate_production_endpoint("https://172.16.0.1/api")
+
+
+def test_validate_production_endpoint_rejects_rfc1918_192_168_block() -> None:
+    """RFC 1918 192.168.x.x addresses are rejected as production endpoints."""
+    with pytest.raises(ServiceConfigError):
+        validate_production_endpoint("https://192.168.1.10/api")
+
+
+def test_validate_production_endpoint_rejects_link_local() -> None:
+    """Link-local 169.254.x.x addresses are rejected as production endpoints."""
+    with pytest.raises(ServiceConfigError):
+        validate_production_endpoint("https://169.254.1.2/api")
+
+
 def test_service_cannot_start_without_device_credential_even_with_config() -> None:
     """Device credential is independently required; config alone is not sufficient."""
     config = _make_valid_config()
@@ -499,6 +523,41 @@ def test_regression_validate_raises_on_empty_required_fields() -> None:
     config = _make_valid_config(executable_path="")
     with pytest.raises(ServiceConfigError, match="executable_path"):
         config.validate_service_config()
+
+
+def test_regression_validate_rejects_none_required_field() -> None:
+    """Regression: None value for a required str field must be rejected immediately.
+
+    str(None) == 'None' which is non-empty and would pass the old coercion check.
+    isinstance guard must catch this at validation time, not at execution time.
+    """
+    config = _make_valid_config(executable_path=None)  # type: ignore[arg-type]
+    with pytest.raises(ServiceConfigError, match="executable_path"):
+        config.validate_service_config()
+
+
+def test_regression_validate_rejects_non_string_sentinel() -> None:
+    """Regression: non-string sentinels (0, False) for required str fields are rejected."""
+    config_zero = _make_valid_config(service_name=0)  # type: ignore[arg-type]
+    with pytest.raises(ServiceConfigError, match="service_name"):
+        config_zero.validate_service_config()
+
+
+def test_regression_rfc1918_endpoints_rejected() -> None:
+    """Regression: all RFC 1918 and loopback classes must be rejected as production endpoints."""
+    forbidden = [
+        "https://10.0.0.1/api",
+        "https://10.255.255.255/api",
+        "https://172.16.0.1/api",
+        "https://172.31.255.255/api",
+        "https://192.168.0.1/api",
+        "https://192.168.255.255/api",
+        "https://169.254.1.1/api",
+        "https://127.0.0.1/api",
+    ]
+    for url in forbidden:
+        with pytest.raises(ServiceConfigError):
+            validate_production_endpoint(url)
 
 
 def test_regression_stop_plan_always_deterministic() -> None:
