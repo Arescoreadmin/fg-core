@@ -5755,3 +5755,31 @@ Canonical tester flow: ALL ASSERTIONS PASSED
 **Local review issues found:**
 - ruff formatting required on test file — fixed via `ruff format`
 **Fixes made after local review:** formatting only
+
+---
+
+### 2026-04-28 — Task 17.6 addendum: enrollment token disk-persistence fix
+
+**Branch:** `task/17.6-windows-service-installer-contract`
+**Trigger:** PR review — enrollment token disk-backed handoff pattern
+
+**Issue:** Original contract section 2.4 permitted writing `ENROLLMENT_TOKEN` to a disk-backed `.enroll` temporary parameter file (`C:\ProgramData\FrostGate\Agent\config\.enroll`), then deleting it after exchange. This violated the contract's own security guarantee that raw enrollment/bootstrap tokens are never persisted to disk.
+
+**Fixes applied:**
+
+1. `docs/agent/windows_service_installer_contract.md` section 2.4 — removed all language permitting `.enroll` file or any disk-backed raw token handoff. Replaced with fail-closed enrollment flow requiring in-process custom action or DPAPI-protected deferred storage. Explicitly forbids: `.enroll` file, plaintext bootstrap token file, config-stored enrollment token, command-line logging of token, localhost fallback in production.
+
+2. New section 2.6 (`agent.toml` contents) — explicit MAY/MUST NOT lists for config file. MUST NOT: enrollment token, bootstrap token, device_key, API key, signing secret, bearer token, HMAC secret.
+
+3. `tests/agent/test_windows_service_installer_contract.py` — tests tightened:
+   - `test_contract_forbids_raw_token_disk_persistence` — now requires explicit "MUST NOT be written to disk" language (not just "deleted")
+   - `test_contract_contains_no_disk_backed_token_patterns` — checks for PERMISSIVE patterns (e.g., "temporary parameter file", "enrollment_token from msi-written") that indicate the contract allows disk writes; would have caught the original violation
+   - `test_contract_requires_service_starts_only_after_credential_exists` — new
+   - `test_contract_requires_enrollment_failure_closes_install` — new
+   - `test_contract_defines_agent_toml_must_not_contain_secrets` — new
+
+**Validation results:**
+- `pytest -q tests/agent/test_windows_service_installer_contract.py`: 44 passed
+- `make fg-fast`: All checks passed
+
+**Local review:** Verified new forbidden-pattern test would have caught original `.enroll` file language (confirmed via isolation check).

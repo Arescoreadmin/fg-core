@@ -249,24 +249,61 @@ def test_contract_forbids_embedded_secrets(contract_text: str) -> None:
     )
 
 
-def test_contract_forbids_raw_token_persistence(contract_text: str) -> None:
-    """Contract must forbid persisting the raw enrollment/bootstrap token."""
+def test_contract_forbids_raw_token_disk_persistence(contract_text: str) -> None:
+    """Contract must explicitly state that raw enrollment/bootstrap token MUST NOT be written to disk."""
     text_lower = contract_text.lower()
     assert "token" in text_lower, "Contract must address enrollment token handling."
+    # Required prohibition phrases — at least one must be present
     assert any(
         phrase in text_lower
         for phrase in [
-            "never written",
-            "never persist",
-            "deleted",
-            "removed",
-            "not stored",
+            "must not be written to disk",
+            "must not write raw",
+            "must not write the raw",
+            "never persisted",
+            "never be written to disk",
         ]
-    ), "Contract must explicitly forbid raw token persistence after exchange."
+    ), (
+        "Contract must explicitly prohibit writing the raw enrollment/bootstrap token to disk. "
+        "Phrases like 'deleted' or 'removed' are insufficient — the contract must forbid disk writes entirely."
+    )
+
+
+# Permissive phrases that would indicate the contract ALLOWS disk-backed token handoff.
+# These should never appear because they describe patterns that are forbidden.
+# Note: prohibition-context mentions (e.g. "no .enroll file") are fine — we check for
+# PERMISSIVE constructions only, not any mention.
+_FORBIDDEN_PERMISSIVE_TOKEN_PATTERNS = [
+    # Old permissive: "reads ENROLLMENT_TOKEN from MSI-written temporary parameter file"
+    "temporary parameter file",
+    # Old permissive: step describing the installer writing a .enroll file for later use
+    "enrollment_token from msi-written",
+    # Explicit permission to write or read a token from a file on disk
+    "writes enrollment_token",
+    "write enrollment_token",
+    "writes bootstrap_token",
+    "write bootstrap_token",
+    # Describing a readable bootstrap/enrollment token file (permissive)
+    "reads enrollment_token from",
+    "read enrollment_token from",
+    "reads bootstrap_token from",
+    "read bootstrap_token from",
+]
+
+
+def test_contract_contains_no_disk_backed_token_patterns(contract_text: str) -> None:
+    """Contract must not contain permissive disk-backed enrollment token handoff language."""
+    text_lower = contract_text.lower()
+    violations = [p for p in _FORBIDDEN_PERMISSIVE_TOKEN_PATTERNS if p in text_lower]
+    assert not violations, (
+        f"Contract contains permissive disk-backed enrollment token pattern(s): "
+        f"{violations}. "
+        "These patterns indicate the contract permits raw token disk writes, which is forbidden."
+    )
 
 
 def test_contract_requires_protected_credential_storage(contract_text: str) -> None:
-    """Contract must require protected storage for device credentials (DPAPI/Credential Manager)."""
+    """Contract must require DPAPI/Credential Manager for device credential storage."""
     text_lower = contract_text.lower()
     assert any(
         phrase in text_lower
@@ -281,11 +318,76 @@ def test_contract_requires_protected_credential_storage(contract_text: str) -> N
     )
 
 
+def test_contract_requires_service_starts_only_after_credential_exists(
+    contract_text: str,
+) -> None:
+    """Contract must state that service starts only after device credential is present."""
+    text_lower = contract_text.lower()
+    assert any(
+        phrase in text_lower
+        for phrase in [
+            "service starts only after device credential",
+            "starts only after device credential",
+            "only after device credential exists",
+        ]
+    ), (
+        "Contract must explicitly require that service starts only after device credential "
+        "exists in protected storage."
+    )
+
+
+def test_contract_requires_enrollment_failure_closes_install(
+    contract_text: str,
+) -> None:
+    """Contract must state that enrollment failure causes install to fail closed."""
+    text_lower = contract_text.lower()
+    assert any(
+        phrase in text_lower
+        for phrase in [
+            "install fails closed",
+            "installation fails closed",
+            "fails closed with",
+            "fail closed with",
+        ]
+    ), (
+        "Contract must state that if enrollment fails, installation fails closed "
+        "with an actionable error."
+    )
+
+
 def test_contract_requires_no_plaintext_credentials(contract_text: str) -> None:
     """Contract must prohibit plaintext credential storage."""
     text_lower = contract_text.lower()
     assert "plaintext" in text_lower or "plain text" in text_lower, (
         "Contract must address and prohibit plaintext credential storage."
+    )
+
+
+def test_contract_defines_agent_toml_must_not_contain_secrets(
+    contract_text: str,
+) -> None:
+    """Contract must define what agent.toml must NOT contain (no tokens, keys, secrets)."""
+    assert "agent.toml" in contract_text, (
+        "Contract must reference agent.toml config file contents."
+    )
+    text_lower = contract_text.lower()
+    # Must have a prohibitions section for agent.toml
+    assert any(
+        phrase in text_lower
+        for phrase in [
+            "must not contain",
+            "must not include",
+        ]
+    ), "Contract must define what agent.toml must NOT contain."
+    # Must explicitly prohibit token content in config
+    assert any(
+        phrase in text_lower
+        for phrase in [
+            "enrollment token",
+            "bootstrap token",
+        ]
+    ), (
+        "Contract must explicitly state that agent.toml must not contain enrollment/bootstrap tokens."
     )
 
 

@@ -132,15 +132,34 @@ Required config keys (startup fails without these):
 
 ### 2.4 Enrollment Flow
 
-1. MSI installs binary and writes `agent.toml` with non-secret config (tenant_id, control_plane_url, environment).
-2. On first service start, agent reads `ENROLLMENT_TOKEN` from MSI-written temporary parameter file (mode 0600 equivalent via ACL, placed in `C:\ProgramData\FrostGate\Agent\config\.enroll`, accessible only to `NT SERVICE\FrostGateAgent` and `SYSTEM`).
-3. Agent calls `POST /agent/enroll` with the enrollment token to obtain `device_id` and `device_key`.
-4. `device_key` is stored in Windows Credential Manager (target: `FrostGate/Agent/{tenant_id}/{device_id}`) via DPAPI. Never written to disk as plaintext.
-5. `.enroll` file is deleted immediately after successful credential storage. If enrollment fails, file is deleted after max 3 retries and service stops (not retried indefinitely to prevent token replay).
-6. `device_id` is written to `agent.toml` (non-secret device identifier).
-7. On all subsequent starts, service reads `device_id` from `agent.toml` and `device_key` from Windows Credential Manager. No enrollment token reference after initial exchange.
-8. **Identity stability:** device_id and device_key survive restart, upgrade (non-purge), and repair. Purge uninstall removes the Credential Manager entry.
-9. **Revoked/disabled device behavior (17.4):** If control plane returns `DEVICE_REVOKED` or `DEVICE_DISABLED`, service halts collector execution immediately and logs the lifecycle state. Reenrollment requires operator action (purge + fresh enrollment token).
+**ENROLLMENT_TOKEN / BOOTSTRAP_TOKEN MUST NOT be written to disk at any point.** No `.enroll` file, no temporary token file, no plaintext bootstrap token file, no config-stored enrollment token. No installer log and no Windows Event Log entry may contain raw enrollment/bootstrap token material. No crash dump or diagnostic bundle may intentionally include raw enrollment/bootstrap token material.
+
+**Approved handoff patterns:**
+- MSI custom action passes token directly to the enrollment process via secure in-memory process invocation (e.g., `CreateProcess` with an inherited handle or a named pipe — never a command-line argument that can be logged).
+- If deferred handoff is required, the token MUST be stored using Windows Credential Manager or DPAPI-protected secret storage directly — never as a plaintext file.
+- Raw token lifetime is bounded: token is cleared from process environment and memory as soon as the exchange completes.
+
+**Explicitly forbidden:**
+- `.enroll` raw token file or any raw bootstrap token file on disk
+- Plaintext enrollment/bootstrap token in any config file (including `agent.toml`)
+- Command-line echo or logging of the token value
+- Fallback enrollment using a localhost or dev endpoint in production profile
+
+**Required enrollment flow:**
+
+1. MSI receives `TENANT_ID`, `CONTROL_PLANE_URL`, `ENVIRONMENT`, and `ENROLLMENT_TOKEN` / `BOOTSTRAP_TOKEN` as install-time inputs.
+2. Installer validates all required inputs before service registration. Missing or invalid inputs → install fails closed; no service is registered.
+3. Installer MUST NOT write the raw enrollment/bootstrap token to disk in any form.
+4. Installer performs bootstrap enrollment immediately (preferred) via an in-process custom action, OR if enrollment must be deferred, stores the token only via Windows Credential Manager / DPAPI — never as a plaintext file.
+5. Enrollment call (`POST /agent/enroll`) exchanges the raw install-time token for a `device_id` + `device_key` device credential.
+6. Device credential is stored using DPAPI, Windows Credential Manager (target: `FrostGate/Agent/{tenant_id}/{device_id}`), or an approved equivalent. Raw device credential is never written to disk as plaintext.
+7. Raw enrollment/bootstrap token is cleared immediately after the exchange and is never reused.
+8. `device_id` (non-secret identifier) is written to `agent.toml`.
+9. Service starts only after device credential exists in protected storage and is validated by a successful control plane call.
+10. If enrollment fails, installation fails closed with an actionable, non-token-leaking error message. Service is not started.
+11. On all subsequent starts, service reads `device_id` from `agent.toml` and `device_key` from Windows Credential Manager. No enrollment token is referenced after initial exchange.
+12. **Identity stability:** device_id and device_key survive restart, upgrade (non-purge), and repair. Purge uninstall removes the Credential Manager entry.
+13. **Revoked/disabled device behavior (17.4):** If control plane returns `DEVICE_REVOKED` or `DEVICE_DISABLED`, service halts collector execution immediately and logs the lifecycle state. Reenrollment requires operator action (purge + fresh enrollment token).
 
 ### 2.5 Artifact Contents
 
@@ -156,7 +175,28 @@ Required config keys (startup fails without these):
 | `RELEASE_NOTES.txt` | Human-readable release notes |
 | `manifest.sha256` | SHA256 hash of every artifact in the MSI |
 
-### 2.6 Artifact Exclusions
+### 2.6 Config File Contents (`agent.toml`)
+
+`agent.toml` is the non-secret runtime config file written by the MSI installer and read by the service at startup.
+
+**`agent.toml` MAY contain:**
+- `tenant_id` — non-secret tenant identifier
+- `control_plane_url` — HTTPS endpoint
+- `environment` / `profile` — `prod`, `staging`
+- `log_level` — `debug`, `info`, `warn`, `error`
+- `device_id` — non-secret device identifier (written after successful enrollment)
+- Other non-secret service settings (flush interval, queue path, etc.)
+
+**`agent.toml` MUST NOT contain:**
+- Enrollment token or bootstrap token of any kind
+- Device private key or device_key
+- API key, signing secret, or bearer token
+- HMAC secret or any credential material
+- `FG_SIGNING_SECRET`, `FG_INTERNAL_AUTH_SECRET`, `FG_AGENT_KEY`, `FG_API_KEY`
+
+Violation is a release blocker and a security incident trigger.
+
+### 2.7 Artifact Exclusions
 
 The MSI MUST NOT contain:
 
@@ -169,7 +209,7 @@ The MSI MUST NOT contain:
 
 Violation of any exclusion is a release blocker.
 
-### 2.7 Versioning and Upgrade
+### 2.8 Versioning and Upgrade
 
 - **Version field:** Semantic version `MAJOR.MINOR.PATCH` embedded in MSI ProductVersion and `FrostGateAgent.exe` file metadata.
 - **Upgrade preserves identity:** Non-purge upgrade keeps device_id in `agent.toml` and device_key in Credential Manager. Collectors restart; queue is preserved.
@@ -177,7 +217,7 @@ Violation of any exclusion is a release blocker.
 - **Version floor compatibility:** Agent binary MUST report its version in every heartbeat per 17.5 schema. Control plane health evaluation (17.4) determines if the running version is below floor.
 - **Rollback behavior:** MSI rollback (failed upgrade) restores previous binary; Credential Manager entry and `agent.toml` are preserved; service restarted on rollback. If rollback leaves agent below version floor, behavior is same as downgrade above.
 
-### 2.8 Signing and Release Metadata
+### 2.9 Signing and Release Metadata
 
 - **MSI signing:** Required for production release. Signed with organization code signing certificate. SHA-256 digest algorithm. Timestamp authority required. Unsigned MSI MUST be labeled `NOT FOR PRODUCTION`.
 - **Executable signing:** `FrostGateAgent.exe` signed independently. Both MSI container and embedded executable must be signed.
@@ -199,7 +239,7 @@ Violation of any exclusion is a release blocker.
   }
   ```
 
-### 2.9 Enterprise Deployment (Intune / GPO / RMM)
+### 2.10 Enterprise Deployment (Intune / GPO / RMM)
 
 **Compatibility:** The MSI is a standard Windows Installer package compatible with:
 - Microsoft Intune (Win32 app deployment)
