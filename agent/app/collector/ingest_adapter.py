@@ -7,8 +7,10 @@ Design invariants:
 - tenant_id and agent_id come exclusively from CollectorEvent fields.
 - Any tenant_id or agent_id keys present in CollectorEvent.payload are stripped
   before submission; they cannot override the explicit identity fields.
-- event_id is derived deterministically from (collector_name, agent_id, occurred_at)
-  via SHA-256; idempotent replay works correctly for same event occurrence.
+- event_id is derived deterministically from (collector_name, agent_id, event_type,
+  occurred_at) via SHA-256; idempotent replay works correctly for same event
+  occurrence. event_type is included to prevent collision when a collector emits
+  multiple event types sharing the same timestamp.
 - CollectorEvent.validate() is called before conversion; malformed events raise
   ValueError and are not converted.
 - No broad except/pass; failures propagate to caller.
@@ -31,18 +33,26 @@ _FORBIDDEN_PAYLOAD_KEYS: frozenset[str] = frozenset({"tenant_id", "agent_id"})
 AGENT_SOURCE_PREFIX: str = "agent"
 
 
-def _derive_event_id(collector_name: str, agent_id: str, occurred_at: str) -> str:
+def _derive_event_id(
+    collector_name: str, agent_id: str, occurred_at: str, event_type: str
+) -> str:
     """
     Derive a deterministic event_id for POST /ingest.
 
-    Uses SHA-256 of the canonical string "collector_name:agent_id:occurred_at".
+    Uses SHA-256 of the canonical string
+    "collector_name:agent_id:event_type:occurred_at".
     Returns the first 32 hex characters (lowercase), which matches the
     /ingest event_id pattern ^[A-Za-z0-9._:-]+$ and is within the 128-char limit.
 
-    Determinism: same (collector_name, agent_id, occurred_at) always produces
-    the same event_id, enabling idempotent replay on the ingest endpoint.
+    event_type is included so collectors that emit multiple event types in one
+    run (the Collector contract returns a list) do not collide on a shared
+    timestamp — a collision would cause /ingest's idempotency guard to silently
+    drop the later event.
+
+    Determinism: same (collector_name, agent_id, event_type, occurred_at) always
+    produces the same event_id, enabling idempotent replay on the ingest endpoint.
     """
-    raw = f"{collector_name}:{agent_id}:{occurred_at}"
+    raw = f"{collector_name}:{agent_id}:{event_type}:{occurred_at}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
 
@@ -83,7 +93,9 @@ def collector_event_to_ingest_payload(evt: CollectorEvent) -> dict[str, Any]:
     }
 
     return {
-        "event_id": _derive_event_id(evt.collector_name, evt.agent_id, evt.occurred_at),
+        "event_id": _derive_event_id(
+            evt.collector_name, evt.agent_id, evt.occurred_at, evt.event_type
+        ),
         "tenant_id": evt.tenant_id,
         "source": f"{AGENT_SOURCE_PREFIX}:{evt.agent_id}",
         "event_type": evt.event_type,

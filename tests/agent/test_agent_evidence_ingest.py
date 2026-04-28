@@ -311,29 +311,54 @@ def test_agent_evidence_adapter_whitespace_tenant_id_raises() -> None:
 
 def test_agent_evidence_derive_event_id_is_32_hex_chars() -> None:
     """_derive_event_id returns exactly 32 lowercase hex characters."""
-    eid = _derive_event_id("process_inventory", "agent-1", _FIXED_OCCURRED_AT)
+    eid = _derive_event_id(
+        "process_inventory", "agent-1", _FIXED_OCCURRED_AT, "inventory.process_snapshot"
+    )
     assert len(eid) == 32
     assert all(c in "0123456789abcdef" for c in eid)
 
 
 def test_agent_evidence_derive_event_id_deterministic() -> None:
     """Same inputs produce same event_id every call."""
-    a = _derive_event_id("process_inventory", "agent-1", _FIXED_OCCURRED_AT)
-    b = _derive_event_id("process_inventory", "agent-1", _FIXED_OCCURRED_AT)
+    a = _derive_event_id(
+        "process_inventory", "agent-1", _FIXED_OCCURRED_AT, "inventory.process_snapshot"
+    )
+    b = _derive_event_id(
+        "process_inventory", "agent-1", _FIXED_OCCURRED_AT, "inventory.process_snapshot"
+    )
     assert a == b
 
 
 def test_agent_evidence_derive_event_id_differs_by_agent() -> None:
     """Different agent_ids produce different event_ids."""
-    a = _derive_event_id("process_inventory", "agent-1", _FIXED_OCCURRED_AT)
-    b = _derive_event_id("process_inventory", "agent-2", _FIXED_OCCURRED_AT)
+    a = _derive_event_id(
+        "process_inventory", "agent-1", _FIXED_OCCURRED_AT, "inventory.process_snapshot"
+    )
+    b = _derive_event_id(
+        "process_inventory", "agent-2", _FIXED_OCCURRED_AT, "inventory.process_snapshot"
+    )
     assert a != b
 
 
 def test_agent_evidence_derive_event_id_differs_by_collector() -> None:
-    """Different collector names produce different event_ids."""
-    a = _derive_event_id("collector-a", "agent-1", _FIXED_OCCURRED_AT)
-    b = _derive_event_id("collector-b", "agent-1", _FIXED_OCCURRED_AT)
+    """Different collector names produce different event_ids (same event_type)."""
+    a = _derive_event_id(
+        "collector-a", "agent-1", _FIXED_OCCURRED_AT, "inventory.process_snapshot"
+    )
+    b = _derive_event_id(
+        "collector-b", "agent-1", _FIXED_OCCURRED_AT, "inventory.process_snapshot"
+    )
+    assert a != b
+
+
+def test_agent_evidence_derive_event_id_differs_by_event_type() -> None:
+    """Different event_types produce different event_ids (prevents same-timestamp collision)."""
+    a = _derive_event_id(
+        "process_inventory", "agent-1", _FIXED_OCCURRED_AT, "inventory.process_snapshot"
+    )
+    b = _derive_event_id(
+        "process_inventory", "agent-1", _FIXED_OCCURRED_AT, "inventory.network_snapshot"
+    )
     assert a != b
 
 
@@ -352,7 +377,9 @@ def test_agent_evidence_ingest_tenant_can_query_own_evidence(build_app) -> None:
     suffix = uuid.uuid4().hex[:8]
     tenant_a = f"ev-tenant-a-{suffix}"
     agent_id = f"agent-{suffix}"
-    event_id = _derive_event_id("process_inventory", agent_id, _FIXED_OCCURRED_AT)
+    event_id = _derive_event_id(
+        "process_inventory", agent_id, _FIXED_OCCURRED_AT, "inventory.process_snapshot"
+    )
 
     app = build_app(auth_enabled=True)
     client = TestClient(app)
@@ -393,7 +420,9 @@ def test_agent_evidence_ingest_tenant_isolation_cross_tenant_denied(build_app) -
     tenant_a = f"ev-isol-a-{suffix}"
     tenant_b = f"ev-isol-b-{suffix}"
     agent_id = f"agent-{suffix}"
-    event_id = _derive_event_id("process_inventory", agent_id, _FIXED_OCCURRED_AT)
+    event_id = _derive_event_id(
+        "process_inventory", agent_id, _FIXED_OCCURRED_AT, "inventory.process_snapshot"
+    )
 
     app = build_app(auth_enabled=True)
     client = TestClient(app)
@@ -432,7 +461,9 @@ def test_agent_evidence_ingest_empty_result_for_wrong_tenant(build_app) -> None:
     tenant_a = f"ev-enum-a-{suffix}"
     tenant_b = f"ev-enum-b-{suffix}"
     agent_id = f"agent-{suffix}"
-    event_id = _derive_event_id("process_inventory", agent_id, _FIXED_OCCURRED_AT)
+    event_id = _derive_event_id(
+        "process_inventory", agent_id, _FIXED_OCCURRED_AT, "inventory.process_snapshot"
+    )
 
     app = build_app(auth_enabled=True)
     client = TestClient(app)
@@ -466,7 +497,9 @@ def test_agent_evidence_ingest_decision_contains_agent_metadata(build_app) -> No
     suffix = uuid.uuid4().hex[:8]
     tenant_a = f"ev-meta-a-{suffix}"
     agent_id = f"agent-meta-{suffix}"
-    event_id = _derive_event_id("process_inventory", agent_id, _FIXED_OCCURRED_AT)
+    event_id = _derive_event_id(
+        "process_inventory", agent_id, _FIXED_OCCURRED_AT, "inventory.process_snapshot"
+    )
 
     app = build_app(auth_enabled=True)
     client = TestClient(app)
@@ -506,8 +539,18 @@ def test_agent_evidence_ingest_tenant_a_b_fully_isolated(build_app) -> None:
     tenant_b = f"ev-bil-b-{suffix}"
     agent_id_a = f"agent-a-{suffix}"
     agent_id_b = f"agent-b-{suffix}"
-    event_id_a = _derive_event_id("process_inventory", agent_id_a, _FIXED_OCCURRED_AT)
-    event_id_b = _derive_event_id("process_inventory", agent_id_b, _FIXED_OCCURRED_AT)
+    event_id_a = _derive_event_id(
+        "process_inventory",
+        agent_id_a,
+        _FIXED_OCCURRED_AT,
+        "inventory.process_snapshot",
+    )
+    event_id_b = _derive_event_id(
+        "process_inventory",
+        agent_id_b,
+        _FIXED_OCCURRED_AT,
+        "inventory.process_snapshot",
+    )
 
     app = build_app(auth_enabled=True)
     client = TestClient(app)
