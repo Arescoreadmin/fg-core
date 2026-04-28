@@ -820,6 +820,7 @@ phases:
       validation:
       - Service and installer contracts exist and are reviewable
       validation_commands:
+      - .venv/bin/pytest -q tests/agent/test_windows_service_installer_contract.py
       - make fg-fast
   - id: '18.0'
     name: Agent Packaging / Enterprise Deployment

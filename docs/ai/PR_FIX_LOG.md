@@ -5704,3 +5704,82 @@ Canonical tester flow: ALL ASSERTIONS PASSED
 - `pytest -q tests/agent/test_agent_observability.py tests/agent/test_agent_lifecycle.py`: 45 passed
 - `make fg-fast`: All checks passed
 - `python tools/plan/taskctl.py validate`: Validation passed
+
+---
+
+### 2026-04-28 — Task 17.6: Windows service + installer contract
+
+**Branch:** `task/17.6-windows-service-installer-contract`
+**Trigger:** Task 17.6 execution
+
+**Contract file added:**
+- `docs/agent/windows_service_installer_contract.md` — production-ready forward contract for tasks 18.1 (Windows service wrapper) and 18.2 (MSI installer)
+
+**Windows service contract summary:**
+- Service identity: `FrostGateAgent` / `FrostGate Agent`, install dir `C:\Program Files\FrostGate\Agent`, data dir `C:\ProgramData\FrostGate\Agent`
+- Lifecycle: install / start / stop / restart / upgrade / uninstall / purge uninstall
+- Startup: fail-closed on missing device credential; no localhost defaults; collectors blocked until enrollment validated
+- Shutdown: 30s graceful timeout; inflight telemetry flushed to durable queue; forced exit logged to Event Log
+- Recovery: automatic restart with 0s→60s→300s backoff; consecutive-failure logging
+- Service account: `NT SERVICE\FrostGateAgent` (virtual, non-privileged, Session 0)
+- Observability: Windows Event Log source `FrostGateAgent`; structured JSON logs; heartbeat includes collector_statuses per 17.5 schema
+
+**MSI installer contract summary:**
+- Modes: interactive / silent / repair / upgrade / uninstall / purge uninstall
+- Silent params: TENANT_ID, ENROLLMENT_TOKEN, FROSTGATE_ENDPOINT, ENVIRONMENT (all required); INSTALLDIR, LOG_LEVEL, PURGE_DATA (optional)
+- Enrollment flow: token used once → device_key stored in Windows Credential Manager (DPAPI); token file deleted after exchange; device identity stable across restart/upgrade
+- Artifact exclusions: no baked secrets, no plaintext credentials, no dev-bypass defaults
+- Signing: MSI + exe both signed for production; unsigned artifacts labeled NON-PRODUCTION; SHA256 manifest required; release_metadata.json with version/commit/build_time/signing_status/sha256
+- Enterprise: Intune/GPO/RMM compatible; concrete msiexec silent install examples documented
+
+**Security/fail-closed guarantees:**
+- No secrets embedded in MSI
+- ENROLLMENT_TOKEN never persisted as plaintext; deleted after exchange
+- device_key protected via DPAPI/Credential Manager only
+- Production rejects localhost, HTTP, and dev-bypass flags
+- Revoked/disabled agents halt collector execution (17.4 preserved)
+- Version floor enforced at runtime (17.4 preserved)
+- Secrets never logged (17.5 preserved)
+- Config tampering → INTEGRITY_FAILURE event + halt
+- TLS required; certificate validation enforced
+
+**Tests added:**
+- `tests/agent/test_windows_service_installer_contract.py` — 40 tests covering all contract invariants
+
+**Validation results:**
+- `pytest -q tests/agent/test_windows_service_installer_contract.py`: 40 passed
+- `make fg-fast`: All checks passed
+- `python tools/plan/taskctl.py validate`: Validation passed (17.6)
+
+**Local review performed:** yes
+**Local review issues found:**
+- ruff formatting required on test file — fixed via `ruff format`
+**Fixes made after local review:** formatting only
+
+---
+
+### 2026-04-28 — Task 17.6 addendum: enrollment token disk-persistence fix
+
+**Branch:** `task/17.6-windows-service-installer-contract`
+**Trigger:** PR review — enrollment token disk-backed handoff pattern
+
+**Issue:** Original contract section 2.4 permitted writing `ENROLLMENT_TOKEN` to a disk-backed `.enroll` temporary parameter file (`C:\ProgramData\FrostGate\Agent\config\.enroll`), then deleting it after exchange. This violated the contract's own security guarantee that raw enrollment/bootstrap tokens are never persisted to disk.
+
+**Fixes applied:**
+
+1. `docs/agent/windows_service_installer_contract.md` section 2.4 — removed all language permitting `.enroll` file or any disk-backed raw token handoff. Replaced with fail-closed enrollment flow requiring in-process custom action or DPAPI-protected deferred storage. Explicitly forbids: `.enroll` file, plaintext bootstrap token file, config-stored enrollment token, command-line logging of token, localhost fallback in production.
+
+2. New section 2.6 (`agent.toml` contents) — explicit MAY/MUST NOT lists for config file. MUST NOT: enrollment token, bootstrap token, device_key, API key, signing secret, bearer token, HMAC secret.
+
+3. `tests/agent/test_windows_service_installer_contract.py` — tests tightened:
+   - `test_contract_forbids_raw_token_disk_persistence` — now requires explicit "MUST NOT be written to disk" language (not just "deleted")
+   - `test_contract_contains_no_disk_backed_token_patterns` — checks for PERMISSIVE patterns (e.g., "temporary parameter file", "enrollment_token from msi-written") that indicate the contract allows disk writes; would have caught the original violation
+   - `test_contract_requires_service_starts_only_after_credential_exists` — new
+   - `test_contract_requires_enrollment_failure_closes_install` — new
+   - `test_contract_defines_agent_toml_must_not_contain_secrets` — new
+
+**Validation results:**
+- `pytest -q tests/agent/test_windows_service_installer_contract.py`: 44 passed
+- `make fg-fast`: All checks passed
+
+**Local review:** Verified new forbidden-pattern test would have caught original `.enroll` file language (confirmed via isolation check).
