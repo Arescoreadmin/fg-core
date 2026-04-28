@@ -5704,3 +5704,54 @@ Canonical tester flow: ALL ASSERTIONS PASSED
 - `pytest -q tests/agent/test_agent_observability.py tests/agent/test_agent_lifecycle.py`: 45 passed
 - `make fg-fast`: All checks passed
 - `python tools/plan/taskctl.py validate`: Validation passed
+
+---
+
+### 2026-04-28 — Task 17.6: Windows service + installer contract
+
+**Branch:** `task/17.6-windows-service-installer-contract`
+**Trigger:** Task 17.6 execution
+
+**Contract file added:**
+- `docs/agent/windows_service_installer_contract.md` — production-ready forward contract for tasks 18.1 (Windows service wrapper) and 18.2 (MSI installer)
+
+**Windows service contract summary:**
+- Service identity: `FrostGateAgent` / `FrostGate Agent`, install dir `C:\Program Files\FrostGate\Agent`, data dir `C:\ProgramData\FrostGate\Agent`
+- Lifecycle: install / start / stop / restart / upgrade / uninstall / purge uninstall
+- Startup: fail-closed on missing device credential; no localhost defaults; collectors blocked until enrollment validated
+- Shutdown: 30s graceful timeout; inflight telemetry flushed to durable queue; forced exit logged to Event Log
+- Recovery: automatic restart with 0s→60s→300s backoff; consecutive-failure logging
+- Service account: `NT SERVICE\FrostGateAgent` (virtual, non-privileged, Session 0)
+- Observability: Windows Event Log source `FrostGateAgent`; structured JSON logs; heartbeat includes collector_statuses per 17.5 schema
+
+**MSI installer contract summary:**
+- Modes: interactive / silent / repair / upgrade / uninstall / purge uninstall
+- Silent params: TENANT_ID, ENROLLMENT_TOKEN, FROSTGATE_ENDPOINT, ENVIRONMENT (all required); INSTALLDIR, LOG_LEVEL, PURGE_DATA (optional)
+- Enrollment flow: token used once → device_key stored in Windows Credential Manager (DPAPI); token file deleted after exchange; device identity stable across restart/upgrade
+- Artifact exclusions: no baked secrets, no plaintext credentials, no dev-bypass defaults
+- Signing: MSI + exe both signed for production; unsigned artifacts labeled NON-PRODUCTION; SHA256 manifest required; release_metadata.json with version/commit/build_time/signing_status/sha256
+- Enterprise: Intune/GPO/RMM compatible; concrete msiexec silent install examples documented
+
+**Security/fail-closed guarantees:**
+- No secrets embedded in MSI
+- ENROLLMENT_TOKEN never persisted as plaintext; deleted after exchange
+- device_key protected via DPAPI/Credential Manager only
+- Production rejects localhost, HTTP, and dev-bypass flags
+- Revoked/disabled agents halt collector execution (17.4 preserved)
+- Version floor enforced at runtime (17.4 preserved)
+- Secrets never logged (17.5 preserved)
+- Config tampering → INTEGRITY_FAILURE event + halt
+- TLS required; certificate validation enforced
+
+**Tests added:**
+- `tests/agent/test_windows_service_installer_contract.py` — 40 tests covering all contract invariants
+
+**Validation results:**
+- `pytest -q tests/agent/test_windows_service_installer_contract.py`: 40 passed
+- `make fg-fast`: All checks passed
+- `python tools/plan/taskctl.py validate`: Validation passed (17.6)
+
+**Local review performed:** yes
+**Local review issues found:**
+- ruff formatting required on test file — fixed via `ruff format`
+**Fixes made after local review:** formatting only

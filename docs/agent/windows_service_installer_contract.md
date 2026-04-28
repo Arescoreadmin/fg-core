@@ -1,0 +1,274 @@
+# FrostGate Agent — Windows Service and MSI Installer Contract
+
+**Version:** 1.0.0
+**Status:** APPROVED — drives 18.1 (service wrapper) and 18.2 (MSI installer) implementation.
+**Depends on:** Task 17.4 (lifecycle controls), Task 17.5 (agent observability)
+
+---
+
+## 1. Windows Service Wrapper Contract
+
+### 1.1 Service Identity
+
+| Field | Value |
+|---|---|
+| Service name | `FrostGateAgent` |
+| Display name | `FrostGate Agent` |
+| Description | `FrostGate endpoint telemetry agent — collects and forwards device telemetry to the FrostGate control plane` |
+| Executable entrypoint | `FrostGateAgent.exe` (PyInstaller-bundled or native binary) |
+| Install directory | `C:\Program Files\FrostGate\Agent` |
+| Working directory | `C:\ProgramData\FrostGate\Agent` |
+| Log directory | `C:\ProgramData\FrostGate\Agent\logs` |
+| Config directory | `C:\ProgramData\FrostGate\Agent\config` |
+| Data / state directory | `C:\ProgramData\FrostGate\Agent\data` |
+| Queue directory | `C:\ProgramData\FrostGate\Agent\data\queue` |
+
+### 1.2 Service Lifecycle
+
+| Operation | Behavior |
+|---|---|
+| **install** | Register service with SCM using `sc create`. Validate required config before registration completes. Fail closed if config missing or invalid. |
+| **start** | SCM starts `FrostGateAgent.exe`. Service validates enrolled device credential before accepting any commands or starting collectors. |
+| **stop** | SCM sends `SERVICE_CONTROL_STOP`. Service enters graceful shutdown: flush inflight telemetry, stop collectors, dequeue pending events, exit within `GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS` (default 30s). |
+| **restart** | SCM stops then starts. Device credential and identity must survive restart unchanged. |
+| **upgrade** | MSI upgrade runs, existing service stopped, binary replaced, service re-registered if needed, started. Device identity (device_id, device key) preserved unless purge requested. |
+| **uninstall** | Service stopped and de-registered from SCM. Config and data directories preserved (non-purge uninstall). |
+| **purge uninstall** | Service stopped and de-registered. All FrostGate directories removed: `C:\ProgramData\FrostGate\Agent\`. Device credential removed from Windows Credential Manager. Device revocation via control plane is a SEPARATE operator action. |
+
+### 1.3 Startup Behavior
+
+**REQUIRED — fail closed:**
+
+- Service MUST validate that a device credential (device_id + device_key) exists in protected storage before starting any collector.
+- Service MUST NOT start collectors or submit telemetry if no valid enrolled device credential is found.
+- Service MUST NOT silently default to localhost, `http://127.0.0.1`, or any dev/test endpoint in production.
+- Service MUST NOT use a dev-bypass mode (`FG_DEV_AUTH_BYPASS=1` or equivalent) in production builds.
+- Service MUST fetch effective configuration (version floor, collector config, policy) only after device identity is authenticated via `/agent/heartbeat` or `/agent/config`.
+- If the control plane returns `disabled` or `revoked` for this device (per 17.4 lifecycle controls), service MUST halt collector execution and cease telemetry submission until operator intervenes.
+- If agent version is below the effective version floor (per 17.4), service MUST log the outdated condition and cease normal operation until upgraded.
+
+**Config load order:**
+
+1. `C:\ProgramData\FrostGate\Agent\config\agent.toml` (primary config)
+2. MSI-written defaults (install-time parameters, non-secret)
+3. Environment variables (optional, for admin overrides)
+
+Required config keys (startup fails without these):
+- `control_plane_url` — HTTPS endpoint, no localhost in production
+- `tenant_id` — non-empty, no placeholder
+- `device_credential_target` — Windows Credential Manager target name
+
+### 1.4 Shutdown Behavior
+
+- **Graceful shutdown timeout:** `GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS` default `30`. Configurable via `agent.toml`.
+- **Collector stop:** All collectors receive stop signal; each collector must honor stop within 10s or be force-terminated.
+- **Inflight telemetry:** Queued events are flushed to durable local queue (SQLite WAL) before exit. Unflushed in-memory events are written to queue, not dropped.
+- **Failure mode if timeout exceeded:** Service logs `SHUTDOWN_TIMEOUT` event to Windows Event Log and Windows Application log, then exits forcefully. Data integrity protected by WAL journal.
+
+### 1.5 Recovery Behavior
+
+| Parameter | Value |
+|---|---|
+| **Restart policy** | Automatic restart on failure (SCM first/second/subsequent failure actions) |
+| **Backoff policy** | 0s → 60s → 300s (first, second, subsequent failure reset interval: 86400s) |
+| **Max restart threshold** | Subsequent failures after threshold use maximum backoff; operator must investigate after 5 consecutive failures within reset window |
+| **Failure logging** | Every restart cycle MUST write to Windows Application Event Log (source: `FrostGateAgent`) with failure reason and timestamp |
+| **Unhealthy state** | If service cannot reach control plane for `OFFLINE_THRESHOLD_SECONDS` (default 3600), log `CONTROL_PLANE_UNREACHABLE` to Event Log; continue local queue accumulation; do not discard queued telemetry |
+
+### 1.6 Local Account / Privilege Model
+
+- **Service identity target:** `NT SERVICE\FrostGateAgent` (Windows virtual service account). No interactive logon rights. No local admin.
+- **Filesystem ACLs:**
+  - `C:\Program Files\FrostGate\Agent\` — read + execute for `NT SERVICE\FrostGateAgent`; write for `SYSTEM` and local `Administrators` only
+  - `C:\ProgramData\FrostGate\Agent\` — read + write for `NT SERVICE\FrostGateAgent`; no broader access
+- **No admin-required runtime:** The service MUST run under a non-privileged virtual account at runtime. Admin privilege is required only during install/uninstall operations (MSI elevation).
+- **No interactive session dependency:** Service runs in Session 0 (non-interactive). No UI, no desktop access, no user-profile dependency.
+- **Network access:** Service requires outbound HTTPS (port 443) to control plane. No inbound ports required.
+
+### 1.7 Logs and Observability
+
+- **Windows Event Log source:** `FrostGateAgent` registered in `SYSTEM\CurrentControlSet\Services\EventLog\Application\FrostGateAgent`
+- **Local log path:** `C:\ProgramData\FrostGate\Agent\logs\agent.log` (rotating, max 10MB × 5 files)
+- **Log format:** Structured JSON (same as Linux agent), one event per line
+- **Minimum structured log fields:** `timestamp` (ISO 8601 UTC), `level`, `agent_id`, `device_id`, `tenant_id`, `event`, `message`
+- **Secrets MUST NOT appear in logs:** device_key, enrollment_token, bootstrap_token, FG_SIGNING_SECRET, FG_INTERNAL_AUTH_SECRET, any bearer token or API key
+- **Heartbeat observability (17.5):** Service MUST include collector_statuses in every heartbeat per the 17.5 schema. Health status reported via `/admin/agent/devices/{device_id}/status` MUST reflect Windows service state.
+- **Service events logged to Event Log:** start, stop, restart, enrollment success, enrollment failure, config update, collector start, collector failure, graceful shutdown, forced shutdown, lifecycle state changes (disabled/revoked/outdated)
+
+---
+
+## 2. MSI Installer Build / Install Contract
+
+### 2.1 Supported Install Modes
+
+| Mode | Description |
+|---|---|
+| **interactive** | GUI-driven install wizard; prompts for required parameters if not pre-supplied |
+| **silent** | `msiexec /i FrostGateAgent.msi /qn PROPERTY=VALUE ...` — no UI; fails closed if required properties absent |
+| **repair** | `msiexec /f FrostGateAgent.msi` — reinstalls files, re-registers service; preserves device credential and data |
+| **upgrade** | Major/minor upgrade via MSI ProductCode replacement; device identity preserved; service restarted |
+| **uninstall** | `msiexec /x FrostGateAgent.msi /qn` — removes service and binaries; preserves `C:\ProgramData\FrostGate\Agent\` |
+| **purge uninstall** | `msiexec /x FrostGateAgent.msi /qn PURGE_DATA=1` — removes service, binaries, and all data/credential directories |
+
+### 2.2 Silent Install Parameters
+
+| Property | Required | Description |
+|---|---|---|
+| `TENANT_ID` | **Required** | Tenant identifier. Non-empty, no placeholder. Validated against `^[a-zA-Z0-9_-]{3,128}$`. |
+| `ENROLLMENT_TOKEN` | **Required** (first install) | Bootstrap enrollment token. Used once to exchange for device credential. Never written to disk as plaintext. |
+| `FROSTGATE_ENDPOINT` | **Required** | HTTPS control plane URL. Must begin with `https://`. Localhost and non-TLS endpoints rejected in production profile. |
+| `ENVIRONMENT` | **Required** | One of `prod`, `staging`. `dev` and `local` are rejected in production-signed MSI. |
+| `INSTALLDIR` | Optional | Override install directory. Defaults to `C:\Program Files\FrostGate\Agent`. |
+| `LOG_LEVEL` | Optional | One of `debug`, `info`, `warn`, `error`. Default: `info`. |
+| `PURGE_DATA` | Optional (uninstall only) | If `1`, purge all data and credentials on uninstall. Default: `0`. |
+
+### 2.3 Parameter Validation
+
+- **Missing required parameters:** MSI fails closed; installation does not proceed; exit code 1603 (fatal error).
+- **TENANT_ID format:** Validated as `^[a-zA-Z0-9_-]{3,128}$`. Invalid format → fail closed.
+- **FROSTGATE_ENDPOINT validation:** Must be `https://` scheme. Must not be `localhost`, `127.0.0.1`, `::1`, or any RFC 1918/link-local address in `ENVIRONMENT=prod` or `ENVIRONMENT=staging`. Invalid → fail closed.
+- **ENROLLMENT_TOKEN:** Validated as non-empty, minimum 32 characters. Never written to disk in plaintext. Used only during the enrollment exchange. After successful enrollment, removed from memory and not stored anywhere.
+- **ENVIRONMENT:** `dev` and `local` are rejected by production-signed MSI. Non-production builds may permit these for lab use; this MUST be clearly indicated in the artifact signing status.
+
+### 2.4 Enrollment Flow
+
+1. MSI installs binary and writes `agent.toml` with non-secret config (tenant_id, control_plane_url, environment).
+2. On first service start, agent reads `ENROLLMENT_TOKEN` from MSI-written temporary parameter file (mode 0600 equivalent via ACL, placed in `C:\ProgramData\FrostGate\Agent\config\.enroll`, accessible only to `NT SERVICE\FrostGateAgent` and `SYSTEM`).
+3. Agent calls `POST /agent/enroll` with the enrollment token to obtain `device_id` and `device_key`.
+4. `device_key` is stored in Windows Credential Manager (target: `FrostGate/Agent/{tenant_id}/{device_id}`) via DPAPI. Never written to disk as plaintext.
+5. `.enroll` file is deleted immediately after successful credential storage. If enrollment fails, file is deleted after max 3 retries and service stops (not retried indefinitely to prevent token replay).
+6. `device_id` is written to `agent.toml` (non-secret device identifier).
+7. On all subsequent starts, service reads `device_id` from `agent.toml` and `device_key` from Windows Credential Manager. No enrollment token reference after initial exchange.
+8. **Identity stability:** device_id and device_key survive restart, upgrade (non-purge), and repair. Purge uninstall removes the Credential Manager entry.
+9. **Revoked/disabled device behavior (17.4):** If control plane returns `DEVICE_REVOKED` or `DEVICE_DISABLED`, service halts collector execution immediately and logs the lifecycle state. Reenrollment requires operator action (purge + fresh enrollment token).
+
+### 2.5 Artifact Contents
+
+| Artifact | Description |
+|---|---|
+| `FrostGateAgent.msi` | Signed MSI package |
+| `FrostGateAgent.exe` | Signed PyInstaller-bundled agent executable |
+| `agent.toml.template` | Config template (no secrets, substituted by MSI installer actions) |
+| `service_register.ps1` | Service registration script (called by MSI custom action) |
+| `service_unregister.ps1` | Service deregistration script (called by MSI uninstall) |
+| `migrate_config.ps1` | Config migration hook for upgrades (runs before service start on upgrade) |
+| `LICENSE.txt` | Apache 2.0 / commercial license |
+| `RELEASE_NOTES.txt` | Human-readable release notes |
+| `manifest.sha256` | SHA256 hash of every artifact in the MSI |
+
+### 2.6 Artifact Exclusions
+
+The MSI MUST NOT contain:
+
+- Baked tenant secrets (`FG_SIGNING_SECRET`, `FG_INTERNAL_AUTH_SECRET`, API keys)
+- Baked enrollment token or bootstrap token
+- Plaintext device credentials
+- Environment-specific production secrets of any kind
+- Dev-bypass defaults (`FG_DEV_AUTH_BYPASS=1`, `FG_ALLOW_INSECURE_HTTP=1`, `FG_ALLOW_PRIVATE_CORE=1`)
+- Pre-populated `FG_AGENT_KEY` or `FG_API_KEY`
+
+Violation of any exclusion is a release blocker.
+
+### 2.7 Versioning and Upgrade
+
+- **Version field:** Semantic version `MAJOR.MINOR.PATCH` embedded in MSI ProductVersion and `FrostGateAgent.exe` file metadata.
+- **Upgrade preserves identity:** Non-purge upgrade keeps device_id in `agent.toml` and device_key in Credential Manager. Collectors restart; queue is preserved.
+- **Downgrade behavior:** Downgrade to a version below the effective `version_floor` (per 17.4) is permitted by MSI but agent will immediately enter `outdated` health state on next heartbeat and halt collector execution. This is intentional: the version floor is enforced at runtime by the control plane, not blocked at install time.
+- **Version floor compatibility:** Agent binary MUST report its version in every heartbeat per 17.5 schema. Control plane health evaluation (17.4) determines if the running version is below floor.
+- **Rollback behavior:** MSI rollback (failed upgrade) restores previous binary; Credential Manager entry and `agent.toml` are preserved; service restarted on rollback. If rollback leaves agent below version floor, behavior is same as downgrade above.
+
+### 2.8 Signing and Release Metadata
+
+- **MSI signing:** Required for production release. Signed with organization code signing certificate. SHA-256 digest algorithm. Timestamp authority required. Unsigned MSI MUST be labeled `NOT FOR PRODUCTION`.
+- **Executable signing:** `FrostGateAgent.exe` signed independently. Both MSI container and embedded executable must be signed.
+- **Unsigned artifacts:** Build pipeline MUST mark unsigned artifacts with `BUILD_SIGNED=false` in release metadata. Unsigned artifacts MUST NOT be deployed to production endpoints.
+- **Hash manifest:** `manifest.sha256` lists SHA256 of every file in the package. Verified by installer at extract time and again by agent at startup (self-integrity check on binary).
+- **Release metadata fields (release_metadata.json):**
+  ```json
+  {
+    "product": "FrostGateAgent",
+    "version": "MAJOR.MINOR.PATCH",
+    "commit": "<git sha>",
+    "build_time": "<ISO 8601 UTC>",
+    "signing_status": "signed|unsigned",
+    "signed_by": "<certificate CN or 'N/A'>",
+    "sha256_msi": "<hex>",
+    "sha256_exe": "<hex>",
+    "min_os": "Windows 10 1903 / Server 2019",
+    "arch": "x86_64"
+  }
+  ```
+
+### 2.9 Enterprise Deployment (Intune / GPO / RMM)
+
+**Compatibility:** The MSI is a standard Windows Installer package compatible with:
+- Microsoft Intune (Win32 app deployment)
+- Group Policy (GPO software installation)
+- Any RMM tool supporting `msiexec` invocation (e.g., NinjaRMM, ConnectWise, Datto)
+
+**Intune silent install command:**
+```
+msiexec /i FrostGateAgent.msi /qn /l*v C:\Windows\Temp\FrostGateAgent_install.log TENANT_ID="<your-tenant-id>" ENROLLMENT_TOKEN="<bootstrap-token>" FROSTGATE_ENDPOINT="https://your-control-plane.example.com" ENVIRONMENT="prod"
+```
+
+**Intune silent uninstall command:**
+```
+msiexec /x {PRODUCT-CODE-GUID} /qn /l*v C:\Windows\Temp\FrostGateAgent_uninstall.log
+```
+
+**Intune purge uninstall command:**
+```
+msiexec /x {PRODUCT-CODE-GUID} /qn PURGE_DATA=1 /l*v C:\Windows\Temp\FrostGateAgent_uninstall.log
+```
+
+**GPO deployment:** Assign to computer configuration (not user). Run in system context. Use transform (`.mst`) to pre-populate required properties for org-wide silent deployment.
+
+**Log collection path:** `C:\Windows\Temp\FrostGateAgent_install.log` (MSI log) and `C:\ProgramData\FrostGate\Agent\logs\agent.log` (runtime log).
+
+**Detection rule (Intune):** File exists: `C:\Program Files\FrostGate\Agent\FrostGateAgent.exe` AND registry key `HKLM\SYSTEM\CurrentControlSet\Services\FrostGateAgent` exists.
+
+**Rollback (Intune / RMM):**
+```
+msiexec /x {PRODUCT-CODE-GUID} /qn
+```
+Then re-deploy previous version MSI via Intune. Device identity preserved (non-purge).
+
+---
+
+## 3. Security and Failure Contract
+
+The following guarantees MUST be maintained by any implementation:
+
+| Guarantee | Requirement |
+|---|---|
+| No embedded secrets | MSI artifact contains no tenant secrets, API keys, signing secrets, or credentials of any kind |
+| No raw token persistence | ENROLLMENT_TOKEN / BOOTSTRAP_TOKEN is never written to disk in plaintext; deleted from all intermediate files after exchange |
+| Protected credential at rest | device_key stored exclusively via Windows DPAPI / Credential Manager; never in plaintext file, registry plaintext, or environment variable |
+| Fail closed on missing config | Service and installer fail with non-zero exit if TENANT_ID, FROSTGATE_ENDPOINT, or device credential is absent or invalid |
+| Production rejects dev defaults | ENVIRONMENT=prod and ENVIRONMENT=staging reject localhost, HTTP, and dev-bypass flags |
+| Revoked agents cannot submit telemetry | If control plane returns DEVICE_REVOKED or lifecycle_status=revoked (17.4), service halts collector execution immediately |
+| Disabled agents cannot submit telemetry | If lifecycle_status=disabled (17.4), same halt behavior as revoked |
+| Version floor enforced | If agent version is below effective_min_version (17.4/17.5), agent halts collectors and reports outdated health status |
+| Logs never contain secrets | device_key, tokens, signing secrets, and API keys are never written to any log output |
+| Config tampering | Agent verifies SHA256 of own executable at startup against `manifest.sha256`. Mismatch → halt with INTEGRITY_FAILURE event log entry |
+| TLS required | All control plane communication requires HTTPS (TLS 1.2 minimum, TLS 1.3 preferred). Certificate validation enabled. Self-signed certificates rejected in production profile unless explicitly pinned via `FG_CORE_CERT_SHA256`. |
+
+---
+
+## 4. Implementation Status
+
+This is a **forward contract document** for tasks 18.1 (Windows service wrapper) and 18.2 (MSI installer).
+
+The following already exist in the repository and satisfy parts of this contract:
+- `agent/windows_service.py` — pywin32 service skeleton (implements service name, display name, SvcStop/SvcDoRun lifecycle)
+- `agent/windows-requirements.txt` — pywin32 + pyinstaller declared
+- `agent/app/config.py` — `AgentConfig` load_config() (enforces required env vars via `os.environ[...]`)
+
+The following MUST be implemented in 18.1 and 18.2:
+- Credential Manager integration (DPAPI storage of device_key)
+- Enrollment flow with token deletion after exchange
+- MSI build toolchain (WiX or equivalent)
+- ACL setup in installer custom actions
+- Windows Event Log source registration
+- Config tampering / binary integrity check
+- Release signing pipeline
