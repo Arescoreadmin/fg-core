@@ -807,7 +807,7 @@ phases:
       - Agent status surfaces report real state
       - Failure states are actionable
       validation_commands:
-      - .venv/bin/pytest -q tests -k "(agent and health) or last_seen or backlog"
+      - .venv/bin/pytest -q tests/agent/test_agent_observability.py
       - make fg-fast
     - id: '17.6'
       title: Windows service + installer contract

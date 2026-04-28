@@ -432,3 +432,20 @@ Task 17.4 introduces a `GET /agent/config` endpoint that agents call using HMAC 
 - `pytest -q tests/agent/test_agent_lifecycle.py`: 27 passed
 - `pytest -q tests -k '(agent and evidence) or (ingest and tenant) or (lifecycle)'`: 118 passed, 2 skipped
 - `git diff --check`: clean
+
+---
+
+## Task 17.5 — Agent observability: route inventory updated (2026-04-28)
+
+### Files changed
+- `tools/ci/route_inventory.json` / `route_inventory_summary.json` / `topology.sha256` / `plane_registry_snapshot.json`: regenerated to include new `GET /admin/agent/devices/{device_id}/status` endpoint
+
+### Why
+Task 17.5 adds an operator observability endpoint. The new route is under the existing `/admin/agent` prefix, which is governed by the `control` plane with `keys:admin` scope required. No new security perimeter — same auth model as all other `/admin/agent` routes. Route inventory regenerated via `make route-inventory-generate` as per standard process.
+
+### Risk
+- **Low.** `GET /admin/agent/devices/{device_id}/status` requires `keys:admin` scope and derives tenant from auth context. It does not expose cross-tenant data. The endpoint is not in PUBLIC_PATHS and will be rejected by the API-key middleware without a valid admin key.
+
+### Validation performed
+- `pytest -q tests/agent/test_agent_observability.py`: 18 passed
+- `make fg-fast`: All checks passed (post-refresh)

@@ -3,6 +3,7 @@
   "allowed_internal": [
     "GET /_debug/routes",
     "GET /admin/agent/devices",
+    "GET /admin/agent/devices/{device_id}/status",
     "GET /admin/agent/evidence/export/{device_id}",
     "GET /admin/agent/version-floor",
     "GET /admin/audit/search",
@@ -86,17 +87,18 @@
     "agent": 14,
     "ai": 4,
     "connector": 14,
-    "control": 118,
+    "control": 119,
     "data": 32,
     "evidence": 23,
     "security": 6,
     "ui": 30
   },
   "removed": [],
-  "runtime_count": 241,
+  "runtime_count": 242,
   "runtime_only": [
     "GET /_debug/routes",
     "GET /admin/agent/devices",
+    "GET /admin/agent/devices/{device_id}/status",
     "GET /admin/agent/evidence/export/{device_id}",
     "GET /admin/agent/version-floor",
     "GET /admin/audit/search",

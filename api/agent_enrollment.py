@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from api.auth_scopes import hash_key
 from api.db import get_engine
 from api.db_models import (
+    AgentCollectorStatus,
     AgentDeviceKey,
     AgentDeviceNonce,
     AgentDeviceRegistry,
@@ -247,6 +248,16 @@ class AgentEnrollResponse(BaseModel):
     expires_at: str | None = None
 
 
+class CollectorStatusReport(BaseModel):
+    """Collector run outcome reported by the agent in a heartbeat."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    collector_name: str = Field(min_length=1, max_length=128)
+    outcome: str = Field(pattern="^(ran|failed|skipped)$")
+    error: str | None = Field(default=None, max_length=512)
+
+
 class AgentHeartbeatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -257,6 +268,9 @@ class AgentHeartbeatRequest(BaseModel):
     ip_addrs: list[str] = Field(default_factory=list, max_length=32)
     metrics: dict[str, float] = Field(default_factory=dict)
     signals: dict[str, bool] = Field(default_factory=dict)
+    collector_statuses: list[CollectorStatusReport] = Field(
+        default_factory=list, max_length=50
+    )
 
 
 class AgentHeartbeatResponse(BaseModel):
@@ -562,6 +576,34 @@ def agent_heartbeat(
         reg.last_ip = request.client.host if request.client else None
         reg.last_version = body.agent_version
         session.commit()
+
+        # Upsert collector statuses reported by the agent (may be empty list).
+        if body.collector_statuses:
+            for cs in body.collector_statuses:
+                existing = (
+                    session.query(AgentCollectorStatus)
+                    .filter(
+                        AgentCollectorStatus.device_id == device.device_id,
+                        AgentCollectorStatus.collector_name == cs.collector_name,
+                    )
+                    .first()
+                )
+                if existing is not None:
+                    existing.last_outcome = cs.outcome
+                    existing.last_run_at = now
+                    existing.last_error = cs.error
+                else:
+                    session.add(
+                        AgentCollectorStatus(
+                            device_id=device.device_id,
+                            tenant_id=device.tenant_id,
+                            collector_name=cs.collector_name,
+                            last_outcome=cs.outcome,
+                            last_run_at=now,
+                            last_error=cs.error,
+                        )
+                    )
+            session.commit()
 
         details = {
             "actor_id": device.device_id,
