@@ -203,10 +203,10 @@ validations:
     artifact: artifacts/plan/17.3_validate_latest.json
     working_tree_fingerprint: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
   '17.4':
-    status: fail
-    timestamp: 20260428T015745Z
+    status: pass
+    timestamp: 20260428T115103Z
     artifact: artifacts/plan/17.4_validate_latest.json
-    working_tree_fingerprint: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    working_tree_fingerprint: 773edebeeb4f3fee3164b5587194414dee8fee4fde48a7cd0ba3be6ca57ecd08
 history:
 - event: complete
   task_id: '9.3'
