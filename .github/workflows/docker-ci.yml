@@ -260,6 +260,9 @@ jobs:
           FG_DEV_AUTH_BYPASS=0
           FG_DEV_TENANT_ID=default
           FG_DEV_ALLOWED_TENANTS=default
+
+          FG_SIGNING_SECRET=ci-signing-secret-32-bytes-minimum
+          FG_INTERNAL_AUTH_SECRET=ci-internal-auth-secret-32-bytes
           EOF
 
           cp .env.ci .env
@@ -442,6 +445,10 @@ jobs:
           docker compose --env-file .env.ci ps > artifacts/docker/compose-ps.txt 2>&1 || true
           docker compose --env-file .env.ci logs --tail=400 > artifacts/docker/compose-logs.txt 2>&1 || true
           docker images > artifacts/docker/docker-images.txt 2>&1 || true
+          docker inspect fg-core-frostgate-core-1 > artifacts/docker/frostgate-core.inspect.json 2>/dev/null || true
+          docker logs fg-core-frostgate-core-1 --tail=300 > artifacts/docker/frostgate-core.logs.txt 2>&1 || true
+          docker inspect fg-core-frostgate-migrate-1 > artifacts/docker/frostgate-migrate.inspect.json 2>/dev/null || true
+          docker logs fg-core-frostgate-migrate-1 --tail=100 > artifacts/docker/frostgate-migrate.logs.txt 2>&1 || true
           docker inspect fg-core-admin-gateway-1 > artifacts/docker/admin-gateway.inspect.json 2>/dev/null || true
           docker inspect fg-core-console-1 > artifacts/docker/console.inspect.json 2>/dev/null || true
           docker inspect fg-core-opa-bundles-1 > artifacts/docker/opa-bundles.inspect.json 2>/dev/null || true

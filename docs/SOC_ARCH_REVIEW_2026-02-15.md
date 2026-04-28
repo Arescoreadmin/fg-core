@@ -432,3 +432,39 @@ Task 17.4 introduces a `GET /agent/config` endpoint that agents call using HMAC 
 - `pytest -q tests/agent/test_agent_lifecycle.py`: 27 passed
 - `pytest -q tests -k '(agent and evidence) or (ingest and tenant) or (lifecycle)'`: 118 passed, 2 skipped
 - `git diff --check`: clean
+
+---
+
+## Task 17.5 — Agent observability: route inventory updated (2026-04-28)
+
+### Files changed
+- `tools/ci/route_inventory.json` / `route_inventory_summary.json` / `topology.sha256` / `plane_registry_snapshot.json`: regenerated to include new `GET /admin/agent/devices/{device_id}/status` endpoint
+
+### Why
+Task 17.5 adds an operator observability endpoint. The new route is under the existing `/admin/agent` prefix, which is governed by the `control` plane with `keys:admin` scope required. No new security perimeter — same auth model as all other `/admin/agent` routes. Route inventory regenerated via `make route-inventory-generate` as per standard process.
+
+### Risk
+- **Low.** `GET /admin/agent/devices/{device_id}/status` requires `keys:admin` scope and derives tenant from auth context. It does not expose cross-tenant data. The endpoint is not in PUBLIC_PATHS and will be rejected by the API-key middleware without a valid admin key.
+
+### Validation performed
+- `pytest -q tests/agent/test_agent_observability.py`: 18 passed
+- `make fg-fast`: All checks passed (post-refresh)
+
+---
+
+## Task 17.5 addendum — Docker CI: diagnostics hardening (2026-04-28)
+
+### Files changed
+- `.github/workflows/docker-ci.yml`: Added `FG_SIGNING_SECRET` and `FG_INTERNAL_AUTH_SECRET` to `.env.ci` generation; added `frostgate-core` and `frostgate-migrate` log/inspect collection to diagnostics step
+
+### Why
+Two issues fixed:
+1. The "Persist docker diagnostics" step ran `docker compose --env-file .env.ci ps/logs` but `.env.ci` did not contain `FG_SIGNING_SECRET` / `FG_INTERNAL_AUTH_SECRET`, causing compose to fail with interpolation errors because docker-compose.yml requires these vars via `${VAR:?}`. Added them to `.env.ci` (with CI placeholder values) so all compose invocations use a single self-contained env-file.
+2. `frostgate-core` and `frostgate-migrate` container logs were not captured in CI artifacts on failure, making root-cause analysis impossible. Added `docker logs` and `docker inspect` collection for both containers.
+
+### Risk
+- **Low.** No change to runtime security posture. `.env.ci` is ephemeral per-run (generated in CI, never committed). The values added (`ci-signing-secret-32-bytes-minimum`, `ci-internal-auth-secret-32-bytes`) are the same placeholder CI values already used by all other compose steps via step-level `env:` blocks. Diagnostics collection is `if: always()` and uses `|| true` so failures are non-blocking.
+
+### Validation performed
+- `make fg-fast`: All checks passed
+- `pytest -q tests/agent/test_agent_observability.py tests/agent/test_agent_lifecycle.py`: 45 passed

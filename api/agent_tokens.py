@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import secrets
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from threading import Lock
+
+from packaging.version import InvalidVersion
+from packaging.version import Version as _Version
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -16,12 +20,15 @@ from sqlalchemy.orm import Session
 from api.auth_scopes import require_bound_tenant, require_scopes
 from api.db import get_engine
 from api.db_models import (
+    AgentCollectorStatus,
     AgentDeviceKey,
     AgentDeviceRegistry,
     AgentEnrollmentToken,
     AgentTenantConfig,
 )
 from api.security_audit import audit_admin_action
+
+log = logging.getLogger("frostgate.agent.admin")
 
 router = APIRouter(
     prefix="/admin/agent",
@@ -404,3 +411,217 @@ def set_version_floor(
         },
     )
     return VersionFloorResponse(version_floor=body.version_floor)
+
+
+# ---------------------------------------------------------------------------
+# Observability — task 17.5
+# ---------------------------------------------------------------------------
+
+
+def _no_heartbeat_threshold() -> int:
+    """Read threshold at request time so tests can override via env."""
+    return int(os.getenv("FG_AGENT_NO_HEARTBEAT_SECONDS", "3600"))
+
+
+# Health status values (deterministic, not collapsed into generic blobs).
+_HEALTH_REVOKED = "revoked"
+_HEALTH_DISABLED = "disabled"
+_HEALTH_OUTDATED = "outdated"
+_HEALTH_NO_HEARTBEAT = "no_heartbeat"
+_HEALTH_DEGRADED = "degraded"
+_HEALTH_HEALTHY = "healthy"
+_HEALTH_UNKNOWN = "unknown"
+
+
+class CollectorStatusItem(BaseModel):
+    collector_name: str
+    last_outcome: str  # "ran" | "failed" | "skipped"
+    last_run_at: str
+    last_error: str | None = None
+
+
+class AgentObservabilityResponse(BaseModel):
+    device_id: str
+    tenant_id: str
+    health_status: str
+    lifecycle_status: str
+    last_seen_at: str | None
+    version: str | None
+    version_floor: str | None
+    effective_min_version: str | None
+    collector_statuses: list[CollectorStatusItem]
+    backlog_state: str
+    backlog_reason: str
+    reasons: list[str]
+
+
+def _version_below_floor(version: str, floor: str) -> bool:
+    """
+    Return True if version is semantically below floor.
+
+    Uses packaging.version.Version for PEP 440 / semver-aware comparison so
+    that 10.0.0 > 2.0.0 (lexicographic comparison would invert this).
+    If either string is not parseable as a valid version, falls back to True
+    (fail-closed: treat unparseable agent version as below floor).
+    """
+    try:
+        return _Version(version) < _Version(floor)
+    except InvalidVersion:
+        log.warning(
+            "version_floor_compare_failed version=%r floor=%r; treating as below floor",
+            version,
+            floor,
+        )
+        return True
+
+
+def _derive_health(
+    *,
+    lifecycle_status: str,
+    last_seen_at: datetime | None,
+    version: str | None,
+    effective_floor: str,
+    collector_statuses: list[AgentCollectorStatus],
+    now: datetime,
+) -> tuple[str, list[str]]:
+    """
+    Derive a deterministic health_status and list of actionable reasons.
+
+    Priority (highest first):
+      revoked → disabled → outdated → no_heartbeat → degraded → healthy
+    """
+    reasons: list[str] = []
+
+    if lifecycle_status == "revoked":
+        reasons.append("DEVICE_REVOKED")
+        return _HEALTH_REVOKED, reasons
+
+    if lifecycle_status == "disabled":
+        reasons.append("DEVICE_DISABLED")
+        return _HEALTH_DISABLED, reasons
+
+    if effective_floor and version and _version_below_floor(version, effective_floor):
+        reasons.append(f"VERSION_BELOW_FLOOR:{version}<{effective_floor}")
+        return _HEALTH_OUTDATED, reasons
+
+    if last_seen_at is None:
+        reasons.append("NO_HEARTBEAT_RECORDED")
+        return _HEALTH_NO_HEARTBEAT, reasons
+
+    # SQLite stores datetimes as naive; normalise to UTC-aware for comparison.
+    last_seen_aware = (
+        last_seen_at.replace(tzinfo=UTC)
+        if last_seen_at.tzinfo is None
+        else last_seen_at
+    )
+    elapsed = (now - last_seen_aware).total_seconds()
+    if elapsed > _no_heartbeat_threshold():
+        reasons.append(f"HEARTBEAT_STALE:{int(elapsed)}s_since_last_seen")
+        return _HEALTH_NO_HEARTBEAT, reasons
+
+    # Degraded if lifecycle is suspicious or quarantined.
+    if lifecycle_status in {"suspicious", "quarantined"}:
+        reasons.append(f"DEVICE_{lifecycle_status.upper()}")
+
+    # Collector failures are visible and actionable.
+    for cs in collector_statuses:
+        if cs.last_outcome == "failed":
+            reasons.append(
+                f"COLLECTOR_FAILED:{cs.collector_name}:{cs.last_error or 'unknown'}"
+            )
+
+    if reasons:
+        return _HEALTH_DEGRADED, reasons
+
+    return _HEALTH_HEALTHY, reasons
+
+
+@router.get(
+    "/devices/{device_id}/status",
+    response_model=AgentObservabilityResponse,
+    responses={
+        404: {"description": "Device not found"},
+    },
+    summary="Get agent observability status",
+    description=(
+        "Returns health, last_seen, lifecycle state, collector statuses, and backlog "
+        "state for a specific device scoped to the caller's tenant."
+    ),
+)
+def get_device_status(
+    device_id: str,
+    request: Request,
+) -> AgentObservabilityResponse:
+    """
+    Operator observability endpoint — returns deterministic health status.
+
+    Health derivation priority (highest wins):
+      revoked → disabled → outdated → no_heartbeat → degraded → healthy
+
+    Tenant isolation: device_id is verified against caller's tenant_id.
+    """
+    tenant_id = require_bound_tenant(request)
+
+    engine = get_engine()
+    with Session(engine) as session:
+        device = (
+            session.query(AgentDeviceRegistry)
+            .filter(
+                AgentDeviceRegistry.device_id == device_id,
+                AgentDeviceRegistry.tenant_id == tenant_id,
+            )
+            .first()
+        )
+        if device is None:
+            raise HTTPException(status_code=404, detail="device not found")
+
+        # Load per-tenant version floor.
+        tc = session.get(AgentTenantConfig, tenant_id)
+        tenant_floor = (tc.version_floor or "").strip() if tc else ""
+        global_floor = (os.getenv("FG_AGENT_MIN_VERSION") or "").strip()
+        effective_floor = tenant_floor or global_floor
+
+        # Load collector statuses for this device (sorted by name for determinism).
+        collector_rows = (
+            session.query(AgentCollectorStatus)
+            .filter(AgentCollectorStatus.device_id == device_id)
+            .order_by(AgentCollectorStatus.collector_name)
+            .all()
+        )
+
+        now = _utcnow()
+        health_status, reasons = _derive_health(
+            lifecycle_status=device.status,
+            last_seen_at=device.last_seen_at,
+            version=device.last_version,
+            effective_floor=effective_floor,
+            collector_statuses=collector_rows,
+            now=now,
+        )
+
+        collector_items = [
+            CollectorStatusItem(
+                collector_name=cs.collector_name,
+                last_outcome=cs.last_outcome,
+                last_run_at=cs.last_run_at.isoformat(),
+                last_error=cs.last_error,
+            )
+            for cs in collector_rows
+        ]
+
+        return AgentObservabilityResponse(
+            device_id=device.device_id,
+            tenant_id=device.tenant_id,
+            health_status=health_status,
+            lifecycle_status=device.status,
+            last_seen_at=(
+                device.last_seen_at.isoformat() if device.last_seen_at else None
+            ),
+            version=device.last_version,
+            version_floor=tenant_floor or None,
+            effective_min_version=effective_floor or None,
+            collector_statuses=collector_items,
+            backlog_state="not_tracked",
+            backlog_reason="backlog_tracking_not_implemented",
+            reasons=reasons,
+        )

@@ -5630,3 +5630,77 @@ Canonical tester flow: ALL ASSERTIONS PASSED
 - `pytest -q tests/agent/test_agent_lifecycle.py` → 27 passed
 - `pytest -q tests -k '(agent and evidence) or (ingest and tenant) or lifecycle'` → 118 passed, 2 skipped
 - `make fg-fast` → All checks passed
+
+---
+
+## Task 17.5 — Agent observability (2026-04-28)
+
+**Branch:** `task/17.5-agent-observability`
+
+**Observability surface added:**
+- `GET /admin/agent/devices/{device_id}/status` — requires `keys:admin` scope, tenant-bound from auth context
+
+**Health/last_seen source of truth:**
+- `last_seen_at` from `AgentDeviceRegistry` (set on enrollment and each heartbeat)
+- `status` from `AgentDeviceRegistry` (active/disabled/revoked/suspicious/quarantined)
+- `last_version` from `AgentDeviceRegistry`
+- `version_floor` from `AgentTenantConfig` (per-tenant) + `FG_AGENT_MIN_VERSION` env var
+
+**Collector status behavior:**
+- Agents report collector outcomes in heartbeat body (`collector_statuses` optional list)
+- Server upserts `AgentCollectorStatus` per device/collector
+- Failed collectors surface as `health_status=degraded` with `COLLECTOR_FAILED:<name>:<error>` reason code
+- Collectors sorted by name for deterministic response ordering
+
+**Backlog state behavior:**
+- Returns `backlog_state: not_tracked`, `backlog_reason: backlog_tracking_not_implemented`
+- Explicitly not zero — honest about what is and is not tracked
+
+**Tenant-safety / security guarantees:**
+- Device queried only after verifying `device.tenant_id == caller tenant_id` (from auth)
+- Foreign-tenant device returns 404, not 403 (anti-enumeration)
+- Endpoint not in PUBLIC_PATHS — requires API key
+
+**Files changed:**
+- `api/db_models.py`: `AgentCollectorStatus` model
+- `api/agent_enrollment.py`: `CollectorStatusReport` model; `collector_statuses` field in heartbeat; upsert logic
+- `api/agent_tokens.py`: `GET /admin/agent/devices/{device_id}/status` endpoint + health derivation logic
+- `migrations/postgres/0030_agent_collector_status.sql`: new table
+- `plans/30_day_repo_blitz.yaml`: validation_commands fixed to dedicated test file
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md`: SOC review entry for route inventory changes
+
+**Tests added:** 18 tests in `tests/agent/test_agent_observability.py`
+
+**Validation results:**
+- `pytest -q tests/agent/test_agent_observability.py`: 18 passed
+- `make fg-fast`: All checks passed
+- `python tools/plan/taskctl.py validate`: Validation passed
+
+**Local review performed:** yes
+**Local review issues found:**
+- Timezone-naive datetime from SQLite causing `can't subtract offset-naive and offset-aware datetimes` — fixed with `.replace(tzinfo=UTC)` guard
+- Enrollment sets `last_seen_at`, making the NULL path unreachable; fixed test to use `FG_AGENT_NO_HEARTBEAT_SECONDS=0` for stale-heartbeat scenario
+- `time` import left unused after `_NO_HEARTBEAT_THRESHOLD_SECONDS` became a function — removed via ruff --fix
+**Fixes made after local review:** all above fixed
+
+---
+
+### 2026-04-28 — Task 17.5 addendum: P1 PR review fixes (semver + atomic upsert)
+
+**Branch:** `task/17.5-agent-observability`
+**Trigger:** External PR review surfaced two P1 issues
+
+**Issues fixed:**
+
+1. **Lexicographic version comparison** — `version < effective_floor` used raw string comparison, causing `10.0.0 < 2.0.0` to evaluate as `True` (incorrect). Replaced with `packaging.version.Version` in both `api/agent_tokens.py` (`_version_below_floor`) and `api/agent_enrollment.py` (`_agent_version_below_floor`). Fails closed on `InvalidVersion` with a warning log.
+
+2. **Read-before-write race condition in collector status upsert** — original code performed a `SELECT` then `INSERT` or `UPDATE`, which could fail on concurrent heartbeats hitting the unique constraint. Replaced with atomic `INSERT ... ON CONFLICT (device_id, collector_name) DO UPDATE SET ...` using SQLAlchemy dialect-specific `insert()` (`postgresql` vs `sqlite`).
+
+**Files modified:**
+- `api/agent_tokens.py`: `_version_below_floor()` helper; `_derive_health` calls it
+- `api/agent_enrollment.py`: `_agent_version_below_floor()` helper; `_upsert_collector_statuses()` atomic upsert helper; heartbeat handler uses both
+
+**Validation results:**
+- `pytest -q tests/agent/test_agent_observability.py tests/agent/test_agent_lifecycle.py`: 45 passed
+- `make fg-fast`: All checks passed
+- `python tools/plan/taskctl.py validate`: Validation passed

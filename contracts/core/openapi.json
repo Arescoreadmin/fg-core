@@ -164,6 +164,14 @@
             "title": "Agent Version",
             "type": "string"
           },
+          "collector_statuses": {
+            "items": {
+              "$ref": "#/components/schemas/CollectorStatusReport"
+            },
+            "maxItems": 50,
+            "title": "Collector Statuses",
+            "type": "array"
+          },
           "hostname": {
             "maxLength": 255,
             "title": "Hostname",
@@ -242,6 +250,108 @@
           "server_time"
         ],
         "title": "AgentHeartbeatResponse",
+        "type": "object"
+      },
+      "AgentObservabilityResponse": {
+        "properties": {
+          "backlog_reason": {
+            "title": "Backlog Reason",
+            "type": "string"
+          },
+          "backlog_state": {
+            "title": "Backlog State",
+            "type": "string"
+          },
+          "collector_statuses": {
+            "items": {
+              "$ref": "#/components/schemas/CollectorStatusItem"
+            },
+            "title": "Collector Statuses",
+            "type": "array"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "effective_min_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Min Version"
+          },
+          "health_status": {
+            "title": "Health Status",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "lifecycle_status": {
+            "title": "Lifecycle Status",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "version_floor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Floor"
+          }
+        },
+        "required": [
+          "device_id",
+          "tenant_id",
+          "health_status",
+          "lifecycle_status",
+          "last_seen_at",
+          "version",
+          "version_floor",
+          "effective_min_version",
+          "collector_statuses",
+          "backlog_state",
+          "backlog_reason",
+          "reasons"
+        ],
+        "title": "AgentObservabilityResponse",
         "type": "object"
       },
       "AgentRotateResponse": {
@@ -539,6 +649,75 @@
         ],
         "title": "ClassificationRing",
         "type": "string"
+      },
+      "CollectorStatusItem": {
+        "properties": {
+          "collector_name": {
+            "title": "Collector Name",
+            "type": "string"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_outcome": {
+            "title": "Last Outcome",
+            "type": "string"
+          },
+          "last_run_at": {
+            "title": "Last Run At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "collector_name",
+          "last_outcome",
+          "last_run_at"
+        ],
+        "title": "CollectorStatusItem",
+        "type": "object"
+      },
+      "CollectorStatusReport": {
+        "additionalProperties": false,
+        "description": "Collector run outcome reported by the agent in a heartbeat.",
+        "properties": {
+          "collector_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Collector Name",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "outcome": {
+            "pattern": "^(ran|failed|skipped)$",
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "collector_name",
+          "outcome"
+        ],
+        "title": "CollectorStatusReport",
+        "type": "object"
       },
       "CommandAckRequest": {
         "additionalProperties": false,

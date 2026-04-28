@@ -303,6 +303,38 @@ class AgentTenantConfig(Base):
     updated_by: Mapped[Any] = mapped_column(String(128), nullable=True)
 
 
+class AgentCollectorStatus(Base):
+    """Last-known collector run outcome per device, reported via heartbeat."""
+
+    __tablename__ = "agent_collector_statuses"
+    __table_args__ = (
+        UniqueConstraint(
+            "device_id",
+            "collector_name",
+            name="uq_agent_collector_statuses_device_name",
+        ),
+        Index("ix_agent_collector_statuses_device", "device_id"),
+        Index("ix_agent_collector_statuses_tenant", "tenant_id"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    device_id: Mapped[Any] = mapped_column(
+        String(64),
+        ForeignKey("agent_device_registry.device_id"),
+        nullable=False,
+        index=True,
+    )
+    tenant_id: Mapped[Any] = mapped_column(String(128), nullable=False)
+    collector_name: Mapped[Any] = mapped_column(String(128), nullable=False)
+    last_outcome: Mapped[Any] = mapped_column(
+        String(16), nullable=False
+    )  # "ran" | "failed" | "skipped"
+    last_run_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    last_error: Mapped[Any] = mapped_column(Text, nullable=True)
+
+
 class AgentCommand(Base):
     __tablename__ = "agent_commands"
 
