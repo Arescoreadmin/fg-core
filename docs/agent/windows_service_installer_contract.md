@@ -344,11 +344,33 @@ Command plans are cross-platform and deterministic; actual SCM execution is plat
 **Live MSI build was NOT tested** — WiX toolchain unavailable on Linux CI.
 Command plans are cross-platform and deterministic; actual toolchain execution is platform-gated.
 
-### Still required in 18.3 and later tasks
+### Implemented in task 18.3
+
+- `agent/app/installer/silent_enrollment.py` — Typed silent enrollment parameter model and command builders:
+  - `SilentEnrollmentParams` frozen dataclass — tenant_id, control_plane_url (→ `FROSTGATE_ENDPOINT`), environment, enrollment_token, bootstrap_token (mutually exclusive), install_dir, log_level
+  - `validate()` — rejects missing/empty tenant_id; rejects HTTP, localhost, RFC 1918, link-local endpoints; rejects dev/local environment; enforces token mutual exclusivity
+  - `build_msiexec_args(artifact_path, *, redact_token=False)` — deterministic `msiexec /i … /qn` argument list; raw token only when `redact_token=False`
+  - `build_log_safe_args(artifact_path)` — identical to `build_msiexec_args(redact_token=True)`; safe for log output
+  - `execute_live_enrollment(artifact_path)` — platform-gated; raises `EnrollmentToolchainError` on non-Windows or missing msiexec; uses `shell=False` arg list (no metacharacter injection)
+  - `SERVICE_CREDENTIAL_GATE_REQUIRED = True` — explicit invariant: service start is gated on device credential, never on raw token presence
+  - `placeholder_enrollment_params()` — factory returning non-production placeholder values for docs and tests
+- `agent/app/installer/__init__.py` — updated to re-export all silent_enrollment public symbols
+- `tests/agent/test_silent_enrollment_install_flow.py` — 65 tests covering parameter validation, command plan content and determinism, token redaction in log-safe output, service credential gate, platform behavior, plan YAML cross-reference, and regression invariants
+
+**Token persistence rules (unchanged from 17.6 contract):**
+- Raw enrollment/bootstrap token is install-time only; exchanged for a device credential and discarded
+- Token is never written to `agent.toml`, disk, or any non-secret config
+- Token never appears in `build_log_safe_args()` output — always replaced with `<redacted>`
+- Token is not part of any log, release manifest, or MSI artifact
+
+**Live MSI enrollment was NOT tested** — msiexec unavailable on Linux CI.
+Command plan generation is cross-platform and deterministic; live enrollment execution is platform-gated.
+Silent install examples use placeholder values only; log-safe examples always redact tokens.
+
+### Still required in 18.4 and later tasks
 
 - Credential Manager integration (DPAPI storage of device_key)
-- Enrollment flow with token deletion after exchange
-- Silent enrollment install flow (task 18.3)
+- Enrollment flow with token deletion after exchange (live Windows path)
 - ACL setup in installer custom actions
 - Windows Event Log source registration
 - Config tampering / binary integrity check

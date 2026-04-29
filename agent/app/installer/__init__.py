@@ -16,8 +16,26 @@ from agent.app.installer.msi_contract import (
     validate_environment,
     validate_msi_endpoint,
 )
+from agent.app.installer.silent_enrollment import (
+    MSI_PROP_ENDPOINT,
+    MSI_PROP_ENVIRONMENT,
+    MSI_PROP_INSTALLDIR,
+    MSI_PROP_LOG_LEVEL,
+    MSI_PROP_TENANT_ID,
+    MSI_PROP_TOKEN,
+    PLACEHOLDER_ENDPOINT,
+    PLACEHOLDER_TENANT_ID,
+    PLACEHOLDER_TOKEN,
+    SERVICE_CREDENTIAL_GATE_REQUIRED,
+    TOKEN_REDACTED,
+    EnrollmentToolchainError,
+    EnrollmentValidationError,
+    SilentEnrollmentParams,
+    placeholder_enrollment_params,
+)
 
 __all__ = [
+    # msi_contract
     "PURGE_PARAM",
     "SILENT_OPTIONAL_PARAMS",
     "SILENT_REQUIRED_PARAMS",
@@ -32,4 +50,20 @@ __all__ = [
     "default_frostgate_msi_contract",
     "validate_environment",
     "validate_msi_endpoint",
+    # silent_enrollment
+    "MSI_PROP_ENDPOINT",
+    "MSI_PROP_ENVIRONMENT",
+    "MSI_PROP_INSTALLDIR",
+    "MSI_PROP_LOG_LEVEL",
+    "MSI_PROP_TENANT_ID",
+    "MSI_PROP_TOKEN",
+    "PLACEHOLDER_ENDPOINT",
+    "PLACEHOLDER_TENANT_ID",
+    "PLACEHOLDER_TOKEN",
+    "SERVICE_CREDENTIAL_GATE_REQUIRED",
+    "TOKEN_REDACTED",
+    "EnrollmentToolchainError",
+    "EnrollmentValidationError",
+    "SilentEnrollmentParams",
+    "placeholder_enrollment_params",
 ]
