@@ -859,6 +859,7 @@ phases:
       validation:
       - Silent install flow succeeds with supplied enrollment parameters
       validation_commands:
+      - .venv/bin/pytest -q tests/agent/test_silent_enrollment_install_flow.py
       - make fg-fast
     - id: '18.4'
       title: Local credential storage hardening

@@ -5893,3 +5893,71 @@ New typed MSI build contract module (`agent/app/installer/msi_contract.py`) and 
 - `pytest -q tests/agent/test_msi_installer_contract.py`: 63 passed
 - `ruff format --check`: 2 files reformatted, then re-verified clean
 - `make fg-fast`: All checks passed (see gate run below)
+
+---
+
+### 2026-04-28 — Task 18.3: Silent enrollment install flow
+
+**Branch:** `task/18.3-silent-enrollment-install-flow`
+
+**Area:** Agent / MSI installer — silent enrollment contract
+
+---
+
+**What was implemented:**
+
+New typed silent enrollment parameter module (`agent/app/installer/silent_enrollment.py`) and 65 tests in `tests/agent/test_silent_enrollment_install_flow.py`.
+
+**Silent enrollment behavior:**
+
+- `SilentEnrollmentParams` frozen dataclass holds all install-time enrollment parameters. Never persisted to disk.
+- `validate()` enforces: non-empty tenant_id, HTTPS + non-private endpoint (reusing msi_contract validators), valid environment (prod/staging), exactly one of enrollment_token/bootstrap_token (mutually exclusive).
+- `build_msiexec_args(artifact_path, *, redact_token)` builds a deterministic `msiexec /i … /qn` argument list. Stable ordering. No shell=True.
+- `build_log_safe_args()` calls `build_msiexec_args(redact_token=True)` — always safe to log.
+- `execute_live_enrollment()` platform-gated (non-Windows raises `EnrollmentToolchainError`); uses `shell=False` arg list.
+- `SERVICE_CREDENTIAL_GATE_REQUIRED = True` — explicit invariant constant cross-referenced by tests.
+
+**Command-plan behavior:**
+
+- Always includes: msiexec, /i, /qn, /l*v, TENANT_ID=, FROSTGATE_ENDPOINT=, ENROLLMENT_TOKEN=, ENVIRONMENT=
+- INSTALLDIR and LOG_LEVEL appended only when set
+- Log-safe rendering: ENROLLMENT_TOKEN=<redacted>
+- Execution rendering: ENROLLMENT_TOKEN=<real-value> (only in execute_live_enrollment, not logged)
+- Argument ordering is deterministic — identical output on repeated calls
+
+**Token/secret protections:**
+
+1. `build_log_safe_args()` always redacts token — regression test catches any leak
+2. `SilentEnrollmentParams` has no `to_config`/`as_dict` method — token cannot flow into config serialisation
+3. `EnrollmentValidationError` inherits `ValueError`; `EnrollmentToolchainError` inherits `RuntimeError` — separate hierarchies, no cross-catching risk
+4. Endpoint validation reuses `validate_msi_endpoint()` (RFC 1918 + link-local + empty-hostname guards from 18.2 P1+P2 fixes)
+
+**Platform/toolchain behavior:**
+
+- All plan generation: cross-platform, works on Linux CI
+- `execute_live_enrollment()`: raises `EnrollmentToolchainError` on non-Windows or missing msiexec
+- No live enrollment proof claimed
+
+**Files changed:**
+- `agent/app/installer/silent_enrollment.py` — new
+- `agent/app/installer/__init__.py` — updated (adds silent_enrollment exports)
+- `tests/agent/test_silent_enrollment_install_flow.py` — new (65 tests)
+- `plans/30_day_repo_blitz.yaml` — task 18.3 validation_commands updated
+- `docs/agent/windows_service_installer_contract.md` — Implementation Status updated
+
+**Validation results:**
+- `pytest -q tests/agent/test_silent_enrollment_install_flow.py`: 65 passed
+- `ruff format --check`: 1 file reformatted (silent_enrollment.py), then clean
+- `make fg-fast`: see gate run
+- `bash codex_gates.sh`: see gate run
+
+**Local review performed:**
+- No raw token in log-safe output ✓
+- No interactive flags (/qb, /qf, /qr) ✓
+- No localhost/private endpoint default ✓
+- Service start gated on device credential (ServiceConfigError raised) ✓
+- Enrollment failure not treated as success (exceptions propagate) ✓
+- No lifecycle bypass ✓
+- No observability bypass ✓
+- No live MSI proof claimed ✓
+- Validation command under correct task (18.3) ✓
