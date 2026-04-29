@@ -190,37 +190,26 @@ class AIPlaneService:
             db.commit()
             raise ValueError("AI_INPUT_POLICY_BLOCKED")
 
-        # PHI classification runs first — PHI presence determines whether BAA is required.
-        from services.phi_classifier.classifier import (  # noqa: PLC0415
-            classify_phi as _classify_phi,
-            emit_phi_classification_audit as _emit_phi_audit,
-            emit_phi_enforcement_block_audit as _emit_phi_block_audit,
-        )
-
         effective_provider = (
             "simulated" if not ai_external_provider_enabled() else SIM_MODEL.lower()
         )
-        _phi_result = _classify_phi(payload.query)
-        if _phi_result.contains_phi:
-            from fastapi import HTTPException as _HTTPException  # noqa: PLC0415
-            from services.provider_baa.policy import enforce_provider_baa_for_route  # noqa: PLC0415
+        from fastapi import HTTPException as _HTTPException  # noqa: PLC0415
+        from services.provider_baa.gate import (  # noqa: PLC0415
+            enforce_baa_gate_for_route as _enforce_baa_gate,
+        )
 
-            try:
-                enforce_provider_baa_for_route(
-                    db, tenant_id=tenant_id, provider_id=effective_provider
-                )
-            except Exception as baa_exc:
-                if isinstance(baa_exc, _HTTPException):
-                    _emit_phi_block_audit(
-                        _phi_result,
-                        tenant_id=tenant_id,
-                        provider_id=effective_provider,
-                    )
-                    self._record_violation(db, tenant_id, "AI_PHI_PROVIDER_NOT_BAA_CAPABLE")
-                    db.commit()
-                    raise ValueError("AI_PHI_PROVIDER_NOT_BAA_CAPABLE") from baa_exc
-                raise
-        _emit_phi_audit(_phi_result, tenant_id=tenant_id, enforcement_action="allowed")
+        try:
+            _enforce_baa_gate(
+                db,
+                tenant_id=tenant_id,
+                provider_id=effective_provider,
+                text=payload.query,
+                source="ai_plane_infer",
+            )
+        except _HTTPException:
+            self._record_violation(db, tenant_id, "AI_PHI_PROVIDER_NOT_BAA_CAPABLE")
+            db.commit()
+            raise ValueError("AI_PHI_PROVIDER_NOT_BAA_CAPABLE")
 
         rag = rag_stub.retrieve(tenant_id=tenant_id, query=payload.query)
         prompt_sha = hashlib.sha256(payload.query.encode("utf-8")).hexdigest()

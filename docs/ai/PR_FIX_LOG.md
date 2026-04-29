@@ -6247,3 +6247,57 @@ Section 9 — Routing integration: 3 tests
 - `make fg-fast` → passed
 - `bash codex_gates.sh` → passed
 - `.venv/bin/pytest -q tests/security/test_provider_baa_enforcement.py` → all tests passed
+
+---
+
+### 2026-04-29 — BAA Gate orchestration boundary (services/provider_baa/gate.py)
+
+**Why added:** PHI classification and BAA enforcement were hand-wired inline in two separate routing paths (`api/ui_ai_console.py` and `services/ai_plane_extension/service.py`), with no shared contract. Duplicate logic creates drift risk: one path could silently drop PHI classification or skip BAA enforcement after a refactor. A stable orchestration boundary gives routing code a single call site, ensures every path applies the same fail-closed semantics, and lets the implementation be replaced (policy plane, ML classifier, remote service) without rewriting routing code.
+
+**What was consolidated:**
+- Created `services/provider_baa/gate.py` — single composition point for `classify_phi()` and `enforce_provider_baa_for_route()`.
+- Exposes `BaaGateResult` (frozen dataclass), `evaluate_baa_gate()` (returns result, never raises on denial), and `enforce_baa_gate_for_route()` (raises HTTPException 403 on denial — primary routing call site).
+- Replaced 27-line inline PHI→BAA block in `api/ui_ai_console.py` with a 9-line gate call.
+- Replaced 33-line inline block in `services/ai_plane_extension/service.py` with a 17-line gate call (service layer converts HTTPException → ValueError per layer convention).
+
+**Files changed:**
+- `services/provider_baa/gate.py` — new (orchestration boundary)
+- `api/ui_ai_console.py` — inline PHI→BAA block → `enforce_baa_gate_for_route` call
+- `services/ai_plane_extension/service.py` — inline block → gate call with ValueError conversion
+- `tests/security/test_baa_gate.py` — new (28 tests, 8 sections)
+- `tests/security/test_phi_classifier.py` — updated `test_phi_gate_is_wired_into_chat_route` to assert gate boundary rather than direct classifier import
+
+**Enforcement order (preserved):** PHI classification → BAA enforcement (conditional on PHI) → quota → inference. Non-regulated providers (simulated) pass BAA unconditionally even with PHI present.
+
+**Fail-closed behavior:**
+- `classify_phi()` errors → `contains_phi=True` → BAA enforced
+- Blank/None `tenant_id` or `provider_id` → `ValueError` immediately (programming error)
+- No code path silently allows after a deny result
+
+**Circular import prevention:** `gate.py` is not exported from `services/provider_baa/__init__.py`. Consumers import directly from `services.provider_baa.gate` to avoid `__init__ → gate → policy → __init__` circular dependency.
+
+**Tests added (`tests/security/test_baa_gate.py`, 28 tests):**
+
+Section 1 — `evaluate_baa_gate()` unit: no-PHI allowed, PHI+no-BAA denied, PHI+active-BAA allowed, classifier-error fail-closed
+
+Section 2 — `enforce_baa_gate_for_route()` unit: raises 403 on deny, returns result on allow, detail keys stable
+
+Section 3 — Audit emission: block audit on deny, classification audit on PHI+allow, classification audit on no-PHI
+
+Section 4 — Input validation: blank/None tenant_id and provider_id raise ValueError
+
+Section 5 — `BaaGateResult` fields: allowed, contains_phi, sensitivity_level, phi_types, provider_id, tenant_id, reason_code, enforcement_action all present
+
+Section 6 — Integration (`/ui/ai/chat`): PHI+regulated+no-BAA → 403; PHI+regulated+active-BAA → 200; no-PHI → 200
+
+Section 7 — Integration (`AIPlaneService.infer`): PHI+regulated+no-BAA → ValueError; no-PHI+simulated → pass
+
+Section 8 — Regression: gate wired into both routing paths (behavioral, not source-inspection)
+
+**Validation results:**
+
+- `python -m compileall services api tests` → clean
+- `.venv/bin/pytest -q tests/security/test_baa_gate.py` → 28 passed
+- `.venv/bin/pytest -q tests/security/test_phi_classifier.py tests/security/test_provider_baa_enforcement.py` → 61 passed
+- `make fg-fast` → passed
+- `bash codex_gates.sh` → passed
