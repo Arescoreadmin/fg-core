@@ -369,6 +369,8 @@ def validate_uninstall_plan(plan: UninstallPlan) -> None:
         errors.append("normal uninstall purge must be False")
     if not plan.service_name.strip():
         errors.append("normal uninstall service_name must be non-empty")
+    if not plan.artifact_path.strip():
+        errors.append("normal uninstall artifact_path must be non-empty")
     if not plan.steps:
         errors.append("normal uninstall steps must be non-empty")
 
@@ -489,6 +491,17 @@ def execute_credential_cleanup(
             ),
         )
 
+    # Check presence first so conforming idempotent stores (which do not raise
+    # CredentialNotFoundError on delete) produce accurate audit status.
+    if not store.exists(tenant_id, device_id):
+        return CredentialCleanupResult(
+            status="not_found",
+            detail=(
+                f"Credential for tenant={tenant_id!r} device={device_id!r} "
+                "was not present in store (already removed)"
+            ),
+        )
+
     try:
         store.delete(tenant_id, device_id)
         return CredentialCleanupResult(
@@ -499,6 +512,7 @@ def execute_credential_cleanup(
             ),
         )
     except CredentialNotFoundError:
+        # Rare race: credential disappeared between exists() and delete().
         return CredentialCleanupResult(
             status="not_found",
             detail=(

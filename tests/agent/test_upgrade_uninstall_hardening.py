@@ -372,9 +372,22 @@ def test_credential_cleanup_purge_true_removes_credential() -> None:
 
 
 def test_credential_cleanup_not_found_returns_not_found() -> None:
-    """Store that raises CredentialNotFoundError on delete() → status 'not_found', not error."""
+    """Credential absent from store → status 'not_found', not 'removed'."""
+    store = TestOnlyInMemoryCredentialStore()
+    # Credential never stored — exists() returns False → not_found without calling delete
+    result = execute_credential_cleanup(
+        store, tenant_id=_TENANT, device_id=_DEVICE_ID, purge=True
+    )
+    assert result.status == "not_found"
+
+
+def test_credential_cleanup_not_found_via_race_condition() -> None:
+    """CredentialNotFoundError from delete() after exists()=True (race) → not_found."""
     store = MagicMock()
-    store.delete.side_effect = CredentialNotFoundError("already gone")
+    store.exists.return_value = True
+    store.delete.side_effect = CredentialNotFoundError(
+        "disappeared between exists and delete"
+    )
     result = execute_credential_cleanup(
         store, tenant_id=_TENANT, device_id=_DEVICE_ID, purge=True
     )
@@ -466,6 +479,21 @@ def test_validate_upgrade_plan_rejects_token_material_in_args() -> None:
 
 def test_validate_uninstall_plan_passes_valid_plan() -> None:
     validate_uninstall_plan(_uninstall_plan())  # must not raise
+
+
+def test_validate_uninstall_plan_rejects_empty_artifact_path() -> None:
+    """validate_uninstall_plan must reject a plan with an empty artifact_path."""
+    plan = UninstallPlan(
+        credential_action="preserve",
+        data_action="preserve",
+        stops_service_first=True,
+        purge=False,
+        service_name=_SERVICE,
+        artifact_path="",
+        steps=["sc stop FrostGateAgent"],
+    )
+    with pytest.raises(LifecycleError, match="artifact_path"):
+        validate_uninstall_plan(plan)
 
 
 # ===========================================================================
