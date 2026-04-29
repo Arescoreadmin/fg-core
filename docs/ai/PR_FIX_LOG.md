@@ -6069,3 +6069,64 @@ New typed silent enrollment parameter module (`agent/app/installer/silent_enroll
 - Plan generation is deterministic across repeated calls ✓
 - Validation command under correct task (18.5) ✓
 - No live Windows MSI/SCM proof claimed ✓
+
+---
+
+## Task 18.6 — Release artifact signing and deployment guide
+
+**Branch:** `task/18.6-release-signing-deployment-guide`
+
+**What was built:**
+- `agent/app/installer/release_signing.py` — signing pipeline contract: typed models, plan builders, manifest builder, validator, hash verification
+- `docs/agent/windows_enterprise_deployment.md` — 9-section enterprise deployment guide
+- `tests/agent/test_release_signing_deployment_guide.py` — test suite covering signing contract, manifest, hash verification, production readiness, and deployment guide invariants
+
+**Signing contract added:**
+- `ReleaseArtifact` dataclass — name, path, artifact_type, signing_status, sha256, size_bytes
+- `SigningPlan` dataclass — deterministic Authenticode command plan; cert_thumbprint_ref is env var reference only; no signing secrets in any field
+- `build_signing_plan()` — generates signtool.exe sign/verify args; cross-platform; secret guards applied
+- `execute_live_signing()` — raises `SigningToolchainError` on non-Windows or missing signtool.exe
+
+**Release manifest added:**
+- `ReleaseManifest` dataclass — product, version, commit, build_time, signing_status, production_ready, sha256_manifest_path, artifacts
+- `build_release_manifest()` — computes production_ready and signing_status from artifacts
+- `production_ready` = True only when: all msi/exe signed + all SHA256 present + sha256_manifest_path set
+- `signing_status`: 'signed' | 'unsigned' | 'partial' (computed from required artifact count)
+- `as_dict()` / `as_json()` — deterministic serialization
+
+**Validation and hash verification added:**
+- `validate_release_ready()` — raises `UnsignedProductionArtifactError` for unsigned production artifacts; `ReleaseManifestError` for missing hashes, missing sha256_manifest_path, empty version, secret material, forbidden endpoints
+- `verify_artifact_hashes()` — cross-platform SHA256 hash verification using hashlib; returns `HashVerificationResult` list with match/file_not_found/hash_missing status
+
+**Security invariants enforced:**
+- Signing secrets (PFX passwords, private keys) never in plans, manifests, logs, or args
+- cert_thumbprint_ref is env var reference only — raw thumbprint never stored in plan
+- Unsigned production artifacts explicitly raise `UnsignedProductionArtifactError`
+- Forbidden endpoints (localhost, dev., .local) blocked in manifest metadata
+- production_ready never set True for unsigned/incomplete artifacts
+
+**Deployment guide invariants enforced:**
+- No localhost in production install examples
+- ENROLLMENT_TOKEN not embedded in GPO transforms
+- PURGE_DATA=1 required for destructive uninstall
+- Unsigned artifacts labeled "MUST NOT be deployed to production"
+- Credential cleanup guarantee section (CredDelete API only, no filesystem guessing)
+
+**Validation results:**
+- `pytest -q tests/agent/test_release_signing_deployment_guide.py`: passed
+- `ruff format --check`: clean
+- `ruff check`: clean
+- `mypy`: 0 errors
+- `make fg-fast`: All checks passed
+
+**Local review performed:**
+- No signing secret in any plan field ✓
+- cert_thumbprint_ref is env var ref only, never raw value ✓
+- execute_live_signing() raises on non-Windows ✓
+- production_ready computed from artifact content, not asserted ✓
+- validate_release_ready() raises on unsigned production artifacts ✓
+- Deployment guide uses HTTPS only in production examples ✓
+- ENROLLMENT_TOKEN not in GPO transform, not hardcoded ✓
+- Purge requires explicit PURGE_DATA=1 ✓
+- Validation command under correct task (18.6) ✓
+- No live Windows signing proof claimed ✓
