@@ -31,6 +31,7 @@ DEVICE_KEY_REDACTED: str = "<redacted>"
 # Windows Credential Manager target name prefix.
 _CRED_TARGET_PREFIX: str = "FrostGate/agent"
 _CRED_TYPE_GENERIC: int = 1  # CRED_TYPE_GENERIC
+_WINERR_NOT_FOUND: int = 1168  # ERROR_NOT_FOUND — credential target does not exist
 
 # ---------------------------------------------------------------------------
 # Errors
@@ -257,8 +258,12 @@ class WindowsCredentialManagerStore:
         try:
             result = win32cred.CredRead(target, _CRED_TYPE_GENERIC)
         except Exception as exc:
-            raise CredentialNotFoundError(
-                f"No credential found for tenant={tenant_id!r} device={device_id!r}: {exc}"
+            if getattr(exc, "winerror", None) == _WINERR_NOT_FOUND:
+                raise CredentialNotFoundError(
+                    f"No credential found for tenant={tenant_id!r} device={device_id!r}"
+                ) from exc
+            raise CredentialStorageError(
+                f"Failed to read credential for tenant={tenant_id!r} device={device_id!r}: {exc}"
             ) from exc
         blob = json.loads(result["CredentialBlob"])
         return DeviceCredential(
@@ -276,8 +281,12 @@ class WindowsCredentialManagerStore:
         target = _cred_target(tenant_id, device_id)
         try:
             win32cred.CredDelete(target, _CRED_TYPE_GENERIC)
-        except Exception:
-            pass  # idempotent — credential may not exist; Win32 error is opaque
+        except Exception as exc:
+            if getattr(exc, "winerror", None) == _WINERR_NOT_FOUND:
+                return  # idempotent — credential was already absent
+            raise CredentialStorageError(
+                f"Failed to delete credential for tenant={tenant_id!r} device={device_id!r}: {exc}"
+            ) from exc
 
     def exists(self, tenant_id: str, device_id: str) -> bool:
         self._require_platform()

@@ -460,6 +460,150 @@ def test_windows_store_error_messages_do_not_contain_device_key() -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# Win32 error discrimination helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_win32_exc(
+    winerror: int | None = None, msg: str = "fake Win32 error"
+) -> Exception:
+    """Build a fake Win32-style exception with an optional winerror attribute."""
+    exc = Exception(msg)
+    if winerror is not None:
+        exc.winerror = winerror  # type: ignore[attr-defined]
+    return exc
+
+
+# ---------------------------------------------------------------------------
+# P2 — load() distinguishes missing from backend failure
+# ---------------------------------------------------------------------------
+
+
+def test_load_raises_credential_not_found_for_winerror_1168() -> None:
+    """load() must raise CredentialNotFoundError only for ERROR_NOT_FOUND (1168)."""
+    import sys
+    import types
+    from unittest.mock import MagicMock
+
+    fake_win32 = types.ModuleType("win32cred")
+    fake_win32.CRED_PERSIST_LOCAL_MACHINE = 3  # type: ignore[attr-defined]
+    fake_win32.CredRead = MagicMock(side_effect=_make_win32_exc(winerror=1168))  # type: ignore[attr-defined]
+
+    store = WindowsCredentialManagerStore()
+    store._require_platform = MagicMock()  # type: ignore[method-assign]
+
+    import unittest.mock as mock
+
+    with mock.patch.dict(sys.modules, {"win32cred": fake_win32}):
+        with pytest.raises(CredentialNotFoundError):
+            store.load(_TENANT, _DEVICE_ID)
+
+
+def test_load_raises_storage_error_for_access_denied() -> None:
+    """load() must raise CredentialStorageError (not CredentialNotFoundError) for winerror=5."""
+    import sys
+    import types
+    from unittest.mock import MagicMock
+
+    fake_win32 = types.ModuleType("win32cred")
+    fake_win32.CredRead = MagicMock(side_effect=_make_win32_exc(winerror=5))  # type: ignore[attr-defined]
+
+    store = WindowsCredentialManagerStore()
+    store._require_platform = MagicMock()  # type: ignore[method-assign]
+
+    import unittest.mock as mock
+
+    with mock.patch.dict(sys.modules, {"win32cred": fake_win32}):
+        with pytest.raises(CredentialStorageError) as exc_info:
+            store.load(_TENANT, _DEVICE_ID)
+        assert not isinstance(exc_info.value, CredentialNotFoundError), (
+            "access-denied must not be mis-classified as CredentialNotFoundError"
+        )
+
+
+def test_load_raises_storage_error_for_generic_exception() -> None:
+    """load() must raise CredentialStorageError for non-Win32 backend failures."""
+    import sys
+    import types
+    from unittest.mock import MagicMock
+
+    fake_win32 = types.ModuleType("win32cred")
+    fake_win32.CredRead = MagicMock(side_effect=_make_win32_exc(winerror=None))  # type: ignore[attr-defined]
+
+    store = WindowsCredentialManagerStore()
+    store._require_platform = MagicMock()  # type: ignore[method-assign]
+
+    import unittest.mock as mock
+
+    with mock.patch.dict(sys.modules, {"win32cred": fake_win32}):
+        with pytest.raises(CredentialStorageError) as exc_info:
+            store.load(_TENANT, _DEVICE_ID)
+        assert not isinstance(exc_info.value, CredentialNotFoundError)
+
+
+# ---------------------------------------------------------------------------
+# P1 — delete() only swallows ERROR_NOT_FOUND
+# ---------------------------------------------------------------------------
+
+
+def test_delete_is_idempotent_for_winerror_1168() -> None:
+    """delete() must not raise when CredDelete returns ERROR_NOT_FOUND (1168)."""
+    import sys
+    import types
+    from unittest.mock import MagicMock
+
+    fake_win32 = types.ModuleType("win32cred")
+    fake_win32.CRED_PERSIST_LOCAL_MACHINE = 3  # type: ignore[attr-defined]
+    fake_win32.CredDelete = MagicMock(side_effect=_make_win32_exc(winerror=1168))  # type: ignore[attr-defined]
+
+    store = WindowsCredentialManagerStore()
+    store._require_platform = MagicMock()  # type: ignore[method-assign]
+
+    import unittest.mock as mock
+
+    with mock.patch.dict(sys.modules, {"win32cred": fake_win32}):
+        store.delete(_TENANT, _DEVICE_ID)  # must not raise
+
+
+def test_delete_raises_storage_error_for_access_denied() -> None:
+    """delete() must raise CredentialStorageError for winerror=5 (access denied)."""
+    import sys
+    import types
+    from unittest.mock import MagicMock
+
+    fake_win32 = types.ModuleType("win32cred")
+    fake_win32.CredDelete = MagicMock(side_effect=_make_win32_exc(winerror=5))  # type: ignore[attr-defined]
+
+    store = WindowsCredentialManagerStore()
+    store._require_platform = MagicMock()  # type: ignore[method-assign]
+
+    import unittest.mock as mock
+
+    with mock.patch.dict(sys.modules, {"win32cred": fake_win32}):
+        with pytest.raises(CredentialStorageError):
+            store.delete(_TENANT, _DEVICE_ID)
+
+
+def test_delete_raises_storage_error_for_generic_exception() -> None:
+    """delete() must raise CredentialStorageError for non-Win32 backend failures."""
+    import sys
+    import types
+    from unittest.mock import MagicMock
+
+    fake_win32 = types.ModuleType("win32cred")
+    fake_win32.CredDelete = MagicMock(side_effect=_make_win32_exc(winerror=None))  # type: ignore[attr-defined]
+
+    store = WindowsCredentialManagerStore()
+    store._require_platform = MagicMock()  # type: ignore[method-assign]
+
+    import unittest.mock as mock
+
+    with mock.patch.dict(sys.modules, {"win32cred": fake_win32}):
+        with pytest.raises(CredentialStorageError):
+            store.delete(_TENANT, _DEVICE_ID)
+
+
 # ===========================================================================
 # 6. Plan YAML cross-reference
 # ===========================================================================
