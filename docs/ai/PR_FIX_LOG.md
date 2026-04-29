@@ -6005,3 +6005,67 @@ New typed silent enrollment parameter module (`agent/app/installer/silent_enroll
 - `TestOnlyInMemoryCredentialStore` is never returned by production factory ✓
 - All Windows-only paths platform-gated with explicit error ✓
 - Validation command under correct task (18.4) ✓
+
+---
+
+## Task 18.5 — Upgrade and uninstall hardening
+
+**Branch:** `task/18.5-upgrade-uninstall-hardening`
+
+**What was built:**
+- `agent/app/installer/lifecycle.py` — new module: typed upgrade/uninstall/purge plan models and builders with explicit invariant enforcement
+- `tests/agent/test_upgrade_uninstall_hardening.py` — 57 tests covering all upgrade/uninstall/purge/cleanup paths
+
+**Upgrade behavior added:**
+- `build_upgrade_plan()` produces a deterministic `UpgradePlan` with `credential_action='preserve'`, `data_action='preserve'`, `no_reenroll=True`, `token_material_present=False`
+- `validate_upgrade_plan()` enforces all invariants; raises `LifecycleError` on violation
+- Token guard `_assert_no_token_material()` applied at build time
+
+**Uninstall behavior added:**
+- `build_uninstall_plan()` produces `UninstallPlan` with `credential_action='preserve'`, `data_action='preserve'`, `stops_service_first=True`, `purge=False`
+- Ordered steps: stop → msiexec /x → credential/data preservation commentary
+- `validate_uninstall_plan()` enforces invariants
+
+**Purge behavior added:**
+- `build_purge_uninstall_plan()` produces `PurgePlan` with `purge=True`, `credential_action='delete_via_store'`, `data_action='delete'`
+- `execute_credential_cleanup()` uses `CredentialStore.delete()` only — no filesystem path guessing
+- `CredentialNotFoundError` → `not_found` status (already removed — idempotent)
+- `CredentialStorageError` (access-denied, API failure) → raises `CredentialCleanupError` — surfaced, not swallowed
+- `purge=False` → `preserved` — credential never deleted without explicit purge
+
+**Credential/data preservation guarantees:**
+- Upgrade: credentials preserved, data preserved, no re-enrollment
+- Normal uninstall: credentials preserved, data preserved
+- Purge: credentials deleted via store API only (no filesystem guessing)
+
+**Credential cleanup guarantees:**
+- Only `CredentialNotFoundError` treated as already-removed
+- Access-denied and API failures raise `CredentialCleanupError` — callers cannot treat failure as success
+- No broad `except Exception: pass` on cleanup path
+
+**Tests added:**
+- 14 upgrade plan tests
+- 10 normal uninstall plan tests
+- 14 purge plan tests
+- 9 credential cleanup executor tests
+- 3 validation tests
+- 9 security regression tests
+- 1 plan YAML cross-reference test
+
+**Validation results:**
+- `pytest -q tests/agent/test_upgrade_uninstall_hardening.py`: 57 passed
+- `ruff format --check`: clean
+- `ruff check`: clean
+- `mypy`: 0 errors
+
+**Local review performed:**
+- Upgrade does not call credential delete ✓
+- Normal uninstall does not purge credentials or data ✓
+- Purge uses `CredentialStore.delete()`, not filesystem paths ✓
+- Credential deletion failure surfaced as `CredentialCleanupError` ✓
+- No broad `except Exception: pass` in cleanup ✓
+- No token material in upgrade/uninstall plans ✓
+- `purge=True` required for destructive cleanup ✓
+- Plan generation is deterministic across repeated calls ✓
+- Validation command under correct task (18.5) ✓
+- No live Windows MSI/SCM proof claimed ✓

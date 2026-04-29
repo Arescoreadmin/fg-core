@@ -885,6 +885,7 @@ phases:
       validation:
       - Upgrade and uninstall paths are tested and explicit
       validation_commands:
+      - .venv/bin/pytest -q tests/agent/test_upgrade_uninstall_hardening.py
       - make fg-fast
     - id: '18.6'
       title: Release artifact signing and deployment guide

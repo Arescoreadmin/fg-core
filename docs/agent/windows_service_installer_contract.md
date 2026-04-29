@@ -390,11 +390,52 @@ Silent install examples use placeholder values only; log-safe examples always re
 **Live Windows Credential Manager was NOT tested** — pywin32 unavailable on Linux CI.
 All plan generation and factory behavior is cross-platform; DPAPI execution is platform-gated.
 
-### Still required in 18.5 and later tasks
+### Implemented in task 18.5
+
+- `agent/app/installer/lifecycle.py` — Upgrade and uninstall hardening boundary:
+  - `UpgradePlan` frozen dataclass — captures `credential_action='preserve'`, `data_action='preserve'`, `no_reenroll=True`, `token_material_present=False`, `msiexec_args`; all fields are invariant-enforced
+  - `UninstallPlan` frozen dataclass — `credential_action='preserve'`, `data_action='preserve'`, `stops_service_first=True`, `purge=False`; ordered `steps` list for operator review
+  - `PurgePlan` frozen dataclass — `purge=True`, `credential_action='delete_via_store'`, `data_action='delete'`; includes `tenant_id`/`device_id` for credential lookup and data/log directory paths
+  - `CredentialCleanupResult` frozen dataclass — structured status: `removed | preserved | not_found | failed`; non-empty `detail` string; no secret material
+  - `build_upgrade_plan()` — deterministic upgrade plan builder; rejects empty fields; asserts no token material in `msiexec_args`
+  - `build_uninstall_plan()` — deterministic normal uninstall plan; step order: stop → remove → preserve commentary
+  - `build_purge_uninstall_plan()` — deterministic purge uninstall plan; step order: stop → remove → credential-store delete → data directory delete
+  - `validate_upgrade_plan()` / `validate_uninstall_plan()` — explicit invariant validators; raise `LifecycleError` on violation
+  - `execute_credential_cleanup()` — credential deletion through `CredentialStore.delete()` only; `purge=False` → `preserved`; `CredentialNotFoundError` → `not_found`; `CredentialStorageError` → raises `CredentialCleanupError` (surfaced, not swallowed)
+  - `LifecycleError(ValueError)` — invalid plan parameters
+  - `CredentialCleanupError(RuntimeError)` — credential deletion failure (access-denied, API error)
+- `tests/agent/test_upgrade_uninstall_hardening.py` — 57 tests covering upgrade preservation invariants, uninstall preservation invariants, purge destructive path, credential cleanup result paths, validation functions, and security regressions
+
+**Upgrade rules:**
+- Upgrade preserves OS-protected device credential (`credential_action='preserve'`)
+- Upgrade preserves collected state (`data_action='preserve'`)
+- Upgrade never re-enrolls silently (`no_reenroll=True`)
+- Upgrade never embeds enrollment/bootstrap token material in `msiexec_args`
+- Upgrade updates only: binaries, service wrapper, non-secret config schema, version metadata
+
+**Normal uninstall rules:**
+- Normal uninstall stops service before removing binaries
+- Normal uninstall DOES NOT purge OS-protected credentials
+- Normal uninstall DOES NOT purge collected state or data directories
+- Normal uninstall produces explicit post-uninstall steps for operator review
+
+**Purge uninstall rules:**
+- Purge requires explicit `purge=True` — no destructive cleanup without it
+- Purge deletes OS-protected device credential through `CredentialStore.delete()` only
+- No filesystem path guessing for credential cleanup
+- Credential deletion failures (access-denied, API failure) are surfaced as `CredentialCleanupError`
+- Only `CredentialNotFoundError` from the store is treated as already-removed (`not_found` status)
+- Purge deletes data and log directories explicitly
+
+**Live Windows MSI uninstall was NOT tested** — msiexec unavailable on Linux CI.
+All plan generation is cross-platform; live SCM/MSI execution is platform-gated.
+
+### Still required in 18.6 and later tasks
 
 - Migration of `agent/main.py` to use `WindowsCredentialManagerStore` for device_key persistence
 - Enrollment flow with token deletion after exchange (live Windows path)
 - ACL setup in installer custom actions
 - Windows Event Log source registration
 - Config tampering / binary integrity check
+- Release artifact signing (task 18.6)
 - Release signing pipeline
