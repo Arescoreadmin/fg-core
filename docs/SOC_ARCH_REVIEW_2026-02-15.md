@@ -511,3 +511,22 @@ PHI classification is now a first-class enforcement dependency wired into all AI
 ### Validation performed
 - `make fg-fast`: All checks passed
 - `bash codex_gates.sh`: All gates passed
+
+## Real LLM provider boundary — tools/ci/validate_ai_contracts.py addendum (2026-04-29)
+
+### Files reviewed (required by SOC-HIGH-002)
+- `tools/ci/validate_ai_contracts.py`: Added `"anthropic"` to `KNOWN_PROVIDERS` set
+
+### Why
+The AI contract validator previously only recognized `"simulated"` as a valid provider ID in policy contracts. Adding the `anthropic` provider as a first-class real LLM integration requires that the contract CI gate recognizes it as a sanctioned provider. Without this, deploying an `allowed_providers: ["anthropic"]` policy would fail the `validate-ai-contracts` gate.
+
+### Security posture impact
+- The `KNOWN_PROVIDERS` set in `validate_ai_contracts.py` is the authoritative CI-enforced allowlist for provider IDs in AI policy contracts. Expanding it to include `"anthropic"` explicitly permits `anthropic` in tenant policies.
+- No new route, no new auth scope, no new audit event type. Impact is limited to contract validation allowlist.
+- Provider activation still requires `FG_ANTHROPIC_API_KEY` at runtime (fail-closed: missing key → `AI_PROVIDER_CONFIG_MISSING`).
+- Simulated provider remains gated by `FG_AI_ENABLE_SIMULATED`; blocked in prod by default.
+- BAA gate ordering preserved: PHI classification → BAA enforcement → provider call. No bypass path added.
+
+### Verification
+- `make fg-fast`: All checks passed
+- `bash codex_gates.sh`: All gates passed
