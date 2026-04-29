@@ -430,12 +430,37 @@ All plan generation and factory behavior is cross-platform; DPAPI execution is p
 **Live Windows MSI uninstall was NOT tested** — msiexec unavailable on Linux CI.
 All plan generation is cross-platform; live SCM/MSI execution is platform-gated.
 
-### Still required in 18.6 and later tasks
+### Implemented in task 18.6 — Release artifact signing and deployment guide
+
+**Module:** `agent/app/installer/release_signing.py`
+
+**What is implemented:**
+
+- `ReleaseArtifact` dataclass — typed artifact model with name, path, artifact_type, signing_status, sha256, size_bytes
+- `SigningPlan` dataclass — deterministic Authenticode signing plan (sign_args + verify_args for signtool.exe); no signing secrets in any field; cert_thumbprint_ref is an env var reference only
+- `ReleaseManifest` dataclass — auditable release manifest with product, version, commit, build_time, signing_status, production_ready, sha256_manifest_path, artifacts; `as_dict()` and `as_json()` serialization
+- `HashVerificationResult` dataclass — per-artifact SHA256 verification result (matches/file_not_found/hash_missing)
+- `build_signing_plan()` — deterministic signtool.exe command plan generation; cross-platform; secret material guards applied
+- `execute_live_signing()` — live signing execution; raises `SigningToolchainError` on non-Windows or missing signtool.exe
+- `build_release_manifest()` — manifest builder; computes production_ready and signing_status from artifacts
+- `validate_release_ready()` — raises `UnsignedProductionArtifactError` if required artifacts are unsigned; raises `ReleaseManifestError` for missing hashes, missing sha256_manifest_path, empty version, secret material, forbidden endpoints
+- `verify_artifact_hashes()` — cross-platform SHA256 hash verification using hashlib
+
+**Deployment guide:** `docs/agent/windows_enterprise_deployment.md` — 9-section enterprise deployment guide covering: Intune, GPO, RMM, staged rollout, offline verification, enrollment flow, upgrade, uninstall/purge, troubleshooting, security guarantees.
+
+**Security invariants enforced:**
+- Signing secrets (PFX passwords, private keys) must never appear in plans, manifests, logs, or command args
+- `cert_thumbprint_ref` is an env var reference only — raw thumbprint never stored in plan
+- Unsigned production artifacts raise `UnsignedProductionArtifactError`
+- `production_ready` is False unless all msi/exe artifacts are signed, all SHA256 hashes present, sha256_manifest_path set
+- Forbidden endpoints (localhost, dev., .local) blocked in manifest metadata
+
+**Platform behavior:** All plan generation is cross-platform. `execute_live_signing()` is the only function requiring Windows — it raises `SigningToolchainError` on non-Windows.
+
+### Still required in later tasks
 
 - Migration of `agent/main.py` to use `WindowsCredentialManagerStore` for device_key persistence
 - Enrollment flow with token deletion after exchange (live Windows path)
 - ACL setup in installer custom actions
 - Windows Event Log source registration
 - Config tampering / binary integrity check
-- Release artifact signing (task 18.6)
-- Release signing pipeline

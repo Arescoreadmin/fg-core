@@ -898,6 +898,7 @@ phases:
       validation:
       - Signing pipeline and deployment guide exist
       validation_commands:
+      - .venv/bin/pytest -q tests/agent/test_release_signing_deployment_guide.py
       - make fg-fast
   - id: '19.0'
     name: Server-side Agent / Control Execution

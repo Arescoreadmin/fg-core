@@ -30,6 +30,23 @@ from agent.app.installer.lifecycle import (
     validate_uninstall_plan,
     validate_upgrade_plan,
 )
+from agent.app.installer.release_signing import (
+    ArtifactSigningStatus,
+    ArtifactType,
+    HashVerificationResult,
+    ReleaseArtifact,
+    ReleaseManifest,
+    ReleaseManifestError,
+    ReleaseSigningStatus,
+    SigningPlan,
+    SigningToolchainError,
+    UnsignedProductionArtifactError,
+    build_release_manifest,
+    build_signing_plan,
+    execute_live_signing,
+    validate_release_ready,
+    verify_artifact_hashes,
+)
 from agent.app.installer.silent_enrollment import (
     MSI_PROP_ENDPOINT,
     MSI_PROP_ENVIRONMENT,
@@ -49,6 +66,22 @@ from agent.app.installer.silent_enrollment import (
 )
 
 __all__ = [
+    # release_signing
+    "ArtifactSigningStatus",
+    "ArtifactType",
+    "HashVerificationResult",
+    "ReleaseArtifact",
+    "ReleaseManifest",
+    "ReleaseManifestError",
+    "ReleaseSigningStatus",
+    "SigningPlan",
+    "SigningToolchainError",
+    "UnsignedProductionArtifactError",
+    "build_release_manifest",
+    "build_signing_plan",
+    "execute_live_signing",
+    "validate_release_ready",
+    "verify_artifact_hashes",
     # lifecycle
     "CredentialCleanupError",
     "CredentialCleanupResult",
