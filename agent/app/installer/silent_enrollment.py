@@ -111,8 +111,17 @@ class SilentEnrollmentParams:
     log_level: str | None = None
 
     def _active_token(self) -> str | None:
-        """Return whichever token is set (enrollment_token takes precedence)."""
-        return self.enrollment_token or self.bootstrap_token
+        """Return the first non-empty, non-whitespace string token.
+
+        Consistent with the strip()-based checks in validate(): a token that is
+        whitespace-only is treated as absent, so bootstrap_token is used even
+        when enrollment_token is set but blank.
+        """
+        if isinstance(self.enrollment_token, str) and self.enrollment_token.strip():
+            return self.enrollment_token
+        if isinstance(self.bootstrap_token, str) and self.bootstrap_token.strip():
+            return self.bootstrap_token
+        return None
 
     def validate(self) -> None:
         """Validate all enrollment parameters.
@@ -135,8 +144,12 @@ class SilentEnrollmentParams:
         except MsiContractError as exc:
             errors.append(str(exc))
 
-        has_enrollment = bool(self.enrollment_token and self.enrollment_token.strip())
-        has_bootstrap = bool(self.bootstrap_token and self.bootstrap_token.strip())
+        has_enrollment = bool(
+            isinstance(self.enrollment_token, str) and self.enrollment_token.strip()
+        )
+        has_bootstrap = bool(
+            isinstance(self.bootstrap_token, str) and self.bootstrap_token.strip()
+        )
 
         if has_enrollment and has_bootstrap:
             errors.append(

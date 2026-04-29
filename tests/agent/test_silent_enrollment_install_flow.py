@@ -574,3 +574,50 @@ def test_regression_execute_live_enrollment_never_succeeds_on_non_windows() -> N
         "REGRESSION: execute_live_enrollment() returned without raising "
         "EnrollmentToolchainError on non-Windows. Platform guard broken."
     )
+
+
+def test_regression_p1_whitespace_enrollment_token_uses_bootstrap() -> None:
+    """Regression (P1): whitespace enrollment_token must not win over valid bootstrap_token.
+
+    validate() treats '   ' as absent (strip() is empty), so bootstrap_token
+    should be used. _active_token() previously returned the whitespace string
+    because non-empty whitespace is truthy, making build_msiexec_args() emit
+    ENROLLMENT_TOKEN=   instead of the valid bootstrap token.
+    """
+    real_bootstrap = "valid-bootstrap-token-xyz"
+    params = _make_params(enrollment_token="   ", bootstrap_token=real_bootstrap)
+    # Validation must pass (whitespace enrollment_token treated as absent)
+    params.validate()
+    # build_msiexec_args must use bootstrap_token, not whitespace
+    args = params.build_msiexec_args(_ARTIFACT, redact_token=False)
+    token_arg = next((a for a in args if a.startswith(f"{MSI_PROP_TOKEN}=")), None)
+    assert token_arg is not None, f"No {MSI_PROP_TOKEN}= in args: {args}"
+    assert token_arg == f"{MSI_PROP_TOKEN}={real_bootstrap}", (
+        f"REGRESSION (P1): whitespace enrollment_token used instead of bootstrap_token. "
+        f"Got: '{token_arg}', expected ENROLLMENT_TOKEN={real_bootstrap}"
+    )
+
+
+def test_regression_p2_non_string_token_raises_enrollment_validation_error() -> None:
+    """Regression (P2): non-string token values must raise EnrollmentValidationError.
+
+    validate() called .strip() directly without isinstance check, so integer or
+    other non-string tokens raised AttributeError instead of EnrollmentValidationError,
+    bypassing callers that only handle EnrollmentValidationError.
+    """
+    params = _make_params(
+        enrollment_token=None,
+        bootstrap_token=12345,  # type: ignore[arg-type]
+    )
+    with pytest.raises(EnrollmentValidationError):
+        params.validate()
+
+
+def test_regression_p2_non_string_enrollment_token_raises_validation_error() -> None:
+    """Regression (P2): non-string enrollment_token must raise EnrollmentValidationError."""
+    params = _make_params(
+        enrollment_token=True,  # type: ignore[arg-type]
+        bootstrap_token=None,
+    )
+    with pytest.raises(EnrollmentValidationError):
+        params.validate()
