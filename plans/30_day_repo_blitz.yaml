@@ -872,6 +872,7 @@ phases:
       validation:
       - Credential storage uses OS-protected path
       validation_commands:
+      - .venv/bin/pytest -q tests/agent/test_local_credential_storage.py
       - make fg-fast
     - id: '18.5'
       title: Upgrade and uninstall hardening
