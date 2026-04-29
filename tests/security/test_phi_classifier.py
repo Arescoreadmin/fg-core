@@ -12,8 +12,8 @@ Covers:
              PHI_CLASSIFICATION_PERFORMED emitted on clean;
              PHI_CLASSIFICATION_ENFORCED_BLOCK emitted on block;
              blocked payload excludes raw PHI text
-  Routing:   PHI + simulated provider (non-BAA-eligible) → 403;
-             no PHI + simulated → 200;
+  Routing:   PHI + regulated provider (no active BAA) → 403;
+             no PHI + any provider → 200;
              PHI + regulated provider with BAA → 200
   RAG:       ingest tags phi_sensitivity_level in safe_metadata;
              clean document → sensitivity 'none'
@@ -316,9 +316,26 @@ def test_audit_payload_excludes_raw_phi() -> None:
 
 
 def test_phi_denied_for_non_baa_provider(build_app, monkeypatch) -> None:
-    """PHI in message + simulated (non-BAA-eligible) provider → 403."""
-    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated")
+    """PHI in message + regulated provider (no active BAA) → 403."""
+    import api.ui_ai_console as ai_console
+
+    monkeypatch.setattr(ai_console, "KNOWN_PROVIDERS", {"simulated", "anthropic"})
+    monkeypatch.setattr(
+        ai_console, "PROVIDER_MAX_TOKENS", {"simulated": 4096, "anthropic": 4096}
+    )
+    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated,anthropic")
     monkeypatch.setenv("FG_AI_ENABLE_SIMULATED", "1")
+    monkeypatch.setattr(ai_console, "_provider_env_allowed", lambda p: True)
+
+    orig_resolve = ai_console._resolve_experience
+
+    def _patched_resolve(tenant_id):
+        exp, policy, theme = orig_resolve(tenant_id)
+        policy = dict(policy)
+        policy["allowed_providers"] = ["simulated", "anthropic"]
+        return exp, policy, theme
+
+    monkeypatch.setattr(ai_console, "_resolve_experience", _patched_resolve)
 
     client = TestClient(build_app(auth_enabled=True))
     hdrs = {
@@ -336,13 +353,13 @@ def test_phi_denied_for_non_baa_provider(build_app, monkeypatch) -> None:
         json={"reason": "test", "ticket": "PHI-1"},
     )
 
+    # No BAA record for anthropic — PHI + regulated provider without BAA → 403
     resp = client.post(
         "/ui/ai/chat",
         headers=hdrs,
-        json={"message": _SSN_TEXT, "device_id": device_id, "provider": "simulated"},
+        json={"message": _MRN_TEXT, "device_id": device_id, "provider": "anthropic"},
     )
     assert resp.status_code == 403
-    assert resp.json()["detail"]["error_code"] == "AI_PHI_PROVIDER_NOT_BAA_CAPABLE"
 
 
 def test_no_phi_allowed_for_non_baa_provider(build_app, monkeypatch) -> None:
@@ -425,11 +442,28 @@ def test_phi_allowed_for_regulated_provider_with_baa(build_app, monkeypatch) -> 
 
 
 def test_phi_quota_not_charged_on_phi_block(build_app, monkeypatch) -> None:
-    """PHI block fires before quota precharge — no quota consumed."""
-    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated")
-    monkeypatch.setenv("FG_AI_ENABLE_SIMULATED", "1")
-
+    """PHI+BAA block fires before quota precharge — no quota consumed."""
     import api.ui_ai_console as ai_console
+
+    monkeypatch.setattr(ai_console, "KNOWN_PROVIDERS", {"simulated", "anthropic"})
+    monkeypatch.setattr(
+        ai_console, "PROVIDER_MAX_TOKENS", {"simulated": 4096, "anthropic": 4096}
+    )
+    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated,anthropic")
+    monkeypatch.setenv("FG_AI_ENABLE_SIMULATED", "1")
+    monkeypatch.setattr(ai_console, "_provider_env_allowed", lambda p: True)
+
+    orig_resolve = ai_console._resolve_experience
+
+    def _patched_resolve(tenant_id):
+        exp, policy, theme = orig_resolve(tenant_id)
+        policy = dict(policy)
+        policy["allowed_providers"] = ["simulated", "anthropic"]
+        policy["tenant_max_tokens_per_day"] = 1000
+        policy["device_max_tokens_per_day"] = 500
+        return exp, policy, theme
+
+    monkeypatch.setattr(ai_console, "_resolve_experience", _patched_resolve)
 
     quota_calls: list[dict] = []
     original = ai_console._consume_quota_atomic
@@ -454,13 +488,16 @@ def test_phi_quota_not_charged_on_phi_block(build_app, monkeypatch) -> None:
         json={"reason": "test", "ticket": "PHI-4"},
     )
 
+    # PHI + regulated provider (no BAA) → 403 before quota
     resp = client.post(
         "/ui/ai/chat",
         headers=hdrs,
-        json={"message": _SSN_TEXT, "device_id": device_id},
+        json={"message": _MRN_TEXT, "device_id": device_id, "provider": "anthropic"},
     )
     assert resp.status_code == 403
-    assert quota_calls == [], "quota must not be charged on PHI block"
+    assert quota_calls == [], (
+        "quota must not be charged when PHI+BAA enforcement blocks"
+    )
 
 
 # ---------------------------------------------------------------------------

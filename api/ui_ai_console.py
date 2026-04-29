@@ -718,33 +718,27 @@ def ai_chat(
             400, "AI_PROVIDER_DENIED_BY_ENV", "provider not allowed in this environment"
         )
 
-    # BAA enforcement: regulated providers require an active tenant BAA.
-    # This gate runs before quota charge or inference. Raises 403 on denial.
-    from services.provider_baa.policy import enforce_provider_baa_for_route  # noqa: PLC0415
-
-    enforce_provider_baa_for_route(
-        db, tenant_id=tenant_id, provider_id=provider, request=request
-    )
-
-    # PHI classification: must run before quota charge or inference.
-    # PHI + non-BAA-eligible provider (no BAA pathway) → deny immediately.
+    # PHI classification runs first — PHI presence determines whether BAA is required.
     from services.phi_classifier.classifier import (  # noqa: PLC0415
         classify_phi as _classify_phi,
         emit_phi_classification_audit as _emit_phi_audit,
         emit_phi_enforcement_block_audit as _emit_phi_block_audit,
     )
-    from services.provider_baa.policy import requires_baa as _requires_baa  # noqa: PLC0415
 
     _phi_result = _classify_phi(payload.message)
-    if _phi_result.contains_phi and not _requires_baa(provider):
-        _emit_phi_block_audit(
-            _phi_result, tenant_id=tenant_id, provider_id=provider, request=request
-        )
-        raise _error(
-            403,
-            "AI_PHI_PROVIDER_NOT_BAA_CAPABLE",
-            "input contains PHI; provider is not eligible for BAA compliance",
-        )
+    if _phi_result.contains_phi:
+        from fastapi import HTTPException as _HTTPException  # noqa: PLC0415
+        from services.provider_baa.policy import enforce_provider_baa_for_route  # noqa: PLC0415
+
+        try:
+            enforce_provider_baa_for_route(
+                db, tenant_id=tenant_id, provider_id=provider, request=request
+            )
+        except _HTTPException:
+            _emit_phi_block_audit(
+                _phi_result, tenant_id=tenant_id, provider_id=provider, request=request
+            )
+            raise
     _emit_phi_audit(
         _phi_result,
         tenant_id=tenant_id,

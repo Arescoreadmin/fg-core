@@ -190,53 +190,36 @@ class AIPlaneService:
             db.commit()
             raise ValueError("AI_INPUT_POLICY_BLOCKED")
 
-        # BAA enforcement gate: resolve the effective provider and enforce
-        # before any inference work. SIM_MODEL is non-regulated; this path
-        # is a no-op today but establishes the enforcement point for when
-        # real external providers are wired into this service.
-        from services.provider_baa.policy import enforce_provider_baa_for_route  # noqa: PLC0415
-
-        effective_provider = (
-            "simulated" if not ai_external_provider_enabled() else SIM_MODEL.lower()
-        )
-        try:
-            enforce_provider_baa_for_route(
-                db, tenant_id=tenant_id, provider_id=effective_provider
-            )
-        except Exception as baa_exc:
-            from fastapi import HTTPException as _HTTPException  # noqa: PLC0415
-
-            if isinstance(baa_exc, _HTTPException):
-                self._record_violation(db, tenant_id, "AI_PROVIDER_BAA_DENIED")
-                db.commit()
-                detail = baa_exc.detail
-                err_code = (
-                    detail.get("error_code", "AI_PROVIDER_BAA_DENIED")
-                    if isinstance(detail, dict)
-                    else "AI_PROVIDER_BAA_DENIED"
-                )
-                raise ValueError(err_code) from baa_exc
-            raise
-
-        # PHI classification: runs after BAA gate, before any inference.
-        # PHI + non-BAA-eligible provider → record violation and deny.
+        # PHI classification runs first — PHI presence determines whether BAA is required.
         from services.phi_classifier.classifier import (  # noqa: PLC0415
             classify_phi as _classify_phi,
             emit_phi_classification_audit as _emit_phi_audit,
             emit_phi_enforcement_block_audit as _emit_phi_block_audit,
         )
-        from services.provider_baa.policy import requires_baa as _requires_baa  # noqa: PLC0415
 
+        effective_provider = (
+            "simulated" if not ai_external_provider_enabled() else SIM_MODEL.lower()
+        )
         _phi_result = _classify_phi(payload.query)
-        if _phi_result.contains_phi and not _requires_baa(effective_provider):
-            _emit_phi_block_audit(
-                _phi_result,
-                tenant_id=tenant_id,
-                provider_id=effective_provider,
-            )
-            self._record_violation(db, tenant_id, "AI_PHI_PROVIDER_NOT_BAA_CAPABLE")
-            db.commit()
-            raise ValueError("AI_PHI_PROVIDER_NOT_BAA_CAPABLE")
+        if _phi_result.contains_phi:
+            from fastapi import HTTPException as _HTTPException  # noqa: PLC0415
+            from services.provider_baa.policy import enforce_provider_baa_for_route  # noqa: PLC0415
+
+            try:
+                enforce_provider_baa_for_route(
+                    db, tenant_id=tenant_id, provider_id=effective_provider
+                )
+            except Exception as baa_exc:
+                if isinstance(baa_exc, _HTTPException):
+                    _emit_phi_block_audit(
+                        _phi_result,
+                        tenant_id=tenant_id,
+                        provider_id=effective_provider,
+                    )
+                    self._record_violation(db, tenant_id, "AI_PHI_PROVIDER_NOT_BAA_CAPABLE")
+                    db.commit()
+                    raise ValueError("AI_PHI_PROVIDER_NOT_BAA_CAPABLE") from baa_exc
+                raise
         _emit_phi_audit(_phi_result, tenant_id=tenant_id, enforcement_action="allowed")
 
         rag = rag_stub.retrieve(tenant_id=tenant_id, query=payload.query)

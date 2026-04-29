@@ -492,11 +492,15 @@ def test_baa_enforcement_is_called_in_chat_route(build_app, monkeypatch, tmp_pat
         json={"reason": "test", "ticket": "T-1"},
     )
 
-    # Attempt chat with regulated provider (anthropic) — no BAA record → 403
+    # PHI message + regulated provider (anthropic) — no BAA record → 403
     resp = client.post(
         "/ui/ai/chat",
         headers=hdrs,
-        json={"message": "hello", "device_id": device_id, "provider": "anthropic"},
+        json={
+            "message": "MRN: 4872910 — schedule appointment next week.",
+            "device_id": device_id,
+            "provider": "anthropic",
+        },
     )
     assert resp.status_code == 403
     detail = resp.json()["detail"]
@@ -595,7 +599,11 @@ def test_quota_not_charged_before_baa_denial(build_app, monkeypatch):
     resp = client.post(
         "/ui/ai/chat",
         headers=hdrs,
-        json={"message": "hello", "device_id": device_id, "provider": "anthropic"},
+        json={
+            "message": "MRN: 4872910 — schedule appointment next week.",
+            "device_id": device_id,
+            "provider": "anthropic",
+        },
     )
     assert resp.status_code == 403
     assert quota_consumed_calls == [], (
