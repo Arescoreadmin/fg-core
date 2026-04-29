@@ -96,8 +96,12 @@ def _global_allowed_providers() -> set[str]:
     raw_env = os.getenv("FG_AI_ALLOWED_PROVIDERS")
     if raw_env is not None:
         return {item.strip() for item in raw_env.strip().split(",") if item.strip()}
-    # Default: simulated + FG_AI_DEFAULT_PROVIDER (if set)
-    allowed = {"simulated"}
+    # Simulated only in the server-allowed set when it would also pass the env check.
+    # This keeps _global_allowed_providers and _provider_env_allowed independent gates
+    # so neither alone can allow simulated in prod.
+    allowed: set[str] = set()
+    if _provider_env_allowed("simulated"):
+        allowed.add("simulated")
     env_default = (os.getenv("FG_AI_DEFAULT_PROVIDER") or "").strip()
     if env_default:
         allowed.add(env_default)
@@ -832,14 +836,25 @@ def ai_chat(
             )
             raise blocked_error
 
-        extra_tokens = max(0, total_tokens - quota_precharged_tokens)
-        if extra_tokens > 0:
+        quota_delta = total_tokens - quota_precharged_tokens
+        if quota_delta > 0:
             _consume_quota_atomic(
                 db,
                 tenant_id=tenant_id,
                 device_id=device_id,
                 usage_day=request_day,
-                total_tokens=extra_tokens,
+                total_tokens=quota_delta,
+                tenant_limit=tenant_limit,
+                device_limit=device_limit,
+            )
+        elif quota_delta < 0:
+            # Provider reported fewer tokens than the estimate; refund the overage.
+            _refund_quota_atomic(
+                db,
+                tenant_id=tenant_id,
+                device_id=device_id,
+                usage_day=request_day,
+                total_tokens=-quota_delta,
                 tenant_limit=tenant_limit,
                 device_limit=device_limit,
             )

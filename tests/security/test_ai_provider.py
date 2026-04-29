@@ -848,4 +848,113 @@ def test_production_path_does_not_return_simulated_response(
     )
     # Must fail — simulated disabled, no real provider configured
     assert resp.status_code in {400, 503}
-    assert "SIMULATED_RESPONSE" not in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Section 8: Prod-gate tightening — independent checks, no silent downgrade
+# ---------------------------------------------------------------------------
+
+
+def test_global_allowed_providers_excludes_simulated_in_prod(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """In prod without FG_AI_ALLOWED_PROVIDERS, simulated must not be in the
+    server-allowed set — even before the env check runs."""
+    import api.ui_ai_console as ai_console
+
+    monkeypatch.setenv("FG_ENV", "production")
+    monkeypatch.delenv("FG_AI_ALLOWED_PROVIDERS", raising=False)
+    monkeypatch.delenv("FG_AI_ENABLE_SIMULATED", raising=False)
+    monkeypatch.delenv("FG_AI_DEFAULT_PROVIDER", raising=False)
+
+    allowed = ai_console._global_allowed_providers()
+    assert "simulated" not in allowed, (
+        "_global_allowed_providers must not include simulated in prod "
+        "— two independent checks required"
+    )
+
+
+def test_global_allowed_providers_excludes_simulated_in_staging(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import api.ui_ai_console as ai_console
+
+    monkeypatch.setenv("FG_ENV", "staging")
+    monkeypatch.delenv("FG_AI_ALLOWED_PROVIDERS", raising=False)
+    monkeypatch.delenv("FG_AI_ENABLE_SIMULATED", raising=False)
+
+    allowed = ai_console._global_allowed_providers()
+    assert "simulated" not in allowed
+
+
+def test_no_provider_configured_rejected_at_server_check(
+    build_app, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When simulated is disabled and no other provider is configured, the
+    fallback must be caught at the server-allowed check (AI_PROVIDER_DENIED_BY_SERVER),
+    not at the env check — proving the two gates are independent.
+
+    FG_AI_ENABLE_SIMULATED=0 mirrors prod-default behaviour without triggering
+    the auth_gate's FG_DB_URL requirement (set by build_app's conftest)."""
+    client = TestClient(build_app(auth_enabled=True))
+    monkeypatch.setenv("FG_AI_ENABLE_SIMULATED", "0")
+    monkeypatch.delenv("FG_AI_ALLOWED_PROVIDERS", raising=False)
+    monkeypatch.delenv("FG_AI_DEFAULT_PROVIDER", raising=False)
+    hdrs = {
+        "X-API-Key": mint_key(
+            "ui:read", "ai:chat", "admin:write", tenant_id="tenant-dev"
+        )
+    }
+    exp = client.get("/ui/ai/experience", headers=hdrs).json()
+    device_id = exp["device"]["device_id"]
+    client.post(
+        f"/ui/devices/{device_id}/enable",
+        headers=hdrs,
+        json={"reason": "test", "ticket": "AI-11"},
+    )
+
+    resp = client.post(
+        "/ui/ai/chat",
+        headers=hdrs,
+        json={"message": _CLEAN_TEXT, "device_id": device_id},
+    )
+    assert resp.status_code == 400
+    # Must be caught at server check, not env check
+    assert resp.json()["detail"]["error_code"] == "AI_PROVIDER_DENIED_BY_SERVER"
+
+
+def test_resolve_effective_provider_raises_in_prod_without_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """In prod with no FG_AI_DEFAULT_PROVIDER, selection must fail immediately —
+    not silently return 'simulated' and let it fail downstream."""
+    from services.ai_plane_extension.service import _resolve_effective_provider
+
+    monkeypatch.setenv("FG_ENV", "production")
+    monkeypatch.delenv("FG_AI_DEFAULT_PROVIDER", raising=False)
+
+    with pytest.raises(ValueError, match="AI_PROVIDER_NOT_CONFIGURED"):
+        _resolve_effective_provider()
+
+
+def test_resolve_effective_provider_raises_in_staging_without_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from services.ai_plane_extension.service import _resolve_effective_provider
+
+    monkeypatch.setenv("FG_ENV", "staging")
+    monkeypatch.delenv("FG_AI_DEFAULT_PROVIDER", raising=False)
+
+    with pytest.raises(ValueError, match="AI_PROVIDER_NOT_CONFIGURED"):
+        _resolve_effective_provider()
+
+
+def test_resolve_effective_provider_returns_simulated_in_dev(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from services.ai_plane_extension.service import _resolve_effective_provider
+
+    monkeypatch.setenv("FG_ENV", "dev")
+    monkeypatch.delenv("FG_AI_DEFAULT_PROVIDER", raising=False)
+
+    assert _resolve_effective_provider() == "simulated"

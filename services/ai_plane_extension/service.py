@@ -52,6 +52,9 @@ def _resolve_effective_provider() -> str:
     env_default = (os.getenv("FG_AI_DEFAULT_PROVIDER") or "").strip()
     if env_default:
         return env_default
+    fg_env = (os.getenv("FG_ENV") or "").strip().lower()
+    if fg_env in {"prod", "production", "staging"}:
+        raise ValueError("AI_PROVIDER_NOT_CONFIGURED")
     return "simulated"
 
 
