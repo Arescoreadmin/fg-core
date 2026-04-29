@@ -6300,4 +6300,68 @@ Section 8 — Regression: gate wired into both routing paths (behavioral, not so
 - `.venv/bin/pytest -q tests/security/test_baa_gate.py` → 28 passed
 - `.venv/bin/pytest -q tests/security/test_phi_classifier.py tests/security/test_provider_baa_enforcement.py` → 61 passed
 - `make fg-fast` → passed
+
+---
+
+### 2026-04-29 — Real LLM provider boundary MVP — Anthropic integration
+
+**Branch:** `feat/real-llm-provider-mvp`
+
+**Area:** AI plane / provider dispatch
+
+---
+
+**Problem:**
+
+All AI chat and inference requests returned `SIMULATED_RESPONSE:*` strings — there was no production path to a real LLM. The `SIM_MODEL` branch in `service.py` was dead code gated behind `ai_external_provider_enabled()` which is always False at runtime (startup raises `RuntimeError` when `FG_AI_EXTERNAL_PROVIDER_ENABLED=1`).
+
+**Solution:**
+
+Introduced a typed provider boundary (`LlmProvider` protocol, `ProviderRequest`/`ProviderResponse` dataclasses, `ProviderCallError` with stable error codes) and wired Anthropic as the first real provider, selected deterministically via `FG_AI_DEFAULT_PROVIDER=anthropic`. No fallback, no multi-provider routing. Simulated provider preserved and gated by `FG_AI_ENABLE_SIMULATED`.
+
+**Files changed:**
+
+- `services/ai/providers/__init__.py` — NEW: package init
+- `services/ai/providers/base.py` — NEW: `LlmProvider` protocol, `ProviderRequest`, `ProviderResponse`, `ProviderCallError`, stable error code constants
+- `services/ai/providers/anthropic_provider.py` — NEW: `AnthropicProvider.call()` via `httpx`; reads `FG_ANTHROPIC_API_KEY`/`FG_ANTHROPIC_MODEL`/`FG_ANTHROPIC_TIMEOUT_SECONDS`; never logs prompt or key; maps timeout/transport/non-200/parse errors to stable error codes
+- `services/ai/providers/simulated_provider.py` — NEW: `SimulatedProvider`; gated by `FG_AI_ENABLE_SIMULATED` (defaults off in prod/staging)
+- `services/ai/dispatch.py` — NEW: `call_provider()` single dispatch point; rejects unknown provider IDs; no fallback
+- `api/ui_ai_console.py` — MODIFIED: removed direct `deterministic_simulated_response` call; provider selection via `FG_AI_DEFAULT_PROVIDER` → `payload.provider` → `policy.default_provider` → `"simulated"`; `_provider_env_allowed()` checks API key presence for anthropic; route response includes `provider` and `model`; token accounting uses provider-reported counts when available
+- `services/ai_plane_extension/service.py` — MODIFIED: replaced dead `SIM_MODEL` / `ai_external_provider_enabled` path with `_resolve_effective_provider()` + `call_provider()`; return dict includes `provider`, `model`, `simulated` fields
+- `contracts/ai/policies/default.json` — MODIFIED: added `"anthropic"` to `allowed_providers`
+- `tools/ci/validate_ai_contracts.py` — MODIFIED: added `"anthropic"` to `KNOWN_PROVIDERS`
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` — MODIFIED: SOC review gate addendum for `tools/ci/` change
+- `tests/security/test_ai_provider.py` — NEW: 34 tests across 7 sections (error code stability, dispatch, AnthropicProvider unit with mocked httpx, SimulatedProvider, provider selection in route, route integration, regression)
+- `tests/security/test_baa_gate.py` — MODIFIED: updated patches to `_resolve_effective_provider` + `_call_provider` mock; removed "openai" references
+- `tests/security/test_phi_classifier.py` — MODIFIED: changed regulated provider from "openai" to "anthropic"; mocked `_call_provider`
+
+**Key invariants established:**
+
+- `call_provider()` raises `ProviderCallError` on any failure — never silently switches providers
+- Missing `FG_ANTHROPIC_API_KEY` → `AI_PROVIDER_CONFIG_MISSING` before any network call
+- Simulated provider disabled in `FG_ENV=prod/production/staging` unless explicitly re-enabled
+- No live network calls in tests — all httpx calls mocked
+
+**Tests added (34):**
+
+Section 1 — Error code stability (error codes are uppercase strings, ProviderCallError carries code)
+
+Section 2 — Dispatch: correct routing, unknown provider rejection, no fallback on config error
+
+Section 3 — AnthropicProvider: successful call, timeout → `AI_PROVIDER_TIMEOUT`, transport error → `AI_PROVIDER_CALL_FAILED`, non-200 → `AI_PROVIDER_CALL_FAILED`, missing text block → `AI_PROVIDER_RESPONSE_INVALID`, system_prompt included, missing API key
+
+Section 4 — SimulatedProvider: deterministic output, blocked in prod env, enabled by explicit flag override
+
+Section 5 — Provider selection in `/ui/ai/chat`: `FG_AI_DEFAULT_PROVIDER` overrides policy default; explicit `payload.provider` overrides env; unknown provider → 403; missing API key → 503; simulated blocked in prod → 503
+
+Section 6 — Route integration: anthropic mocked → real text (not `SIMULATED_RESPONSE:`); provider config error → 503; simulated route returns correct text
+
+Section 7 — Regression: BAA denial prevents provider call; no fallback on provider error; prod path does not return `SIMULATED_RESPONSE:`
+
+**Validation results:**
+
+- `.venv/bin/pytest -q tests/security/test_ai_provider.py` → 34 passed
+- `.venv/bin/pytest -q tests/security/test_baa_gate.py tests/security/test_phi_classifier.py tests/security/test_provider_baa_enforcement.py tests/security/test_ai_provider.py` → 132 passed
+- `make fg-fast` → passed
+- `bash codex_gates.sh` → passed
 - `bash codex_gates.sh` → passed

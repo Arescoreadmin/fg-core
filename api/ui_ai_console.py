@@ -20,7 +20,8 @@ from api.config.env import is_production_env
 from api.config_versioning import canonicalize_config, hash_config
 from api.deps import tenant_db_required
 from api.security_audit import AuditEvent, EventType, Severity, get_auditor
-from services.ai_plane_extension.orchestration import deterministic_simulated_response
+from services.ai.dispatch import ProviderCallError as _ProviderCallError
+from services.ai.dispatch import call_provider as _call_provider
 from services.schema_validation import validate_payload_against_schema
 
 router = APIRouter(prefix="/ui", tags=["ui-ai"])
@@ -44,8 +45,8 @@ class DeviceStateRequest(BaseModel):
     ticket: str | None = Field(default=None, max_length=128)
 
 
-KNOWN_PROVIDERS = {"simulated"}
-PROVIDER_MAX_TOKENS = {"simulated": 4096}
+KNOWN_PROVIDERS = {"simulated", "anthropic"}
+PROVIDER_MAX_TOKENS = {"simulated": 4096, "anthropic": 4096}
 
 
 def _utc_now() -> datetime:
@@ -93,20 +94,31 @@ def _ip_prefix(request: Request) -> str | None:
 
 def _global_allowed_providers() -> set[str]:
     raw_env = os.getenv("FG_AI_ALLOWED_PROVIDERS")
-    raw = "simulated" if raw_env is None else raw_env.strip()
-    return {item.strip() for item in raw.split(",") if item.strip()}
+    if raw_env is not None:
+        return {item.strip() for item in raw_env.strip().split(",") if item.strip()}
+    # Simulated only in the server-allowed set when it would also pass the env check.
+    # This keeps _global_allowed_providers and _provider_env_allowed independent gates
+    # so neither alone can allow simulated in prod.
+    allowed: set[str] = set()
+    if _provider_env_allowed("simulated"):
+        allowed.add("simulated")
+    env_default = (os.getenv("FG_AI_DEFAULT_PROVIDER") or "").strip()
+    if env_default:
+        allowed.add(env_default)
+    return allowed
 
 
 def _provider_env_allowed(provider: str) -> bool:
-    flags = {
-        "simulated": (
-            os.getenv("FG_AI_ENABLE_SIMULATED") or "1" if not _prod_like() else "0"
+    if provider == "simulated":
+        flag = (
+            (os.getenv("FG_AI_ENABLE_SIMULATED") or ("0" if _prod_like() else "1"))
+            .strip()
+            .lower()
         )
-        .strip()
-        .lower()
-        in {"1", "true", "yes", "on"}
-    }
-    return bool(flags.get(provider, False))
+        return flag in {"1", "true", "yes", "on"}
+    if provider == "anthropic":
+        return bool((os.getenv("FG_ANTHROPIC_API_KEY") or "").strip())
+    return False
 
 
 def _signature_hook_enabled() -> bool:
@@ -699,7 +711,13 @@ def ai_chat(
     _enforce_device_enabled(db, tenant_id, device_id, request)
 
     deny_terms = [str(x) for x in (policy.get("pii_deny_terms") or [])]
-    provider = payload.provider or policy.get("default_provider") or "simulated"
+    _env_default_provider = (os.getenv("FG_AI_DEFAULT_PROVIDER") or "").strip()
+    provider = (
+        payload.provider
+        or _env_default_provider
+        or policy.get("default_provider")
+        or "simulated"
+    )
     model = payload.model or policy.get("default_model") or "SIMULATED_V1"
     _known_provider_or_fail(provider)
 
@@ -780,8 +798,26 @@ def ai_chat(
             )
             quota_precharged_tokens = prompt_tokens
 
-        output = deterministic_simulated_response(payload.message)
-        metering_mode = "estimated"
+        try:
+            prov_resp = _call_provider(
+                provider_id=provider,
+                prompt=payload.message,
+                max_tokens=_max_tokens_per_request(policy, provider),
+                request_id=event_id,
+                tenant_id=tenant_id,
+            )
+        except _ProviderCallError as exc:
+            blocked_error = _error(503, exc.error_code, str(exc))
+            raise blocked_error
+        output = prov_resp.text
+        if prov_resp.input_tokens is not None:
+            prompt_tokens = prov_resp.input_tokens
+        if prov_resp.output_tokens is not None:
+            completion_tokens = prov_resp.output_tokens
+        model = prov_resp.model
+        metering_mode = (
+            "provider" if prov_resp.input_tokens is not None else "estimated"
+        )
 
         if _contains_pii(output, deny_terms):
             blocked_error = _error(
@@ -789,7 +825,8 @@ def ai_chat(
             )
             raise blocked_error
 
-        completion_tokens = _estimate_tokens(output)
+        if prov_resp.output_tokens is None:
+            completion_tokens = _estimate_tokens(output)
         total_tokens = prompt_tokens + completion_tokens
 
         max_tokens = _max_tokens_per_request(policy, provider)
@@ -799,14 +836,25 @@ def ai_chat(
             )
             raise blocked_error
 
-        extra_tokens = max(0, total_tokens - quota_precharged_tokens)
-        if extra_tokens > 0:
+        quota_delta = total_tokens - quota_precharged_tokens
+        if quota_delta > 0:
             _consume_quota_atomic(
                 db,
                 tenant_id=tenant_id,
                 device_id=device_id,
                 usage_day=request_day,
-                total_tokens=extra_tokens,
+                total_tokens=quota_delta,
+                tenant_limit=tenant_limit,
+                device_limit=device_limit,
+            )
+        elif quota_delta < 0:
+            # Provider reported fewer tokens than the estimate; refund the overage.
+            _refund_quota_atomic(
+                db,
+                tenant_id=tenant_id,
+                device_id=device_id,
+                usage_day=request_day,
+                total_tokens=-quota_delta,
                 tenant_limit=tenant_limit,
                 device_limit=device_limit,
             )
@@ -921,6 +969,8 @@ def ai_chat(
 
     return {
         "ok": True,
+        "provider": provider,
+        "model": model,
         "correlation_id": event_id,
         "session_id": session_id,
         "tenant_id": tenant_id,

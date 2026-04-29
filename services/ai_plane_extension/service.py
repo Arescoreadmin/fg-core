@@ -10,12 +10,13 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from services.ai.dispatch import ProviderCallError as _ProviderCallError
+from services.ai.dispatch import call_provider as _call_provider
 from services.ai_plane_extension import policy_engine, rag_stub
 from services.ai_plane_extension.models import AIInferRequest, AIPolicyUpsertRequest
-from services.ai_plane_extension.orchestration import deterministic_simulated_response
 from services.schema_validation import validate_payload_against_schema
 
-SIM_MODEL = "SIMULATED_V1"
+_SIMULATED_MODEL = "SIMULATED_V1"
 AI_PLANE_EVIDENCE_SCHEMA_VERSION = "v1"
 
 
@@ -39,6 +40,22 @@ def ai_external_provider_enabled() -> bool:
         "yes",
         "on",
     }
+
+
+def _resolve_effective_provider() -> str:
+    """Deterministic provider selection: FG_AI_DEFAULT_PROVIDER > simulated fallback.
+
+    FG_AI_EXTERNAL_PROVIDER_ENABLED is blocked at startup (main.py), so
+    ai_external_provider_enabled() is preserved for that check only and is
+    effectively always False at runtime.
+    """
+    env_default = (os.getenv("FG_AI_DEFAULT_PROVIDER") or "").strip()
+    if env_default:
+        return env_default
+    fg_env = (os.getenv("FG_ENV") or "").strip().lower()
+    if fg_env in {"prod", "production", "staging"}:
+        raise ValueError("AI_PROVIDER_NOT_CONFIGURED")
+    return "simulated"
 
 
 def _int_or_default(value: object, default: int) -> int:
@@ -190,9 +207,7 @@ class AIPlaneService:
             db.commit()
             raise ValueError("AI_INPUT_POLICY_BLOCKED")
 
-        effective_provider = (
-            "simulated" if not ai_external_provider_enabled() else SIM_MODEL.lower()
-        )
+        effective_provider = _resolve_effective_provider()
         from fastapi import HTTPException as _HTTPException  # noqa: PLC0415
         from services.provider_baa.gate import (  # noqa: PLC0415
             enforce_baa_gate_for_route as _enforce_baa_gate,
@@ -215,7 +230,20 @@ class AIPlaneService:
         prompt_sha = hashlib.sha256(payload.query.encode("utf-8")).hexdigest()
         self._log_retrieval_stub(db, tenant_id, prompt_sha)
 
-        out = deterministic_simulated_response(payload.query)
+        try:
+            prov_resp = _call_provider(
+                provider_id=effective_provider,
+                prompt=payload.query,
+                max_tokens=2000,
+                request_id=f"inf-{prompt_sha[:16]}",
+                tenant_id=tenant_id,
+            )
+        except _ProviderCallError as exc:
+            self._record_violation(db, tenant_id, exc.error_code)
+            db.commit()
+            raise ValueError(exc.error_code) from exc
+
+        out = prov_resp.text
         ok_out, code_out = policy_engine.evaluate_output(out)
         if not ok_out:
             self._record_violation(
@@ -244,7 +272,7 @@ class AIPlaneService:
             {
                 "tenant_id": tenant_id,
                 "inference_id": f"inf-{prompt_sha[:16]}-{self._next_inference_suffix(db, tenant_id, prompt_sha)}",
-                "model_id": SIM_MODEL,
+                "model_id": prov_resp.model,
                 "prompt_sha256": prompt_sha,
                 "response_text": out,
                 "context_refs_json": json.dumps(rag.get("sources", [])),
@@ -256,7 +284,13 @@ class AIPlaneService:
         )
         db.commit()
 
-        return {"ok": True, "model": SIM_MODEL, "response": out, "simulated": True}
+        return {
+            "ok": True,
+            "provider": effective_provider,
+            "model": prov_resp.model,
+            "response": out,
+            "simulated": effective_provider == "simulated",
+        }
 
     def list_inference(self, db: Session, tenant_id: str) -> list[dict[str, object]]:
         rows = (

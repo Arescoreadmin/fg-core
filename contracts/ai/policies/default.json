@@ -2,7 +2,8 @@
   "id": "policy-default",
   "version": "1.0.0",
   "allowed_providers": [
-    "simulated"
+    "simulated",
+    "anthropic"
   ],
   "default_provider": "simulated",
   "default_model": "SIMULATED_V1",

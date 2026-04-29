@@ -392,22 +392,29 @@ def test_no_phi_allowed_for_non_baa_provider(build_app, monkeypatch) -> None:
 
 
 def test_phi_allowed_for_regulated_provider_with_baa(build_app, monkeypatch) -> None:
-    """PHI + regulated provider with active BAA → 200."""
+    """PHI + regulated provider (anthropic) with active BAA → 200."""
+    from services.ai.providers.base import ProviderResponse
+
     import api.ui_ai_console as ai_console
 
-    monkeypatch.setattr(ai_console, "KNOWN_PROVIDERS", {"simulated", "openai"})
-    monkeypatch.setattr(
-        ai_console, "PROVIDER_MAX_TOKENS", {"simulated": 4096, "openai": 4096}
+    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated,anthropic")
+    monkeypatch.setenv("FG_ANTHROPIC_API_KEY", "test-key-not-used")
+
+    _fake = ProviderResponse(
+        provider_id="anthropic",
+        text="test response",
+        model="claude-haiku-4-5-20251001",
+        input_tokens=10,
+        output_tokens=5,
     )
-    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated,openai")
-    monkeypatch.setattr(ai_console, "_provider_env_allowed", lambda p: True)
+    monkeypatch.setattr(ai_console, "_call_provider", lambda **kw: _fake)
 
     orig_resolve = ai_console._resolve_experience
 
     def _patched_resolve(tenant_id):
         exp, policy, theme = orig_resolve(tenant_id)
         policy = dict(policy)
-        policy["allowed_providers"] = ["simulated", "openai"]
+        policy["allowed_providers"] = ["simulated", "anthropic"]
         return exp, policy, theme
 
     monkeypatch.setattr(ai_console, "_resolve_experience", _patched_resolve)
@@ -429,14 +436,16 @@ def test_phi_allowed_for_regulated_provider_with_baa(build_app, monkeypatch) -> 
 
     # Insert an active BAA using the same DB the app was built against
     db = get_sessionmaker()()
-    _insert_baa(db, tenant_id="tenant-dev", provider_id="openai", baa_status="active")
+    _insert_baa(
+        db, tenant_id="tenant-dev", provider_id="anthropic", baa_status="active"
+    )
 
     # Use MRN text: detected by PHI classifier (HIGH) but not by the legacy
     # _contains_pii() check (no "ssn" keyword, fewer than 13 digits).
     resp = client.post(
         "/ui/ai/chat",
         headers=hdrs,
-        json={"message": _MRN_TEXT, "device_id": device_id, "provider": "openai"},
+        json={"message": _MRN_TEXT, "device_id": device_id, "provider": "anthropic"},
     )
     assert resp.status_code == 200
 
