@@ -16,6 +16,20 @@ from agent.app.installer.msi_contract import (
     validate_environment,
     validate_msi_endpoint,
 )
+from agent.app.installer.lifecycle import (
+    CredentialCleanupError,
+    CredentialCleanupResult,
+    LifecycleError,
+    PurgePlan,
+    UninstallPlan,
+    UpgradePlan,
+    build_purge_uninstall_plan,
+    build_uninstall_plan,
+    build_upgrade_plan,
+    execute_credential_cleanup,
+    validate_uninstall_plan,
+    validate_upgrade_plan,
+)
 from agent.app.installer.silent_enrollment import (
     MSI_PROP_ENDPOINT,
     MSI_PROP_ENVIRONMENT,
@@ -35,6 +49,19 @@ from agent.app.installer.silent_enrollment import (
 )
 
 __all__ = [
+    # lifecycle
+    "CredentialCleanupError",
+    "CredentialCleanupResult",
+    "LifecycleError",
+    "PurgePlan",
+    "UninstallPlan",
+    "UpgradePlan",
+    "build_purge_uninstall_plan",
+    "build_uninstall_plan",
+    "build_upgrade_plan",
+    "execute_credential_cleanup",
+    "validate_uninstall_plan",
+    "validate_upgrade_plan",
     # msi_contract
     "PURGE_PARAM",
     "SILENT_OPTIONAL_PARAMS",
