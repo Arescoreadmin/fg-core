@@ -718,6 +718,14 @@ def ai_chat(
             400, "AI_PROVIDER_DENIED_BY_ENV", "provider not allowed in this environment"
         )
 
+    # BAA enforcement: regulated providers require an active tenant BAA.
+    # This gate runs before quota charge or inference. Raises 403 on denial.
+    from services.provider_baa.policy import enforce_provider_baa_for_route  # noqa: PLC0415
+
+    enforce_provider_baa_for_route(
+        db, tenant_id=tenant_id, provider_id=provider, request=request
+    )
+
     request_hash = hashlib.sha256(
         canonicalize_config(payload.model_dump()).encode("utf-8")
     ).hexdigest()
