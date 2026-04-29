@@ -402,16 +402,62 @@ def test_windows_store_methods_fail_closed_on_linux() -> None:
 
 
 def test_windows_store_is_not_file_backed() -> None:
-    """WindowsCredentialManagerStore must not reference file I/O in its class body."""
+    """WindowsCredentialManagerStore must not contain file I/O in its class body."""
     import inspect
 
     src = inspect.getsource(WindowsCredentialManagerStore)
-    for file_op in ("open(", "write_text(", "read_text(", "Path(", ".json"):
-        # Allow only the module docstring/comments to reference these
-        assert file_op not in src.split("def store")[1:], (
-            f"File I/O pattern '{file_op}' found in WindowsCredentialManagerStore — "
+    for file_op in ("open(", "write_text(", "read_text(", "Path("):
+        assert file_op not in src, (
+            f"File I/O pattern '{file_op}' found in WindowsCredentialManagerStore source — "
             "this store must not use file-backed persistence."
         )
+
+
+def test_windows_store_does_not_use_dict_or_asdict_in_store() -> None:
+    """store() must extract fields explicitly, not via __dict__ or dataclasses.asdict.
+
+    If __dict__ or asdict() were used, a future field addition (e.g. a raw key comment)
+    could silently be included in the blob without a deliberate review gate.
+    """
+    import inspect
+
+    src = inspect.getsource(WindowsCredentialManagerStore.store)
+    assert "__dict__" not in src, (
+        "WindowsCredentialManagerStore.store() must not use __dict__ — "
+        "use explicit field extraction to make the blob surface area visible."
+    )
+    assert "asdict" not in src, (
+        "WindowsCredentialManagerStore.store() must not use dataclasses.asdict() — "
+        "use explicit field extraction to make the blob surface area visible."
+    )
+    assert "vars(" not in src, (
+        "WindowsCredentialManagerStore.store() must not use vars() — "
+        "use explicit field extraction to make the blob surface area visible."
+    )
+
+
+def test_windows_store_error_messages_do_not_contain_device_key() -> None:
+    """Exceptions raised by load() must not embed device_key in the message.
+
+    load() catches Win32 exceptions and re-raises CredentialNotFoundError.
+    The error message f-string must only reference tenant/device identifiers, not secrets.
+    Checks the literal format string line(s) in the source, not the blob extraction that follows.
+    """
+    import inspect
+
+    load_src = inspect.getsource(WindowsCredentialManagerStore.load)
+    # Isolate the CredentialNotFoundError raise statement: everything between
+    # "raise CredentialNotFoundError(" and ") from exc" — the f-string message.
+    if "raise CredentialNotFoundError" not in load_src:
+        return  # nothing to check
+    # Extract just the message argument of the raise, up to ") from exc"
+    after_raise = load_src.split("raise CredentialNotFoundError")[1]
+    message_section = after_raise.split(") from exc")[0]
+    assert "device_key" not in message_section, (
+        "load() CredentialNotFoundError message must not reference device_key — "
+        "only tenant_id, device_id, and the Win32 error are acceptable. "
+        f"Found 'device_key' in message section: {message_section!r}"
+    )
 
 
 # ===========================================================================
