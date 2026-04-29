@@ -5961,3 +5961,47 @@ New typed silent enrollment parameter module (`agent/app/installer/silent_enroll
 - No observability bypass ✓
 - No live MSI proof claimed ✓
 - Validation command under correct task (18.3) ✓
+
+---
+
+## Task 18.4 — Local credential storage hardening
+
+**Branch:** `task/18.4-local-credential-storage`
+
+**What was built:**
+- `agent/app/credentials/local_store.py` — new module: typed credential storage boundary with Windows Credential Manager (DPAPI-backed) production backend, explicit fail-closed error on Linux/macOS, and test-only in-memory store
+- `agent/app/credentials/__init__.py` — new package init re-exporting all public symbols
+- `tests/agent/test_local_credential_storage.py` — 53 tests covering credential model, storage interface, security invariants, factory behavior, Windows protected path, plan YAML cross-reference, and regression invariants
+
+**Security invariants enforced:**
+- `DeviceCredential.__repr__`/`__str__` always redact `device_key` (never expose in logs)
+- `get_credential_store(mode='production')` on Linux raises `UnsupportedCredentialStoreError` — no silent fallback
+- No plaintext file or environment variable backend exists in this module
+- `TestOnlyInMemoryCredentialStore.__test__ = False` prevents pytest from collecting the class when imported
+
+**Platform/toolchain behavior:**
+- `WindowsCredentialManagerStore` calls `_require_platform()` before any operation — raises on non-Windows or missing pywin32
+- All error classes use separate hierarchies: `CredentialStorageError(RuntimeError)` vs `PlaintextCredentialStorageRejected(ValueError)`
+- `DeviceCredential.validate()` uses `isinstance(str) and .strip()` pattern for all fields
+
+**Files changed:**
+- `agent/app/credentials/local_store.py` — new
+- `agent/app/credentials/__init__.py` — new
+- `tests/agent/test_local_credential_storage.py` — new (53 tests)
+- `plans/30_day_repo_blitz.yaml` — task 18.4 validation_commands updated
+- `docs/agent/windows_service_installer_contract.md` — Implementation Status updated
+
+**Validation results:**
+- `pytest -q tests/agent/test_local_credential_storage.py`: 53 passed
+- `ruff format --check`: clean
+- `ruff check`: clean
+- `mypy`: 0 errors
+- `make fg-fast`: all checks passed
+
+**Local review performed:**
+- `device_key` never appears in repr/str output ✓
+- No plaintext file storage class exists ✓
+- Production Linux raises `UnsupportedCredentialStoreError`, not a silent no-op ✓
+- `TestOnlyInMemoryCredentialStore` is never returned by production factory ✓
+- All Windows-only paths platform-gated with explicit error ✓
+- Validation command under correct task (18.4) ✓

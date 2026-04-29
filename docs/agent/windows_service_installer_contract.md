@@ -367,9 +367,32 @@ Command plans are cross-platform and deterministic; actual toolchain execution i
 Command plan generation is cross-platform and deterministic; live enrollment execution is platform-gated.
 Silent install examples use placeholder values only; log-safe examples always redact tokens.
 
-### Still required in 18.4 and later tasks
+### Implemented in task 18.4
 
-- Credential Manager integration (DPAPI storage of device_key)
+- `agent/app/credentials/local_store.py` — Typed credential storage boundary:
+  - `DeviceCredential` frozen dataclass — tenant_id, device_id, device_key (protected), device_key_id, issued_at; `repr()`/`str()` always redact device_key; `redacted()` returns log-safe dict; `validate()` enforces non-empty string fields
+  - `CredentialStore` runtime-checkable Protocol — `store()`, `load()`, `delete()`, `exists()` interface
+  - `WindowsCredentialManagerStore` — production backend; DPAPI-backed via Windows Credential Manager; all methods raise `UnsupportedCredentialStoreError` on non-Windows or when pywin32 is absent; no plaintext fallback
+  - `TestOnlyInMemoryCredentialStore` — unit test fake; never returned by factory in production mode; `__test__ = False` prevents pytest collection
+  - `get_credential_store(*, platform, mode)` — factory: `mode='production'` returns `WindowsCredentialManagerStore` on win32 and raises `UnsupportedCredentialStoreError` on all other platforms; `mode='test'` returns the in-memory fake only
+  - Error hierarchy: `CredentialStorageError(RuntimeError)`, `CredentialNotFoundError`, `UnsupportedCredentialStoreError`, `PlaintextCredentialStorageRejected(ValueError)`
+- `agent/app/credentials/__init__.py` — package init re-exporting all public symbols
+- `tests/agent/test_local_credential_storage.py` — 53 tests covering model validation, store/load/delete/exists, repr/str/redacted secret guards, factory platform behavior, Windows store fail-closed behavior, plan YAML cross-reference, and regression invariants
+
+**Credential persistence rules:**
+- `device_key` MUST only flow through OS-protected storage (Windows Credential Manager / DPAPI)
+- `device_key` MUST NOT appear in agent.toml, config files, environment variables, or log output
+- raw enrollment/bootstrap tokens are never accepted by this module — token is consumed by the enrollment exchange and only the resulting `DeviceCredential` is stored
+- Linux/macOS production: no supported backend exists — `UnsupportedCredentialStoreError` is raised; no file/env/in-memory fallback
+
+**Note on existing agent/main.py:** The existing `_save_config()` method writes `device_key` and `device_key_id` to plaintext JSON — this is a known pre-existing issue. Task 18.4 establishes the storage boundary and contract; the migration of `main.py` to use `WindowsCredentialManagerStore` is deferred to a future task.
+
+**Live Windows Credential Manager was NOT tested** — pywin32 unavailable on Linux CI.
+All plan generation and factory behavior is cross-platform; DPAPI execution is platform-gated.
+
+### Still required in 18.5 and later tasks
+
+- Migration of `agent/main.py` to use `WindowsCredentialManagerStore` for device_key persistence
 - Enrollment flow with token deletion after exchange (live Windows path)
 - ACL setup in installer custom actions
 - Windows Event Log source registration
