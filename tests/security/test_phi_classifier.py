@@ -543,15 +543,24 @@ def test_ingest_tags_phi_sensitivity_none() -> None:
 
 
 def test_phi_gate_is_wired_into_chat_route() -> None:
-    """Regression guard: removing the PHI classifier from the chat route breaks this test."""
+    """Regression guard: removing BAA gate from chat routing breaks this test."""
     import inspect
 
     import api.ui_ai_console as ai_console
+    from services.provider_baa import gate as baa_gate
 
     source = inspect.getsource(ai_console)
-    assert "classify_phi" in source, (
-        "PHI classifier must be present in chat route source"
+    gate_source = inspect.getsource(baa_gate)
+
+    assert "enforce_baa_gate_for_route" in source, (
+        "BAA gate must be called from chat route source"
     )
-    assert "AI_PHI_PROVIDER_NOT_BAA_CAPABLE" in source, (
-        "PHI enforcement error code must be present in chat route source"
+    assert "classify_phi" in gate_source, (
+        "PHI classifier must be present in gate source"
+    )
+    assert "enforce_provider_baa_for_route" in gate_source, (
+        "BAA enforcement must be present in gate source"
+    )
+    assert "contains_phi" in gate_source, (
+        "BAA enforcement must be conditional on PHI classification in gate"
     )

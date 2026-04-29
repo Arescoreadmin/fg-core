@@ -718,31 +718,16 @@ def ai_chat(
             400, "AI_PROVIDER_DENIED_BY_ENV", "provider not allowed in this environment"
         )
 
-    # PHI classification runs first — PHI presence determines whether BAA is required.
-    from services.phi_classifier.classifier import (  # noqa: PLC0415
-        classify_phi as _classify_phi,
-        emit_phi_classification_audit as _emit_phi_audit,
-        emit_phi_enforcement_block_audit as _emit_phi_block_audit,
+    from services.provider_baa.gate import (  # noqa: PLC0415
+        enforce_baa_gate_for_route as _enforce_baa_gate,
     )
 
-    _phi_result = _classify_phi(payload.message)
-    if _phi_result.contains_phi:
-        from fastapi import HTTPException as _HTTPException  # noqa: PLC0415
-        from services.provider_baa.policy import enforce_provider_baa_for_route  # noqa: PLC0415
-
-        try:
-            enforce_provider_baa_for_route(
-                db, tenant_id=tenant_id, provider_id=provider, request=request
-            )
-        except _HTTPException:
-            _emit_phi_block_audit(
-                _phi_result, tenant_id=tenant_id, provider_id=provider, request=request
-            )
-            raise
-    _emit_phi_audit(
-        _phi_result,
+    _enforce_baa_gate(
+        db,
         tenant_id=tenant_id,
-        enforcement_action="allowed",
+        provider_id=provider,
+        text=payload.message,
+        source="ui_ai_chat",
         request=request,
     )
 
