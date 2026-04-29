@@ -52,9 +52,7 @@ _SECRET_FIELD_PATTERNS: tuple[str, ...] = (
     "pfx_password",
     "private_key",
     "signing_key",
-    "BEGIN PRIVATE KEY",
-    "BEGIN CERTIFICATE",
-    "-----",
+    "-----",  # catches all PEM-format headers (five-dash PEM delimiters)
     "enrollment_token",
     "bootstrap_token",
     "api_key",
