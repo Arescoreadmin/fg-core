@@ -218,6 +218,27 @@ class AIPlaneService:
                 raise ValueError(err_code) from baa_exc
             raise
 
+        # PHI classification: runs after BAA gate, before any inference.
+        # PHI + non-BAA-eligible provider → record violation and deny.
+        from services.phi_classifier.classifier import (  # noqa: PLC0415
+            classify_phi as _classify_phi,
+            emit_phi_classification_audit as _emit_phi_audit,
+            emit_phi_enforcement_block_audit as _emit_phi_block_audit,
+        )
+        from services.provider_baa.policy import requires_baa as _requires_baa  # noqa: PLC0415
+
+        _phi_result = _classify_phi(payload.query)
+        if _phi_result.contains_phi and not _requires_baa(effective_provider):
+            _emit_phi_block_audit(
+                _phi_result,
+                tenant_id=tenant_id,
+                provider_id=effective_provider,
+            )
+            self._record_violation(db, tenant_id, "AI_PHI_PROVIDER_NOT_BAA_CAPABLE")
+            db.commit()
+            raise ValueError("AI_PHI_PROVIDER_NOT_BAA_CAPABLE")
+        _emit_phi_audit(_phi_result, tenant_id=tenant_id, enforcement_action="allowed")
+
         rag = rag_stub.retrieve(tenant_id=tenant_id, query=payload.query)
         prompt_sha = hashlib.sha256(payload.query.encode("utf-8")).hexdigest()
         self._log_retrieval_stub(db, tenant_id, prompt_sha)

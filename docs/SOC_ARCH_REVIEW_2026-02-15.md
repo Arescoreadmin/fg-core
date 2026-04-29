@@ -488,3 +488,26 @@ BAA enforcement (provider routing gate) requires dedicated, stable audit event t
 ### Validation performed
 - `make fg-fast`: All checks passed
 - `pytest -q tests/security/test_provider_baa_enforcement.py`: 35 passed
+
+---
+
+## PHI classifier enforcement — security_audit.py addendum (2026-04-29)
+
+### Files changed
+- `api/security_audit.py`: Added three `EventType` values:
+  - `PHI_CLASSIFICATION_PERFORMED` — emitted when classification runs and no PHI is found
+  - `PHI_CLASSIFICATION_DETECTED` — emitted when PHI is detected but routing is allowed (regulated provider with active BAA)
+  - `PHI_CLASSIFICATION_ENFORCED_BLOCK` — emitted when PHI is detected and the provider cannot satisfy BAA requirements
+
+### Why
+PHI classification is now a first-class enforcement dependency wired into all AI request entry points (`/ui/ai/chat`, `/ai/infer`, RAG ingest). Dedicated event types allow compliance teams to separately track (a) classification outcomes and (b) enforcement blocks without relying on `ADMIN_ACTION` reason strings.
+
+### Security posture impact
+- Additive only: new enum values, no change to existing event handling
+- Every PHI enforcement decision emits a structured audit event with `contains_phi`, `sensitivity_level`, `phi_types` (type names only, no raw values), `enforcement_action`, `reasoning_code`
+- Block events carry `Severity.WARNING`; clean classifications carry `Severity.INFO`
+- Audit payload explicitly excludes: raw input text, extracted PHI values, full request body
+
+### Validation performed
+- `make fg-fast`: All checks passed
+- `bash codex_gates.sh`: All gates passed

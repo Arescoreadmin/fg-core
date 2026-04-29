@@ -93,6 +93,11 @@ class EventType(str, Enum):
     PROVIDER_BAA_ALLOWED = "provider_baa_allowed"
     PROVIDER_BAA_DENIED = "provider_baa_denied"
 
+    # PHI classification enforcement
+    PHI_CLASSIFICATION_PERFORMED = "phi_classification_performed"
+    PHI_CLASSIFICATION_DETECTED = "phi_classification_detected"
+    PHI_CLASSIFICATION_ENFORCED_BLOCK = "phi_classification_enforced_block"
+
 
 class Severity(str, Enum):
     """Severity levels for audit events."""

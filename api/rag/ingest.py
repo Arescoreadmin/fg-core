@@ -239,6 +239,24 @@ def ingest_corpus(
         content_hash = _sha256_hex(doc.content)
         document_id = _deterministic_document_id(tenant_id, doc.source_id, content_hash)
 
+        from services.phi_classifier.classifier import classify_phi as _classify_phi  # noqa: PLC0415
+
+        phi_result = _classify_phi(doc.content)
+        phi_meta: dict[str, Any] = {
+            "phi_sensitivity_level": phi_result.sensitivity_level.value,
+        }
+        safe_phi_types = sorted(phi_result.phi_types - {"medical_keyword"})
+        if safe_phi_types:
+            phi_meta["phi_types"] = safe_phi_types
+        log.info(
+            "rag.ingest: document phi classification",
+            extra={
+                "tenant_id": tenant_id,
+                "source_id": doc.source_id,
+                "phi_sensitivity_level": phi_result.sensitivity_level.value,
+            },
+        )
+
         record = IngestedCorpusRecord(
             tenant_id=tenant_id,
             source_id=doc.source_id,
@@ -246,7 +264,7 @@ def ingest_corpus(
             content_hash=content_hash,
             content=doc.content,
             status=IngestStatus.SUCCESS,
-            safe_metadata=_safe_metadata(doc.metadata),
+            safe_metadata={**_safe_metadata(doc.metadata), **phi_meta},
         )
         records.append(record)
         log.info(
