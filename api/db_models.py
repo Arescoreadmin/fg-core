@@ -1740,3 +1740,40 @@ class ConnectorIdempotency(Base):
         server_default=func.now(),
     )
     expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ProviderBaaRecord(Base):
+    """
+    Tenant-scoped provider BAA (Business Associate Agreement) record.
+
+    One authoritative row per (tenant_id, provider_id). The BAA enforcement
+    boundary (services/provider_baa/policy.py) is the only authorized reader.
+    Callers must never bypass the enforcement boundary to read this table.
+    """
+
+    __tablename__ = "provider_baa_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "provider_id",
+            name="uq_provider_baa_records_tenant_provider",
+        ),
+        Index("ix_provider_baa_records_tenant_provider", "tenant_id", "provider_id"),
+        Index("ix_provider_baa_records_tenant_status", "tenant_id", "baa_status"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    provider_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    baa_status: Mapped[Any] = mapped_column(
+        Text, nullable=False
+    )  # active | expired | missing | revoked | pending
+    expiry_date: Mapped[Any] = mapped_column(Date, nullable=True)
+    signed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    document_ref: Mapped[Any] = mapped_column(Text, nullable=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )

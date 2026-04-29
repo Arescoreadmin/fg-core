@@ -468,3 +468,23 @@ Two issues fixed:
 ### Validation performed
 - `make fg-fast`: All checks passed
 - `pytest -q tests/agent/test_agent_observability.py tests/agent/test_agent_lifecycle.py`: 45 passed
+
+---
+
+## Provider BAA enforcement — security_audit.py addendum (2026-04-29)
+
+### Files changed
+- `api/security_audit.py`: Added `EventType.PROVIDER_BAA_ALLOWED` and `EventType.PROVIDER_BAA_DENIED` to the `EventType` enum
+
+### Why
+BAA enforcement (provider routing gate) requires dedicated, stable audit event types so compliance teams can filter provider-routing decisions from the audit log without relying on `ADMIN_ACTION` reason strings. The two new types emit on every allow and deny decision, creating a tamper-evident record of BAA gate outcomes.
+
+### Security posture impact
+- Additive only: new enum values, no change to existing event handling or routing logic
+- All BAA enforcement decisions now emit structured audit events with `provider_id`, `baa_status`, `enforcement_result`, `reason_code`
+- Denied events carry `Severity.WARNING`; allowed carry `Severity.INFO`
+- Audit payload explicitly excludes: `expiry_date`, `document_ref`, contract text, secrets, PHI
+
+### Validation performed
+- `make fg-fast`: All checks passed
+- `pytest -q tests/security/test_provider_baa_enforcement.py`: 35 passed

@@ -6130,3 +6130,120 @@ New typed silent enrollment parameter module (`agent/app/installer/silent_enroll
 - Purge requires explicit PURGE_DATA=1 ✓
 - Validation command under correct task (18.6) ✓
 - No live Windows signing proof claimed ✓
+
+---
+
+### 2026-04-29 — Provider BAA Enforcement: Table, Routing Integration, Audit Trail
+
+**Branch:** `feat/provider-baa-enforcement`
+
+**Area:** AI Gateway / Compliance enforcement / Provider routing
+
+---
+
+**Implementation summary:**
+
+Provider BAA (Business Associate Agreement) enforcement with fail-closed routing gate, tenant-scoped persistence, and full audit trail. Every regulated-provider routing decision is intercepted before dispatch and either allowed (active BAA) or denied (missing, expired, revoked, pending, or lookup failure).
+
+---
+
+**Files added:**
+
+- `migrations/postgres/0031_provider_baa_records.sql` — Postgres migration:
+  - `provider_baa_records` table with `tenant_id`, `provider_id`, `baa_status` (CHECK constraint), `expiry_date`, `signed_at`, `document_ref`, `created_at`, `updated_at`
+  - UNIQUE constraint on `(tenant_id, provider_id)` — one authoritative row per pair
+  - Indexes on `(tenant_id, provider_id)` and `(tenant_id, baa_status)`
+  - Row Level Security enabled with `tenant_isolation` policy
+
+- `services/provider_baa/__init__.py` — Package re-exports
+
+- `services/provider_baa/policy.py` — Enforcement boundary (single call site for all BAA decisions):
+  - `_REGULATED_PROVIDERS` — frozenset of regulated provider IDs (openai, anthropic, azure_openai, google_vertex, cohere, aws_bedrock)
+  - `requires_baa(provider_id)` — classification predicate
+  - `ProviderBaaCheckResult` — frozen dataclass; `allowed`, `reason_code`, `provider_id`, `tenant_id`, `baa_status`, `expiry_date` (internal only)
+  - `check_provider_baa(db, *, tenant_id, provider_id)` — lookup + evaluation, no side effects
+  - `enforce_provider_baa_for_route(db, *, tenant_id, provider_id, request)` — enforcement entry point; emits audit event; raises `HTTPException(403)` on denial
+  - Stable error codes: `PROVIDER_BAA_NOT_REQUIRED`, `PROVIDER_BAA_ACTIVE`, `PROVIDER_BAA_MISSING`, `PROVIDER_BAA_EXPIRED`, `PROVIDER_BAA_REVOKED`, `PROVIDER_BAA_PENDING`, `PROVIDER_BAA_LOOKUP_FAILED`, `PROVIDER_BAA_STATUS_UNKNOWN`
+
+- `tests/security/test_provider_baa_enforcement.py` — 28 tests (see below)
+
+**Files modified:**
+
+- `api/db_models.py` — Added `ProviderBaaRecord` SQLAlchemy model (used for SQLite test schema via `Base.metadata.create_all`)
+
+- `api/security_audit.py` — Added `EventType.PROVIDER_BAA_ALLOWED` and `EventType.PROVIDER_BAA_DENIED` to the audit event type enum
+
+- `api/ui_ai_console.py` — BAA enforcement integrated into `/ui/ai/chat` routing path, after the three provider allow-list checks (`_known_provider_or_fail`, `policy.allowed_providers`, `_global_allowed_providers`, `_provider_env_allowed`) and before quota charge or inference. Raises 403 on denial; quota is never charged for denied requests.
+
+- `services/ai_plane_extension/service.py` — BAA enforcement integrated into `AIPlaneService.infer()` path. Effective provider resolves to "simulated" (non-regulated, always passes); establishes the enforcement point for future external provider wiring.
+
+---
+
+**Enforcement behavior:**
+
+| Condition | Result | Error code |
+|---|---|---|
+| Non-regulated provider (simulated) | Allowed | `PROVIDER_BAA_NOT_REQUIRED` |
+| Active BAA, no expiry | Allowed | `PROVIDER_BAA_ACTIVE` |
+| Active BAA, future expiry | Allowed | `PROVIDER_BAA_ACTIVE` |
+| No record found | Denied 403 | `PROVIDER_BAA_MISSING` |
+| Status = expired | Denied 403 | `PROVIDER_BAA_EXPIRED` |
+| Status = revoked | Denied 403 | `PROVIDER_BAA_REVOKED` |
+| Status = pending | Denied 403 | `PROVIDER_BAA_PENDING` |
+| Active BAA, past expiry_date | Denied 403 | `PROVIDER_BAA_EXPIRED` |
+| Unknown/malformed status | Denied 403 | `PROVIDER_BAA_STATUS_UNKNOWN` |
+| DB exception on lookup | Denied 403 | `PROVIDER_BAA_LOOKUP_FAILED` |
+
+**Fail-closed guarantees:**
+- DB exception on regulated-provider path → deny, never allow
+- Unknown status → deny, never allow
+- Blank tenant_id → ValueError (programming error, raised before DB access)
+- No fallback: 403 is terminal; callers must not retry with a different provider
+- `expiry_date`, `document_ref`, and contract text never appear in user-facing detail or audit event details
+
+---
+
+**Routing integration point:**
+
+`api/ui_ai_console.py: ai_chat()` — enforcement runs after all allow-list checks, before `request_hash` computation and quota charge. This guarantees BAA denial cannot be bypassed via quota path or inference path.
+
+---
+
+**Audit behavior:**
+
+- `EventType.PROVIDER_BAA_ALLOWED` emitted on every allowed decision
+- `EventType.PROVIDER_BAA_DENIED` emitted on every denied decision
+- Audit details include: `provider_id`, `baa_status`, `enforcement_result`, `reason_code`
+- Audit details exclude: `expiry_date`, `document_ref`, contract text, secrets, PHI
+
+---
+
+**Tests added (`tests/security/test_provider_baa_enforcement.py`):**
+
+Section 1 — `requires_baa()`: 3 tests (simulated not regulated; all regulated providers flagged; unknown not regulated)
+
+Section 2–4 — `check_provider_baa()`: 12 tests
+- Positive: non-regulated allowed without DB; active BAA no expiry; active BAA future expiry
+- Negative: missing record; expired status; revoked status; pending status; active + past expiry; unknown status; wrong-tenant BAA invisible; DB failure
+
+Section 5 — Input validation: 2×2 parametrized tests (blank/None tenant_id; blank/None provider_id)
+
+Section 6 — `enforce_provider_baa_for_route()`: 6 tests (403 on missing; no raise on active; no raise non-regulated; 403 revoked; 403 pending; 403 expired)
+
+Section 7 — Audit events: 4 tests (allow event emitted; deny event emitted; denied payload excludes secrets/PHI; denied HTTP detail excludes expiry/contract)
+
+Section 8 — No fallback: 1 test
+
+Section 9 — Routing integration: 3 tests
+- `test_baa_enforcement_is_called_in_chat_route` — regulated provider without BAA → 403 from routing path
+- `test_simulated_provider_unaffected_by_baa_enforcement` — simulated works unchanged (regression guard)
+- `test_quota_not_charged_before_baa_denial` — quota not consumed on BAA denial
+
+---
+
+**Validation results:**
+
+- `python -m compileall services/provider_baa tests/security/test_provider_baa_enforcement.py api/ui_ai_console.py api/security_audit.py api/db_models.py` → clean
+- `make fg-fast` → passed
+- `bash codex_gates.sh` → passed
+- `.venv/bin/pytest -q tests/security/test_provider_baa_enforcement.py` → all tests passed

@@ -89,6 +89,10 @@ class EventType(str, Enum):
     # Admin actions
     ADMIN_ACTION = "admin_action"
 
+    # Provider BAA enforcement
+    PROVIDER_BAA_ALLOWED = "provider_baa_allowed"
+    PROVIDER_BAA_DENIED = "provider_baa_denied"
+
 
 class Severity(str, Enum):
     """Severity levels for audit events."""

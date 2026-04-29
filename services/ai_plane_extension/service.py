@@ -190,6 +190,34 @@ class AIPlaneService:
             db.commit()
             raise ValueError("AI_INPUT_POLICY_BLOCKED")
 
+        # BAA enforcement gate: resolve the effective provider and enforce
+        # before any inference work. SIM_MODEL is non-regulated; this path
+        # is a no-op today but establishes the enforcement point for when
+        # real external providers are wired into this service.
+        from services.provider_baa.policy import enforce_provider_baa_for_route  # noqa: PLC0415
+
+        effective_provider = (
+            "simulated" if not ai_external_provider_enabled() else SIM_MODEL.lower()
+        )
+        try:
+            enforce_provider_baa_for_route(
+                db, tenant_id=tenant_id, provider_id=effective_provider
+            )
+        except Exception as baa_exc:
+            from fastapi import HTTPException as _HTTPException  # noqa: PLC0415
+
+            if isinstance(baa_exc, _HTTPException):
+                self._record_violation(db, tenant_id, "AI_PROVIDER_BAA_DENIED")
+                db.commit()
+                detail = baa_exc.detail
+                err_code = (
+                    detail.get("error_code", "AI_PROVIDER_BAA_DENIED")
+                    if isinstance(detail, dict)
+                    else "AI_PROVIDER_BAA_DENIED"
+                )
+                raise ValueError(err_code) from baa_exc
+            raise
+
         rag = rag_stub.retrieve(tenant_id=tenant_id, query=payload.query)
         prompt_sha = hashlib.sha256(payload.query.encode("utf-8")).hexdigest()
         self._log_retrieval_stub(db, tenant_id, prompt_sha)
