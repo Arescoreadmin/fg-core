@@ -208,6 +208,45 @@ def test_signing_plan_cert_thumbprint_ref_is_env_reference() -> None:
     assert plan.cert_thumbprint_ref == _THUMBPRINT_REF
 
 
+def test_execute_live_signing_raises_when_env_var_unset() -> None:
+    """execute_live_signing() must raise when $env: reference resolves to empty/missing."""
+    import sys
+
+    if sys.platform != "win32":
+        pytest.skip("env-var resolution path only reached on Windows")
+    import os
+    import unittest.mock
+
+    plan = build_signing_plan(
+        artifact_path=_ARTIFACT_PATH,
+        artifact_type="msi",
+        cert_thumbprint_ref="$env:FG_SIGNING_THUMBPRINT_UNSET_TEST",
+    )
+    env = {
+        k: v for k, v in os.environ.items() if k != "FG_SIGNING_THUMBPRINT_UNSET_TEST"
+    }
+    with unittest.mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(
+            SigningToolchainError, match="FG_SIGNING_THUMBPRINT_UNSET_TEST"
+        ):
+            execute_live_signing(plan)
+
+
+def test_sign_args_contain_thumbprint_ref_not_expanded() -> None:
+    """sign_args store the env var reference literally — not the resolved value.
+
+    Resolution happens at execute_live_signing() time so plans are portable
+    across environments and never embed the actual thumbprint at build time.
+    """
+    plan = build_signing_plan(
+        artifact_path=_ARTIFACT_PATH,
+        artifact_type="msi",
+        cert_thumbprint_ref=_THUMBPRINT_REF,
+    )
+    assert _THUMBPRINT_REF in plan.sign_args
+    assert plan.cert_thumbprint_ref == _THUMBPRINT_REF
+
+
 # ===========================================================================
 # 2. Release manifest
 # ===========================================================================
@@ -256,6 +295,20 @@ def test_release_manifest_production_ready_false_when_missing_sha256() -> None:
 
 def test_release_manifest_production_ready_false_when_no_sha256_manifest() -> None:
     manifest = _make_manifest(sha256_manifest_path=None)
+    assert manifest.production_ready is False
+
+
+def test_release_manifest_production_ready_false_when_empty_sha256_manifest_path() -> (
+    None
+):
+    manifest = _make_manifest(sha256_manifest_path="")
+    assert manifest.production_ready is False
+
+
+def test_release_manifest_production_ready_false_when_whitespace_sha256_manifest_path() -> (
+    None
+):
+    manifest = _make_manifest(sha256_manifest_path="   ")
     assert manifest.production_ready is False
 
 
@@ -475,6 +528,18 @@ def test_validate_release_ready_unsigned_ok_when_not_production() -> None:
 
 def test_validate_release_ready_rejects_missing_sha256_manifest() -> None:
     manifest = _make_manifest(sha256_manifest_path=None)
+    with pytest.raises(ReleaseManifestError, match="sha256_manifest_path"):
+        validate_release_ready(manifest, require_production=False)
+
+
+def test_validate_release_ready_rejects_empty_sha256_manifest_path() -> None:
+    manifest = _make_manifest(sha256_manifest_path="")
+    with pytest.raises(ReleaseManifestError, match="sha256_manifest_path"):
+        validate_release_ready(manifest, require_production=False)
+
+
+def test_validate_release_ready_rejects_whitespace_sha256_manifest_path() -> None:
+    manifest = _make_manifest(sha256_manifest_path="   ")
     with pytest.raises(ReleaseManifestError, match="sha256_manifest_path"):
         validate_release_ready(manifest, require_production=False)
 

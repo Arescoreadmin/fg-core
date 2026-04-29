@@ -330,6 +330,8 @@ def execute_live_signing(plan: SigningPlan) -> None:
             "Use build_signing_plan() for cross-platform plan generation. "
             "Unsigned artifacts MUST NOT be deployed to production."
         )
+    import os
+    import re
     import shutil
 
     if not shutil.which("signtool.exe") and not shutil.which("signtool"):
@@ -339,9 +341,27 @@ def execute_live_signing(plan: SigningPlan) -> None:
             "Unsigned artifacts MUST NOT be deployed to production."
         )
 
+    # Resolve $env:VAR_NAME reference to the actual thumbprint value.
+    # subprocess.run(shell=False) does not expand shell environment references,
+    # so we must resolve the value explicitly before building the arg list.
+    ref = plan.cert_thumbprint_ref
+    env_match = re.match(r"^\$env:(\w+)$", ref, re.IGNORECASE)
+    if env_match:
+        var_name = env_match.group(1)
+        thumbprint = os.environ.get(var_name)
+        if not thumbprint or not thumbprint.strip():
+            raise SigningToolchainError(
+                f"Certificate thumbprint environment variable '{var_name}' is not set or empty. "
+                "Set the variable to the certificate SHA1 thumbprint before signing. "
+                "Unsigned artifacts MUST NOT be deployed to production."
+            )
+        resolved_args = [thumbprint if arg == ref else arg for arg in plan.sign_args]
+    else:
+        resolved_args = list(plan.sign_args)
+
     import subprocess
 
-    subprocess.run(plan.sign_args, check=True, shell=False)
+    subprocess.run(resolved_args, check=True, shell=False)
 
 
 # ---------------------------------------------------------------------------
@@ -411,7 +431,7 @@ def build_release_manifest(
     production_ready: bool = (
         all_signed
         and all_hashed
-        and sha256_manifest_path is not None
+        and bool(sha256_manifest_path and sha256_manifest_path.strip())
         and required_artifacts_exist
     )
 
@@ -476,7 +496,7 @@ def validate_release_ready(
     if not manifest.product.strip():
         errors.append("product must be non-empty")
 
-    if manifest.sha256_manifest_path is None:
+    if not manifest.sha256_manifest_path or not manifest.sha256_manifest_path.strip():
         errors.append(
             "sha256_manifest_path is required — missing SHA256 manifest blocks release"
         )
