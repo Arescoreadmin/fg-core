@@ -15,6 +15,7 @@ from services.ai.dispatch import ProviderCallError as _ProviderCallError
 from services.ai.dispatch import call_provider as _call_provider
 from services.ai_plane_extension import policy_engine, rag_stub
 from services.ai_plane_extension.models import AIInferRequest, AIPolicyUpsertRequest
+from services.phi_classifier.minimizer import minimize_prompt
 from services.schema_validation import validate_payload_against_schema
 
 if TYPE_CHECKING:
@@ -238,8 +239,8 @@ class AIPlaneService:
             enforce_baa_gate_for_route as _enforce_baa_gate,
         )
 
-        prompt_sha = hashlib.sha256(payload.query.encode("utf-8")).hexdigest()
-        request_id = f"inf-{prompt_sha[:16]}"
+        pre_gate_prompt_sha = hashlib.sha256(payload.query.encode("utf-8")).hexdigest()
+        request_id = f"inf-{pre_gate_prompt_sha[:16]}"
         try:
             baa_gate_result = _enforce_baa_gate(
                 db,
@@ -270,13 +271,36 @@ class AIPlaneService:
             db.commit()
             raise ValueError("AI_PHI_PROVIDER_NOT_BAA_CAPABLE")
 
+        prompt_minimization = minimize_prompt(payload.query)
+        outgoing_prompt = prompt_minimization.minimized_text
+        if prompt_minimization.reason_code == "PROMPT_MINIMIZATION_NON_STRING":
+            self._audit_infer(
+                tenant_id=tenant_id,
+                success=False,
+                reason="AI_PROMPT_MINIMIZATION_FAILED",
+                details=build_ai_audit_metadata(
+                    tenant_id=tenant_id,
+                    provider_id=effective_provider,
+                    baa_gate_result=baa_gate_result,
+                    request_text="",
+                    response_text=None,
+                    prompt_minimization=prompt_minimization,
+                    request_id=request_id,
+                ),
+            )
+            self._record_violation(db, tenant_id, "AI_PROMPT_MINIMIZATION_FAILED")
+            db.commit()
+            raise ValueError("AI_PROMPT_MINIMIZATION_FAILED")
+
+        prompt_sha = hashlib.sha256(outgoing_prompt.encode("utf-8")).hexdigest()
+        request_id = f"inf-{prompt_sha[:16]}"
         rag = rag_stub.retrieve(tenant_id=tenant_id, query=payload.query)
         self._log_retrieval_stub(db, tenant_id, prompt_sha)
 
         try:
             prov_resp = _call_provider(
                 provider_id=effective_provider,
-                prompt=payload.query,
+                prompt=outgoing_prompt,
                 max_tokens=2000,
                 request_id=request_id,
                 tenant_id=tenant_id,
@@ -290,8 +314,9 @@ class AIPlaneService:
                     tenant_id=tenant_id,
                     provider_id=effective_provider,
                     baa_gate_result=baa_gate_result,
-                    request_text=payload.query,
+                    request_text=outgoing_prompt,
                     response_text=None,
+                    prompt_minimization=prompt_minimization,
                     request_id=request_id,
                 ),
             )
@@ -348,8 +373,9 @@ class AIPlaneService:
                 tenant_id=tenant_id,
                 provider_id=effective_provider,
                 baa_gate_result=baa_gate_result,
-                request_text=payload.query,
+                request_text=outgoing_prompt,
                 provider_response=prov_resp,
+                prompt_minimization=prompt_minimization,
                 request_id=request_id,
             ),
         )

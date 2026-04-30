@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 
 from services.ai.providers.base import ProviderResponse
+from services.phi_classifier.minimizer import PromptMinimizationResult
 from services.provider_baa.gate import BaaGateResult
 
 
@@ -22,6 +23,8 @@ def build_ai_audit_metadata(
     request_text: str,
     response_text: str | None = None,
     provider_response: ProviderResponse | None = None,
+    prompt_minimization: PromptMinimizationResult | None = None,
+    request_hash: str | None = None,
     request_id: str | None = None,
     device_id: str | None = None,
 ) -> dict[str, object]:
@@ -36,7 +39,7 @@ def build_ai_audit_metadata(
         if provider_response is not None
         else provider_id,
         "baa_check_result": baa_gate_result.enforcement_action,
-        "request_hash": _sha256_text(request_text),
+        "request_hash": request_hash or _sha256_text(request_text),
         "response_hash": _sha256_text(effective_response_text)
         if effective_response_text is not None
         else None,
@@ -44,6 +47,18 @@ def build_ai_audit_metadata(
         "enforcement_action": baa_gate_result.enforcement_action,
         "reason_code": baa_gate_result.reason_code,
         "sensitivity_level": baa_gate_result.sensitivity_level.value,
+        "prompt_minimized": bool(
+            prompt_minimization.changed if prompt_minimization is not None else False
+        ),
+        "minimization_version": prompt_minimization.minimization_version
+        if prompt_minimization is not None
+        else None,
+        "minimization_replacement_count": prompt_minimization.replacement_count
+        if prompt_minimization is not None
+        else 0,
+        "minimization_placeholder_types": prompt_minimization.placeholder_types
+        if prompt_minimization is not None
+        else [],
     }
     if request_id:
         metadata["request_id"] = request_id

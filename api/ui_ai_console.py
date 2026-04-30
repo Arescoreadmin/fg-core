@@ -23,6 +23,7 @@ from api.security_audit import AuditEvent, EventType, Severity, get_auditor
 from services.ai.audit import build_ai_audit_metadata
 from services.ai.dispatch import ProviderCallError as _ProviderCallError
 from services.ai.dispatch import call_provider as _call_provider
+from services.phi_classifier.minimizer import minimize_prompt
 from services.schema_validation import validate_payload_against_schema
 
 if TYPE_CHECKING:
@@ -74,6 +75,33 @@ def _error(status_code: int, code: str, message: str, **extra: Any) -> HTTPExcep
 
 def _hash_payload(payload: dict[str, Any]) -> str:
     return hash_config(canonicalize_config(payload))
+
+
+def _build_provider_request_hash(
+    *,
+    tenant_id: str,
+    device_id: str,
+    provider: str,
+    model: str,
+    persona: str,
+    outgoing_prompt: str,
+    request_id: str | None,
+) -> str:
+    """Hash the provider-bound prompt plus safe request context, never raw PHI."""
+    return hashlib.sha256(
+        canonicalize_config(
+            {
+                "hash_version": "ai_provider_request_v2",
+                "tenant_id": tenant_id,
+                "device_id": device_id,
+                "provider": provider,
+                "model": model,
+                "persona": persona,
+                "request_id": request_id or "",
+                "outgoing_prompt": outgoing_prompt,
+            }
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 def _day_bucket() -> str:
@@ -740,10 +768,6 @@ def ai_chat(
             400, "AI_PROVIDER_DENIED_BY_ENV", "provider not allowed in this environment"
         )
 
-    request_hash = hashlib.sha256(
-        canonicalize_config(payload.model_dump()).encode("utf-8")
-    ).hexdigest()
-
     from services.provider_baa.gate import (  # noqa: PLC0415
         enforce_baa_gate_for_route as _enforce_baa_gate,
     )
@@ -782,6 +806,27 @@ def ai_chat(
             )
         raise
 
+    prompt_minimization = minimize_prompt(payload.message)
+    outgoing_prompt = prompt_minimization.minimized_text
+    if prompt_minimization.reason_code == "PROMPT_MINIMIZATION_NON_STRING":
+        raise _error(
+            400,
+            "AI_PROMPT_MINIMIZATION_FAILED",
+            "prompt minimization failed closed",
+        )
+
+    route_request_id = getattr(getattr(request, "state", None), "request_id", None)
+    request_hash = _build_provider_request_hash(
+        tenant_id=tenant_id,
+        device_id=device_id,
+        provider=provider,
+        model=model,
+        persona=persona,
+        outgoing_prompt=outgoing_prompt,
+        request_id=route_request_id,
+    )
+    audit_request_hash = f"sha256:{request_hash}"
+
     _validate_device_signature_stub(request, tenant_id, device_id, request_hash)
 
     policy_hash = _hash_payload(policy)
@@ -796,7 +841,7 @@ def ai_chat(
 
     output = ""
     metering_mode = "unknown"
-    prompt_tokens = _estimate_tokens(payload.message)
+    prompt_tokens = _estimate_tokens(outgoing_prompt)
     completion_tokens = 0
     total_tokens = prompt_tokens
     usage_record_id = hashlib.sha256(
@@ -832,7 +877,7 @@ def ai_chat(
         try:
             prov_resp = _call_provider(
                 provider_id=provider,
-                prompt=payload.message,
+                prompt=outgoing_prompt,
                 max_tokens=_max_tokens_per_request(policy, provider),
                 request_id=event_id,
                 tenant_id=tenant_id,
@@ -940,8 +985,10 @@ def ai_chat(
                     tenant_id=tenant_id,
                     provider_id=provider,
                     baa_gate_result=baa_gate_result,
-                    request_text=payload.message,
+                    request_text=outgoing_prompt,
                     response_text=None,
+                    prompt_minimization=prompt_minimization,
+                    request_hash=audit_request_hash,
                     request_id=event_id,
                     device_id=device_id,
                 ),
@@ -972,8 +1019,10 @@ def ai_chat(
                     tenant_id=tenant_id,
                     provider_id=provider,
                     baa_gate_result=baa_gate_result,
-                    request_text=payload.message,
+                    request_text=outgoing_prompt,
                     response_text=None,
+                    prompt_minimization=prompt_minimization,
+                    request_hash=audit_request_hash,
                     request_id=event_id,
                     device_id=device_id,
                 ),
@@ -1000,8 +1049,10 @@ def ai_chat(
                 tenant_id=tenant_id,
                 provider_id=provider,
                 baa_gate_result=baa_gate_result,
-                request_text=payload.message,
+                request_text=outgoing_prompt,
                 provider_response=prov_resp,
+                prompt_minimization=prompt_minimization,
+                request_hash=audit_request_hash,
                 request_id=event_id,
                 device_id=device_id,
             ),

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,7 @@ from services.ai.providers.base import (
     ProviderCallError,
     ProviderResponse,
 )
+from services.phi_classifier.minimizer import PromptMinimizationResult
 from services.phi_classifier.models import SensitivityLevel
 from services.provider_baa.gate import (
     BaaGateResult,
@@ -26,6 +28,13 @@ from services.provider_baa.gate import (
 _CLEAN_TEXT = "Please summarize the quarterly report."
 _PHI_TEXT = "SSN 123-45-6789 and MRN 987-65 belong to patient@example.com"
 _RAW_RESPONSE = "Patient response contains MRN 987-65."
+_MINIMIZATION_TEXT = (
+    "Patient John Smith DOB 01/02/1980 has MRN 4872910. "
+    "Contact jane@example.com or 555-123-4567."
+)
+_MINIMIZED_TEXT = (
+    "Patient [PATIENT_NAME] DOB [DATE] has MRN [MRN]. Contact [EMAIL] or [PHONE]."
+)
 
 
 def _baa_result(
@@ -226,7 +235,7 @@ def test_ui_success_audit_includes_request_and_response_hash(
         json={"message": _CLEAN_TEXT, "device_id": device_id, "provider": "anthropic"},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     details = _captured_admin_details(events, "ai_chat")
     assert details["phi_detected"] is False
     assert details["phi_types"] == []
@@ -235,6 +244,124 @@ def test_ui_success_audit_includes_request_and_response_hash(
     assert str(details["request_hash"]).startswith("sha256:")
     assert str(details["response_hash"]).startswith("sha256:")
     _assert_no_raw_values(details)
+
+
+def test_ui_chat_sends_minimized_prompt_and_audits_safe_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.ui_ai_console as ai_console
+
+    _allow_providers(monkeypatch)
+    monkeypatch.setattr(ai_console, "_contains_pii", lambda _text, _terms: False)
+    captured_prompt = ""
+
+    def _provider(**kw: Any) -> ProviderResponse:
+        nonlocal captured_prompt
+        captured_prompt = str(kw["prompt"])
+        return ProviderResponse(
+            provider_id="simulated",
+            text="safe response",
+            model="SIMULATED_V1",
+            input_tokens=6,
+            output_tokens=2,
+        )
+
+    monkeypatch.setattr(ai_console, "_call_provider", _provider)
+    events: list[Any] = []
+    monkeypatch.setattr(
+        "api.security_audit.SecurityAuditor.log_event",
+        lambda _self, event: events.append(event),
+    )
+
+    client = _setup_client(tmp_path, monkeypatch)
+    headers = {
+        "X-API-Key": mint_key(
+            "ui:read", "ai:chat", "admin:write", tenant_id="tenant-dev"
+        )
+    }
+    device_id = _enable_device(client, headers)
+    request_headers = {**headers, "X-Request-ID": "min-req-1"}
+    response = client.post(
+        "/ui/ai/chat",
+        headers=request_headers,
+        json={
+            "message": _MINIMIZATION_TEXT,
+            "device_id": device_id,
+            "provider": "simulated",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert captured_prompt == _MINIMIZED_TEXT
+    assert "John Smith" not in captured_prompt
+    assert "01/02/1980" not in captured_prompt
+    assert "4872910" not in captured_prompt
+    assert "jane@example.com" not in captured_prompt
+    assert "555-123-4567" not in captured_prompt
+    details = _captured_admin_details(events, "ai_chat")
+    assert details["prompt_minimized"] is True
+    assert details["minimization_replacement_count"] == 5
+    assert details["minimization_placeholder_types"] == [
+        "DATE",
+        "EMAIL",
+        "MRN",
+        "PATIENT_NAME",
+        "PHONE",
+    ]
+    expected_request_hash = ai_console._build_provider_request_hash(
+        tenant_id="tenant-dev",
+        device_id=device_id,
+        provider="simulated",
+        model="SIMULATED_V1",
+        persona="default",
+        outgoing_prompt=_MINIMIZED_TEXT,
+        request_id="min-req-1",
+    )
+    assert details["request_hash"] == ("sha256:" + expected_request_hash)
+    assert details["request_hash"] != (
+        "sha256:" + hashlib.sha256(_MINIMIZED_TEXT.encode("utf-8")).hexdigest()
+    )
+    assert _MINIMIZATION_TEXT not in str(details)
+    assert _MINIMIZED_TEXT not in str(details)
+
+
+def test_ui_provider_request_hash_includes_safe_request_context() -> None:
+    import api.ui_ai_console as ai_console
+
+    first = ai_console._build_provider_request_hash(
+        tenant_id="tenant-a",
+        device_id="device-a",
+        provider="simulated",
+        model="SIMULATED_V1",
+        persona="default",
+        outgoing_prompt=_MINIMIZED_TEXT,
+        request_id="req-1",
+    )
+    second = ai_console._build_provider_request_hash(
+        tenant_id="tenant-a",
+        device_id="device-a",
+        provider="simulated",
+        model="SIMULATED_V1",
+        persona="default",
+        outgoing_prompt=_MINIMIZED_TEXT,
+        request_id="req-2",
+    )
+    different_provider = ai_console._build_provider_request_hash(
+        tenant_id="tenant-a",
+        device_id="device-a",
+        provider="anthropic",
+        model="SIMULATED_V1",
+        persona="default",
+        outgoing_prompt=_MINIMIZED_TEXT,
+        request_id="req-1",
+    )
+
+    assert first != second
+    assert first != different_provider
+    assert "John Smith" not in first
+    assert "01/02/1980" not in first
+    assert "4872910" not in first
+    assert "jane@example.com" not in first
 
 
 def test_ui_phi_baa_denial_audit_has_null_response_hash(
@@ -372,6 +499,63 @@ def test_ui_quota_denial_does_not_call_provider_or_invent_response_hash(
     _assert_no_raw_values(details)
 
 
+def test_ui_minimization_failure_blocks_provider_and_quota(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.ui_ai_console as ai_console
+
+    _allow_providers(monkeypatch)
+    monkeypatch.setattr(
+        ai_console,
+        "minimize_prompt",
+        lambda _text: PromptMinimizationResult(
+            minimized_text="",
+            changed=True,
+            replacements=(),
+            replacement_count=0,
+            placeholder_types=[],
+            minimization_version="prompt_minimization_v1",
+            reason_code="PROMPT_MINIMIZATION_NON_STRING",
+        ),
+    )
+    provider_called = False
+    quota_called = False
+
+    def _provider(**_kw: Any) -> ProviderResponse:
+        nonlocal provider_called
+        provider_called = True
+        return ProviderResponse(provider_id="simulated", text="unused", model="m")
+
+    def _quota(*_args: Any, **_kw: Any) -> None:
+        nonlocal quota_called
+        quota_called = True
+
+    monkeypatch.setattr(ai_console, "_call_provider", _provider)
+    monkeypatch.setattr(ai_console, "_consume_quota_atomic", _quota)
+
+    client = _setup_client(tmp_path, monkeypatch)
+    headers = {
+        "X-API-Key": mint_key(
+            "ui:read", "ai:chat", "admin:write", tenant_id="tenant-dev"
+        )
+    }
+    device_id = _enable_device(client, headers)
+    response = client.post(
+        "/ui/ai/chat",
+        headers=headers,
+        json={
+            "message": _MINIMIZATION_TEXT,
+            "device_id": device_id,
+            "provider": "simulated",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["error_code"] == "AI_PROMPT_MINIMIZATION_FAILED"
+    assert provider_called is False
+    assert quota_called is False
+
+
 def test_ai_plane_provider_failure_audit_has_safe_metadata(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -406,3 +590,53 @@ def test_ai_plane_provider_failure_audit_has_safe_metadata(
     assert details["request_hash"]
     assert details["response_hash"] is None
     _assert_no_raw_values(details)
+
+
+def test_ai_plane_infer_sends_minimized_prompt_and_audits_safe_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from services.ai_plane_extension.models import AIInferRequest
+    from services.ai_plane_extension.service import AIPlaneService
+
+    db_path = tmp_path / "plane-minimization.db"
+    reset_engine_cache()
+    init_db(sqlite_path=str(db_path))
+    db = get_sessionmaker()()
+    events: list[Any] = []
+    monkeypatch.setattr(
+        "api.security_audit.SecurityAuditor.log_event",
+        lambda _self, event: events.append(event),
+    )
+    monkeypatch.setattr(
+        "services.ai_plane_extension.service._resolve_effective_provider",
+        lambda: "simulated",
+    )
+    captured_prompt = ""
+
+    def _provider(**kw: Any) -> ProviderResponse:
+        nonlocal captured_prompt
+        captured_prompt = str(kw["prompt"])
+        return ProviderResponse(
+            provider_id="simulated",
+            text="safe response",
+            model="SIMULATED_V1",
+            input_tokens=6,
+            output_tokens=2,
+        )
+
+    monkeypatch.setattr("services.ai_plane_extension.service._call_provider", _provider)
+
+    result = AIPlaneService().infer(
+        db, "tenant-a", AIInferRequest(query=_MINIMIZATION_TEXT)
+    )
+
+    assert result["ok"] is True
+    assert captured_prompt == _MINIMIZED_TEXT
+    details = _captured_admin_details(events, "ai_plane_infer")
+    assert details["prompt_minimized"] is True
+    assert details["minimization_replacement_count"] == 5
+    assert details["request_hash"] == (
+        "sha256:" + hashlib.sha256(_MINIMIZED_TEXT.encode("utf-8")).hexdigest()
+    )
+    assert _MINIMIZATION_TEXT not in str(details)
+    assert _MINIMIZED_TEXT not in str(details)

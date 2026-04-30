@@ -16,6 +16,12 @@ from services.phi_classifier.classifier import (
     emit_phi_enforcement_block_audit,
     set_classifier,
 )
+from services.phi_classifier.minimizer import (
+    MINIMIZATION_VERSION,
+    PromptMinimizationResult,
+    PromptReplacement,
+    minimize_prompt,
+)
 from services.phi_classifier.models import (
     PhiClassificationResult,
     PhiSpan,
@@ -25,6 +31,8 @@ from services.phi_classifier.models import (
 __all__ = [
     "PhiClassifier",
     "PhiClassificationResult",
+    "PromptMinimizationResult",
+    "PromptReplacement",
     "PhiSpan",
     "RuleBasedPhiClassifier",
     "REASON_CLEAN",
@@ -37,9 +45,11 @@ __all__ = [
     "REASON_NAME",
     "REASON_PHONE",
     "REASON_SSN",
+    "MINIMIZATION_VERSION",
     "SensitivityLevel",
     "classify_phi",
     "emit_phi_classification_audit",
     "emit_phi_enforcement_block_audit",
+    "minimize_prompt",
     "set_classifier",
 ]
