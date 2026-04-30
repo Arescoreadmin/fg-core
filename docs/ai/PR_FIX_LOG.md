@@ -6415,3 +6415,73 @@ AI request audit events did not include a complete structured proof surface for 
 - `python -m compileall services api tests` → passed
 - `make fg-fast` → passed after formatting `tests/security/test_ai_audit_enrichment.py`
 - `bash codex_gates.sh` → passed; pytest phase: 2980 passed, 26 skipped; canonical tester flow emitted expected service-unavailable SKIP and script completed successfully
+
+---
+
+### 2026-04-30 — Prompt minimization before AI provider dispatch
+
+**Branch:** `codex/prompt-minimization-phi-tokenization`
+
+**Area:** AI provider routing / PHI safety / audit forensics
+
+---
+
+**Issue:**
+
+AI PHI classification and BAA enforcement ran before provider dispatch, but approved PHI prompts were still sent to external providers as raw user text. Audit `request_hash` also represented the raw prompt on success instead of the actual provider-bound prompt.
+
+**Root cause:**
+
+`/ui/ai/chat` and `AIPlaneService.infer` used `payload.message` / `payload.query` directly after BAA approval for quota estimates, provider calls, and audit hash input. The existing PHI classifier already produced safe redaction spans, but there was no single minimization boundary between BAA approval and provider dispatch.
+
+**Files changed:**
+
+- `services/phi_classifier/minimizer.py` — new deterministic prompt minimization boundary with safe replacement metadata only.
+- `services/phi_classifier/classifier.py` — tightened patient/name label matching to handle documented `Patient John Smith` style labels without treating all-caps DOB as a name token.
+- `services/phi_classifier/__init__.py` — exports the minimization API.
+- `services/ai/audit.py` — adds safe minimization proof fields to AI audit metadata.
+- `api/ui_ai_console.py` — minimizes after BAA gate success and before quota/provider dispatch; provider receives only the minimized prompt when supported PHI spans are found.
+- `services/ai_plane_extension/service.py` — applies the same minimization boundary before AI plane provider dispatch and audit hashing.
+- `tests/security/test_prompt_minimization.py` — unit coverage for deterministic replacement, metadata safety, clean input, repeated values, adjacent spans, and non-string fail-closed behavior.
+- `tests/security/test_ai_audit_enrichment.py` — integration coverage proving UI chat and AIPlaneService send minimized prompts, audit safe metadata, request hashes use outgoing prompts, and minimization failure blocks provider/quota.
+
+**Minimization behavior:**
+
+Supported PHI spans are replaced with stable placeholders while preserving non-PHI clinical context. Replacement ordering is deterministic by offset, overlapping spans are skipped safely, and replacement metadata contains only placeholder type, offsets, PHI type, and replacement token.
+
+**Placeholders supported:**
+
+- `ssn` → `[SSN]`
+- `mrn` → `[MRN]`
+- `dob` / `date` → `[DATE]`
+- `email` → `[EMAIL]`
+- `phone` → `[PHONE]`
+- `name` label pattern → `[PATIENT_NAME]`
+
+**Audit fields added:**
+
+- `prompt_minimized`
+- `minimization_version`
+- `minimization_replacement_count`
+- `minimization_placeholder_types`
+
+**Raw-data leakage protections:**
+
+- Provider-bound prompt is minimized before dispatch when supported PHI is detected.
+- Audit metadata never stores raw prompt, minimized prompt, original PHI values, replacement source values, raw response text, or raw provider payloads.
+- `request_hash` is computed from the outgoing provider prompt on success/failure paths after minimization.
+- BAA denial still blocks before minimization/provider/quota and records `response_hash=null`.
+- Minimized prompt is not placed into `ProviderRequest` metadata; `ProviderRequest` carries only the provider-bound `prompt`.
+
+**Validation results:**
+
+- `git diff --check` → passed
+- `python -m compileall services api tests` → passed
+- `.venv/bin/pytest -q tests/security/test_prompt_minimization.py` → 7 passed
+- `.venv/bin/pytest -q tests/security/test_ai_audit_enrichment.py` → 10 passed
+- `.venv/bin/pytest -q tests/security/test_ai_provider.py` → 40 passed
+- `.venv/bin/pytest -q tests/security/test_baa_gate.py` → 28 passed
+- `.venv/bin/pytest -q tests/security/test_phi_classifier.py` → 26 passed
+- `.venv/bin/pytest -q tests/security/test_provider_baa_enforcement.py` → 35 passed
+- `make fg-fast` → passed
+- `bash codex_gates.sh` → passed; pytest phase: 2990 passed, 26 skipped; canonical tester flow emitted expected service-unavailable SKIP and script completed successfully

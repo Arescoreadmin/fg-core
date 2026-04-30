@@ -82,7 +82,9 @@ _RE_MRN = re.compile(
 )
 
 # Name heuristic: "patient: John Smith" or "name: Jane Doe" (requires label)
-_RE_NAME = re.compile(r"\b(?:patient|name)[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b")
+_RE_NAME = re.compile(
+    r"\b(?i:patient|name)[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b",
+)
 
 # Medical context keywords — used only as a severity UPGRADE, not PHI by themselves
 _MEDICAL_KEYWORDS: frozenset[str] = frozenset(
