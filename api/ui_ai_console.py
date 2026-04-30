@@ -77,6 +77,33 @@ def _hash_payload(payload: dict[str, Any]) -> str:
     return hash_config(canonicalize_config(payload))
 
 
+def _build_provider_request_hash(
+    *,
+    tenant_id: str,
+    device_id: str,
+    provider: str,
+    model: str,
+    persona: str,
+    outgoing_prompt: str,
+    request_id: str | None,
+) -> str:
+    """Hash the provider-bound prompt plus safe request context, never raw PHI."""
+    return hashlib.sha256(
+        canonicalize_config(
+            {
+                "hash_version": "ai_provider_request_v2",
+                "tenant_id": tenant_id,
+                "device_id": device_id,
+                "provider": provider,
+                "model": model,
+                "persona": persona,
+                "request_id": request_id or "",
+                "outgoing_prompt": outgoing_prompt,
+            }
+        ).encode("utf-8")
+    ).hexdigest()
+
+
 def _day_bucket() -> str:
     return _utc_now().strftime("%Y-%m-%d")
 
@@ -788,7 +815,17 @@ def ai_chat(
             "prompt minimization failed closed",
         )
 
-    request_hash = hashlib.sha256(outgoing_prompt.encode("utf-8")).hexdigest()
+    route_request_id = getattr(getattr(request, "state", None), "request_id", None)
+    request_hash = _build_provider_request_hash(
+        tenant_id=tenant_id,
+        device_id=device_id,
+        provider=provider,
+        model=model,
+        persona=persona,
+        outgoing_prompt=outgoing_prompt,
+        request_id=route_request_id,
+    )
+    audit_request_hash = f"sha256:{request_hash}"
 
     _validate_device_signature_stub(request, tenant_id, device_id, request_hash)
 
@@ -951,6 +988,7 @@ def ai_chat(
                     request_text=outgoing_prompt,
                     response_text=None,
                     prompt_minimization=prompt_minimization,
+                    request_hash=audit_request_hash,
                     request_id=event_id,
                     device_id=device_id,
                 ),
@@ -984,6 +1022,7 @@ def ai_chat(
                     request_text=outgoing_prompt,
                     response_text=None,
                     prompt_minimization=prompt_minimization,
+                    request_hash=audit_request_hash,
                     request_id=event_id,
                     device_id=device_id,
                 ),
@@ -1013,6 +1052,7 @@ def ai_chat(
                 request_text=outgoing_prompt,
                 provider_response=prov_resp,
                 prompt_minimization=prompt_minimization,
+                request_hash=audit_request_hash,
                 request_id=event_id,
                 device_id=device_id,
             ),

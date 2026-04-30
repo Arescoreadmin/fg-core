@@ -24,6 +24,7 @@ def build_ai_audit_metadata(
     response_text: str | None = None,
     provider_response: ProviderResponse | None = None,
     prompt_minimization: PromptMinimizationResult | None = None,
+    request_hash: str | None = None,
     request_id: str | None = None,
     device_id: str | None = None,
 ) -> dict[str, object]:
@@ -38,7 +39,7 @@ def build_ai_audit_metadata(
         if provider_response is not None
         else provider_id,
         "baa_check_result": baa_gate_result.enforcement_action,
-        "request_hash": _sha256_text(request_text),
+        "request_hash": request_hash or _sha256_text(request_text),
         "response_hash": _sha256_text(effective_response_text)
         if effective_response_text is not None
         else None,

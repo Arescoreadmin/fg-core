@@ -6485,3 +6485,51 @@ Supported PHI spans are replaced with stable placeholders while preserving non-P
 - `.venv/bin/pytest -q tests/security/test_provider_baa_enforcement.py` → 35 passed
 - `make fg-fast` → passed
 - `bash codex_gates.sh` → passed; pytest phase: 2990 passed, 26 skipped; canonical tester flow emitted expected service-unavailable SKIP and script completed successfully
+
+---
+
+### 2026-04-30 — PR 273 follow-up: request_hash includes safe provider request context
+
+**Branch:** `codex/prompt-minimization-phi-tokenization`
+
+**Area:** AI usage accounting / prompt minimization / audit hash stability
+
+---
+
+**Issue:**
+
+The UI AI route computed its internal `request_hash` from only the minimized outgoing prompt. Different valid requests could collapse to the same hash when PHI values minimized to identical placeholders or when the same minimized prompt was sent through different routing context.
+
+**Root cause:**
+
+Prompt minimization intentionally removes raw PHI before provider dispatch, but the route reused the minimized prompt alone as the usage/accounting hash input. `usage_record_id` derives from `request_hash`, so collisions could cause `ai_token_usage` uniqueness failures instead of recording usage.
+
+**Files changed:**
+
+- `api/ui_ai_console.py` — added `_build_provider_request_hash()` using canonical JSON over the minimized outgoing prompt plus safe request context (`tenant_id`, `device_id`, `provider`, `model`, `persona`, `request_id`, hash version).
+- `services/ai/audit.py` — added optional safe `request_hash` override so route audit metadata can use the same context-aware hash without storing raw or minimized prompt text.
+- `tests/security/test_ai_audit_enrichment.py` — added regression coverage proving request hashes differ across safe request contexts while audit still excludes raw/minimized prompt text.
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+
+**Minimization behavior:**
+
+No change to provider-bound minimization. Providers still receive the minimized prompt, not raw PHI.
+
+**Placeholders supported:**
+
+Unchanged: `[SSN]`, `[MRN]`, `[DATE]`, `[EMAIL]`, `[PHONE]`, `[PATIENT_NAME]`.
+
+**Audit fields added:**
+
+No new audit field names. Existing `request_hash` now uses the context-aware provider request hash for UI post-minimization paths.
+
+**Raw-data leakage protections:**
+
+The context hash envelope contains only the minimized outgoing prompt and safe routing/request metadata. It does not include raw prompt, original PHI values, raw response, or provider payloads. Audit still stores only `sha256:<hex>`.
+
+**Validation results:**
+
+- `.venv/bin/pytest -q tests/security/test_ai_audit_enrichment.py -k "minimiz or provider_request_hash or request_and_response_hash"` → 5 passed, 6 deselected
+- `.venv/bin/pytest -q tests/security/test_ai_audit_enrichment.py` → 11 passed
+- `.venv/bin/pytest -q tests/security/test_prompt_minimization.py` → 7 passed
+- `python -m compileall api/ui_ai_console.py services/ai/audit.py tests/security/test_ai_audit_enrichment.py` → passed

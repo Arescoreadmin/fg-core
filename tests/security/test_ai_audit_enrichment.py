@@ -280,9 +280,10 @@ def test_ui_chat_sends_minimized_prompt_and_audits_safe_metadata(
         )
     }
     device_id = _enable_device(client, headers)
+    request_headers = {**headers, "X-Request-ID": "min-req-1"}
     response = client.post(
         "/ui/ai/chat",
-        headers=headers,
+        headers=request_headers,
         json={
             "message": _MINIMIZATION_TEXT,
             "device_id": device_id,
@@ -307,11 +308,60 @@ def test_ui_chat_sends_minimized_prompt_and_audits_safe_metadata(
         "PATIENT_NAME",
         "PHONE",
     ]
-    assert details["request_hash"] == (
+    expected_request_hash = ai_console._build_provider_request_hash(
+        tenant_id="tenant-dev",
+        device_id=device_id,
+        provider="simulated",
+        model="SIMULATED_V1",
+        persona="default",
+        outgoing_prompt=_MINIMIZED_TEXT,
+        request_id="min-req-1",
+    )
+    assert details["request_hash"] == ("sha256:" + expected_request_hash)
+    assert details["request_hash"] != (
         "sha256:" + hashlib.sha256(_MINIMIZED_TEXT.encode("utf-8")).hexdigest()
     )
     assert _MINIMIZATION_TEXT not in str(details)
     assert _MINIMIZED_TEXT not in str(details)
+
+
+def test_ui_provider_request_hash_includes_safe_request_context() -> None:
+    import api.ui_ai_console as ai_console
+
+    first = ai_console._build_provider_request_hash(
+        tenant_id="tenant-a",
+        device_id="device-a",
+        provider="simulated",
+        model="SIMULATED_V1",
+        persona="default",
+        outgoing_prompt=_MINIMIZED_TEXT,
+        request_id="req-1",
+    )
+    second = ai_console._build_provider_request_hash(
+        tenant_id="tenant-a",
+        device_id="device-a",
+        provider="simulated",
+        model="SIMULATED_V1",
+        persona="default",
+        outgoing_prompt=_MINIMIZED_TEXT,
+        request_id="req-2",
+    )
+    different_provider = ai_console._build_provider_request_hash(
+        tenant_id="tenant-a",
+        device_id="device-a",
+        provider="anthropic",
+        model="SIMULATED_V1",
+        persona="default",
+        outgoing_prompt=_MINIMIZED_TEXT,
+        request_id="req-1",
+    )
+
+    assert first != second
+    assert first != different_provider
+    assert "John Smith" not in first
+    assert "01/02/1980" not in first
+    assert "4872910" not in first
+    assert "jane@example.com" not in first
 
 
 def test_ui_phi_baa_denial_audit_has_null_response_hash(
