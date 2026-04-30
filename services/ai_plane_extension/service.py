@@ -5,16 +5,20 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from services.ai.audit import build_ai_audit_metadata
 from services.ai.dispatch import ProviderCallError as _ProviderCallError
 from services.ai.dispatch import call_provider as _call_provider
 from services.ai_plane_extension import policy_engine, rag_stub
 from services.ai_plane_extension.models import AIInferRequest, AIPolicyUpsertRequest
 from services.schema_validation import validate_payload_against_schema
+
+if TYPE_CHECKING:
+    from services.provider_baa.gate import BaaGateResult
 
 _SIMULATED_MODEL = "SIMULATED_V1"
 AI_PLANE_EVIDENCE_SCHEMA_VERSION = "v1"
@@ -139,6 +143,27 @@ class AIPlaneService:
             {"tenant_id": tenant_id, "violation_code": code},
         )
 
+    def _audit_infer(
+        self,
+        *,
+        tenant_id: str,
+        success: bool,
+        reason: str,
+        details: dict[str, object],
+    ) -> None:
+        from api.security_audit import AuditEvent, EventType, Severity, get_auditor  # noqa: PLC0415
+
+        get_auditor().log_event(
+            AuditEvent(
+                event_type=EventType.ADMIN_ACTION,
+                success=success,
+                severity=Severity.INFO if success else Severity.WARNING,
+                tenant_id=tenant_id,
+                reason=reason,
+                details=details,
+            )
+        )
+
     def _next_inference_suffix(
         self, db: Session, tenant_id: str, prompt_sha: str
     ) -> int:
@@ -213,21 +238,39 @@ class AIPlaneService:
             enforce_baa_gate_for_route as _enforce_baa_gate,
         )
 
+        prompt_sha = hashlib.sha256(payload.query.encode("utf-8")).hexdigest()
+        request_id = f"inf-{prompt_sha[:16]}"
         try:
-            _enforce_baa_gate(
+            baa_gate_result = _enforce_baa_gate(
                 db,
                 tenant_id=tenant_id,
                 provider_id=effective_provider,
                 text=payload.query,
                 source="ai_plane_infer",
             )
-        except _HTTPException:
+        except _HTTPException as exc:
+            denied_baa_gate_result = cast(
+                "BaaGateResult | None", getattr(exc, "baa_gate_result", None)
+            )
+            if denied_baa_gate_result is not None:
+                self._audit_infer(
+                    tenant_id=tenant_id,
+                    success=False,
+                    reason="AI_PHI_PROVIDER_NOT_BAA_CAPABLE",
+                    details=build_ai_audit_metadata(
+                        tenant_id=tenant_id,
+                        provider_id=effective_provider,
+                        baa_gate_result=denied_baa_gate_result,
+                        request_text=payload.query,
+                        response_text=None,
+                        request_id=request_id,
+                    ),
+                )
             self._record_violation(db, tenant_id, "AI_PHI_PROVIDER_NOT_BAA_CAPABLE")
             db.commit()
             raise ValueError("AI_PHI_PROVIDER_NOT_BAA_CAPABLE")
 
         rag = rag_stub.retrieve(tenant_id=tenant_id, query=payload.query)
-        prompt_sha = hashlib.sha256(payload.query.encode("utf-8")).hexdigest()
         self._log_retrieval_stub(db, tenant_id, prompt_sha)
 
         try:
@@ -235,10 +278,23 @@ class AIPlaneService:
                 provider_id=effective_provider,
                 prompt=payload.query,
                 max_tokens=2000,
-                request_id=f"inf-{prompt_sha[:16]}",
+                request_id=request_id,
                 tenant_id=tenant_id,
             )
         except _ProviderCallError as exc:
+            self._audit_infer(
+                tenant_id=tenant_id,
+                success=False,
+                reason=exc.error_code,
+                details=build_ai_audit_metadata(
+                    tenant_id=tenant_id,
+                    provider_id=effective_provider,
+                    baa_gate_result=baa_gate_result,
+                    request_text=payload.query,
+                    response_text=None,
+                    request_id=request_id,
+                ),
+            )
             self._record_violation(db, tenant_id, exc.error_code)
             db.commit()
             raise ValueError(exc.error_code) from exc
@@ -283,6 +339,20 @@ class AIPlaneService:
             },
         )
         db.commit()
+
+        self._audit_infer(
+            tenant_id=tenant_id,
+            success=True,
+            reason="ai_plane_infer",
+            details=build_ai_audit_metadata(
+                tenant_id=tenant_id,
+                provider_id=effective_provider,
+                baa_gate_result=baa_gate_result,
+                request_text=payload.query,
+                provider_response=prov_resp,
+                request_id=request_id,
+            ),
+        )
 
         return {
             "ok": True,

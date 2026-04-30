@@ -6365,3 +6365,53 @@ Section 7 — Regression: BAA denial prevents provider call; no fallback on prov
 - `make fg-fast` → passed
 - `bash codex_gates.sh` → passed
 - `bash codex_gates.sh` → passed
+
+---
+
+### 2026-04-30 — AI audit enrichment hashes request/response without raw data
+
+**Branch:** current workspace
+
+**Area:** AI audit / PHI-BAA-provider forensics
+
+---
+
+**Issue:**
+
+AI request audit events did not include a complete structured proof surface for PHI detection, BAA result, provider identity, request hash, and response hash. Successful provider responses were not represented by a deterministic audit hash, and denial/failure paths did not consistently prove `response_hash=null`.
+
+**Root cause:**
+
+`/ui/ai/chat` and `AIPlaneService.infer` already enforced BAA before quota/provider dispatch and computed internal prompt/request hashes, but audit detail construction was local to route/service code and only included operational ids. There was no reusable AI audit metadata builder tied to the existing `BaaGateResult` and `ProviderResponse`.
+
+**Files changed:**
+
+- `services/ai/audit.py` — added reusable AI audit metadata builder with deterministic `sha256:<hex>` hashes and sorted PHI type names.
+- `services/provider_baa/gate.py` — attaches the existing safe `BaaGateResult` to BAA denial exceptions so callers can audit denial metadata without re-running classification or BAA checks.
+- `api/ui_ai_console.py` — enriches AI success, BAA denial, quota/provider failure, and metering failure audit details.
+- `services/ai_plane_extension/service.py` — emits safe AI infer audit metadata for success, BAA denial, and provider failure.
+- `tests/security/test_ai_audit_enrichment.py` — added unit and integration coverage for metadata fields, hashes, no raw-data leakage, BAA denial, provider failure, quota denial, and AI plane failure.
+
+**Behavior added:**
+
+- AI audit metadata now includes `phi_detected`, `phi_types`, `provider_id`, `baa_check_result`, `request_hash`, and `response_hash`.
+- Request and response hashes use deterministic SHA-256 formatted as `sha256:<hex>`.
+- `phi_types` are sorted deterministically and exclude the internal `medical_keyword` classifier signal.
+- BAA denial, quota denial, and provider failure audit paths include `response_hash=null`.
+- Successful provider responses are hashed in audit metadata and never stored as raw audit details.
+
+**Raw-data leakage protections:**
+
+- Audit metadata builder accepts raw request/response text only to hash it.
+- Audit details do not include raw prompt/message, raw response text, raw provider payloads, PHI values, extracted identifiers, API keys, BAA document refs, or contract text.
+- Provider failure tests assert raw provider body text is absent from audit details.
+
+**Validation results:**
+
+- `python -m compileall services/ai/audit.py services/provider_baa/gate.py api/ui_ai_console.py services/ai_plane_extension/service.py tests/security/test_ai_audit_enrichment.py` → passed
+- `.venv/bin/ruff check services/ai/audit.py services/provider_baa/gate.py api/ui_ai_console.py services/ai_plane_extension/service.py tests/security/test_ai_audit_enrichment.py` → passed
+- `.venv/bin/pytest -q tests/security/test_ai_audit_enrichment.py` → 7 passed
+- `.venv/bin/pytest -q tests/security/test_ai_provider.py tests/security/test_baa_gate.py tests/security/test_phi_classifier.py tests/security/test_provider_baa_enforcement.py` → 129 passed
+- `python -m compileall services api tests` → passed
+- `make fg-fast` → passed after formatting `tests/security/test_ai_audit_enrichment.py`
+- `bash codex_gates.sh` → passed; pytest phase: 2980 passed, 26 skipped; canonical tester flow emitted expected service-unavailable SKIP and script completed successfully

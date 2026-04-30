@@ -8,7 +8,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
@@ -20,9 +20,13 @@ from api.config.env import is_production_env
 from api.config_versioning import canonicalize_config, hash_config
 from api.deps import tenant_db_required
 from api.security_audit import AuditEvent, EventType, Severity, get_auditor
+from services.ai.audit import build_ai_audit_metadata
 from services.ai.dispatch import ProviderCallError as _ProviderCallError
 from services.ai.dispatch import call_provider as _call_provider
 from services.schema_validation import validate_payload_against_schema
+
+if TYPE_CHECKING:
+    from services.provider_baa.gate import BaaGateResult
 
 router = APIRouter(prefix="/ui", tags=["ui-ai"])
 admin_router = APIRouter(prefix="/admin", tags=["ui-ai-admin"])
@@ -736,22 +740,48 @@ def ai_chat(
             400, "AI_PROVIDER_DENIED_BY_ENV", "provider not allowed in this environment"
         )
 
+    request_hash = hashlib.sha256(
+        canonicalize_config(payload.model_dump()).encode("utf-8")
+    ).hexdigest()
+
     from services.provider_baa.gate import (  # noqa: PLC0415
         enforce_baa_gate_for_route as _enforce_baa_gate,
     )
 
-    _enforce_baa_gate(
-        db,
-        tenant_id=tenant_id,
-        provider_id=provider,
-        text=payload.message,
-        source="ui_ai_chat",
-        request=request,
-    )
+    try:
+        baa_gate_result = _enforce_baa_gate(
+            db,
+            tenant_id=tenant_id,
+            provider_id=provider,
+            text=payload.message,
+            source="ui_ai_chat",
+            request=request,
+        )
+    except HTTPException as exc:
+        denied_baa_gate_result = cast(
+            "BaaGateResult | None", getattr(exc, "baa_gate_result", None)
+        )
+        if denied_baa_gate_result is not None:
+            _audit(
+                EventType.ADMIN_ACTION,
+                tenant_id=tenant_id,
+                success=False,
+                reason=denied_baa_gate_result.reason_code,
+                details=build_ai_audit_metadata(
+                    tenant_id=tenant_id,
+                    provider_id=provider,
+                    baa_gate_result=denied_baa_gate_result,
+                    request_text=payload.message,
+                    response_text=None,
+                    request_id=getattr(
+                        getattr(request, "state", None), "request_id", None
+                    ),
+                    device_id=device_id,
+                ),
+                request=request,
+            )
+        raise
 
-    request_hash = hashlib.sha256(
-        canonicalize_config(payload.model_dump()).encode("utf-8")
-    ).hexdigest()
     _validate_device_signature_stub(request, tenant_id, device_id, request_hash)
 
     policy_hash = _hash_payload(policy)
@@ -773,6 +803,7 @@ def ai_chat(
         f"{tenant_id}|{device_id}|{request_hash}|{session_id}".encode("utf-8")
     ).hexdigest()
     blocked_error: HTTPException | None = None
+    prov_resp = None
 
     denial_error: HTTPException | None = None
     quota_charge_mode = "precharge"
@@ -807,7 +838,7 @@ def ai_chat(
                 tenant_id=tenant_id,
             )
         except _ProviderCallError as exc:
-            blocked_error = _error(503, exc.error_code, str(exc))
+            blocked_error = _error(503, exc.error_code, "provider call failed")
             raise blocked_error
         output = prov_resp.text
         if prov_resp.input_tokens is not None:
@@ -905,12 +936,20 @@ def ai_chat(
             success=False,
             reason=reason_code,
             details={
+                **build_ai_audit_metadata(
+                    tenant_id=tenant_id,
+                    provider_id=provider,
+                    baa_gate_result=baa_gate_result,
+                    request_text=payload.message,
+                    response_text=None,
+                    request_id=event_id,
+                    device_id=device_id,
+                ),
                 "event_id": event_id,
                 "session_id": session_id,
                 "device_id": device_id,
                 "policy_hash": policy_hash,
                 "experience_hash": experience_hash,
-                "request_hash": request_hash,
                 "usage_record_id": usage_record_id,
                 "metering_mode": metering_mode,
                 "quota_charge_mode": quota_charge_mode,
@@ -929,12 +968,20 @@ def ai_chat(
             success=False,
             reason="AI_METERING_UNCERTAIN",
             details={
+                **build_ai_audit_metadata(
+                    tenant_id=tenant_id,
+                    provider_id=provider,
+                    baa_gate_result=baa_gate_result,
+                    request_text=payload.message,
+                    response_text=None,
+                    request_id=event_id,
+                    device_id=device_id,
+                ),
                 "event_id": event_id,
                 "session_id": session_id,
                 "device_id": device_id,
                 "policy_hash": policy_hash,
                 "experience_hash": experience_hash,
-                "request_hash": request_hash,
                 "usage_record_id": usage_record_id,
                 "metering_mode": metering_mode,
                 "quota_charge_mode": quota_charge_mode,
@@ -949,6 +996,15 @@ def ai_chat(
         success=True,
         reason="ai_chat",
         details={
+            **build_ai_audit_metadata(
+                tenant_id=tenant_id,
+                provider_id=provider,
+                baa_gate_result=baa_gate_result,
+                request_text=payload.message,
+                provider_response=prov_resp,
+                request_id=event_id,
+                device_id=device_id,
+            ),
             "event_id": event_id,
             "session_id": session_id,
             "device_id": device_id,
@@ -959,7 +1015,6 @@ def ai_chat(
             "total_tokens": total_tokens,
             "policy_hash": policy_hash,
             "experience_hash": experience_hash,
-            "request_hash": request_hash,
             "usage_record_id": usage_record_id,
             "metering_mode": metering_mode,
             "quota_charge_mode": quota_charge_mode,

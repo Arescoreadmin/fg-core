@@ -209,7 +209,7 @@ def enforce_baa_gate_for_route(
         request=request,
     )
     if not result.allowed:
-        raise HTTPException(
+        exc = HTTPException(
             status_code=403,
             detail={
                 "error_code": result.reason_code,
@@ -217,4 +217,6 @@ def enforce_baa_gate_for_route(
                 "provider_id": result.provider_id,
             },
         )
+        setattr(exc, "baa_gate_result", result)
+        raise exc
     return result
