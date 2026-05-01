@@ -4,6 +4,7 @@ import hashlib
 
 from services.ai.providers.base import ProviderResponse
 from services.ai.rag_context import RagContextResult
+from services.ai.response_validation import ResponseValidationResult
 from services.ai.routing import AiProviderRoutingResult
 from services.phi_classifier.minimizer import PromptMinimizationResult
 from services.provider_baa.gate import BaaGateResult
@@ -31,11 +32,14 @@ def build_ai_audit_metadata(
     device_id: str | None = None,
     routing_result: AiProviderRoutingResult | None = None,
     rag_context: RagContextResult | None = None,
+    response_validation: ResponseValidationResult | None = None,
 ) -> dict[str, object]:
     """Build safe AI audit metadata with hashes only for request/response text."""
-    effective_response_text = (
-        provider_response.text if provider_response is not None else response_text
-    )
+    effective_response_text = response_text
+    if provider_response is not None:
+        effective_response_text = provider_response.text
+    if response_validation is not None:
+        effective_response_text = response_validation.final_text
     metadata: dict[str, object] = {
         "phi_detected": bool(baa_gate_result.contains_phi),
         "phi_types": _safe_phi_types(baa_gate_result),
@@ -69,6 +73,11 @@ def build_ai_audit_metadata(
         "rag_retrieval_reason_code": None,
         "rag_query_phi_sensitivity": None,
         "rag_max_sensitivity_level": None,
+        "response_grounded": False,
+        "response_validation_result": None,
+        "response_validator_version": None,
+        "response_citation_source_ids": [],
+        "response_evidence_count": 0,
     }
     if request_id:
         metadata["request_id"] = request_id
@@ -86,6 +95,14 @@ def build_ai_audit_metadata(
         metadata["rag_retrieval_reason_code"] = rag_context.retrieval_reason_code
         metadata["rag_query_phi_sensitivity"] = rag_context.query_phi_sensitivity
         metadata["rag_max_sensitivity_level"] = rag_context.max_sensitivity_level
+    if response_validation is not None:
+        metadata["response_grounded"] = response_validation.grounded
+        metadata["response_validation_result"] = response_validation.reason_code
+        metadata["response_validator_version"] = response_validation.validator_version
+        metadata["response_citation_source_ids"] = list(
+            response_validation.citation_source_ids
+        )
+        metadata["response_evidence_count"] = response_validation.evidence_count
     if provider_response is not None:
         metadata["model"] = provider_response.model
         if provider_response.input_tokens is not None:

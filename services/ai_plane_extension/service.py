@@ -21,6 +21,7 @@ from services.ai.rag_context import (
     build_rag_augmented_prompt,
     retrieve_rag_context,
 )
+from services.ai.response_validation import validate_provider_response_grounding
 from services.ai.routing import (
     AI_PROVIDER_NOT_CONFIGURED,
     configured_ai_providers,
@@ -327,6 +328,11 @@ class AIPlaneService:
                     "rag_retrieval_reason_code": exc.error_code,
                     "rag_query_phi_sensitivity": phi_classification.sensitivity_level.value,
                     "rag_max_sensitivity_level": None,
+                    "response_grounded": False,
+                    "response_validation_result": None,
+                    "response_validator_version": None,
+                    "response_citation_source_ids": [],
+                    "response_evidence_count": 0,
                 },
             )
             self._record_violation(db, tenant_id, exc.error_code)
@@ -383,6 +389,11 @@ class AIPlaneService:
                     "rag_retrieval_reason_code": rag_context.retrieval_reason_code,
                     "rag_query_phi_sensitivity": rag_context.query_phi_sensitivity,
                     "rag_max_sensitivity_level": rag_context.max_sensitivity_level,
+                    "response_grounded": False,
+                    "response_validation_result": None,
+                    "response_validator_version": None,
+                    "response_citation_source_ids": [],
+                    "response_evidence_count": 0,
                 },
             )
             self._record_violation(db, tenant_id, routing_result.reason_code)
@@ -480,7 +491,12 @@ class AIPlaneService:
             db.commit()
             raise ValueError(exc.error_code) from exc
 
-        out = prov_resp.text
+        response_validation = validate_provider_response_grounding(
+            response_text=prov_resp.text,
+            rag_context=rag_context,
+            tenant_id=tenant_id,
+        )
+        out = response_validation.final_text
         ok_out, code_out = policy_engine.evaluate_output(out)
         if not ok_out:
             self._record_violation(
@@ -535,6 +551,7 @@ class AIPlaneService:
                 request_id=request_id,
                 routing_result=routing_result,
                 rag_context=rag_context,
+                response_validation=response_validation,
             ),
         )
 

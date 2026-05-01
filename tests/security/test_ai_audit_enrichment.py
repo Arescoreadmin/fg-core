@@ -19,6 +19,12 @@ from services.ai.providers.base import (
     ProviderResponse,
 )
 from services.ai.rag_context import RagContextChunk, RagContextResult
+from services.ai.response_validation import (
+    NO_ANSWER_TEXT,
+    RESPONSE_UNGROUNDED,
+    RESPONSE_VALIDATOR_VERSION,
+    ResponseValidationResult,
+)
 from services.phi_classifier.minimizer import PromptMinimizationResult
 from services.phi_classifier.models import SensitivityLevel
 from services.provider_baa.gate import (
@@ -192,6 +198,42 @@ def test_ai_audit_metadata_includes_safe_rag_fields_without_raw_context() -> Non
     assert metadata["rag_max_sensitivity_level"] == "high"
     assert "raw retrieved context" not in str(metadata)
     assert "123-45-6789" not in str(metadata)
+
+
+def test_ai_audit_metadata_uses_final_validated_response_hash() -> None:
+    provider_response = ProviderResponse(
+        provider_id="simulated",
+        text="unsupported raw provider answer 987-65",
+        model="SIMULATED_V1",
+    )
+    response_validation = ResponseValidationResult(
+        grounded=False,
+        final_text=NO_ANSWER_TEXT,
+        reason_code=RESPONSE_UNGROUNDED,
+        citation_source_ids=(),
+        validator_version=RESPONSE_VALIDATOR_VERSION,
+        evidence_count=0,
+    )
+
+    metadata = build_ai_audit_metadata(
+        tenant_id="tenant-a",
+        provider_id="simulated",
+        baa_gate_result=_baa_result(provider_id="simulated"),
+        request_text="provider prompt",
+        provider_response=provider_response,
+        response_validation=response_validation,
+    )
+
+    assert metadata["response_hash"] == (
+        "sha256:" + hashlib.sha256(NO_ANSWER_TEXT.encode("utf-8")).hexdigest()
+    )
+    assert metadata["response_grounded"] is False
+    assert metadata["response_validation_result"] == RESPONSE_UNGROUNDED
+    assert metadata["response_validator_version"] == RESPONSE_VALIDATOR_VERSION
+    assert metadata["response_citation_source_ids"] == []
+    assert metadata["response_evidence_count"] == 0
+    assert "unsupported raw provider answer" not in str(metadata)
+    assert "987-65" not in str(metadata)
 
 
 def _setup_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
