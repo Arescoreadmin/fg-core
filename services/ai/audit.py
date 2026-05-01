@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 
 from services.ai.providers.base import ProviderResponse
+from services.ai.routing import AiProviderRoutingResult
 from services.phi_classifier.minimizer import PromptMinimizationResult
 from services.provider_baa.gate import BaaGateResult
 
@@ -27,6 +28,7 @@ def build_ai_audit_metadata(
     request_hash: str | None = None,
     request_id: str | None = None,
     device_id: str | None = None,
+    routing_result: AiProviderRoutingResult | None = None,
 ) -> dict[str, object]:
     """Build safe AI audit metadata with hashes only for request/response text."""
     effective_response_text = (
@@ -64,6 +66,11 @@ def build_ai_audit_metadata(
         metadata["request_id"] = request_id
     if device_id:
         metadata["device_id"] = device_id
+    if routing_result is not None:
+        metadata["requested_provider"] = routing_result.requested_provider
+        metadata["selected_by"] = routing_result.selected_by
+        metadata["routing_reason_code"] = routing_result.reason_code
+        metadata["requires_baa"] = routing_result.requires_baa
     if provider_response is not None:
         metadata["model"] = provider_response.model
         if provider_response.input_tokens is not None:

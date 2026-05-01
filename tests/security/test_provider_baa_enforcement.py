@@ -448,24 +448,29 @@ def test_baa_enforcement_is_called_in_chat_route(build_app, monkeypatch, tmp_pat
     """
     import api.ui_ai_console as ai_console
 
-    # Register "anthropic" as a known provider for this test
-    monkeypatch.setattr(ai_console, "KNOWN_PROVIDERS", {"simulated", "anthropic"})
+    # Register Azure as the PHI provider for this test
+    monkeypatch.setattr(
+        ai_console, "KNOWN_PROVIDERS", {"simulated", "anthropic", "azure_openai"}
+    )
     monkeypatch.setattr(
         ai_console, "PROVIDER_MAX_TOKENS", {"simulated": 4096, "anthropic": 4096}
     )
-    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated,anthropic")
+    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated,anthropic,azure_openai")
+    monkeypatch.setenv("FG_AZURE_AI_KEY", "test-azure-key")
+    monkeypatch.setenv("FG_AZURE_OPENAI_ENDPOINT", "https://azure.example.test")
+    monkeypatch.setenv("FG_AZURE_OPENAI_DEPLOYMENT", "fg-test")
     monkeypatch.setenv("FG_AI_ENABLE_SIMULATED", "1")
 
     # Make the env-allowed check pass for anthropic
     monkeypatch.setattr(ai_console, "_provider_env_allowed", lambda p: True)
 
-    # Make the experience policy include anthropic
+    # Make the experience policy include the PHI provider
     orig_resolve = ai_console._resolve_experience
 
     def _patched_resolve(tenant_id):
         exp, policy, theme = orig_resolve(tenant_id)
         policy = dict(policy)
-        policy["allowed_providers"] = ["simulated", "anthropic"]
+        policy["allowed_providers"] = ["simulated", "anthropic", "azure_openai"]
         policy["default_provider"] = "simulated"
         return exp, policy, theme
 
@@ -492,20 +497,19 @@ def test_baa_enforcement_is_called_in_chat_route(build_app, monkeypatch, tmp_pat
         json={"reason": "test", "ticket": "T-1"},
     )
 
-    # PHI message + regulated provider (anthropic) — no BAA record → 403
+    # PHI message + regulated PHI provider — no BAA record → 403
     resp = client.post(
         "/ui/ai/chat",
         headers=hdrs,
         json={
             "message": "MRN: 4872910 — schedule appointment next week.",
             "device_id": device_id,
-            "provider": "anthropic",
         },
     )
     assert resp.status_code == 403
     detail = resp.json()["detail"]
     assert detail["error_code"] == _REASON_MISSING
-    assert detail["provider_id"] == "anthropic"
+    assert detail["provider_id"] == "azure_openai"
 
 
 def test_simulated_provider_unaffected_by_baa_enforcement(build_app, monkeypatch):

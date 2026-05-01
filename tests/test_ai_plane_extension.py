@@ -25,6 +25,9 @@ def _setup_client(
     os.environ["FG_API_KEY"] = ""
     os.environ["FG_AI_PLANE_ENABLED"] = "1" if ai_enabled else "0"
     os.environ["FG_AI_EXTERNAL_PROVIDER_ENABLED"] = "0"
+    os.environ["FG_AI_ALLOWED_PROVIDERS"] = "simulated"
+    os.environ["FG_AI_DEFAULT_PROVIDER"] = "simulated"
+    os.environ["FG_AI_ENABLE_SIMULATED"] = "1"
     reset_engine_cache()
     init_db(sqlite_path=str(db_path))
     key_a = mint_key(
@@ -76,6 +79,58 @@ def test_ai_output_deterministic_same_input_same_output(tmp_path: Path) -> None:
     assert r2.status_code == 200
     assert r1.json()["response"] == r2.json()["response"]
     assert r1.json()["simulated"] is True
+
+
+def test_ai_plane_no_phi_uses_guarded_dev_simulated_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from services.ai_plane_extension.models import AIInferRequest
+    from services.ai_plane_extension.service import AIPlaneService
+
+    db_path = tmp_path / "ai-plane-guarded-dev.db"
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
+    monkeypatch.delenv("FG_AI_DEFAULT_PROVIDER", raising=False)
+    monkeypatch.delenv("FG_AI_ALLOWED_PROVIDERS", raising=False)
+    monkeypatch.delenv("FG_ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("FG_AZURE_AI_KEY", raising=False)
+    monkeypatch.delenv("FG_AZURE_OPENAI_ENDPOINT", raising=False)
+    monkeypatch.delenv("FG_AZURE_OPENAI_DEPLOYMENT", raising=False)
+    monkeypatch.setenv("FG_AI_ENABLE_SIMULATED", "1")
+    reset_engine_cache()
+    init_db(sqlite_path=str(db_path))
+
+    result = AIPlaneService().infer(
+        get_sessionmaker()(), "tenant-a", AIInferRequest(query="deterministic")
+    )
+
+    assert result["ok"] is True
+    assert result["provider"] == "simulated"
+    assert result["simulated"] is True
+
+
+def test_ai_plane_no_phi_prod_without_default_fails_guarded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from services.ai_plane_extension.models import AIInferRequest
+    from services.ai_plane_extension.service import AIPlaneService
+
+    db_path = tmp_path / "ai-plane-guarded-prod.db"
+    monkeypatch.setenv("FG_ENV", "production")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
+    monkeypatch.delenv("FG_AI_DEFAULT_PROVIDER", raising=False)
+    monkeypatch.delenv("FG_AI_ALLOWED_PROVIDERS", raising=False)
+    monkeypatch.delenv("FG_ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("FG_AZURE_AI_KEY", raising=False)
+    monkeypatch.delenv("FG_AZURE_OPENAI_ENDPOINT", raising=False)
+    monkeypatch.delenv("FG_AZURE_OPENAI_DEPLOYMENT", raising=False)
+    reset_engine_cache()
+    init_db(sqlite_path=str(db_path))
+
+    with pytest.raises(ValueError, match="AI_PROVIDER_NOT_CONFIGURED"):
+        AIPlaneService().infer(
+            get_sessionmaker()(), "tenant-a", AIInferRequest(query="deterministic")
+        )
 
 
 def test_rag_stub_never_touches_db(monkeypatch: pytest.MonkeyPatch) -> None:

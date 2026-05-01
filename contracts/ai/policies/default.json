@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "allowed_providers": [
     "simulated",
-    "anthropic"
+    "anthropic",
+    "azure_openai"
   ],
   "default_provider": "simulated",
   "default_model": "SIMULATED_V1",

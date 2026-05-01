@@ -392,18 +392,20 @@ def test_no_phi_allowed_for_non_baa_provider(build_app, monkeypatch) -> None:
 
 
 def test_phi_allowed_for_regulated_provider_with_baa(build_app, monkeypatch) -> None:
-    """PHI + regulated provider (anthropic) with active BAA → 200."""
+    """PHI + configured Azure PHI provider with active BAA → 200."""
     from services.ai.providers.base import ProviderResponse
 
     import api.ui_ai_console as ai_console
 
-    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated,anthropic")
-    monkeypatch.setenv("FG_ANTHROPIC_API_KEY", "test-key-not-used")
+    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated,anthropic,azure_openai")
+    monkeypatch.setenv("FG_AZURE_AI_KEY", "test-azure-key")
+    monkeypatch.setenv("FG_AZURE_OPENAI_ENDPOINT", "https://azure.example.test")
+    monkeypatch.setenv("FG_AZURE_OPENAI_DEPLOYMENT", "fg-test")
 
     _fake = ProviderResponse(
-        provider_id="anthropic",
+        provider_id="azure_openai",
         text="test response",
-        model="claude-haiku-4-5-20251001",
+        model="fg-test",
         input_tokens=10,
         output_tokens=5,
     )
@@ -414,7 +416,7 @@ def test_phi_allowed_for_regulated_provider_with_baa(build_app, monkeypatch) -> 
     def _patched_resolve(tenant_id):
         exp, policy, theme = orig_resolve(tenant_id)
         policy = dict(policy)
-        policy["allowed_providers"] = ["simulated", "anthropic"]
+        policy["allowed_providers"] = ["simulated", "anthropic", "azure_openai"]
         return exp, policy, theme
 
     monkeypatch.setattr(ai_console, "_resolve_experience", _patched_resolve)
@@ -437,7 +439,7 @@ def test_phi_allowed_for_regulated_provider_with_baa(build_app, monkeypatch) -> 
     # Insert an active BAA using the same DB the app was built against
     db = get_sessionmaker()()
     _insert_baa(
-        db, tenant_id="tenant-dev", provider_id="anthropic", baa_status="active"
+        db, tenant_id="tenant-dev", provider_id="azure_openai", baa_status="active"
     )
 
     # Use MRN text: detected by PHI classifier (HIGH) but not by the legacy
@@ -445,7 +447,7 @@ def test_phi_allowed_for_regulated_provider_with_baa(build_app, monkeypatch) -> 
     resp = client.post(
         "/ui/ai/chat",
         headers=hdrs,
-        json={"message": _MRN_TEXT, "device_id": device_id, "provider": "anthropic"},
+        json={"message": _MRN_TEXT, "device_id": device_id},
     )
     assert resp.status_code == 200
 

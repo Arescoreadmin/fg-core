@@ -13,6 +13,12 @@ from sqlalchemy.orm import Session
 from services.ai.audit import build_ai_audit_metadata
 from services.ai.dispatch import ProviderCallError as _ProviderCallError
 from services.ai.dispatch import call_provider as _call_provider
+from services.ai.dispatch import known_provider_ids
+from services.ai.routing import (
+    AI_PROVIDER_NOT_CONFIGURED,
+    configured_ai_providers,
+    resolve_ai_provider_for_request,
+)
 from services.ai_plane_extension import policy_engine, rag_stub
 from services.ai_plane_extension.models import AIInferRequest, AIPolicyUpsertRequest
 from services.phi_classifier.minimizer import minimize_prompt
@@ -71,6 +77,15 @@ def _str_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value]
+
+
+def _ai_plane_allowed_providers() -> frozenset[str]:
+    raw_env = os.getenv("FG_AI_ALLOWED_PROVIDERS")
+    if raw_env is not None:
+        return frozenset(
+            item.strip() for item in raw_env.strip().split(",") if item.strip()
+        )
+    return configured_ai_providers()
 
 
 class AIPlaneService:
@@ -233,14 +248,55 @@ class AIPlaneService:
             db.commit()
             raise ValueError("AI_INPUT_POLICY_BLOCKED")
 
-        effective_provider = _resolve_effective_provider()
         from fastapi import HTTPException as _HTTPException  # noqa: PLC0415
         from services.provider_baa.gate import (  # noqa: PLC0415
+            classify_baa_gate_phi as _classify_baa_gate_phi,
             enforce_baa_gate_for_route as _enforce_baa_gate,
         )
 
         pre_gate_prompt_sha = hashlib.sha256(payload.query.encode("utf-8")).hexdigest()
         request_id = f"inf-{pre_gate_prompt_sha[:16]}"
+        phi_classification = _classify_baa_gate_phi(payload.query)
+        guarded_default_provider = (
+            None if phi_classification.contains_phi else _resolve_effective_provider()
+        )
+        routing_result = resolve_ai_provider_for_request(
+            tenant_id=tenant_id,
+            requested_provider=None,
+            tenant_allowed_providers=_ai_plane_allowed_providers(),
+            known_providers=known_provider_ids(),
+            configured_providers=configured_ai_providers(),
+            phi_detected=phi_classification.contains_phi,
+            default_provider=guarded_default_provider,
+            phi_provider=(os.getenv("FG_AI_PHI_PROVIDER") or "").strip() or None,
+        )
+        if not routing_result.allowed or routing_result.provider_id is None:
+            self._audit_infer(
+                tenant_id=tenant_id,
+                success=False,
+                reason=routing_result.reason_code,
+                details={
+                    "provider_id": routing_result.provider_id,
+                    "requested_provider": routing_result.requested_provider,
+                    "selected_by": routing_result.selected_by,
+                    "routing_reason_code": routing_result.reason_code,
+                    "phi_detected": phi_classification.contains_phi,
+                    "phi_types": sorted(
+                        phi_classification.phi_types - {"medical_keyword"}
+                    ),
+                    "baa_check_result": "not_evaluated",
+                    "prompt_minimized": False,
+                    "request_hash": None,
+                    "response_hash": None,
+                },
+            )
+            self._record_violation(db, tenant_id, routing_result.reason_code)
+            db.commit()
+            if routing_result.reason_code == AI_PROVIDER_NOT_CONFIGURED:
+                raise ValueError("AI_PROVIDER_NOT_CONFIGURED")
+            raise ValueError(routing_result.reason_code)
+
+        effective_provider = routing_result.provider_id
         try:
             baa_gate_result = _enforce_baa_gate(
                 db,
@@ -248,6 +304,7 @@ class AIPlaneService:
                 provider_id=effective_provider,
                 text=payload.query,
                 source="ai_plane_infer",
+                classification=phi_classification,
             )
         except _HTTPException as exc:
             denied_baa_gate_result = cast(
@@ -265,13 +322,14 @@ class AIPlaneService:
                         request_text=payload.query,
                         response_text=None,
                         request_id=request_id,
+                        routing_result=routing_result,
                     ),
                 )
             self._record_violation(db, tenant_id, "AI_PHI_PROVIDER_NOT_BAA_CAPABLE")
             db.commit()
             raise ValueError("AI_PHI_PROVIDER_NOT_BAA_CAPABLE")
 
-        prompt_minimization = minimize_prompt(payload.query)
+        prompt_minimization = minimize_prompt(payload.query, phi_classification)
         outgoing_prompt = prompt_minimization.minimized_text
         if prompt_minimization.reason_code == "PROMPT_MINIMIZATION_NON_STRING":
             self._audit_infer(
@@ -286,6 +344,7 @@ class AIPlaneService:
                     response_text=None,
                     prompt_minimization=prompt_minimization,
                     request_id=request_id,
+                    routing_result=routing_result,
                 ),
             )
             self._record_violation(db, tenant_id, "AI_PROMPT_MINIMIZATION_FAILED")
@@ -318,6 +377,7 @@ class AIPlaneService:
                     response_text=None,
                     prompt_minimization=prompt_minimization,
                     request_id=request_id,
+                    routing_result=routing_result,
                 ),
             )
             self._record_violation(db, tenant_id, exc.error_code)
@@ -377,6 +437,7 @@ class AIPlaneService:
                 provider_response=prov_resp,
                 prompt_minimization=prompt_minimization,
                 request_id=request_id,
+                routing_result=routing_result,
             ),
         )
 

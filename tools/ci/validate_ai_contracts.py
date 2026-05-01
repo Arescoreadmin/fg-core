@@ -6,7 +6,7 @@ from pathlib import Path
 from services.schema_validation import validate_payload_against_schema
 
 ROOT = Path("contracts/ai")
-KNOWN_PROVIDERS = {"simulated", "anthropic"}
+KNOWN_PROVIDERS = {"simulated", "anthropic", "azure_openai"}
 FORBIDDEN_THEME_FIELDS = {"css", "raw_css", "script", "javascript"}
 
 
