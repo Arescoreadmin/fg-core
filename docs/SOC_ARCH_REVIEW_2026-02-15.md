@@ -530,3 +530,21 @@ The AI contract validator previously only recognized `"simulated"` as a valid pr
 ### Verification
 - `make fg-fast`: All checks passed
 - `bash codex_gates.sh`: All gates passed
+
+## PHI-aware Azure provider routing — tools/ci/validate_ai_contracts.py addendum (2026-04-30)
+
+### Files reviewed (required by SOC-HIGH-002)
+- `tools/ci/validate_ai_contracts.py`: Added `"azure_openai"` to `KNOWN_PROVIDERS` set
+
+### Why
+Deterministic PHI-aware routing requires `azure_openai` as the configured PHI provider ID in AI policy contracts. The contract validator is the CI-enforced provider allowlist for policy files, so Azure must be recognized there before tenant policy can approve it.
+
+### Security posture impact
+- `azure_openai` is contract-allowed only as a canonical provider ID; runtime activation still requires explicit Azure endpoint, deployment, and API key configuration.
+- PHI routing remains fail-closed: PHI selects Azure only when known, tenant-allowed, configured, and BAA-approved.
+- No fallback to Anthropic or simulated is introduced after routing denial, BAA denial, or provider failure.
+- Audit metadata records safe routing fields (`requested_provider`, `selected_by`, `routing_reason_code`, `requires_baa`) without raw prompt, minimized prompt, raw response, provider body, or secrets.
+
+### Verification
+- `make fg-fast`: All checks passed
+- `bash codex_gates.sh`: All gates passed

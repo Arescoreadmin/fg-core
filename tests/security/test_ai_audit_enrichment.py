@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from api.auth_scopes import mint_key
 from api.db import get_sessionmaker, init_db, reset_engine_cache
@@ -155,7 +156,10 @@ def _setup_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient
     monkeypatch.setenv("FG_ENV", "test")
     monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
     monkeypatch.setenv("FG_AUTH_ENABLED", "1")
-    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated,anthropic")
+    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated,anthropic,azure_openai")
+    monkeypatch.setenv("FG_AZURE_AI_KEY", "test-azure-key")
+    monkeypatch.setenv("FG_AZURE_OPENAI_ENDPOINT", "https://azure.example.test")
+    monkeypatch.setenv("FG_AZURE_OPENAI_DEPLOYMENT", "fg-test")
     monkeypatch.setenv("FG_AI_ENABLE_SIMULATED", "1")
     reset_engine_cache()
     init_db(sqlite_path=str(db_path))
@@ -183,13 +187,29 @@ def _allow_providers(monkeypatch: pytest.MonkeyPatch) -> None:
     def _patched_resolve(tenant_id: str):
         exp, policy, theme = orig_resolve(tenant_id)
         policy = dict(policy)
-        policy["allowed_providers"] = ["simulated", "anthropic"]
+        policy["allowed_providers"] = ["simulated", "anthropic", "azure_openai"]
         policy["tenant_max_tokens_per_day"] = 1000
         policy["device_max_tokens_per_day"] = 1000
         return exp, policy, theme
 
     monkeypatch.setattr(ai_console, "_resolve_experience", _patched_resolve)
     monkeypatch.setattr(ai_console, "_provider_env_allowed", lambda _p: True)
+
+
+def _insert_baa(db: Any, *, tenant_id: str, provider_id: str) -> None:
+    db.execute(
+        text(
+            """
+            INSERT INTO provider_baa_records(
+                tenant_id, provider_id, baa_status, expiry_date, created_at, updated_at
+            )
+            VALUES (:tenant_id, :provider_id, 'active', '2030-01-01',
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            """
+        ),
+        {"tenant_id": tenant_id, "provider_id": provider_id},
+    )
+    db.commit()
 
 
 def _captured_admin_details(events: list[Any], reason: str) -> dict[str, object]:
@@ -259,9 +279,9 @@ def test_ui_chat_sends_minimized_prompt_and_audits_safe_metadata(
         nonlocal captured_prompt
         captured_prompt = str(kw["prompt"])
         return ProviderResponse(
-            provider_id="simulated",
+            provider_id="azure_openai",
             text="safe response",
-            model="SIMULATED_V1",
+            model="fg-test",
             input_tokens=6,
             output_tokens=2,
         )
@@ -280,6 +300,9 @@ def test_ui_chat_sends_minimized_prompt_and_audits_safe_metadata(
         )
     }
     device_id = _enable_device(client, headers)
+    _insert_baa(
+        get_sessionmaker()(), tenant_id="tenant-dev", provider_id="azure_openai"
+    )
     request_headers = {**headers, "X-Request-ID": "min-req-1"}
     response = client.post(
         "/ui/ai/chat",
@@ -287,7 +310,6 @@ def test_ui_chat_sends_minimized_prompt_and_audits_safe_metadata(
         json={
             "message": _MINIMIZATION_TEXT,
             "device_id": device_id,
-            "provider": "simulated",
         },
     )
 
@@ -311,8 +333,8 @@ def test_ui_chat_sends_minimized_prompt_and_audits_safe_metadata(
     expected_request_hash = ai_console._build_provider_request_hash(
         tenant_id="tenant-dev",
         device_id=device_id,
-        provider="simulated",
-        model="SIMULATED_V1",
+        provider="azure_openai",
+        model="azure_openai",
         persona="default",
         outgoing_prompt=_MINIMIZED_TEXT,
         request_id="min-req-1",
@@ -375,7 +397,7 @@ def test_ui_phi_baa_denial_audit_has_null_response_hash(
     def _provider(**_kw):
         nonlocal provider_called
         provider_called = True
-        return ProviderResponse(provider_id="anthropic", text="unused", model="m")
+        return ProviderResponse(provider_id="azure_openai", text="unused", model="m")
 
     monkeypatch.setattr(ai_console, "_call_provider", _provider)
     events: list[Any] = []
@@ -394,7 +416,7 @@ def test_ui_phi_baa_denial_audit_has_null_response_hash(
     response = client.post(
         "/ui/ai/chat",
         headers=headers,
-        json={"message": _PHI_TEXT, "device_id": device_id, "provider": "anthropic"},
+        json={"message": _PHI_TEXT, "device_id": device_id},
     )
 
     assert response.status_code == 403
@@ -402,7 +424,7 @@ def test_ui_phi_baa_denial_audit_has_null_response_hash(
     details = _captured_admin_details(events, "PROVIDER_BAA_MISSING")
     assert details["phi_detected"] is True
     assert details["phi_types"] == ["email", "mrn", "ssn"]
-    assert details["provider_id"] == "anthropic"
+    assert details["provider_id"] == "azure_openai"
     assert details["baa_check_result"] == "denied"
     assert details["response_hash"] is None
     assert str(details["request_hash"]).startswith("sha256:")
@@ -508,7 +530,7 @@ def test_ui_minimization_failure_blocks_provider_and_quota(
     monkeypatch.setattr(
         ai_console,
         "minimize_prompt",
-        lambda _text: PromptMinimizationResult(
+        lambda *_args: PromptMinimizationResult(
             minimized_text="",
             changed=True,
             replacements=(),
@@ -524,7 +546,7 @@ def test_ui_minimization_failure_blocks_provider_and_quota(
     def _provider(**_kw: Any) -> ProviderResponse:
         nonlocal provider_called
         provider_called = True
-        return ProviderResponse(provider_id="simulated", text="unused", model="m")
+        return ProviderResponse(provider_id="azure_openai", text="unused", model="m")
 
     def _quota(*_args: Any, **_kw: Any) -> None:
         nonlocal quota_called
@@ -540,13 +562,15 @@ def test_ui_minimization_failure_blocks_provider_and_quota(
         )
     }
     device_id = _enable_device(client, headers)
+    _insert_baa(
+        get_sessionmaker()(), tenant_id="tenant-dev", provider_id="azure_openai"
+    )
     response = client.post(
         "/ui/ai/chat",
         headers=headers,
         json={
             "message": _MINIMIZATION_TEXT,
             "device_id": device_id,
-            "provider": "simulated",
         },
     )
 
@@ -571,10 +595,9 @@ def test_ai_plane_provider_failure_audit_has_safe_metadata(
         "api.security_audit.SecurityAuditor.log_event",
         lambda _self, event: events.append(event),
     )
-    monkeypatch.setattr(
-        "services.ai_plane_extension.service._resolve_effective_provider",
-        lambda: "simulated",
-    )
+    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "anthropic")
+    monkeypatch.setenv("FG_AI_DEFAULT_PROVIDER", "anthropic")
+    monkeypatch.setenv("FG_ANTHROPIC_API_KEY", "test-key")
 
     def _fail(**_kw):
         raise ProviderCallError(AI_PROVIDER_CALL_FAILED, "raw provider body")
@@ -585,7 +608,7 @@ def test_ai_plane_provider_failure_audit_has_safe_metadata(
         AIPlaneService().infer(db, "tenant-a", AIInferRequest(query=_CLEAN_TEXT))
 
     details = _captured_admin_details(events, AI_PROVIDER_CALL_FAILED)
-    assert details["provider_id"] == "simulated"
+    assert details["provider_id"] == "anthropic"
     assert details["phi_detected"] is False
     assert details["request_hash"]
     assert details["response_hash"] is None
@@ -607,19 +630,20 @@ def test_ai_plane_infer_sends_minimized_prompt_and_audits_safe_metadata(
         "api.security_audit.SecurityAuditor.log_event",
         lambda _self, event: events.append(event),
     )
-    monkeypatch.setattr(
-        "services.ai_plane_extension.service._resolve_effective_provider",
-        lambda: "simulated",
-    )
+    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "azure_openai")
+    monkeypatch.setenv("FG_AZURE_AI_KEY", "test-azure-key")
+    monkeypatch.setenv("FG_AZURE_OPENAI_ENDPOINT", "https://azure.example.test")
+    monkeypatch.setenv("FG_AZURE_OPENAI_DEPLOYMENT", "fg-test")
+    _insert_baa(db, tenant_id="tenant-a", provider_id="azure_openai")
     captured_prompt = ""
 
     def _provider(**kw: Any) -> ProviderResponse:
         nonlocal captured_prompt
         captured_prompt = str(kw["prompt"])
         return ProviderResponse(
-            provider_id="simulated",
+            provider_id="azure_openai",
             text="safe response",
-            model="SIMULATED_V1",
+            model="fg-test",
             input_tokens=6,
             output_tokens=2,
         )

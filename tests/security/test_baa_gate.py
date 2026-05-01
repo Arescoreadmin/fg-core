@@ -436,11 +436,16 @@ def test_ui_chat_phi_regulated_no_baa_denied_403(build_app, monkeypatch) -> None
     """PHI + regulated provider + no BAA record → 403; gate is the enforcement point."""
     import api.ui_ai_console as ai_console
 
-    monkeypatch.setattr(ai_console, "KNOWN_PROVIDERS", {"simulated", "anthropic"})
+    monkeypatch.setattr(
+        ai_console, "KNOWN_PROVIDERS", {"simulated", "anthropic", "azure_openai"}
+    )
     monkeypatch.setattr(
         ai_console, "PROVIDER_MAX_TOKENS", {"simulated": 4096, "anthropic": 4096}
     )
-    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated,anthropic")
+    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated,anthropic,azure_openai")
+    monkeypatch.setenv("FG_AZURE_AI_KEY", "test-azure-key")
+    monkeypatch.setenv("FG_AZURE_OPENAI_ENDPOINT", "https://azure.example.test")
+    monkeypatch.setenv("FG_AZURE_OPENAI_DEPLOYMENT", "fg-test")
     monkeypatch.setenv("FG_AI_ENABLE_SIMULATED", "1")
     monkeypatch.setattr(ai_console, "_provider_env_allowed", lambda p: True)
 
@@ -449,7 +454,7 @@ def test_ui_chat_phi_regulated_no_baa_denied_403(build_app, monkeypatch) -> None
     def _patched_resolve(tenant_id):
         exp, policy, theme = orig_resolve(tenant_id)
         policy = dict(policy)
-        policy["allowed_providers"] = ["simulated", "anthropic"]
+        policy["allowed_providers"] = ["simulated", "anthropic", "azure_openai"]
         return exp, policy, theme
 
     monkeypatch.setattr(ai_console, "_resolve_experience", _patched_resolve)
@@ -473,7 +478,7 @@ def test_ui_chat_phi_regulated_no_baa_denied_403(build_app, monkeypatch) -> None
     resp = client.post(
         "/ui/ai/chat",
         headers=hdrs,
-        json={"message": _MRN_TEXT, "device_id": device_id, "provider": "anthropic"},
+        json={"message": _MRN_TEXT, "device_id": device_id},
     )
     assert resp.status_code == 403
     assert resp.json()["detail"]["error_code"] == _REASON_MISSING
@@ -485,14 +490,16 @@ def test_ui_chat_phi_regulated_active_baa_allowed(build_app, monkeypatch) -> Non
 
     import api.ui_ai_console as ai_console
 
-    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated,anthropic")
-    monkeypatch.setenv("FG_ANTHROPIC_API_KEY", "test-key-not-used")
+    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated,anthropic,azure_openai")
+    monkeypatch.setenv("FG_AZURE_AI_KEY", "test-azure-key")
+    monkeypatch.setenv("FG_AZURE_OPENAI_ENDPOINT", "https://azure.example.test")
+    monkeypatch.setenv("FG_AZURE_OPENAI_DEPLOYMENT", "fg-test")
     monkeypatch.setenv("FG_AI_ENABLE_SIMULATED", "1")
 
     _fake_resp = ProviderResponse(
-        provider_id="anthropic",
-        text="test response from anthropic",
-        model="claude-haiku-4-5-20251001",
+        provider_id="azure_openai",
+        text="test response from azure",
+        model="fg-test",
         input_tokens=10,
         output_tokens=5,
     )
@@ -503,7 +510,7 @@ def test_ui_chat_phi_regulated_active_baa_allowed(build_app, monkeypatch) -> Non
     def _patched_resolve(tenant_id):
         exp, policy, theme = orig_resolve(tenant_id)
         policy = dict(policy)
-        policy["allowed_providers"] = ["simulated", "anthropic"]
+        policy["allowed_providers"] = ["simulated", "anthropic", "azure_openai"]
         return exp, policy, theme
 
     monkeypatch.setattr(ai_console, "_resolve_experience", _patched_resolve)
@@ -525,16 +532,16 @@ def test_ui_chat_phi_regulated_active_baa_allowed(build_app, monkeypatch) -> Non
 
     db = get_sessionmaker()()
     _insert_baa(
-        db, tenant_id="tenant-dev", provider_id="anthropic", baa_status="active"
+        db, tenant_id="tenant-dev", provider_id="azure_openai", baa_status="active"
     )
 
     resp = client.post(
         "/ui/ai/chat",
         headers=hdrs,
-        json={"message": _MRN_TEXT, "device_id": device_id, "provider": "anthropic"},
+        json={"message": _MRN_TEXT, "device_id": device_id},
     )
     assert resp.status_code == 200
-    assert resp.json()["provider"] == "anthropic"
+    assert resp.json()["provider"] == "azure_openai"
 
 
 def test_ui_chat_no_phi_simulated_allowed(build_app, monkeypatch) -> None:
@@ -637,10 +644,14 @@ def test_ai_plane_service_phi_regulated_no_baa_raises(tmp_path: Path) -> None:
     svc = AIPlaneService()
     payload = AIInferRequest(query=_MRN_TEXT)
 
-    # Make effective_provider a regulated provider (anthropic) with no BAA record
-    with patch(
-        "services.ai_plane_extension.service._resolve_effective_provider",
-        return_value="anthropic",
+    with patch.dict(
+        "os.environ",
+        {
+            "FG_AI_ALLOWED_PROVIDERS": "azure_openai",
+            "FG_AZURE_AI_KEY": "test-azure-key",
+            "FG_AZURE_OPENAI_ENDPOINT": "https://azure.example.test",
+            "FG_AZURE_OPENAI_DEPLOYMENT": "fg-test",
+        },
     ):
         with pytest.raises(ValueError, match="AI_PHI_PROVIDER_NOT_BAA_CAPABLE"):
             svc.infer(db, tenant_id="tenant-a", payload=payload)
@@ -651,7 +662,9 @@ def test_ai_plane_service_phi_regulated_active_baa_allowed(tmp_path: Path) -> No
     from services.ai.providers.base import ProviderResponse
 
     db = _db(tmp_path)
-    _insert_baa(db, tenant_id="tenant-a", provider_id="anthropic", baa_status="active")
+    _insert_baa(
+        db, tenant_id="tenant-a", provider_id="azure_openai", baa_status="active"
+    )
 
     from services.ai_plane_extension.models import AIInferRequest
     from services.ai_plane_extension.service import AIPlaneService
@@ -660,13 +673,18 @@ def test_ai_plane_service_phi_regulated_active_baa_allowed(tmp_path: Path) -> No
     payload = AIInferRequest(query=_MRN_TEXT)
 
     _fake_resp = ProviderResponse(
-        provider_id="anthropic",
+        provider_id="azure_openai",
         text="test response",
-        model="claude-haiku-4-5-20251001",
+        model="fg-test",
     )
-    with patch(
-        "services.ai_plane_extension.service._resolve_effective_provider",
-        return_value="anthropic",
+    with patch.dict(
+        "os.environ",
+        {
+            "FG_AI_ALLOWED_PROVIDERS": "azure_openai",
+            "FG_AZURE_AI_KEY": "test-azure-key",
+            "FG_AZURE_OPENAI_ENDPOINT": "https://azure.example.test",
+            "FG_AZURE_OPENAI_DEPLOYMENT": "fg-test",
+        },
     ):
         with patch(
             "services.ai_plane_extension.service._call_provider",
@@ -686,9 +704,28 @@ def test_ai_plane_service_no_phi_passes_gate(tmp_path: Path) -> None:
     from services.ai_plane_extension.service import AIPlaneService
 
     svc = AIPlaneService()
-    result = svc.infer(
-        db, tenant_id="tenant-a", payload=AIInferRequest(query=_CLEAN_TEXT)
+    from services.ai.providers.base import ProviderResponse
+
+    _fake_resp = ProviderResponse(
+        provider_id="anthropic",
+        text="test response",
+        model="claude-haiku-4-5-20251001",
     )
+    with patch.dict(
+        "os.environ",
+        {
+            "FG_AI_ALLOWED_PROVIDERS": "anthropic",
+            "FG_AI_DEFAULT_PROVIDER": "anthropic",
+            "FG_ANTHROPIC_API_KEY": "test-key",
+        },
+    ):
+        with patch(
+            "services.ai_plane_extension.service._call_provider",
+            return_value=_fake_resp,
+        ):
+            result = svc.infer(
+                db, tenant_id="tenant-a", payload=AIInferRequest(query=_CLEAN_TEXT)
+            )
     assert result["ok"] is True
 
 
@@ -762,9 +799,14 @@ def test_ai_plane_gate_is_wired_removing_it_allows_phi(tmp_path: Path) -> None:
     svc = AIPlaneService()
     payload = AIInferRequest(query=_MRN_TEXT)
 
-    with patch(
-        "services.ai_plane_extension.service._resolve_effective_provider",
-        return_value="anthropic",
+    with patch.dict(
+        "os.environ",
+        {
+            "FG_AI_ALLOWED_PROVIDERS": "azure_openai",
+            "FG_AZURE_AI_KEY": "test-azure-key",
+            "FG_AZURE_OPENAI_ENDPOINT": "https://azure.example.test",
+            "FG_AZURE_OPENAI_DEPLOYMENT": "fg-test",
+        },
     ):
         with pytest.raises(ValueError, match="AI_PHI_PROVIDER_NOT_BAA_CAPABLE"):
             svc.infer(db, tenant_id="tenant-a", payload=payload)

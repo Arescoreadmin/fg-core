@@ -21,15 +21,22 @@ from services.ai.providers.base import (
     ProviderResponse,
 )
 
-_KNOWN_PROVIDERS: frozenset[str] = frozenset({"anthropic", "simulated"})
+_KNOWN_PROVIDERS: frozenset[str] = frozenset({"anthropic", "azure_openai", "simulated"})
+
+
+def known_provider_ids() -> frozenset[str]:
+    return _KNOWN_PROVIDERS
 
 
 def _get_provider(provider_id: str):
     from services.ai.providers.anthropic_provider import AnthropicProvider  # noqa: PLC0415
+    from services.ai.providers.azure_openai_provider import AzureOpenAIProvider  # noqa: PLC0415
     from services.ai.providers.simulated_provider import SimulatedProvider  # noqa: PLC0415
 
     if provider_id == "anthropic":
         return AnthropicProvider()
+    if provider_id == "azure_openai":
+        return AzureOpenAIProvider()
     if provider_id == "simulated":
         return SimulatedProvider()
     raise ProviderCallError(

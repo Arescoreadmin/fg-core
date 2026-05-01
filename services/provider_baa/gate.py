@@ -35,6 +35,7 @@ from services.phi_classifier.classifier import (
     emit_phi_enforcement_block_audit,
 )
 from services.phi_classifier.models import SensitivityLevel
+from services.phi_classifier.models import PhiClassificationResult
 from services.provider_baa.policy import enforce_provider_baa_for_route
 
 if TYPE_CHECKING:
@@ -79,6 +80,7 @@ def evaluate_baa_gate(
     text: str,
     source: str = "",
     request: "Request | None" = None,
+    classification: PhiClassificationResult | None = None,
 ) -> BaaGateResult:
     """Evaluate the BAA gate for a request. Returns result; never raises on denial.
 
@@ -100,8 +102,9 @@ def evaluate_baa_gate(
     tenant_id = tenant_id.strip()
     provider_id = provider_id.strip()
 
-    # classify_phi never raises — classifier errors return contains_phi=True (fail-closed)
-    phi_result = classify_phi(text)
+    phi_result = (
+        classification if classification is not None else classify_baa_gate_phi(text)
+    )
 
     if not phi_result.contains_phi:
         emit_phi_classification_audit(
@@ -187,6 +190,7 @@ def enforce_baa_gate_for_route(
     text: str,
     source: str = "",
     request: "Request | None" = None,
+    classification: PhiClassificationResult | None = None,
 ) -> BaaGateResult:
     """Enforce the BAA gate; raises HTTPException(403) on any denial.
 
@@ -207,6 +211,7 @@ def enforce_baa_gate_for_route(
         text=text,
         source=source,
         request=request,
+        classification=classification,
     )
     if not result.allowed:
         exc = HTTPException(
@@ -220,3 +225,8 @@ def enforce_baa_gate_for_route(
         setattr(exc, "baa_gate_result", result)
         raise exc
     return result
+
+
+def classify_baa_gate_phi(text: str) -> PhiClassificationResult:
+    """Classify PHI for provider routing before selected-provider BAA enforcement."""
+    return classify_phi(text)

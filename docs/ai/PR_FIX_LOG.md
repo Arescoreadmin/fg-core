@@ -6,6 +6,113 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-04-30 — Deterministic PHI-aware AI provider routing
+
+**Branch:** `codex/phi-aware-provider-routing`
+
+**Area:** AI provider routing / PHI minimization / BAA enforcement / Audit metadata
+
+---
+
+**Issue:**
+
+AI provider selection was resolved before PHI-aware routing policy. `/ui/ai/chat` selected an explicit/env/default/simulated provider first, then ran BAA enforcement against that provider. `AIPlaneService` used `_resolve_effective_provider()` with a dev simulated fallback. This allowed PHI routing behavior to depend on caller/provider defaults instead of deterministic PHI policy.
+
+**Root cause:**
+
+There was no central routing boundary that consumed PHI classification and tenant/provider config before dispatch. Azure was listed as regulated in BAA policy but was not a known dispatch provider.
+
+**Files changed:**
+
+- `services/ai/routing.py` — new pure deterministic routing boundary and stable reason codes.
+- `services/ai/providers/azure_openai_provider.py` — env-gated Azure OpenAI provider implementation with bounded timeout and safe errors.
+- `services/ai/dispatch.py` — registered `azure_openai`; exposed known provider IDs.
+- `api/ui_ai_console.py` — route PHI/non-PHI requests through routing before BAA, minimization, quota, and dispatch.
+- `services/ai_plane_extension/service.py` — same routing order for AIPlaneService.
+- `services/provider_baa/gate.py` — added classification reuse so routing and minimization do not require duplicate classifier calls.
+- `services/ai/audit.py` — added safe routing metadata fields.
+- `contracts/ai/policies/default.json` and `tools/ci/validate_ai_contracts.py` — recognize `azure_openai`.
+- `tests/security/*` — updated and added routing/PHI/BAA/audit regression coverage.
+
+**Routing behavior:**
+
+- No PHI + no explicit provider selects `anthropic` when tenant-allowed and configured.
+- PHI + no explicit provider selects `azure_openai` only when tenant-allowed, known, configured, and BAA-approved.
+- Explicit PHI request for non-PHI provider is denied with `AI_PROVIDER_PHI_PROVIDER_REQUIRED`.
+
+**PHI routing rule:**
+
+PHI never routes to Anthropic or simulated. Azure is required for PHI and BAA enforcement remains mandatory before prompt minimization, quota, and provider dispatch.
+
+**Provider selection reason codes:**
+
+- `AI_PROVIDER_SELECTED_NON_PHI_DEFAULT`
+- `AI_PROVIDER_SELECTED_PHI_AZURE`
+- `AI_PROVIDER_REQUESTED_ALLOWED`
+- `AI_PROVIDER_NOT_ALLOWED`
+- `AI_PROVIDER_NOT_CONFIGURED`
+- `AI_PROVIDER_PHI_PROVIDER_REQUIRED`
+- `AI_PROVIDER_PHI_PROVIDER_NOT_APPROVED`
+
+**No-fallback guarantee:**
+
+Routing denial stops before quota and dispatch. Provider call/config failures are not retried against Anthropic or simulated.
+
+**Audit fields added:**
+
+`requested_provider`, `selected_by`, `routing_reason_code`, and `requires_baa`; existing safe fields continue to include `provider_id`, `phi_detected`, `phi_types`, `baa_check_result`, `prompt_minimized`, `request_hash`, and `response_hash`.
+
+**Validation results:**
+
+- `.venv/bin/pytest -q tests/security/test_ai_provider_routing.py` → 13 passed
+- `.venv/bin/pytest -q tests/security/test_ai_provider.py` → 40 passed
+- `.venv/bin/pytest -q tests/security/test_ai_audit_enrichment.py` → 11 passed
+- `.venv/bin/pytest -q tests/security/test_prompt_minimization.py` → 7 passed
+- `.venv/bin/pytest -q tests/security/test_baa_gate.py` → 28 passed
+- `.venv/bin/pytest -q tests/security/test_phi_classifier.py` → 26 passed
+- `.venv/bin/pytest -q tests/security/test_provider_baa_enforcement.py` → 35 passed
+- `make fg-fast` → All checks passed
+- `bash codex_gates.sh` → All gates passed
+
+**Risks/notes:**
+
+Azure OpenAI network behavior is implemented but only exercised via mocked tests in this change. Production use requires explicit `FG_AZURE_AI_KEY`, `FG_AZURE_OPENAI_ENDPOINT`, and `FG_AZURE_OPENAI_DEPLOYMENT`.
+
+---
+
+### 2026-04-30 — PR review fix: AIPlane guarded non-PHI provider default
+
+**Branch:** `codex/phi-aware-provider-routing`
+
+**Area:** AI provider routing / AIPlaneService
+
+---
+
+**Issue:**
+
+AIPlaneService PHI-aware routing derived `default_provider` directly from `FG_AI_DEFAULT_PROVIDER`; when unset, the generic routing default became Anthropic instead of preserving AIPlane's existing `_resolve_effective_provider()` guard.
+
+**Root cause:**
+
+The PHI routing integration bypassed the AIPlane-specific default-provider guard for non-PHI requests.
+
+**Fix:**
+
+AIPlane now calls `_resolve_effective_provider()` for non-PHI default routing and leaves PHI routing on the configured PHI provider path. This restores simulated dev/test behavior and production/staging fail-closed behavior when `FG_AI_DEFAULT_PROVIDER` is unset.
+
+**Files changed:**
+
+- `services/ai_plane_extension/service.py`
+- `tests/test_ai_plane_extension.py`
+- `tests/security/test_ai_audit_enrichment.py`
+- `tests/security/test_baa_gate.py`
+
+**Validation results:**
+
+- `.venv/bin/pytest -q tests/test_ai_plane_extension.py tests/security/test_ai_provider_routing.py tests/security/test_ai_audit_enrichment.py tests/security/test_baa_gate.py` → 63 passed
+
+---
+
 ### 2026-04-28 — Task 18.1: Windows service wrapper foundation
 
 **Branch:** `task/18.1-windows-service-wrapper`

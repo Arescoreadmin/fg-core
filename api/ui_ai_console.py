@@ -23,6 +23,13 @@ from api.security_audit import AuditEvent, EventType, Severity, get_auditor
 from services.ai.audit import build_ai_audit_metadata
 from services.ai.dispatch import ProviderCallError as _ProviderCallError
 from services.ai.dispatch import call_provider as _call_provider
+from services.ai.dispatch import known_provider_ids
+from services.ai.routing import (
+    AI_PROVIDER_NOT_ALLOWED,
+    AI_PROVIDER_NOT_CONFIGURED,
+    configured_ai_providers,
+    resolve_ai_provider_for_request,
+)
 from services.phi_classifier.minimizer import minimize_prompt
 from services.schema_validation import validate_payload_against_schema
 
@@ -50,8 +57,8 @@ class DeviceStateRequest(BaseModel):
     ticket: str | None = Field(default=None, max_length=128)
 
 
-KNOWN_PROVIDERS = {"simulated", "anthropic"}
-PROVIDER_MAX_TOKENS = {"simulated": 4096, "anthropic": 4096}
+KNOWN_PROVIDERS = set(known_provider_ids())
+PROVIDER_MAX_TOKENS = {"simulated": 4096, "anthropic": 4096, "azure_openai": 4096}
 
 
 def _utc_now() -> datetime:
@@ -137,6 +144,9 @@ def _global_allowed_providers() -> set[str]:
     env_default = (os.getenv("FG_AI_DEFAULT_PROVIDER") or "").strip()
     if env_default:
         allowed.add(env_default)
+    phi_provider = (os.getenv("FG_AI_PHI_PROVIDER") or "").strip()
+    if phi_provider:
+        allowed.add(phi_provider)
     return allowed
 
 
@@ -150,6 +160,8 @@ def _provider_env_allowed(provider: str) -> bool:
         return flag in {"1", "true", "yes", "on"}
     if provider == "anthropic":
         return bool((os.getenv("FG_ANTHROPIC_API_KEY") or "").strip())
+    if provider == "azure_openai":
+        return provider in configured_ai_providers()
     return False
 
 
@@ -743,35 +755,74 @@ def ai_chat(
     _enforce_device_enabled(db, tenant_id, device_id, request)
 
     deny_terms = [str(x) for x in (policy.get("pii_deny_terms") or [])]
-    _env_default_provider = (os.getenv("FG_AI_DEFAULT_PROVIDER") or "").strip()
-    provider = (
-        payload.provider
-        or _env_default_provider
-        or policy.get("default_provider")
-        or "simulated"
-    )
-    model = payload.model or policy.get("default_model") or "SIMULATED_V1"
-    _known_provider_or_fail(provider)
-
-    if provider not in set(policy.get("allowed_providers") or []):
-        raise _error(
-            400,
-            "AI_PROVIDER_DENIED_BY_TENANT_POLICY",
-            "provider not allowed by tenant policy",
-        )
-    if provider not in _global_allowed_providers():
-        raise _error(
-            400, "AI_PROVIDER_DENIED_BY_SERVER", "provider not allowed by server config"
-        )
-    if not _provider_env_allowed(provider):
-        raise _error(
-            400, "AI_PROVIDER_DENIED_BY_ENV", "provider not allowed in this environment"
-        )
-
     from services.provider_baa.gate import (  # noqa: PLC0415
+        classify_baa_gate_phi as _classify_baa_gate_phi,
         enforce_baa_gate_for_route as _enforce_baa_gate,
     )
 
+    if payload.provider:
+        _known_provider_or_fail(payload.provider)
+    phi_classification = _classify_baa_gate_phi(payload.message)
+    routing_result = resolve_ai_provider_for_request(
+        tenant_id=tenant_id,
+        requested_provider=payload.provider,
+        tenant_allowed_providers=set(policy.get("allowed_providers") or []),
+        known_providers=known_provider_ids(),
+        configured_providers={
+            provider_id
+            for provider_id in known_provider_ids()
+            if _provider_env_allowed(provider_id)
+            and provider_id in _global_allowed_providers()
+        },
+        phi_detected=phi_classification.contains_phi,
+        default_provider=(os.getenv("FG_AI_DEFAULT_PROVIDER") or "").strip()
+        or str(policy.get("default_provider") or "").strip()
+        or None,
+        phi_provider=(os.getenv("FG_AI_PHI_PROVIDER") or "").strip() or None,
+    )
+    if not routing_result.allowed or routing_result.provider_id is None:
+        status_code = 400
+        detail_code = routing_result.reason_code
+        if routing_result.reason_code == "AI_PROVIDER_PHI_PROVIDER_REQUIRED":
+            status_code = 403
+        elif routing_result.reason_code == AI_PROVIDER_NOT_CONFIGURED:
+            detail_code = (
+                "AI_PROVIDER_DENIED_BY_ENV"
+                if payload.provider
+                else "AI_PROVIDER_DENIED_BY_SERVER"
+            )
+        elif routing_result.reason_code == AI_PROVIDER_NOT_ALLOWED:
+            detail_code = "AI_PROVIDER_DENIED_BY_TENANT_POLICY"
+        _audit(
+            EventType.ADMIN_ACTION,
+            tenant_id=tenant_id,
+            success=False,
+            reason=routing_result.reason_code,
+            details={
+                "provider_id": routing_result.provider_id,
+                "requested_provider": routing_result.requested_provider,
+                "selected_by": routing_result.selected_by,
+                "routing_reason_code": routing_result.reason_code,
+                "phi_detected": phi_classification.contains_phi,
+                "phi_types": sorted(phi_classification.phi_types - {"medical_keyword"}),
+                "baa_check_result": "not_evaluated",
+                "prompt_minimized": False,
+                "request_hash": None,
+                "response_hash": None,
+            },
+            request=request,
+        )
+        raise _error(status_code, detail_code, "provider routing denied")
+
+    provider = routing_result.provider_id
+    policy_default_provider = (str(policy.get("default_provider") or "")).strip()
+    model = (
+        payload.model
+        or (
+            policy.get("default_model") if policy_default_provider == provider else None
+        )
+        or provider
+    )
     try:
         baa_gate_result = _enforce_baa_gate(
             db,
@@ -780,6 +831,7 @@ def ai_chat(
             text=payload.message,
             source="ui_ai_chat",
             request=request,
+            classification=phi_classification,
         )
     except HTTPException as exc:
         denied_baa_gate_result = cast(
@@ -801,12 +853,13 @@ def ai_chat(
                         getattr(request, "state", None), "request_id", None
                     ),
                     device_id=device_id,
+                    routing_result=routing_result,
                 ),
                 request=request,
             )
         raise
 
-    prompt_minimization = minimize_prompt(payload.message)
+    prompt_minimization = minimize_prompt(payload.message, phi_classification)
     outgoing_prompt = prompt_minimization.minimized_text
     if prompt_minimization.reason_code == "PROMPT_MINIMIZATION_NON_STRING":
         raise _error(
@@ -991,6 +1044,7 @@ def ai_chat(
                     request_hash=audit_request_hash,
                     request_id=event_id,
                     device_id=device_id,
+                    routing_result=routing_result,
                 ),
                 "event_id": event_id,
                 "session_id": session_id,
@@ -1025,6 +1079,7 @@ def ai_chat(
                     request_hash=audit_request_hash,
                     request_id=event_id,
                     device_id=device_id,
+                    routing_result=routing_result,
                 ),
                 "event_id": event_id,
                 "session_id": session_id,
@@ -1055,6 +1110,7 @@ def ai_chat(
                 request_hash=audit_request_hash,
                 request_id=event_id,
                 device_id=device_id,
+                routing_result=routing_result,
             ),
             "event_id": event_id,
             "session_id": session_id,
