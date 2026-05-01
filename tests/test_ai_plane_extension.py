@@ -28,6 +28,44 @@ def _chunks(tenant_id: str, source_id: str, content: str) -> list[CorpusChunk]:
     return chunk_ingested_records(result.records, config=_CHUNK_CONFIG)
 
 
+def _policy_file(
+    tmp_path: Path,
+    *,
+    allowed_providers: list[str],
+    default_provider: str,
+    phi_provider: str,
+) -> str:
+    path = tmp_path / "ai-policy.json"
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "allowed_providers": allowed_providers,
+                "default_provider": default_provider,
+                "phi_provider": phi_provider,
+                "phi_rules": {
+                    "require_baa": True,
+                    "require_prompt_minimization": True,
+                    "deny_if_phi_provider_unavailable": True,
+                    "deny_explicit_non_phi_provider_for_phi": True,
+                },
+                "rag_rules": {
+                    "enabled": True,
+                    "require_grounded_response": True,
+                    "no_answer_on_ungrounded": True,
+                },
+                "audit_rules": {
+                    "require_request_hash": True,
+                    "require_response_hash": True,
+                    "include_routing_metadata": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    return str(path)
+
+
 def _setup_client(
     tmp_path: Path, *, ai_enabled: bool = True
 ) -> tuple[TestClient, str, str]:
@@ -221,6 +259,53 @@ def test_ai_plane_uses_real_rag_context_in_outgoing_prompt(
     assert audit_details["response_validation_result"] == "RESPONSE_GROUNDED"
     assert audit_details["response_citation_source_ids"] == ["source-a"]
     assert audit_details["response_evidence_count"] == 1
+
+
+def test_ai_plane_uses_json_policy_provider_controls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from services.ai_plane_extension.models import AIInferRequest
+    from services.ai_plane_extension.service import AIPlaneService
+
+    db_path = tmp_path / "ai-plane-json-policy.db"
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
+    monkeypatch.setenv("FG_AI_ENABLE_SIMULATED", "1")
+    monkeypatch.setenv(
+        "FG_AI_POLICY_PATH",
+        _policy_file(
+            tmp_path,
+            allowed_providers=["simulated"],
+            default_provider="simulated",
+            phi_provider="simulated",
+        ),
+    )
+    monkeypatch.delenv("FG_AI_ALLOWED_PROVIDERS", raising=False)
+    monkeypatch.delenv("FG_AI_DEFAULT_PROVIDER", raising=False)
+    reset_engine_cache()
+    init_db(sqlite_path=str(db_path))
+    rag_chunks = _chunks(
+        "tenant-a", "source-a", "authentication control evidence for alpha"
+    )
+
+    monkeypatch.setattr(
+        "services.ai_plane_extension.service._call_provider",
+        lambda **_kw: ProviderResponse(
+            provider_id="simulated",
+            text="authentication control evidence alpha",
+            model="SIMULATED_V1",
+        ),
+    )
+
+    result = AIPlaneService(rag_chunks=rag_chunks).infer(
+        get_sessionmaker()(),
+        "tenant-a",
+        AIInferRequest(query="authentication control"),
+    )
+
+    assert result["ok"] is True
+    assert result["provider"] == "simulated"
+    assert result["simulated"] is True
 
 
 def test_ai_plane_ungrounded_rag_response_returns_no_answer(

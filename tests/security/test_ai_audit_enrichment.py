@@ -15,6 +15,7 @@ from api.rag.chunking import ChunkingConfig, CorpusChunk, chunk_ingested_records
 from api.rag.ingest import CorpusDocument, IngestRequest, ingest_corpus
 from api.security_audit import EventType
 from services.ai.audit import build_ai_audit_metadata
+from services.ai.policy import AiAuditRules, AiPhiRules, AiPolicy, AiRagRules
 from services.ai.providers.base import (
     AI_PROVIDER_CALL_FAILED,
     ProviderCallError,
@@ -209,6 +210,48 @@ def test_ai_audit_metadata_includes_safe_rag_fields_without_raw_context() -> Non
     assert metadata["rag_max_sensitivity_level"] == "high"
     assert "raw retrieved context" not in str(metadata)
     assert "123-45-6789" not in str(metadata)
+
+
+def test_ai_audit_metadata_includes_safe_policy_fields_only() -> None:
+    ai_policy = AiPolicy(
+        version=1,
+        allowed_providers=("anthropic", "azure_openai"),
+        default_provider="anthropic",
+        phi_provider="azure_openai",
+        phi_rules=AiPhiRules(
+            require_baa=True,
+            require_prompt_minimization=True,
+            deny_if_phi_provider_unavailable=True,
+            deny_explicit_non_phi_provider_for_phi=True,
+        ),
+        rag_rules=AiRagRules(
+            enabled=True,
+            require_grounded_response=True,
+            no_answer_on_ungrounded=True,
+        ),
+        audit_rules=AiAuditRules(
+            require_request_hash=True,
+            require_response_hash=True,
+            include_routing_metadata=True,
+        ),
+        source="contracts/ai/policies/default.json",
+        reason_code="AI_POLICY_LOADED",
+    )
+
+    metadata = build_ai_audit_metadata(
+        tenant_id="tenant-a",
+        provider_id="anthropic",
+        baa_gate_result=_baa_result(provider_id="anthropic"),
+        request_text="provider prompt",
+        response_text=None,
+        ai_policy=ai_policy,
+    )
+
+    assert metadata["policy_source"] == "contracts/ai/policies/default.json"
+    assert metadata["policy_version"] == 1
+    assert metadata["policy_reason_code"] == "AI_POLICY_LOADED"
+    assert "allowed_providers" not in str(metadata)
+    assert "raw_policy" not in str(metadata)
 
 
 def test_ai_audit_metadata_uses_final_validated_response_hash() -> None:

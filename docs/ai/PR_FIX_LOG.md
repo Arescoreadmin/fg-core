@@ -6819,3 +6819,27 @@ Unsupported provider output is not returned, persisted, audited, or hashed as th
 - `.venv/bin/pytest -q tests/security/test_ai_response_validation.py tests/test_ai_plane_extension.py tests/security/test_ai_audit_enrichment.py` → 33 passed after formatting
 - `make fg-fast` → passed
 - `bash codex_gates.sh` → passed; pytest phase: 3025 passed, 26 skipped; canonical tester flow emitted expected service-unavailable SKIP and script completed successfully
+
+---
+
+### 2026-05-01 — Admin AI policy controls JSON config
+
+**Branch:** `codex/admin-ai-policy-json-config`
+
+**Issue:** AI provider policy controls were split across UI contract JSON, environment variables, and AIPlane provider helpers. The existing contract lacked PHI provider, PHI safety, RAG grounding, and audit policy controls, so UI and AIPlane could drift.
+
+**Root cause:** `api/ui_ai_console.py` consumed UI experience policy plus env gates, while `services/ai_plane_extension/service.py` used separate env-based defaults. There was no shared strict JSON loader that rejected invalid provider IDs, duplicate allowlists, unsafe production simulated policy, or disabled production PHI protections.
+
+**Files changed:** `services/ai/policy.py`, `contracts/ai/schema/policy.schema.json`, `contracts/ai/policies/default.json`, `contracts/ai/policies/tenants/example.json`, `api/ui_ai_console.py`, `services/ai_plane_extension/service.py`, `services/ai/audit.py`, `tests/security/test_ai_policy_config.py`, `tests/security/test_ui_ai_console.py`, `tests/test_ai_plane_extension.py`, `tests/security/test_ai_audit_enrichment.py`, `docs/ai/PR_FIX_LOG.md`.
+
+**Policy fields added:** `allowed_providers`, `default_provider`, `phi_provider`, `phi_rules`, `rag_rules`, and `audit_rules` are now resolved through a shared typed AI policy boundary. Explicit admin JSON can be supplied via `FG_AI_POLICY_PATH`; tenant overrides can be supplied via `FG_AI_TENANT_POLICY_DIR/{tenant_id}.json`.
+
+**Validation rules:** Explicit JSON rejects unknown fields, invalid JSON, missing required fields, empty or duplicate provider allowlists, unknown providers, `default_provider` outside `allowed_providers`, and `phi_provider` outside `allowed_providers`. Production-like environments reject `simulated`, `require_baa=false`, and `require_prompt_minimization=false`.
+
+**Integration behavior:** UI chat and AIPlane both call `resolve_ai_policy_for_tenant()` before provider routing. The resolved policy feeds deterministic allowed/default/PHI provider selection while preserving PHI classification, BAA enforcement, prompt minimization, tenant-scoped RAG, response validation, audit, and quota ordering.
+
+**Production fail-closed behavior:** Invalid tenant/admin policy fails closed and does not silently fall back. Missing explicit admin policy uses a safe built-in default; production-like built-ins exclude `simulated` and still require provider configuration, so unconfigured providers deny routing.
+
+**Audit fields added:** `policy_source`, `policy_version`, and `policy_reason_code` are included as safe metadata. Raw policy contents are not audited.
+
+**Validation results:** `git diff --check` passed; `python -m compileall services api tests` passed; focused policy/UI/AIPlane/audit/routing/provider/minimization/RAG/response-validation/BAA/PHI/provider-BAA tests passed; `make fg-fast` passed after formatting `tests/security/test_ai_policy_config.py` and `tests/security/test_ui_ai_console.py`.

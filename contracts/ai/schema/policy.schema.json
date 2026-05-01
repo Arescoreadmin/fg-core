@@ -5,6 +5,10 @@
     "version",
     "allowed_providers",
     "default_provider",
+    "phi_provider",
+    "phi_rules",
+    "rag_rules",
+    "audit_rules",
     "default_model",
     "tenant_max_tokens_per_day"
   ],
@@ -24,6 +28,73 @@
     },
     "default_provider": {
       "type": "string"
+    },
+    "phi_provider": {
+      "type": "string"
+    },
+    "phi_rules": {
+      "type": "object",
+      "required": [
+        "require_baa",
+        "require_prompt_minimization",
+        "deny_if_phi_provider_unavailable",
+        "deny_explicit_non_phi_provider_for_phi"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "require_baa": {
+          "type": "boolean"
+        },
+        "require_prompt_minimization": {
+          "type": "boolean"
+        },
+        "deny_if_phi_provider_unavailable": {
+          "type": "boolean"
+        },
+        "deny_explicit_non_phi_provider_for_phi": {
+          "type": "boolean"
+        }
+      }
+    },
+    "rag_rules": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "require_grounded_response",
+        "no_answer_on_ungrounded"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "require_grounded_response": {
+          "type": "boolean"
+        },
+        "no_answer_on_ungrounded": {
+          "type": "boolean"
+        }
+      }
+    },
+    "audit_rules": {
+      "type": "object",
+      "required": [
+        "require_request_hash",
+        "require_response_hash",
+        "include_routing_metadata"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "require_request_hash": {
+          "type": "boolean"
+        },
+        "require_response_hash": {
+          "type": "boolean"
+        },
+        "include_routing_metadata": {
+          "type": "boolean"
+        }
+      }
     },
     "default_model": {
       "type": "string"

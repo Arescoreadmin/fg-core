@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 
 from services.ai.providers.base import ProviderResponse
+from services.ai.policy import AiPolicy
 from services.ai.rag_context import RagContextResult
 from services.ai.response_validation import ResponseValidationResult
 from services.ai.routing import AiProviderRoutingResult
@@ -33,6 +34,7 @@ def build_ai_audit_metadata(
     routing_result: AiProviderRoutingResult | None = None,
     rag_context: RagContextResult | None = None,
     response_validation: ResponseValidationResult | None = None,
+    ai_policy: AiPolicy | None = None,
 ) -> dict[str, object]:
     """Build safe AI audit metadata with hashes only for request/response text."""
     effective_response_text = response_text
@@ -78,6 +80,9 @@ def build_ai_audit_metadata(
         "response_validator_version": None,
         "response_citation_source_ids": [],
         "response_evidence_count": 0,
+        "policy_source": None,
+        "policy_version": None,
+        "policy_reason_code": None,
     }
     if request_id:
         metadata["request_id"] = request_id
@@ -103,6 +108,10 @@ def build_ai_audit_metadata(
             response_validation.citation_source_ids
         )
         metadata["response_evidence_count"] = response_validation.evidence_count
+    if ai_policy is not None:
+        metadata["policy_source"] = ai_policy.source
+        metadata["policy_version"] = ai_policy.version
+        metadata["policy_reason_code"] = ai_policy.reason_code
     if provider_response is not None:
         metadata["model"] = provider_response.model
         if provider_response.input_tokens is not None:
