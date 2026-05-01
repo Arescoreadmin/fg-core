@@ -82,10 +82,10 @@ def validate_provider_response_grounding(
     text can be returned. Unsupported output is replaced with NO_ANSWER.
     """
     _require_tenant(tenant_id)
-    if not isinstance(response_text, str) or not response_text.strip():
-        return _no_answer(RESPONSE_EMPTY)
     if not rag_context.rag_used:
         return _no_answer(RESPONSE_NO_RAG_CONTEXT)
+    if not isinstance(response_text, str) or not response_text.strip():
+        return _no_answer(RESPONSE_EMPTY)
 
     response_tokens = _significant_tokens(response_text)
     if not response_tokens:

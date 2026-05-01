@@ -462,40 +462,48 @@ class AIPlaneService:
         prompt_sha = hashlib.sha256(outgoing_prompt.encode("utf-8")).hexdigest()
         request_id = f"inf-{prompt_sha[:16]}"
 
-        try:
-            prov_resp = _call_provider(
-                provider_id=effective_provider,
-                prompt=outgoing_prompt,
-                max_tokens=2000,
-                request_id=request_id,
+        prov_resp = None
+        if not rag_context.rag_used:
+            response_validation = validate_provider_response_grounding(
+                response_text="",
+                rag_context=rag_context,
                 tenant_id=tenant_id,
             )
-        except _ProviderCallError as exc:
-            self._audit_infer(
-                tenant_id=tenant_id,
-                success=False,
-                reason=exc.error_code,
-                details=build_ai_audit_metadata(
-                    tenant_id=tenant_id,
+        else:
+            try:
+                prov_resp = _call_provider(
                     provider_id=effective_provider,
-                    baa_gate_result=baa_gate_result,
-                    request_text=outgoing_prompt,
-                    response_text=None,
-                    prompt_minimization=prompt_minimization,
+                    prompt=outgoing_prompt,
+                    max_tokens=2000,
                     request_id=request_id,
-                    routing_result=routing_result,
-                    rag_context=rag_context,
-                ),
-            )
-            self._record_violation(db, tenant_id, exc.error_code)
-            db.commit()
-            raise ValueError(exc.error_code) from exc
+                    tenant_id=tenant_id,
+                )
+            except _ProviderCallError as exc:
+                self._audit_infer(
+                    tenant_id=tenant_id,
+                    success=False,
+                    reason=exc.error_code,
+                    details=build_ai_audit_metadata(
+                        tenant_id=tenant_id,
+                        provider_id=effective_provider,
+                        baa_gate_result=baa_gate_result,
+                        request_text=outgoing_prompt,
+                        response_text=None,
+                        prompt_minimization=prompt_minimization,
+                        request_id=request_id,
+                        routing_result=routing_result,
+                        rag_context=rag_context,
+                    ),
+                )
+                self._record_violation(db, tenant_id, exc.error_code)
+                db.commit()
+                raise ValueError(exc.error_code) from exc
 
-        response_validation = validate_provider_response_grounding(
-            response_text=prov_resp.text,
-            rag_context=rag_context,
-            tenant_id=tenant_id,
-        )
+            response_validation = validate_provider_response_grounding(
+                response_text=prov_resp.text,
+                rag_context=rag_context,
+                tenant_id=tenant_id,
+            )
         out = response_validation.final_text
         ok_out, code_out = policy_engine.evaluate_output(out)
         if not ok_out:
@@ -525,7 +533,9 @@ class AIPlaneService:
             {
                 "tenant_id": tenant_id,
                 "inference_id": f"inf-{prompt_sha[:16]}-{self._next_inference_suffix(db, tenant_id, prompt_sha)}",
-                "model_id": prov_resp.model,
+                "model_id": prov_resp.model
+                if prov_resp is not None
+                else effective_provider,
                 "prompt_sha256": prompt_sha,
                 "response_text": out,
                 "context_refs_json": _canonical_json(list(rag_context.source_ids)),
@@ -546,6 +556,7 @@ class AIPlaneService:
                 provider_id=effective_provider,
                 baa_gate_result=baa_gate_result,
                 request_text=outgoing_prompt,
+                response_text=out,
                 provider_response=prov_resp,
                 prompt_minimization=prompt_minimization,
                 request_id=request_id,
@@ -558,7 +569,7 @@ class AIPlaneService:
         return {
             "ok": True,
             "provider": effective_provider,
-            "model": prov_resp.model,
+            "model": prov_resp.model if prov_resp is not None else effective_provider,
             "response": out,
             "simulated": effective_provider == "simulated",
         }

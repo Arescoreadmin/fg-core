@@ -310,8 +310,11 @@ def test_ai_plane_no_rag_context_returns_no_answer(
     monkeypatch.setenv("FG_AI_ENABLE_SIMULATED", "1")
     reset_engine_cache()
     init_db(sqlite_path=str(db_path))
+    provider_called = False
 
     def _provider(**_kw) -> ProviderResponse:
+        nonlocal provider_called
+        provider_called = True
         return ProviderResponse(
             provider_id="simulated",
             text="general unsupported answer",
@@ -328,6 +331,8 @@ def test_ai_plane_no_rag_context_returns_no_answer(
 
     assert result["ok"] is True
     assert result["response"] == "NO_ANSWER"
+    assert result["model"] == "simulated"
+    assert provider_called is False
 
 
 def test_inference_record_hash_only_no_raw_prompt(tmp_path: Path) -> None:
@@ -344,7 +349,7 @@ def test_inference_record_hash_only_no_raw_prompt(tmp_path: Path) -> None:
             db.execute(
                 text(
                     "SELECT prompt_sha256, output_sha256, response_text "
-                    "FROM ai_inference_records WHERE tenant_id='tenant-a' AND model_id='SIMULATED_V1' "
+                    "FROM ai_inference_records WHERE tenant_id='tenant-a' AND model_id='simulated' "
                     "ORDER BY id DESC LIMIT 1"
                 )
             )
@@ -352,6 +357,7 @@ def test_inference_record_hash_only_no_raw_prompt(tmp_path: Path) -> None:
             .first()
         )
     assert row is not None
+    assert row["response_text"] == "NO_ANSWER"
     assert row["prompt_sha256"] != prompt
     assert prompt not in row["prompt_sha256"]
 

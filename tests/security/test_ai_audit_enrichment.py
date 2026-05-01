@@ -11,6 +11,8 @@ from sqlalchemy import text
 
 from api.auth_scopes import mint_key
 from api.db import get_sessionmaker, init_db, reset_engine_cache
+from api.rag.chunking import ChunkingConfig, CorpusChunk, chunk_ingested_records
+from api.rag.ingest import CorpusDocument, IngestRequest, ingest_corpus
 from api.security_audit import EventType
 from services.ai.audit import build_ai_audit_metadata
 from services.ai.providers.base import (
@@ -43,6 +45,15 @@ _MINIMIZATION_TEXT = (
 _MINIMIZED_TEXT = (
     "Patient [PATIENT_NAME] DOB [DATE] has MRN [MRN]. Contact [EMAIL] or [PHONE]."
 )
+_CHUNK_CONFIG = ChunkingConfig(max_chars=180, overlap_chars=0)
+
+
+def _chunks(tenant_id: str, source_id: str, content: str) -> list[CorpusChunk]:
+    result = ingest_corpus(
+        IngestRequest(documents=[CorpusDocument(source_id=source_id, content=content)]),
+        trusted_tenant_id=tenant_id,
+    )
+    return chunk_ingested_records(result.records, config=_CHUNK_CONFIG)
 
 
 def _baa_result(
@@ -690,9 +701,14 @@ def test_ai_plane_provider_failure_audit_has_safe_metadata(
         raise ProviderCallError(AI_PROVIDER_CALL_FAILED, "raw provider body")
 
     monkeypatch.setattr("services.ai_plane_extension.service._call_provider", _fail)
+    rag_chunks = _chunks(
+        "tenant-a", "source-a", "quarterly report evidence for tenant alpha"
+    )
 
     with pytest.raises(ValueError, match=AI_PROVIDER_CALL_FAILED):
-        AIPlaneService().infer(db, "tenant-a", AIInferRequest(query=_CLEAN_TEXT))
+        AIPlaneService(rag_chunks=rag_chunks).infer(
+            db, "tenant-a", AIInferRequest(query=_CLEAN_TEXT)
+        )
 
     details = _captured_admin_details(events, AI_PROVIDER_CALL_FAILED)
     assert details["provider_id"] == "anthropic"
@@ -736,18 +752,23 @@ def test_ai_plane_infer_sends_minimized_prompt_and_audits_safe_metadata(
         )
 
     monkeypatch.setattr("services.ai_plane_extension.service._call_provider", _provider)
+    rag_chunks = _chunks(
+        "tenant-a", "source-a", "Patient contact schedule evidence for tenant alpha"
+    )
 
-    result = AIPlaneService().infer(
+    result = AIPlaneService(rag_chunks=rag_chunks).infer(
         db, "tenant-a", AIInferRequest(query=_MINIMIZATION_TEXT)
     )
 
     assert result["ok"] is True
-    assert captured_prompt == _MINIMIZED_TEXT
+    assert _MINIMIZED_TEXT in captured_prompt
+    assert "Retrieved context:" in captured_prompt
+    assert _MINIMIZATION_TEXT not in captured_prompt
     details = _captured_admin_details(events, "ai_plane_infer")
     assert details["prompt_minimized"] is True
     assert details["minimization_replacement_count"] == 5
     assert details["request_hash"] == (
-        "sha256:" + hashlib.sha256(_MINIMIZED_TEXT.encode("utf-8")).hexdigest()
+        "sha256:" + hashlib.sha256(captured_prompt.encode("utf-8")).hexdigest()
     )
     assert _MINIMIZATION_TEXT not in str(details)
     assert _MINIMIZED_TEXT not in str(details)
