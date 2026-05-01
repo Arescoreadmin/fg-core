@@ -18,6 +18,7 @@ from services.ai.providers.base import (
     ProviderCallError,
     ProviderResponse,
 )
+from services.ai.rag_context import RagContextChunk, RagContextResult
 from services.phi_classifier.minimizer import PromptMinimizationResult
 from services.phi_classifier.models import SensitivityLevel
 from services.provider_baa.gate import (
@@ -147,6 +148,50 @@ def test_ai_audit_metadata_response_hash_null_without_response() -> None:
     assert metadata["request_hash"]
     assert metadata["phi_types"] == ["mrn"]
     _assert_no_raw_values(metadata)
+
+
+def test_ai_audit_metadata_includes_safe_rag_fields_without_raw_context() -> None:
+    rag_result = RagContextResult(
+        chunks=(
+            RagContextChunk(
+                source_id="src-a",
+                chunk_id="chunk-a",
+                chunk_index=0,
+                text="raw retrieved context with 123-45-6789",
+                phi_sensitivity_level="high",
+                phi_types=("ssn",),
+            ),
+        ),
+        context_text="raw retrieved context with 123-45-6789",
+        chunk_count=1,
+        source_ids=("src-a",),
+        retrieval_reason_code="RAG_RETRIEVAL_SELECTED",
+        query_phi_sensitivity="none",
+        max_sensitivity_level="high",
+        contains_phi=True,
+    )
+
+    metadata = build_ai_audit_metadata(
+        tenant_id="tenant-a",
+        provider_id="azure_openai",
+        baa_gate_result=_baa_result(
+            contains_phi=True,
+            phi_types=frozenset({"ssn"}),
+            provider_id="azure_openai",
+        ),
+        request_text="provider prompt",
+        response_text=None,
+        rag_context=rag_result,
+    )
+
+    assert metadata["rag_used"] is True
+    assert metadata["rag_chunk_count"] == 1
+    assert metadata["rag_source_ids"] == ["src-a"]
+    assert metadata["rag_retrieval_reason_code"] == "RAG_RETRIEVAL_SELECTED"
+    assert metadata["rag_query_phi_sensitivity"] == "none"
+    assert metadata["rag_max_sensitivity_level"] == "high"
+    assert "raw retrieved context" not in str(metadata)
+    assert "123-45-6789" not in str(metadata)
 
 
 def _setup_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:

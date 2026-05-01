@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -8,11 +9,23 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
+from api.rag.chunking import ChunkingConfig, CorpusChunk, chunk_ingested_records
+from api.rag.ingest import CorpusDocument, IngestRequest, ingest_corpus
 from api.auth_scopes import mint_key
 from api.db import get_sessionmaker, init_db, reset_engine_cache
 from api.main import build_app
-from services.ai_plane_extension import rag_stub
+from services.ai.providers.base import ProviderResponse
 from services.ai_plane_extension.service import write_ai_plane_evidence
+
+_CHUNK_CONFIG = ChunkingConfig(max_chars=180, overlap_chars=0)
+
+
+def _chunks(tenant_id: str, source_id: str, content: str) -> list[CorpusChunk]:
+    result = ingest_corpus(
+        IngestRequest(documents=[CorpusDocument(source_id=source_id, content=content)]),
+        trusted_tenant_id=tenant_id,
+    )
+    return chunk_ingested_records(result.records, config=_CHUNK_CONFIG)
 
 
 def _setup_client(
@@ -133,16 +146,74 @@ def test_ai_plane_no_phi_prod_without_default_fails_guarded(
         )
 
 
-def test_rag_stub_never_touches_db(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _boom(*_args, **_kwargs):
-        raise RuntimeError("db_touch_forbidden")
+def test_ai_plane_uses_real_rag_context_in_outgoing_prompt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from services.ai_plane_extension.models import AIInferRequest
+    from services.ai_plane_extension.service import AIPlaneService
 
-    import sqlite3
+    db_path = tmp_path / "ai-plane-rag.db"
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
+    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated")
+    monkeypatch.setenv("FG_AI_DEFAULT_PROVIDER", "simulated")
+    monkeypatch.setenv("FG_AI_ENABLE_SIMULATED", "1")
+    reset_engine_cache()
+    init_db(sqlite_path=str(db_path))
+    rag_chunks = _chunks(
+        "tenant-a", "source-a", "authentication control evidence for alpha"
+    ) + _chunks("tenant-b", "source-b", "authentication control evidence for beta")
+    captured_prompt = ""
+    events = []
 
-    monkeypatch.setattr(sqlite3, "connect", _boom)
-    result = rag_stub.retrieve(tenant_id="tenant-a", query="hello")
-    assert result["retrieval_id"] == "stub"
+    def _provider(**kw) -> ProviderResponse:
+        nonlocal captured_prompt
+        captured_prompt = str(kw["prompt"])
+        return ProviderResponse(
+            provider_id="simulated", text="safe response", model="m"
+        )
+
+    monkeypatch.setattr("services.ai_plane_extension.service._call_provider", _provider)
+    monkeypatch.setattr(
+        "api.security_audit.SecurityAuditor.log_event",
+        lambda _self, event: events.append(event),
+    )
+
+    result = AIPlaneService(rag_chunks=rag_chunks).infer(
+        get_sessionmaker()(),
+        "tenant-a",
+        AIInferRequest(query="authentication control"),
+    )
+
     assert result["ok"] is True
+    assert "Retrieved context:" in captured_prompt
+    assert "authentication control evidence for alpha" in captured_prompt
+    assert "authentication control evidence for beta" not in captured_prompt
+    prompt_sha = hashlib.sha256(captured_prompt.encode("utf-8")).hexdigest()
+    with get_sessionmaker()() as db:
+        row = (
+            db.execute(
+                text(
+                    "SELECT prompt_sha256, context_refs_json, retrieval_id "
+                    "FROM ai_inference_records WHERE tenant_id='tenant-a' "
+                    "ORDER BY id DESC LIMIT 1"
+                )
+            )
+            .mappings()
+            .first()
+        )
+    assert row is not None
+    assert row["prompt_sha256"] == prompt_sha
+    assert row["context_refs_json"] == '["source-a"]'
+    assert str(row["retrieval_id"]).startswith("rag:")
+    assert row["retrieval_id"] != "stub"
+    audit_details = [
+        event.details for event in events if event.reason == "ai_plane_infer"
+    ][-1]
+    assert audit_details["rag_used"] is True
+    assert audit_details["rag_chunk_count"] == 1
+    assert audit_details["rag_source_ids"] == ["source-a"]
+    assert "authentication control evidence" not in str(audit_details)
 
 
 def test_inference_record_hash_only_no_raw_prompt(tmp_path: Path) -> None:

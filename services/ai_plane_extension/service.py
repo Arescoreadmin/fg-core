@@ -5,23 +5,31 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Sequence, cast
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from api.rag.chunking import CorpusChunk
 from services.ai.audit import build_ai_audit_metadata
 from services.ai.dispatch import ProviderCallError as _ProviderCallError
 from services.ai.dispatch import call_provider as _call_provider
 from services.ai.dispatch import known_provider_ids
+from services.ai.rag_context import (
+    RagContextError,
+    RagContextResult,
+    build_rag_augmented_prompt,
+    retrieve_rag_context,
+)
 from services.ai.routing import (
     AI_PROVIDER_NOT_CONFIGURED,
     configured_ai_providers,
     resolve_ai_provider_for_request,
 )
-from services.ai_plane_extension import policy_engine, rag_stub
+from services.ai_plane_extension import policy_engine
 from services.ai_plane_extension.models import AIInferRequest, AIPolicyUpsertRequest
 from services.phi_classifier.minimizer import minimize_prompt
+from services.phi_classifier.models import PhiClassificationResult, SensitivityLevel
 from services.schema_validation import validate_payload_against_schema
 
 if TYPE_CHECKING:
@@ -88,7 +96,66 @@ def _ai_plane_allowed_providers() -> frozenset[str]:
     return configured_ai_providers()
 
 
+def _canonical_json(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _rag_retrieval_id(rag_context: RagContextResult) -> str:
+    if not rag_context.rag_used:
+        return "rag:none"
+    payload = [
+        {"chunk_id": chunk.chunk_id, "source_id": chunk.source_id}
+        for chunk in rag_context.chunks
+    ]
+    digest = hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+    return f"rag:{digest[:24]}"
+
+
+def _sensitivity_level(value: str | None) -> SensitivityLevel:
+    try:
+        return SensitivityLevel(value or SensitivityLevel.NONE.value)
+    except ValueError:
+        return SensitivityLevel.HIGH
+
+
+def _merge_rag_phi_classification(
+    classification: PhiClassificationResult,
+    rag_context: RagContextResult,
+) -> PhiClassificationResult:
+    rag_context_contains_phi = any(
+        (chunk.phi_sensitivity_level or "none") != "none" or chunk.phi_types
+        for chunk in rag_context.chunks
+    )
+    if not rag_context_contains_phi:
+        return classification
+
+    rag_phi_types = frozenset(
+        phi_type for chunk in rag_context.chunks for phi_type in chunk.phi_types
+    )
+    sensitivity = _sensitivity_level(rag_context.max_sensitivity_level)
+    if _sensitivity_level(classification.sensitivity_level.value).value in {
+        SensitivityLevel.MODERATE.value,
+        SensitivityLevel.HIGH.value,
+    }:
+        sensitivity = classification.sensitivity_level
+    if sensitivity == SensitivityLevel.NONE:
+        sensitivity = SensitivityLevel.HIGH
+    return PhiClassificationResult(
+        contains_phi=True,
+        phi_types=classification.phi_types | rag_phi_types,
+        confidence=max(classification.confidence, 0.95),
+        sensitivity_level=sensitivity,
+        redaction_candidates=classification.redaction_candidates,
+        reasoning_code="RAG_CONTEXT_PHI_DETECTED"
+        if not classification.contains_phi
+        else classification.reasoning_code,
+    )
+
+
 class AIPlaneService:
+    def __init__(self, *, rag_chunks: Sequence[CorpusChunk] | None = None) -> None:
+        self._rag_chunks: tuple[CorpusChunk, ...] = tuple(rag_chunks or ())
+
     def get_policy(self, db: Session, tenant_id: str) -> dict[str, object]:
         row = (
             db.execute(
@@ -200,36 +267,6 @@ class AIPlaneService:
         count = row.get("c")
         return (count if isinstance(count, int) else 0) + 1
 
-    def _log_retrieval_stub(self, db: Session, tenant_id: str, prompt_sha: str) -> None:
-        db.execute(
-            text(
-                """
-                INSERT INTO ai_inference_records(
-                    tenant_id, inference_id, model_id, prompt_sha256, response_text,
-                    context_refs_json, created_at_utc, output_sha256, retrieval_id,
-                    policy_result, created_at
-                )
-                VALUES (
-                    :tenant_id, :inference_id, :model_id, :prompt_sha256, :response_text,
-                    :context_refs_json, :created_at_utc, :output_sha256, :retrieval_id,
-                    :policy_result, CURRENT_TIMESTAMP
-                )
-                """
-            ),
-            {
-                "tenant_id": tenant_id,
-                "inference_id": f"rag-{prompt_sha[:16]}-{self._next_inference_suffix(db, tenant_id, prompt_sha)}",
-                "model_id": "RAG_STUB",
-                "prompt_sha256": prompt_sha,
-                "response_text": "RAG_STUB",
-                "context_refs_json": "[]",
-                "created_at_utc": _utc_now(),
-                "output_sha256": "stub",
-                "retrieval_id": "stub",
-                "policy_result": "pass",
-            },
-        )
-
     def infer(
         self, db: Session, tenant_id: str, payload: AIInferRequest
     ) -> dict[str, object]:
@@ -257,8 +294,60 @@ class AIPlaneService:
         pre_gate_prompt_sha = hashlib.sha256(payload.query.encode("utf-8")).hexdigest()
         request_id = f"inf-{pre_gate_prompt_sha[:16]}"
         phi_classification = _classify_baa_gate_phi(payload.query)
+        try:
+            rag_context = retrieve_rag_context(
+                tenant_id=tenant_id,
+                query_text=payload.query,
+                chunks=self._rag_chunks,
+                limit=4,
+                phi_detected=phi_classification.contains_phi,
+                query_phi_sensitivity=phi_classification.sensitivity_level.value,
+            )
+        except RagContextError as exc:
+            self._audit_infer(
+                tenant_id=tenant_id,
+                success=False,
+                reason=exc.error_code,
+                details={
+                    "provider_id": None,
+                    "requested_provider": None,
+                    "selected_by": None,
+                    "routing_reason_code": None,
+                    "phi_detected": phi_classification.contains_phi,
+                    "phi_types": sorted(
+                        phi_classification.phi_types - {"medical_keyword"}
+                    ),
+                    "baa_check_result": "not_evaluated",
+                    "prompt_minimized": False,
+                    "request_hash": None,
+                    "response_hash": None,
+                    "rag_used": False,
+                    "rag_chunk_count": 0,
+                    "rag_source_ids": [],
+                    "rag_retrieval_reason_code": exc.error_code,
+                    "rag_query_phi_sensitivity": phi_classification.sensitivity_level.value,
+                    "rag_max_sensitivity_level": None,
+                },
+            )
+            self._record_violation(db, tenant_id, exc.error_code)
+            db.commit()
+            raise ValueError(exc.error_code) from exc
+
+        provider_prompt = build_rag_augmented_prompt(
+            query_text=payload.query, rag_context=rag_context
+        )
+        final_phi_classification = (
+            _classify_baa_gate_phi(provider_prompt)
+            if rag_context.rag_used
+            else phi_classification
+        )
+        final_phi_classification = _merge_rag_phi_classification(
+            final_phi_classification, rag_context
+        )
         guarded_default_provider = (
-            None if phi_classification.contains_phi else _resolve_effective_provider()
+            None
+            if final_phi_classification.contains_phi
+            else _resolve_effective_provider()
         )
         routing_result = resolve_ai_provider_for_request(
             tenant_id=tenant_id,
@@ -266,7 +355,7 @@ class AIPlaneService:
             tenant_allowed_providers=_ai_plane_allowed_providers(),
             known_providers=known_provider_ids(),
             configured_providers=configured_ai_providers(),
-            phi_detected=phi_classification.contains_phi,
+            phi_detected=final_phi_classification.contains_phi,
             default_provider=guarded_default_provider,
             phi_provider=(os.getenv("FG_AI_PHI_PROVIDER") or "").strip() or None,
         )
@@ -280,14 +369,20 @@ class AIPlaneService:
                     "requested_provider": routing_result.requested_provider,
                     "selected_by": routing_result.selected_by,
                     "routing_reason_code": routing_result.reason_code,
-                    "phi_detected": phi_classification.contains_phi,
+                    "phi_detected": final_phi_classification.contains_phi,
                     "phi_types": sorted(
-                        phi_classification.phi_types - {"medical_keyword"}
+                        final_phi_classification.phi_types - {"medical_keyword"}
                     ),
                     "baa_check_result": "not_evaluated",
                     "prompt_minimized": False,
                     "request_hash": None,
                     "response_hash": None,
+                    "rag_used": rag_context.rag_used,
+                    "rag_chunk_count": rag_context.chunk_count,
+                    "rag_source_ids": list(rag_context.source_ids),
+                    "rag_retrieval_reason_code": rag_context.retrieval_reason_code,
+                    "rag_query_phi_sensitivity": rag_context.query_phi_sensitivity,
+                    "rag_max_sensitivity_level": rag_context.max_sensitivity_level,
                 },
             )
             self._record_violation(db, tenant_id, routing_result.reason_code)
@@ -302,9 +397,9 @@ class AIPlaneService:
                 db,
                 tenant_id=tenant_id,
                 provider_id=effective_provider,
-                text=payload.query,
+                text=provider_prompt,
                 source="ai_plane_infer",
-                classification=phi_classification,
+                classification=final_phi_classification,
             )
         except _HTTPException as exc:
             denied_baa_gate_result = cast(
@@ -319,17 +414,18 @@ class AIPlaneService:
                         tenant_id=tenant_id,
                         provider_id=effective_provider,
                         baa_gate_result=denied_baa_gate_result,
-                        request_text=payload.query,
+                        request_text=provider_prompt,
                         response_text=None,
                         request_id=request_id,
                         routing_result=routing_result,
+                        rag_context=rag_context,
                     ),
                 )
             self._record_violation(db, tenant_id, "AI_PHI_PROVIDER_NOT_BAA_CAPABLE")
             db.commit()
             raise ValueError("AI_PHI_PROVIDER_NOT_BAA_CAPABLE")
 
-        prompt_minimization = minimize_prompt(payload.query, phi_classification)
+        prompt_minimization = minimize_prompt(provider_prompt, final_phi_classification)
         outgoing_prompt = prompt_minimization.minimized_text
         if prompt_minimization.reason_code == "PROMPT_MINIMIZATION_NON_STRING":
             self._audit_infer(
@@ -345,6 +441,7 @@ class AIPlaneService:
                     prompt_minimization=prompt_minimization,
                     request_id=request_id,
                     routing_result=routing_result,
+                    rag_context=rag_context,
                 ),
             )
             self._record_violation(db, tenant_id, "AI_PROMPT_MINIMIZATION_FAILED")
@@ -353,8 +450,6 @@ class AIPlaneService:
 
         prompt_sha = hashlib.sha256(outgoing_prompt.encode("utf-8")).hexdigest()
         request_id = f"inf-{prompt_sha[:16]}"
-        rag = rag_stub.retrieve(tenant_id=tenant_id, query=payload.query)
-        self._log_retrieval_stub(db, tenant_id, prompt_sha)
 
         try:
             prov_resp = _call_provider(
@@ -378,6 +473,7 @@ class AIPlaneService:
                     prompt_minimization=prompt_minimization,
                     request_id=request_id,
                     routing_result=routing_result,
+                    rag_context=rag_context,
                 ),
             )
             self._record_violation(db, tenant_id, exc.error_code)
@@ -416,10 +512,10 @@ class AIPlaneService:
                 "model_id": prov_resp.model,
                 "prompt_sha256": prompt_sha,
                 "response_text": out,
-                "context_refs_json": json.dumps(rag.get("sources", [])),
+                "context_refs_json": _canonical_json(list(rag_context.source_ids)),
                 "created_at_utc": _utc_now(),
                 "output_sha256": output_sha,
-                "retrieval_id": str(rag.get("retrieval_id", "stub")),
+                "retrieval_id": _rag_retrieval_id(rag_context),
                 "policy_result": "pass",
             },
         )
@@ -438,6 +534,7 @@ class AIPlaneService:
                 prompt_minimization=prompt_minimization,
                 request_id=request_id,
                 routing_result=routing_result,
+                rag_context=rag_context,
             ),
         )
 

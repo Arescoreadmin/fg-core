@@ -181,6 +181,110 @@ AIPlane now calls `_resolve_effective_provider()` for non-PHI default routing an
 
 ---
 
+### 2026-05-01 — Wire real tenant-scoped RAG retrieval into AIPlane execution
+
+**Branch:** `codex/wire-real-rag-retrieval`
+
+**Area:** AIPlane RAG retrieval / Prompt minimization / Audit metadata / Tenant isolation
+
+---
+
+**Issue:**
+
+AIPlane inference still called `rag_stub.retrieve()`, inserted a `RAG_STUB` inference record, recorded stub source refs, and sent only the user query to the provider. The existing real RAG retrieval surface was not part of AI execution.
+
+**Root cause:**
+
+The repo had tenant-safe in-memory RAG primitives (`search_chunks`, lifecycle chunk listing, ingestion PHI metadata), but no small AI execution adapter that converted those retrieval results into bounded provider context and safe audit metadata.
+
+**Files changed:**
+
+- `services/ai/rag_context.py` — new typed adapter around `search_chunks` with tenant validation, bounded limits, deterministic context formatting, sensitivity extraction, and fail-closed errors.
+- `services/ai_plane_extension/service.py` — replaced stub retrieval with real RAG context retrieval, final prompt construction, RAG-sensitive provider routing input, BAA enforcement on the provider prompt, minimization of the final provider prompt, deterministic context refs, and RAG-safe audit metadata.
+- `services/ai/audit.py` — added default safe RAG metadata fields and optional `RagContextResult` enrichment.
+- `tests/security/test_ai_rag_context.py` — added adapter unit, tenant isolation, deterministic ordering, fail-closed, prompt construction, and no-stub regression coverage.
+- `tests/test_ai_plane_extension.py` — added AIPlane integration coverage proving retrieved context reaches the outgoing provider prompt, tenant B context is excluded, request hash uses the final prompt, and stored refs are deterministic.
+- `tests/security/test_ai_audit_enrichment.py` — added safe RAG audit-field coverage proving raw retrieved context is excluded.
+
+**RAG wiring behavior:**
+
+AIPlane now calls `retrieve_rag_context()`, which calls `search_chunks()` with `trusted_tenant_id`. When matching chunks exist, the provider prompt is deterministically built as bounded retrieved context plus user query. When no corpus chunks are configured, retrieval returns `RAG_RETRIEVAL_EMPTY` and the provider prompt remains the user query.
+
+**Tenant isolation behavior:**
+
+`tenant_id` is mandatory. Cross-tenant chunks are filtered by `search_chunks()` and defensively rejected by the adapter if a foreign tenant result is ever returned. Stored context refs contain only source IDs from the tenant-scoped ranked results.
+
+**PHI/BAA/provider interaction:**
+
+The user query is classified first, tenant-scoped RAG is retrieved, the RAG-augmented provider prompt is classified when context is present, and retrieved chunk PHI metadata can upgrade provider routing to the PHI path. BAA enforcement runs before minimization, quota/provider dispatch remains after denial gates, and minimization applies to the final provider prompt.
+
+**Audit fields added:**
+
+`rag_used`, `rag_chunk_count`, `rag_source_ids`, `rag_retrieval_reason_code`, `rag_query_phi_sensitivity`, and `rag_max_sensitivity_level`. Audit metadata continues to exclude raw prompts, minimized prompts, raw responses, raw chunk text, retrieved context text, embeddings, and provider raw bodies.
+
+**No-stub/no-fallback guarantee:**
+
+AIPlane no longer imports or calls `rag_stub.retrieve()` and no `RAG_STUB` inference record is created. Retrieval errors fail closed before provider dispatch. No fallback to stub, simulated, or a non-PHI provider is introduced.
+
+**Validation results:**
+
+- `.venv/bin/pytest -q tests/security/test_ai_rag_context.py` → 7 passed
+- `.venv/bin/pytest -q tests/test_ai_plane_extension.py` → 11 passed
+- `.venv/bin/pytest -q tests/security/test_ai_audit_enrichment.py` → 12 passed
+- `.venv/bin/pytest -q tests/security/test_ai_provider_routing.py` → 13 passed
+- `.venv/bin/pytest -q tests/security/test_ai_provider.py` → 40 passed
+- `.venv/bin/pytest -q tests/security/test_prompt_minimization.py` → 7 passed
+- `.venv/bin/pytest -q tests/security/test_baa_gate.py` → 28 passed
+- `.venv/bin/pytest -q tests/security/test_phi_classifier.py` → 26 passed
+- `.venv/bin/pytest -q tests/security/test_provider_baa_enforcement.py` → 35 passed
+- `.venv/bin/pytest -q tests/security/test_ai_rag_context.py tests/test_ai_plane_extension.py tests/security/test_ai_audit_enrichment.py` → 30 passed
+- `git diff --check` → passed
+- `python -m compileall services api tests` → passed
+- Required leak/safety `rg` scan → reviewed; matches are existing docs/tests/config names, the unused legacy stub module, or test fixture PHI strings.
+- `make fg-fast` → All checks passed
+- `bash codex_gates.sh` → All gates passed; 3014 passed, 26 skipped; dependency audit found no known vulnerabilities; tester flow skipped because Keycloak was not running.
+
+**Risks/notes:**
+
+The current RAG corpus implementation is in-memory. AIPlane accepts an explicit chunk source and defaults to an empty corpus when no runtime corpus source is configured; this avoids stub fallback and preserves deterministic behavior until a persistent corpus service is introduced.
+
+---
+
+### 2026-05-01 — PR review fix: skip zero-score RAG retrieval hits
+
+**Branch:** `codex/wire-real-rag-retrieval`
+
+**Area:** AIPlane RAG retrieval / Prompt construction / PHI minimization
+
+---
+
+**Issue:**
+
+`retrieve_rag_context()` accepted every tenant-scoped `search_chunks()` result, including zero-score chunks with no lexical match to the query.
+
+**Root cause:**
+
+`search_chunks()` returns the top bounded slice after scoring but does not filter zero-score results. The AI adapter treated those results as usable context.
+
+**Fix:**
+
+The RAG adapter now skips `result.score <= 0.0` before constructing prompt context or setting `rag_used=True`.
+
+**Files changed:**
+
+- `services/ai/rag_context.py`
+- `tests/security/test_ai_rag_context.py`
+
+**Validation results:**
+
+- `.venv/bin/pytest -q tests/security/test_ai_rag_context.py` → 8 passed
+
+**Risks/notes:**
+
+None.
+
+---
+
 ### 2026-04-27 — Task 15.3 PR review fix: blocked semantics + no-break-on-skip + precedence
 
 **Branch:** `task/15.3-runtime-verification-classification`
