@@ -986,6 +986,23 @@
       ],
       "file": "api/ai_plane_extension.py",
       "method": "POST",
+      "path": "/ai/chat",
+      "plane": "ai",
+      "plane_id": "ai",
+      "scoped": true,
+      "scopes": [
+        "compliance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/ai_plane_extension.py",
+      "method": "POST",
       "path": "/ai/infer",
       "plane": "ai",
       "plane_id": "ai",
@@ -4037,7 +4054,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-04-28T12:56:49.402317+00:00",
+  "generated_at": "2026-05-01T18:46:13.813363+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

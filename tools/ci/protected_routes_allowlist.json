@@ -1,5 +1,6 @@
 {
   "protected_prefixes": [
+    "/ai/chat",
     "/ai/infer",
     "/ai-plane/",
     "/auth/federation/validate",

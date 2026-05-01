@@ -548,3 +548,29 @@ Deterministic PHI-aware routing requires `azure_openai` as the configured PHI pr
 ### Verification
 - `make fg-fast`: All checks passed
 - `bash codex_gates.sh`: All gates passed
+
+## Simple AI chat endpoint — OpenAPI security diff and route inventory addendum (2026-05-01)
+
+### Files reviewed (required by SOC-HIGH-002)
+- `tools/ci/check_openapi_security_diff.py`: Added `POST /ai/chat` to the exact known AI route set.
+- `tools/ci/protected_routes_allowlist.json`: Added `/ai/chat` as a protected route.
+- `tools/ci/route_inventory.json`, `tools/ci/contract_routes.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`: Regenerated after adding `POST /ai/chat`.
+
+### Why
+The new root `POST /ai/chat` endpoint is a tenant-bound, scoped AI surface backed by the existing AIPlane pipeline. The OpenAPI security diff intentionally blocks unknown `/ai/*` routes, so the new route must be named explicitly and present in the protected route inventory with auth and tenant metadata.
+
+### Security posture impact
+- Additive route only: `POST /ai/chat` requires `compliance:read` and tenant binding through the same dependencies as `POST /ai/infer`.
+- The route reuses AIPlane policy, PHI routing, BAA enforcement, prompt minimization, tenant-scoped RAG retrieval, response grounding validation, audit metadata, and existing provider dispatch.
+- No fallback provider behavior is introduced. Unsupported provider output is still replaced with `NO_ANSWER` by the validator path before hashing, persistence, and audit.
+- OpenAPI response metadata documents stable error-code responses for policy/auth denials so the route remains compatible with the security diff gate.
+
+### Verification
+- `.venv/bin/pytest -q tests/security/test_openapi_security_diff_scoping.py`: 5 passed
+- `make route-inventory-generate`: route inventory regenerated
+- `make contract-authority-refresh`: authority markers refreshed
+
+### Addendum — 2026-05-01 auth response schema alignment
+- `api/ai_plane_extension.py`: `/ai/chat` 401/403 OpenAPI response metadata now documents the actual FastAPI auth envelope, `{"detail": "..."}`, emitted by `require_scopes(...)`.
+- `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `tools/ci/plane_registry_snapshot.json`, and `tools/ci/topology.sha256`: regenerated/refreshed after the response metadata correction.
+- Security posture is unchanged: the endpoint remains tenant-bound, scoped with `compliance:read`, and protected by the same AIPlane policy/BAA/RAG/validator pipeline.

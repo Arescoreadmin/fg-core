@@ -6843,3 +6843,27 @@ Unsupported provider output is not returned, persisted, audited, or hashed as th
 **Audit fields added:** `policy_source`, `policy_version`, and `policy_reason_code` are included as safe metadata. Raw policy contents are not audited.
 
 **Validation results:** `git diff --check` passed; `python -m compileall services api tests` passed; focused policy/UI/AIPlane/audit/routing/provider/minimization/RAG/response-validation/BAA/PHI/provider-BAA tests passed; `make fg-fast` passed after formatting `tests/security/test_ai_policy_config.py` and `tests/security/test_ui_ai_console.py`.
+
+---
+
+### 2026-05-01 — Simple AI chat endpoint
+
+**Branch:** `codex/simple-ai-chat-endpoint`
+
+**Issue:** FrostGate had `/ui/ai/chat` and `/ai/infer`, but no minimal root `POST /ai/chat` API contract returning `answer`, `sources`, and `confidence`.
+
+**Root cause:** The complete secure AI pipeline already existed in `AIPlaneService.infer()`, but it exposed the AIPlane response shape and did not provide a simple chat adapter or pass an explicit provider request through the shared routing boundary.
+
+**Files changed:** `api/ai_plane_extension.py`, `services/ai_plane_extension/models.py`, `services/ai_plane_extension/__init__.py`, `services/ai_plane_extension/service.py`, `tests/test_ai_plane_extension.py`, `tests/security/test_openapi_security_diff_scoping.py`, `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `tools/ci/check_openapi_security_diff.py`, `tools/ci/protected_routes_allowlist.json`, `tools/ci/route_inventory.json`, `tools/ci/contract_routes.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256`, `artifacts/platform_inventory.det.json`, `docs/SOC_ARCH_REVIEW_2026-02-15.md`, `docs/ai/PR_FIX_LOG.md`.
+
+**Endpoint contract:** Added `POST /ai/chat` with request fields `message` and optional `provider`. The response contains `answer`, `sources`, and `confidence`. Sources expose only safe `source_id` values, and confidence is deterministic: `1.0` for grounded evidence-backed responses and `0.0` for `NO_ANSWER`.
+
+**Security behavior:** The route requires the same tenant binding and `compliance:read` scope pattern as `/ai/infer`. Empty messages are rejected by schema validation. Policy, routing, BAA, minimization, RAG retrieval, response validation, audit metadata, and provider dispatch are not duplicated in the route.
+
+**Policy/BAA/RAG/validator reuse:** `/ai/chat` calls `AIPlaneService.chat()`, which wraps `AIPlaneService.infer()`. Explicit provider requests flow through `resolve_ai_provider_for_request()`. Unsupported or ungrounded provider output is replaced by `NO_ANSWER` before response hashing, persistence, and audit.
+
+**Tests added/updated:** Added `/ai/chat` coverage for auth required, empty message rejection, grounded answer shape, safe sources, deterministic confidence, ungrounded `NO_ANSWER`, final response hash audit behavior, PHI BAA denial before provider call, requested-provider policy denial, and OpenAPI security diff recognition for `/ai/chat`.
+
+**Validation results:** `git diff --check` passed; `python -m compileall services api tests` passed; focused security suites passed; `tests/test_ai_plane_extension.py` passed with 20 tests; `tests/security/test_openapi_security_diff_scoping.py` passed with 5 tests; `make route-inventory-generate` and `make contract-authority-refresh` ran after contract changes; `make fg-fast` passed; `bash codex_gates.sh` passed with 3052 passed and 26 skipped in the full pytest phase.
+
+**Addendum — 2026-05-01 auth response contract fix:** Updated `/ai/chat` 401/403 OpenAPI metadata to match the actual `require_scopes(...)` FastAPI error envelope, `{"detail": "..."}`, instead of advertising a top-level `error_code`. Added endpoint regression coverage for runtime 401 payload shape and generated OpenAPI 401/403 schemas. Regenerated OpenAPI/schema mirrors and refreshed contract authority markers.

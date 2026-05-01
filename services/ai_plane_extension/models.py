@@ -6,7 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field
 class AIInferRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    query: str
+    query: str = Field(min_length=1, max_length=10000)
+    provider: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class AIInferResponse(BaseModel):
@@ -14,6 +15,27 @@ class AIInferResponse(BaseModel):
     model: str
     response: str
     simulated: bool
+
+
+class AIChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = Field(min_length=1, max_length=10000)
+    provider: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class AIChatSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: str
+
+
+class AIChatResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    answer: str
+    sources: list[AIChatSource] = Field(default_factory=list)
+    confidence: float = Field(ge=0.0, le=1.0)
 
 
 class AIPolicyUpsertRequest(BaseModel):

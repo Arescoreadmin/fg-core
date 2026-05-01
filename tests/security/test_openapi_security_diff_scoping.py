@@ -75,3 +75,45 @@ def test_unexpected_ai_route_fails(tmp_path):
     )
     assert proc.returncode != 0
     assert "OPENAPI_SECURITY_UNEXPECTED_AI_ROUTE" in proc.stdout
+
+
+def test_known_ai_chat_route_is_allowed_when_protected(tmp_path):
+    base = {"paths": {}}
+    cur = {
+        "paths": {
+            "/ai/chat": {
+                "post": {
+                    "responses": {
+                        "200": {},
+                        "400": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "properties": {"error_code": {"type": "string"}}
+                                    }
+                                }
+                            }
+                        },
+                        "401": {},
+                        "403": {},
+                    }
+                }
+            }
+        }
+    }
+    inv = [
+        {
+            "method": "POST",
+            "path": "/ai/chat",
+            "scoped": True,
+            "tenant_bound": True,
+        }
+    ]
+    proc = _run(
+        tmp_path,
+        base,
+        cur,
+        {"protected_prefixes": ["/ai/chat"], "waived_401_403": {}},
+        inv,
+    )
+    assert proc.returncode == 0

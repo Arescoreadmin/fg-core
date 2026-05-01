@@ -27,9 +27,9 @@
     }
   ],
   "governance": {
-    "contract_count": 156,
+    "contract_count": 157,
     "contract_only": [],
-    "runtime_count": 242,
+    "runtime_count": 243,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -117,7 +117,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "62f15bda6fab8ba584b53c5c2785e5667ee95aac4c6cb6159301541559f4ce89",
+  "governance_fingerprint": "a348217d5490343f3287abd581e4f0ed86f2e13c12e67645de4f6364accbfe9b",
   "planes": [
     {
       "compat": {
@@ -279,6 +279,7 @@
       "GET /ai-plane/inference",
       "GET /ai-plane/policies",
       "POST /ai-plane/policies",
+      "POST /ai/chat",
       "POST /ai/infer"
     ],
     "connector": [

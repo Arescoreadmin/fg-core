@@ -1,4 +1,7 @@
 from services.ai_plane_extension.models import (
+    AIChatRequest,
+    AIChatResponse,
+    AIChatSource,
     AIInferRequest,
     AIInferResponse,
     AIPolicyUpsertRequest,
@@ -12,6 +15,9 @@ from services.ai_plane_extension.service import (
 
 __all__ = [
     "AIPlaneService",
+    "AIChatRequest",
+    "AIChatResponse",
+    "AIChatSource",
     "AIInferRequest",
     "AIInferResponse",
     "AIPolicyUpsertRequest",
