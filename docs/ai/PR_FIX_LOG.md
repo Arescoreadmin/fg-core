@@ -6744,3 +6744,78 @@ The context hash envelope contains only the minimized outgoing prompt and safe r
 - `.venv/bin/pytest -q tests/security/test_ai_audit_enrichment.py` → 11 passed
 - `.venv/bin/pytest -q tests/security/test_prompt_minimization.py` → 7 passed
 - `python -m compileall api/ui_ai_console.py services/ai/audit.py tests/security/test_ai_audit_enrichment.py` → passed
+
+---
+
+### 2026-05-01 — Connect AIPlane response validator and grounding enforcement
+
+**Branch:** `codex/response-grounding-enforcement`
+
+**Area:** AIPlane RAG grounding / response validation / audit integrity
+
+---
+
+**Issue:**
+
+AIPlane retrieved tenant-scoped RAG context and sent it to the selected provider, but provider output was returned directly. There was no connected response validation step proving that returned text was grounded in retrieved evidence.
+
+**Root cause:**
+
+`AIPlaneService.infer()` assigned `prov_resp.text` directly to the user-visible response, database `response_text`, `output_sha256`, and audit response hash path. RAG context existed before dispatch, but the response flow had no fail-closed validator boundary after provider dispatch.
+
+**Files changed:**
+
+- `services/ai/response_validation.py` — new deterministic, no-network grounding validator that returns provider text only when significant response tokens are supported by retrieved RAG chunks; otherwise returns `NO_ANSWER`.
+- `services/ai_plane_extension/service.py` — validates provider output after dispatch and before output policy, persistence, response hashing, and audit; custom denial audit paths include inert response-validation metadata.
+- `services/ai/audit.py` — adds safe response validation fields and hashes the final returned text when validation is present.
+- `tests/security/test_ai_response_validation.py` — unit coverage for grounded, ungrounded, empty, no-context, tenantless, deterministic citation, and raw-data exclusion behavior.
+- `tests/test_ai_plane_extension.py` — integration coverage for grounded RAG responses, ungrounded `NO_ANSWER`, no-RAG `NO_ANSWER`, single provider call/no fallback, response hash, and audit metadata.
+- `tests/security/test_ai_audit_enrichment.py` — audit coverage proving final validated text drives `response_hash` and unsupported provider text is not stored in metadata.
+- `docs/ai/PR_FIX_LOG.md` — this append-only entry.
+
+**Response validator behavior:**
+
+The validator is deterministic, tenant-required, and fail-closed. It makes no external calls and does not mutate RAG context. A response is returned only when all significant response tokens are present in retrieved context and at least one source supports the response.
+
+**NO_ANSWER behavior:**
+
+Empty responses, missing RAG context, and ungrounded responses return the literal `NO_ANSWER`. `AIPlaneService` persists and returns `NO_ANSWER`, computes `output_sha256` from `NO_ANSWER`, and audit `response_hash` hashes `NO_ANSWER` rather than unsupported provider text.
+
+**Grounding/citation behavior:**
+
+Citation source IDs are deterministic from the retrieved chunk order with stable de-duplication. Evidence count is the number of source IDs supporting the response. No citation text or raw chunk text is stored in audit metadata.
+
+**UI chat scope:**
+
+`/ui/ai/chat` does not currently use the AIPlane RAG context path, so this change does not add fake UI RAG validation coverage. The connected validator applies to AIPlane execution where `RagContextResult` is available after tenant-scoped retrieval.
+
+**Audit fields added:**
+
+- `response_grounded`
+- `response_validation_result`
+- `response_validator_version`
+- `response_citation_source_ids`
+- `response_evidence_count`
+
+**Raw-data leakage protections:**
+
+Unsupported provider output is not returned, persisted, audited, or hashed as the response. Raw RAG context remains excluded from audit metadata. Prompt minimization, PHI/BAA enforcement, tenant-scoped RAG retrieval, provider routing, and request hashing order remain unchanged.
+
+**Validation results:**
+
+- `git diff --check` → passed
+- `python -m compileall services api tests` → passed
+- `.venv/bin/ruff check services/ai/response_validation.py services/ai/audit.py services/ai_plane_extension/service.py tests/security/test_ai_response_validation.py tests/test_ai_plane_extension.py tests/security/test_ai_audit_enrichment.py` → passed
+- `.venv/bin/pytest -q tests/security/test_ai_response_validation.py` → 7 passed
+- `.venv/bin/pytest -q tests/security/test_ai_rag_context.py` → 8 passed
+- `.venv/bin/pytest -q tests/security/test_ai_provider_routing.py` → 13 passed
+- `.venv/bin/pytest -q tests/security/test_ai_provider.py` → 40 passed
+- `.venv/bin/pytest -q tests/security/test_ai_audit_enrichment.py` → 13 passed
+- `.venv/bin/pytest -q tests/security/test_prompt_minimization.py` → 7 passed
+- `.venv/bin/pytest -q tests/security/test_baa_gate.py` → 28 passed
+- `.venv/bin/pytest -q tests/security/test_phi_classifier.py` → 26 passed
+- `.venv/bin/pytest -q tests/security/test_provider_baa_enforcement.py` → 35 passed
+- `.venv/bin/pytest -q tests/test_ai_plane_extension.py` → 13 passed
+- `.venv/bin/pytest -q tests/security/test_ai_response_validation.py tests/test_ai_plane_extension.py tests/security/test_ai_audit_enrichment.py` → 33 passed after formatting
+- `make fg-fast` → passed
+- `bash codex_gates.sh` → passed; pytest phase: 3025 passed, 26 skipped; canonical tester flow emitted expected service-unavailable SKIP and script completed successfully

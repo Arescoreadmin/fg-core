@@ -170,7 +170,9 @@ def test_ai_plane_uses_real_rag_context_in_outgoing_prompt(
         nonlocal captured_prompt
         captured_prompt = str(kw["prompt"])
         return ProviderResponse(
-            provider_id="simulated", text="safe response", model="m"
+            provider_id="simulated",
+            text="authentication control evidence alpha",
+            model="m",
         )
 
     monkeypatch.setattr("services.ai_plane_extension.service._call_provider", _provider)
@@ -186,6 +188,7 @@ def test_ai_plane_uses_real_rag_context_in_outgoing_prompt(
     )
 
     assert result["ok"] is True
+    assert result["response"] == "authentication control evidence alpha"
     assert "Retrieved context:" in captured_prompt
     assert "authentication control evidence for alpha" in captured_prompt
     assert "authentication control evidence for beta" not in captured_prompt
@@ -214,6 +217,122 @@ def test_ai_plane_uses_real_rag_context_in_outgoing_prompt(
     assert audit_details["rag_chunk_count"] == 1
     assert audit_details["rag_source_ids"] == ["source-a"]
     assert "authentication control evidence" not in str(audit_details)
+    assert audit_details["response_grounded"] is True
+    assert audit_details["response_validation_result"] == "RESPONSE_GROUNDED"
+    assert audit_details["response_citation_source_ids"] == ["source-a"]
+    assert audit_details["response_evidence_count"] == 1
+
+
+def test_ai_plane_ungrounded_rag_response_returns_no_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from services.ai_plane_extension.models import AIInferRequest
+    from services.ai_plane_extension.service import AIPlaneService
+
+    db_path = tmp_path / "ai-plane-rag-ungrounded.db"
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
+    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated")
+    monkeypatch.setenv("FG_AI_DEFAULT_PROVIDER", "simulated")
+    monkeypatch.setenv("FG_AI_ENABLE_SIMULATED", "1")
+    reset_engine_cache()
+    init_db(sqlite_path=str(db_path))
+    rag_chunks = _chunks(
+        "tenant-a", "source-a", "authentication control evidence for alpha"
+    )
+    provider_calls = 0
+    events = []
+
+    def _provider(**kw) -> ProviderResponse:
+        nonlocal provider_calls
+        provider_calls += 1
+        assert "Retrieved context:" in str(kw["prompt"])
+        return ProviderResponse(
+            provider_id="simulated",
+            text="unsupported deployment procedure",
+            model="m",
+        )
+
+    monkeypatch.setattr("services.ai_plane_extension.service._call_provider", _provider)
+    monkeypatch.setattr(
+        "api.security_audit.SecurityAuditor.log_event",
+        lambda _self, event: events.append(event),
+    )
+
+    result = AIPlaneService(rag_chunks=rag_chunks).infer(
+        get_sessionmaker()(),
+        "tenant-a",
+        AIInferRequest(query="authentication control"),
+    )
+
+    assert result["ok"] is True
+    assert result["response"] == "NO_ANSWER"
+    assert provider_calls == 1
+    no_answer_sha = hashlib.sha256(b"NO_ANSWER").hexdigest()
+    with get_sessionmaker()() as db:
+        row = (
+            db.execute(
+                text(
+                    "SELECT output_sha256, response_text "
+                    "FROM ai_inference_records WHERE tenant_id='tenant-a' "
+                    "ORDER BY id DESC LIMIT 1"
+                )
+            )
+            .mappings()
+            .first()
+        )
+    assert row is not None
+    assert row["response_text"] == "NO_ANSWER"
+    assert row["output_sha256"] == no_answer_sha
+    audit_details = [
+        event.details for event in events if event.reason == "ai_plane_infer"
+    ][-1]
+    assert audit_details["response_grounded"] is False
+    assert audit_details["response_validation_result"] == "RESPONSE_UNGROUNDED"
+    assert audit_details["response_hash"] == f"sha256:{no_answer_sha}"
+    assert audit_details["response_citation_source_ids"] == []
+    assert audit_details["response_evidence_count"] == 0
+    assert "unsupported deployment procedure" not in str(audit_details)
+    assert "authentication control evidence" not in str(audit_details)
+
+
+def test_ai_plane_no_rag_context_returns_no_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from services.ai_plane_extension.models import AIInferRequest
+    from services.ai_plane_extension.service import AIPlaneService
+
+    db_path = tmp_path / "ai-plane-no-rag-answer.db"
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
+    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated")
+    monkeypatch.setenv("FG_AI_DEFAULT_PROVIDER", "simulated")
+    monkeypatch.setenv("FG_AI_ENABLE_SIMULATED", "1")
+    reset_engine_cache()
+    init_db(sqlite_path=str(db_path))
+    provider_called = False
+
+    def _provider(**_kw) -> ProviderResponse:
+        nonlocal provider_called
+        provider_called = True
+        return ProviderResponse(
+            provider_id="simulated",
+            text="general unsupported answer",
+            model="m",
+        )
+
+    monkeypatch.setattr("services.ai_plane_extension.service._call_provider", _provider)
+
+    result = AIPlaneService().infer(
+        get_sessionmaker()(),
+        "tenant-a",
+        AIInferRequest(query="general question"),
+    )
+
+    assert result["ok"] is True
+    assert result["response"] == "NO_ANSWER"
+    assert result["model"] == "simulated"
+    assert provider_called is False
 
 
 def test_inference_record_hash_only_no_raw_prompt(tmp_path: Path) -> None:
@@ -230,7 +349,7 @@ def test_inference_record_hash_only_no_raw_prompt(tmp_path: Path) -> None:
             db.execute(
                 text(
                     "SELECT prompt_sha256, output_sha256, response_text "
-                    "FROM ai_inference_records WHERE tenant_id='tenant-a' AND model_id='SIMULATED_V1' "
+                    "FROM ai_inference_records WHERE tenant_id='tenant-a' AND model_id='simulated' "
                     "ORDER BY id DESC LIMIT 1"
                 )
             )
@@ -238,6 +357,7 @@ def test_inference_record_hash_only_no_raw_prompt(tmp_path: Path) -> None:
             .first()
         )
     assert row is not None
+    assert row["response_text"] == "NO_ANSWER"
     assert row["prompt_sha256"] != prompt
     assert prompt not in row["prompt_sha256"]
 

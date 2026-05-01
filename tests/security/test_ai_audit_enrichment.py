@@ -11,6 +11,8 @@ from sqlalchemy import text
 
 from api.auth_scopes import mint_key
 from api.db import get_sessionmaker, init_db, reset_engine_cache
+from api.rag.chunking import ChunkingConfig, CorpusChunk, chunk_ingested_records
+from api.rag.ingest import CorpusDocument, IngestRequest, ingest_corpus
 from api.security_audit import EventType
 from services.ai.audit import build_ai_audit_metadata
 from services.ai.providers.base import (
@@ -19,6 +21,12 @@ from services.ai.providers.base import (
     ProviderResponse,
 )
 from services.ai.rag_context import RagContextChunk, RagContextResult
+from services.ai.response_validation import (
+    NO_ANSWER_TEXT,
+    RESPONSE_UNGROUNDED,
+    RESPONSE_VALIDATOR_VERSION,
+    ResponseValidationResult,
+)
 from services.phi_classifier.minimizer import PromptMinimizationResult
 from services.phi_classifier.models import SensitivityLevel
 from services.provider_baa.gate import (
@@ -37,6 +45,15 @@ _MINIMIZATION_TEXT = (
 _MINIMIZED_TEXT = (
     "Patient [PATIENT_NAME] DOB [DATE] has MRN [MRN]. Contact [EMAIL] or [PHONE]."
 )
+_CHUNK_CONFIG = ChunkingConfig(max_chars=180, overlap_chars=0)
+
+
+def _chunks(tenant_id: str, source_id: str, content: str) -> list[CorpusChunk]:
+    result = ingest_corpus(
+        IngestRequest(documents=[CorpusDocument(source_id=source_id, content=content)]),
+        trusted_tenant_id=tenant_id,
+    )
+    return chunk_ingested_records(result.records, config=_CHUNK_CONFIG)
 
 
 def _baa_result(
@@ -192,6 +209,42 @@ def test_ai_audit_metadata_includes_safe_rag_fields_without_raw_context() -> Non
     assert metadata["rag_max_sensitivity_level"] == "high"
     assert "raw retrieved context" not in str(metadata)
     assert "123-45-6789" not in str(metadata)
+
+
+def test_ai_audit_metadata_uses_final_validated_response_hash() -> None:
+    provider_response = ProviderResponse(
+        provider_id="simulated",
+        text="unsupported raw provider answer 987-65",
+        model="SIMULATED_V1",
+    )
+    response_validation = ResponseValidationResult(
+        grounded=False,
+        final_text=NO_ANSWER_TEXT,
+        reason_code=RESPONSE_UNGROUNDED,
+        citation_source_ids=(),
+        validator_version=RESPONSE_VALIDATOR_VERSION,
+        evidence_count=0,
+    )
+
+    metadata = build_ai_audit_metadata(
+        tenant_id="tenant-a",
+        provider_id="simulated",
+        baa_gate_result=_baa_result(provider_id="simulated"),
+        request_text="provider prompt",
+        provider_response=provider_response,
+        response_validation=response_validation,
+    )
+
+    assert metadata["response_hash"] == (
+        "sha256:" + hashlib.sha256(NO_ANSWER_TEXT.encode("utf-8")).hexdigest()
+    )
+    assert metadata["response_grounded"] is False
+    assert metadata["response_validation_result"] == RESPONSE_UNGROUNDED
+    assert metadata["response_validator_version"] == RESPONSE_VALIDATOR_VERSION
+    assert metadata["response_citation_source_ids"] == []
+    assert metadata["response_evidence_count"] == 0
+    assert "unsupported raw provider answer" not in str(metadata)
+    assert "987-65" not in str(metadata)
 
 
 def _setup_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
@@ -648,9 +701,14 @@ def test_ai_plane_provider_failure_audit_has_safe_metadata(
         raise ProviderCallError(AI_PROVIDER_CALL_FAILED, "raw provider body")
 
     monkeypatch.setattr("services.ai_plane_extension.service._call_provider", _fail)
+    rag_chunks = _chunks(
+        "tenant-a", "source-a", "quarterly report evidence for tenant alpha"
+    )
 
     with pytest.raises(ValueError, match=AI_PROVIDER_CALL_FAILED):
-        AIPlaneService().infer(db, "tenant-a", AIInferRequest(query=_CLEAN_TEXT))
+        AIPlaneService(rag_chunks=rag_chunks).infer(
+            db, "tenant-a", AIInferRequest(query=_CLEAN_TEXT)
+        )
 
     details = _captured_admin_details(events, AI_PROVIDER_CALL_FAILED)
     assert details["provider_id"] == "anthropic"
@@ -694,18 +752,23 @@ def test_ai_plane_infer_sends_minimized_prompt_and_audits_safe_metadata(
         )
 
     monkeypatch.setattr("services.ai_plane_extension.service._call_provider", _provider)
+    rag_chunks = _chunks(
+        "tenant-a", "source-a", "Patient contact schedule evidence for tenant alpha"
+    )
 
-    result = AIPlaneService().infer(
+    result = AIPlaneService(rag_chunks=rag_chunks).infer(
         db, "tenant-a", AIInferRequest(query=_MINIMIZATION_TEXT)
     )
 
     assert result["ok"] is True
-    assert captured_prompt == _MINIMIZED_TEXT
+    assert _MINIMIZED_TEXT in captured_prompt
+    assert "Retrieved context:" in captured_prompt
+    assert _MINIMIZATION_TEXT not in captured_prompt
     details = _captured_admin_details(events, "ai_plane_infer")
     assert details["prompt_minimized"] is True
     assert details["minimization_replacement_count"] == 5
     assert details["request_hash"] == (
-        "sha256:" + hashlib.sha256(_MINIMIZED_TEXT.encode("utf-8")).hexdigest()
+        "sha256:" + hashlib.sha256(captured_prompt.encode("utf-8")).hexdigest()
     )
     assert _MINIMIZATION_TEXT not in str(details)
     assert _MINIMIZED_TEXT not in str(details)
