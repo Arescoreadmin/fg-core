@@ -97,6 +97,186 @@ def test_ai_infer_authz_401(tmp_path: Path) -> None:
     assert resp.status_code == 401
 
 
+def test_ai_chat_authz_401(tmp_path: Path) -> None:
+    client, _, _ = _setup_client(tmp_path, ai_enabled=True)
+    resp = client.post("/ai/chat", json={"message": "hello"})
+    assert resp.status_code == 401
+
+
+def test_ai_chat_empty_message_rejected(tmp_path: Path) -> None:
+    client, key_a, _ = _setup_client(tmp_path, ai_enabled=True)
+    resp = client.post("/ai/chat", json={"message": ""}, headers={"X-API-Key": key_a})
+    assert resp.status_code == 422
+
+
+def test_ai_chat_grounded_response_returns_safe_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.ai_plane_extension as ai_api
+    from services.ai_plane_extension.service import AIPlaneService
+
+    client, key_a, _ = _setup_client(tmp_path, ai_enabled=True)
+    rag_chunks = _chunks(
+        "tenant-a", "source-a", "authentication control evidence for alpha"
+    )
+    monkeypatch.setattr(ai_api, "service", AIPlaneService(rag_chunks=rag_chunks))
+
+    def _provider(**kw) -> ProviderResponse:
+        assert "Retrieved context:" in str(kw["prompt"])
+        return ProviderResponse(
+            provider_id="simulated",
+            text="authentication control evidence alpha",
+            model="SIMULATED_V1",
+        )
+
+    monkeypatch.setattr("services.ai_plane_extension.service._call_provider", _provider)
+
+    resp = client.post(
+        "/ai/chat",
+        json={"message": "authentication control"},
+        headers={"X-API-Key": key_a},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {
+        "answer": "authentication control evidence alpha",
+        "sources": [{"source_id": "source-a"}],
+        "confidence": 1.0,
+    }
+    assert "authentication control evidence for alpha" not in str(body["sources"])
+
+
+def test_ai_chat_ungrounded_response_returns_no_answer_and_hashes_final_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.ai_plane_extension as ai_api
+    from services.ai_plane_extension.service import AIPlaneService
+
+    client, key_a, _ = _setup_client(tmp_path, ai_enabled=True)
+    rag_chunks = _chunks(
+        "tenant-a", "source-a", "authentication control evidence for alpha"
+    )
+    events = []
+    provider_calls = 0
+    monkeypatch.setattr(ai_api, "service", AIPlaneService(rag_chunks=rag_chunks))
+
+    def _provider(**_kw) -> ProviderResponse:
+        nonlocal provider_calls
+        provider_calls += 1
+        return ProviderResponse(
+            provider_id="simulated",
+            text="unsupported deployment procedure",
+            model="SIMULATED_V1",
+        )
+
+    monkeypatch.setattr("services.ai_plane_extension.service._call_provider", _provider)
+    monkeypatch.setattr(
+        "api.security_audit.SecurityAuditor.log_event",
+        lambda _self, event: events.append(event),
+    )
+
+    resp = client.post(
+        "/ai/chat",
+        json={"message": "authentication control"},
+        headers={"X-API-Key": key_a},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["answer"] == "NO_ANSWER"
+    assert body["sources"] == []
+    assert body["confidence"] == 0.0
+    assert provider_calls == 1
+    assert "unsupported deployment procedure" not in str(body)
+    no_answer_sha = hashlib.sha256(b"NO_ANSWER").hexdigest()
+    audit_details = [
+        event.details for event in events if event.reason == "ai_plane_infer"
+    ][-1]
+    assert audit_details["response_grounded"] is False
+    assert audit_details["response_validation_result"] == "RESPONSE_UNGROUNDED"
+    assert audit_details["response_hash"] == f"sha256:{no_answer_sha}"
+    assert "unsupported deployment procedure" not in str(audit_details)
+    assert "authentication control evidence for alpha" not in str(audit_details)
+
+
+def test_ai_chat_phi_without_baa_denies_before_provider_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.ai_plane_extension as ai_api
+    from services.ai_plane_extension.service import AIPlaneService
+
+    client, key_a, _ = _setup_client(tmp_path, ai_enabled=True)
+    monkeypatch.setenv("FG_AZURE_AI_KEY", "test-key")
+    monkeypatch.setenv("FG_AZURE_OPENAI_ENDPOINT", "https://azure.example.test")
+    monkeypatch.setenv("FG_AZURE_OPENAI_DEPLOYMENT", "test-deployment")
+    monkeypatch.setenv(
+        "FG_AI_POLICY_PATH",
+        _policy_file(
+            tmp_path,
+            allowed_providers=["azure_openai"],
+            default_provider="azure_openai",
+            phi_provider="azure_openai",
+        ),
+    )
+    monkeypatch.setattr(ai_api, "service", AIPlaneService())
+    provider_called = False
+
+    def _provider(**_kw) -> ProviderResponse:
+        nonlocal provider_called
+        provider_called = True
+        return ProviderResponse(
+            provider_id="azure_openai",
+            text="should not be called",
+            model="m",
+        )
+
+    monkeypatch.setattr("services.ai_plane_extension.service._call_provider", _provider)
+
+    resp = client.post(
+        "/ai/chat",
+        json={"message": "Patient John Smith has diabetes."},
+        headers={"X-API-Key": key_a},
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["error_code"] == "AI_PHI_PROVIDER_NOT_BAA_CAPABLE"
+    assert provider_called is False
+    assert "John Smith" not in str(resp.json())
+
+
+def test_ai_chat_policy_denies_disallowed_requested_provider(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.ai_plane_extension as ai_api
+    from services.ai_plane_extension.service import AIPlaneService
+
+    client, key_a, _ = _setup_client(tmp_path, ai_enabled=True)
+    monkeypatch.setattr(ai_api, "service", AIPlaneService())
+    provider_called = False
+
+    def _provider(**_kw) -> ProviderResponse:
+        nonlocal provider_called
+        provider_called = True
+        return ProviderResponse(
+            provider_id="anthropic",
+            text="should not be called",
+            model="m",
+        )
+
+    monkeypatch.setattr("services.ai_plane_extension.service._call_provider", _provider)
+
+    resp = client.post(
+        "/ai/chat",
+        json={"message": "hello", "provider": "anthropic"},
+        headers={"X-API-Key": key_a},
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["error_code"] == "AI_PROVIDER_NOT_ALLOWED"
+    assert provider_called is False
+
+
 def test_ai_infer_tenant_mismatch_403(tmp_path: Path) -> None:
     client, key_a, _ = _setup_client(tmp_path, ai_enabled=True)
     resp = client.post(

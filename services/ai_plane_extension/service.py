@@ -22,6 +22,7 @@ from services.ai.rag_context import (
     build_rag_augmented_prompt,
     retrieve_rag_context,
 )
+from services.ai.response_validation import ResponseValidationResult
 from services.ai.response_validation import validate_provider_response_grounding
 from services.ai.routing import (
     AI_PROVIDER_NOT_CONFIGURED,
@@ -29,7 +30,11 @@ from services.ai.routing import (
     resolve_ai_provider_for_request,
 )
 from services.ai_plane_extension import policy_engine
-from services.ai_plane_extension.models import AIInferRequest, AIPolicyUpsertRequest
+from services.ai_plane_extension.models import (
+    AIChatRequest,
+    AIInferRequest,
+    AIPolicyUpsertRequest,
+)
 from services.phi_classifier.minimizer import minimize_prompt
 from services.phi_classifier.models import PhiClassificationResult, SensitivityLevel
 from services.schema_validation import validate_payload_against_schema
@@ -152,6 +157,24 @@ def _merge_rag_phi_classification(
         if not classification.contains_phi
         else classification.reasoning_code,
     )
+
+
+def _chat_sources(
+    response_validation: ResponseValidationResult,
+) -> list[dict[str, str]]:
+    if not response_validation.grounded:
+        return []
+    return [
+        {"source_id": source_id}
+        for source_id in dict.fromkeys(response_validation.citation_source_ids)
+        if source_id
+    ]
+
+
+def _chat_confidence(response_validation: ResponseValidationResult) -> float:
+    if response_validation.grounded and response_validation.evidence_count > 0:
+        return 1.0
+    return 0.0
 
 
 class AIPlaneService:
@@ -397,7 +420,7 @@ class AIPlaneService:
         )
         routing_result = resolve_ai_provider_for_request(
             tenant_id=tenant_id,
-            requested_provider=None,
+            requested_provider=payload.provider,
             tenant_allowed_providers=set(ai_policy.allowed_providers),
             known_providers=known_provider_ids(),
             configured_providers=frozenset(
@@ -622,7 +645,36 @@ class AIPlaneService:
             "provider": effective_provider,
             "model": prov_resp.model if prov_resp is not None else effective_provider,
             "response": out,
+            "sources": _chat_sources(response_validation),
+            "confidence": _chat_confidence(response_validation),
             "simulated": effective_provider == "simulated",
+        }
+
+    def chat(
+        self, db: Session, tenant_id: str, payload: AIChatRequest
+    ) -> dict[str, object]:
+        result = self.infer(
+            db,
+            tenant_id,
+            AIInferRequest(query=payload.message, provider=payload.provider),
+        )
+        raw_sources = result.get("sources")
+        sources = (
+            cast(list[dict[str, str]], raw_sources)
+            if isinstance(raw_sources, list)
+            else []
+        )
+        raw_confidence = result.get("confidence")
+        confidence = (
+            float(raw_confidence)
+            if isinstance(raw_confidence, int | float)
+            and not isinstance(raw_confidence, bool)
+            else 0.0
+        )
+        return {
+            "answer": str(result.get("response") or ""),
+            "sources": sources,
+            "confidence": confidence,
         }
 
     def list_inference(self, db: Session, tenant_id: str) -> list[dict[str, object]]:

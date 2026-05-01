@@ -161,7 +161,7 @@ def main() -> int:
 
     failures: list[str] = []
 
-    allowed_ai = {"/ai/infer"}
+    allowed_ai = {"/ai/chat", "/ai/infer"}
     for _, path in tgt_ops:
         if path.startswith("/ai/") and path not in allowed_ai:
             failures.append(f"OPENAPI_SECURITY_UNEXPECTED_AI_ROUTE {path}")
