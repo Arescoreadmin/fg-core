@@ -127,6 +127,17 @@ def test_invalid_json_rejected(tmp_path: Path) -> None:
     assert exc.value.error_code == AI_POLICY_INVALID
 
 
+def test_missing_policy_file_rejected_as_policy_error(tmp_path: Path) -> None:
+    with pytest.raises(AiPolicyError) as exc:
+        load_ai_policy(
+            tmp_path / "missing-policy.json",
+            known_providers=KNOWN,
+            environment="test",
+        )
+
+    assert exc.value.error_code == AI_POLICY_INVALID
+
+
 def test_missing_required_fields_rejected() -> None:
     payload = _valid_policy()
     payload.pop("phi_rules")

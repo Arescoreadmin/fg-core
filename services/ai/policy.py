@@ -120,7 +120,11 @@ def _safe_tenant_file(tenant_policy_dir: Path, tenant_id: str) -> Path:
 
 def _load_json(path: Path) -> dict[str, Any]:
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise AiPolicyError(AI_POLICY_INVALID, "AI policy file is unreadable") from exc
+    try:
+        raw = json.loads(text)
     except json.JSONDecodeError as exc:
         raise AiPolicyError(AI_POLICY_INVALID, "AI policy JSON is invalid") from exc
     if not isinstance(raw, dict):
