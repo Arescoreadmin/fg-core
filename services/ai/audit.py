@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 
 from services.ai.providers.base import ProviderResponse
+from services.ai.rag_context import RagContextResult
 from services.ai.routing import AiProviderRoutingResult
 from services.phi_classifier.minimizer import PromptMinimizationResult
 from services.provider_baa.gate import BaaGateResult
@@ -29,6 +30,7 @@ def build_ai_audit_metadata(
     request_id: str | None = None,
     device_id: str | None = None,
     routing_result: AiProviderRoutingResult | None = None,
+    rag_context: RagContextResult | None = None,
 ) -> dict[str, object]:
     """Build safe AI audit metadata with hashes only for request/response text."""
     effective_response_text = (
@@ -61,6 +63,12 @@ def build_ai_audit_metadata(
         "minimization_placeholder_types": prompt_minimization.placeholder_types
         if prompt_minimization is not None
         else [],
+        "rag_used": False,
+        "rag_chunk_count": 0,
+        "rag_source_ids": [],
+        "rag_retrieval_reason_code": None,
+        "rag_query_phi_sensitivity": None,
+        "rag_max_sensitivity_level": None,
     }
     if request_id:
         metadata["request_id"] = request_id
@@ -71,6 +79,13 @@ def build_ai_audit_metadata(
         metadata["selected_by"] = routing_result.selected_by
         metadata["routing_reason_code"] = routing_result.reason_code
         metadata["requires_baa"] = routing_result.requires_baa
+    if rag_context is not None:
+        metadata["rag_used"] = rag_context.rag_used
+        metadata["rag_chunk_count"] = rag_context.chunk_count
+        metadata["rag_source_ids"] = list(rag_context.source_ids)
+        metadata["rag_retrieval_reason_code"] = rag_context.retrieval_reason_code
+        metadata["rag_query_phi_sensitivity"] = rag_context.query_phi_sensitivity
+        metadata["rag_max_sensitivity_level"] = rag_context.max_sensitivity_level
     if provider_response is not None:
         metadata["model"] = provider_response.model
         if provider_response.input_tokens is not None:
