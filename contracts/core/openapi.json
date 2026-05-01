@@ -5789,10 +5789,13 @@
               "application/json": {
                 "schema": {
                   "properties": {
-                    "error_code": {
+                    "detail": {
                       "type": "string"
                     }
                   },
+                  "required": [
+                    "detail"
+                  ],
                   "type": "object"
                 }
               }
@@ -5804,10 +5807,13 @@
               "application/json": {
                 "schema": {
                   "properties": {
-                    "error_code": {
+                    "detail": {
                       "type": "string"
                     }
                   },
+                  "required": [
+                    "detail"
+                  ],
                   "type": "object"
                 }
               }

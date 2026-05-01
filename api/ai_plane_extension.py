@@ -68,7 +68,8 @@ def ai_infer(
             "content": {
                 "application/json": {
                     "schema": {
-                        "properties": {"error_code": {"type": "string"}},
+                        "properties": {"detail": {"type": "string"}},
+                        "required": ["detail"],
                         "type": "object",
                     }
                 }
@@ -79,7 +80,8 @@ def ai_infer(
             "content": {
                 "application/json": {
                     "schema": {
-                        "properties": {"error_code": {"type": "string"}},
+                        "properties": {"detail": {"type": "string"}},
+                        "required": ["detail"],
                         "type": "object",
                     }
                 }

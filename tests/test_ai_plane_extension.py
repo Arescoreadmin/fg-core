@@ -101,6 +101,21 @@ def test_ai_chat_authz_401(tmp_path: Path) -> None:
     client, _, _ = _setup_client(tmp_path, ai_enabled=True)
     resp = client.post("/ai/chat", json={"message": "hello"})
     assert resp.status_code == 401
+    assert "detail" in resp.json()
+    assert "error_code" not in resp.json()
+
+
+def test_ai_chat_openapi_auth_errors_match_detail_envelope(tmp_path: Path) -> None:
+    _setup_client(tmp_path, ai_enabled=True)
+    schema = json.loads(Path("contracts/core/openapi.json").read_text(encoding="utf-8"))
+    responses = schema["paths"]["/ai/chat"]["post"]["responses"]
+    for status_code in ("401", "403"):
+        body_schema = responses[status_code]["content"]["application/json"]["schema"]
+        assert body_schema == {
+            "properties": {"detail": {"type": "string"}},
+            "required": ["detail"],
+            "type": "object",
+        }
 
 
 def test_ai_chat_empty_message_rejected(tmp_path: Path) -> None:

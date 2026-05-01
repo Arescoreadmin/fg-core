@@ -569,3 +569,8 @@ The new root `POST /ai/chat` endpoint is a tenant-bound, scoped AI surface backe
 - `.venv/bin/pytest -q tests/security/test_openapi_security_diff_scoping.py`: 5 passed
 - `make route-inventory-generate`: route inventory regenerated
 - `make contract-authority-refresh`: authority markers refreshed
+
+### Addendum — 2026-05-01 auth response schema alignment
+- `api/ai_plane_extension.py`: `/ai/chat` 401/403 OpenAPI response metadata now documents the actual FastAPI auth envelope, `{"detail": "..."}`, emitted by `require_scopes(...)`.
+- `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `tools/ci/plane_registry_snapshot.json`, and `tools/ci/topology.sha256`: regenerated/refreshed after the response metadata correction.
+- Security posture is unchanged: the endpoint remains tenant-bound, scoped with `compliance:read`, and protected by the same AIPlane policy/BAA/RAG/validator pipeline.
