@@ -24,6 +24,7 @@ from services.ai.audit import build_ai_audit_metadata
 from services.ai.dispatch import ProviderCallError as _ProviderCallError
 from services.ai.dispatch import call_provider as _call_provider
 from services.ai.dispatch import known_provider_ids
+from services.ai.policy import AiPolicyError, resolve_ai_policy_for_tenant
 from services.ai.routing import (
     AI_PROVIDER_NOT_ALLOWED,
     AI_PROVIDER_NOT_CONFIGURED,
@@ -148,6 +149,21 @@ def _global_allowed_providers() -> set[str]:
     if phi_provider:
         allowed.add(phi_provider)
     return allowed
+
+
+def _configured_providers_for_policy(policy_allowed: set[str]) -> set[str]:
+    env_allowed = (
+        _global_allowed_providers()
+        if os.getenv("FG_AI_ALLOWED_PROVIDERS") is not None
+        else set(policy_allowed)
+    )
+    return {
+        provider_id
+        for provider_id in known_provider_ids()
+        if provider_id in policy_allowed
+        and provider_id in env_allowed
+        and _provider_env_allowed(provider_id)
+    }
 
 
 def _provider_env_allowed(provider: str) -> bool:
@@ -748,6 +764,37 @@ def ai_chat(
 
     persona = _extract_persona(request, payload.persona)
     experience, policy, _theme = _resolve_experience(tenant_id)
+    try:
+        ai_policy = resolve_ai_policy_for_tenant(
+            tenant_id=tenant_id,
+            known_providers=known_provider_ids(),
+            environment=os.getenv("FG_ENV"),
+            contract_policy=policy,
+        )
+    except AiPolicyError as exc:
+        _audit(
+            EventType.ADMIN_ACTION,
+            tenant_id=tenant_id,
+            success=False,
+            reason=exc.error_code,
+            details={
+                "policy_source": None,
+                "policy_version": None,
+                "policy_reason_code": exc.error_code,
+                "provider_id": None,
+                "requested_provider": payload.provider,
+                "selected_by": None,
+                "routing_reason_code": None,
+                "phi_detected": False,
+                "phi_types": [],
+                "baa_check_result": "not_evaluated",
+                "prompt_minimized": False,
+                "request_hash": None,
+                "response_hash": None,
+            },
+            request=request,
+        )
+        raise _error(503, exc.error_code, "AI policy invalid") from exc
     device_id = _device_id(request, payload.device_id)
     if not device_id:
         raise _error(400, "AI_DEVICE_REQUIRED", "device identifier missing")
@@ -766,19 +813,14 @@ def ai_chat(
     routing_result = resolve_ai_provider_for_request(
         tenant_id=tenant_id,
         requested_provider=payload.provider,
-        tenant_allowed_providers=set(policy.get("allowed_providers") or []),
+        tenant_allowed_providers=set(ai_policy.allowed_providers),
         known_providers=known_provider_ids(),
-        configured_providers={
-            provider_id
-            for provider_id in known_provider_ids()
-            if _provider_env_allowed(provider_id)
-            and provider_id in _global_allowed_providers()
-        },
+        configured_providers=_configured_providers_for_policy(
+            set(ai_policy.allowed_providers)
+        ),
         phi_detected=phi_classification.contains_phi,
-        default_provider=(os.getenv("FG_AI_DEFAULT_PROVIDER") or "").strip()
-        or str(policy.get("default_provider") or "").strip()
-        or None,
-        phi_provider=(os.getenv("FG_AI_PHI_PROVIDER") or "").strip() or None,
+        default_provider=ai_policy.default_provider,
+        phi_provider=ai_policy.phi_provider,
     )
     if not routing_result.allowed or routing_result.provider_id is None:
         status_code = 400
@@ -809,13 +851,16 @@ def ai_chat(
                 "prompt_minimized": False,
                 "request_hash": None,
                 "response_hash": None,
+                "policy_source": ai_policy.source,
+                "policy_version": ai_policy.version,
+                "policy_reason_code": ai_policy.reason_code,
             },
             request=request,
         )
         raise _error(status_code, detail_code, "provider routing denied")
 
     provider = routing_result.provider_id
-    policy_default_provider = (str(policy.get("default_provider") or "")).strip()
+    policy_default_provider = ai_policy.default_provider
     model = (
         payload.model
         or (
@@ -854,6 +899,7 @@ def ai_chat(
                     ),
                     device_id=device_id,
                     routing_result=routing_result,
+                    ai_policy=ai_policy,
                 ),
                 request=request,
             )
@@ -1045,6 +1091,7 @@ def ai_chat(
                     request_id=event_id,
                     device_id=device_id,
                     routing_result=routing_result,
+                    ai_policy=ai_policy,
                 ),
                 "event_id": event_id,
                 "session_id": session_id,
@@ -1080,6 +1127,7 @@ def ai_chat(
                     request_id=event_id,
                     device_id=device_id,
                     routing_result=routing_result,
+                    ai_policy=ai_policy,
                 ),
                 "event_id": event_id,
                 "session_id": session_id,
@@ -1111,6 +1159,7 @@ def ai_chat(
                 request_id=event_id,
                 device_id=device_id,
                 routing_result=routing_result,
+                ai_policy=ai_policy,
             ),
             "event_id": event_id,
             "session_id": session_id,

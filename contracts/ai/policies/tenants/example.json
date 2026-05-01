@@ -1,12 +1,10 @@
 {
-  "id": "policy-default",
-  "version": "1.0.0",
+  "version": 1,
   "allowed_providers": [
-    "simulated",
     "anthropic",
     "azure_openai"
   ],
-  "default_provider": "simulated",
+  "default_provider": "anthropic",
   "phi_provider": "azure_openai",
   "phi_rules": {
     "require_baa": true,
@@ -23,13 +21,5 @@
     "require_request_hash": true,
     "require_response_hash": true,
     "include_routing_metadata": true
-  },
-  "default_model": "SIMULATED_V1",
-  "tenant_max_tokens_per_day": 100000,
-  "device_max_tokens_per_day": 25000,
-  "pii_deny_terms": [
-    "private key",
-    "social security"
-  ],
-  "max_tokens_per_request": 4096
+  }
 }

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from api.auth_scopes import mint_key
@@ -22,6 +25,44 @@ def _enable(client: TestClient, headers: dict[str, str], device_id: str) -> None
         json={"reason": "allow test device", "ticket": "SEC-1"},
     )
     assert resp.status_code == 200
+
+
+def _policy_file(
+    tmp_path: Path,
+    *,
+    allowed_providers: list[str],
+    default_provider: str,
+    phi_provider: str,
+) -> str:
+    path = tmp_path / "ai-policy.json"
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "allowed_providers": allowed_providers,
+                "default_provider": default_provider,
+                "phi_provider": phi_provider,
+                "phi_rules": {
+                    "require_baa": True,
+                    "require_prompt_minimization": True,
+                    "deny_if_phi_provider_unavailable": True,
+                    "deny_explicit_non_phi_provider_for_phi": True,
+                },
+                "rag_rules": {
+                    "enabled": True,
+                    "require_grounded_response": True,
+                    "no_answer_on_ungrounded": True,
+                },
+                "audit_rules": {
+                    "require_request_hash": True,
+                    "require_response_hash": True,
+                    "include_routing_metadata": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    return str(path)
 
 
 def test_tenant_mismatch_denied(build_app):
@@ -101,6 +142,62 @@ def test_token_usage_and_quota_enforcement(build_app, monkeypatch):
     usage = ok.json()["usage"]
     assert usage["total_tokens"] >= usage["prompt_tokens"]
     assert usage["metering_mode"] == "estimated"
+
+
+def test_ui_chat_uses_json_policy_allowed_and_default_provider(
+    build_app, monkeypatch, tmp_path: Path
+) -> None:
+    from services.ai.providers.base import ProviderResponse
+
+    monkeypatch.setenv(
+        "FG_AI_POLICY_PATH",
+        _policy_file(
+            tmp_path,
+            allowed_providers=["anthropic"],
+            default_provider="anthropic",
+            phi_provider="anthropic",
+        ),
+    )
+    monkeypatch.delenv("FG_AI_ALLOWED_PROVIDERS", raising=False)
+    monkeypatch.setenv("FG_ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr(
+        ai_console,
+        "_call_provider",
+        lambda **_kw: ProviderResponse(
+            provider_id="anthropic",
+            text="json policy response",
+            model="claude-haiku-4-5-20251001",
+        ),
+    )
+
+    client = _client(build_app)
+    hdrs = _headers("ui:read", "ai:chat", "admin:write", tenant_id="tenant-dev")
+    exp = client.get("/ui/ai/experience", headers=hdrs)
+    device_id = exp.json()["device"]["device_id"]
+    _enable(client, hdrs, device_id)
+
+    ok = client.post(
+        "/ui/ai/chat",
+        headers=hdrs,
+        json={"message": "small prompt", "device_id": device_id},
+    )
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["provider"] == "anthropic"
+    assert ok.json()["response"] == "json policy response"
+
+    denied = client.post(
+        "/ui/ai/chat",
+        headers=hdrs,
+        json={
+            "message": "small prompt",
+            "device_id": device_id,
+            "provider": "simulated",
+        },
+    )
+    assert denied.status_code == 400
+    assert (
+        denied.json()["detail"]["error_code"] == "AI_PROVIDER_DENIED_BY_TENANT_POLICY"
+    )
 
 
 def test_unknown_device_denied(build_app):

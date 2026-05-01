@@ -15,6 +15,7 @@ from services.ai.audit import build_ai_audit_metadata
 from services.ai.dispatch import ProviderCallError as _ProviderCallError
 from services.ai.dispatch import call_provider as _call_provider
 from services.ai.dispatch import known_provider_ids
+from services.ai.policy import AiPolicyError, resolve_ai_policy_for_tenant
 from services.ai.rag_context import (
     RagContextError,
     RagContextResult,
@@ -272,6 +273,47 @@ class AIPlaneService:
         self, db: Session, tenant_id: str, payload: AIInferRequest
     ) -> dict[str, object]:
         policy = self.get_policy(db, tenant_id)
+        try:
+            ai_policy = resolve_ai_policy_for_tenant(
+                tenant_id=tenant_id,
+                known_providers=known_provider_ids(),
+                environment=os.getenv("FG_ENV"),
+            )
+        except AiPolicyError as exc:
+            self._audit_infer(
+                tenant_id=tenant_id,
+                success=False,
+                reason=exc.error_code,
+                details={
+                    "policy_source": None,
+                    "policy_version": None,
+                    "policy_reason_code": exc.error_code,
+                    "provider_id": None,
+                    "requested_provider": None,
+                    "selected_by": None,
+                    "routing_reason_code": None,
+                    "phi_detected": False,
+                    "phi_types": [],
+                    "baa_check_result": "not_evaluated",
+                    "prompt_minimized": False,
+                    "request_hash": None,
+                    "response_hash": None,
+                    "rag_used": False,
+                    "rag_chunk_count": 0,
+                    "rag_source_ids": [],
+                    "rag_retrieval_reason_code": None,
+                    "rag_query_phi_sensitivity": None,
+                    "rag_max_sensitivity_level": None,
+                    "response_grounded": False,
+                    "response_validation_result": None,
+                    "response_validator_version": None,
+                    "response_citation_source_ids": [],
+                    "response_evidence_count": 0,
+                },
+            )
+            self._record_violation(db, tenant_id, exc.error_code)
+            db.commit()
+            raise ValueError(exc.error_code) from exc
         max_prompt_chars = _int_or_default(policy.get("max_prompt_chars"), 2000)
         denylist = _str_list(policy.get("denylist"))
 
@@ -333,6 +375,9 @@ class AIPlaneService:
                     "response_validator_version": None,
                     "response_citation_source_ids": [],
                     "response_evidence_count": 0,
+                    "policy_source": ai_policy.source,
+                    "policy_version": ai_policy.version,
+                    "policy_reason_code": ai_policy.reason_code,
                 },
             )
             self._record_violation(db, tenant_id, exc.error_code)
@@ -350,20 +395,19 @@ class AIPlaneService:
         final_phi_classification = _merge_rag_phi_classification(
             final_phi_classification, rag_context
         )
-        guarded_default_provider = (
-            None
-            if final_phi_classification.contains_phi
-            else _resolve_effective_provider()
-        )
         routing_result = resolve_ai_provider_for_request(
             tenant_id=tenant_id,
             requested_provider=None,
-            tenant_allowed_providers=_ai_plane_allowed_providers(),
+            tenant_allowed_providers=set(ai_policy.allowed_providers),
             known_providers=known_provider_ids(),
-            configured_providers=configured_ai_providers(),
+            configured_providers=frozenset(
+                provider_id
+                for provider_id in configured_ai_providers()
+                if provider_id in ai_policy.allowed_providers
+            ),
             phi_detected=final_phi_classification.contains_phi,
-            default_provider=guarded_default_provider,
-            phi_provider=(os.getenv("FG_AI_PHI_PROVIDER") or "").strip() or None,
+            default_provider=ai_policy.default_provider,
+            phi_provider=ai_policy.phi_provider,
         )
         if not routing_result.allowed or routing_result.provider_id is None:
             self._audit_infer(
@@ -394,6 +438,9 @@ class AIPlaneService:
                     "response_validator_version": None,
                     "response_citation_source_ids": [],
                     "response_evidence_count": 0,
+                    "policy_source": ai_policy.source,
+                    "policy_version": ai_policy.version,
+                    "policy_reason_code": ai_policy.reason_code,
                 },
             )
             self._record_violation(db, tenant_id, routing_result.reason_code)
@@ -430,6 +477,7 @@ class AIPlaneService:
                         request_id=request_id,
                         routing_result=routing_result,
                         rag_context=rag_context,
+                        ai_policy=ai_policy,
                     ),
                 )
             self._record_violation(db, tenant_id, "AI_PHI_PROVIDER_NOT_BAA_CAPABLE")
@@ -453,6 +501,7 @@ class AIPlaneService:
                     request_id=request_id,
                     routing_result=routing_result,
                     rag_context=rag_context,
+                    ai_policy=ai_policy,
                 ),
             )
             self._record_violation(db, tenant_id, "AI_PROMPT_MINIMIZATION_FAILED")
@@ -493,6 +542,7 @@ class AIPlaneService:
                         request_id=request_id,
                         routing_result=routing_result,
                         rag_context=rag_context,
+                        ai_policy=ai_policy,
                     ),
                 )
                 self._record_violation(db, tenant_id, exc.error_code)
@@ -563,6 +613,7 @@ class AIPlaneService:
                 routing_result=routing_result,
                 rag_context=rag_context,
                 response_validation=response_validation,
+                ai_policy=ai_policy,
             ),
         )
 
