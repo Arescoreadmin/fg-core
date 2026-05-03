@@ -181,6 +181,7 @@ scratch.sh
 
 # local env
 env.*.local
+docker-compose.override.yml
 tools/dev/
 
 # CI-generated snapshots (non-deterministic; never commit)

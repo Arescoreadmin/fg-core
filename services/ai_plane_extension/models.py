@@ -36,6 +36,10 @@ class AIChatResponse(BaseModel):
     answer: str
     sources: list[AIChatSource] = Field(default_factory=list)
     confidence: float = Field(ge=0.0, le=1.0)
+    answer_reason: str | None = Field(
+        default=None,
+        description="Human-readable reason when answer is NO_ANSWER. Null on successful responses.",
+    )
 
 
 class AIPolicyUpsertRequest(BaseModel):

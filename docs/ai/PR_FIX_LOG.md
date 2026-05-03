@@ -6867,3 +6867,41 @@ Unsupported provider output is not returned, persisted, audited, or hashed as th
 **Validation results:** `git diff --check` passed; `python -m compileall services api tests` passed; focused security suites passed; `tests/test_ai_plane_extension.py` passed with 20 tests; `tests/security/test_openapi_security_diff_scoping.py` passed with 5 tests; `make route-inventory-generate` and `make contract-authority-refresh` ran after contract changes; `make fg-fast` passed; `bash codex_gates.sh` passed with 3052 passed and 26 skipped in the full pytest phase.
 
 **Addendum — 2026-05-01 auth response contract fix:** Updated `/ai/chat` 401/403 OpenAPI metadata to match the actual `require_scopes(...)` FastAPI error envelope, `{"detail": "..."}`, instead of advertising a top-level `error_code`. Added endpoint regression coverage for runtime 401 payload shape and generated OpenAPI 401/403 schemas. Regenerated OpenAPI/schema mirrors and refreshed contract authority markers.
+
+---
+
+### 2026-05-03 — CF-5 frostgate-core direct host port binding
+
+**Branch:** `cf-5-remove-core-host-port`
+
+**Area:** Docker Compose plane-boundary enforcement / local override separation
+
+---
+
+**Finding:**
+
+CF-5 frostgate-core direct host port binding.
+
+**Root cause:**
+
+`docker-compose.yml` published `127.0.0.1:18080:8080` for `frostgate-core`, allowing host-side access to core outside the intended admin-gateway/control-plane boundary.
+
+**Fix:**
+
+Removed the committed production/client compose host port binding from `frostgate-core`. Added `docker-compose.override.yml` to `.gitignore` so local developer-only host port exposure remains separated from committed production/client compose paths.
+
+**Security impact:**
+
+Direct-to-core host access is blocked from committed production/client compose paths; admin-gateway/control-plane boundary enforcement is preserved.
+
+**Validation:**
+
+- `.venv/bin/pytest -q tests/security/test_plane_boundary_enforcement.py::test_direct_core_blocked_core_has_no_host_port_bindings` -> 1 passed
+- `docker compose config` -> passed
+- `git diff --check` -> passed
+- `make fg-fast` -> passed
+- `bash codex_gates.sh` -> passed; 3053 passed, 26 skipped; canonical tester flow skipped because Keycloak was not running
+
+**Risk/note:**
+
+Local dev access remains only through the local `docker-compose.override.yml` path when present. That override is ignored and is not treated as a production/client compose exposure.

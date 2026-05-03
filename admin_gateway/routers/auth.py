@@ -22,6 +22,16 @@ log = logging.getLogger("admin-gateway.auth-router")
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+def _safe_return_to(value: Optional[str]) -> str:
+    """Accept only relative paths. Reject absolute URLs to prevent open redirect."""
+    if not value:
+        return "/admin/me"
+    stripped = value.strip()
+    if stripped.startswith("/") and not stripped.startswith("//"):
+        return stripped
+    return "/admin/me"
+
+
 def get_oidc_client(config: AuthConfig = Depends(get_auth_config)) -> OIDCClient:
     """Get OIDC client dependency."""
     return OIDCClient(config)
@@ -57,7 +67,7 @@ async def login(
 
         session = get_dev_bypass_session(config)
         if session:
-            redirect_url = return_to or "/admin/me"
+            redirect_url = _safe_return_to(return_to)
             response = RedirectResponse(url=redirect_url, status_code=302)
             session_manager.set_session_cookie(response, session)
             csrf.set_token_cookie(response)
@@ -126,10 +136,8 @@ async def callback(
         if access_token:
             session.upstream_access_token = access_token
 
-        return_to = "/admin/me"
         pending_returns = getattr(request.app.state, "pending_returns", {})
-        if state in pending_returns:
-            return_to = pending_returns.pop(state)
+        return_to = _safe_return_to(pending_returns.pop(state, None))
 
         response = RedirectResponse(url=return_to, status_code=302)
         session_manager.set_session_cookie(response, session)

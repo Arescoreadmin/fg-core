@@ -1290,6 +1290,14 @@ spine-wait:
 fg-idp-validate:
 	@bash tools/auth/validate_keycloak_runtime.sh
 
+.PHONY: rotate-prod-secrets
+
+## rotate-prod-secrets: generate strong random secrets for env/prod.env
+##   Output: env/prod.env.generated (review before use)
+##   Usage:  make rotate-prod-secrets
+rotate-prod-secrets:
+	@bash scripts/rotate_prod_secrets.sh
+
 .PHONY: fg-tester-flow-validate
 
 ## fg-tester-flow-validate: prove canonical tester path end-to-end

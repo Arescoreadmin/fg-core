@@ -37,6 +37,18 @@
             "title": "Answer",
             "type": "string"
           },
+          "answer_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Human-readable reason when answer is NO_ANSWER. Null on successful responses.",
+            "title": "Answer Reason"
+          },
           "confidence": {
             "maximum": 1.0,
             "minimum": 0.0,

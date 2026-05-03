@@ -671,10 +671,17 @@ class AIPlaneService:
             and not isinstance(raw_confidence, bool)
             else 0.0
         )
+        answer = str(result.get("response") or "")
+        answer_reason: str | None = None
+        if answer == "NO_ANSWER":
+            answer_reason = str(
+                result.get("validation_reason") or "insufficient_context"
+            )
         return {
-            "answer": str(result.get("response") or ""),
+            "answer": answer,
             "sources": sources,
             "confidence": confidence,
+            "answer_reason": answer_reason,
         }
 
     def list_inference(self, db: Session, tenant_id: str) -> list[dict[str, object]]:

@@ -55,6 +55,9 @@ export default function Dashboard() {
       <header style={styles.header}>
         <h1 style={styles.title}>FrostGate Console</h1>
         <div style={styles.headerActions}>
+          <a style={styles.linkButton} href="/chat">
+            AI Chat
+          </a>
           <a style={styles.linkButton} href="/keys">
             Manage API keys
           </a>

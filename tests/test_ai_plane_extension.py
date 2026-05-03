@@ -156,6 +156,7 @@ def test_ai_chat_grounded_response_returns_safe_contract(
     body = resp.json()
     assert body == {
         "answer": "authentication control evidence alpha",
+        "answer_reason": None,
         "sources": [{"source_id": "source-a"}],
         "confidence": 1.0,
     }

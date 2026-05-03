@@ -327,7 +327,7 @@ services:
       frostgate-core:
         condition: service_healthy
     ports:
-      - "127.0.0.1:18080:8080"
+     - "127.0.0.1:8080:8080"
     env_file:
       - path: .env
         required: false
@@ -335,10 +335,7 @@ services:
         required: true
     environment:
       AG_CORE_BASE_URL: http://frostgate-core:8080
-
-      # Explicit local/CI-safe auth posture for admin profile until OIDC is wired.
-      FG_ENV: local
-      FG_AUTH_MODE: dev
+      FG_ENV: ${FG_ENV:-dev}
       FG_DEBUG: "false"
       FG_LOG_LEVEL: info
     healthcheck:
