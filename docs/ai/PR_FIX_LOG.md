@@ -6,6 +6,57 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-02 — Assessment plane registry auth/tenant enforcement fix
+
+**Branch:** `fix/pr-280-local`
+
+**Area:** Plane registry governance / data plane / assessment+report+webhook routes
+
+---
+
+**Issue:**
+
+`python tools/ci/check_plane_registry.py` failed with 14 violations across `/ingest/assessment/*` routes classified under the `data` plane:
+- `missing scoped auth` for `reports_engine.py` routes (no `require_scopes` dependency) and `stripe_webhooks.py` route (external webhook, auth-exempt by design)
+- `missing tenant binding without exact exception` for all 10 routes (pre-tenant onboarding flow; no tenant context exists before org enrollment)
+
+**Root cause:**
+
+Three causes compounded:
+1. `api/reports_engine.py` router had no `require_scopes` dependency (only `assessments.py` had it).
+2. `api/assessments.py` called `require_scopes(["ingest:assessment"])` (list arg) instead of `require_scopes("ingest:assessment")` — wrong call convention causing broken runtime scope enforcement.
+3. Data plane had zero exceptions for `/ingest/assessment/*`; the plane registry checker requires either `tenant_bound=True` in the route inventory OR an exact exception registered in the plane definition.
+
+**Security model chosen:**
+
+- Assessment/report routes (9): `bootstrap_routes` with `class_name="bootstrap"`. These are pre-tenant onboarding routes gated by `ingest:assessment` scoped API key (enforced via proxy). No tenant context until org enrollment completes.
+- Stripe webhook route (1): `auth_exempt_routes` with `class_name="auth_exempt"`. External Stripe webhook verified by HMAC signature; cannot carry API key credentials.
+- No security gate weakened; no wildcard exceptions used; all exceptions are exact method+path matches.
+
+**Files changed:**
+
+- `services/plane_registry/registry.py` — added `bootstrap_routes` (9 routes) and `auth_exempt_routes` (1 route) to `data` plane definition
+- `api/assessments.py` — fixed `require_scopes(["ingest:assessment"])` → `require_scopes("ingest:assessment")` (correct `*scopes` call convention)
+- `api/reports_engine.py` — added `require_scopes` import and `dependencies=[Depends(require_scopes("ingest:assessment"))]` to router
+- `console/lib/assessmentApi.ts` — fixed `BASE` from `/api/core/assessments` → `/api/core/ingest/assessment`; fixed `createCheckout` double-path bug
+- `console/lib/reportApi.ts` — fixed `BASE` from `/api/core/core/assessment` (double `/core/`) → `/api/core/ingest/assessment`
+- `console/app/api/core/[...path]/route.ts` — fixed proxy rule prefix from `assessments` → `ingest/assessment`
+- `tools/ci/route_inventory.json` — regenerated via `make route-inventory-generate`
+- Related governance artifacts regenerated (plane_registry_snapshot, contract_routes, topology hash)
+
+**Validation:**
+
+- `python tools/ci/check_plane_registry.py` → OK
+- `python scripts/generate_platform_inventory.py` → OK (exit 0)
+- `python tools/ci/check_openapi_security_diff.py` → OK (72 ops, 0 violations)
+- `make route-inventory-generate` → OK
+- `make contracts-gen` → OK
+- `make contract-authority-refresh` → OK
+- `make soc-review-sync` → OK
+- `make fg-fast` → All checks passed
+
+---
+
 ### 2026-04-30 — Deterministic PHI-aware AI provider routing
 
 **Branch:** `codex/phi-aware-provider-routing`

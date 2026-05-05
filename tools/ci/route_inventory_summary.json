@@ -88,11 +88,10 @@
     "ai": 5,
     "connector": 14,
     "control": 119,
-    "data": 32,
+    "data": 42,
     "evidence": 23,
     "security": 6,
-    "ui": 30,
-    "unmapped": 10
+    "ui": 30
   },
   "removed": [],
   "runtime_count": 253,

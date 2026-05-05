@@ -24,14 +24,20 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from api.auth_scopes.resolution import require_scopes
 from api.db import get_sessionmaker
 from api.db_models import AssessmentRecord, OrgProfile, PromptVersion, ReportRecord
 
 log = logging.getLogger("frostgate.reports")
 
-router = APIRouter(prefix="/assessment", tags=["reports"])
+router = APIRouter(
+    prefix="/ingest/assessment",
+    tags=["reports"],
+    dependencies=[Depends(require_scopes("ingest:assessment"))],
+)
 
 # ─── DB session ───────────────────────────────────────────────────────────────
+
 
 def _get_db():
     SessionLocal = get_sessionmaker()
@@ -44,6 +50,7 @@ def _get_db():
 
 # ─── Prompt rendering ─────────────────────────────────────────────────────────
 
+
 def _render_prompt(template: str, context: dict[str, str]) -> str:
     for key, value in context.items():
         template = template.replace(f"{{{{{key}}}}}", value)
@@ -52,10 +59,10 @@ def _render_prompt(template: str, context: dict[str, str]) -> str:
 
 def _domain_scores_text(scores: dict[str, float]) -> str:
     labels = {
-        "data_governance":      "Data Governance",
-        "security_posture":     "Security Posture",
-        "ai_maturity":          "AI Maturity",
-        "infra_readiness":      "Infrastructure Readiness",
+        "data_governance": "Data Governance",
+        "security_posture": "Security Posture",
+        "ai_maturity": "AI Maturity",
+        "infra_readiness": "Infrastructure Readiness",
         "compliance_awareness": "Compliance Awareness",
         "automation_potential": "Automation Potential",
     }
@@ -75,6 +82,7 @@ def _domain_scores_text(scores: dict[str, float]) -> str:
 
 
 # ─── JSON extraction from LLM response ───────────────────────────────────────
+
 
 def _extract_json(text: str) -> dict[str, Any]:
     """
@@ -105,6 +113,7 @@ def _extract_json(text: str) -> dict[str, Any]:
 
 
 # ─── Report generation (runs in background) ───────────────────────────────────
+
 
 def _validate_report_content(content: dict[str, Any]) -> dict[str, Any]:
     """
@@ -200,7 +209,9 @@ def _generate_report_sync(report_id: str) -> None:
             "org_name": org_name,
             "industry": industry,
             "profile_type": assessment.profile_type.replace("_", " ").title(),
-            "overall_score": f"{assessment.overall_score:.1f}" if assessment.overall_score else "0",
+            "overall_score": f"{assessment.overall_score:.1f}"
+            if assessment.overall_score
+            else "0",
             "risk_band": (assessment.risk_band or "unknown").title(),
             "domain_scores": _domain_scores_text(domain_scores),
         }
@@ -234,7 +245,8 @@ def _generate_report_sync(report_id: str) -> None:
 
         log.info(
             "reports.generated report_id=%s assessment_id=%s",
-            report_id, report.assessment_id,
+            report_id,
+            report.assessment_id,
         )
 
     except Exception as exc:
@@ -254,6 +266,7 @@ def _generate_report_sync(report_id: str) -> None:
 
 # ─── Pydantic schemas ─────────────────────────────────────────────────────────
 
+
 class GenerateReportRequest(BaseModel):
     assessment_id: str
     prompt_type: str = "executive"
@@ -266,7 +279,10 @@ class GenerateReportResponse(BaseModel):
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
-@router.post("/reports/generate", response_model=GenerateReportResponse, status_code=202)
+
+@router.post(
+    "/reports/generate", response_model=GenerateReportResponse, status_code=202
+)
 def generate_report(
     body: GenerateReportRequest,
     background_tasks: BackgroundTasks,
@@ -312,7 +328,9 @@ def generate_report(
 
     log.info(
         "reports.enqueued report_id=%s assessment_id=%s type=%s",
-        report_id, body.assessment_id, body.prompt_type,
+        report_id,
+        body.assessment_id,
+        body.prompt_type,
     )
 
     return GenerateReportResponse(report_id=report_id, status="pending")
@@ -327,7 +345,11 @@ def get_report(report_id: str, db: Session = Depends(_get_db)):
 
     overall_score: float | None = None
     if report.assessment_id:
-        assessment = db.query(AssessmentRecord).filter(AssessmentRecord.id == report.assessment_id).first()
+        assessment = (
+            db.query(AssessmentRecord)
+            .filter(AssessmentRecord.id == report.assessment_id)
+            .first()
+        )
         if assessment:
             overall_score = assessment.overall_score
 
@@ -341,7 +363,9 @@ def get_report(report_id: str, db: Session = Depends(_get_db)):
         "error_message": report.error_message,
         "overall_score": overall_score,
         "created_at": report.created_at.isoformat() if report.created_at else None,
-        "completed_at": report.completed_at.isoformat() if report.completed_at else None,
+        "completed_at": report.completed_at.isoformat()
+        if report.completed_at
+        else None,
     }
 
 

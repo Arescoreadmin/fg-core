@@ -1794,7 +1794,9 @@ class OrgProfile(Base):
     org_id: Mapped[Any] = mapped_column(
         Text, nullable=False, unique=True, default=lambda: str(uuid.uuid4())
     )
-    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, default="public", index=True)
+    tenant_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="public", index=True
+    )
     org_name: Mapped[Any] = mapped_column(Text, nullable=False)
     industry: Mapped[Any] = mapped_column(Text, nullable=False, default="other")
     employee_count: Mapped[Any] = mapped_column(Text, nullable=False, default="")
@@ -1802,8 +1804,12 @@ class OrgProfile(Base):
     profile_type: Mapped[Any] = mapped_column(Text, nullable=False, default="smb_basic")
     handles_phi: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
     handles_cui: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
-    is_dod_contractor: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
-    fedramp_required: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
+    is_dod_contractor: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    fedramp_required: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     email: Mapped[Any] = mapped_column(Text, nullable=True)
     created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
@@ -1836,12 +1842,16 @@ class AssessmentRecord(Base):
     id: Mapped[Any] = mapped_column(
         Text, primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, default="public", index=True)
+    tenant_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="public", index=True
+    )
     org_profile_id: Mapped[Any] = mapped_column(
         Integer, ForeignKey("org_profiles.id", ondelete="SET NULL"), nullable=True
     )
     org_id: Mapped[Any] = mapped_column(Text, nullable=False, default="", index=True)
-    schema_version: Mapped[Any] = mapped_column(Text, nullable=False, default="v2025.1-base")
+    schema_version: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="v2025.1-base"
+    )
     profile_type: Mapped[Any] = mapped_column(Text, nullable=False, default="smb_basic")
     status: Mapped[Any] = mapped_column(Text, nullable=False, default="draft")
     responses: Mapped[Any] = mapped_column(JSON, nullable=False, default=dict)
@@ -1886,7 +1896,9 @@ class ReportRecord(Base):
     id: Mapped[Any] = mapped_column(
         Text, primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, default="public", index=True)
+    tenant_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="public", index=True
+    )
     assessment_id: Mapped[Any] = mapped_column(
         Text, ForeignKey("assessments.id", ondelete="SET NULL"), nullable=True
     )

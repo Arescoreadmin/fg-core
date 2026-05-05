@@ -1,10 +1,10 @@
 /**
  * Report API client — all requests go through fg-core's single API.
- * The Next.js proxy at /api/core/* forwards to admin-gateway → fg-core.
- * Routes are prefixed /assessment/reports/* on the backend (api/reports_engine.py).
+ * The Next.js proxy at /api/core/* forwards to fg-core.
+ * Routes are prefixed /ingest/assessment/* on the backend (api/reports_engine.py).
  */
 
-const BASE = '/api/core/assessment';
+const BASE = '/api/core/ingest/assessment';
 
 export type ReportStatus = 'pending' | 'generating' | 'complete' | 'failed';
 

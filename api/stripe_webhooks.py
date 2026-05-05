@@ -5,6 +5,7 @@ Receives checkout.session.completed and marks the linked assessment as paid.
 Signature verification is active when STRIPE_WEBHOOK_SECRET is set.
 In dev (no secret), any POST is accepted — never deploy without the secret.
 """
+
 from __future__ import annotations
 
 import json
@@ -18,7 +19,7 @@ from api.db_models import AssessmentRecord, StripeEvent
 
 log = logging.getLogger("frostgate.stripe")
 
-router = APIRouter(prefix="/assessment", tags=["stripe"])
+router = APIRouter(prefix="/ingest/assessment", tags=["stripe"])
 
 _WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 
@@ -30,10 +31,9 @@ async def stripe_webhook(request: Request):
     if _WEBHOOK_SECRET:
         try:
             import stripe  # noqa: PLC0415 — lazy, only when configured
+
             sig = request.headers.get("stripe-signature", "")
-            event = dict(
-                stripe.Webhook.construct_event(payload, sig, _WEBHOOK_SECRET)
-            )
+            event = dict(stripe.Webhook.construct_event(payload, sig, _WEBHOOK_SECRET))
         except Exception as exc:
             log.warning("stripe.webhook_sig_failed error=%s", exc)
             raise HTTPException(status_code=400, detail="Invalid Stripe signature")

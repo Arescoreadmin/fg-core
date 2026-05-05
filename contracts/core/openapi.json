@@ -6250,406 +6250,6 @@
         ]
       }
     },
-    "/assessment/assessments/{assessment_id}": {
-      "get": {
-        "description": "Return assessment metadata + scores (if scored).",
-        "operationId": "get_assessment_assessment_assessments__assessment_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "assessment_id",
-            "required": true,
-            "schema": {
-              "title": "Assessment Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Assessment",
-        "tags": [
-          "assessment"
-        ]
-      }
-    },
-    "/assessment/assessments/{assessment_id}/checkout": {
-      "post": {
-        "description": "Create a Stripe Checkout session for the assessment payment.\n\nDev mode (no STRIPE_SECRET_KEY): marks payment_status=paid immediately\nand returns dev_bypass=True so the frontend skips the Stripe redirect.",
-        "operationId": "create_checkout_session_assessment_assessments__assessment_id__checkout_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "assessment_id",
-            "required": true,
-            "schema": {
-              "title": "Assessment Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Checkout Session",
-        "tags": [
-          "assessment"
-        ]
-      }
-    },
-    "/assessment/assessments/{assessment_id}/questions": {
-      "get": {
-        "description": "Return the full question bank for this assessment's profile.",
-        "operationId": "get_questions_assessment_assessments__assessment_id__questions_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "assessment_id",
-            "required": true,
-            "schema": {
-              "title": "Assessment Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Questions",
-        "tags": [
-          "assessment"
-        ]
-      }
-    },
-    "/assessment/assessments/{assessment_id}/responses": {
-      "patch": {
-        "description": "Autosave partial responses. Called every 30s by the assessment wizard.",
-        "operationId": "save_responses_assessment_assessments__assessment_id__responses_patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "assessment_id",
-            "required": true,
-            "schema": {
-              "title": "Assessment Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SaveResponsesRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Save Responses",
-        "tags": [
-          "assessment"
-        ]
-      }
-    },
-    "/assessment/assessments/{assessment_id}/submit": {
-      "post": {
-        "description": "Score the assessment and mark it complete.\nCalled by the assessment wizard on final submission.",
-        "operationId": "submit_assessment_assessment_assessments__assessment_id__submit_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "assessment_id",
-            "required": true,
-            "schema": {
-              "title": "Assessment Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Submit Assessment",
-        "tags": [
-          "assessment"
-        ]
-      }
-    },
-    "/assessment/orgs": {
-      "post": {
-        "description": "Create an org profile + draft assessment in a single call.\nCalled by the onboarding wizard on the final \"Launch Assessment\" step.",
-        "operationId": "create_org_assessment_orgs_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/OrgCreateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OrgCreateResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Org",
-        "tags": [
-          "assessment"
-        ]
-      }
-    },
-    "/assessment/reports/generate": {
-      "post": {
-        "description": "Start async report generation for a scored assessment.\nReturns immediately with report_id; client polls GET /reports/{id}.",
-        "operationId": "generate_report_assessment_reports_generate_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GenerateReportRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GenerateReportResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Generate Report",
-        "tags": [
-          "reports"
-        ]
-      }
-    },
-    "/assessment/reports/{report_id}": {
-      "get": {
-        "description": "Poll report status and retrieve content when complete.",
-        "operationId": "get_report_assessment_reports__report_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "report_id",
-            "required": true,
-            "schema": {
-              "title": "Report Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Report",
-        "tags": [
-          "reports"
-        ]
-      }
-    },
-    "/assessment/reports/{report_id}/download": {
-      "get": {
-        "description": "Return a download URL for the PDF version of the report.\nPDF generation via MinIO/S3 is a Stage 2 feature.\nFor now, return a data URL hint so the frontend can render a fallback.",
-        "operationId": "download_report_assessment_reports__report_id__download_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "report_id",
-            "required": true,
-            "schema": {
-              "title": "Report Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Download Report",
-        "tags": [
-          "reports"
-        ]
-      }
-    },
-    "/assessment/webhooks/stripe": {
-      "post": {
-        "operationId": "stripe_webhook_assessment_webhooks_stripe_post",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Stripe Webhook",
-        "tags": [
-          "stripe"
-        ]
-      }
-    },
     "/audit/cycle/run": {
       "post": {
         "operationId": "run_audit_cycle_audit_cycle_run_post",
@@ -14492,6 +14092,548 @@
         "summary": "Ingest",
         "tags": [
           "ingest"
+        ]
+      }
+    },
+    "/ingest/assessment/orgs": {
+      "post": {
+        "operationId": "create_org_ingest_assessment_orgs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrgCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgCreateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Org",
+        "tags": [
+          "assessment"
+        ]
+      }
+    },
+    "/ingest/assessment/reports/generate": {
+      "post": {
+        "description": "Start async report generation for a scored assessment.\nReturns immediately with report_id; client polls GET /reports/{id}.",
+        "operationId": "generate_report_ingest_assessment_reports_generate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate Report",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/ingest/assessment/reports/{report_id}": {
+      "get": {
+        "description": "Poll report status and retrieve content when complete.",
+        "operationId": "get_report_ingest_assessment_reports__report_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Report",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/ingest/assessment/reports/{report_id}/download": {
+      "get": {
+        "description": "Return a download URL for the PDF version of the report.\nPDF generation via MinIO/S3 is a Stage 2 feature.\nFor now, return a data URL hint so the frontend can render a fallback.",
+        "operationId": "download_report_ingest_assessment_reports__report_id__download_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Report",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/ingest/assessment/webhooks/stripe": {
+      "post": {
+        "operationId": "stripe_webhook_ingest_assessment_webhooks_stripe_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Stripe Webhook",
+        "tags": [
+          "stripe"
+        ]
+      }
+    },
+    "/ingest/assessment/{assessment_id}": {
+      "get": {
+        "operationId": "get_assessment_ingest_assessment__assessment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Assessment",
+        "tags": [
+          "assessment"
+        ]
+      }
+    },
+    "/ingest/assessment/{assessment_id}/checkout": {
+      "post": {
+        "operationId": "create_checkout_session_ingest_assessment__assessment_id__checkout_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Checkout Session",
+        "tags": [
+          "assessment"
+        ]
+      }
+    },
+    "/ingest/assessment/{assessment_id}/questions": {
+      "get": {
+        "operationId": "get_questions_ingest_assessment__assessment_id__questions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Questions",
+        "tags": [
+          "assessment"
+        ]
+      }
+    },
+    "/ingest/assessment/{assessment_id}/responses": {
+      "patch": {
+        "operationId": "save_responses_ingest_assessment__assessment_id__responses_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveResponsesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Responses",
+        "tags": [
+          "assessment"
+        ]
+      }
+    },
+    "/ingest/assessment/{assessment_id}/submit": {
+      "post": {
+        "operationId": "submit_assessment_ingest_assessment__assessment_id__submit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Assessment",
+        "tags": [
+          "assessment"
         ]
       }
     },

@@ -211,6 +211,70 @@ PLANE_REGISTRY: list[PlaneDef] = [
                 "Debug stats endpoint is operational bootstrap path.",
             ),
         ),
+        bootstrap_routes=(
+            ex(
+                "POST",
+                "/ingest/assessment/orgs",
+                "bootstrap",
+                "Pre-tenant org enrollment; no tenant context exists before this call completes.",
+            ),
+            ex(
+                "GET",
+                "/ingest/assessment/{assessment_id}",
+                "bootstrap",
+                "UUID-gated assessment read; org not yet enrolled as a tenant.",
+            ),
+            ex(
+                "GET",
+                "/ingest/assessment/{assessment_id}/questions",
+                "bootstrap",
+                "UUID-gated question bank read; org not yet enrolled as a tenant.",
+            ),
+            ex(
+                "PATCH",
+                "/ingest/assessment/{assessment_id}/responses",
+                "bootstrap",
+                "UUID-gated response autosave; org not yet enrolled as a tenant.",
+            ),
+            ex(
+                "POST",
+                "/ingest/assessment/{assessment_id}/checkout",
+                "bootstrap",
+                "UUID-gated Stripe checkout initiation; org not yet enrolled as a tenant.",
+            ),
+            ex(
+                "POST",
+                "/ingest/assessment/{assessment_id}/submit",
+                "bootstrap",
+                "UUID-gated assessment submission; org not yet enrolled as a tenant.",
+            ),
+            ex(
+                "POST",
+                "/ingest/assessment/reports/generate",
+                "bootstrap",
+                "UUID-gated report generation; org not yet enrolled as a tenant.",
+            ),
+            ex(
+                "GET",
+                "/ingest/assessment/reports/{report_id}",
+                "bootstrap",
+                "UUID-gated report status poll; org not yet enrolled as a tenant.",
+            ),
+            ex(
+                "GET",
+                "/ingest/assessment/reports/{report_id}/download",
+                "bootstrap",
+                "UUID-gated report download stub; org not yet enrolled as a tenant.",
+            ),
+        ),
+        auth_exempt_routes=(
+            ex(
+                "POST",
+                "/ingest/assessment/webhooks/stripe",
+                "auth_exempt",
+                "External Stripe webhook verified by HMAC signature; cannot carry API key credentials.",
+            ),
+        ),
     ),
     PlaneDef(
         plane_id="agent",

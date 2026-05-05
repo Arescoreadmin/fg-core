@@ -1,10 +1,10 @@
 /**
  * Assessment API client — all requests go through fg-core's single API.
- * The Next.js proxy at /api/core/* forwards to admin-gateway → fg-core.
- * Routes are prefixed /assessment/* on the backend (api/assessments.py).
+ * The Next.js proxy at /api/core/* forwards to fg-core.
+ * Routes are prefixed /ingest/assessment/* on the backend (api/assessments.py).
  */
 
-const BASE = '/api/core/assessment';
+const BASE = '/api/core/ingest/assessment';
 
 export interface OrgCreatePayload {
   name: string;
@@ -81,19 +81,19 @@ export const assessmentApi = {
     }),
 
   createCheckout: (assessmentId: string) =>
-    request<CheckoutResponse>(`/assessments/${assessmentId}/checkout`, {
+    request<CheckoutResponse>(`/${assessmentId}/checkout`, {
       method: 'POST',
     }),
 
   getAssessment: (id: string) =>
-    request<AssessmentDetail>(`/assessments/${id}`),
+    request<AssessmentDetail>(`/${id}`),
 
   getQuestions: (id: string) =>
-    request<AssessmentQuestion[]>(`/assessments/${id}/questions`),
+    request<AssessmentQuestion[]>(`/${id}/questions`),
 
   saveResponses: (id: string, responses: Record<string, unknown>) =>
     request<{ saved: boolean; response_count: number }>(
-      `/assessments/${id}/responses`,
+      `/${id}/responses`,
       {
         method: 'PATCH',
         body: JSON.stringify({ responses }),
@@ -101,7 +101,7 @@ export const assessmentApi = {
     ),
 
   submitAssessment: (id: string) =>
-    request<SubmitResponse>(`/assessments/${id}/submit`, {
+    request<SubmitResponse>(`/${id}/submit`, {
       method: 'POST',
     }),
 };

@@ -2630,3 +2630,57 @@ SOC review outcome:
 - Canonical tester flow passes end-to-end (OIDC → session → CSRF → export)
 - Negative tenant isolation verified
 - All auth boundary and loopback rejection tests pass
+
+## PR #280 — Route inventory and contract topology refresh
+
+Generated route/topology artifacts were updated after customer-facing assessment route normalization and contract authority refresh.
+
+Reviewed critical files:
+- tools/ci/contract_routes.json
+- tools/ci/plane_registry_snapshot.json
+- tools/ci/route_inventory.json
+- tools/ci/route_inventory_summary.json
+- tools/ci/topology.sha256
+
+SOC review:
+- No enforcement weakened.
+- Route inventory regenerated from current runtime/contract source.
+- Contract topology regenerated.
+- Contract authority markers refreshed and matched prod OpenAPI.
+- Assessment proxy and public customer assessment flow remain bounded by explicit route allowlists.
+
+Validation:
+- make route-inventory-generate
+- make contracts-gen
+- make contract-authority-refresh
+- make fg-fast
+
+## PR #280 — Assessment routes moved under core plane
+
+Customer-facing assessment, report, and Stripe webhook routes were moved under the governed `/core/assessment` route plane to satisfy plane registry and platform inventory enforcement.
+
+Reviewed critical files:
+- api/assessments.py
+- api/reports_engine.py
+- api/stripe_webhooks.py
+- console/app/api/core/[...path]/route.ts
+- console/lib/assessmentApi.ts
+- console/lib/reportApi.ts
+- tools/ci/contract_routes.json
+- tools/ci/plane_registry_snapshot.json
+- tools/ci/route_inventory.json
+- tools/ci/route_inventory_summary.json
+- tools/ci/topology.sha256
+
+SOC review:
+- No enforcement weakened.
+- No wildcard proxy rule added.
+- Assessment traffic remains bounded by explicit proxy allowlist.
+- Contract and route inventory regenerated from current runtime source.
+
+Validation:
+- make route-inventory-generate
+- make contracts-gen
+- make contract-authority-refresh
+- make soc-review-sync
+- make fg-fast
