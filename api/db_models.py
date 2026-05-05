@@ -1804,6 +1804,7 @@ class OrgProfile(Base):
     handles_cui: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
     is_dod_contractor: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
     fedramp_required: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
+    email: Mapped[Any] = mapped_column(Text, nullable=True)
     created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
@@ -1855,6 +1856,10 @@ class AssessmentRecord(Base):
     )
     submitted_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
     scored_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    email: Mapped[Any] = mapped_column(Text, nullable=True)
+    stripe_session_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    payment_status: Mapped[Any] = mapped_column(Text, nullable=False, default="unpaid")
+    tier: Mapped[Any] = mapped_column(Text, nullable=True)
 
 
 class PromptVersion(Base):
@@ -1898,3 +1903,17 @@ class ReportRecord(Base):
         DateTime(timezone=True), nullable=False, default=utcnow
     )
     completed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class StripeEvent(Base):
+    """Raw Stripe webhook events — used for idempotency and audit."""
+
+    __tablename__ = "stripe_events"
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    stripe_event_id: Mapped[Any] = mapped_column(Text, nullable=False, unique=True)
+    event_type: Mapped[Any] = mapped_column(Text, nullable=False)
+    payload: Mapped[Any] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )

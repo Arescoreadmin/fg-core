@@ -8,6 +8,7 @@ const BASE = '/api/core/assessment';
 
 export interface OrgCreatePayload {
   name: string;
+  email?: string;
   industry: string;
   employee_count: string;
   revenue: string;
@@ -22,6 +23,13 @@ export interface OrgCreateResponse {
   assessment_id: string;
   profile_type: string;
   schema_version: string;
+}
+
+export interface CheckoutResponse {
+  checkout_url: string | null;
+  assessment_id: string;
+  dev_bypass?: boolean;
+  already_paid?: boolean;
 }
 
 export interface AssessmentQuestion {
@@ -42,6 +50,8 @@ export interface AssessmentDetail {
   scores: Record<string, number> | null;
   overall_score: number | null;
   risk_band: 'critical' | 'high' | 'medium' | 'low' | null;
+  payment_status: 'unpaid' | 'paid';
+  tier: string | null;
 }
 
 export interface SubmitResponse {
@@ -68,6 +78,11 @@ export const assessmentApi = {
     request<OrgCreateResponse>('/orgs', {
       method: 'POST',
       body: JSON.stringify(payload),
+    }),
+
+  createCheckout: (assessmentId: string) =>
+    request<CheckoutResponse>(`/assessments/${assessmentId}/checkout`, {
+      method: 'POST',
     }),
 
   getAssessment: (id: string) =>

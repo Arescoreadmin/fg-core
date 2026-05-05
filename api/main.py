@@ -63,6 +63,7 @@ from api.agent_phase2 import router as agent_phase2_router
 from api.agent_tokens import router as agent_tokens_router
 from api.assessments import router as assessments_router
 from api.reports_engine import router as reports_engine_router
+from api.stripe_webhooks import router as stripe_webhooks_router
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
 from api.middleware.exception_shield import FGExceptionShieldMiddleware
@@ -547,6 +548,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(agent_phase2_router)
     app.include_router(assessments_router)
     app.include_router(reports_engine_router)
+    app.include_router(stripe_webhooks_router)
     app.include_router(connectors_control_plane_router)
     app.include_router(control_plane_router)
     app.include_router(control_plane_v2_router)
@@ -833,6 +835,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(agent_phase2_router)
     app.include_router(assessments_router)
     app.include_router(reports_engine_router)
+    app.include_router(stripe_webhooks_router)
     app.include_router(connectors_control_plane_router)
     app.include_router(control_plane_router)
     app.include_router(control_plane_v2_router)

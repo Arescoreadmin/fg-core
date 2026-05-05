@@ -201,6 +201,7 @@ function CompletionScreen({
 function AssessmentContent() {
   const searchParams = useSearchParams();
   const assessmentId = searchParams.get('id') ?? '';
+  const paymentSuccess = searchParams.get('payment') === 'success';
   const {
     questions,
     responses,
@@ -218,6 +219,7 @@ function AssessmentContent() {
   const [submitted, setSubmitted] = useState(false);
   const [finalScore, setFinalScore] = useState(0);
   const [finalRiskBand, setFinalRiskBand] = useState('high');
+  const [showPaymentBanner, setShowPaymentBanner] = useState(paymentSuccess);
 
   // Load questions on mount
   useEffect(() => {
@@ -254,6 +256,7 @@ function AssessmentContent() {
 
   const handleSubmit = async () => {
     setSubmitting(true);
+    setError('');
     try {
       await assessmentApi.saveResponses(assessmentId, responses);
       const result = await assessmentApi.submitAssessment(assessmentId);
@@ -261,7 +264,15 @@ function AssessmentContent() {
       setFinalRiskBand(result.risk_band);
       setSubmitted(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Submission failed');
+      const msg = err instanceof Error ? err.message : 'Submission failed';
+      // 402 = payment not yet confirmed (webhook race condition)
+      if (msg.includes('402')) {
+        setError(
+          'Payment confirmation is still processing. Please wait a moment and try again.'
+        );
+      } else {
+        setError(msg);
+      }
       setSubmitting(false);
     }
   };
@@ -312,6 +323,21 @@ function AssessmentContent() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      {/* Payment confirmed banner */}
+      {showPaymentBanner && (
+        <div className="bg-success/10 border-b border-success/30 px-4 py-2 flex items-center justify-between">
+          <p className="text-xs text-success font-medium">
+            ✓ Payment confirmed — your assessment is unlocked. Complete all questions below.
+          </p>
+          <button
+            onClick={() => setShowPaymentBanner(false)}
+            className="text-success/60 hover:text-success text-xs ml-4"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur-md">
         <div className="mx-auto max-w-2xl px-4 py-3">
@@ -387,6 +413,12 @@ function AssessmentContent() {
                 )}
               </div>
             </div>
+
+            {error && (
+              <div className="mt-3 rounded-lg border border-danger/30 bg-danger/5 px-4 py-3">
+                <p className="text-sm text-danger">{error}</p>
+              </div>
+            )}
 
             {!canSubmit && isLast && (
               <p className="mt-3 text-center text-xs text-muted">

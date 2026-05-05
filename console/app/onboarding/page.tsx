@@ -5,7 +5,16 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { ArrowRight, ArrowLeft, Zap, Building2, Users, DollarSign, Shield } from 'lucide-react';
+import {
+  ArrowRight,
+  ArrowLeft,
+  Zap,
+  Building2,
+  Users,
+  DollarSign,
+  Shield,
+  CreditCard,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -26,6 +35,7 @@ import { assessmentApi } from '@/lib/assessmentApi';
 
 const step0Schema = z.object({
   orgName: z.string().min(2, 'Organization name is required'),
+  email: z.string().email('A valid email is required'),
   industry: z.string().min(1, 'Please select an industry'),
 });
 
@@ -36,6 +46,17 @@ const step1Schema = z.object({
 
 type Step0Data = z.infer<typeof step0Schema>;
 type Step1Data = z.infer<typeof step1Schema>;
+
+// ─── Tier pricing helper ─────────────────────────────────────────────────────
+
+function tierPrice(data: { isDodContractor: boolean; handlesCui: boolean; handlesPhi: boolean; industry: string; employeeCount: string }) {
+  if (data.isDodContractor || data.handlesCui) return '$999';
+  if (data.handlesPhi || data.industry === 'banking' || data.industry === 'healthcare') return '$999';
+  const n = parseInt(data.employeeCount?.split('-')[0] ?? '0', 10);
+  if (n > 200) return '$599';
+  if (n > 50) return '$599';
+  return '$299';
+}
 
 // ─── Step components ─────────────────────────────────────────────────────────
 
@@ -48,7 +69,7 @@ function Step0({ onNext }: { onNext: () => void }) {
     formState: { errors },
   } = useForm<Step0Data>({
     resolver: zodResolver(step0Schema),
-    defaultValues: { orgName: data.orgName, industry: data.industry },
+    defaultValues: { orgName: data.orgName, email: data.email, industry: data.industry },
   });
 
   const onSubmit = (values: Step0Data) => {
@@ -62,6 +83,12 @@ function Step0({ onNext }: { onNext: () => void }) {
         <Label htmlFor="orgName">Organization name</Label>
         <Input id="orgName" placeholder="Acme Community Bank" {...register('orgName')} />
         {errors.orgName && <p className="text-xs text-danger">{errors.orgName.message}</p>}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="email">Work email</Label>
+        <Input id="email" type="email" placeholder="you@company.com" {...register('email')} />
+        {errors.email && <p className="text-xs text-danger">{errors.email.message}</p>}
       </div>
 
       <div className="space-y-2">
@@ -241,12 +268,26 @@ function Step3({ onBack }: { onBack: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleLaunch = async () => {
+  const price = tierPrice(data);
+
+  const derivedProfile = () => {
+    if (data.isDodContractor || data.handlesCui) return 'GovCon';
+    if (data.handlesPhi || data.industry === 'banking' || data.industry === 'healthcare')
+      return 'Regulated';
+    const n = parseInt(data.employeeCount?.split('-')[0] ?? '0', 10);
+    if (n > 200) return 'Enterprise';
+    if (n > 50) return 'Mid-Market';
+    return 'SMB';
+  };
+
+  const handleProceedToPayment = async () => {
     setLoading(true);
     setError('');
     try {
-      const result = await assessmentApi.createOrg({
+      // 1. Create org + draft assessment
+      const org = await assessmentApi.createOrg({
         name: data.orgName,
+        email: data.email,
         industry: data.industry,
         employee_count: data.employeeCount,
         revenue: data.revenue,
@@ -255,32 +296,36 @@ function Step3({ onBack }: { onBack: () => void }) {
         is_dod_contractor: data.isDodContractor,
         fedramp_required: data.fedrampRequired,
       });
-      setOrgId(result.org_id);
-      setAssessmentId(result.assessment_id);
-      router.push(`/assessment?id=${result.assessment_id}`);
+      setOrgId(org.org_id);
+      setAssessmentId(org.assessment_id);
+
+      // 2. Create checkout session
+      const checkout = await assessmentApi.createCheckout(org.assessment_id);
+
+      // 3. Dev bypass: no Stripe key configured — go straight to assessment
+      if (checkout.dev_bypass || !checkout.checkout_url) {
+        router.push(`/assessment?id=${org.assessment_id}`);
+        return;
+      }
+
+      // 4. Redirect to Stripe hosted checkout
+      window.location.href = checkout.checkout_url;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create assessment. Please try again.');
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
       setLoading(false);
     }
   };
 
-  const derivedProfile = () => {
-    if (data.isDodContractor || data.handlesCui) return 'GovCon (130 questions)';
-    if (data.handlesPhi || data.industry === 'banking' || data.industry === 'healthcare')
-      return 'Regulated (110 questions)';
-    const count = parseInt(data.employeeCount?.split('-')[0] ?? '0', 10);
-    if (count > 200) return 'Enterprise (100 questions)';
-    if (count > 50) return 'Mid-Market (65 questions)';
-    return 'SMB (35–55 questions)';
-  };
-
   return (
     <div className="space-y-5">
+      {/* Profile summary */}
       <div className="rounded-lg border border-border bg-surface-2 p-4 space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Your assessment profile</h3>
         <div className="grid grid-cols-2 gap-y-2 text-sm">
           <span className="text-muted">Organization</span>
           <span className="text-foreground font-medium">{data.orgName}</span>
+          <span className="text-muted">Email</span>
+          <span className="text-foreground font-medium">{data.email}</span>
           <span className="text-muted">Industry</span>
           <span className="text-foreground font-medium capitalize">{data.industry}</span>
           <span className="text-muted">Team size</span>
@@ -289,6 +334,32 @@ function Step3({ onBack }: { onBack: () => void }) {
           <span className="text-primary font-medium">{derivedProfile()}</span>
         </div>
       </div>
+
+      {/* Pricing */}
+      <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-foreground">One-time assessment fee</p>
+          <p className="text-xs text-muted mt-0.5">
+            Includes AI advisory report · {derivedProfile()} tier
+          </p>
+        </div>
+        <p className="text-2xl font-bold text-primary">{price}</p>
+      </div>
+
+      {/* What you get */}
+      <ul className="space-y-1.5">
+        {[
+          'Full AI governance risk scoring across 6 domains',
+          'Claude-powered executive advisory report',
+          'Prioritised 30/60/90-day remediation roadmap',
+          'Compliance framework alignment (NIST, SOC 2, HIPAA, CMMC)',
+        ].map((item) => (
+          <li key={item} className="flex items-start gap-2 text-xs text-muted">
+            <span className="text-success mt-0.5">✓</span>
+            {item}
+          </li>
+        ))}
+      </ul>
 
       {error && (
         <div className="rounded-lg border border-danger/30 bg-danger/5 px-4 py-3">
@@ -300,10 +371,14 @@ function Step3({ onBack }: { onBack: () => void }) {
         <Button type="button" variant="outline" className="flex-1 gap-2" onClick={onBack} disabled={loading}>
           <ArrowLeft className="h-4 w-4" /> Back
         </Button>
-        <Button className="flex-1 gap-2" onClick={handleLaunch} loading={loading}>
-          Launch Assessment <ArrowRight className="h-4 w-4" />
+        <Button className="flex-1 gap-2" onClick={handleProceedToPayment} loading={loading}>
+          <CreditCard className="h-4 w-4" /> Pay {price}
         </Button>
       </div>
+
+      <p className="text-center text-xs text-muted">
+        Secured by Stripe · No subscription · Cancel anytime
+      </p>
     </div>
   );
 }
@@ -313,8 +388,8 @@ function Step3({ onBack }: { onBack: () => void }) {
 const STEPS = [
   { label: 'Organization', icon: Building2 },
   { label: 'Size', icon: Users },
-  { label: 'Compliance flags', icon: Shield },
-  { label: 'Review & launch', icon: DollarSign },
+  { label: 'Compliance', icon: Shield },
+  { label: 'Review & Pay', icon: DollarSign },
 ];
 
 export default function OnboardingPage() {
@@ -348,7 +423,11 @@ export default function OnboardingPage() {
             <div
               key={s.label}
               className={`flex-1 flex flex-col items-center pb-3 text-xs transition-colors ${
-                i === step ? 'text-primary border-b-2 border-primary' : i < step ? 'text-success' : 'text-muted'
+                i === step
+                  ? 'text-primary border-b-2 border-primary'
+                  : i < step
+                  ? 'text-success'
+                  : 'text-muted'
               }`}
             >
               <s.icon className="h-4 w-4 mb-1" />

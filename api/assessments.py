@@ -17,11 +17,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -214,6 +215,25 @@ def score_assessment(
 
 # ─── Pydantic schemas ─────────────────────────────────────────────────────────
 
+_TIER_PRICES: dict[str, int] = {
+    "smb_basic":  29900,
+    "smb_growth": 29900,
+    "midmarket":  59900,
+    "enterprise": 59900,
+    "regulated":  99900,
+    "govcon":     99900,
+}
+
+_TIER_LABELS: dict[str, str] = {
+    "smb_basic":  "SMB Basic",
+    "smb_growth": "SMB Growth",
+    "midmarket":  "Mid-Market",
+    "enterprise": "Enterprise",
+    "regulated":  "Regulated",
+    "govcon":     "GovCon",
+}
+
+
 class OrgCreateRequest(BaseModel):
     name: str
     industry: str = "other"
@@ -223,6 +243,7 @@ class OrgCreateRequest(BaseModel):
     handles_cui: bool = False
     is_dod_contractor: bool = False
     fedramp_required: bool = False
+    email: str = ""
 
 
 class OrgCreateResponse(BaseModel):
@@ -292,6 +313,7 @@ def create_org(body: OrgCreateRequest, db: Session = Depends(_get_db)):
         handles_cui=body.handles_cui,
         is_dod_contractor=body.is_dod_contractor,
         fedramp_required=body.fedramp_required,
+        email=body.email or None,
     )
     db.add(org)
     db.flush()  # get org.id
@@ -306,6 +328,8 @@ def create_org(body: OrgCreateRequest, db: Session = Depends(_get_db)):
         profile_type=profile_type,
         status="draft",
         responses={},
+        email=body.email or None,
+        tier=profile_type,
     )
     db.add(assessment)
     db.commit()
@@ -345,6 +369,8 @@ def get_assessment(assessment_id: str, db: Session = Depends(_get_db)):
         "risk_band": rec.risk_band,
         "scores": rec.scores,
         "responses": rec.responses,
+        "payment_status": rec.payment_status,
+        "tier": rec.tier,
         "created_at": rec.created_at.isoformat() if rec.created_at else None,
         "submitted_at": rec.submitted_at.isoformat() if rec.submitted_at else None,
     }
@@ -371,6 +397,80 @@ def save_responses(
     return {"saved": True, "response_count": len(existing)}
 
 
+@router.post("/assessments/{assessment_id}/checkout")
+def create_checkout_session(assessment_id: str, db: Session = Depends(_get_db)):
+    """
+    Create a Stripe Checkout session for the assessment payment.
+
+    Dev mode (no STRIPE_SECRET_KEY): marks payment_status=paid immediately
+    and returns dev_bypass=True so the frontend skips the Stripe redirect.
+    """
+    rec = _get_assessment_or_404(assessment_id, db)
+
+    stripe_key = os.environ.get("STRIPE_SECRET_KEY", "")
+    if not stripe_key:
+        # Dev / CI — bypass payment
+        rec.payment_status = "paid"
+        rec.tier = rec.profile_type
+        db.commit()
+        log.info(
+            "assessment.checkout_dev_bypass assessment_id=%s profile=%s",
+            assessment_id, rec.profile_type,
+        )
+        return {"checkout_url": None, "dev_bypass": True, "assessment_id": assessment_id}
+
+    # Already paid — return early
+    if rec.payment_status == "paid":
+        return {"checkout_url": None, "already_paid": True, "assessment_id": assessment_id}
+
+    import stripe  # noqa: PLC0415
+
+    stripe.api_key = stripe_key
+
+    amount = _TIER_PRICES.get(rec.profile_type, 29900)
+    tier_label = _TIER_LABELS.get(rec.profile_type, rec.profile_type)
+    base_url = os.environ.get("CONSOLE_BASE_URL", "https://app.frostgate.ai")
+
+    # Load org email for pre-fill
+    org = db.query(OrgProfile).filter(OrgProfile.id == rec.org_profile_id).first()
+    customer_email = (org.email if org else None) or rec.email or None
+
+    session = stripe.checkout.Session.create(
+        payment_method_types=["card"],
+        line_items=[
+            {
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {
+                        "name": f"FrostGate AI Governance Assessment — {tier_label}",
+                        "description": (
+                            "One-time AI governance risk assessment with "
+                            "personalized Claude-powered advisory report."
+                        ),
+                    },
+                    "unit_amount": amount,
+                },
+                "quantity": 1,
+            }
+        ],
+        mode="payment",
+        success_url=f"{base_url}/assessment?id={assessment_id}&payment=success",
+        cancel_url=f"{base_url}/onboarding",
+        metadata={"assessment_id": assessment_id},
+        customer_email=customer_email,
+    )
+
+    rec.stripe_session_id = session.id
+    rec.tier = rec.profile_type
+    db.commit()
+
+    log.info(
+        "assessment.checkout_created assessment_id=%s session_id=%s amount=%d",
+        assessment_id, session.id, amount,
+    )
+    return {"checkout_url": session.url, "assessment_id": assessment_id}
+
+
 @router.post("/assessments/{assessment_id}/submit")
 def submit_assessment(assessment_id: str, db: Session = Depends(_get_db)):
     """
@@ -378,6 +478,14 @@ def submit_assessment(assessment_id: str, db: Session = Depends(_get_db)):
     Called by the assessment wizard on final submission.
     """
     rec = _get_assessment_or_404(assessment_id, db)
+
+    # Payment gate — bypass in dev (no Stripe key configured)
+    if os.environ.get("STRIPE_SECRET_KEY") and rec.payment_status != "paid":
+        raise HTTPException(
+            status_code=402,
+            detail="Payment required. Complete checkout to unlock your assessment report.",
+        )
+
     if rec.status in ("submitted", "scored"):
         # Idempotent — return existing scores
         return {

@@ -21,6 +21,7 @@ export type OrgProfile =
 
 export interface OnboardingData {
   orgName: string;
+  email: string;
   industry: Industry | '';
   employeeCount: string;
   revenue: string;
@@ -44,6 +45,7 @@ interface OnboardingStore {
 
 const defaultOnboarding: OnboardingData = {
   orgName: '',
+  email: '',
   industry: '',
   employeeCount: '',
   revenue: '',
