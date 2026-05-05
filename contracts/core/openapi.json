@@ -2640,6 +2640,42 @@
         "title": "FindingCreateRequest",
         "type": "object"
       },
+      "GenerateReportRequest": {
+        "properties": {
+          "assessment_id": {
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "prompt_type": {
+            "default": "executive",
+            "title": "Prompt Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assessment_id"
+        ],
+        "title": "GenerateReportRequest",
+        "type": "object"
+      },
+      "GenerateReportResponse": {
+        "properties": {
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_id",
+          "status"
+        ],
+        "title": "GenerateReportResponse",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3460,6 +3496,87 @@
           "build_id"
         ],
         "title": "ModuleRegistrationRequest",
+        "type": "object"
+      },
+      "OrgCreateRequest": {
+        "properties": {
+          "email": {
+            "default": "",
+            "title": "Email",
+            "type": "string"
+          },
+          "employee_count": {
+            "default": "",
+            "title": "Employee Count",
+            "type": "string"
+          },
+          "fedramp_required": {
+            "default": false,
+            "title": "Fedramp Required",
+            "type": "boolean"
+          },
+          "handles_cui": {
+            "default": false,
+            "title": "Handles Cui",
+            "type": "boolean"
+          },
+          "handles_phi": {
+            "default": false,
+            "title": "Handles Phi",
+            "type": "boolean"
+          },
+          "industry": {
+            "default": "other",
+            "title": "Industry",
+            "type": "string"
+          },
+          "is_dod_contractor": {
+            "default": false,
+            "title": "Is Dod Contractor",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revenue": {
+            "default": "",
+            "title": "Revenue",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "OrgCreateRequest",
+        "type": "object"
+      },
+      "OrgCreateResponse": {
+        "properties": {
+          "assessment_id": {
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "org_id": {
+            "title": "Org Id",
+            "type": "string"
+          },
+          "profile_type": {
+            "title": "Profile Type",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "org_id",
+          "assessment_id",
+          "profile_type",
+          "schema_version"
+        ],
+        "title": "OrgCreateResponse",
         "type": "object"
       },
       "PlaybookTriggerRequest": {
@@ -4347,6 +4464,19 @@
           "old_key_revoked"
         ],
         "title": "RotateKeyResponse",
+        "type": "object"
+      },
+      "SaveResponsesRequest": {
+        "properties": {
+          "responses": {
+            "title": "Responses",
+            "type": "object"
+          }
+        },
+        "required": [
+          "responses"
+        ],
+        "title": "SaveResponsesRequest",
         "type": "object"
       },
       "StatsResponse": {
@@ -6117,6 +6247,406 @@
         "summary": "List Approvals",
         "tags": [
           "attestation"
+        ]
+      }
+    },
+    "/assessment/assessments/{assessment_id}": {
+      "get": {
+        "description": "Return assessment metadata + scores (if scored).",
+        "operationId": "get_assessment_assessment_assessments__assessment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Assessment",
+        "tags": [
+          "assessment"
+        ]
+      }
+    },
+    "/assessment/assessments/{assessment_id}/checkout": {
+      "post": {
+        "description": "Create a Stripe Checkout session for the assessment payment.\n\nDev mode (no STRIPE_SECRET_KEY): marks payment_status=paid immediately\nand returns dev_bypass=True so the frontend skips the Stripe redirect.",
+        "operationId": "create_checkout_session_assessment_assessments__assessment_id__checkout_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Checkout Session",
+        "tags": [
+          "assessment"
+        ]
+      }
+    },
+    "/assessment/assessments/{assessment_id}/questions": {
+      "get": {
+        "description": "Return the full question bank for this assessment's profile.",
+        "operationId": "get_questions_assessment_assessments__assessment_id__questions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Questions",
+        "tags": [
+          "assessment"
+        ]
+      }
+    },
+    "/assessment/assessments/{assessment_id}/responses": {
+      "patch": {
+        "description": "Autosave partial responses. Called every 30s by the assessment wizard.",
+        "operationId": "save_responses_assessment_assessments__assessment_id__responses_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveResponsesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Responses",
+        "tags": [
+          "assessment"
+        ]
+      }
+    },
+    "/assessment/assessments/{assessment_id}/submit": {
+      "post": {
+        "description": "Score the assessment and mark it complete.\nCalled by the assessment wizard on final submission.",
+        "operationId": "submit_assessment_assessment_assessments__assessment_id__submit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Assessment",
+        "tags": [
+          "assessment"
+        ]
+      }
+    },
+    "/assessment/orgs": {
+      "post": {
+        "description": "Create an org profile + draft assessment in a single call.\nCalled by the onboarding wizard on the final \"Launch Assessment\" step.",
+        "operationId": "create_org_assessment_orgs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrgCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgCreateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Org",
+        "tags": [
+          "assessment"
+        ]
+      }
+    },
+    "/assessment/reports/generate": {
+      "post": {
+        "description": "Start async report generation for a scored assessment.\nReturns immediately with report_id; client polls GET /reports/{id}.",
+        "operationId": "generate_report_assessment_reports_generate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate Report",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/assessment/reports/{report_id}": {
+      "get": {
+        "description": "Poll report status and retrieve content when complete.",
+        "operationId": "get_report_assessment_reports__report_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Report",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/assessment/reports/{report_id}/download": {
+      "get": {
+        "description": "Return a download URL for the PDF version of the report.\nPDF generation via MinIO/S3 is a Stage 2 feature.\nFor now, return a data URL hint so the frontend can render a fallback.",
+        "operationId": "download_report_assessment_reports__report_id__download_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Report",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/assessment/webhooks/stripe": {
+      "post": {
+        "operationId": "stripe_webhook_assessment_webhooks_stripe_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Stripe Webhook",
+        "tags": [
+          "stripe"
         ]
       }
     },

@@ -6867,3 +6867,60 @@ Unsupported provider output is not returned, persisted, audited, or hashed as th
 **Validation results:** `git diff --check` passed; `python -m compileall services api tests` passed; focused security suites passed; `tests/test_ai_plane_extension.py` passed with 20 tests; `tests/security/test_openapi_security_diff_scoping.py` passed with 5 tests; `make route-inventory-generate` and `make contract-authority-refresh` ran after contract changes; `make fg-fast` passed; `bash codex_gates.sh` passed with 3052 passed and 26 skipped in the full pytest phase.
 
 **Addendum — 2026-05-01 auth response contract fix:** Updated `/ai/chat` 401/403 OpenAPI metadata to match the actual `require_scopes(...)` FastAPI error envelope, `{"detail": "..."}`, instead of advertising a top-level `error_code`. Added endpoint regression coverage for runtime 401 payload shape and generated OpenAPI 401/403 schemas. Regenerated OpenAPI/schema mirrors and refreshed contract authority markers.
+
+---
+
+### 2026-05-05 — CI repair: contract drift, UNAUTHORIZED webhook route, migrate UNIQUE VIOLATION
+
+**Branch:** `claude/merge-frontend-fg-core-6fjVg`
+
+**Area:** CI gates / contract authority / route inventory / database migrations / admin-gateway
+
+---
+
+**Issues (compound CI failure):**
+
+1. `fg-contract` failing — `git diff --exit-code contracts/admin` detected drift after `core_proxy_router` was added to admin-gateway but `contracts/admin/openapi.json` was not regenerated.
+2. `route-inventory-audit` hard fail — `POST /assessment/webhooks/stripe` classified as `UNAUTHORIZED` because `include_in_schema=False` made it invisible to the OpenAPI contract but visible to the AST scanner. Path does not match any `ALLOWED_INTERNAL_PREFIXES`, so it was rejected.
+3. FastAPI duplicate operation ID warning — `@router.api_route("/core/{path:path}", methods=["GET","POST","PUT","PATCH","DELETE"])` with a single function generates duplicate `operation_id` values in the OpenAPI schema.
+4. `frostgate-migrate` exited with code 1 — migrations 0032, 0033, and 0034 each contained `INSERT INTO schema_migrations(version) VALUES ('...') ON CONFLICT DO NOTHING;` at the end. The Python migration runner (`api/db_migrations.py`) also inserts into `schema_migrations` after calling `_apply_sql`, without `ON CONFLICT`. The SQL-level insert ran first, then the Python runner's insert failed with a UNIQUE VIOLATION. Pre-existing migrations 0001–0031 do not include this line.
+5. `soc-review-sync` failure — `tools/ci/` files changed (route inventory, contract routes, topology hash) but neither SOC doc was updated.
+6. `admin-lint` failure — `admin_gateway/routers/core_proxy.py` and `admin_gateway/main.py` were not ruff-formatted.
+7. Contract authority mismatch — `contracts/core/openapi.json` changed (new routes added) but `BLUEPRINT_STAGED.md` and `CONTRACT.md` still held the old `Contract-Authority-SHA256`.
+
+**Root causes:**
+
+- `include_in_schema=False` on the Stripe webhook route was a leftover from an earlier pass that wanted to hide internal implementation details; the route is a real production endpoint and must be in the schema.
+- The `core_proxy_router` was wired into `admin_gateway/main.py` but `contracts/admin/openapi.json` was not regenerated after the router was added.
+- The single `@router.api_route(methods=[...])` call with one function produces one operation per method but all share the same function name as `operation_id`, causing FastAPI to emit duplicate IDs.
+- Migrations 0032–0034 copied a pattern not used by any of the 31 existing migrations. The Python runner (`api/db_migrations.py`) owns the `schema_migrations` insert; SQL files must not replicate it.
+
+**Files changed:**
+
+- `api/stripe_webhooks.py` — removed `include_in_schema=False` from `@router.post("/webhooks/stripe")` so the route appears in the OpenAPI contract and passes route-inventory-audit.
+- `admin_gateway/routers/core_proxy.py` — rewrote single `@router.api_route` with shared `_proxy()` helper and 5 separate per-method handlers, each with explicit `operation_id` (`core_proxy_get`, `core_proxy_post`, `core_proxy_patch`, `core_proxy_put`, `core_proxy_delete`). Ruff-formatted.
+- `admin_gateway/main.py` — ruff-formatted (no logic changes).
+- `migrations/postgres/0032_assessment_and_reports.sql` — removed final `INSERT INTO schema_migrations` line.
+- `migrations/postgres/0033_seed_assessment_data.sql` — removed final `INSERT INTO schema_migrations` line.
+- `migrations/postgres/0034_payment_columns.sql` — removed final `INSERT INTO schema_migrations` line.
+- `contracts/admin/openapi.json` — regenerated via `make contracts-gen` to include 5 new `core_proxy_*` routes.
+- `contracts/core/openapi.json` — regenerated via `make contracts-gen` to include 10 new assessment/report/webhook routes. New SHA256: `824eff5084b3ef6abed5ed5a4e293bb0f97ea33d4847f4493b1ac5806a2549d8`.
+- `BLUEPRINT_STAGED.md` — updated `Contract-Authority-SHA256` to `824eff5084b3ef6abed5ed5a4e293bb0f97ea33d4847f4493b1ac5806a2549d8`.
+- `CONTRACT.md` — same contract authority hash update.
+- `schemas/api/openapi.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256` — regenerated as part of `make contracts-gen` and `make route-inventory-generate`.
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — prepended structured entry documenting the assessment/report API surface addition, route inventory update, contract authority hash update, and migration fix. Required by `soc-review-sync` gate (changes to `tools/ci/` must be accompanied by a SOC doc update).
+
+**Enforcement integrity:**
+
+- No CI gate weakened. No route marked public to avoid scope enforcement. No migrate failure suppressed. No `--no-verify` used.
+- Assessment routes remain `scoped: False, tenant_bound: False` — the UUID4 assessment ID is the access token (unguessable), per existing design.
+- The Stripe webhook route is now correctly in the schema; it was never public — it was misclassified by `include_in_schema=False`.
+- Migration runner ownership of `schema_migrations` inserts is preserved; SQL files remain data-only.
+
+**Validation results:**
+
+- `make fg-contract` → `Contract diff: OK (admin/core/artifacts)` ✓
+- `make route-inventory-audit` → `route inventory: OK` ✓
+- `make soc-review-sync` → `soc-review-sync: OK` ✓
+- `make admin-lint` → `All checks passed! / 52 files already formatted` ✓
+- `make fg-fast` → all gates passing (pr-fix-log was the final gate)

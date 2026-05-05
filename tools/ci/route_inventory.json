@@ -1068,6 +1068,126 @@
       "tenant_bound": true
     },
     {
+      "dependency_categories": [],
+      "file": "api/assessments.py",
+      "method": "GET",
+      "path": "/assessment/assessments/{assessment_id}",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/assessments.py",
+      "method": "POST",
+      "path": "/assessment/assessments/{assessment_id}/checkout",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/assessments.py",
+      "method": "GET",
+      "path": "/assessment/assessments/{assessment_id}/questions",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/assessments.py",
+      "method": "PATCH",
+      "path": "/assessment/assessments/{assessment_id}/responses",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/assessments.py",
+      "method": "POST",
+      "path": "/assessment/assessments/{assessment_id}/submit",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/assessments.py",
+      "method": "POST",
+      "path": "/assessment/orgs",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/reports_engine.py",
+      "method": "POST",
+      "path": "/assessment/reports/generate",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/reports_engine.py",
+      "method": "GET",
+      "path": "/assessment/reports/{report_id}",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/reports_engine.py",
+      "method": "GET",
+      "path": "/assessment/reports/{report_id}/download",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [],
+      "file": "api/stripe_webhooks.py",
+      "method": "POST",
+      "path": "/assessment/webhooks/stripe",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
       "dependency_categories": [
         "auth",
         "rate",
@@ -4054,7 +4174,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-05-01T18:46:13.813363+00:00",
+  "generated_at": "2026-05-05T15:29:24.146088+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

@@ -133,6 +133,66 @@
       "source": "contract"
     },
     {
+      "method": "GET",
+      "path": "/assessment/assessments/{assessment_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/assessment/assessments/{assessment_id}/checkout",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/assessment/assessments/{assessment_id}/questions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/assessment/assessments/{assessment_id}/responses",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/assessment/assessments/{assessment_id}/submit",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/assessment/orgs",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/assessment/reports/generate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/assessment/reports/{report_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/assessment/reports/{report_id}/download",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/assessment/webhooks/stripe",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "POST",
       "path": "/audit/cycle/run",
       "scopes": [],
@@ -943,7 +1003,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-01T18:46:13.817212+00:00",
+  "generated_at": "2026-05-05T15:29:24.159640+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

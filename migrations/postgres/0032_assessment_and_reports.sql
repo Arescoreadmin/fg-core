@@ -103,5 +103,3 @@ CREATE INDEX IF NOT EXISTS ix_reports_tenant_id     ON reports(tenant_id);
 CREATE INDEX IF NOT EXISTS ix_reports_assessment_id ON reports(assessment_id);
 CREATE INDEX IF NOT EXISTS ix_reports_org_id        ON reports(org_id);
 CREATE INDEX IF NOT EXISTS ix_reports_status        ON reports(status);
-
-INSERT INTO schema_migrations(version) VALUES ('0032') ON CONFLICT DO NOTHING;

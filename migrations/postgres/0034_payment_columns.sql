@@ -28,5 +28,3 @@ CREATE TABLE IF NOT EXISTS stripe_events (
 );
 
 CREATE INDEX IF NOT EXISTS ix_stripe_events_type ON stripe_events(event_type);
-
-INSERT INTO schema_migrations(version) VALUES ('0034') ON CONFLICT DO NOTHING;

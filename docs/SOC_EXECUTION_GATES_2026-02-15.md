@@ -1,3 +1,30 @@
+## 2026-05-05 — Assessment + Report API surface: route inventory and contract update
+
+New customer-facing API surface added for AI governance assessments and advisory reports.
+All routes are intentionally auth-free at the gateway level — the assessment UUID is the
+access token (unguessable UUID4). Enforcement review:
+
+Routes added to `tools/ci/route_inventory.json` (10 new routes):
+- `POST /assessment/orgs` — create org profile + draft assessment
+- `GET/PATCH/POST /assessment/assessments/{id}` — questions, responses, submit, checkout
+- `POST /assessment/reports/generate`, `GET /assessment/reports/{id}`, `GET /assessment/reports/{id}/download`
+- `POST /assessment/webhooks/stripe` — Stripe checkout.session.completed webhook (signature-verified)
+
+Contract authority SHA256 updated in `BLUEPRINT_STAGED.md` and `CONTRACT.md` to
+`824eff5084b3ef6abed5ed5a4e293bb0f97ea33d4847f4493b1ac5806a2549d8` to reflect
+the new assessment/report/webhook routes in `contracts/core/openapi.json`.
+
+Admin-gateway `core_proxy_router` added: forwards `/core/assessment/*` to fg-core.
+All other fg-core paths return 403. No admin/governance routes exposed.
+
+Migration fix: removed duplicate `INSERT INTO schema_migrations` from 0032/0033/0034;
+the Python migration runner is the sole source of truth for schema_migrations tracking.
+
+Validation: `make fg-fast` → passed. `make route-inventory-audit` → OK.
+`make fg-contract` → OK. `make sql-migration-percent-guard` → OK.
+
+---
+
 ## 2026-04-25 — Task 11.1 Addendum: Gateway Guard Test Contract Alignment
 
 `tests/security/test_gateway_only_admin_access.py` updated to assert structured error payload from `require_internal_admin_gateway`.

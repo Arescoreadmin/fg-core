@@ -23,7 +23,7 @@ router = APIRouter(prefix="/assessment", tags=["stripe"])
 _WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 
 
-@router.post("/webhooks/stripe", include_in_schema=False)
+@router.post("/webhooks/stripe")
 async def stripe_webhook(request: Request):
     payload = await request.body()
 

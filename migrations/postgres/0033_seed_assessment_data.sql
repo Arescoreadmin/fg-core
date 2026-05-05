@@ -343,5 +343,3 @@ Domain Scores:
 Respond with ONLY a valid JSON object matching the executive report schema but with compliance depth: cite specific regulatory provisions, evidence requirements, audit readiness gaps, and remediation priority by regulatory obligation.'
 )
 ON CONFLICT (prompt_key, version) DO NOTHING;
-
-INSERT INTO schema_migrations(version) VALUES ('0033') ON CONFLICT DO NOTHING;
