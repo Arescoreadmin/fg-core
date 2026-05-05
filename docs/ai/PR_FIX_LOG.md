@@ -6924,3 +6924,46 @@ Unsupported provider output is not returned, persisted, audited, or hashed as th
 - `make soc-review-sync` → `soc-review-sync: OK` ✓
 - `make admin-lint` → `All checks passed! / 52 files already formatted` ✓
 - `make fg-fast` → all gates passing (pr-fix-log was the final gate)
+
+---
+
+### 2026-05-05 — Frontend↔core integration repair: proxy allowlist, PATCH handler, real report score
+
+**Branch:** `claude/merge-frontend-fg-core-6fjVg`
+
+**Area:** Next.js core proxy / assessment API / report data pipeline
+
+---
+
+**Issues:**
+
+1. **Proxy blocked all assessment traffic (403)** — `console/app/api/core/[...path]/route.ts` uses a `PROXY_RULES` allowlist. `assessment` was absent from the list, so every call to `/api/core/assessment/*` (createOrg, getQuestions, checkout, saveResponses, submitAssessment, generateReport, getReport) returned 403 from the proxy before reaching fg-core.
+
+2. **PATCH requests silently dropped** — The route file exported only `GET`, `POST`, `DELETE`, and `HEAD` handlers. `saveResponses` uses `PATCH /assessment/assessments/{id}/responses`. Without a `PATCH` export, Next.js returns 405. Additionally, the content-type forwarding only applied to `POST` and `DELETE`, not `PATCH`.
+
+3. **Hardcoded score 47 in report UI** — `console/app/reports/[reportId]/page.tsx` assigned `const overallScore = 47` unconditionally. The backend `GET /assessment/reports/{id}` endpoint did not return `overall_score`, so there was no real data to bind. Score is computed by the backend during assessment submission (`overall_score` on `AssessmentRecord`).
+
+**Root causes:**
+
+- The `PROXY_RULES` allowlist was established before assessment routes existed and was never extended.
+- The PATCH HTTP method handler was omitted when the proxy route file was written.
+- The report GET endpoint returned only report-table fields; it did not join `AssessmentRecord` to expose `overall_score`. The UI had no real value to render and used a placeholder.
+
+**Files changed:**
+
+- `console/app/api/core/[...path]/route.ts` — added `{ prefix: 'assessment', methods: new Set(['GET', 'POST', 'PATCH', 'HEAD']) }` to `PROXY_RULES`; added PATCH to content-type forwarding condition; exported `PATCH` handler.
+- `api/reports_engine.py` — `get_report` now looks up the linked `AssessmentRecord` by `assessment_id` and includes `overall_score` in the response dict.
+- `console/lib/reportApi.ts` — added `overall_score: number | null` to the `Report` interface.
+- `console/app/reports/[reportId]/page.tsx` — replaced `const overallScore = 47` with `const overallScore = report.overall_score ?? 0`.
+
+**No route naming mismatch:** Both frontend (`BASE = '/api/core/assessment'`) and backend (`APIRouter(prefix="/assessment")`) use the singular form consistently. The proxy strips `/api/core/` leaving `assessment/...` which matches the backend prefix exactly.
+
+**Enforcement integrity:** No proxy rules opened beyond the explicit assessment prefix. No wildcard rules added. `fg-contract`, `route-inventory-audit`, `soc-review-sync`, and `admin-lint` all pass.
+
+**Validation results:**
+
+- `python -m compileall api/reports_engine.py` → OK ✓
+- `make fg-contract` → `Contract diff: OK (admin/core/artifacts)` ✓
+- `make route-inventory-audit` → `route inventory: OK` ✓
+- `make soc-review-sync` → `soc-review-sync: OK` ✓
+- `make admin-lint` → `All checks passed!` ✓

@@ -46,6 +46,7 @@ export interface Report {
   prompt_type: string;
   content: ReportContent | null;
   error_message: string | null;
+  overall_score: number | null;
   created_at: string;
   completed_at: string | null;
 }

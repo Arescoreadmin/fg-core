@@ -129,8 +129,7 @@ function GeneratingScreen() {
 function ReportView({ report }: { report: Report }) {
   const content = report.content!;
 
-  // Derive score from first framework or default
-  const overallScore = 47; // This would come from assessment scores in a real integration
+  const overallScore = report.overall_score ?? 0;
 
   return (
     <div className="min-h-screen bg-background">

@@ -325,6 +325,12 @@ def get_report(report_id: str, db: Session = Depends(_get_db)):
     if report is None:
         raise HTTPException(status_code=404, detail="Report not found")
 
+    overall_score: float | None = None
+    if report.assessment_id:
+        assessment = db.query(AssessmentRecord).filter(AssessmentRecord.id == report.assessment_id).first()
+        if assessment:
+            overall_score = assessment.overall_score
+
     return {
         "id": report.id,
         "assessment_id": report.assessment_id,
@@ -333,6 +339,7 @@ def get_report(report_id: str, db: Session = Depends(_get_db)):
         "prompt_type": report.prompt_type,
         "content": report.content,
         "error_message": report.error_message,
+        "overall_score": overall_score,
         "created_at": report.created_at.isoformat() if report.created_at else None,
         "completed_at": report.completed_at.isoformat() if report.completed_at else None,
     }
