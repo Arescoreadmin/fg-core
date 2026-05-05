@@ -1,4 +1,10 @@
-const BASE = process.env.NEXT_PUBLIC_ASSESSMENT_URL ?? '';
+/**
+ * Assessment API client — all requests go through fg-core's single API.
+ * The Next.js proxy at /api/core/* forwards to admin-gateway → fg-core.
+ * Routes are prefixed /assessment/* on the backend (api/assessments.py).
+ */
+
+const BASE = '/api/core/assessment';
 
 export interface OrgCreatePayload {
   name: string;
@@ -36,7 +42,6 @@ export interface AssessmentDetail {
   scores: Record<string, number> | null;
   overall_score: number | null;
   risk_band: 'critical' | 'high' | 'medium' | 'low' | null;
-  questions: AssessmentQuestion[];
 }
 
 export interface SubmitResponse {
@@ -47,13 +52,12 @@ export interface SubmitResponse {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const url = `${BASE}${path}`;
-  const res = await fetch(url, {
+  const res = await fetch(`${BASE}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
   if (!res.ok) {
-    const body = await res.text();
+    const body = await res.text().catch(() => '');
     throw new Error(`Assessment API ${res.status}: ${body}`);
   }
   return res.json() as Promise<T>;
@@ -73,10 +77,13 @@ export const assessmentApi = {
     request<AssessmentQuestion[]>(`/assessments/${id}/questions`),
 
   saveResponses: (id: string, responses: Record<string, unknown>) =>
-    request<{ saved: boolean }>(`/assessments/${id}/responses`, {
-      method: 'PATCH',
-      body: JSON.stringify({ responses }),
-    }),
+    request<{ saved: boolean; response_count: number }>(
+      `/assessments/${id}/responses`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ responses }),
+      }
+    ),
 
   submitAssessment: (id: string) =>
     request<SubmitResponse>(`/assessments/${id}/submit`, {

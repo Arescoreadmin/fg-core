@@ -157,6 +157,7 @@ function ReportView({ report }: { report: Report }) {
               onClick={async () => {
                 try {
                   const { url } = await reportApi.getDownloadUrl(report.id);
+                  if (!url) { alert('PDF export is coming in Stage 2. Use the on-screen report view.'); return; }
                   window.open(url, '_blank');
                 } catch {
                   alert('PDF not yet available. Try again shortly.');
