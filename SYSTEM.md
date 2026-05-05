@@ -584,8 +584,12 @@ To update a prompt: INSERT a new row with `version='v1.1'`, set `is_active=TRUE`
 ### API routing (no separate services)
 
 ```
-Frontend /api/core/* → Next.js proxy → admin-gateway:8080 → fg-core
+Frontend /api/core/* → Next.js proxy → admin-gateway:8080/core/* → fg-core /assessment/*
 ```
+
+The admin-gateway's `core_proxy_router` (`admin_gateway/routers/core_proxy.py`) handles
+`/core/{path:path}` and forwards to fg-core without auth headers. Only paths starting with
+`assessment/` are allowed through — all other fg-core internal paths return 403.
 
 All assessment and report API calls use `/api/core/assessment/*` — the same
 fg-core backend. No `NEXT_PUBLIC_ASSESSMENT_URL` or `NEXT_PUBLIC_REPORT_URL` env vars needed.
