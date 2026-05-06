@@ -6,7 +6,7 @@ Uses an injected fake generator — no real LLM or provider calls are made.
 
 Default safe profile: 5 jobs, concurrency 2, 10 ms simulated duration.
 
-CLI usage:
+CLI usage (from repo root):
     python tools/load/report_generation_load.py --help
     python tools/load/report_generation_load.py --jobs 5 --concurrency 2
     python tools/load/report_generation_load.py --jobs 20 --concurrency 4 --artifact /tmp/load_result.json
@@ -18,6 +18,12 @@ Importable API:
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# Allow execution from repo root without PYTHONPATH manipulation.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 import argparse
 import asyncio
 import json
@@ -25,7 +31,6 @@ import random
 import time
 import uuid
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Awaitable, Callable
 
 from api.report_jobs import (
