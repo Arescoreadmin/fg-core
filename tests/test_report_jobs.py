@@ -434,7 +434,7 @@ class TestHandleTimeout:
         )
 
     def test_generate_report_async_triggers_timeout_handler(self) -> None:
-        """_generate_report_async calls _handle_timeout when wait_for raises TimeoutError."""
+        """_generate_report_core_async calls _handle_timeout when wait_for raises TimeoutError."""
         import api.reports_engine as engine_mod
 
         async def _test() -> None:
@@ -445,7 +445,7 @@ class TestHandleTimeout:
                     side_effect=asyncio.TimeoutError,
                 ),
             ):
-                await engine_mod._generate_report_async("r-030")
+                await engine_mod._generate_report_core_async("r-030")
                 mock_timeout.assert_called_once_with("r-030")
 
         asyncio.run(_test())

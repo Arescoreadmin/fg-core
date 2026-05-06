@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -41,6 +42,65 @@ log = logging.getLogger("frostgate.reports")
 
 # Configurable generation timeout in seconds (default 300 s = 5 min).
 _REPORT_GENERATION_TIMEOUT_S = int(os.getenv("FG_REPORT_GENERATION_TIMEOUT_S", "300"))
+
+# ─── Bounded concurrency ──────────────────────────────────────────────────────
+
+
+def _get_max_concurrent_jobs() -> int:
+    """Return max concurrent report generation jobs from env (default: 4)."""
+    val = os.environ.get("FG_REPORT_MAX_CONCURRENT_JOBS", "4")
+    try:
+        n = int(val)
+        return max(1, n)
+    except ValueError:
+        return 4
+
+
+_REPORT_SEMAPHORE: threading.BoundedSemaphore | None = None
+_STATUS_LOCK = threading.Lock()
+_queued_count: int = 0
+_running_count: int = 0
+
+
+def _get_semaphore() -> threading.BoundedSemaphore:
+    """Return (lazily creating) the module-level concurrency semaphore."""
+    global _REPORT_SEMAPHORE
+    if _REPORT_SEMAPHORE is None:
+        _REPORT_SEMAPHORE = threading.BoundedSemaphore(_get_max_concurrent_jobs())
+    return _REPORT_SEMAPHORE
+
+
+def _reset_semaphore() -> None:
+    """Reset the module-level semaphore and counters (used in tests to re-initialise capacity)."""
+    global _REPORT_SEMAPHORE, _queued_count, _running_count
+    _REPORT_SEMAPHORE = None
+    _queued_count = 0
+    _running_count = 0
+
+
+# ─── Queue depth visibility ───────────────────────────────────────────────────
+
+
+def get_report_queue_status() -> dict[str, int]:
+    """Return a snapshot of the current report queue depth.
+
+    Keys:
+      max_concurrent  — configured slot count
+      running         — jobs currently in generation
+      queued_waiting  — jobs waiting to acquire a slot
+      available       — free slots right now (0 means fully saturated)
+    """
+    max_c = _get_max_concurrent_jobs()
+    with _STATUS_LOCK:
+        qc = _queued_count
+        rc = _running_count
+    return {
+        "max_concurrent": max_c,
+        "running": rc,
+        "queued_waiting": qc,
+        "available": max(0, max_c - rc),
+    }
+
 
 router = APIRouter(
     prefix="/ingest/assessment",
@@ -200,11 +260,8 @@ def _emit_report_event(
         )
 
 
-async def _generate_report_async(report_id: str) -> None:
-    """
-    Async wrapper that runs blocking report generation in an executor with a
-    configurable timeout.  Called via BackgroundTasks (which runs in an event loop).
-    """
+async def _generate_report_core_async(report_id: str) -> None:
+    """Pure async wrapper — no semaphore; timeout-guarded executor call only."""
     loop = asyncio.get_event_loop()
     try:
         await asyncio.wait_for(
@@ -216,24 +273,36 @@ async def _generate_report_async(report_id: str) -> None:
 
 
 def _handle_timeout(report_id: str) -> None:
-    """Mark the report as failed due to timeout and emit the failure audit event."""
+    """Mark the report as failed due to timeout and emit the failure audit event.
+
+    Guards against overwriting a terminal state that may have been written
+    concurrently (e.g. by the executor thread's exception handler).
+    """
     SessionLocal = get_sessionmaker()
     db = SessionLocal()
     try:
         report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
         if report:
-            report.status = "failed"
-            report.error_message = REPORT_GENERATION_TIMEOUT
-            report.completed_at = datetime.now(timezone.utc)
-            db.commit()
-            _emit_report_event(
-                "report_job_failed",
-                report.tenant_id,
-                report_id,
-                report.assessment_id,
-                state=ReportJobState.FAILED,
-                reason_code=REPORT_GENERATION_TIMEOUT,
-            )
+            # Terminal-state guard: never overwrite a final outcome.
+            if report.status in ("complete", "failed"):
+                log.warning(
+                    "reports.timeout_skipped_terminal report_id=%s status=%s",
+                    report_id,
+                    report.status,
+                )
+            else:
+                report.status = "failed"
+                report.error_message = REPORT_GENERATION_TIMEOUT
+                report.completed_at = datetime.now(timezone.utc)
+                db.commit()
+                _emit_report_event(
+                    "report_job_failed",
+                    report.tenant_id,
+                    report_id,
+                    report.assessment_id,
+                    state=ReportJobState.FAILED,
+                    reason_code=REPORT_GENERATION_TIMEOUT,
+                )
         log.error(
             "reports.timeout report_id=%s timeout_s=%d",
             report_id,
@@ -259,6 +328,16 @@ def _do_generate_report(report_id: str) -> None:
         report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
         if report is None:
             log.error("reports.generate report_not_found id=%s", report_id)
+            return
+
+        # Terminal-state guard: if timeout already marked this failed, do not
+        # overwrite it — the slot was acquired after the timeout fired.
+        if report.status in ("complete", "failed"):
+            log.warning(
+                "reports.generate_skipped_terminal report_id=%s status=%s",
+                report_id,
+                report.status,
+            )
             return
 
         tenant_id = report.tenant_id or "unknown"
@@ -378,10 +457,13 @@ def _do_generate_report(report_id: str) -> None:
         try:
             report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
             if report:
-                report.status = "failed"
-                report.error_message = str(exc)[:500]
-                report.completed_at = datetime.now(timezone.utc)
-                db.commit()
+                # Terminal-state guard: do not overwrite a state already set by
+                # the timeout handler or a concurrent path.
+                if report.status not in ("complete", "failed"):
+                    report.status = "failed"
+                    report.error_message = str(exc)[:500]
+                    report.completed_at = datetime.now(timezone.utc)
+                    db.commit()
             _emit_report_event(
                 "report_job_failed",
                 tenant_id,
@@ -399,11 +481,33 @@ def _do_generate_report(report_id: str) -> None:
 
 def _generate_report_sync(report_id: str) -> None:
     """
-    BackgroundTask entry point: runs the async wrapper in an event loop.
-    FastAPI BackgroundTasks do not automatically provide a running loop for
-    synchronous callables, so we bridge via asyncio.run().
+    BackgroundTask entry point: acquires the concurrency semaphore in thread
+    context (loop-safe), manages counters, then drives async generation.
+
+    threading.BoundedSemaphore is used instead of asyncio.Semaphore because
+    _generate_report_sync runs in a BackgroundTask thread while
+    asyncio.run() creates a fresh event loop per call — asyncio.Semaphore
+    waiters registered in one loop cannot be woken by a release from another.
     """
-    asyncio.run(_generate_report_async(report_id))
+    global _queued_count, _running_count
+    sem = _get_semaphore()
+    with _STATUS_LOCK:
+        _queued_count += 1
+    try:
+        sem.acquire()
+    except Exception:
+        with _STATUS_LOCK:
+            _queued_count -= 1
+        raise
+    with _STATUS_LOCK:
+        _queued_count -= 1
+        _running_count += 1
+    try:
+        asyncio.run(_generate_report_core_async(report_id))
+    finally:
+        with _STATUS_LOCK:
+            _running_count -= 1
+        sem.release()
 
 
 # ─── Pydantic schemas ─────────────────────────────────────────────────────────
