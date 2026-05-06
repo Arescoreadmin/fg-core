@@ -2716,3 +2716,36 @@ Validation:
 - make contract-authority-refresh
 - make soc-review-sync
 - make fg-fast
+
+## PR/1-env-contract — Revenue + AI provider required env enforcement
+
+Reviewed critical files:
+- api/config/required_env.py
+- tools/ci/check_soc_invariants.py
+- tools/ci/check_enforcement_mode_matrix.py
+- tests/security/test_required_env_enforcement.py
+
+Changes:
+- Added STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, FG_ANTHROPIC_API_KEY to
+  REQUIRED_PROD_ENV_VARS — the single source of truth enforced by both
+  CI (check_required_env.py) and runtime startup (assert_prod_invariants).
+- Updated all test/CI fixtures that construct valid prod env dicts to include
+  the 3 new required vars so existing enforcement-mode/soc-invariant checks
+  continue to pass against a complete prod env.
+- Documented all 3 vars in .env.example with security guidance.
+
+SOC review:
+- No enforcement weakened. Requirement strengthened: prod/staging now fail
+  closed when payment or AI provider secrets are absent.
+- No real secrets added. All test values are clearly prefixed test-*.
+- Blank and CHANGE_ME_* placeholder values are rejected by existing logic
+  (no additional code required).
+
+Validation:
+- python tools/ci/check_required_env.py
+- env FG_ENV=production ... python tools/ci/check_required_env.py
+- make soc-invariants
+- make enforcement-mode-matrix
+- pytest tests/security/test_required_env_enforcement.py (41 passed)
+- make soc-review-sync
+- make fg-fast

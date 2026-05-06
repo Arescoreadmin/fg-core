@@ -19,6 +19,11 @@ REQUIRED_PROD_ENV_VARS: tuple[str, ...] = (
     "FG_SIGNING_SECRET",
     "FG_INTERNAL_AUTH_SECRET",
     "FG_API_KEY",
+    # Revenue + AI provider requirements — must be set before accepting payments
+    # or generating AI reports in any prod/staging deployment.
+    "STRIPE_SECRET_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+    "FG_ANTHROPIC_API_KEY",
 )
 
 
