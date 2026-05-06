@@ -27,6 +27,7 @@ PUBLIC_PATHS_EXACT: tuple[str, ...] = (
     "/agent/policy/fetch",
     "/agent/log/anchor",
     "/agent/config",
+    "/ingest/assessment/webhooks/stripe",
 )
 
 PUBLIC_PATHS_PREFIX: tuple[str, ...] = (

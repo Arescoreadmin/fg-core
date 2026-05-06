@@ -2684,3 +2684,35 @@ Validation:
 - make contract-authority-refresh
 - make soc-review-sync
 - make fg-fast
+
+
+## PR #280 addendum — Stripe webhook public path + seed SQL fix
+
+Reviewed critical files:
+- api/security/public_paths.py
+- migrations/postgres/0033_seed_assessment_data.sql
+- tools/ci/plane_registry_snapshot.json
+- tools/ci/topology.sha256
+
+Changes:
+- Added `/ingest/assessment/webhooks/stripe` to `PUBLIC_PATHS_EXACT`.
+  This is the same pattern used for agent device routes (external-party auth via HMAC,
+  not API keys). The route is already covered by `auth_exempt_routes` in the plane
+  registry. The public_paths addition only satisfies the separate route-scope linter.
+- Fixed 5 shell-escaped apostrophes (`'\''`) in 0033_seed_assessment_data.sql that
+  caused SQL syntax errors when PostgreSQL parsed the JSONB literal. Replaced with
+  SQL-standard `''` escaping. No schema change; seed data content is identical.
+
+SOC review:
+- No enforcement weakened. Route was already registered as auth_exempt in plane registry.
+- No new unauthenticated surface added; Stripe HMAC verification remains intact.
+- Seed SQL fix is data-only; no DDL changes.
+
+Validation:
+- python tools/ci/check_route_scopes.py
+- python tools/ci/check_plane_registry.py
+- make route-inventory-generate
+- make contracts-gen
+- make contract-authority-refresh
+- make soc-review-sync
+- make fg-fast

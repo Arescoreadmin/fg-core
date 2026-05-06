@@ -22,7 +22,7 @@ VALUES (
     {
       "id": "dg_002",
       "domain": "data_governance",
-      "text": "How would you rate the completeness of your organization'\''s inventory of data used in AI workflows?",
+      "text": "How would you rate the completeness of your organization''s inventory of data used in AI workflows?",
       "type": "scale",
       "weight": 1.2
     },
@@ -129,7 +129,7 @@ VALUES (
     {
       "id": "am_005",
       "domain": "ai_maturity",
-      "text": "How would you rate your organization'\''s overall awareness of AI-related risks?",
+      "text": "How would you rate your organization''s overall awareness of AI-related risks?",
       "type": "scale",
       "weight": 1.0
     },
@@ -171,7 +171,7 @@ VALUES (
     {
       "id": "ir_005",
       "domain": "infra_readiness",
-      "text": "How would you rate your organization'\''s incident response readiness for an AI-related data exposure event?",
+      "text": "How would you rate your organization''s incident response readiness for an AI-related data exposure event?",
       "type": "scale",
       "weight": 1.2
     },
@@ -206,7 +206,7 @@ VALUES (
     {
       "id": "ca_005",
       "domain": "compliance_awareness",
-      "text": "How would you rate your compliance team'\''s understanding of AI-specific regulatory requirements?",
+      "text": "How would you rate your compliance team''s understanding of AI-specific regulatory requirements?",
       "type": "scale",
       "weight": 1.0
     },
@@ -241,7 +241,7 @@ VALUES (
     {
       "id": "ap_004",
       "domain": "automation_potential",
-      "text": "How would you rate your organization'\''s technical infrastructure readiness to support AI automation at scale?",
+      "text": "How would you rate your organization''s technical infrastructure readiness to support AI automation at scale?",
       "type": "scale",
       "weight": 1.0
     },
