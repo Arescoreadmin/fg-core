@@ -12,7 +12,12 @@
  *
  * Redis unavailable behavior:
  *   - dev/test: falls back to MemoryRateLimitStore (deterministic)
- *   - prod-like: returns { available: false } — caller must return 503
+ *   - prod-like: returns { unavailable: true, errorCode } — caller must return 503
+ *
+ * Prod-like enforcement (NODE_ENV=production or FG_ENV=prod/staging/production):
+ *   - Missing/blank/CHANGE_ME BFF_REDIS_URL → errorCode: BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED
+ *   - Valid URL but Redis unreachable → errorCode: BFF_RATE_LIMIT_REDIS_UNAVAILABLE
+ *   - Memory fallback is NEVER allowed in prod-like environments
  *
  * Key format: fg:bff:rl:{route_group}:{tenant_id}:{user_id_or_session}
  * TTL: BFF_RATE_LIMIT_WINDOW_S (default 60s)
@@ -33,6 +38,15 @@ export interface RateLimitResult {
 export interface RateLimitStore {
   increment(key: string, windowSec: number, maxRequests: number): Promise<RateLimitResult>;
 }
+
+// ─── Error codes ──────────────────────────────────────────────────────────────
+
+/** Stable error codes for BFF rate-limit unavailability. */
+export type BffRateLimitErrorCode =
+  /** BFF_REDIS_URL is missing, blank, or is a CHANGE_ME placeholder in prod-like env */
+  | 'BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED'
+  /** BFF_REDIS_URL is present but Redis is unreachable in prod-like env */
+  | 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -67,6 +81,16 @@ export function isDevOrTestEnv(): boolean {
   const fgEnv = (process.env.FG_ENV || '').toLowerCase();
   if (nodeEnv === 'development' || nodeEnv === 'test') return true;
   if (['dev', 'development', 'local', 'test'].includes(fgEnv)) return true;
+  return false;
+}
+
+/**
+ * Returns true when BFF_REDIS_URL is missing, blank, or starts with "CHANGE_ME"
+ * (i.e. was never configured beyond placeholder value).
+ */
+export function isBffRedisUrlMissingOrPlaceholder(redisUrl: string | undefined): boolean {
+  if (!redisUrl || !redisUrl.trim()) return true;
+  if (redisUrl.trim().toUpperCase().startsWith('CHANGE_ME')) return true;
   return false;
 }
 
@@ -150,36 +174,55 @@ export class RedisRateLimitStore implements RateLimitStore {
  * Build a RateLimitStore for the current environment.
  *
  * Returns { store, unavailable: false } on success.
- * Returns { store: null, unavailable: true } when Redis is required but
- * unavailable in a prod-like environment — callers MUST return 503.
+ * Returns { store: null, unavailable: true, errorCode, required: true } when Redis is
+ * required but unavailable in a prod-like environment — callers MUST return 503.
  *
- * Dev/test: always succeeds (falls back to memory).
+ * Prod-like (NODE_ENV=production or FG_ENV=prod/staging/production):
+ *   - Missing/blank/CHANGE_ME BFF_REDIS_URL → errorCode: BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED
+ *   - Valid URL but Redis unreachable → errorCode: BFF_RATE_LIMIT_REDIS_UNAVAILABLE
+ *   - Memory fallback is NEVER allowed.
+ *
+ * Dev/test: always succeeds (falls back to memory when Redis unavailable).
  */
 export async function buildRateLimitStore(): Promise<
   | { store: RateLimitStore; unavailable: false }
-  | { store: null; unavailable: true }
+  | { store: null; unavailable: true; errorCode: BffRateLimitErrorCode; required: true }
 > {
   const { backend, redisUrl } = getBffRateLimitConfig();
   const devOrTest = isDevOrTestEnv();
 
   if (backend === 'memory') {
+    if (!devOrTest) {
+      // Explicit memory backend in prod-like env is treated as missing config.
+      return {
+        store: null,
+        unavailable: true,
+        errorCode: 'BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED',
+        required: true,
+      };
+    }
     return { store: new MemoryRateLimitStore(), unavailable: false };
   }
 
   // Redis backend
-  if (!redisUrl) {
+  if (isBffRedisUrlMissingOrPlaceholder(redisUrl)) {
     if (devOrTest) {
-      // No URL in dev/test → fall back to memory
+      // No valid URL in dev/test → fall back to memory
       return { store: new MemoryRateLimitStore(), unavailable: false };
     }
-    // Prod-like with no URL → unavailable
-    return { store: null, unavailable: true };
+    // Prod-like with missing/placeholder URL → config required error
+    return {
+      store: null,
+      unavailable: true,
+      errorCode: 'BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED',
+      required: true,
+    };
   }
 
   try {
     // ioredis is a server-only dependency — top-level ESM import is safe here
     // because this file is never imported into browser/client components.
-    const client = new Redis(redisUrl, {
+    const client = new Redis(redisUrl!, {
       lazyConnect: true,
       connectTimeout: 2000,
       commandTimeout: 1000,
@@ -196,8 +239,13 @@ export async function buildRateLimitStore(): Promise<
       // Dev/test: Redis unavailable → fall back to memory (deterministic)
       return { store: new MemoryRateLimitStore(), unavailable: false };
     }
-    // Prod-like: Redis unavailable → unavailable
-    return { store: null, unavailable: true };
+    // Prod-like: Redis unreachable → unavailable
+    return {
+      store: null,
+      unavailable: true,
+      errorCode: 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE',
+      required: true,
+    };
   }
 }
 

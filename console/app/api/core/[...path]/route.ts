@@ -77,9 +77,10 @@ async function enforceRateLimit(request: NextRequest, requestId: string, routeGr
   const storeResult = await getRateLimitStore();
 
   if (storeResult.unavailable) {
-    // Redis required but unavailable in prod-like — deterministic 503, fail-closed
+    // Redis required but unavailable in prod-like — deterministic 503, fail-closed.
+    // errorCode distinguishes missing/invalid config from transient Redis failure.
     return NextResponse.json(
-      { error: 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE', request_id: requestId },
+      { error: storeResult.errorCode, request_id: requestId },
       {
         status: 503,
         headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId },
