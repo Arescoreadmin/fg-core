@@ -692,7 +692,13 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
                 detail=f"dependencies_unhealthy: {'; '.join(failures)}",
             )
 
-        return {"status": "ready", "dependencies": deps_status}
+        from api.config.billing import get_stripe_readiness
+
+        return {
+            "status": "ready",
+            "dependencies": deps_status,
+            "billing": get_stripe_readiness(),
+        }
 
     @app.get("/health/detailed")
     async def health_detailed(_: None = Depends(require_status_auth)) -> dict[str, Any]:
