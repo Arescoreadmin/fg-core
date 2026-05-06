@@ -7018,3 +7018,71 @@ Unsupported provider output is not returned, persisted, audited, or hashed as th
 - `make route-inventory-audit` → `route inventory: OK` ✓
 - `make soc-review-sync` → `soc-review-sync: OK` ✓
 - `make admin-lint` → `All checks passed!` ✓
+
+---
+
+### 2026-05-05 — PR #281 / PR/1-env-contract: Revenue + AI provider required env enforcement + CI repair
+
+**Branch:** `pr/1-env-contract`
+
+**Area:** Security / Env Contract / CI Infrastructure
+
+---
+
+**Root cause:**
+
+`REQUIRED_PROD_ENV_VARS` in `api/config/required_env.py` was expanded to include
+STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, and FG_ANTHROPIC_API_KEY as part of PR #281
+(first paying-client readiness). After the expansion, several fixtures and CI
+environment files that construct a "valid prod env" were not updated to include the 3
+new vars, causing cascading failures:
+
+1. `tests/security/test_prod_invariants.py::test_prod_invariants_allow_enforcement_mode_enforce`
+   — success-path fixture was missing the 3 new required vars; `enforce_required_env()`
+   raised RuntimeError instead of passing silently.
+
+2. `tests/security/test_compliance_modules.py::test_ui_disabled_by_default_in_prod_returns_404`
+   — `_seed_prod_env()` sets `FG_ENV=prod` but lacked the 3 new vars; `build_app()`
+   called `assert_prod_invariants()` → `enforce_required_env()` → RuntimeError before
+   routes were ever registered.
+
+3. `.github/workflows/docker-ci.yml` — "Prepare CI environment files" step generated
+   `.env.ci` and `env/prod.env` with `FG_ENV=prod` + `FG_ENFORCEMENT_MODE=enforce`
+   but without the 3 new required vars. `frostgate-core` container started, called
+   `enforce_required_env()` at startup, found the vars absent, and crashed →
+   unhealthy container → Docker CI failure.
+
+4. `docs/ai/PR_FIX_LOG.md` guard — high-risk files were changed without this log being
+   updated.
+
+**Enforcement invariant:** `enforce_required_env()` fires at startup for any `FG_ENV`
+in `{prod, production, staging}`. Absent, blank, or `CHANGE_ME_*` values all trigger
+failure. This is the correct and intended behavior; the fix is to provide valid values
+in every context that starts the app in a prod-like mode.
+
+**Files changed:**
+
+- `tests/security/test_prod_invariants.py` — added STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
+  FG_ANTHROPIC_API_KEY to the success-path fixture in
+  `test_prod_invariants_allow_enforcement_mode_enforce`.
+- `tests/security/test_compliance_modules.py` — added the 3 vars to `_seed_prod_env()`
+  so the success-path test `test_ui_disabled_by_default_in_prod_returns_404` continues
+  to pass; failure-path tests (compliance module disabled) still pass because they
+  already expect RuntimeError.
+- `.github/workflows/docker-ci.yml` — added static CI placeholder values for
+  STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, FG_ANTHROPIC_API_KEY to both the `.env.ci`
+  and `env/prod.env` heredocs. Values are 32-char minimum, clearly synthetic, not real
+  secrets. **This is a CI config change.**
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — appended SOC review entry for this CI
+  config change (required by soc-review-sync gate).
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+
+**No enforcement weakened.** The enforcement logic in `required_env.py` and
+`prod_invariants.py` is unchanged. All prod/staging deployments still fail closed when
+any of the 7 required vars are absent.
+
+**Validation results:**
+
+- `pytest tests/security/test_prod_invariants.py tests/security/test_required_env_enforcement.py tests/security/test_compliance_modules.py` → 56 passed ✓
+- `make soc-review-sync` → OK ✓
+- `make fg-fast` → All checks passed ✓

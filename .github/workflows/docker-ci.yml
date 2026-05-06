@@ -263,6 +263,9 @@ jobs:
 
           FG_SIGNING_SECRET=ci-signing-secret-32-bytes-minimum
           FG_INTERNAL_AUTH_SECRET=ci-internal-auth-secret-32-bytes
+          STRIPE_SECRET_KEY=ci-stripe-secret-key-32-bytes-minimum-
+          STRIPE_WEBHOOK_SECRET=ci-stripe-webhook-secret-32-bytes--
+          FG_ANTHROPIC_API_KEY=ci-anthropic-api-key-32-bytes-min--
           EOF
 
           cp .env.ci .env
@@ -337,6 +340,10 @@ jobs:
           FG_DEV_AUTH_BYPASS=0
           FG_DEV_TENANT_ID=default
           FG_DEV_ALLOWED_TENANTS=default
+
+          STRIPE_SECRET_KEY=ci-stripe-secret-key-32-bytes-minimum-
+          STRIPE_WEBHOOK_SECRET=ci-stripe-webhook-secret-32-bytes--
+          FG_ANTHROPIC_API_KEY=ci-anthropic-api-key-32-bytes-min--
           EOF
 
           printf '%s\n' "${FG_API_KEY}" > secrets/fg_api_keys.txt
