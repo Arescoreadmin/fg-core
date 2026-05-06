@@ -76,6 +76,9 @@ def test_prod_invariants_allow_enforcement_mode_enforce(fg_env: str) -> None:
             "FG_SIGNING_SECRET": "test-signing-secret",
             "FG_INTERNAL_AUTH_SECRET": "test-internal-secret",
             "FG_API_KEY": "test-api-key",
+            "STRIPE_SECRET_KEY": "test-stripe-secret-key",
+            "STRIPE_WEBHOOK_SECRET": "test-stripe-webhook-secret",
+            "FG_ANTHROPIC_API_KEY": "test-anthropic-api-key",
         }
     )
 

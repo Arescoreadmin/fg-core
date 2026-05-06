@@ -35,6 +35,9 @@ _VALID_PROD_ENV: dict[str, str] = {
     "FG_SIGNING_SECRET": "test-signing-secret",
     "FG_INTERNAL_AUTH_SECRET": "test-internal-secret",
     "FG_API_KEY": "test-api-key",
+    "STRIPE_SECRET_KEY": "test-stripe-secret-key",
+    "STRIPE_WEBHOOK_SECRET": "test-stripe-webhook-secret",
+    "FG_ANTHROPIC_API_KEY": "test-anthropic-api-key",
 }
 
 
@@ -127,6 +130,30 @@ def test_prod_startup_fails_when_internal_auth_secret_missing() -> None:
     """assert_prod_invariants must raise when FG_INTERNAL_AUTH_SECRET is absent."""
     env = {**_VALID_PROD_ENV}
     del env["FG_INTERNAL_AUTH_SECRET"]
+    with pytest.raises(RuntimeError, match="Missing required production env vars"):
+        assert_prod_invariants(env)
+
+
+def test_prod_startup_fails_when_stripe_secret_key_missing() -> None:
+    """assert_prod_invariants must raise when STRIPE_SECRET_KEY is absent."""
+    env = {**_VALID_PROD_ENV}
+    del env["STRIPE_SECRET_KEY"]
+    with pytest.raises(RuntimeError, match="Missing required production env vars"):
+        assert_prod_invariants(env)
+
+
+def test_prod_startup_fails_when_stripe_webhook_secret_missing() -> None:
+    """assert_prod_invariants must raise when STRIPE_WEBHOOK_SECRET is absent."""
+    env = {**_VALID_PROD_ENV}
+    del env["STRIPE_WEBHOOK_SECRET"]
+    with pytest.raises(RuntimeError, match="Missing required production env vars"):
+        assert_prod_invariants(env)
+
+
+def test_prod_startup_fails_when_anthropic_api_key_missing() -> None:
+    """assert_prod_invariants must raise when FG_ANTHROPIC_API_KEY is absent."""
+    env = {**_VALID_PROD_ENV}
+    del env["FG_ANTHROPIC_API_KEY"]
     with pytest.raises(RuntimeError, match="Missing required production env vars"):
         assert_prod_invariants(env)
 

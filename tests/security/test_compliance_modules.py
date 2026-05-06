@@ -53,6 +53,9 @@ def _seed_prod_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         "DATABASE_URL": "postgresql://user:pass@fg-db:5432/frostgate",
         "FG_SIGNING_SECRET": "test-signing-secret",
         "FG_INTERNAL_AUTH_SECRET": "test-internal-secret",
+        "STRIPE_SECRET_KEY": "test-stripe-secret-key",
+        "STRIPE_WEBHOOK_SECRET": "test-stripe-webhook-secret",
+        "FG_ANTHROPIC_API_KEY": "test-anthropic-api-key",
     }
     for key, value in env.items():
         monkeypatch.setenv(key, value)
