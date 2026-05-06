@@ -7182,3 +7182,55 @@ any of the 7 required vars are absent.
 - `pytest tests/security/test_prod_invariants.py tests/security/test_required_env_enforcement.py tests/security/test_compliance_modules.py` → 56 passed ✓
 - `make soc-review-sync` → OK ✓
 - `make fg-fast` → All checks passed ✓
+
+---
+
+### 2026-05-06 — PR 6: Report Generation Load-Test Harness
+
+**Branch:** `pr/6-report-load-harness`
+
+**Area:** Testing / Load Harness / Report Jobs
+
+---
+
+**Purpose:**
+
+Add a repeatable, deterministic load-test harness for report job enqueue + status
+lifecycle. Establishes a measurement baseline before any concurrency or backend
+changes so future PRs can compare metrics rather than guess.
+
+**Files changed:**
+
+- `tools/load/__init__.py` — package marker (empty)
+- `tools/load/report_generation_load.py` — CLI + importable harness: `JobRecord`,
+  `LoadMetrics`, `_make_default_generator`, `_run_job`, `run_load_test`, argparse CLI
+- `tests/test_report_load_harness.py` — 10 focused harness behaviour tests
+- `docs/testing/report_generation_load.md` — local run guide
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Proof of no production behavior change:**
+
+`api/report_jobs.py` and `api/reports_engine.py` are untouched. The harness imports
+`ReportJobState` and the stable reason code constants from `api/report_jobs.py` as
+read-only references. No production queue, worker, or endpoint logic is modified.
+
+**Metrics produced:**
+
+- `enqueue_latency_ms` (min/max/avg/p95)
+- `completion_latency_ms` (min/max/avg/p95)
+- `total_duration_ms`, `queued_count`, `succeeded_count`, `failed_count`, `timeout_count`
+- Written as machine-readable JSON to configurable artifact path
+
+**Harness safety proof:**
+
+- Injects a fake async generator (`asyncio.sleep`) — zero real LLM/provider calls
+- `failure_rate` and `simulated_duration_s` are configurable; defaults are deterministic
+- Default profile: 5 jobs, concurrency 2, 10 ms simulated duration → completes in ~30 ms
+- No external services required; runs without network access
+
+**Validation results:**
+
+- `pytest tests/test_report_load_harness.py` → 10 passed ✓
+- `pytest -q tests -k "report or load or queue"` → 102 passed ✓
+- `PYTHONPATH=. python tools/load/report_generation_load.py --jobs 5 --concurrency 2` → JSON output verified ✓
+- `make fg-fast` → All checks passed ✓

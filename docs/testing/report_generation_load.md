@@ -21,7 +21,7 @@ it never calls a real LLM, provider, or database.
 ## Default Safe Command
 
 ```bash
-python tools/load/report_generation_load.py
+PYTHONPATH=. python tools/load/report_generation_load.py
 ```
 
 Runs 5 jobs at concurrency 2 with a 10 ms simulated duration.
@@ -30,7 +30,7 @@ Completes in well under 1 second.
 ## Optional Heavier Command
 
 ```bash
-python tools/load/report_generation_load.py \
+PYTHONPATH=. python tools/load/report_generation_load.py \
   --jobs 100 \
   --concurrency 10 \
   --duration 0.05 \
