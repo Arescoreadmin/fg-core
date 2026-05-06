@@ -42,6 +42,59 @@ log = logging.getLogger("frostgate.reports")
 # Configurable generation timeout in seconds (default 300 s = 5 min).
 _REPORT_GENERATION_TIMEOUT_S = int(os.getenv("FG_REPORT_GENERATION_TIMEOUT_S", "300"))
 
+# ─── Bounded concurrency ──────────────────────────────────────────────────────
+
+
+def _get_max_concurrent_jobs() -> int:
+    """Return max concurrent report generation jobs from env (default: 4)."""
+    val = os.environ.get("FG_REPORT_MAX_CONCURRENT_JOBS", "4")
+    try:
+        n = int(val)
+        return max(1, n)
+    except ValueError:
+        return 4
+
+
+_REPORT_SEMAPHORE: asyncio.Semaphore | None = None
+
+
+def _get_semaphore() -> asyncio.Semaphore:
+    """Return (lazily creating) the module-level concurrency semaphore."""
+    global _REPORT_SEMAPHORE
+    if _REPORT_SEMAPHORE is None:
+        _REPORT_SEMAPHORE = asyncio.Semaphore(_get_max_concurrent_jobs())
+    return _REPORT_SEMAPHORE
+
+
+def _reset_semaphore() -> None:
+    """Reset the module-level semaphore (used in tests to re-initialise capacity)."""
+    global _REPORT_SEMAPHORE
+    _REPORT_SEMAPHORE = None
+
+
+# ─── Queue depth visibility ───────────────────────────────────────────────────
+
+
+def get_report_queue_status() -> dict[str, int]:
+    """Return a snapshot of the current report queue depth.
+
+    Keys:
+      max_concurrent  — configured slot count
+      available       — free slots right now (0 means fully saturated)
+    """
+    max_c = _get_max_concurrent_jobs()
+    sem = _get_semaphore()
+    available = sem._value  # asyncio.Semaphore public counter
+    running = max_c - available
+    queued_waiting = max(0, -sem._value)  # negative when waiters exceed capacity
+    return {
+        "max_concurrent": max_c,
+        "running": running,
+        "queued_waiting": queued_waiting,
+        "available": available,
+    }
+
+
 router = APIRouter(
     prefix="/ingest/assessment",
     tags=["reports"],
@@ -203,37 +256,53 @@ def _emit_report_event(
 async def _generate_report_async(report_id: str) -> None:
     """
     Async wrapper that runs blocking report generation in an executor with a
-    configurable timeout.  Called via BackgroundTasks (which runs in an event loop).
+    configurable timeout.  Acquires the bounded concurrency semaphore before
+    starting so that at most FG_REPORT_MAX_CONCURRENT_JOBS jobs run at once;
+    additional jobs wait in QUEUED state until a slot is free.
+    Called via BackgroundTasks (which runs in an event loop).
     """
     loop = asyncio.get_event_loop()
-    try:
-        await asyncio.wait_for(
-            loop.run_in_executor(None, _do_generate_report, report_id),
-            timeout=_REPORT_GENERATION_TIMEOUT_S,
-        )
-    except asyncio.TimeoutError:
-        _handle_timeout(report_id)
+    async with _get_semaphore():
+        try:
+            await asyncio.wait_for(
+                loop.run_in_executor(None, _do_generate_report, report_id),
+                timeout=_REPORT_GENERATION_TIMEOUT_S,
+            )
+        except asyncio.TimeoutError:
+            _handle_timeout(report_id)
 
 
 def _handle_timeout(report_id: str) -> None:
-    """Mark the report as failed due to timeout and emit the failure audit event."""
+    """Mark the report as failed due to timeout and emit the failure audit event.
+
+    Guards against overwriting a terminal state that may have been written
+    concurrently (e.g. by the executor thread's exception handler).
+    """
     SessionLocal = get_sessionmaker()
     db = SessionLocal()
     try:
         report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
         if report:
-            report.status = "failed"
-            report.error_message = REPORT_GENERATION_TIMEOUT
-            report.completed_at = datetime.now(timezone.utc)
-            db.commit()
-            _emit_report_event(
-                "report_job_failed",
-                report.tenant_id,
-                report_id,
-                report.assessment_id,
-                state=ReportJobState.FAILED,
-                reason_code=REPORT_GENERATION_TIMEOUT,
-            )
+            # Terminal-state guard: never overwrite a final outcome.
+            if report.status in ("complete", "failed"):
+                log.warning(
+                    "reports.timeout_skipped_terminal report_id=%s status=%s",
+                    report_id,
+                    report.status,
+                )
+            else:
+                report.status = "failed"
+                report.error_message = REPORT_GENERATION_TIMEOUT
+                report.completed_at = datetime.now(timezone.utc)
+                db.commit()
+                _emit_report_event(
+                    "report_job_failed",
+                    report.tenant_id,
+                    report_id,
+                    report.assessment_id,
+                    state=ReportJobState.FAILED,
+                    reason_code=REPORT_GENERATION_TIMEOUT,
+                )
         log.error(
             "reports.timeout report_id=%s timeout_s=%d",
             report_id,
@@ -259,6 +328,16 @@ def _do_generate_report(report_id: str) -> None:
         report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
         if report is None:
             log.error("reports.generate report_not_found id=%s", report_id)
+            return
+
+        # Terminal-state guard: if timeout already marked this failed, do not
+        # overwrite it — the slot was acquired after the timeout fired.
+        if report.status in ("complete", "failed"):
+            log.warning(
+                "reports.generate_skipped_terminal report_id=%s status=%s",
+                report_id,
+                report.status,
+            )
             return
 
         tenant_id = report.tenant_id or "unknown"
@@ -378,10 +457,13 @@ def _do_generate_report(report_id: str) -> None:
         try:
             report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
             if report:
-                report.status = "failed"
-                report.error_message = str(exc)[:500]
-                report.completed_at = datetime.now(timezone.utc)
-                db.commit()
+                # Terminal-state guard: do not overwrite a state already set by
+                # the timeout handler or a concurrent path.
+                if report.status not in ("complete", "failed"):
+                    report.status = "failed"
+                    report.error_message = str(exc)[:500]
+                    report.completed_at = datetime.now(timezone.utc)
+                    db.commit()
             _emit_report_event(
                 "report_job_failed",
                 tenant_id,
