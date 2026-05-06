@@ -58,6 +58,125 @@ export interface AlignmentArtifact {
   [key: string]: unknown;
 }
 
+// ─── Dashboard money-path types ───────────────────────────────────────────────
+
+export interface BillingReadiness {
+  provider: string;
+  ready: boolean;
+  reasons: string[];
+}
+
+export interface HealthReadyResponse {
+  status: string;
+  service?: string;
+  version?: string;
+  dependencies?: Record<string, string>;
+  billing?: BillingReadiness;
+}
+
+export interface AssessmentStatus {
+  id: string;
+  org_id: string;
+  profile_type: string;
+  schema_version?: string;
+  status: 'draft' | 'in_progress' | 'submitted' | 'scored';
+  overall_score: number | null;
+  risk_band: 'critical' | 'high' | 'medium' | 'low' | null;
+  scores: Record<string, number> | null;
+  payment_status: 'unpaid' | 'paid';
+  tier: string | null;
+  created_at?: string | null;
+  submitted_at?: string | null;
+}
+
+export type ReportJobStatus = 'pending' | 'generating' | 'complete' | 'failed';
+
+export interface ReportStatus {
+  id: string;
+  assessment_id: string;
+  org_id: string;
+  status: ReportJobStatus;
+  prompt_type: string;
+  overall_score: number | null;
+  error_message: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface FeedItem {
+  id: number;
+  event_id?: string | null;
+  event_type?: string | null;
+  source?: string | null;
+  tenant_id?: string | null;
+  threat_level?: string | null;
+  timestamp?: string | null;
+  severity?: string | null;
+  title?: string | null;
+  summary?: string | null;
+  action_taken?: string | null;
+}
+
+export interface FeedLiveResponse {
+  items: FeedItem[];
+  next_since_id?: number | null;
+}
+
+export type SafeResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: string };
+
+// ─── Dashboard API helpers ────────────────────────────────────────────────────
+
+export async function getBillingReadiness(): Promise<SafeResult<BillingReadiness>> {
+  try {
+    const data = await request<HealthReadyResponse>('/health/ready');
+    if (!data.billing) {
+      return { ok: false, error: 'billing_field_missing' };
+    }
+    return { ok: true, data: data.billing };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'fetch_error' };
+  }
+}
+
+export async function getAssessmentStatusById(
+  assessmentId: string,
+): Promise<SafeResult<AssessmentStatus>> {
+  try {
+    const data = await request<AssessmentStatus>(
+      `/ingest/assessment/${encodeURIComponent(assessmentId)}`,
+    );
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'fetch_error' };
+  }
+}
+
+export async function getReportStatusById(
+  reportId: string,
+): Promise<SafeResult<ReportStatus>> {
+  try {
+    const data = await request<ReportStatus>(
+      `/ingest/assessment/reports/${encodeURIComponent(reportId)}`,
+    );
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'fetch_error' };
+  }
+}
+
+export async function getRecentFeedEvents(
+  limit = 5,
+): Promise<SafeResult<FeedLiveResponse>> {
+  try {
+    const data = await request<FeedLiveResponse>(`/feed/live?limit=${encodeURIComponent(String(limit))}`);
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'fetch_error' };
+  }
+}
+
 interface RequestOptions {
   mask404?: boolean;
 }

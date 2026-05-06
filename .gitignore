@@ -9,6 +9,7 @@ node_modules/
 .DS_Store
 .idea/
 .vscode/
+.claude/
 coverage/
 pytest_cache/
 supervisor-sidecar/supervisor-sidecar
