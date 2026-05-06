@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getRateLimitStore, getBffRateLimitConfig } from '@/lib/rateLimitStore';
 
 const CORE_API_URL = (process.env.CORE_API_URL || 'http://localhost:8000').replace(/\/$/, '');
 const CORE_API_KEY = process.env.CORE_API_KEY;
@@ -28,10 +29,6 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'ingest/assessment', methods: new Set(['GET', 'POST', 'PATCH', 'HEAD']) },
 ];
 
-const WINDOW_MS = 10_000;
-const MAX_REQUESTS_PER_WINDOW = 120;
-const rateStore = new Map<string, { count: number; windowStart: number }>();
-
 function getRequestId(request: NextRequest): string {
   return request.headers.get('x-request-id') || crypto.randomUUID();
 }
@@ -49,18 +46,51 @@ function jsonError(message: string, status: number, requestId: string) {
   );
 }
 
-function enforceRateLimit(request: NextRequest, requestId: string): NextResponse | null {
-  const key = request.headers.get('x-real-ip') || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-  const now = Date.now();
-  const current = rateStore.get(key);
+/**
+ * Build the rate-limit key in the format:
+ *   fg:bff:rl:{route_group}:{tenant_id}:{client_identity}
+ *
+ * - route_group: first path segment (e.g. "decisions", "keys")
+ * - tenant_id: from CORE_TENANT_ID env (server-resolved, never from request body)
+ * - client_identity: session/user from x-frostgate-user header, else IP fallback
+ *
+ * Keys contain no secrets — only stable identity tokens already in headers.
+ */
+function buildRateLimitKey(request: NextRequest, routeGroup: string): string {
+  const tenantId = CORE_TENANT_ID || 'default';
+  // x-frostgate-user is set by the session layer upstream (server-side only).
+  // Fall back to IP — never trust body-provided user identity.
+  const userOrSession =
+    request.headers.get('x-frostgate-user') ||
+    request.headers.get('x-real-ip') ||
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    'unknown';
+  // Sanitize: remove characters that could cause key collision (colon is delimiter)
+  const safeGroup = routeGroup.replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 64);
+  const safeTenant = tenantId.replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 128);
+  const safeUser = userOrSession.replace(/[^a-zA-Z0-9_\-.:]/g, '_').slice(0, 128);
+  return `fg:bff:rl:${safeGroup}:${safeTenant}:${safeUser}`;
+}
 
-  if (!current || now - current.windowStart > WINDOW_MS) {
-    rateStore.set(key, { count: 1, windowStart: now });
-    return null;
+async function enforceRateLimit(request: NextRequest, requestId: string, routeGroup: string): Promise<NextResponse | null> {
+  const { windowSec, maxRequests } = getBffRateLimitConfig();
+  const storeResult = await getRateLimitStore();
+
+  if (storeResult.unavailable) {
+    // Redis required but unavailable in prod-like — deterministic 503, fail-closed
+    return NextResponse.json(
+      { error: 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE', request_id: requestId },
+      {
+        status: 503,
+        headers: { 'Cache-Control': 'no-store', 'x-request-id': requestId },
+      },
+    );
   }
 
-  current.count += 1;
-  if (current.count > MAX_REQUESTS_PER_WINDOW) {
+  const key = buildRateLimitKey(request, routeGroup);
+  const result = await storeResult.store.increment(key, windowSec, maxRequests);
+
+  if (!result.allowed) {
     return jsonError('Too many requests', 429, requestId);
   }
   return null;
@@ -189,10 +219,12 @@ async function getAlignmentArtifact(requestId: string): Promise<NextResponse> {
 
 async function handle(request: NextRequest, { params }: { params: { path: string[] } }) {
   const requestId = getRequestId(request);
-  const rate = enforceRateLimit(request, requestId);
+  const path = params.path || [];
+  const routeGroup = path[0] || 'unknown';
+
+  const rate = await enforceRateLimit(request, requestId, routeGroup);
   if (rate) return rate;
 
-  const path = params.path || [];
   if (!path.length) return jsonError('Missing path', 400, requestId);
   if (isAlignmentArtifact(path) && request.method === 'GET') return getAlignmentArtifact(requestId);
   return proxyToCore(request, path, requestId);

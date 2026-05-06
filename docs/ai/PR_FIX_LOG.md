@@ -7299,3 +7299,56 @@ decrements `_running_count` in `finally` after generation completes.
 - `pytest -q tests -k "report or load or queue"` → all passed ✓
 - `python tools/load/report_generation_load.py --jobs 20 --concurrency 5` → metrics verified ✓
 - `make fg-fast` → green ✓
+
+---
+
+### 2026-05-06 — PR 8 BFF Redis Rate-Limit Adapter
+
+**Branch:** `pr/8-bff-redis-rate-limit`
+
+**Area:** `console/lib/rateLimitStore.ts`, `console/app/api/core/[...path]/route.ts`, `console/tests/bff-rate-limit.test.js`, `console/.env.example`, `console/package.json`
+
+**Purpose:** Replace in-process `Map`-based rate limiter in the console BFF with a Redis-backed storage adapter. Adds `MemoryRateLimitStore` (dev/test only), `RedisRateLimitStore` (production), and a `buildRateLimitStore()` factory with explicit dev/test vs prod-like divergence. Keys are scoped `fg:bff:rl:{route_group}:{tenant_id}:{user_or_session}`. All config is server-only (no `NEXT_PUBLIC_*`). Redis unavailable in prod-like returns deterministic 503 with `BFF_RATE_LIMIT_REDIS_UNAVAILABLE` — no silent fail-open.
+
+**Files changed:**
+
+- `console/lib/rateLimitStore.ts` (new) — `RateLimitStore` interface, `MemoryRateLimitStore`, `RedisRateLimitStore`, `getRateLimitStore()` factory, `getBffRateLimitConfig()`, `isDevOrTestEnv()`
+- `console/app/api/core/[...path]/route.ts` — removed in-module `Map` rate limiter; replaced with async `enforceRateLimit()` calling `getRateLimitStore()`; added `buildRateLimitKey()` with tenant/user scoping; added import of `getRateLimitStore` and `getBffRateLimitConfig`
+- `console/tests/bff-rate-limit.test.js` (new) — 13 tests covering all required invariants (no live Redis required)
+- `console/.env.example` (new) — documents `BFF_REDIS_URL`, `BFF_RATE_LIMIT_BACKEND`, `BFF_RATE_LIMIT_WINDOW_S`, `BFF_RATE_LIMIT_MAX_REQUESTS`, `FG_ENV`
+- `console/package.json` + `console/package-lock.json` — added `ioredis@^5` dependency
+
+**Redis unavailable behavior proof:**
+
+- `buildRateLimitStore()` returns `{ store: null, unavailable: true }` when Redis connect fails and `isDevOrTestEnv()` is false
+- `enforceRateLimit()` in route.ts checks `storeResult.unavailable` first and returns `NextResponse.json({ error: 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE' }, { status: 503 })` — no fall-through to proxy
+- Test `redis_outage_does_not_fail_open_in_prod` asserts source contains `storeResult.unavailable`, `status: 503`, and `BFF_RATE_LIMIT_REDIS_UNAVAILABLE`
+
+**Memory fallback boundary proof:**
+
+- `isDevOrTestEnv()` returns true only for `NODE_ENV=development|test` or `FG_ENV=dev|development|local|test`
+- In `buildRateLimitStore()`, memory fallback is conditioned exclusively on `devOrTest === true`
+- In prod-like without Redis, `{ store: null, unavailable: true }` is returned — no memory store created
+- Test `memory_fallback_is_bounded_to_dev_test_env` asserts source contains `unavailable: true` and `devOrTest`
+
+**Tenant/user keying proof:**
+
+- Key format: `fg:bff:rl:{route_group}:{tenant_id}:{user_or_session}`
+- `tenant_id` sourced from `CORE_TENANT_ID` env var (server-resolved, never from request body)
+- `user_or_session` from `x-frostgate-user` header → `x-real-ip` → `x-forwarded-for` → `"unknown"`
+- Keys sanitized to prevent colon-injection collisions; length-capped
+- Tests `rate_limit_key_includes_tenant_and_user` and `rate_limit_keys_do_not_collide_across_tenants` verify isolation
+
+**Secret-safety proof:**
+
+- `BFF_REDIS_URL` accessed only via `process.env` in `rateLimitStore.ts` (server-only module)
+- No `NEXT_PUBLIC_*` prefix on any rate-limit config — confirmed by test `bff_rate_limit_does_not_use_next_public_secret_config`
+- Redis URL never appears in any returned response body
+- `console/.env.example` documents all vars with explicit "server-only; never NEXT_PUBLIC_" comment
+
+**Validation results:**
+
+- `cd console && npm test` → 48 passed, 0 failed ✓
+- `pytest -q tests -k "rate or redis or bff"` → 64 passed ✓
+- `make fg-fast` → green ✓
+- `git diff --check` → no whitespace errors ✓
