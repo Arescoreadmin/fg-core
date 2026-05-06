@@ -200,7 +200,9 @@ class TestReportConcurrencyLimiter:
 
         import api.reports_engine as engine_mod
 
-        with patch.dict(os.environ, {"FG_REPORT_MAX_CONCURRENT_JOBS": str(max_concurrent)}):
+        with patch.dict(
+            os.environ, {"FG_REPORT_MAX_CONCURRENT_JOBS": str(max_concurrent)}
+        ):
             engine_mod._reset_semaphore()
             sem = engine_mod._get_semaphore()
 
