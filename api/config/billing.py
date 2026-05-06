@@ -14,14 +14,20 @@ provides readiness visibility only.
 from __future__ import annotations
 
 import os
-from typing import Mapping
+from typing import Mapping, TypedDict
 
 # Stable reason codes — safe for alerting rules and log scraping.
 BILLING_STRIPE_SECRET_KEY_MISSING = "BILLING_STRIPE_SECRET_KEY_MISSING"
 BILLING_STRIPE_WEBHOOK_SECRET_MISSING = "BILLING_STRIPE_WEBHOOK_SECRET_MISSING"
 
 
-def get_stripe_readiness(env: Mapping[str, str] | None = None) -> dict[str, object]:
+class StripeReadiness(TypedDict):
+    provider: str
+    ready: bool
+    reasons: list[str]
+
+
+def get_stripe_readiness(env: Mapping[str, str] | None = None) -> StripeReadiness:
     """Return billing readiness dict.
 
     Args:
