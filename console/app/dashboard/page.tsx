@@ -112,7 +112,7 @@ export default function DashboardOverviewPage() {
     async function load() {
       try {
         const [healthRes, statsRes] = await Promise.all([
-          fetch('/api/core/health/live'),
+          fetch('/api/core/health/ready'),
           fetch('/api/core/stats/summary'),
         ]);
         if (healthRes.ok) setHealth(await healthRes.json());
@@ -160,7 +160,7 @@ export default function DashboardOverviewPage() {
             {coreError ? (
               <>
                 <AlertTriangle className="h-4 w-4 shrink-0" />
-                Core API unreachable — check admin-gateway is running
+                Core unreachable — check admin-gateway is running
               </>
             ) : (
               <>

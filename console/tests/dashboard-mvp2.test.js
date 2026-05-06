@@ -97,7 +97,7 @@ test('no NEXT_PUBLIC_CORE_API_KEY usage anywhere in console source', () => {
 });
 
 test('control tower route is canonical in nav and legacy keys route is removed', () => {
-  const layout = read('app/dashboard/layout.tsx');
+  const layout = read('components/layout/Sidebar.tsx');
   assert.match(layout, /\/dashboard\/control-tower/);
   assert.doesNotMatch(layout, /\/dashboard\/keys/);
 });
