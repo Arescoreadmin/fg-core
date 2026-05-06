@@ -34,7 +34,8 @@ def assert_prod_invariants(settings: Mapping[str, str] | None = None) -> None:
 
     if not _env_bool(env, "FG_AUTH_ENABLED", True):
         raise ProdInvariantViolation(
-            "FG-PROD-001", "FG_AUTH_ENABLED must be true in prod/staging"
+            "FG-PROD-001",
+            "AUTH_DISABLED_IN_PROD: auth cannot be disabled in production-like environments",
         )
 
     for flag in ("FG_AUTH_DB_FAIL_OPEN", "FG_RL_FAIL_OPEN", "FG_AUTH_ALLOW_FALLBACK"):

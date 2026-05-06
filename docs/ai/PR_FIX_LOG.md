@@ -6,6 +6,39 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-06 — Startup fail-closed when auth is disabled in prod-like envs
+
+**Branch:** `pr/2-auth-fail-closed`
+
+**Area:** Startup invariant enforcement / auth / prod_invariants
+
+---
+
+**Issue:**
+
+FG-PROD-001 error message did not include the stable sentinel `AUTH_DISABLED_IN_PROD`, making it impossible to write stable alerting rules or grep patterns against the error string. Additionally, the required test matrix (dev/test allow, prod/staging fail, stable message assertion) was incomplete.
+
+**Root cause:**
+
+The existing FG-PROD-001 message was `"FG_AUTH_ENABLED must be true in prod/staging"` — no stable machine-readable token. Tests covered the code path but did not assert message stability.
+
+**Fix:**
+
+- Updated FG-PROD-001 message to: `"AUTH_DISABLED_IN_PROD: auth cannot be disabled in production-like environments"`
+- Added 6 focused tests to `tests/security/test_prod_invariants.py` covering: dev allows, test allows, prod fails, staging fails, prod+auth-enabled passes, message stability.
+
+**Files changed:**
+
+- `api/config/prod_invariants.py` — updated FG-PROD-001 error message to include `AUTH_DISABLED_IN_PROD`
+- `tests/security/test_prod_invariants.py` — added `_VALID_PROD_ENV` fixture dict and 6 auth fail-closed tests
+
+**Validation:**
+
+- `pytest -q tests/security/test_prod_invariants.py` → pass
+- `pytest -q tests/security/test_required_env_enforcement.py` → pass
+
+---
+
 ### 2026-05-02 — Assessment plane registry auth/tenant enforcement fix
 
 **Branch:** `fix/pr-280-local`
