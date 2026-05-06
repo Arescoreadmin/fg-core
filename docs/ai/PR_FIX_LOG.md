@@ -6,6 +6,69 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-06 — PR 3 Stripe Readiness Wiring
+
+**Branch:** `pr/3-stripe-readiness`
+
+**Area:** Billing config / health readiness signal / api/config
+
+---
+
+**Purpose:**
+
+Add production-safe Stripe configuration readiness surface and expose billing
+readiness through the /health/ready endpoint. Required-env enforcement
+(fail-closed at startup) was already in place from prior PRs; this PR adds
+operational visibility — a structured readiness dict that operators and
+orchestrators can inspect without triggering network calls or leaking secrets.
+
+**Root cause / trigger:**
+
+`STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` were enforced by
+`REQUIRED_PROD_ENV_VARS` at startup, but there was no runtime readiness
+signal indicating whether the billing provider was configured. Health/ready
+endpoint returned no billing component. This PR closes that gap.
+
+**Files changed:**
+
+- `api/config/billing.py` (new) — `get_stripe_readiness()`: validates
+  STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET (absent, blank, CHANGE_ME_*);
+  returns `{provider, ready, reasons}` dict; zero network calls; never exposes
+  secret values in output
+- `api/main.py` — /health/ready response extended with `billing` key
+  (additive, does not break existing fields; liveness probe unchanged)
+- `tests/test_billing_config.py` (new) — 11 tests covering all readiness
+  scenarios, endpoint integration, liveness independence, and secret non-leakage
+
+**Behavior proof:**
+
+- `get_stripe_readiness()` is pure config-inspection: reads env vars via
+  `Mapping[str, str]`, no imports of `stripe` SDK, no HTTP calls
+- Reason codes (`BILLING_STRIPE_SECRET_KEY_MISSING`,
+  `BILLING_STRIPE_WEBHOOK_SECRET_MISSING`) are stable string constants safe
+  for alerting rules
+- Secret values never appear in the return dict (proven by test 9)
+- /health/live is unchanged — Stripe keys are not required for liveness
+
+**Validation:**
+
+- `pytest -q tests/test_billing_config.py` → 11 passed
+- `pytest -q tests -k "billing or stripe or webhook or health or readiness"` → 117 passed, 2 skipped
+- `pytest -q tests -k "required_env"` → 41 passed
+- `make fg-fast` → see validation run
+
+**Secret-safety proof:**
+
+- `api/config/billing.py` imports only `os` and `typing`; no Stripe SDK
+- Return value contains only `provider` (literal string), `ready` (bool),
+  `reasons` (list of constant strings) — no env var values propagated
+- Test `test_stripe_readiness_does_not_expose_secret_values` asserts secret
+  material absent from stringified return value
+- `REQUIRED_PROD_ENV_VARS` enforcement in `api/config/required_env.py`
+  unchanged — startup fail-closed authority not weakened
+
+---
+
 ### 2026-05-06 — Startup fail-closed when auth is disabled in prod-like envs
 
 **Branch:** `pr/2-auth-fail-closed`
