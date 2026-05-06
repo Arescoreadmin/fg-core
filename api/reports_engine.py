@@ -13,22 +13,34 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import os
 import re
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from api.auth_scopes.resolution import require_scopes
 from api.db import get_sessionmaker
 from api.db_models import AssessmentRecord, OrgProfile, PromptVersion, ReportRecord
+from api.report_jobs import (
+    REPORT_GENERATION_FAILED,
+    REPORT_GENERATION_TIMEOUT,
+    ReportJobState,
+)
+from api.security_audit import AuditEvent, EventType, get_auditor
 
 log = logging.getLogger("frostgate.reports")
+
+# Configurable generation timeout in seconds (default 300 s = 5 min).
+_REPORT_GENERATION_TIMEOUT_S = int(os.getenv("FG_REPORT_GENERATION_TIMEOUT_S", "300"))
 
 router = APIRouter(
     prefix="/ingest/assessment",
@@ -147,21 +159,121 @@ def _validate_report_content(content: dict[str, Any]) -> dict[str, Any]:
     return content
 
 
-def _generate_report_sync(report_id: str) -> None:
+def _emit_report_event(
+    event_type_str: str,
+    tenant_id: str,
+    report_id: str,
+    assessment_id: str | None,
+    *,
+    state: ReportJobState,
+    reason_code: str | None = None,
+    duration_ms: int | None = None,
+) -> None:
+    """Emit a structured audit event for a report job lifecycle transition.
+
+    Sensitive payload (report content, prompts, model outputs) is never included.
     """
-    Blocking report generation — called via BackgroundTasks.
+    details: dict[str, Any] = {
+        "report_id": report_id,
+        "assessment_id": assessment_id,
+        "job_state": state.value,
+    }
+    if reason_code is not None:
+        details["reason_code"] = reason_code
+    if duration_ms is not None:
+        details["duration_ms"] = duration_ms
+    try:
+        get_auditor().log_event(
+            AuditEvent(
+                event_type=EventType.ADMIN_ACTION,
+                tenant_id=tenant_id,
+                reason=event_type_str,
+                details=details,
+            )
+        )
+    except Exception:
+        # Audit failure must never abort the background job itself.
+        log.warning(
+            "reports.audit_emit_failed event=%s report_id=%s",
+            event_type_str,
+            report_id,
+        )
+
+
+async def _generate_report_async(report_id: str) -> None:
+    """
+    Async wrapper that runs blocking report generation in an executor with a
+    configurable timeout.  Called via BackgroundTasks (which runs in an event loop).
+    """
+    loop = asyncio.get_event_loop()
+    try:
+        await asyncio.wait_for(
+            loop.run_in_executor(None, _do_generate_report, report_id),
+            timeout=_REPORT_GENERATION_TIMEOUT_S,
+        )
+    except asyncio.TimeoutError:
+        _handle_timeout(report_id)
+
+
+def _handle_timeout(report_id: str) -> None:
+    """Mark the report as failed due to timeout and emit the failure audit event."""
+    SessionLocal = get_sessionmaker()
+    db = SessionLocal()
+    try:
+        report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
+        if report:
+            report.status = "failed"
+            report.error_message = REPORT_GENERATION_TIMEOUT
+            report.completed_at = datetime.now(timezone.utc)
+            db.commit()
+            _emit_report_event(
+                "report_job_failed",
+                report.tenant_id,
+                report_id,
+                report.assessment_id,
+                state=ReportJobState.FAILED,
+                reason_code=REPORT_GENERATION_TIMEOUT,
+            )
+        log.error(
+            "reports.timeout report_id=%s timeout_s=%d",
+            report_id,
+            _REPORT_GENERATION_TIMEOUT_S,
+        )
+    except Exception:
+        log.exception("reports.timeout_handler_error report_id=%s", report_id)
+    finally:
+        db.close()
+
+
+def _do_generate_report(report_id: str) -> None:
+    """
+    Blocking report generation — called via BackgroundTasks executor.
     Opens its own DB session (the request session is closed by the time this runs).
     """
     SessionLocal = get_sessionmaker()
     db = SessionLocal()
+    start_ms = int(time.monotonic() * 1000)
+    tenant_id: str = "unknown"
+    assessment_id: str | None = None
     try:
         report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
         if report is None:
             log.error("reports.generate report_not_found id=%s", report_id)
             return
 
+        tenant_id = report.tenant_id or "unknown"
+        assessment_id = report.assessment_id
+
         report.status = "generating"
         db.commit()
+
+        _emit_report_event(
+            "report_job_started",
+            tenant_id,
+            report_id,
+            assessment_id,
+            state=ReportJobState.RUNNING,
+        )
 
         # Load assessment
         assessment = (
@@ -243,14 +355,26 @@ def _generate_report_sync(report_id: str) -> None:
         report.completed_at = datetime.now(timezone.utc)
         db.commit()
 
+        duration_ms = int(time.monotonic() * 1000) - start_ms
+        _emit_report_event(
+            "report_job_succeeded",
+            tenant_id,
+            report_id,
+            assessment_id,
+            state=ReportJobState.SUCCEEDED,
+            duration_ms=duration_ms,
+        )
+
         log.info(
-            "reports.generated report_id=%s assessment_id=%s",
+            "reports.generated report_id=%s assessment_id=%s duration_ms=%d",
             report_id,
             report.assessment_id,
+            duration_ms,
         )
 
     except Exception as exc:
         log.exception("reports.generate_failed report_id=%s error=%s", report_id, exc)
+        duration_ms = int(time.monotonic() * 1000) - start_ms
         try:
             report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
             if report:
@@ -258,10 +382,28 @@ def _generate_report_sync(report_id: str) -> None:
                 report.error_message = str(exc)[:500]
                 report.completed_at = datetime.now(timezone.utc)
                 db.commit()
+            _emit_report_event(
+                "report_job_failed",
+                tenant_id,
+                report_id,
+                assessment_id,
+                state=ReportJobState.FAILED,
+                reason_code=REPORT_GENERATION_FAILED,
+                duration_ms=duration_ms,
+            )
         except Exception:
             pass
     finally:
         db.close()
+
+
+def _generate_report_sync(report_id: str) -> None:
+    """
+    BackgroundTask entry point: runs the async wrapper in an event loop.
+    FastAPI BackgroundTasks do not automatically provide a running loop for
+    synchronous callables, so we bridge via asyncio.run().
+    """
+    asyncio.run(_generate_report_async(report_id))
 
 
 # ─── Pydantic schemas ─────────────────────────────────────────────────────────
@@ -286,6 +428,7 @@ class GenerateReportResponse(BaseModel):
 def generate_report(
     body: GenerateReportRequest,
     background_tasks: BackgroundTasks,
+    request: Request,
     db: Session = Depends(_get_db),
 ):
     """
@@ -312,9 +455,10 @@ def generate_report(
         )
 
     report_id = str(uuid.uuid4())
+    tenant_id = assessment.tenant_id
     report = ReportRecord(
         id=report_id,
-        tenant_id=assessment.tenant_id,
+        tenant_id=tenant_id,
         assessment_id=assessment.id,
         org_id=assessment.org_id,
         org_profile_id=assessment.org_profile_id,
@@ -324,23 +468,39 @@ def generate_report(
     db.add(report)
     db.commit()
 
+    _emit_report_event(
+        "report_job_queued",
+        tenant_id,
+        report_id,
+        assessment.id,
+        state=ReportJobState.QUEUED,
+    )
+
     background_tasks.add_task(_generate_report_sync, report_id)
 
     log.info(
-        "reports.enqueued report_id=%s assessment_id=%s type=%s",
+        "reports.enqueued report_id=%s assessment_id=%s type=%s tenant_id=%s",
         report_id,
         body.assessment_id,
         body.prompt_type,
+        tenant_id,
     )
 
     return GenerateReportResponse(report_id=report_id, status="pending")
 
 
 @router.get("/reports/{report_id}")
-def get_report(report_id: str, db: Session = Depends(_get_db)):
+def get_report(report_id: str, request: Request, db: Session = Depends(_get_db)):
     """Poll report status and retrieve content when complete."""
     report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
     if report is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    # Tenant isolation: wrong tenant gets 404 (not 403) to avoid enumeration.
+    caller_tenant: str | None = getattr(
+        getattr(request, "state", None), "tenant_id", None
+    )
+    if caller_tenant and report.tenant_id and caller_tenant != report.tenant_id:
         raise HTTPException(status_code=404, detail="Report not found")
 
     overall_score: float | None = None
