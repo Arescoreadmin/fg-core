@@ -20,3 +20,4 @@ PyJWT==2.12.0
 cryptography==46.0.7
 pygments==2.20.0
 packaging>=21.3
+stripe>=10.0.0

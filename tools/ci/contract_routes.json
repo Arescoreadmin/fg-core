@@ -800,6 +800,66 @@
     },
     {
       "method": "POST",
+      "path": "/ingest/assessment/orgs",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/ingest/assessment/reports/generate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ingest/assessment/reports/{report_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ingest/assessment/reports/{report_id}/download",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/ingest/assessment/webhooks/stripe",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/ingest/assessment/{assessment_id}/checkout",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}/questions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/ingest/assessment/{assessment_id}/responses",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/ingest/assessment/{assessment_id}/submit",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
       "path": "/internal/connectors/{connector_id}/ingest",
       "scopes": [],
       "source": "contract"
@@ -943,7 +1003,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-01T18:46:13.817212+00:00",
+  "generated_at": "2026-05-05T21:08:39.699949+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

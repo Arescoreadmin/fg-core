@@ -24,6 +24,8 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'admin/agent/unquarantine', methods: new Set(['POST']) },
   { prefix: 'control-plane/lockers', methods: new Set(['GET', 'POST', 'HEAD']) },
   { prefix: 'audit/export', methods: new Set(['GET', 'HEAD']) },
+  // Assessment + report flow: scoped-key-gated pre-tenant endpoints
+  { prefix: 'ingest/assessment', methods: new Set(['GET', 'POST', 'PATCH', 'HEAD']) },
 ];
 
 const WINDOW_MS = 10_000;
@@ -120,7 +122,7 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
   if (tenant) headers.set('X-Tenant-ID', tenant);
 
   const contentType = request.headers.get('content-type');
-  if (contentType && (request.method === 'POST' || request.method === 'DELETE')) {
+  if (contentType && (request.method === 'POST' || request.method === 'DELETE' || request.method === 'PATCH' || request.method === 'PUT')) {
     headers.set('Content-Type', contentType);
   }
 
@@ -201,6 +203,15 @@ export async function GET(request: NextRequest, context: { params: { path: strin
 }
 
 export async function POST(request: NextRequest, context: { params: { path: string[] } }) {
+  return handle(request, context);
+}
+
+export async function PATCH(request: NextRequest, context: { params: { path: string[] } }) {
+  return handle(request, context);
+}
+
+
+export async function PUT(request: NextRequest, context: { params: { path: string[] } }) {
   return handle(request, context);
 }
 

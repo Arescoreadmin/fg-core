@@ -1,28 +1,12 @@
-import Link from 'next/link';
-import { TenantBadge } from '@/components/common/TenantBadge';
-import { TenantSwitcher } from '@/components/common/TenantSwitcher';
-
-const tenantId = process.env.CORE_TENANT_ID;
-const scopes = process.env.NEXT_PUBLIC_SCOPE_BADGE;
+import { Sidebar } from '@/components/layout/Sidebar';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <main style={{ maxWidth: 1200, margin: '0 auto', padding: '1.5rem' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem', gap: '0.8rem' }}>
-        <nav style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-          <Link href="/dashboard">Overview</Link>
-          <Link href="/dashboard/control-tower">Control Tower</Link>
-          <Link href="/dashboard/decisions">Decisions</Link>
-          <Link href="/dashboard/forensics">Forensics</Link>
-          <Link href="/dashboard/alignment">Alignment</Link>
-        </nav>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <TenantBadge tenantId={tenantId} />
-          <TenantSwitcher defaultTenant={tenantId} />
-          {scopes ? <span style={{ border: '1px solid var(--border)', padding: '0.2rem 0.5rem', borderRadius: 8, fontSize: 12 }}>Scopes: {scopes}</span> : null}
-        </div>
-      </header>
-      {children}
-    </main>
+    <div className="flex h-screen overflow-hidden bg-background">
+      <Sidebar />
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <main className="flex-1 overflow-y-auto">{children}</main>
+      </div>
+    </div>
   );
 }

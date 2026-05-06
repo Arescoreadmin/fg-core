@@ -42,7 +42,12 @@ from admin_gateway.middleware.csrf import CSRFMiddleware
 from admin_gateway.middleware.logging import StructuredLoggingMiddleware
 from admin_gateway.middleware.request_id import RequestIdMiddleware
 from admin_gateway.middleware.session_cookie import SessionCookieMiddleware
-from admin_gateway.routers import admin_router, auth_router, products_router
+from admin_gateway.routers import (
+    admin_router,
+    auth_router,
+    core_proxy_router,
+    products_router,
+)
 from admin_gateway.auth.config import enforce_prod_auth_safety
 
 enforce_prod_auth_safety()
@@ -261,6 +266,7 @@ def build_app() -> FastAPI:
     app.include_router(admin_router)
     app.include_router(auth_router)
     app.include_router(products_router)
+    app.include_router(core_proxy_router)
 
     @app.get("/health")
     async def health(request: Request) -> dict[str, Any]:

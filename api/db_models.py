@@ -1777,3 +1777,155 @@ class ProviderBaaRecord(Base):
     updated_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
+
+
+# =============================================================================
+# Assessment & Report models (migration 0032)
+# These power the customer-facing onboarding → assessment → report flow.
+# =============================================================================
+
+
+class OrgProfile(Base):
+    """One row per customer org created through the onboarding wizard."""
+
+    __tablename__ = "org_profiles"
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="public", index=True
+    )
+    org_name: Mapped[Any] = mapped_column(Text, nullable=False)
+    industry: Mapped[Any] = mapped_column(Text, nullable=False, default="other")
+    employee_count: Mapped[Any] = mapped_column(Text, nullable=False, default="")
+    revenue: Mapped[Any] = mapped_column(Text, nullable=False, default="")
+    profile_type: Mapped[Any] = mapped_column(Text, nullable=False, default="smb_basic")
+    handles_phi: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
+    handles_cui: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
+    is_dod_contractor: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    fedramp_required: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    email: Mapped[Any] = mapped_column(Text, nullable=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class AssessmentSchema(Base):
+    """Versioned question banks. Seeded by migration 0033."""
+
+    __tablename__ = "assessment_schemas"
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    schema_version: Mapped[Any] = mapped_column(Text, nullable=False, unique=True)
+    profile_type: Mapped[Any] = mapped_column(Text, nullable=False)
+    questions: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    is_current: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class AssessmentRecord(Base):
+    """One row per assessment session."""
+
+    __tablename__ = "assessments"
+
+    id: Mapped[Any] = mapped_column(
+        Text, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="public", index=True
+    )
+    org_profile_id: Mapped[Any] = mapped_column(
+        Integer, ForeignKey("org_profiles.id", ondelete="SET NULL"), nullable=True
+    )
+    org_id: Mapped[Any] = mapped_column(Text, nullable=False, default="", index=True)
+    schema_version: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="v2025.1-base"
+    )
+    profile_type: Mapped[Any] = mapped_column(Text, nullable=False, default="smb_basic")
+    status: Mapped[Any] = mapped_column(Text, nullable=False, default="draft")
+    responses: Mapped[Any] = mapped_column(JSON, nullable=False, default=dict)
+    scores: Mapped[Any] = mapped_column(JSON, nullable=True)
+    overall_score: Mapped[Any] = mapped_column(Float, nullable=True)
+    risk_band: Mapped[Any] = mapped_column(Text, nullable=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+    submitted_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    scored_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    email: Mapped[Any] = mapped_column(Text, nullable=True)
+    stripe_session_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    payment_status: Mapped[Any] = mapped_column(Text, nullable=False, default="unpaid")
+    tier: Mapped[Any] = mapped_column(Text, nullable=True)
+
+
+class PromptVersion(Base):
+    """AI prompt templates for report generation. Seeded by migration 0033."""
+
+    __tablename__ = "prompt_versions"
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    prompt_key: Mapped[Any] = mapped_column(Text, nullable=False)
+    version: Mapped[Any] = mapped_column(Text, nullable=False)
+    system_prompt: Mapped[Any] = mapped_column(Text, nullable=False)
+    user_prompt_template: Mapped[Any] = mapped_column(Text, nullable=False)
+    is_active: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class ReportRecord(Base):
+    """One row per generated advisory report."""
+
+    __tablename__ = "reports"
+
+    id: Mapped[Any] = mapped_column(
+        Text, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    tenant_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="public", index=True
+    )
+    assessment_id: Mapped[Any] = mapped_column(
+        Text, ForeignKey("assessments.id", ondelete="SET NULL"), nullable=True
+    )
+    org_id: Mapped[Any] = mapped_column(Text, nullable=False, default="", index=True)
+    org_profile_id: Mapped[Any] = mapped_column(
+        Integer, ForeignKey("org_profiles.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[Any] = mapped_column(Text, nullable=False, default="pending")
+    prompt_type: Mapped[Any] = mapped_column(Text, nullable=False, default="executive")
+    content: Mapped[Any] = mapped_column(JSON, nullable=True)
+    error_message: Mapped[Any] = mapped_column(Text, nullable=True)
+    pdf_storage_key: Mapped[Any] = mapped_column(Text, nullable=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    completed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class StripeEvent(Base):
+    """Raw Stripe webhook events — used for idempotency and audit."""
+
+    __tablename__ = "stripe_events"
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    stripe_event_id: Mapped[Any] = mapped_column(Text, nullable=False, unique=True)
+    event_type: Mapped[Any] = mapped_column(Text, nullable=False)
+    payload: Mapped[Any] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )

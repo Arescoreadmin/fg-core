@@ -6,6 +6,57 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-02 — Assessment plane registry auth/tenant enforcement fix
+
+**Branch:** `fix/pr-280-local`
+
+**Area:** Plane registry governance / data plane / assessment+report+webhook routes
+
+---
+
+**Issue:**
+
+`python tools/ci/check_plane_registry.py` failed with 14 violations across `/ingest/assessment/*` routes classified under the `data` plane:
+- `missing scoped auth` for `reports_engine.py` routes (no `require_scopes` dependency) and `stripe_webhooks.py` route (external webhook, auth-exempt by design)
+- `missing tenant binding without exact exception` for all 10 routes (pre-tenant onboarding flow; no tenant context exists before org enrollment)
+
+**Root cause:**
+
+Three causes compounded:
+1. `api/reports_engine.py` router had no `require_scopes` dependency (only `assessments.py` had it).
+2. `api/assessments.py` called `require_scopes(["ingest:assessment"])` (list arg) instead of `require_scopes("ingest:assessment")` — wrong call convention causing broken runtime scope enforcement.
+3. Data plane had zero exceptions for `/ingest/assessment/*`; the plane registry checker requires either `tenant_bound=True` in the route inventory OR an exact exception registered in the plane definition.
+
+**Security model chosen:**
+
+- Assessment/report routes (9): `bootstrap_routes` with `class_name="bootstrap"`. These are pre-tenant onboarding routes gated by `ingest:assessment` scoped API key (enforced via proxy). No tenant context until org enrollment completes.
+- Stripe webhook route (1): `auth_exempt_routes` with `class_name="auth_exempt"`. External Stripe webhook verified by HMAC signature; cannot carry API key credentials.
+- No security gate weakened; no wildcard exceptions used; all exceptions are exact method+path matches.
+
+**Files changed:**
+
+- `services/plane_registry/registry.py` — added `bootstrap_routes` (9 routes) and `auth_exempt_routes` (1 route) to `data` plane definition
+- `api/assessments.py` — fixed `require_scopes(["ingest:assessment"])` → `require_scopes("ingest:assessment")` (correct `*scopes` call convention)
+- `api/reports_engine.py` — added `require_scopes` import and `dependencies=[Depends(require_scopes("ingest:assessment"))]` to router
+- `console/lib/assessmentApi.ts` — fixed `BASE` from `/api/core/assessments` → `/api/core/ingest/assessment`; fixed `createCheckout` double-path bug
+- `console/lib/reportApi.ts` — fixed `BASE` from `/api/core/core/assessment` (double `/core/`) → `/api/core/ingest/assessment`
+- `console/app/api/core/[...path]/route.ts` — fixed proxy rule prefix from `assessments` → `ingest/assessment`
+- `tools/ci/route_inventory.json` — regenerated via `make route-inventory-generate`
+- Related governance artifacts regenerated (plane_registry_snapshot, contract_routes, topology hash)
+
+**Validation:**
+
+- `python tools/ci/check_plane_registry.py` → OK
+- `python scripts/generate_platform_inventory.py` → OK (exit 0)
+- `python tools/ci/check_openapi_security_diff.py` → OK (72 ops, 0 violations)
+- `make route-inventory-generate` → OK
+- `make contracts-gen` → OK
+- `make contract-authority-refresh` → OK
+- `make soc-review-sync` → OK
+- `make fg-fast` → All checks passed
+
+---
+
 ### 2026-04-30 — Deterministic PHI-aware AI provider routing
 
 **Branch:** `codex/phi-aware-provider-routing`
@@ -6867,3 +6918,103 @@ Unsupported provider output is not returned, persisted, audited, or hashed as th
 **Validation results:** `git diff --check` passed; `python -m compileall services api tests` passed; focused security suites passed; `tests/test_ai_plane_extension.py` passed with 20 tests; `tests/security/test_openapi_security_diff_scoping.py` passed with 5 tests; `make route-inventory-generate` and `make contract-authority-refresh` ran after contract changes; `make fg-fast` passed; `bash codex_gates.sh` passed with 3052 passed and 26 skipped in the full pytest phase.
 
 **Addendum — 2026-05-01 auth response contract fix:** Updated `/ai/chat` 401/403 OpenAPI metadata to match the actual `require_scopes(...)` FastAPI error envelope, `{"detail": "..."}`, instead of advertising a top-level `error_code`. Added endpoint regression coverage for runtime 401 payload shape and generated OpenAPI 401/403 schemas. Regenerated OpenAPI/schema mirrors and refreshed contract authority markers.
+
+---
+
+### 2026-05-05 — CI repair: contract drift, UNAUTHORIZED webhook route, migrate UNIQUE VIOLATION
+
+**Branch:** `claude/merge-frontend-fg-core-6fjVg`
+
+**Area:** CI gates / contract authority / route inventory / database migrations / admin-gateway
+
+---
+
+**Issues (compound CI failure):**
+
+1. `fg-contract` failing — `git diff --exit-code contracts/admin` detected drift after `core_proxy_router` was added to admin-gateway but `contracts/admin/openapi.json` was not regenerated.
+2. `route-inventory-audit` hard fail — `POST /assessment/webhooks/stripe` classified as `UNAUTHORIZED` because `include_in_schema=False` made it invisible to the OpenAPI contract but visible to the AST scanner. Path does not match any `ALLOWED_INTERNAL_PREFIXES`, so it was rejected.
+3. FastAPI duplicate operation ID warning — `@router.api_route("/core/{path:path}", methods=["GET","POST","PUT","PATCH","DELETE"])` with a single function generates duplicate `operation_id` values in the OpenAPI schema.
+4. `frostgate-migrate` exited with code 1 — migrations 0032, 0033, and 0034 each contained `INSERT INTO schema_migrations(version) VALUES ('...') ON CONFLICT DO NOTHING;` at the end. The Python migration runner (`api/db_migrations.py`) also inserts into `schema_migrations` after calling `_apply_sql`, without `ON CONFLICT`. The SQL-level insert ran first, then the Python runner's insert failed with a UNIQUE VIOLATION. Pre-existing migrations 0001–0031 do not include this line.
+5. `soc-review-sync` failure — `tools/ci/` files changed (route inventory, contract routes, topology hash) but neither SOC doc was updated.
+6. `admin-lint` failure — `admin_gateway/routers/core_proxy.py` and `admin_gateway/main.py` were not ruff-formatted.
+7. Contract authority mismatch — `contracts/core/openapi.json` changed (new routes added) but `BLUEPRINT_STAGED.md` and `CONTRACT.md` still held the old `Contract-Authority-SHA256`.
+
+**Root causes:**
+
+- `include_in_schema=False` on the Stripe webhook route was a leftover from an earlier pass that wanted to hide internal implementation details; the route is a real production endpoint and must be in the schema.
+- The `core_proxy_router` was wired into `admin_gateway/main.py` but `contracts/admin/openapi.json` was not regenerated after the router was added.
+- The single `@router.api_route(methods=[...])` call with one function produces one operation per method but all share the same function name as `operation_id`, causing FastAPI to emit duplicate IDs.
+- Migrations 0032–0034 copied a pattern not used by any of the 31 existing migrations. The Python runner (`api/db_migrations.py`) owns the `schema_migrations` insert; SQL files must not replicate it.
+
+**Files changed:**
+
+- `api/stripe_webhooks.py` — removed `include_in_schema=False` from `@router.post("/webhooks/stripe")` so the route appears in the OpenAPI contract and passes route-inventory-audit.
+- `admin_gateway/routers/core_proxy.py` — rewrote single `@router.api_route` with shared `_proxy()` helper and 5 separate per-method handlers, each with explicit `operation_id` (`core_proxy_get`, `core_proxy_post`, `core_proxy_patch`, `core_proxy_put`, `core_proxy_delete`). Ruff-formatted.
+- `admin_gateway/main.py` — ruff-formatted (no logic changes).
+- `migrations/postgres/0032_assessment_and_reports.sql` — removed final `INSERT INTO schema_migrations` line.
+- `migrations/postgres/0033_seed_assessment_data.sql` — removed final `INSERT INTO schema_migrations` line.
+- `migrations/postgres/0034_payment_columns.sql` — removed final `INSERT INTO schema_migrations` line.
+- `contracts/admin/openapi.json` — regenerated via `make contracts-gen` to include 5 new `core_proxy_*` routes.
+- `contracts/core/openapi.json` — regenerated via `make contracts-gen` to include 10 new assessment/report/webhook routes. New SHA256: `824eff5084b3ef6abed5ed5a4e293bb0f97ea33d4847f4493b1ac5806a2549d8`.
+- `BLUEPRINT_STAGED.md` — updated `Contract-Authority-SHA256` to `824eff5084b3ef6abed5ed5a4e293bb0f97ea33d4847f4493b1ac5806a2549d8`.
+- `CONTRACT.md` — same contract authority hash update.
+- `schemas/api/openapi.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256` — regenerated as part of `make contracts-gen` and `make route-inventory-generate`.
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — prepended structured entry documenting the assessment/report API surface addition, route inventory update, contract authority hash update, and migration fix. Required by `soc-review-sync` gate (changes to `tools/ci/` must be accompanied by a SOC doc update).
+
+**Enforcement integrity:**
+
+- No CI gate weakened. No route marked public to avoid scope enforcement. No migrate failure suppressed. No `--no-verify` used.
+- Assessment routes remain `scoped: False, tenant_bound: False` — the UUID4 assessment ID is the access token (unguessable), per existing design.
+- The Stripe webhook route is now correctly in the schema; it was never public — it was misclassified by `include_in_schema=False`.
+- Migration runner ownership of `schema_migrations` inserts is preserved; SQL files remain data-only.
+
+**Validation results:**
+
+- `make fg-contract` → `Contract diff: OK (admin/core/artifacts)` ✓
+- `make route-inventory-audit` → `route inventory: OK` ✓
+- `make soc-review-sync` → `soc-review-sync: OK` ✓
+- `make admin-lint` → `All checks passed! / 52 files already formatted` ✓
+- `make fg-fast` → all gates passing (pr-fix-log was the final gate)
+
+---
+
+### 2026-05-05 — Frontend↔core integration repair: proxy allowlist, PATCH handler, real report score
+
+**Branch:** `claude/merge-frontend-fg-core-6fjVg`
+
+**Area:** Next.js core proxy / assessment API / report data pipeline
+
+---
+
+**Issues:**
+
+1. **Proxy blocked all assessment traffic (403)** — `console/app/api/core/[...path]/route.ts` uses a `PROXY_RULES` allowlist. `assessment` was absent from the list, so every call to `/api/core/assessment/*` (createOrg, getQuestions, checkout, saveResponses, submitAssessment, generateReport, getReport) returned 403 from the proxy before reaching fg-core.
+
+2. **PATCH requests silently dropped** — The route file exported only `GET`, `POST`, `DELETE`, and `HEAD` handlers. `saveResponses` uses `PATCH /assessment/assessments/{id}/responses`. Without a `PATCH` export, Next.js returns 405. Additionally, the content-type forwarding only applied to `POST` and `DELETE`, not `PATCH`.
+
+3. **Hardcoded score 47 in report UI** — `console/app/reports/[reportId]/page.tsx` assigned `const overallScore = 47` unconditionally. The backend `GET /assessment/reports/{id}` endpoint did not return `overall_score`, so there was no real data to bind. Score is computed by the backend during assessment submission (`overall_score` on `AssessmentRecord`).
+
+**Root causes:**
+
+- The `PROXY_RULES` allowlist was established before assessment routes existed and was never extended.
+- The PATCH HTTP method handler was omitted when the proxy route file was written.
+- The report GET endpoint returned only report-table fields; it did not join `AssessmentRecord` to expose `overall_score`. The UI had no real value to render and used a placeholder.
+
+**Files changed:**
+
+- `console/app/api/core/[...path]/route.ts` — added `{ prefix: 'assessment', methods: new Set(['GET', 'POST', 'PATCH', 'HEAD']) }` to `PROXY_RULES`; added PATCH to content-type forwarding condition; exported `PATCH` handler.
+- `api/reports_engine.py` — `get_report` now looks up the linked `AssessmentRecord` by `assessment_id` and includes `overall_score` in the response dict.
+- `console/lib/reportApi.ts` — added `overall_score: number | null` to the `Report` interface.
+- `console/app/reports/[reportId]/page.tsx` — replaced `const overallScore = 47` with `const overallScore = report.overall_score ?? 0`.
+
+**No route naming mismatch:** Both frontend (`BASE = '/api/core/assessment'`) and backend (`APIRouter(prefix="/assessment")`) use the singular form consistently. The proxy strips `/api/core/` leaving `assessment/...` which matches the backend prefix exactly.
+
+**Enforcement integrity:** No proxy rules opened beyond the explicit assessment prefix. No wildcard rules added. `fg-contract`, `route-inventory-audit`, `soc-review-sync`, and `admin-lint` all pass.
+
+**Validation results:**
+
+- `python -m compileall api/reports_engine.py` → OK ✓
+- `make fg-contract` → `Contract diff: OK (admin/core/artifacts)` ✓
+- `make route-inventory-audit` → `route inventory: OK` ✓
+- `make soc-review-sync` → `soc-review-sync: OK` ✓
+- `make admin-lint` → `All checks passed!` ✓

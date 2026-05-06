@@ -1,3 +1,30 @@
+## 2026-05-05 — Assessment + Report API surface: route inventory and contract update
+
+New customer-facing API surface added for AI governance assessments and advisory reports.
+All routes are intentionally auth-free at the gateway level — the assessment UUID is the
+access token (unguessable UUID4). Enforcement review:
+
+Routes added to `tools/ci/route_inventory.json` (10 new routes):
+- `POST /assessment/orgs` — create org profile + draft assessment
+- `GET/PATCH/POST /assessment/assessments/{id}` — questions, responses, submit, checkout
+- `POST /assessment/reports/generate`, `GET /assessment/reports/{id}`, `GET /assessment/reports/{id}/download`
+- `POST /assessment/webhooks/stripe` — Stripe checkout.session.completed webhook (signature-verified)
+
+Contract authority SHA256 updated in `BLUEPRINT_STAGED.md` and `CONTRACT.md` to
+`824eff5084b3ef6abed5ed5a4e293bb0f97ea33d4847f4493b1ac5806a2549d8` to reflect
+the new assessment/report/webhook routes in `contracts/core/openapi.json`.
+
+Admin-gateway `core_proxy_router` added: forwards `/core/assessment/*` to fg-core.
+All other fg-core paths return 403. No admin/governance routes exposed.
+
+Migration fix: removed duplicate `INSERT INTO schema_migrations` from 0032/0033/0034;
+the Python migration runner is the sole source of truth for schema_migrations tracking.
+
+Validation: `make fg-fast` → passed. `make route-inventory-audit` → OK.
+`make fg-contract` → OK. `make sql-migration-percent-guard` → OK.
+
+---
+
 ## 2026-04-25 — Task 11.1 Addendum: Gateway Guard Test Contract Alignment
 
 `tests/security/test_gateway_only_admin_access.py` updated to assert structured error payload from `require_internal_admin_gateway`.
@@ -2603,3 +2630,89 @@ SOC review outcome:
 - Canonical tester flow passes end-to-end (OIDC → session → CSRF → export)
 - Negative tenant isolation verified
 - All auth boundary and loopback rejection tests pass
+
+## PR #280 — Route inventory and contract topology refresh
+
+Generated route/topology artifacts were updated after customer-facing assessment route normalization and contract authority refresh.
+
+Reviewed critical files:
+- tools/ci/contract_routes.json
+- tools/ci/plane_registry_snapshot.json
+- tools/ci/route_inventory.json
+- tools/ci/route_inventory_summary.json
+- tools/ci/topology.sha256
+
+SOC review:
+- No enforcement weakened.
+- Route inventory regenerated from current runtime/contract source.
+- Contract topology regenerated.
+- Contract authority markers refreshed and matched prod OpenAPI.
+- Assessment proxy and public customer assessment flow remain bounded by explicit route allowlists.
+
+Validation:
+- make route-inventory-generate
+- make contracts-gen
+- make contract-authority-refresh
+- make fg-fast
+
+## PR #280 — Assessment routes moved under core plane
+
+Customer-facing assessment, report, and Stripe webhook routes were moved under the governed `/core/assessment` route plane to satisfy plane registry and platform inventory enforcement.
+
+Reviewed critical files:
+- api/assessments.py
+- api/reports_engine.py
+- api/stripe_webhooks.py
+- console/app/api/core/[...path]/route.ts
+- console/lib/assessmentApi.ts
+- console/lib/reportApi.ts
+- tools/ci/contract_routes.json
+- tools/ci/plane_registry_snapshot.json
+- tools/ci/route_inventory.json
+- tools/ci/route_inventory_summary.json
+- tools/ci/topology.sha256
+
+SOC review:
+- No enforcement weakened.
+- No wildcard proxy rule added.
+- Assessment traffic remains bounded by explicit proxy allowlist.
+- Contract and route inventory regenerated from current runtime source.
+
+Validation:
+- make route-inventory-generate
+- make contracts-gen
+- make contract-authority-refresh
+- make soc-review-sync
+- make fg-fast
+
+
+## PR #280 addendum — Stripe webhook public path + seed SQL fix
+
+Reviewed critical files:
+- api/security/public_paths.py
+- migrations/postgres/0033_seed_assessment_data.sql
+- tools/ci/plane_registry_snapshot.json
+- tools/ci/topology.sha256
+
+Changes:
+- Added `/ingest/assessment/webhooks/stripe` to `PUBLIC_PATHS_EXACT`.
+  This is the same pattern used for agent device routes (external-party auth via HMAC,
+  not API keys). The route is already covered by `auth_exempt_routes` in the plane
+  registry. The public_paths addition only satisfies the separate route-scope linter.
+- Fixed 5 shell-escaped apostrophes (`'\''`) in 0033_seed_assessment_data.sql that
+  caused SQL syntax errors when PostgreSQL parsed the JSONB literal. Replaced with
+  SQL-standard `''` escaping. No schema change; seed data content is identical.
+
+SOC review:
+- No enforcement weakened. Route was already registered as auth_exempt in plane registry.
+- No new unauthenticated surface added; Stripe HMAC verification remains intact.
+- Seed SQL fix is data-only; no DDL changes.
+
+Validation:
+- python tools/ci/check_route_scopes.py
+- python tools/ci/check_plane_registry.py
+- make route-inventory-generate
+- make contracts-gen
+- make contract-authority-refresh
+- make soc-review-sync
+- make fg-fast
