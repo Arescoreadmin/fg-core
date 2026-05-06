@@ -18,6 +18,8 @@
  * TTL: BFF_RATE_LIMIT_WINDOW_S (default 60s)
  */
 
+import Redis from 'ioredis';
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface RateLimitResult {
@@ -175,12 +177,8 @@ export async function buildRateLimitStore(): Promise<
   }
 
   try {
-    // Dynamic import to avoid bundling ioredis in browser chunks.
-    // ioredis is a server-only dependency.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const Redis = require('ioredis') as {
-      new (url: string, options?: Record<string, unknown>): RedisClientInterface;
-    };
+    // ioredis is a server-only dependency — top-level ESM import is safe here
+    // because this file is never imported into browser/client components.
     const client = new Redis(redisUrl, {
       lazyConnect: true,
       connectTimeout: 2000,
@@ -192,7 +190,7 @@ export async function buildRateLimitStore(): Promise<
     // Eagerly test connectivity
     await (client as unknown as { connect(): Promise<void> }).connect();
 
-    return { store: new RedisRateLimitStore(client), unavailable: false };
+    return { store: new RedisRateLimitStore(client as unknown as RedisClientInterface), unavailable: false };
   } catch {
     if (devOrTest) {
       // Dev/test: Redis unavailable → fall back to memory (deterministic)
