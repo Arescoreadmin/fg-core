@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -55,21 +56,26 @@ def _get_max_concurrent_jobs() -> int:
         return 4
 
 
-_REPORT_SEMAPHORE: asyncio.Semaphore | None = None
+_REPORT_SEMAPHORE: threading.BoundedSemaphore | None = None
+_STATUS_LOCK = threading.Lock()
+_queued_count: int = 0
+_running_count: int = 0
 
 
-def _get_semaphore() -> asyncio.Semaphore:
+def _get_semaphore() -> threading.BoundedSemaphore:
     """Return (lazily creating) the module-level concurrency semaphore."""
     global _REPORT_SEMAPHORE
     if _REPORT_SEMAPHORE is None:
-        _REPORT_SEMAPHORE = asyncio.Semaphore(_get_max_concurrent_jobs())
+        _REPORT_SEMAPHORE = threading.BoundedSemaphore(_get_max_concurrent_jobs())
     return _REPORT_SEMAPHORE
 
 
 def _reset_semaphore() -> None:
-    """Reset the module-level semaphore (used in tests to re-initialise capacity)."""
-    global _REPORT_SEMAPHORE
+    """Reset the module-level semaphore and counters (used in tests to re-initialise capacity)."""
+    global _REPORT_SEMAPHORE, _queued_count, _running_count
     _REPORT_SEMAPHORE = None
+    _queued_count = 0
+    _running_count = 0
 
 
 # ─── Queue depth visibility ───────────────────────────────────────────────────
@@ -80,18 +86,19 @@ def get_report_queue_status() -> dict[str, int]:
 
     Keys:
       max_concurrent  — configured slot count
+      running         — jobs currently in generation
+      queued_waiting  — jobs waiting to acquire a slot
       available       — free slots right now (0 means fully saturated)
     """
     max_c = _get_max_concurrent_jobs()
-    sem = _get_semaphore()
-    available = sem._value  # asyncio.Semaphore public counter
-    running = max_c - available
-    queued_waiting = max(0, -sem._value)  # negative when waiters exceed capacity
+    with _STATUS_LOCK:
+        qc = _queued_count
+        rc = _running_count
     return {
         "max_concurrent": max_c,
-        "running": running,
-        "queued_waiting": queued_waiting,
-        "available": available,
+        "running": rc,
+        "queued_waiting": qc,
+        "available": max(0, max_c - rc),
     }
 
 
@@ -253,23 +260,16 @@ def _emit_report_event(
         )
 
 
-async def _generate_report_async(report_id: str) -> None:
-    """
-    Async wrapper that runs blocking report generation in an executor with a
-    configurable timeout.  Acquires the bounded concurrency semaphore before
-    starting so that at most FG_REPORT_MAX_CONCURRENT_JOBS jobs run at once;
-    additional jobs wait in QUEUED state until a slot is free.
-    Called via BackgroundTasks (which runs in an event loop).
-    """
+async def _generate_report_core_async(report_id: str) -> None:
+    """Pure async wrapper — no semaphore; timeout-guarded executor call only."""
     loop = asyncio.get_event_loop()
-    async with _get_semaphore():
-        try:
-            await asyncio.wait_for(
-                loop.run_in_executor(None, _do_generate_report, report_id),
-                timeout=_REPORT_GENERATION_TIMEOUT_S,
-            )
-        except asyncio.TimeoutError:
-            _handle_timeout(report_id)
+    try:
+        await asyncio.wait_for(
+            loop.run_in_executor(None, _do_generate_report, report_id),
+            timeout=_REPORT_GENERATION_TIMEOUT_S,
+        )
+    except asyncio.TimeoutError:
+        _handle_timeout(report_id)
 
 
 def _handle_timeout(report_id: str) -> None:
@@ -481,11 +481,33 @@ def _do_generate_report(report_id: str) -> None:
 
 def _generate_report_sync(report_id: str) -> None:
     """
-    BackgroundTask entry point: runs the async wrapper in an event loop.
-    FastAPI BackgroundTasks do not automatically provide a running loop for
-    synchronous callables, so we bridge via asyncio.run().
+    BackgroundTask entry point: acquires the concurrency semaphore in thread
+    context (loop-safe), manages counters, then drives async generation.
+
+    threading.BoundedSemaphore is used instead of asyncio.Semaphore because
+    _generate_report_sync runs in a BackgroundTask thread while
+    asyncio.run() creates a fresh event loop per call — asyncio.Semaphore
+    waiters registered in one loop cannot be woken by a release from another.
     """
-    asyncio.run(_generate_report_async(report_id))
+    global _queued_count, _running_count
+    sem = _get_semaphore()
+    with _STATUS_LOCK:
+        _queued_count += 1
+    try:
+        sem.acquire()
+    except Exception:
+        with _STATUS_LOCK:
+            _queued_count -= 1
+        raise
+    with _STATUS_LOCK:
+        _queued_count -= 1
+        _running_count += 1
+    try:
+        asyncio.run(_generate_report_core_async(report_id))
+    finally:
+        with _STATUS_LOCK:
+            _running_count -= 1
+        sem.release()
 
 
 # ─── Pydantic schemas ─────────────────────────────────────────────────────────

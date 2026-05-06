@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
+import time
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -151,7 +153,7 @@ class TestSemaphoreHelpers:
         from api.reports_engine import _get_semaphore
 
         sem = _get_semaphore()
-        assert isinstance(sem, asyncio.Semaphore)
+        assert isinstance(sem, threading.BoundedSemaphore)
 
     def test_get_semaphore_is_idempotent(self) -> None:
         from api.reports_engine import _get_semaphore
@@ -185,31 +187,36 @@ class TestReportConcurrencyLimiter:
         max_concurrent = 2
         concurrency_seen: list[int] = []
         running_now = 0
+        counter_lock = threading.Lock()
 
-        async def _fake_generator() -> None:
+        def _work() -> None:
             nonlocal running_now
-            running_now += 1
-            concurrency_seen.append(running_now)
-            await asyncio.sleep(0)  # yield to let other tasks start
-            running_now -= 1
+            with counter_lock:
+                running_now += 1
+                concurrency_seen.append(running_now)
+            time.sleep(0.005)
+            with counter_lock:
+                running_now -= 1
 
-        async def _run() -> None:
-            import api.reports_engine as engine_mod
+        import api.reports_engine as engine_mod
 
-            with patch.dict(
-                os.environ, {"FG_REPORT_MAX_CONCURRENT_JOBS": str(max_concurrent)}
-            ):
-                engine_mod._reset_semaphore()
-                sem = engine_mod._get_semaphore()
+        with patch.dict(os.environ, {"FG_REPORT_MAX_CONCURRENT_JOBS": str(max_concurrent)}):
+            engine_mod._reset_semaphore()
+            sem = engine_mod._get_semaphore()
 
-                async def _bounded():
-                    async with sem:
-                        await _fake_generator()
+            def _bounded() -> None:
+                sem.acquire()
+                try:
+                    _work()
+                finally:
+                    sem.release()
 
-                tasks = [asyncio.create_task(_bounded()) for _ in range(6)]
-                await asyncio.gather(*tasks)
+            threads = [threading.Thread(target=_bounded) for _ in range(6)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
 
-        asyncio.run(_run())
         assert max(concurrency_seen) <= max_concurrent, (
             f"Max observed concurrency {max(concurrency_seen)} exceeded limit {max_concurrent}"
         )
@@ -217,22 +224,29 @@ class TestReportConcurrencyLimiter:
     def test_report_jobs_wait_queued_until_capacity_available(self) -> None:
         """Jobs that cannot immediately acquire the semaphore wait (do not error)."""
         completion_order: list[int] = []
+        order_lock = threading.Lock()
 
-        async def _run() -> None:
-            import api.reports_engine as engine_mod
+        import api.reports_engine as engine_mod
 
-            with patch.dict(os.environ, {"FG_REPORT_MAX_CONCURRENT_JOBS": "1"}):
-                engine_mod._reset_semaphore()
-                sem = engine_mod._get_semaphore()
+        with patch.dict(os.environ, {"FG_REPORT_MAX_CONCURRENT_JOBS": "1"}):
+            engine_mod._reset_semaphore()
+            sem = engine_mod._get_semaphore()
 
-                async def _job(idx: int) -> None:
-                    async with sem:
-                        await asyncio.sleep(0.001)
+            def _job(idx: int) -> None:
+                sem.acquire()
+                try:
+                    time.sleep(0.001)
+                    with order_lock:
                         completion_order.append(idx)
+                finally:
+                    sem.release()
 
-                await asyncio.gather(*[asyncio.create_task(_job(i)) for i in range(4)])
+            threads = [threading.Thread(target=_job, args=(i,)) for i in range(4)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
 
-        asyncio.run(_run())
         # All 4 jobs completed (none was dropped)
         assert sorted(completion_order) == [0, 1, 2, 3]
 
@@ -523,31 +537,37 @@ class TestReportQueueDepth:
             assert status["max_concurrent"] == 3
 
     def test_report_queue_depth_reflects_queued_and_running_jobs(self) -> None:
-        """Available slots decrease as jobs acquire the semaphore."""
+        """Counter-based queue depth reflects running and queued state accurately."""
+        import api.reports_engine as engine_mod
 
-        async def _run() -> None:
-            import api.reports_engine as engine_mod
+        with patch.dict(os.environ, {"FG_REPORT_MAX_CONCURRENT_JOBS": "2"}):
+            engine_mod._reset_semaphore()
 
-            with patch.dict(os.environ, {"FG_REPORT_MAX_CONCURRENT_JOBS": "2"}):
-                engine_mod._reset_semaphore()
-                sem = engine_mod._get_semaphore()
+            # Simulate 1 running job via counters
+            with engine_mod._STATUS_LOCK:
+                engine_mod._running_count = 1
+            status = engine_mod.get_report_queue_status()
+            assert status["running"] == 1
+            assert status["available"] == 1
+            assert status["queued_waiting"] == 0
 
-                # Acquire one slot manually
-                await sem.acquire()
-                status = engine_mod.get_report_queue_status()
-                assert status["running"] == 1
-                assert status["available"] == 1
+            # Simulate fully saturated (2 running)
+            with engine_mod._STATUS_LOCK:
+                engine_mod._running_count = 2
+            status = engine_mod.get_report_queue_status()
+            assert status["running"] == 2
+            assert status["available"] == 0
 
-                # Acquire second slot
-                await sem.acquire()
-                status = engine_mod.get_report_queue_status()
-                assert status["running"] == 2
-                assert status["available"] == 0
+            # Simulate 1 queued waiting + 2 running
+            with engine_mod._STATUS_LOCK:
+                engine_mod._queued_count = 1
+            status = engine_mod.get_report_queue_status()
+            assert status["queued_waiting"] == 1
 
-                sem.release()
-                sem.release()
-
-        asyncio.run(_run())
+            # Cleanup
+            with engine_mod._STATUS_LOCK:
+                engine_mod._running_count = 0
+                engine_mod._queued_count = 0
 
 
 # ---------------------------------------------------------------------------

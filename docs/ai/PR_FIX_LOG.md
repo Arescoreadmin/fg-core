@@ -7234,3 +7234,68 @@ read-only references. No production queue, worker, or endpoint logic is modified
 - `pytest -q tests -k "report or load or queue"` → 102 passed ✓
 - `PYTHONPATH=. python tools/load/report_generation_load.py --jobs 5 --concurrency 2` → JSON output verified ✓
 - `make fg-fast` → All checks passed ✓
+
+---
+
+### 2026-05-06 — PR 7 CI/Review Repair: Loop-Safe Concurrency
+
+**Branch:** `pr/7-report-load-hardening`
+
+**Area:** `api/reports_engine.py`, `tests/test_report_hardening.py`
+
+---
+
+**Baseline evidence (why this repair was needed):**
+
+PR 7 shipped `asyncio.Semaphore` as the bounded concurrency limiter.
+`_generate_report_sync` calls `asyncio.run(_generate_report_async(report_id))`
+which creates a **fresh event loop per BackgroundTask thread**.
+`asyncio.Semaphore` stores its waiter queue inside a specific event loop;
+a `release()` call from loop-A cannot wake a waiter registered in loop-B.
+Under load (more queued jobs than `FG_REPORT_MAX_CONCURRENT_JOBS`), waiting
+jobs would stall indefinitely — never receiving a wakeup signal.
+
+Secondary issue: `get_report_queue_status()` derived `queued_waiting` via
+`max(0, -sem._value)`. `asyncio.Semaphore._value` floors at 0 even when
+waiters are queued, so `queued_waiting` was always 0 under pressure.
+
+**Fix 1 — threading.BoundedSemaphore:**
+
+Replaced `asyncio.Semaphore` with `threading.BoundedSemaphore`.
+`threading.BoundedSemaphore.acquire()` is loop-agnostic: it blocks the
+calling OS thread and is woken by any `release()` call regardless of which
+event loop (or no event loop) is active.
+Semaphore acquisition moved from `_generate_report_async` (async context)
+to `_generate_report_sync` (thread context) where it is correct.
+`_generate_report_async` renamed to `_generate_report_core_async` (pure
+timeout/executor wrapper with no semaphore logic).
+
+**Fix 2 — Explicit threading.Lock-protected counters:**
+
+Replaced `sem._value`-based queue depth with:
+- `_queued_count: int` — jobs waiting to acquire the semaphore
+- `_running_count: int` — jobs actively executing
+- `_STATUS_LOCK = threading.Lock()` — protects both counters
+
+`_generate_report_sync` increments `_queued_count` before `sem.acquire()`,
+decrements it and increments `_running_count` after acquisition, and
+decrements `_running_count` in `finally` after generation completes.
+`get_report_queue_status()` reads both counters under the lock.
+`_reset_semaphore()` resets both counters to 0.
+
+**Test changes:**
+
+- `test_get_semaphore_returns_semaphore`: assertion changed to `threading.BoundedSemaphore`
+- `TestReportConcurrencyLimiter` tests: converted from `asyncio`/`async with sem`
+  to `threading.Thread` + `sem.acquire()/release()`
+- `TestReportQueueDepth.test_report_queue_depth_reflects_queued_and_running_jobs`:
+  replaced asyncio `await sem.acquire()` pattern with direct counter manipulation
+  (`engine_mod._running_count`, `engine_mod._queued_count`) to verify
+  `get_report_queue_status()` returns correct values
+
+**Validation results:**
+
+- `pytest tests/test_report_hardening.py` → all passed ✓
+- `pytest -q tests -k "report or load or queue"` → all passed ✓
+- `python tools/load/report_generation_load.py --jobs 20 --concurrency 5` → metrics verified ✓
+- `make fg-fast` → green ✓
