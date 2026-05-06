@@ -13,6 +13,9 @@ import {
   Clock,
   ArrowRight,
   Zap,
+  CreditCard,
+  FileText,
+  Loader2,
 } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -20,6 +23,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DomainScores } from '@/components/dashboard/DomainScores';
 import { RequestsChart } from '@/components/dashboard/RequestsChart';
+import {
+  getBillingReadiness,
+  getRecentFeedEvents,
+  type BillingReadiness,
+  type FeedItem,
+  type SafeResult,
+  type FeedLiveResponse,
+} from '@/lib/coreApi';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,24 +46,14 @@ interface HealthData {
   service: string;
   version: string;
   status: string;
+  billing?: BillingReadiness;
 }
 
-// ─── Mock chart data (replaced by real API data when available) ───────────────
-
-const MOCK_CHART_DATA = Array.from({ length: 12 }, (_, i) => ({
-  time: `${String(i * 2).padStart(2, '0')}:00`,
-  allowed: Math.floor(Math.random() * 800 + 200),
-  blocked: Math.floor(Math.random() * 80 + 10),
-}));
-
-const MOCK_DOMAIN_SCORES = {
-  data_governance: 42,
-  security_posture: 61,
-  ai_maturity: 35,
-  infra_readiness: 58,
-  compliance_awareness: 47,
-  automation_potential: 72,
-};
+interface ChartPoint {
+  time: string;
+  allowed: number;
+  blocked: number;
+}
 
 // ─── Stat card ────────────────────────────────────────────────────────────────
 
@@ -100,6 +101,178 @@ function StatCard({
   );
 }
 
+// ─── Billing readiness panel ──────────────────────────────────────────────────
+
+function BillingReadinessPanel({
+  loading,
+  result,
+}: {
+  loading: boolean;
+  result: SafeResult<BillingReadiness> | null;
+}) {
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="pt-5">
+          <div className="flex items-center gap-2 text-sm text-muted" aria-label="billing-loading">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading billing status…
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!result) return null;
+
+  if (!result.ok) {
+    return (
+      <Card>
+        <CardContent className="pt-5">
+          <div className="flex items-center gap-2 text-sm text-danger" aria-label="billing-error">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            Billing status unavailable — {result.error}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { provider, ready, reasons } = result.data;
+
+  if (ready) {
+    return (
+      <Card>
+        <CardContent className="pt-5">
+          <div className="flex items-center gap-2 text-sm text-success" aria-label="billing-ready">
+            <CreditCard className="h-4 w-4 shrink-0" />
+            Billing ready — provider: {provider}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardContent className="pt-5">
+        <div className="flex flex-col gap-2" aria-label="billing-not-ready">
+          <div className="flex items-center gap-2 text-sm text-warning">
+            <CreditCard className="h-4 w-4 shrink-0" />
+            Billing not ready — provider: {provider}
+          </div>
+          {reasons.length > 0 && (
+            <ul className="ml-6 space-y-0.5">
+              {reasons.map((r) => (
+                <li key={r} className="text-xs text-muted font-mono">
+                  {r}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Recent events from feed ──────────────────────────────────────────────────
+
+function severityToBadgeVariant(sev?: string | null): 'danger' | 'success' | 'secondary' {
+  const s = (sev || '').toLowerCase();
+  if (s === 'critical' || s === 'high') return 'danger';
+  if (s === 'low') return 'success';
+  return 'secondary';
+}
+
+function feedItemToLabel(item: FeedItem): string {
+  return item.title || item.event_type || 'event';
+}
+
+function feedItemToLevel(item: FeedItem): string {
+  const action = (item.action_taken || '').toLowerCase();
+  if (action === 'blocked' || action === 'block') return 'blocked';
+  const sev = (item.severity || '').toLowerCase();
+  if (sev === 'critical' || sev === 'high') return 'blocked';
+  return item.severity || 'info';
+}
+
+function relativeTime(ts?: string | null): string {
+  if (!ts) return '';
+  try {
+    const diff = Date.now() - new Date(ts).getTime();
+    const mins = Math.floor(diff / 60_000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  } catch {
+    return '';
+  }
+}
+
+function RecentEventsPanel({
+  loading,
+  result,
+}: {
+  loading: boolean;
+  result: SafeResult<FeedLiveResponse> | null;
+}) {
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted py-4" aria-label="events-loading">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading recent events…
+      </div>
+    );
+  }
+
+  if (!result) return null;
+
+  if (!result.ok) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-danger py-2" aria-label="events-error">
+        <AlertTriangle className="h-4 w-4 shrink-0" />
+        Events unavailable — {result.error}
+      </div>
+    );
+  }
+
+  const items = result.data.items;
+
+  if (items.length === 0) {
+    return (
+      <div className="text-sm text-muted py-4 text-center" aria-label="events-empty">
+        No events yet — decisions will appear here once traffic flows through FrostGate.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {items.map((ev) => {
+        const level = feedItemToLevel(ev);
+        return (
+          <div
+            key={ev.id}
+            className="flex items-start gap-3 text-sm py-2 border-b border-border last:border-0"
+          >
+            <Badge
+              variant={severityToBadgeVariant(ev.severity)}
+              className="text-[10px] shrink-0 mt-0.5"
+            >
+              {level}
+            </Badge>
+            <span className="flex-1 text-muted">{feedItemToLabel(ev)}</span>
+            <span className="text-xs text-muted/60 shrink-0">{relativeTime(ev.timestamp)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function DashboardOverviewPage() {
@@ -108,6 +281,18 @@ export default function DashboardOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [coreError, setCoreError] = useState(false);
 
+  const [billingResult, setBillingResult] = useState<SafeResult<BillingReadiness> | null>(null);
+  const [billingLoading, setBillingLoading] = useState(true);
+
+  const [feedResult, setFeedResult] = useState<SafeResult<FeedLiveResponse> | null>(null);
+  const [feedLoading, setFeedLoading] = useState(true);
+
+  // Chart data derived from feed (allowed/blocked per feed batch, placeholder if no data)
+  const [chartData, setChartData] = useState<ChartPoint[]>([]);
+
+  // Domain scores from latest scored assessment (null = not yet available)
+  const [domainScores, setDomainScores] = useState<Record<string, number> | null>(null);
+
   useEffect(() => {
     async function load() {
       try {
@@ -115,7 +300,10 @@ export default function DashboardOverviewPage() {
           fetch('/api/core/health/ready'),
           fetch('/api/core/stats/summary'),
         ]);
-        if (healthRes.ok) setHealth(await healthRes.json());
+        if (healthRes.ok) {
+          const h: HealthData = await healthRes.json();
+          setHealth(h);
+        }
         if (statsRes.ok) setStats(await statsRes.json());
       } catch {
         setCoreError(true);
@@ -126,6 +314,61 @@ export default function DashboardOverviewPage() {
     load();
     const interval = setInterval(load, 30_000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    getBillingReadiness().then((r) => {
+      setBillingResult(r);
+      setBillingLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    getRecentFeedEvents(10).then((r) => {
+      setFeedResult(r);
+      setFeedLoading(false);
+
+      if (r.ok && r.data.items.length > 0) {
+        // Build a compact chart from feed items: group by rounded hour
+        const buckets = new Map<string, { allowed: number; blocked: number }>();
+        for (const item of r.data.items) {
+          if (!item.timestamp) continue;
+          try {
+            const d = new Date(item.timestamp);
+            const key = `${String(d.getHours()).padStart(2, '0')}:00`;
+            const b = buckets.get(key) || { allowed: 0, blocked: 0 };
+            const action = (item.action_taken || '').toLowerCase();
+            if (action === 'blocked' || action === 'block') {
+              b.blocked += 1;
+            } else {
+              b.allowed += 1;
+            }
+            buckets.set(key, b);
+          } catch {
+            // skip malformed timestamp
+          }
+        }
+        const points: ChartPoint[] = Array.from(buckets.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([time, v]) => ({ time, ...v }));
+        if (points.length > 0) setChartData(points);
+      }
+    });
+  }, []);
+
+  // Pull domain scores from the last scored assessment stored in sessionStorage
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem('fg_last_assessment_scores');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object') {
+          setDomainScores(parsed as Record<string, number>);
+        }
+      }
+    } catch {
+      // sessionStorage unavailable or data corrupt — leave null
+    }
   }, []);
 
   const blockRate =
@@ -156,6 +399,7 @@ export default function DashboardOverviewPage() {
                 ? 'border-danger/30 bg-danger/5 text-danger'
                 : 'border-success/30 bg-success/5 text-success'
             }`}
+            aria-label="core-status"
           >
             {coreError ? (
               <>
@@ -171,14 +415,15 @@ export default function DashboardOverviewPage() {
           </div>
         )}
 
+        {/* Billing readiness */}
+        <BillingReadinessPanel loading={billingLoading} result={billingResult} />
+
         {/* Stats row */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             label="Total Requests"
             value={loading ? '—' : (stats?.total_requests ?? 0).toLocaleString()}
             icon={Activity}
-            delta={12}
-            deltaLabel="vs last 24h"
           />
           <StatCard
             label="Blocked"
@@ -206,22 +451,35 @@ export default function DashboardOverviewPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-sm">
                 <TrendingUp className="h-4 w-4 text-primary" />
-                Request Volume (24h)
+                Request Volume (live feed)
               </CardTitle>
-              <CardDescription>Allowed vs. blocked AI requests over time</CardDescription>
+              <CardDescription>Allowed vs. blocked decisions from live feed</CardDescription>
             </CardHeader>
             <CardContent>
-              <RequestsChart data={MOCK_CHART_DATA} />
-              <div className="flex gap-4 mt-2">
-                <span className="flex items-center gap-1.5 text-xs text-muted">
-                  <span className="h-2 w-2 rounded-full bg-success" />
-                  Allowed
-                </span>
-                <span className="flex items-center gap-1.5 text-xs text-muted">
-                  <span className="h-2 w-2 rounded-full bg-danger" />
-                  Blocked
-                </span>
-              </div>
+              {feedLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted py-4" aria-label="chart-loading">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading chart data…
+                </div>
+              ) : chartData.length === 0 ? (
+                <div className="text-sm text-muted py-4 text-center" aria-label="chart-empty">
+                  No traffic data yet — chart will populate as decisions flow through FrostGate.
+                </div>
+              ) : (
+                <>
+                  <RequestsChart data={chartData} />
+                  <div className="flex gap-4 mt-2">
+                    <span className="flex items-center gap-1.5 text-xs text-muted">
+                      <span className="h-2 w-2 rounded-full bg-success" />
+                      Allowed
+                    </span>
+                    <span className="flex items-center gap-1.5 text-xs text-muted">
+                      <span className="h-2 w-2 rounded-full bg-danger" />
+                      Blocked
+                    </span>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -234,7 +492,24 @@ export default function DashboardOverviewPage() {
               <CardDescription>Latest AI governance assessment scores across domains</CardDescription>
             </CardHeader>
             <CardContent>
-              <DomainScores scores={MOCK_DOMAIN_SCORES} />
+              {domainScores ? (
+                <DomainScores scores={domainScores} />
+              ) : (
+                <div
+                  className="flex flex-col items-center gap-3 py-6 text-center"
+                  aria-label="domain-scores-empty"
+                >
+                  <FileText className="h-8 w-8 text-muted/40" />
+                  <p className="text-sm text-muted">
+                    No assessment scores yet.
+                  </p>
+                  <Link href="/onboarding">
+                    <Button size="sm" variant="outline" className="gap-1.5">
+                      <Zap className="h-3.5 w-3.5" /> Run Assessment
+                    </Button>
+                  </Link>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -278,40 +553,17 @@ export default function DashboardOverviewPage() {
           </Link>
         </div>
 
-        {/* Recent events placeholder */}
+        {/* Recent events from live feed */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-sm">
               <Clock className="h-4 w-4 text-primary" />
               Recent Events
             </CardTitle>
+            <CardDescription>Live decision feed from FrostGate core</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {[
-                { msg: 'PHI detected — request blocked before Anthropic boundary', level: 'blocked', time: '2m ago' },
-                { msg: 'Assessment completed — Apex National Bank, score 47/100', level: 'info', time: '18m ago' },
-                { msg: 'New API key issued — tenant: meridian-health', level: 'info', time: '1h ago' },
-                { msg: 'Policy update deployed — hipaa.rego v2.1', level: 'success', time: '3h ago' },
-              ].map((ev, i) => (
-                <div key={i} className="flex items-start gap-3 text-sm py-2 border-b border-border last:border-0">
-                  <Badge
-                    variant={
-                      ev.level === 'blocked'
-                        ? 'danger'
-                        : ev.level === 'success'
-                        ? 'success'
-                        : 'secondary'
-                    }
-                    className="text-[10px] shrink-0 mt-0.5"
-                  >
-                    {ev.level}
-                  </Badge>
-                  <span className="flex-1 text-muted">{ev.msg}</span>
-                  <span className="text-xs text-muted/60 shrink-0">{ev.time}</span>
-                </div>
-              ))}
-            </div>
+            <RecentEventsPanel loading={feedLoading} result={feedResult} />
           </CardContent>
         </Card>
       </div>
