@@ -263,6 +263,12 @@ function AssessmentContent() {
       setFinalScore(result.overall_score);
       setFinalRiskBand(result.risk_band);
       setSubmitted(true);
+      // Persist domain scores so dashboard can display them without a list endpoint.
+      try {
+        sessionStorage.setItem('fg_last_assessment_scores', JSON.stringify(result.domain_scores));
+      } catch {
+        // sessionStorage unavailable — dashboard will show empty state
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Submission failed';
       // 402 = payment not yet confirmed (webhook race condition)

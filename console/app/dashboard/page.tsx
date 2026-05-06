@@ -192,8 +192,6 @@ function feedItemToLabel(item: FeedItem): string {
 function feedItemToLevel(item: FeedItem): string {
   const action = (item.action_taken || '').toLowerCase();
   if (action === 'blocked' || action === 'block') return 'blocked';
-  const sev = (item.severity || '').toLowerCase();
-  if (sev === 'critical' || sev === 'high') return 'blocked';
   return item.severity || 'info';
 }
 
@@ -460,6 +458,11 @@ export default function DashboardOverviewPage() {
                 <div className="flex items-center gap-2 text-sm text-muted py-4" aria-label="chart-loading">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Loading chart data…
+                </div>
+              ) : feedResult && !feedResult.ok ? (
+                <div className="flex items-center gap-2 text-sm text-danger py-4" aria-label="chart-error">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  Chart data unavailable — {feedResult.error}
                 </div>
               ) : chartData.length === 0 ? (
                 <div className="text-sm text-muted py-4 text-center" aria-label="chart-empty">

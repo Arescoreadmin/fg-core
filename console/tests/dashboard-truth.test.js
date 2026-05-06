@@ -183,3 +183,37 @@ test('bff_proxy_allows_health_ready_for_billing_readiness', () => {
   const proxy = read('app/api/core/[...path]/route.ts');
   assert.match(proxy, /health\/ready/);
 });
+
+// ─── Review repair: assessment scores written on submit ───────────────────────
+
+test('assessment_submit_writes_domain_scores_to_session_storage', () => {
+  const page = read('app/assessment/page.tsx');
+  // sessionStorage.setItem must be called with fg_last_assessment_scores after submit
+  assert.match(page, /sessionStorage\.setItem\(['"]fg_last_assessment_scores['"]/);
+  // Written from the actual submit result, not from mock/hardcoded data
+  assert.match(page, /JSON\.stringify\(result\.domain_scores\)/);
+});
+
+// ─── Review repair: feed error differs from empty ────────────────────────────
+
+test('chart_shows_error_state_not_empty_when_feed_fails', () => {
+  const page = read('app/dashboard/page.tsx');
+  // chart-error aria-label must exist and be distinct from chart-empty
+  assert.match(page, /chart-error/);
+  assert.match(page, /Chart data unavailable/);
+  // chart-empty must still exist for the success+empty case
+  assert.match(page, /chart-empty/);
+  // Error path must check feedResult.ok, not just chartData length
+  assert.match(page, /feedResult && !feedResult\.ok/);
+});
+
+// ─── Review repair: blocked label requires explicit action ────────────────────
+
+test('feed_item_blocked_label_requires_explicit_action_not_severity', () => {
+  const page = read('app/dashboard/page.tsx');
+  // feedItemToLevel must only return blocked for explicit action_taken value
+  assert.match(page, /action === 'blocked' \|\| action === 'block'/);
+  // Must NOT map high/critical severity alone to blocked
+  assert.doesNotMatch(page, /sev === 'critical'.*return 'blocked'/);
+  assert.doesNotMatch(page, /sev === 'high'.*return 'blocked'/);
+});
