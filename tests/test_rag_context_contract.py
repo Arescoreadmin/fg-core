@@ -12,7 +12,6 @@ tests/test_rag_context_contract.py — Contract validation for RAG context model
 from __future__ import annotations
 
 import math
-import sys
 
 import pytest
 from pydantic import ValidationError
