@@ -54,9 +54,7 @@ _STABLE_CODES = frozenset(
 )
 
 
-def _make_stripe_sig(
-    payload: bytes, secret: str, timestamp: int | None = None
-) -> str:
+def _make_stripe_sig(payload: bytes, secret: str, timestamp: int | None = None) -> str:
     """Generate a Stripe-compatible v1 signature for testing without network calls."""
     ts = timestamp if timestamp is not None else int(time.time())
     signed = f"{ts}.{payload.decode()}"
@@ -69,8 +67,9 @@ def app(monkeypatch):
     """Build a test app with auth disabled and no real lifespan."""
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", _TEST_SECRET)
     # Stub DB init so the app doesn't require a real DB at import time
-    with patch("api.stripe_webhooks._persist_event"), patch(
-        "api.stripe_webhooks._confirm_payment"
+    with (
+        patch("api.stripe_webhooks._persist_event"),
+        patch("api.stripe_webhooks._confirm_payment"),
     ):
         from api.main import build_app
 
@@ -95,7 +94,9 @@ def _post_webhook(
         headers["Stripe-Signature"] = sig_header
     if extra_headers:
         headers.update(extra_headers)
-    return client.post("/ingest/assessment/webhooks/stripe", content=payload, headers=headers)
+    return client.post(
+        "/ingest/assessment/webhooks/stripe", content=payload, headers=headers
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +112,9 @@ def test_stripe_webhook_rejects_missing_signature(client, monkeypatch):
         return_value=iter([("id", "evt_1"), ("type", "ping"), ("data", {})])
     )
 
-    with patch("stripe.Webhook.construct_event", return_value=mock_event) as mock_construct:
+    with patch(
+        "stripe.Webhook.construct_event", return_value=mock_event
+    ) as mock_construct:
         resp = _post_webhook(client, sig_header=None)
 
     assert resp.status_code == 400, resp.text
@@ -199,9 +202,11 @@ def test_stripe_webhook_accepts_valid_signed_payload(client, monkeypatch):
         )
     )
 
-    with patch("stripe.Webhook.construct_event", return_value=fake_event), patch(
-        "api.stripe_webhooks._persist_event"
-    ), patch("api.stripe_webhooks._confirm_payment"):
+    with (
+        patch("stripe.Webhook.construct_event", return_value=fake_event),
+        patch("api.stripe_webhooks._persist_event"),
+        patch("api.stripe_webhooks._confirm_payment"),
+    ):
         sig = _make_stripe_sig(_TEST_PAYLOAD, _TEST_SECRET)
         resp = _post_webhook(client, sig_header=sig)
 
@@ -251,10 +256,12 @@ def test_stripe_webhook_rejection_emits_audit_event(monkeypatch):
     def _capture_event(event):
         emitted.append(event)
 
-    with patch("stripe.Webhook.construct_event",
-               side_effect=_stripe.error.SignatureVerificationError(
-                   "No signatures found", "t=1,v1=bad"
-               )):
+    with patch(
+        "stripe.Webhook.construct_event",
+        side_effect=_stripe.error.SignatureVerificationError(
+            "No signatures found", "t=1,v1=bad"
+        ),
+    ):
         from api.security_audit import reset_auditor
 
         reset_auditor()
