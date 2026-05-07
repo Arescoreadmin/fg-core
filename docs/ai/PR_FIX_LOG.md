@@ -22,7 +22,15 @@ This log records **completed, intentional fixes**.
 
 **Runtime behavior changed:** no
 
-**Validation results:** [fill in]
+**Validation results:**
+- `FG_ENV=test PYTHONPATH=. .venv/bin/pytest -q tests/test_rag_context_contract.py` → 18 passed
+- `make fg-fast` → All checks passed
+
+#### Codex Review Repair — 2026-05-07
+
+- Root cause: `RagContextResponse.context_count` and `used_retrieval` were plain fields; callers could supply contradictory values (non-empty chunks + `context_count=0`/`used_retrieval=False`)
+- Fix: added `@model_validator(mode="after")` `_derive_counts` that always derives both fields from `chunks` after construction; caller-supplied values are normalised, never trusted
+- Tests added: `test_rag_context_response_empty_chunks_derives_zero_count`, `test_rag_context_response_one_chunk_derives_count_and_flag`, `test_rag_context_response_multiple_chunks_derives_correct_count`, `test_rag_context_response_normalizes_contradictory_caller_values`
 
 ---
 
