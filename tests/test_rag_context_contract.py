@@ -28,13 +28,16 @@ from api.rag_context import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_provenance(**kwargs) -> RagChunkProvenance:
     defaults = dict(corpus_id="corp-1", document_id="doc-1", chunk_id="chunk-1")
     defaults.update(kwargs)
     return RagChunkProvenance(**defaults)
 
 
-def _make_chunk(text: str = "Some text", score: float = 0.9, **prov_kwargs) -> RagContextChunk:
+def _make_chunk(
+    text: str = "Some text", score: float = 0.9, **prov_kwargs
+) -> RagContextChunk:
     return RagContextChunk(
         text=text,
         score=score,
@@ -106,7 +109,9 @@ def test_rag_context_chunk_rejects_non_finite_score():
 
 def test_rag_context_response_serializes_provenance():
     chunk = _make_chunk(corpus_id="corp-x", document_id="doc-x", chunk_id="ck-x")
-    resp = RagContextResponse(query="q", chunks=[chunk], context_count=1, used_retrieval=True)
+    resp = RagContextResponse(
+        query="q", chunks=[chunk], context_count=1, used_retrieval=True
+    )
     dumped = resp.chunks[0].model_dump()
     prov = dumped["provenance"]
     assert prov["corpus_id"] == "corp-x"
@@ -126,7 +131,9 @@ def test_rag_context_response_allows_missing_source_title():
 
 def test_rag_context_response_preserves_chunk_order():
     chunks = [_make_chunk(text=f"chunk {i}", score=float(i) / 10) for i in range(5)]
-    resp = RagContextResponse(query="q", chunks=chunks, context_count=5, used_retrieval=True)
+    resp = RagContextResponse(
+        query="q", chunks=chunks, context_count=5, used_retrieval=True
+    )
     for i, chunk in enumerate(resp.chunks):
         assert chunk.text == f"chunk {i}"
 
@@ -138,7 +145,12 @@ def test_rag_context_response_preserves_chunk_order():
 
 def test_rag_context_schema_has_no_secret_fields():
     forbidden = {"secret", "key", "token", "password"}
-    for model in (RagContextRequest, RagChunkProvenance, RagContextChunk, RagContextResponse):
+    for model in (
+        RagContextRequest,
+        RagChunkProvenance,
+        RagContextChunk,
+        RagContextResponse,
+    ):
         for field_name in model.model_fields:
             assert not any(word in field_name.lower() for word in forbidden), (
                 f"Model {model.__name__} has a field matching a secret keyword: {field_name}"
@@ -147,6 +159,7 @@ def test_rag_context_schema_has_no_secret_fields():
 
 def test_rag_context_contract_does_not_call_retrieval():
     import api.rag_context as rag_mod
+
     # The module must not import any retrieval module at the top level
     for attr_val in vars(rag_mod).values():
         mod_name = getattr(attr_val, "__name__", "") or ""
@@ -155,6 +168,7 @@ def test_rag_context_contract_does_not_call_retrieval():
         )
     # Check that no retrieval module was pulled in via rag_context's own imports
     import importlib
+
     spec = importlib.util.find_spec("api.rag_context")
     assert spec is not None
     # Read the raw source lines (not inspect.getsource which includes docstrings)
@@ -170,6 +184,7 @@ def test_rag_context_contract_does_not_call_retrieval():
 
 def test_rag_context_contract_does_not_touch_persistence():
     import importlib
+
     spec = importlib.util.find_spec("api.rag_context")
     assert spec is not None and spec.origin is not None
     with open(spec.origin) as f:
