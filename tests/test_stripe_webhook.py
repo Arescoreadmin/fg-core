@@ -23,7 +23,7 @@ import hashlib
 import hmac
 import json
 import time
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -34,7 +34,6 @@ from api.stripe_webhooks import (
     STRIPE_WEBHOOK_SIGNATURE_MISSING,
     STRIPE_WEBHOOK_TIMESTAMP_STALE,
     _verify_webhook_signature,
-    WebhookConfigError,
     WebhookSignatureError,
 )
 
@@ -217,8 +216,6 @@ def test_stripe_webhook_accepts_valid_signed_payload(client, monkeypatch):
 
 def test_stripe_webhook_verifies_raw_body(monkeypatch):
     """_verify_webhook_signature passes raw bytes to construct_event."""
-    import stripe as _stripe
-
     payload = b'{"id":"evt_bytes_test","type":"ping"}'
     sig = _make_stripe_sig(payload, _TEST_SECRET)
 
@@ -307,7 +304,6 @@ def test_stripe_webhook_audit_uses_stable_reason_code(monkeypatch):
 
 
 def test_stripe_webhook_audit_does_not_log_payload(monkeypatch):
-    sensitive_body = b'{"secret_customer_data": "pii_value_12345"}'
     emitted: list = []
 
     def _capture_event(event):
