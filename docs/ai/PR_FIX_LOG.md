@@ -6,6 +6,36 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-07 — PR 14 Corpus Persistence MVP
+
+**Branch:** `pr/14-corpus-persistence`
+
+**Area:** `api/rag_corpus_store.py` (new), `api/db.py` (sqlite migration), `migrations/postgres/0035_rag_corpus_persistence.sql` (new), `tests/test_rag_corpus_persistence.py` (new), `docs/ai/RAG_CORPUS_PERSISTENCE.md` (new)
+
+**Purpose:** Add tenant-scoped corpus persistence: `rag_corpora`, `rag_documents`, `rag_chunks` tables with a service-layer store. Persistence only — no retrieval, no embeddings, no vector DB, no AI changes.
+
+**Schema fields added:**
+- `rag_corpora`: corpus_id, tenant_id, name, description, metadata, created_at, updated_at
+- `rag_documents`: document_id, corpus_id, tenant_id, title, source, metadata, created_at, updated_at
+- `rag_chunks`: chunk_id, document_id, corpus_id, tenant_id, text, ordinal, metadata, created_at
+
+**Tenant isolation:**
+- Every function raises `ValueError` for blank/None tenant_id
+- Every query filters by `tenant_id`
+- `create_document` / `store_chunks` verify ownership before insert
+- `get_corpus` / `get_document` return `None` for cross-tenant reads (no enumeration leak)
+
+**Runtime behavior changed:** no
+
+**Validation results:**
+- `FG_ENV=test PYTHONPATH=. .venv/bin/pytest -q tests/test_rag_corpus_persistence.py` → 18 passed
+- `FG_ENV=test PYTHONPATH=. .venv/bin/pytest -q tests/test_rag_context_contract.py` → 18 passed
+- `FG_ENV=test PYTHONPATH=. .venv/bin/python tools/ci/check_rag_stub_references.py` → exit 0
+- `FG_ENV=test PYTHONPATH=. .venv/bin/pytest -q tests -k "corpus or document or chunk or tenant"` → all passed
+- `make fg-fast` → All checks passed
+
+---
+
 ### 2026-05-07 — PR 13 Post-Merge Repair (mypy + mako)
 
 **Branch:** `pr/13-post-merge-repair`
