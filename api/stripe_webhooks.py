@@ -74,7 +74,7 @@ def _verify_webhook_signature(
     raw_body: bytes,
     sig_header: str | None,
     secret: str | None,
-) -> object:
+) -> dict:
     """Verify a Stripe webhook signature.
 
     Args:
@@ -83,7 +83,7 @@ def _verify_webhook_signature(
         secret:     STRIPE_WEBHOOK_SECRET value.
 
     Returns:
-        A stripe.Event object on success.
+        The stripe.Event as a dict on success.
 
     Raises:
         WebhookConfigError:    STRIPE_WEBHOOK_SECRET_NOT_CONFIGURED when secret absent.
@@ -104,7 +104,7 @@ def _verify_webhook_signature(
             sig_header=sig_header,
             secret=secret,
         )
-        return event
+        return dict(event)
     except stripe.error.SignatureVerificationError as exc:
         if "timestamp" in str(exc).lower():
             raise WebhookSignatureError(STRIPE_WEBHOOK_TIMESTAMP_STALE) from exc
@@ -170,11 +170,10 @@ async def stripe_webhook(request: Request):
             detail=exc.reason_code,
         )
 
-    event_dict = dict(event)
-    _persist_event(event_dict)
+    _persist_event(event)
 
-    if event_dict.get("type") == "checkout.session.completed":
-        session = event_dict.get("data", {}).get("object", {})
+    if event.get("type") == "checkout.session.completed":
+        session = event.get("data", {}).get("object", {})
         assessment_id = session.get("metadata", {}).get("assessment_id")
         if assessment_id:
             _confirm_payment(assessment_id, session.get("id", ""))
