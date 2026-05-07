@@ -1,3 +1,37 @@
+## 2026-05-07 — PR 12: RAG Stub Removal Inventory
+
+Reviewed critical files:
+- tools/ci/check_rag_stub_references.py
+
+Changes:
+- `tools/ci/check_rag_stub_references.py`: New visibility-only script that greps for
+  rag_stub references and prints a report. Always exits 0 — no enforcement, no gate.
+  Not wired into any CI enforcer. Pure observability aid for stub removal planning.
+
+SOC review:
+- No security enforcement changed or weakened.
+- Script is read-only: subprocess.run with grep, no write operations.
+- Always exits 0 — cannot block CI or hide failures.
+- Does not access secrets, credentials, or sensitive paths.
+- Consistent with existing visibility scripts in tools/ci/.
+
+Validation:
+- pytest tests/test_rag_stub_inventory_complete.py → 8 passed
+- make fg-fast → All checks passed
+
+#### Codex Review Repair — 2026-05-07
+
+- `tools/ci/check_rag_stub_references.py`: Added `--include=*.sql` to grep
+  patterns so SQL migration files are no longer silently excluded from the
+  visibility scan. No enforcement change — script remains always-exit-0.
+- Added `_HISTORICAL_ALLOWLIST` dict documenting the known SQL migration
+  reference (`migrations/postgres/0017_ai_plane_policy_hardening.sql`) as
+  intentional and immutable history — not a scan gap.
+- SOC review: change is purely additive to scan scope; no security enforcement
+  added, removed, or weakened. The allowlist is documentation only.
+
+---
+
 ## 2026-05-07 — PR 10: Admin OIDC Production Enforcement
 
 Reviewed critical files:
