@@ -407,6 +407,82 @@ def test_blank_chunk_text_rejected(db_session):
         )
 
 
+def test_store_chunks_rejects_corpus_document_mismatch(db_session):
+    """Chunks must not be stored when corpus_id disagrees with the document's actual corpus."""
+    from api.rag_corpus_store import (
+        create_corpus,
+        create_document,
+        list_chunks,
+        store_chunks,
+    )
+
+    corpus_a = create_corpus(db_session, tenant_id="tenant-mismatch", name="Corpus A")
+    corpus_b = create_corpus(db_session, tenant_id="tenant-mismatch", name="Corpus B")
+    doc_a = create_document(
+        db_session,
+        tenant_id="tenant-mismatch",
+        corpus_id=corpus_a["corpus_id"],
+        title="Doc in Corpus A",
+    )
+
+    # Pass corpus_b's id but doc_a belongs to corpus_a — must be rejected.
+    with pytest.raises(ValueError):
+        store_chunks(
+            db_session,
+            tenant_id="tenant-mismatch",
+            document_id=doc_a["document_id"],
+            corpus_id=corpus_b["corpus_id"],
+            chunks=[{"text": "misattributed chunk", "ordinal": 0}],
+        )
+
+    # Confirm zero chunks were inserted for either corpus.
+    assert (
+        list_chunks(
+            db_session, tenant_id="tenant-mismatch", document_id=doc_a["document_id"]
+        )
+        == []
+    )
+
+
+def test_invalid_chunk_in_batch_inserts_zero_chunks(db_session):
+    """If any chunk in a batch is invalid, no chunk from that batch is persisted."""
+    from api.rag_corpus_store import (
+        create_corpus,
+        create_document,
+        list_chunks,
+        store_chunks,
+    )
+
+    corpus = create_corpus(db_session, tenant_id="tenant-partial", name="Partial")
+    doc = create_document(
+        db_session,
+        tenant_id="tenant-partial",
+        corpus_id=corpus["corpus_id"],
+        title="Partial Batch Doc",
+    )
+
+    # First chunk is valid; second chunk has blank text — whole batch must be rejected.
+    with pytest.raises(ValueError, match="blank"):
+        store_chunks(
+            db_session,
+            tenant_id="tenant-partial",
+            document_id=doc["document_id"],
+            corpus_id=corpus["corpus_id"],
+            chunks=[
+                {"text": "valid chunk", "ordinal": 0},
+                {"text": "   ", "ordinal": 1},
+            ],
+        )
+
+    # No chunks should have been persisted.
+    assert (
+        list_chunks(
+            db_session, tenant_id="tenant-partial", document_id=doc["document_id"]
+        )
+        == []
+    )
+
+
 def test_corpus_persistence_does_not_call_retrieval(db_session):
     """
     api.rag_corpus_store must not import any retrieval module.

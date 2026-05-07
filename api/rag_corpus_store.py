@@ -390,30 +390,45 @@ def store_chunks(
     """
     tid = _require_tenant(tenant_id)
 
-    # Verify document ownership before inserting chunks.
+    # Verify document ownership using all three identifiers — tenant_id, corpus_id,
+    # and document_id — so a caller cannot store chunks against a valid document_id
+    # that belongs to a different corpus_id owned by the same tenant.
     doc_row = conn.execute(
         text(
             "SELECT document_id FROM rag_documents "
-            "WHERE document_id = :document_id AND tenant_id = :tenant_id"
+            "WHERE document_id = :document_id "
+            "  AND corpus_id   = :corpus_id "
+            "  AND tenant_id   = :tenant_id"
         ),
-        {"document_id": document_id, "tenant_id": tid},
+        {"document_id": document_id, "corpus_id": corpus_id, "tenant_id": tid},
     ).fetchone()
     if doc_row is None:
-        raise ValueError(f"document_id={document_id!r} not found for tenant_id={tid!r}")
+        raise ValueError(
+            f"document_id={document_id!r} not found for "
+            f"tenant_id={tid!r} / corpus_id={corpus_id!r}"
+        )
 
+    # Pre-validate the entire batch before any insert so that a bad chunk later
+    # in the list cannot leave earlier chunks partially persisted.
     now = _utc_now_iso()
-    persisted: list[dict[str, Any]] = []
-
+    validated: list[dict[str, Any]] = []
     for chunk in chunks:
         text_val = chunk.get("text") or ""
         if not str(text_val).strip():
             raise ValueError("chunk text must not be blank")
+        validated.append(
+            {
+                "chunk_id": _new_id("ck"),
+                "text": str(text_val).strip(),
+                "ordinal": int(chunk["ordinal"]),
+                "metadata": chunk.get("metadata"),
+            }
+        )
 
-        ordinal = int(chunk["ordinal"])
-        metadata = chunk.get("metadata")
-        chunk_id = _new_id("ck")
-        meta_str = _encode_metadata(metadata)
-
+    # All chunks valid — insert in a single pass.
+    persisted: list[dict[str, Any]] = []
+    for v in validated:
+        meta_str = _encode_metadata(v["metadata"])
         conn.execute(
             text(
                 """
@@ -424,25 +439,25 @@ def store_chunks(
                 """
             ),
             {
-                "chunk_id": chunk_id,
+                "chunk_id": v["chunk_id"],
                 "document_id": document_id,
                 "corpus_id": corpus_id,
                 "tenant_id": tid,
-                "text": str(text_val).strip(),
-                "ordinal": ordinal,
+                "text": v["text"],
+                "ordinal": v["ordinal"],
                 "metadata": meta_str,
                 "created_at": now,
             },
         )
         persisted.append(
             {
-                "chunk_id": chunk_id,
+                "chunk_id": v["chunk_id"],
                 "document_id": document_id,
                 "corpus_id": corpus_id,
                 "tenant_id": tid,
-                "text": str(text_val).strip(),
-                "ordinal": ordinal,
-                "metadata": metadata,
+                "text": v["text"],
+                "ordinal": v["ordinal"],
+                "metadata": v["metadata"],
                 "created_at": now,
             }
         )
