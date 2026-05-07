@@ -7352,3 +7352,63 @@ decrements `_running_count` in `finally` after generation completes.
 - `pytest -q tests -k "rate or redis or bff"` → 64 passed ✓
 - `make fg-fast` → green ✓
 - `git diff --check` → no whitespace errors ✓
+
+---
+
+### 2026-05-06 — PR 9 BFF Rate-Limit Production Enforcement
+
+**Branch:** `pr/9-bff-rate-limit-prod-enforcement`
+
+**Area:** console/lib/rateLimitStore.ts, console/app/api/core/[...path]/route.ts, console/app/api/health/route.ts, console/tests/bff-rate-limit-prod.test.js, console/tests/bff-rate-limit.test.js, console/.env.example
+
+**Purpose:** Enforce production-safe BFF rate limiting: require explicit Redis config in prod-like environments, fail closed with deterministic error codes when Redis is required but unavailable, and expose BFF rate-limit readiness in the health endpoint.
+
+**Files changed:**
+
+- `console/lib/rateLimitStore.ts` — added `BffRateLimitErrorCode` type; added `isBffRedisUrlMissingOrPlaceholder()` export (rejects missing/blank/CHANGE_ME URLs); updated `buildRateLimitStore()` return type to include `{ errorCode, required }` on unavailable path; added distinct `BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED` error for missing/placeholder URL vs `BFF_RATE_LIMIT_REDIS_UNAVAILABLE` for unreachable Redis; memory backend rejected in prod-like env
+- `console/app/api/core/[...path]/route.ts` — `enforceRateLimit()` now uses `storeResult.errorCode` in the 503 response body (dynamic pass-through instead of hardcoded string)
+- `console/app/api/health/route.ts` — extended to include `rateLimit: { backend, ready, required, reason }` (never includes Redis URL)
+- `console/tests/bff-rate-limit-prod.test.js` — new: 16 prod enforcement tests
+- `console/tests/bff-rate-limit.test.js` — updated `redis_outage_does_not_fail_open_in_prod` to assert `storeResult.errorCode` pass-through (error codes now live in rateLimitStore.ts)
+- `console/.env.example` — expanded prod/staging enforcement docs; CHANGE_ME placeholder rejection documented
+
+**Prod-like Redis config enforcement proof:**
+
+- `isBffRedisUrlMissingOrPlaceholder()` returns true for: undefined, empty string, whitespace-only, any value starting with `CHANGE_ME` (case-insensitive)
+- In `buildRateLimitStore()`: when `isDevOrTestEnv()` is false and URL is missing/placeholder → returns `{ store: null, unavailable: true, errorCode: 'BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED', required: true }`
+- Tests `prod_requires_bff_redis_url_for_rate_limit`, `staging_requires_bff_redis_url_for_rate_limit`, `blank_bff_redis_url_is_rejected`, `change_me_bff_redis_url_is_rejected` verify all rejection paths
+
+**Memory fallback boundary proof:**
+
+- Memory fallback only available when `isDevOrTestEnv()` is true
+- Explicit `BFF_RATE_LIMIT_BACKEND=memory` in prod-like env → `BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED` (not silently accepted)
+- Tests `memory_fallback_allowed_in_test` and `memory_fallback_rejected_in_prod` verify the boundary
+
+**Redis unavailable fail-closed proof:**
+
+- Valid URL in prod-like env but Redis unreachable → `{ store: null, unavailable: true, errorCode: 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE', required: true }`
+- Route returns HTTP 503 with `{ error: storeResult.errorCode }` — no pass-through, no silent 200
+- Test `redis_unavailable_in_prod_returns_stable_error` verifies deterministic error code
+
+**Readiness proof:**
+
+- `GET /api/health` now returns `{ rateLimit: { backend, ready, required, reason } }`
+- `ready: false` + `reason: 'BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED'` when URL missing in prod
+- `ready: false` + `reason: 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE'` when Redis unreachable in prod
+- `ready: true` + `reason: null` when store is healthy
+- Never includes Redis URL; tests `readiness_does_not_expose_redis_url` and `readiness_reports_rate_limit_ready` verify
+
+**Secret-safety proof:**
+
+- `BFF_REDIS_URL` accessed only via `process.env` in `rateLimitStore.ts` (server-only module)
+- Health route does not reference `BFF_REDIS_URL`; no `NEXT_PUBLIC_*` vars in any changed file
+- Test `client_bundle_does_not_reference_redis_config` verifies absence of `NEXT_PUBLIC_REDIS*` in all relevant sources
+
+**Validation results:**
+
+- `cd console && npm test` → 64 passed, 0 failed ✓
+- `pytest -q tests -k "rate or redis or required_env or readiness"` → 123 passed ✓
+- `cd console && npm run lint` → no ESLint warnings or errors ✓
+- `cd console && npm run build` → build succeeded ✓
+- `make fg-fast` → green ✓
+- `git diff --check` → no whitespace errors ✓

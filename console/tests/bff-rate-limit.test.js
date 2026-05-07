@@ -233,9 +233,11 @@ test('redis_outage_uses_memory_fallback_in_test', async () => {
 // ─── Test 7: redis_outage_does_not_fail_open_in_prod ─────────────────────────
 
 test('redis_outage_does_not_fail_open_in_prod', () => {
-  // Verify that the route source code returns 503 BFF_RATE_LIMIT_REDIS_UNAVAILABLE
-  // when storeResult.unavailable is true — not 200 or a silent pass.
+  // Verify that the route source code returns 503 when storeResult.unavailable
+  // is true — not 200 or a silent pass. Error codes are defined in rateLimitStore.ts
+  // and passed through dynamically via storeResult.errorCode.
   const routeSrc = read('app/api/core/[...path]/route.ts');
+  const rateLimitSrc = read('lib/rateLimitStore.ts');
 
   // The route must check storeResult.unavailable
   assert.match(routeSrc, /storeResult\.unavailable/);
@@ -243,8 +245,12 @@ test('redis_outage_does_not_fail_open_in_prod', () => {
   // The route must return 503
   assert.match(routeSrc, /status:\s*503/);
 
-  // The stable error code must be present
-  assert.match(routeSrc, /BFF_RATE_LIMIT_REDIS_UNAVAILABLE/);
+  // The route must pass through the errorCode from the store result (not hardcode it)
+  assert.match(routeSrc, /storeResult\.errorCode/);
+
+  // The stable error codes must be defined in rateLimitStore.ts
+  assert.match(rateLimitSrc, /BFF_RATE_LIMIT_REDIS_UNAVAILABLE/);
+  assert.match(rateLimitSrc, /BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED/);
 
   // The route must NOT silently pass (no early return before unavailable check)
   // Verify the unavailable branch returns explicitly (no fall-through)
