@@ -6,6 +6,37 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-07 — PR 13 Post-Merge Repair (mypy + mako)
+
+**Branch:** `pr/13-post-merge-repair`
+
+**Area:** tests/test_rag_context_contract.py (mypy fix), constraints.txt (security pin)
+
+**Purpose:** Fix codex_gates.sh mypy failure from untyped dict helpers; patch mako CVE GHSA-2h4p-vjrc-8xpq
+
+**Mypy fix:**
+- Root cause: `_make_provenance` used `dict[str, str]` defaults + `**kwargs` unpacking; mypy saw `**dict[str, str]` as incompatible with `RagChunkProvenance.page: int | None`
+- Fix (Option B): replaced `**kwargs` dict-merge pattern in `_make_provenance` and `_make_chunk` with explicit typed keyword arguments; helpers now directly construct `RagChunkProvenance` with proper types
+- No logic changes; all 18 test assertions preserved
+
+**Mako security patch:**
+- Vulnerability: GHSA-2h4p-vjrc-8xpq, fixed in mako 1.3.12
+- mako is a transitive dep of `alembic==1.11.1`; not directly in requirements.txt
+- Pinned `mako==1.3.12` in `constraints.txt` (applied via `-c constraints.txt` in all `pip install` invocations per Makefile)
+- Only mako itself changed; MarkupSafe already satisfied; no transitive churn
+
+**Runtime behavior changed:** no
+
+**Validation results:**
+- `pytest -q tests/test_rag_context_contract.py` → 18 passed
+- `pytest -q tests -k "rag or context or schema or ai"` → 948 passed, 3 skipped
+- `mypy .` → Success: no issues found in 841 source files
+- `python tools/ci/check_rag_stub_references.py` → exits 0
+- `make fg-fast` → All checks passed
+- `bash codex_gates.sh` → All gates passed
+
+---
+
 ### 2026-05-07 — PR 13 RAG Context Contract
 
 **Branch:** `pr/13-rag-context-contract`
