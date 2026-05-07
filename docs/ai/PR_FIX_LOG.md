@@ -6,6 +6,26 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-07 — PR 13 RAG Context Contract
+
+**Branch:** `pr/13-rag-context-contract`
+
+**Area:** api/rag_context.py (new), tests/test_rag_context_contract.py (new), docs/ai/RAG_CONTEXT_CONTRACT.md (new)
+
+**Purpose:** Define typed RagContextRequest/RagContextChunk/RagContextResponse models for future retrieval wiring. No retrieval implementation.
+
+**Schema fields added:**
+- RagContextRequest: query, tenant_id, corpus_ids, top_k
+- RagChunkProvenance: corpus_id, document_id, chunk_id, source, title, uri, page
+- RagContextChunk: text, score, provenance
+- RagContextResponse: query, chunks, context_count, used_retrieval
+
+**Runtime behavior changed:** no
+
+**Validation results:** [fill in]
+
+---
+
 ### 2026-05-07 — PR 11 Stripe Webhook Validation Hardening
 
 **Branch:** `pr/11-stripe-webhook-hardening`
