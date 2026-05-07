@@ -19,6 +19,9 @@ _VALID_PROD_ENV: dict[str, str] = {
     "STRIPE_SECRET_KEY": "test-stripe-secret-key",
     "STRIPE_WEBHOOK_SECRET": "test-stripe-webhook-secret",
     "FG_ANTHROPIC_API_KEY": "test-anthropic-api-key",
+    # Admin gateway OIDC enforcement — required in prod/staging.
+    "FG_OIDC_ISSUER": "https://oidc.example.com",
+    "FG_DEV_AUTH_BYPASS": "0",
 }
 
 
@@ -94,6 +97,8 @@ def test_prod_invariants_allow_enforcement_mode_enforce(fg_env: str) -> None:
             "STRIPE_SECRET_KEY": "test-stripe-secret-key",
             "STRIPE_WEBHOOK_SECRET": "test-stripe-webhook-secret",
             "FG_ANTHROPIC_API_KEY": "test-anthropic-api-key",
+            "FG_OIDC_ISSUER": "https://oidc.example.com",
+            "FG_DEV_AUTH_BYPASS": "0",
         }
     )
 
@@ -160,3 +165,92 @@ def test_auth_disabled_prod_error_message_is_stable() -> None:
     with pytest.raises(ProdInvariantViolation) as exc:
         assert_prod_invariants(env)
     assert "AUTH_DISABLED_IN_PROD" in str(exc.value)
+
+
+# ---------------------------------------------------------------------------
+# Admin OIDC / dev-auth enforcement tests (FG-PROD-008, FG-PROD-009)
+# ---------------------------------------------------------------------------
+
+
+def test_dev_allows_admin_dev_mode_for_local_config() -> None:
+    """Dev environment must not raise when FG_DEV_AUTH_BYPASS is enabled."""
+    assert_prod_invariants({"FG_ENV": "dev", "FG_DEV_AUTH_BYPASS": "true"})
+
+
+def test_prod_rejects_admin_dev_mode() -> None:
+    """Prod must raise FG-PROD-008 when FG_DEV_AUTH_BYPASS is enabled."""
+    env = {**_VALID_PROD_ENV, "FG_ENV": "prod", "FG_DEV_AUTH_BYPASS": "true"}
+    with pytest.raises(ProdInvariantViolation) as exc:
+        assert_prod_invariants(env)
+    assert exc.value.code == "FG-PROD-008"
+
+
+def test_staging_rejects_admin_dev_mode() -> None:
+    """Staging must raise FG-PROD-008 when FG_DEV_AUTH_BYPASS is enabled."""
+    env = {**_VALID_PROD_ENV, "FG_ENV": "staging", "FG_DEV_AUTH_BYPASS": "true"}
+    with pytest.raises(ProdInvariantViolation) as exc:
+        assert_prod_invariants(env)
+    assert exc.value.code == "FG-PROD-008"
+
+
+def test_prod_requires_admin_oidc_config() -> None:
+    """Prod must raise FG-PROD-009 when FG_OIDC_ISSUER is missing."""
+    env = {**_VALID_PROD_ENV, "FG_ENV": "prod", "FG_OIDC_ISSUER": ""}
+    with pytest.raises(ProdInvariantViolation) as exc:
+        assert_prod_invariants(env)
+    assert exc.value.code == "FG-PROD-009"
+
+
+def test_staging_requires_admin_oidc_config() -> None:
+    """Staging must raise FG-PROD-009 when FG_OIDC_ISSUER is missing."""
+    env = {**_VALID_PROD_ENV, "FG_ENV": "staging", "FG_OIDC_ISSUER": ""}
+    with pytest.raises(ProdInvariantViolation) as exc:
+        assert_prod_invariants(env)
+    assert exc.value.code == "FG-PROD-009"
+
+
+def test_blank_admin_oidc_config_is_rejected() -> None:
+    """Blank FG_OIDC_ISSUER must be rejected in prod (FG-PROD-009)."""
+    env = {**_VALID_PROD_ENV, "FG_ENV": "prod", "FG_OIDC_ISSUER": "   "}
+    with pytest.raises(ProdInvariantViolation) as exc:
+        assert_prod_invariants(env)
+    assert exc.value.code == "FG-PROD-009"
+
+
+def test_change_me_admin_oidc_config_is_rejected() -> None:
+    """CHANGE_ME placeholder in FG_OIDC_ISSUER must be rejected in prod (FG-PROD-009)."""
+    env = {
+        **_VALID_PROD_ENV,
+        "FG_ENV": "prod",
+        "FG_OIDC_ISSUER": "CHANGE_ME_OIDC_ISSUER",
+    }
+    with pytest.raises(ProdInvariantViolation) as exc:
+        assert_prod_invariants(env)
+    assert exc.value.code == "FG-PROD-009"
+
+
+def test_valid_prod_admin_oidc_config_passes() -> None:
+    """Valid FG_OIDC_ISSUER with dev-bypass off must not raise in prod."""
+    env = {
+        **_VALID_PROD_ENV,
+        "FG_ENV": "prod",
+        "FG_OIDC_ISSUER": "https://auth.example.com",
+        "FG_DEV_AUTH_BYPASS": "0",
+    }
+    assert_prod_invariants(env)
+
+
+def test_admin_dev_auth_forbidden_error_message_is_stable() -> None:
+    """Error message must contain ADMIN_DEV_AUTH_FORBIDDEN_IN_PROD for stable alerting."""
+    env = {**_VALID_PROD_ENV, "FG_ENV": "prod", "FG_DEV_AUTH_BYPASS": "true"}
+    with pytest.raises(ProdInvariantViolation) as exc:
+        assert_prod_invariants(env)
+    assert "ADMIN_DEV_AUTH_FORBIDDEN_IN_PROD" in str(exc.value)
+
+
+def test_admin_oidc_required_error_message_is_stable() -> None:
+    """Error message must contain ADMIN_OIDC_CONFIG_REQUIRED for stable alerting."""
+    env = {**_VALID_PROD_ENV, "FG_ENV": "prod", "FG_OIDC_ISSUER": ""}
+    with pytest.raises(ProdInvariantViolation) as exc:
+        assert_prod_invariants(env)
+    assert "ADMIN_OIDC_CONFIG_REQUIRED" in str(exc.value)

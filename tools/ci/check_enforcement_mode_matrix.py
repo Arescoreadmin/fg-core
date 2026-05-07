@@ -29,6 +29,9 @@ def run_case(env_name: str, mode: str) -> tuple[int, str]:
     env["STRIPE_SECRET_KEY"] = "test-stripe-secret-key"
     env["STRIPE_WEBHOOK_SECRET"] = "test-stripe-webhook-secret"
     env["FG_ANTHROPIC_API_KEY"] = "test-anthropic-api-key"
+    # Admin gateway OIDC enforcement — required in prod/staging.
+    env["FG_OIDC_ISSUER"] = "https://oidc.example.com"
+    env["FG_DEV_AUTH_BYPASS"] = "0"
     if mode:
         env["FG_ENFORCEMENT_MODE"] = mode
     else:

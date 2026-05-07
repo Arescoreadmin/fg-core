@@ -38,6 +38,9 @@ _VALID_PROD_ENV: dict[str, str] = {
     "STRIPE_SECRET_KEY": "test-stripe-secret-key",
     "STRIPE_WEBHOOK_SECRET": "test-stripe-webhook-secret",
     "FG_ANTHROPIC_API_KEY": "test-anthropic-api-key",
+    # Admin gateway OIDC enforcement — required in prod/staging.
+    "FG_OIDC_ISSUER": "https://oidc.example.com",
+    "FG_DEV_AUTH_BYPASS": "0",
 }
 
 

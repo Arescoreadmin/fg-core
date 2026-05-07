@@ -218,6 +218,7 @@ jobs:
           FG_DB_MIGRATIONS_REQUIRED=1
           FG_DB_MIGRATIONS_RISK_ACCEPTED=0
 
+          FG_OIDC_ISSUER=https://ci-oidc-issuer.example.com
           FG_OIDC_SCOPES=openid profile email
           FG_AUTH_ALLOW_FALLBACK=false
 
@@ -288,6 +289,7 @@ jobs:
           FG_DB_MIGRATIONS_REQUIRED=1
           FG_DB_MIGRATIONS_RISK_ACCEPTED=0
 
+          FG_OIDC_ISSUER=https://ci-oidc-issuer.example.com
           FG_OIDC_SCOPES=openid profile email
           FG_AUTH_ALLOW_FALLBACK=false
 

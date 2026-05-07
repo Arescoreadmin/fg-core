@@ -78,5 +78,21 @@ def assert_prod_invariants(settings: Mapping[str, str] | None = None) -> None:
             "FG-PROD-007", "FG_ENFORCEMENT_MODE must be enforce in prod/staging"
         )
 
+    # Admin gateway: dev-auth bypass is forbidden in prod/staging.
+    _raw_dev_bypass = (env.get("FG_DEV_AUTH_BYPASS") or "").strip().lower()
+    if _raw_dev_bypass in _TRUE:
+        raise ProdInvariantViolation(
+            "FG-PROD-008",
+            "ADMIN_DEV_AUTH_FORBIDDEN_IN_PROD: FG_DEV_AUTH_BYPASS must be disabled in prod/staging",
+        )
+
+    # Admin gateway: real OIDC issuer is required in prod/staging.
+    _oidc_issuer = (env.get("FG_OIDC_ISSUER") or "").strip()
+    if not _oidc_issuer or _oidc_issuer.startswith("CHANGE_ME"):
+        raise ProdInvariantViolation(
+            "FG-PROD-009",
+            "ADMIN_OIDC_CONFIG_REQUIRED: FG_OIDC_ISSUER must be set to a real value in prod/staging",
+        )
+
     # Enforce the shared required-env list (single source of truth).
     enforce_required_env(env)

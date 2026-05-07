@@ -1,3 +1,47 @@
+## 2026-05-07 — PR 10: Admin OIDC Production Enforcement
+
+Reviewed critical files:
+- .github/workflows/docker-ci.yml
+- admin_gateway/auth/config.py
+- api/config/prod_invariants.py
+- tools/ci/check_soc_invariants.py
+- tools/ci/check_enforcement_mode_matrix.py
+- tests/security/test_prod_invariants.py
+- tests/security/test_required_env_enforcement.py
+- tests/test_dependency_fail_closed.py
+- env/prod.env
+
+Changes:
+- `api/config/prod_invariants.py`: Added FG-PROD-008 (ADMIN_DEV_AUTH_FORBIDDEN_IN_PROD) and
+  FG-PROD-009 (ADMIN_OIDC_CONFIG_REQUIRED) checks. Prod/staging now fail closed if
+  FG_DEV_AUTH_BYPASS is enabled or FG_OIDC_ISSUER is missing/CHANGE_ME placeholder.
+- `admin_gateway/auth/config.py`: Extended `validate()` to use `is_prod_like` (covers staging)
+  for OIDC enforcement, added CHANGE_ME placeholder rejection, and stable error code prefixes.
+  `enforce_prod_auth_safety()` now also enforces OIDC issuer presence in prod/staging at
+  import time, skipped only during contract generation (AG_CONTRACTS_GEN/FG_CONTRACTS_GEN=1).
+- `admin_gateway/main.py`: `_filter_contract_ctx_config_errors()` updated to also filter
+  ADMIN_OIDC_CONFIG_REQUIRED errors in contract generation context.
+- CI/test fixture dicts updated to include FG_OIDC_ISSUER and FG_DEV_AUTH_BYPASS in
+  valid-prod-env fixtures so existing tests continue to pass against stricter enforcement.
+- `env/prod.env`: Added FG_OIDC_ISSUER=CHANGE_ME_FG_OIDC_ISSUER (must be rotated before deploy).
+- `.github/workflows/docker-ci.yml`: Added FG_OIDC_ISSUER=https://ci-oidc-issuer.example.com
+  to both .env.ci and env/prod.env heredocs (safe CI placeholder, not a real secret).
+
+SOC review:
+- No enforcement weakened. Admin dev auth and OIDC config now fail closed in prod/staging.
+- Staging previously missed OIDC enforcement (only `is_prod` was checked); now `is_prod_like`.
+- No real OIDC secrets added. CI uses a clearly synthetic placeholder domain.
+- Contract generation bypass is narrowly scoped: only OIDC checks, not dev-bypass checks.
+- Stable error codes (ADMIN_DEV_AUTH_FORBIDDEN_IN_PROD, ADMIN_OIDC_CONFIG_REQUIRED) allow
+  reliable alerting and regression detection.
+
+Validation:
+- pytest tests/security/test_prod_invariants.py → 26 passed
+- pytest tests -k "admin or oidc or auth or startup" → 334 passed
+- make fg-fast → All checks passed
+
+---
+
 ## 2026-05-05 — Assessment + Report API surface: route inventory and contract update
 
 New customer-facing API surface added for AI governance assessments and advisory reports.

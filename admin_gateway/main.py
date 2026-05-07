@@ -105,6 +105,9 @@ def _filter_contract_ctx_config_errors(errors: list[str]) -> list[str]:
             continue
         if "fg_oidc_scopes is required in production" in msg:
             continue
+        # Stable error codes for OIDC enforcement — also filtered in contract-gen context.
+        if "admin_oidc_config_required" in msg:
+            continue
         filtered.append(e)
     return filtered
 

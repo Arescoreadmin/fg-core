@@ -7412,3 +7412,54 @@ decrements `_running_count` in `finally` after generation completes.
 - `cd console && npm run build` → build succeeded ✓
 - `make fg-fast` → green ✓
 - `git diff --check` → no whitespace errors ✓
+
+---
+
+### 2026-05-07 — PR 10: Admin OIDC Production Enforcement
+
+**Branch:** `pr/10-admin-oidc-prod-enforcement`
+
+**Area:** Admin gateway auth / OIDC enforcement / prod invariants
+
+---
+
+**Issue:**
+
+Admin dev mode was not fail-closed in staging (only `is_prod` checked, not `is_prod_like`). OIDC configuration was not required in staging. No stable error codes existed for admin-specific OIDC enforcement. `api/config/prod_invariants.py` had no admin gateway OIDC/dev-bypass checks.
+
+**Root cause:**
+
+1. `admin_gateway/auth/config.py` `validate()` used `is_prod` (not `is_prod_like`) for OIDC checks, so staging bypassed enforcement.
+2. `api/config/prod_invariants.py` had no checks for `FG_DEV_AUTH_BYPASS` or `FG_OIDC_ISSUER`.
+3. No stable error codes (ADMIN_DEV_AUTH_FORBIDDEN_IN_PROD, ADMIN_OIDC_CONFIG_REQUIRED) existed for admin-specific invariants.
+
+**Files changed:**
+
+- `api/config/prod_invariants.py` — added FG-PROD-008 (ADMIN_DEV_AUTH_FORBIDDEN_IN_PROD) and FG-PROD-009 (ADMIN_OIDC_CONFIG_REQUIRED) checks; both cover prod and staging
+- `admin_gateway/auth/config.py` — extended `validate()` to use `is_prod_like` for OIDC enforcement (covers staging), added CHANGE_ME placeholder rejection, added stable error code prefixes; `enforce_prod_auth_safety()` now enforces OIDC issuer presence in prod/staging at import time (skipped in contract generation context)
+- `admin_gateway/main.py` — updated `_filter_contract_ctx_config_errors()` to filter ADMIN_OIDC_CONFIG_REQUIRED errors in contract-gen context
+- `env/prod.env` — added `FG_OIDC_ISSUER=CHANGE_ME_FG_OIDC_ISSUER` (must be rotated before deploy)
+- `.github/workflows/docker-ci.yml` — added `FG_OIDC_ISSUER=https://ci-oidc-issuer.example.com` to both .env.ci and env/prod.env CI heredocs
+- `tools/ci/check_soc_invariants.py` — added FG_OIDC_ISSUER and FG_DEV_AUTH_BYPASS to the valid-prod-env fixture
+- `tools/ci/check_enforcement_mode_matrix.py` — same additions for the enforcement matrix runner
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — added SOC review entry for this PR
+- `tests/security/test_prod_invariants.py` — added 11 new tests for OIDC/dev-auth enforcement, updated `_VALID_PROD_ENV` and inline fixtures
+- `tests/security/test_required_env_enforcement.py` — updated `_VALID_PROD_ENV` with FG_OIDC_ISSUER/FG_DEV_AUTH_BYPASS
+- `tests/test_dependency_fail_closed.py` — updated assertions to match new stable error code prefixes
+
+**Stable error codes:**
+
+- `ADMIN_DEV_AUTH_FORBIDDEN_IN_PROD` — FG-PROD-008
+- `ADMIN_OIDC_CONFIG_REQUIRED` — FG-PROD-009
+
+**Validation results:**
+
+- `pytest tests/security/test_prod_invariants.py -v` → 26 passed
+- `pytest tests -k "admin or oidc or auth or startup"` → 334 passed
+- `make fg-fast` → All checks passed
+- `bash codex_gates.sh` → All gates passed
+
+**Risks/notes:**
+
+- OIDC enforcement in contract-gen context is narrowly scoped: OIDC checks are skipped, but dev-bypass enforcement is always applied.
+- Real OIDC credentials must be injected via secrets manager before first prod deploy — `CHANGE_ME_FG_OIDC_ISSUER` in `env/prod.env` is a deployment-time reminder only.
