@@ -6,6 +6,42 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-07 — PR 11 Stripe Webhook Validation Hardening
+
+**Branch:** `pr/11-stripe-webhook-hardening`
+
+**Area:** api/stripe_webhooks.py, tests/test_stripe_webhook.py
+
+**Purpose:** Require Stripe webhook signature verification; reject missing/invalid/stale signatures; audit-log rejections without leaking secrets
+
+**Files changed:**
+- `api/stripe_webhooks.py` — removed unsigned bypass; added fail-closed signature verification; added audit logging for all rejections; exported stable reason codes
+- `tests/test_stripe_webhook.py` — 13 tests covering all rejection paths, audit safety, and bilateral behaviour
+
+**Signature validation proof:**
+- `_verify_webhook_signature()` raises `WebhookConfigError(STRIPE_WEBHOOK_SECRET_NOT_CONFIGURED)` when secret is blank
+- Raises `WebhookSignatureError(STRIPE_WEBHOOK_SIGNATURE_MISSING)` before calling stripe when header absent
+- Delegates to `stripe.Webhook.construct_event()` and maps `SignatureVerificationError` to stable reason codes
+- Endpoint converts `WebhookConfigError` → 503, `WebhookSignatureError` → 400
+
+**Stale timestamp proof:**
+- `SignatureVerificationError` with "timestamp" in the message maps to `STRIPE_WEBHOOK_TIMESTAMP_STALE`
+- Test 3 (`test_stripe_webhook_rejects_stale_timestamp`) confirms 400 + correct code
+
+**Audit secret-safety proof:**
+- `_audit_rejection()` logs only `reason_code`, `signature_present` (bool), and `secret_configured` (bool)
+- Raw body, sig header value, and secret value are never passed to the auditor
+- Tests 9, 10, 11 assert that sensitive strings do not appear in audit details
+
+**Validation results:**
+- `FG_ENV=test PYTHONPATH=. .venv/bin/pytest -q tests/test_stripe_webhook.py` → 13 passed
+- `FG_ENV=test PYTHONPATH=. .venv/bin/pytest -q tests -k "stripe or webhook or billing"` → 103 passed
+- `make fg-contract` → All checks passed (no contract change needed)
+- `make fg-fast` → All checks passed
+- `bash codex_gates.sh` → All gates passed
+
+---
+
 ### 2026-05-06 — PR 3 Stripe Readiness Wiring
 
 **Branch:** `pr/3-stripe-readiness`
