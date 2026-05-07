@@ -266,3 +266,43 @@ export function getRateLimitStore(): ReturnType<typeof buildRateLimitStore> {
 export function _resetRateLimitStoreSingleton(): void {
   _storePromise = null;
 }
+
+/**
+ * Probe Redis reachability/config for health checks WITHOUT initializing or
+ * touching the shared store singleton. Non-poisoning, retryable.
+ */
+export async function getRateLimitHealth(): Promise<{
+  backend: string;
+  ready: boolean;
+  required: boolean;
+  reason: string | null;
+}> {
+  const config = getBffRateLimitConfig();
+  const isProd = !isDevOrTestEnv();
+
+  if (isProd) {
+    if (isBffRedisUrlMissingOrPlaceholder(config.redisUrl)) {
+      return { backend: 'redis', ready: false, required: true, reason: 'BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED' };
+    }
+    // Probe Redis directly — side-effect-free, does not touch the module singleton
+    try {
+      const RedisModule = await import('ioredis');
+      const RedisClient = RedisModule.default;
+      const probe = new RedisClient(config.redisUrl!, {
+        lazyConnect: true,
+        connectTimeout: 1500,
+        commandTimeout: 1000,
+        maxRetriesPerRequest: 0,
+        enableOfflineQueue: false,
+      });
+      await probe.ping();
+      await probe.quit().catch(() => {}); // clean up probe connection
+      return { backend: 'redis', ready: true, required: true, reason: null };
+    } catch {
+      return { backend: 'redis', ready: false, required: true, reason: 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE' };
+    }
+  } else {
+    // dev/test: memory fallback, always ready, not required
+    return { backend: config.backend ?? 'memory', ready: true, required: false, reason: null };
+  }
+}

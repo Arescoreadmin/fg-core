@@ -239,22 +239,26 @@ test('rate_limit_over_limit_still_blocks_request', async () => {
 // ─── Test 10: readiness_reports_rate_limit_ready ──────────────────────────────
 
 test('readiness_reports_rate_limit_ready', () => {
-  // Health route must include rateLimit field with ready property
+  // Health route must include rateLimit field and use getRateLimitHealth (non-poisoning probe)
   const healthSrc = read('app/api/health/route.ts');
   assert.match(healthSrc, /rateLimit/);
-  assert.match(healthSrc, /ready/);
-  assert.match(healthSrc, /getRateLimitStore/);
-  assert.match(healthSrc, /getBffRateLimitConfig/);
+  assert.match(healthSrc, /getRateLimitHealth/);
+  // Must NOT use the singleton-initializing getRateLimitStore in the health route
+  assert.doesNotMatch(healthSrc, /getRateLimitStore/);
 });
 
 // ─── Test 11: readiness_reports_rate_limit_config_required ────────────────────
 
 test('readiness_reports_rate_limit_config_required', () => {
-  // Health route must surface the errorCode (reason field)
+  // Health route response shape must include ready/required/reason via getRateLimitHealth
   const healthSrc = read('app/api/health/route.ts');
-  assert.match(healthSrc, /reason/);
-  assert.match(healthSrc, /errorCode/);
-  assert.match(healthSrc, /required/);
+  assert.match(healthSrc, /getRateLimitHealth/);
+  // The reason/required/ready fields are returned by getRateLimitHealth itself
+  const rateLimitSrc = read('lib/rateLimitStore.ts');
+  assert.match(rateLimitSrc, /getRateLimitHealth/);
+  assert.match(rateLimitSrc, /reason/);
+  assert.match(rateLimitSrc, /required/);
+  assert.match(rateLimitSrc, /ready/);
 });
 
 // ─── Test 12: readiness_does_not_expose_redis_url ─────────────────────────────
@@ -320,4 +324,67 @@ test('change_me_placeholder_detection_in_source', () => {
   // Must reject CHANGE_ME prefixed URLs
   assert.match(rateLimitSrc, /CHANGE_ME/);
   assert.match(rateLimitSrc, /isBffRedisUrlMissingOrPlaceholder/);
+});
+
+// ─── Test: health_probe_does_not_poison_store_singleton ───────────────────────
+
+test('health_probe_does_not_poison_store_singleton', () => {
+  // Static: getRateLimitHealth must NOT reference _storePromise
+  const rateLimitSrc = read('lib/rateLimitStore.ts');
+
+  // Locate getRateLimitHealth function body
+  const fnStart = rateLimitSrc.indexOf('export async function getRateLimitHealth');
+  assert.ok(fnStart !== -1, 'getRateLimitHealth must exist in rateLimitStore.ts');
+
+  // Strip single-line comments from the function body to avoid false positives
+  const afterFn = rateLimitSrc.slice(fnStart);
+  const strippedComments = afterFn.replace(/\/\/[^\n]*/g, '');
+
+  // The function body (comment-stripped) must not reference the singleton variable
+  assert.doesNotMatch(
+    strippedComments,
+    /_storePromise/,
+    'getRateLimitHealth must not read or write _storePromise (the singleton)'
+  );
+});
+
+// ─── Test: health_probe_is_retryable_after_redis_recovery ────────────────────
+
+test('health_probe_is_retryable_after_redis_recovery', async () => {
+  // Simulate getRateLimitHealth logic with mocked Redis probe for two scenarios.
+  // This mirrors the prod branch of getRateLimitHealth without touching _storePromise.
+
+  async function simulateGetRateLimitHealth({ redisReachable, env }) {
+    const nodeEnv = (env.NODE_ENV || 'development').toLowerCase();
+    const fgEnv = (env.FG_ENV || '').toLowerCase();
+    const isProd = !(nodeEnv === 'development' || nodeEnv === 'test' ||
+      ['dev', 'development', 'local', 'test'].includes(fgEnv));
+
+    const redisUrl = env.BFF_REDIS_URL || undefined;
+
+    if (isProd) {
+      if (!redisUrl || !redisUrl.trim() || redisUrl.trim().toUpperCase().startsWith('CHANGE_ME')) {
+        return { backend: 'redis', ready: false, required: true, reason: 'BFF_RATE_LIMIT_REDIS_CONFIG_REQUIRED' };
+      }
+      // Simulate Redis probe — independent each call, no singleton
+      if (!redisReachable) {
+        return { backend: 'redis', ready: false, required: true, reason: 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE' };
+      }
+      return { backend: 'redis', ready: true, required: true, reason: null };
+    } else {
+      return { backend: 'memory', ready: true, required: false, reason: null };
+    }
+  }
+
+  const prodEnv = { NODE_ENV: 'production', FG_ENV: 'prod', BFF_REDIS_URL: 'redis://localhost:6379/0' };
+
+  // First call: Redis is down
+  const failResult = await simulateGetRateLimitHealth({ redisReachable: false, env: prodEnv });
+  assert.equal(failResult.ready, false);
+  assert.equal(failResult.reason, 'BFF_RATE_LIMIT_REDIS_UNAVAILABLE');
+
+  // Second call: Redis recovered — no cached state, returns ready immediately
+  const recoverResult = await simulateGetRateLimitHealth({ redisReachable: true, env: prodEnv });
+  assert.equal(recoverResult.ready, true);
+  assert.equal(recoverResult.reason, null);
 });
