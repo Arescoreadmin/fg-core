@@ -2,13 +2,20 @@
 api/stripe_webhooks.py — Stripe payment webhook handler.
 
 Receives checkout.session.completed and marks the linked assessment as paid.
-Signature verification is active when STRIPE_WEBHOOK_SECRET is set.
-In dev (no secret), any POST is accepted — never deploy without the secret.
+Signature verification is ALWAYS required — unsigned requests are rejected with
+a 400 error and an audit event.  The STRIPE_WEBHOOK_SECRET env var must be
+present and non-blank; if it is missing, the endpoint returns 503 rather than
+silently accepting unsigned payloads.
+
+Stable rejection reason codes:
+  STRIPE_WEBHOOK_SIGNATURE_MISSING       — Stripe-Signature header absent
+  STRIPE_WEBHOOK_SIGNATURE_INVALID       — header present but signature bad
+  STRIPE_WEBHOOK_TIMESTAMP_STALE        — signature valid but timestamp stale
+  STRIPE_WEBHOOK_SECRET_NOT_CONFIGURED  — STRIPE_WEBHOOK_SECRET not set (503)
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 
@@ -16,29 +23,153 @@ from fastapi import APIRouter, HTTPException, Request
 
 from api.db import get_sessionmaker
 from api.db_models import AssessmentRecord, StripeEvent
+from api.security_audit import AuditEvent, EventType, Severity, get_auditor
 
 log = logging.getLogger("frostgate.stripe")
 
 router = APIRouter(prefix="/ingest/assessment", tags=["stripe"])
 
-_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+# ---------------------------------------------------------------------------
+# Stable error codes — never change the string values once deployed.
+# ---------------------------------------------------------------------------
+
+STRIPE_WEBHOOK_SIGNATURE_MISSING = "STRIPE_WEBHOOK_SIGNATURE_MISSING"
+STRIPE_WEBHOOK_SIGNATURE_INVALID = "STRIPE_WEBHOOK_SIGNATURE_INVALID"
+STRIPE_WEBHOOK_TIMESTAMP_STALE = "STRIPE_WEBHOOK_TIMESTAMP_STALE"
+STRIPE_WEBHOOK_SECRET_NOT_CONFIGURED = "STRIPE_WEBHOOK_SECRET_NOT_CONFIGURED"
+
+
+# ---------------------------------------------------------------------------
+# Custom exception types
+# ---------------------------------------------------------------------------
+
+
+class WebhookConfigError(Exception):
+    """Raised when the webhook secret is not configured."""
+
+    def __init__(self, reason_code: str) -> None:
+        super().__init__(reason_code)
+        self.reason_code = reason_code
+
+
+class WebhookSignatureError(Exception):
+    """Raised when signature verification fails."""
+
+    def __init__(self, reason_code: str) -> None:
+        super().__init__(reason_code)
+        self.reason_code = reason_code
+
+
+# ---------------------------------------------------------------------------
+# Signature verification
+# ---------------------------------------------------------------------------
+
+
+def _get_webhook_secret() -> str:
+    """Return STRIPE_WEBHOOK_SECRET from environment."""
+    return (os.environ.get("STRIPE_WEBHOOK_SECRET") or "").strip()
+
+
+def _verify_webhook_signature(
+    raw_body: bytes,
+    sig_header: str | None,
+    secret: str | None,
+) -> dict:
+    """Verify a Stripe webhook signature.
+
+    Args:
+        raw_body:   Raw request bytes (not parsed JSON).
+        sig_header: Value of the Stripe-Signature header, or None if absent.
+        secret:     STRIPE_WEBHOOK_SECRET value.
+
+    Returns:
+        The stripe.Event as a dict on success.
+
+    Raises:
+        WebhookConfigError:    STRIPE_WEBHOOK_SECRET_NOT_CONFIGURED when secret absent.
+        WebhookSignatureError: STRIPE_WEBHOOK_SIGNATURE_MISSING when header absent.
+        WebhookSignatureError: STRIPE_WEBHOOK_TIMESTAMP_STALE or
+                               STRIPE_WEBHOOK_SIGNATURE_INVALID on bad sig.
+    """
+    if not secret:
+        raise WebhookConfigError(STRIPE_WEBHOOK_SECRET_NOT_CONFIGURED)
+    if not sig_header:
+        raise WebhookSignatureError(STRIPE_WEBHOOK_SIGNATURE_MISSING)
+
+    import stripe  # noqa: PLC0415 — lazy import; only when configured
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload=raw_body,
+            sig_header=sig_header,
+            secret=secret,
+        )
+        return dict(event)
+    except stripe.error.SignatureVerificationError as exc:
+        _msg = str(exc).lower()
+        if "outside the tolerance zone" in _msg or "timestamp outside" in _msg:
+            raise WebhookSignatureError(STRIPE_WEBHOOK_TIMESTAMP_STALE) from exc
+        raise WebhookSignatureError(STRIPE_WEBHOOK_SIGNATURE_INVALID) from exc
+
+
+# ---------------------------------------------------------------------------
+# Audit helpers
+# ---------------------------------------------------------------------------
+
+
+def _audit_rejection(
+    reason_code: str,
+    sig_header: str | None,
+    secret: str | None,
+) -> None:
+    """Emit a security audit event for a rejected webhook.
+
+    Never logs raw_body, the sig_header value, or the secret value.
+    """
+    try:
+        get_auditor().log_event(
+            AuditEvent(
+                event_type=EventType.ADMIN_ACTION,
+                success=False,
+                severity=Severity.WARNING,
+                tenant_id="stripe",
+                reason="stripe_webhook_rejected",
+                details={
+                    "reason_code": reason_code,
+                    "signature_present": sig_header is not None,
+                    "secret_configured": bool(secret),
+                },
+            )
+        )
+    except Exception:
+        log.warning("stripe.webhook_audit_failed reason_code=%s", reason_code)
+
+
+# ---------------------------------------------------------------------------
+# Endpoint
+# ---------------------------------------------------------------------------
 
 
 @router.post("/webhooks/stripe")
 async def stripe_webhook(request: Request):
-    payload = await request.body()
+    raw_body = await request.body()
+    sig_header = request.headers.get("Stripe-Signature")
+    secret = _get_webhook_secret()
 
-    if _WEBHOOK_SECRET:
-        try:
-            import stripe  # noqa: PLC0415 — lazy, only when configured
-
-            sig = request.headers.get("stripe-signature", "")
-            event = dict(stripe.Webhook.construct_event(payload, sig, _WEBHOOK_SECRET))
-        except Exception as exc:
-            log.warning("stripe.webhook_sig_failed error=%s", exc)
-            raise HTTPException(status_code=400, detail="Invalid Stripe signature")
-    else:
-        event = json.loads(payload)
+    try:
+        event = _verify_webhook_signature(raw_body, sig_header, secret)
+    except WebhookConfigError as exc:
+        _audit_rejection(exc.reason_code, sig_header, secret)
+        raise HTTPException(
+            status_code=503,
+            detail=exc.reason_code,
+        )
+    except WebhookSignatureError as exc:
+        _audit_rejection(exc.reason_code, sig_header, secret)
+        raise HTTPException(
+            status_code=400,
+            detail=exc.reason_code,
+        )
 
     _persist_event(event)
 
@@ -49,6 +180,11 @@ async def stripe_webhook(request: Request):
             _confirm_payment(assessment_id, session.get("id", ""))
 
     return {"received": True}
+
+
+# ---------------------------------------------------------------------------
+# DB helpers (unchanged from original)
+# ---------------------------------------------------------------------------
 
 
 def _confirm_payment(assessment_id: str, stripe_session_id: str) -> None:
