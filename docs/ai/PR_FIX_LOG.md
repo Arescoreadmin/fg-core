@@ -7541,3 +7541,36 @@ Admin dev mode was not fail-closed in staging (only `is_prod` checked, not `is_p
 - `python tools/ci/check_enforcement_mode_matrix.py` → OK
 - `make fg-fast` → pending
 - `bash codex_gates.sh` → pending
+
+---
+
+### 2026-05-07 — PR 12 RAG Stub Removal Inventory
+
+**Branch:** `pr/12-rag-stub-inventory`
+
+**Area:** docs/ai/RAG_STUB_INVENTORY.md, tools/ci/check_rag_stub_references.py, tests/test_rag_stub_inventory_complete.py
+
+**Purpose:** Inventory all rag_stub.py references and fake RAG execution paths; no runtime changes
+
+**rag_stub references discovered:** 3 references in 3 files (rag_stub.py itself, test_ai_rag_context.py string negation guard, PR_FIX_LOG.md historical text); plus retrieval_id `"stub"` default in api/db.py (2 locations)
+
+**Fake retrieval behaviors documented:**
+- `rag_stub.retrieve()` returns hardcoded `retrieval_id: "stub"` — not content-derived
+- `sources` always `[]` (empty seed file `seeds/rag_stub_sources_v1.json`)
+- No tenant filtering of sources beyond non-blank check
+- No relevance scoring or ranking
+- PHI classification is called but result has no effect on returned sources
+- `ai_inference_records.retrieval_id` schema default is still `"stub"` in DDL and migration
+
+**Stub metadata surfaces:**
+- `ai_inference_records.retrieval_id DEFAULT 'stub'` (api/db.py:554, api/db.py:672)
+- `rag_stub.retrieve()` return dict `retrieval_id: "stub"` (services/ai_plane_extension/rag_stub.py:24)
+- `rag_stub.retrieve()` return dict `sources: []` (static empty seed)
+
+**Runtime behavior changed:** no
+
+**Validation results:**
+- `pytest -q tests/test_rag_stub_inventory_complete.py` → 8 passed
+- `pytest -q tests -k "rag or ai or retrieval"` → see full gate below
+- `make fg-fast` → All checks passed
+- `bash codex_gates.sh` → All gates passed
