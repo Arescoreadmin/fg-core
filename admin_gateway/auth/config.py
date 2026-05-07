@@ -239,11 +239,25 @@ def enforce_prod_auth_safety() -> None:
             "FG_DEV_AUTH_BYPASS is forbidden in production/staging"
         )
     if cfg.is_prod_like and not _is_contracts_gen_context():
+        # Accept either FG_OIDC_ISSUER directly (Option A) or
+        # the Keycloak-derived issuer path via FG_KEYCLOAK_BASE_URL + FG_KEYCLOAK_REALM
+        # (Option B).  get_auth_config() already derives oidc_issuer from Keycloak vars,
+        # so checking cfg.oidc_issuer covers both paths.
         _issuer = (cfg.oidc_issuer or "").strip()
-        if not _issuer or _issuer.startswith("CHANGE_ME"):
+        _kc_base = (os.getenv("FG_KEYCLOAK_BASE_URL") or "").strip()
+        _kc_realm = (os.getenv("FG_KEYCLOAK_REALM") or "").strip()
+        _issuer_ok = bool(_issuer) and not _issuer.startswith("CHANGE_ME")
+        _kc_ok = (
+            bool(_kc_base)
+            and not _kc_base.startswith("CHANGE_ME")
+            and bool(_kc_realm)
+            and not _kc_realm.startswith("CHANGE_ME")
+        )
+        if not _issuer_ok and not _kc_ok:
             raise RuntimeError(
                 "ADMIN_OIDC_CONFIG_REQUIRED: "
                 "FG_OIDC_ISSUER must be set to a real value in production/staging"
+                " (or provide both FG_KEYCLOAK_BASE_URL and FG_KEYCLOAK_REALM)"
             )
         if not cfg.oidc_enabled:
             raise RuntimeError(

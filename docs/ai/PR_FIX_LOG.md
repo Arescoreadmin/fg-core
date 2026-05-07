@@ -7463,3 +7463,39 @@ Admin dev mode was not fail-closed in staging (only `is_prod` checked, not `is_p
 
 - OIDC enforcement in contract-gen context is narrowly scoped: OIDC checks are skipped, but dev-bypass enforcement is always applied.
 - Real OIDC credentials must be injected via secrets manager before first prod deploy — `CHANGE_ME_FG_OIDC_ISSUER` in `env/prod.env` is a deployment-time reminder only.
+
+---
+
+### 2026-05-07 — PR 10 CI/Review Repair: Keycloak-derived OIDC + fixture alignment
+
+**Branch:** `pr/10-admin-oidc-prod-enforcement`
+
+**Root causes:**
+1. FG-PROD-009 required `FG_OIDC_ISSUER` but admin gateway can derive the issuer from `FG_KEYCLOAK_BASE_URL` + `FG_KEYCLOAK_REALM`; invariant now accepts either path
+2. Legacy compliance/security test fixtures (`_seed_prod_env` in `test_compliance_modules.py`) didn't include OIDC config after PR 10 added FG-PROD-009; caused `test_ui_disabled_by_default_in_prod_returns_404` to fail with `ProdInvariantViolation: FG-PROD-009`
+
+**Files changed:**
+- `api/config/prod_invariants.py` — FG-PROD-009 now accepts Option A (`FG_OIDC_ISSUER`) OR Option B (`FG_KEYCLOAK_BASE_URL` + `FG_KEYCLOAK_REALM`); partial Keycloak config still fails
+- `admin_gateway/auth/config.py` — `enforce_prod_auth_safety()` mirrors same Option A/B logic (derives issuer via `get_auth_config()` then validates)
+- `tests/security/test_compliance_modules.py` — `_seed_prod_env` fixture now includes `FG_OIDC_ISSUER`, `FG_OIDC_CLIENT_ID`, `FG_DEV_AUTH_BYPASS`
+- `tests/security/test_prod_invariants.py` — added 6 new tests for Keycloak-derived issuer path; added `_VALID_PROD_ENV_NO_ISSUER` helper
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Proof:**
+- prod/staging accept direct `FG_OIDC_ISSUER`: `test_valid_prod_admin_oidc_config_passes` (existing, still green)
+- prod/staging accept Keycloak-derived issuer: `test_prod_passes_with_keycloak_base_url_and_realm`, `test_staging_passes_with_keycloak_derived_issuer`
+- partial Keycloak config fails: `test_prod_fails_with_only_keycloak_base_url`, `test_prod_fails_with_only_keycloak_realm`
+- CHANGE_ME placeholders fail: `test_prod_fails_with_change_me_keycloak_base_url`, `test_prod_fails_with_change_me_keycloak_realm`
+- fixture repair: `test_ui_disabled_by_default_in_prod_returns_404` now passes
+- admin dev bypass still forbidden: FG-PROD-008 untouched
+
+**Validation results:**
+- `pytest tests/security/test_compliance_modules.py` → 5 passed
+- `pytest tests/security/test_prod_invariants.py` → 32 passed
+- `pytest tests/security/test_required_env_enforcement.py` → 41 passed
+- `pytest tests/test_dependency_fail_closed.py` → 26 passed
+- `pytest tests -k "admin or oidc or auth or startup"` → all passed
+- `python tools/ci/check_soc_invariants.py` → OK
+- `python tools/ci/check_enforcement_mode_matrix.py` → OK
+- `make fg-fast` → pending
+- `bash codex_gates.sh` → pending

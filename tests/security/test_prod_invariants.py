@@ -254,3 +254,85 @@ def test_admin_oidc_required_error_message_is_stable() -> None:
     with pytest.raises(ProdInvariantViolation) as exc:
         assert_prod_invariants(env)
     assert "ADMIN_OIDC_CONFIG_REQUIRED" in str(exc.value)
+
+
+# ---------------------------------------------------------------------------
+# Keycloak-derived OIDC issuer tests (FG-PROD-009, Option B)
+# ---------------------------------------------------------------------------
+
+# Base env without FG_OIDC_ISSUER — Keycloak path must satisfy FG-PROD-009.
+_VALID_PROD_ENV_NO_ISSUER: dict[str, str] = {
+    k: v for k, v in _VALID_PROD_ENV.items() if k != "FG_OIDC_ISSUER"
+}
+
+
+def test_prod_passes_with_keycloak_base_url_and_realm() -> None:
+    """FG_KEYCLOAK_BASE_URL + FG_KEYCLOAK_REALM satisfies FG-PROD-009 in prod."""
+    env = {
+        **_VALID_PROD_ENV_NO_ISSUER,
+        "FG_ENV": "prod",
+        "FG_KEYCLOAK_BASE_URL": "https://idp.example.com",
+        "FG_KEYCLOAK_REALM": "frostgate",
+    }
+    assert_prod_invariants(env)
+
+
+def test_prod_fails_with_only_keycloak_base_url() -> None:
+    """FG_KEYCLOAK_BASE_URL without FG_KEYCLOAK_REALM must still fail FG-PROD-009."""
+    env = {
+        **_VALID_PROD_ENV_NO_ISSUER,
+        "FG_ENV": "prod",
+        "FG_KEYCLOAK_BASE_URL": "https://idp.example.com",
+    }
+    with pytest.raises(ProdInvariantViolation) as exc:
+        assert_prod_invariants(env)
+    assert exc.value.code == "FG-PROD-009"
+
+
+def test_prod_fails_with_only_keycloak_realm() -> None:
+    """FG_KEYCLOAK_REALM without FG_KEYCLOAK_BASE_URL must still fail FG-PROD-009."""
+    env = {
+        **_VALID_PROD_ENV_NO_ISSUER,
+        "FG_ENV": "prod",
+        "FG_KEYCLOAK_REALM": "frostgate",
+    }
+    with pytest.raises(ProdInvariantViolation) as exc:
+        assert_prod_invariants(env)
+    assert exc.value.code == "FG-PROD-009"
+
+
+def test_prod_fails_with_change_me_keycloak_base_url() -> None:
+    """CHANGE_ME placeholder in FG_KEYCLOAK_BASE_URL must fail FG-PROD-009."""
+    env = {
+        **_VALID_PROD_ENV_NO_ISSUER,
+        "FG_ENV": "prod",
+        "FG_KEYCLOAK_BASE_URL": "CHANGE_ME_KEYCLOAK_BASE_URL",
+        "FG_KEYCLOAK_REALM": "frostgate",
+    }
+    with pytest.raises(ProdInvariantViolation) as exc:
+        assert_prod_invariants(env)
+    assert exc.value.code == "FG-PROD-009"
+
+
+def test_prod_fails_with_change_me_keycloak_realm() -> None:
+    """CHANGE_ME placeholder in FG_KEYCLOAK_REALM must fail FG-PROD-009."""
+    env = {
+        **_VALID_PROD_ENV_NO_ISSUER,
+        "FG_ENV": "prod",
+        "FG_KEYCLOAK_BASE_URL": "https://idp.example.com",
+        "FG_KEYCLOAK_REALM": "CHANGE_ME_REALM",
+    }
+    with pytest.raises(ProdInvariantViolation) as exc:
+        assert_prod_invariants(env)
+    assert exc.value.code == "FG-PROD-009"
+
+
+def test_staging_passes_with_keycloak_derived_issuer() -> None:
+    """Staging also accepts Keycloak-derived issuer (Option B) for FG-PROD-009."""
+    env = {
+        **_VALID_PROD_ENV_NO_ISSUER,
+        "FG_ENV": "staging",
+        "FG_KEYCLOAK_BASE_URL": "https://idp.example.com",
+        "FG_KEYCLOAK_REALM": "frostgate",
+    }
+    assert_prod_invariants(env)

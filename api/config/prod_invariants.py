@@ -87,11 +87,27 @@ def assert_prod_invariants(settings: Mapping[str, str] | None = None) -> None:
         )
 
     # Admin gateway: real OIDC issuer is required in prod/staging.
+    # Accept Option A: FG_OIDC_ISSUER is set, non-blank, non-CHANGE_ME.
+    # Accept Option B: FG_KEYCLOAK_BASE_URL + FG_KEYCLOAK_REALM are both set,
+    #   non-blank, non-CHANGE_ME (admin_gateway derives the issuer from these).
+    # Partial Keycloak config (one without the other) must still fail.
     _oidc_issuer = (env.get("FG_OIDC_ISSUER") or "").strip()
-    if not _oidc_issuer or _oidc_issuer.startswith("CHANGE_ME"):
+    _kc_base = (env.get("FG_KEYCLOAK_BASE_URL") or "").strip()
+    _kc_realm = (env.get("FG_KEYCLOAK_REALM") or "").strip()
+
+    _issuer_ok = bool(_oidc_issuer) and not _oidc_issuer.startswith("CHANGE_ME")
+    _kc_ok = (
+        bool(_kc_base)
+        and not _kc_base.startswith("CHANGE_ME")
+        and bool(_kc_realm)
+        and not _kc_realm.startswith("CHANGE_ME")
+    )
+
+    if not _issuer_ok and not _kc_ok:
         raise ProdInvariantViolation(
             "FG-PROD-009",
-            "ADMIN_OIDC_CONFIG_REQUIRED: FG_OIDC_ISSUER must be set to a real value in prod/staging",
+            "ADMIN_OIDC_CONFIG_REQUIRED: FG_OIDC_ISSUER must be set to a real value in prod/staging"
+            " (or provide both FG_KEYCLOAK_BASE_URL and FG_KEYCLOAK_REALM)",
         )
 
     # Enforce the shared required-env list (single source of truth).

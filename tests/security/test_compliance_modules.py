@@ -56,6 +56,10 @@ def _seed_prod_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         "STRIPE_SECRET_KEY": "test-stripe-secret-key",
         "STRIPE_WEBHOOK_SECRET": "test-stripe-webhook-secret",
         "FG_ANTHROPIC_API_KEY": "test-anthropic-api-key",
+        # Admin gateway OIDC enforcement — required in prod/staging (FG-PROD-009).
+        "FG_OIDC_ISSUER": "https://issuer.example.test/realms/frostgate",
+        "FG_OIDC_CLIENT_ID": "frostgate-admin",
+        "FG_DEV_AUTH_BYPASS": "0",
     }
     for key, value in env.items():
         monkeypatch.setenv(key, value)
