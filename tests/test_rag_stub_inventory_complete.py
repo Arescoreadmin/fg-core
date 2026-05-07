@@ -100,3 +100,26 @@ def test_rag_stub_ci_visibility_script_exits_zero() -> None:
         f"stdout: {result.stdout}\nstderr: {result.stderr}"
     )
     assert "RAG Stub Reference Visibility Report" in result.stdout
+
+
+def test_rag_stub_scan_includes_sql_files() -> None:
+    """The CI scan tool must include .sql files in its grep include patterns."""
+    content = CI_SCRIPT_PATH.read_text(encoding="utf-8")
+    assert "--include=*.sql" in content, (
+        "check_rag_stub_references.py must include '--include=*.sql' so that "
+        "SQL migration references are not silently missed"
+    )
+
+
+def test_rag_stub_sql_migration_reference_is_documented() -> None:
+    """Inventory doc must mention the SQL migration stub reference."""
+    content = INVENTORY_PATH.read_text(encoding="utf-8")
+    # Verify the specific migration file is named
+    assert "0017_ai_plane_policy_hardening.sql" in content, (
+        "RAG_STUB_INVENTORY.md must document the SQL migration reference in "
+        "migrations/postgres/0017_ai_plane_policy_hardening.sql"
+    )
+    # Verify the doc notes this is a historical/migration concern
+    assert "sql" in content.lower() or "migration" in content.lower(), (
+        "RAG_STUB_INVENTORY.md must mention SQL migration context for stub references"
+    )

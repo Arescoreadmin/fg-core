@@ -7574,3 +7574,10 @@ Admin dev mode was not fail-closed in staging (only `is_prod` checked, not `is_p
 - `pytest -q tests -k "rag or ai or retrieval"` → see full gate below
 - `make fg-fast` → All checks passed
 - `bash codex_gates.sh` → All gates passed
+
+#### Codex Review Repair — 2026-05-07
+
+- Root cause: check_rag_stub_references.py scanned only .py/.md/.json; SQL migrations were invisible
+- Known missed reference: migrations/postgres/0017_ai_plane_policy_hardening.sql contains COALESCE(retrieval_id, 'stub')
+- Fix: added .sql to scan scope; classified SQL migration references as historical in inventory doc
+- Tests added: SQL inclusion, SQL migration documentation coverage

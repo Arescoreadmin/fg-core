@@ -19,6 +19,17 @@ _PATTERNS = [
     "retrieval_id.*stub",
 ]
 
+# Historical/migration references — intentionally present; NOT a scan gap.
+# These are classified as historical because they live in immutable migration
+# history and must not be rewritten.  Any future RAG removal PR must address
+# the data-migration concern they represent separately from runtime code removal.
+_HISTORICAL_ALLOWLIST: dict[str, str] = {
+    "migrations/postgres/0017_ai_plane_policy_hardening.sql": (
+        "COALESCE(retrieval_id, 'stub') — historical migration; "
+        "preserves stub sentinel for legacy rows inserted before real RAG was wired"
+    ),
+}
+
 
 def _grep(pattern: str) -> list[str]:
     try:
@@ -29,6 +40,7 @@ def _grep(pattern: str) -> list[str]:
                 "--include=*.py",
                 "--include=*.md",
                 "--include=*.json",
+                "--include=*.sql",
                 pattern,
                 str(REPO),
             ],
@@ -76,6 +88,12 @@ def main() -> int:
         print(
             "Status: rag_stub references present (see inventory: docs/ai/RAG_STUB_INVENTORY.md)"
         )
+
+    print()
+    print("=== Historical/Migration Allowlist (intentional — do not remove) ===")
+    for path, note in _HISTORICAL_ALLOWLIST.items():
+        print(f"  {path}")
+        print(f"    Note: {note}")
 
     # Always exit 0 — this is a visibility tool, not a CI enforcer.
     return 0

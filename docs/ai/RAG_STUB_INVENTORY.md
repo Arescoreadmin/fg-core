@@ -67,6 +67,16 @@ but is unreachable from any production code path.
 | `tests/security/test_ai_rag_context.py` | 188–192 | Regression test asserting `rag_stub` is NOT in `AIPlaneService.infer` source |
 | `docs/ai/PR_FIX_LOG.md` | 383, 416 | Historical references describing the stub's prior role |
 
+### SQL migration references (historical — do not rewrite)
+
+| File | Line | Reference type |
+|---|---|---|
+| `migrations/postgres/0017_ai_plane_policy_hardening.sql` | 10 | `retrieval_id = COALESCE(retrieval_id, 'stub')` — historical migration; preserves stub sentinel for legacy rows inserted before real RAG was wired |
+
+**Note:** This is intentional migration history. The migration must not be rewritten. Any future
+RAG removal PR must address the data-migration concern (existing rows with `retrieval_id = 'stub'`)
+separately from runtime code removal. See Recommended Removal Order below.
+
 ### Files containing `retrieval_id = "stub"` (database schema residue)
 
 | File | Line | Reference type |
@@ -133,6 +143,7 @@ stub era. None are produced by the current active code path.
 | `ai_inference_records.retrieval_id` migration default | `"stub"` | `api/db.py:672` |
 | `rag_stub.retrieve()` return dict | `"retrieval_id": "stub"` | `services/ai_plane_extension/rag_stub.py:24` |
 | `rag_stub.retrieve()` return dict | `"sources": []` | static empty list from seed file |
+| SQL migration fill value | `COALESCE(retrieval_id, 'stub')` | `migrations/postgres/0017_ai_plane_policy_hardening.sql:10` — historical; immutable migration |
 
 **Real metadata produced by current code path:**
 
@@ -272,6 +283,14 @@ no implementation is implied.
    `DEFAULT 'rag:none'` in DDL and migration. Treat as a schema change; call it
    out in the PR. Existing rows with `retrieval_id = "stub"` are historical and
    should be documented, not back-filled.
+4. **Address SQL migration history separately** —
+   `migrations/postgres/0017_ai_plane_policy_hardening.sql` contains
+   `COALESCE(retrieval_id, 'stub')`. This migration must **not** be rewritten (it
+   is immutable history). The data-migration concern — rows that still hold the
+   `"stub"` sentinel — must be resolved via a new forward migration that updates
+   existing `retrieval_id = 'stub'` rows to `'rag:none'` (or equivalent). This is
+   a data migration concern, not a code removal concern, and must be handled in a
+   dedicated migration PR.
 4. **Remove the `retrieval_id != "stub"` test assertion** in
    `tests/test_ai_plane_extension.py:445` (or update it to assert the `"rag:"`
    prefix is present) once the schema default is updated.
