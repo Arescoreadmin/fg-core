@@ -109,9 +109,7 @@ def test_rag_context_chunk_rejects_non_finite_score():
 
 def test_rag_context_response_serializes_provenance():
     chunk = _make_chunk(corpus_id="corp-x", document_id="doc-x", chunk_id="ck-x")
-    resp = RagContextResponse(
-        query="q", chunks=[chunk], context_count=1, used_retrieval=True
-    )
+    resp = RagContextResponse(query="q", chunks=[chunk])
     dumped = resp.chunks[0].model_dump()
     prov = dumped["provenance"]
     assert prov["corpus_id"] == "corp-x"
@@ -131,11 +129,44 @@ def test_rag_context_response_allows_missing_source_title():
 
 def test_rag_context_response_preserves_chunk_order():
     chunks = [_make_chunk(text=f"chunk {i}", score=float(i) / 10) for i in range(5)]
-    resp = RagContextResponse(
-        query="q", chunks=chunks, context_count=5, used_retrieval=True
-    )
+    resp = RagContextResponse(query="q", chunks=chunks)
     for i, chunk in enumerate(resp.chunks):
         assert chunk.text == f"chunk {i}"
+
+
+# ---------------------------------------------------------------------------
+# Derived field tests (context_count / used_retrieval)
+# ---------------------------------------------------------------------------
+
+
+def test_rag_context_response_empty_chunks_derives_zero_count():
+    resp = RagContextResponse(query="q", chunks=[])
+    assert resp.context_count == 0
+    assert resp.used_retrieval is False
+
+
+def test_rag_context_response_one_chunk_derives_count_and_flag():
+    resp = RagContextResponse(query="q", chunks=[_make_chunk()])
+    assert resp.context_count == 1
+    assert resp.used_retrieval is True
+
+
+def test_rag_context_response_multiple_chunks_derives_correct_count():
+    chunks = [_make_chunk(text=f"t{i}", chunk_id=f"ck-{i}") for i in range(4)]
+    resp = RagContextResponse(query="q", chunks=chunks)
+    assert resp.context_count == 4
+    assert resp.used_retrieval is True
+
+
+def test_rag_context_response_normalizes_contradictory_caller_values():
+    # Caller passes context_count=0/used_retrieval=False but chunks is non-empty.
+    # Model must normalise to derived truth.
+    chunk = _make_chunk()
+    resp = RagContextResponse(
+        query="q", chunks=[chunk], context_count=0, used_retrieval=False
+    )
+    assert resp.context_count == 1
+    assert resp.used_retrieval is True
 
 
 # ---------------------------------------------------------------------------

@@ -13,7 +13,7 @@ from __future__ import annotations
 import math
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class RagContextRequest(BaseModel):
@@ -53,9 +53,21 @@ class RagContextChunk(BaseModel):
 
 
 class RagContextResponse(BaseModel):
-    """Response containing retrieved RAG context chunks for a query."""
+    """Response containing retrieved RAG context chunks for a query.
+
+    ``context_count`` and ``used_retrieval`` are always derived from
+    ``chunks`` after construction — caller-supplied values are normalised.
+    This prevents a non-empty chunk list from producing
+    ``context_count == 0`` or ``used_retrieval == False``.
+    """
 
     query: str
     chunks: list[RagContextChunk] = Field(default_factory=list)
     context_count: int = 0
     used_retrieval: bool = False
+
+    @model_validator(mode="after")
+    def _derive_counts(self) -> "RagContextResponse":
+        self.context_count = len(self.chunks)
+        self.used_retrieval = bool(self.chunks)
+        return self

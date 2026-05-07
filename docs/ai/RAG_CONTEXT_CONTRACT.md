@@ -34,8 +34,12 @@ Fields returned from the retrieval layer to the AI plane.
 |---|---|---|
 | `query` | `str` | Echo of the original query |
 | `chunks` | `list[RagContextChunk]` | Retrieved chunks in rank order |
-| `context_count` | `int` | Number of chunks in `chunks` |
-| `used_retrieval` | `bool` | True if real retrieval was performed |
+| `context_count` | `int` | **Derived** — always equals `len(chunks)`; caller-supplied values are normalised |
+| `used_retrieval` | `bool` | **Derived** — always equals `bool(chunks)`; caller-supplied values are normalised |
+
+> **Note:** `context_count` and `used_retrieval` are computed by a `model_validator` after construction.
+> Callers should not manually supply these fields; if they do, the model normalises them to match `chunks`.
+> This ensures a non-empty chunk list can never produce `context_count == 0` or `used_retrieval == False`.
 
 ---
 
