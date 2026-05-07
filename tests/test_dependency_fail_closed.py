@@ -173,8 +173,8 @@ def test_oidc_dependency_fail_closed_in_production():
 
     cfg = AuthConfig(env="prod")
     errors = cfg.validate()
-    assert any("oidc must be configured" in e.lower() for e in errors), (
-        f"Expected OIDC error in prod, got: {errors}"
+    assert any("admin_oidc_config_required" in e.lower() for e in errors), (
+        f"Expected ADMIN_OIDC_CONFIG_REQUIRED error in prod, got: {errors}"
     )
 
 
@@ -207,7 +207,7 @@ def test_oidc_dependency_dev_does_not_require_oidc():
     cfg = AuthConfig(env="dev")
     errors = cfg.validate()
     # No OIDC-required error in dev
-    assert not any("oidc must be configured" in e.lower() for e in errors), (
+    assert not any("admin_oidc_config_required" in e.lower() for e in errors), (
         f"Unexpected OIDC error in dev: {errors}"
     )
 

@@ -120,13 +120,34 @@ class AuthConfig:
             )
 
         if self.is_prod_like and self.dev_auth_bypass:
-            errors.append("FG_DEV_AUTH_BYPASS cannot be enabled in production/staging")
+            errors.append(
+                "ADMIN_DEV_AUTH_FORBIDDEN_IN_PROD: "
+                "FG_DEV_AUTH_BYPASS cannot be enabled in production/staging"
+            )
 
-        if self.is_prod and not self.oidc_enabled:
-            errors.append("OIDC must be configured in production")
+        if self.is_prod_like and not self.oidc_enabled:
+            errors.append(
+                "ADMIN_OIDC_CONFIG_REQUIRED: "
+                "OIDC must be fully configured in production/staging"
+            )
 
-        if self.is_prod and not self.oidc_scopes:
-            errors.append("FG_OIDC_SCOPES is required in production")
+        if self.is_prod_like and not self.oidc_scopes:
+            errors.append(
+                "ADMIN_OIDC_CONFIG_REQUIRED: "
+                "FG_OIDC_SCOPES is required in production/staging"
+            )
+
+        # Reject CHANGE_ME placeholder values for OIDC issuer in prod-like envs.
+        _change_me = "CHANGE_ME"
+        if (
+            self.is_prod_like
+            and self.oidc_issuer
+            and self.oidc_issuer.startswith(_change_me)
+        ):
+            errors.append(
+                "ADMIN_OIDC_CONFIG_REQUIRED: "
+                "FG_OIDC_ISSUER must not be a CHANGE_ME placeholder in production/staging"
+            )
 
         oidc_fields = [
             self.oidc_issuer,
@@ -182,13 +203,64 @@ def reset_auth_config() -> None:
     get_auth_config.cache_clear()
 
 
+def _is_contracts_gen_context() -> bool:
+    """True when running under contract/OpenAPI generation — skip runtime-only checks."""
+    import sys
+
+    for var in ("AG_CONTRACTS_GEN", "FG_CONTRACTS_GEN"):
+        if os.getenv(var, "").strip().lower() in {"1", "true", "yes", "on"}:
+            return True
+    argv0 = (sys.argv[0] if sys.argv else "").lower()
+    return (
+        "contracts_gen.py" in argv0
+        or "contracts-gen" in argv0
+        or "contracts_gen" in argv0
+    )
+
+
 def enforce_prod_auth_safety() -> None:
     """
     Fail-fast guard used by admin_gateway.main at import time.
 
-    The test expects importing admin_gateway.main to raise RuntimeError when:
-      FG_ENV=prod and FG_DEV_AUTH_BYPASS=true
+    Raises RuntimeError with stable error codes when:
+      - FG_ENV is prod/staging AND FG_DEV_AUTH_BYPASS is enabled
+        (ADMIN_DEV_AUTH_FORBIDDEN_IN_PROD)
+      - FG_ENV is prod/staging AND OIDC is not fully configured or is a placeholder
+        (ADMIN_OIDC_CONFIG_REQUIRED)
+
+    OIDC enforcement is skipped during contract generation (AG_CONTRACTS_GEN=1)
+    to allow OpenAPI schema generation without requiring live OIDC credentials.
+    Dev-bypass enforcement is always applied.
     """
     cfg = get_auth_config()
     if cfg.is_prod_like and cfg.dev_auth_bypass:
-        raise RuntimeError("FG_DEV_AUTH_BYPASS is forbidden in production/staging")
+        raise RuntimeError(
+            "ADMIN_DEV_AUTH_FORBIDDEN_IN_PROD: "
+            "FG_DEV_AUTH_BYPASS is forbidden in production/staging"
+        )
+    if cfg.is_prod_like and not _is_contracts_gen_context():
+        # Accept either FG_OIDC_ISSUER directly (Option A) or
+        # the Keycloak-derived issuer path via FG_KEYCLOAK_BASE_URL + FG_KEYCLOAK_REALM
+        # (Option B).  get_auth_config() already derives oidc_issuer from Keycloak vars,
+        # so checking cfg.oidc_issuer covers both paths.
+        _issuer = (cfg.oidc_issuer or "").strip()
+        _kc_base = (os.getenv("FG_KEYCLOAK_BASE_URL") or "").strip()
+        _kc_realm = (os.getenv("FG_KEYCLOAK_REALM") or "").strip()
+        _issuer_ok = bool(_issuer) and not _issuer.startswith("CHANGE_ME")
+        _kc_ok = (
+            bool(_kc_base)
+            and not _kc_base.startswith("CHANGE_ME")
+            and bool(_kc_realm)
+            and not _kc_realm.startswith("CHANGE_ME")
+        )
+        if not _issuer_ok and not _kc_ok:
+            raise RuntimeError(
+                "ADMIN_OIDC_CONFIG_REQUIRED: "
+                "FG_OIDC_ISSUER must be set to a real value in production/staging"
+                " (or provide both FG_KEYCLOAK_BASE_URL and FG_KEYCLOAK_REALM)"
+            )
+        if not cfg.oidc_enabled:
+            raise RuntimeError(
+                "ADMIN_OIDC_CONFIG_REQUIRED: "
+                "OIDC must be fully configured in production/staging"
+            )
