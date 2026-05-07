@@ -909,6 +909,73 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 """
             )
 
+        # -----------------------------------------------------------------
+        # RAG corpus persistence tables (PR 14)
+        # SQLite uses TEXT for metadata (JSONB not supported); the service
+        # layer serialises/deserialises JSON explicitly.
+        # -----------------------------------------------------------------
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS rag_corpora (
+                corpus_id   TEXT NOT NULL PRIMARY KEY,
+                tenant_id   TEXT NOT NULL,
+                name        TEXT NOT NULL,
+                description TEXT,
+                metadata    TEXT,
+                created_at  TEXT NOT NULL,
+                updated_at  TEXT NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_rag_corpora_tenant_corpus "
+            "ON rag_corpora (tenant_id, corpus_id)"
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS rag_documents (
+                document_id TEXT NOT NULL PRIMARY KEY,
+                corpus_id   TEXT NOT NULL REFERENCES rag_corpora (corpus_id),
+                tenant_id   TEXT NOT NULL,
+                title       TEXT NOT NULL,
+                source      TEXT,
+                metadata    TEXT,
+                created_at  TEXT NOT NULL,
+                updated_at  TEXT NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_rag_documents_tenant_corpus "
+            "ON rag_documents (tenant_id, corpus_id)"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_rag_documents_tenant_document "
+            "ON rag_documents (tenant_id, document_id)"
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS rag_chunks (
+                chunk_id    TEXT    NOT NULL PRIMARY KEY,
+                document_id TEXT    NOT NULL REFERENCES rag_documents (document_id),
+                corpus_id   TEXT    NOT NULL,
+                tenant_id   TEXT    NOT NULL,
+                text        TEXT    NOT NULL,
+                ordinal     INTEGER NOT NULL,
+                metadata    TEXT,
+                created_at  TEXT    NOT NULL
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_rag_chunks_tenant_corpus "
+            "ON rag_chunks (tenant_id, corpus_id)"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_rag_chunks_tenant_document "
+            "ON rag_chunks (tenant_id, document_id)"
+        )
+
 
 # ---------------------------------------------------------------------
 # Public API
