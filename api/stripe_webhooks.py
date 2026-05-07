@@ -106,7 +106,8 @@ def _verify_webhook_signature(
         )
         return dict(event)
     except stripe.error.SignatureVerificationError as exc:
-        if "timestamp" in str(exc).lower():
+        _msg = str(exc).lower()
+        if "outside the tolerance zone" in _msg or "timestamp outside" in _msg:
             raise WebhookSignatureError(STRIPE_WEBHOOK_TIMESTAMP_STALE) from exc
         raise WebhookSignatureError(STRIPE_WEBHOOK_SIGNATURE_INVALID) from exc
 

@@ -459,3 +459,127 @@ def test_billing_readiness_unchanged():
     result_str = str(result)
     assert "sk_live_test" not in result_str
     assert "whsec_test" not in result_str
+
+
+# ---------------------------------------------------------------------------
+# 14. Malformed header (no extractable timestamp) → STRIPE_WEBHOOK_SIGNATURE_INVALID
+# ---------------------------------------------------------------------------
+
+
+def test_stripe_webhook_malformed_header_no_t_value_is_invalid(monkeypatch):
+    """SignatureVerificationError('Unable to extract timestamp...') must map to
+    STRIPE_WEBHOOK_SIGNATURE_INVALID, not STRIPE_WEBHOOK_TIMESTAMP_STALE."""
+    import stripe as _stripe
+
+    with pytest.raises(WebhookSignatureError) as exc_info:
+        with patch(
+            "stripe.Webhook.construct_event",
+            side_effect=_stripe.error.SignatureVerificationError(
+                "Unable to extract timestamp and signatures from header",
+                "v1=abc",
+            ),
+        ):
+            _verify_webhook_signature(_TEST_PAYLOAD, "v1=abc", _TEST_SECRET)
+
+    assert exc_info.value.reason_code == STRIPE_WEBHOOK_SIGNATURE_INVALID
+
+
+# ---------------------------------------------------------------------------
+# 15. Malformed header (v1 only, no t=) → STRIPE_WEBHOOK_SIGNATURE_INVALID
+# ---------------------------------------------------------------------------
+
+
+def test_stripe_webhook_malformed_header_v1_only_is_invalid(monkeypatch):
+    """A header containing only 'v1=...' with no timestamp raises
+    STRIPE_WEBHOOK_SIGNATURE_INVALID, not STRIPE_WEBHOOK_TIMESTAMP_STALE."""
+    import stripe as _stripe
+
+    with pytest.raises(WebhookSignatureError) as exc_info:
+        with patch(
+            "stripe.Webhook.construct_event",
+            side_effect=_stripe.error.SignatureVerificationError(
+                "No signatures found matching the expected signature for the payload",
+                "v1=deadbeef",
+            ),
+        ):
+            _verify_webhook_signature(_TEST_PAYLOAD, "v1=deadbeef", _TEST_SECRET)
+
+    assert exc_info.value.reason_code == STRIPE_WEBHOOK_SIGNATURE_INVALID
+
+
+# ---------------------------------------------------------------------------
+# 16. Genuine stale timestamp → STRIPE_WEBHOOK_TIMESTAMP_STALE (precision check)
+# ---------------------------------------------------------------------------
+
+
+def test_stripe_webhook_stale_timestamp_is_timestamp_stale(monkeypatch):
+    """Only 'Timestamp outside the tolerance zone' maps to STRIPE_WEBHOOK_TIMESTAMP_STALE."""
+    import stripe as _stripe
+
+    with pytest.raises(WebhookSignatureError) as exc_info:
+        with patch(
+            "stripe.Webhook.construct_event",
+            side_effect=_stripe.error.SignatureVerificationError(
+                "Timestamp outside the tolerance zone (1000000000)",
+                "t=1000000000,v1=sig",
+            ),
+        ):
+            _verify_webhook_signature(
+                _TEST_PAYLOAD, "t=1000000000,v1=sig", _TEST_SECRET
+            )
+
+    assert exc_info.value.reason_code == STRIPE_WEBHOOK_TIMESTAMP_STALE
+
+
+# ---------------------------------------------------------------------------
+# 17. Audit details["reason_code"] matches HTTP response error code
+# ---------------------------------------------------------------------------
+
+
+def test_stripe_webhook_audit_reason_code_matches_response(monkeypatch):
+    """For each rejection path the audit details['reason_code'] must equal
+    the reason code returned in the HTTP response body."""
+    import stripe as _stripe
+
+    cases = [
+        (
+            _stripe.error.SignatureVerificationError(
+                "Timestamp outside the tolerance zone (1)", "t=1,v1=s"
+            ),
+            STRIPE_WEBHOOK_TIMESTAMP_STALE,
+        ),
+        (
+            _stripe.error.SignatureVerificationError(
+                "Unable to extract timestamp and signatures from header", "v1=abc"
+            ),
+            STRIPE_WEBHOOK_SIGNATURE_INVALID,
+        ),
+        (
+            _stripe.error.SignatureVerificationError(
+                "No signatures found matching the expected signature", "t=1,v1=bad"
+            ),
+            STRIPE_WEBHOOK_SIGNATURE_INVALID,
+        ),
+    ]
+
+    for side_effect, expected_code in cases:
+        emitted: list = []
+
+        auditor_mock = MagicMock()
+        auditor_mock.log_event.side_effect = lambda ev: emitted.append(ev)
+
+        with patch("api.stripe_webhooks.get_auditor", return_value=auditor_mock):
+            with patch("stripe.Webhook.construct_event", side_effect=side_effect):
+                from api.stripe_webhooks import _audit_rejection
+
+                try:
+                    _verify_webhook_signature(_TEST_PAYLOAD, "t=1,v1=x", _TEST_SECRET)
+                except WebhookSignatureError as exc:
+                    _audit_rejection(exc.reason_code, "t=1,v1=x", _TEST_SECRET)
+                    assert exc.reason_code == expected_code, (
+                        f"Expected {expected_code}, got {exc.reason_code} "
+                        f"for error: {side_effect}"
+                    )
+
+        assert emitted, f"No audit event emitted for {expected_code}"
+        assert emitted[0].details["reason_code"] == expected_code

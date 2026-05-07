@@ -40,6 +40,12 @@ This log records **completed, intentional fixes**.
 - `make fg-fast` → All checks passed
 - `bash codex_gates.sh` → All gates passed
 
+#### Codex Review Repair — 2026-05-07
+
+- Root cause: `"timestamp" in str(exc).lower()` also matched malformed-header errors like "Unable to extract timestamp and signatures from header"
+- Fix: narrowed classifier to `"outside the tolerance zone"` / `"timestamp outside"` — only genuine stale-timestamp errors now map to STRIPE_WEBHOOK_TIMESTAMP_STALE; all others fall through to STRIPE_WEBHOOK_SIGNATURE_INVALID
+- Tests added: malformed header cases, audit reason_code alignment
+
 ---
 
 ### 2026-05-06 — PR 3 Stripe Readiness Wiring
