@@ -3,3 +3,7 @@
 # pip-audit lists no fix_versions for this CVE, so we hard-block ecdsa from being
 # installed until a fixed version is available.
 ecdsa==0
+
+# GHSA-2h4p-vjrc-8xpq (mako, fixed in 1.3.12). Mako is a transitive dep of
+# alembic; pin the minimum here so all installs pick up the patched version.
+mako==1.3.12

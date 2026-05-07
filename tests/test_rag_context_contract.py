@@ -29,19 +29,33 @@ from api.rag_context import (
 # ---------------------------------------------------------------------------
 
 
-def _make_provenance(**kwargs) -> RagChunkProvenance:
-    defaults = dict(corpus_id="corp-1", document_id="doc-1", chunk_id="chunk-1")
-    defaults.update(kwargs)
-    return RagChunkProvenance(**defaults)
+def _make_provenance(
+    corpus_id: str = "corp-1",
+    document_id: str = "doc-1",
+    chunk_id: str = "chunk-1",
+) -> RagChunkProvenance:
+    return RagChunkProvenance(
+        corpus_id=corpus_id,
+        document_id=document_id,
+        chunk_id=chunk_id,
+    )
 
 
 def _make_chunk(
-    text: str = "Some text", score: float = 0.9, **prov_kwargs
+    text: str = "Some text",
+    score: float = 0.9,
+    corpus_id: str = "corp-1",
+    document_id: str = "doc-1",
+    chunk_id: str = "chunk-1",
 ) -> RagContextChunk:
     return RagContextChunk(
         text=text,
         score=score,
-        provenance=_make_provenance(**prov_kwargs),
+        provenance=_make_provenance(
+            corpus_id=corpus_id,
+            document_id=document_id,
+            chunk_id=chunk_id,
+        ),
     )
 
 
