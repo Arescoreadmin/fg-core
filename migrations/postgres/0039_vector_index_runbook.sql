@@ -22,15 +22,19 @@
 --   SELECT model, dimensions, COUNT(*) FROM embedding_vectors GROUP BY model, dimensions;
 --
 -- Step 2. Create the ANN index CONCURRENTLY (outside this migration):
+--   The embedding column is dimensionless (vector with no fixed dim), so the
+--   index expression MUST cast to the concrete dimension of the chosen model.
+--   Replace 1536 with the actual dimension from step 1 if using a different model.
+--
 --   CREATE INDEX CONCURRENTLY ix_ev_ann_ada_1536
---       ON embedding_vectors USING ivfflat (embedding vector_cosine_ops)
+--       ON embedding_vectors USING ivfflat ((embedding::vector(1536)) vector_cosine_ops)
 --       WITH (lists = 100)
 --       WHERE model = 'openai/text-embedding-ada-002';
 --
 --   Tune: lists ≈ sqrt(row_count); minimum ~1 000 rows per list recommended.
 --   For HNSW (better recall, slower build):
 --   CREATE INDEX CONCURRENTLY ix_ev_hnsw_ada_1536
---       ON embedding_vectors USING hnsw (embedding vector_cosine_ops)
+--       ON embedding_vectors USING hnsw ((embedding::vector(1536)) vector_cosine_ops)
 --       WITH (m = 16, ef_construction = 64)
 --       WHERE model = 'openai/text-embedding-ada-002';
 --

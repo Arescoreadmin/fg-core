@@ -210,6 +210,7 @@ class TestExistsIsolation:
         exists_for_b = embedding_exists(
             db,
             tenant_id=_TENANT_B,
+            corpus_id=_CORPUS,
             chunk_id="chunk-a",
             model=_MODEL.value,
             content_hash=rec.content_hash,
@@ -221,6 +222,7 @@ class TestExistsIsolation:
             embedding_exists(
                 db,
                 tenant_id="",
+                corpus_id=_CORPUS,
                 chunk_id="chunk-a",
                 model=_MODEL.value,
                 content_hash="somehash",

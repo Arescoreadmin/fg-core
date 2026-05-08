@@ -479,21 +479,24 @@ def embedding_exists(
     db: Session,
     *,
     tenant_id: str,
+    corpus_id: str,
     chunk_id: str,
     model: str,
     content_hash: str,
 ) -> bool:
-    """Return True if an embedding for (tenant, chunk, model, hash) exists."""
+    """Return True if an embedding for (tenant, corpus, chunk, model, hash) exists."""
     _require_tenant(tenant_id)
     row = (
         db.execute(
             text(
                 "SELECT 1 FROM embedding_vectors "
-                "WHERE tenant_id=:tenant_id AND chunk_id=:chunk_id "
+                "WHERE tenant_id=:tenant_id AND corpus_id=:corpus_id "
+                "AND chunk_id=:chunk_id "
                 "AND model=:model AND content_hash=:content_hash LIMIT 1"
             ),
             {
                 "tenant_id": tenant_id,
+                "corpus_id": corpus_id,
                 "chunk_id": chunk_id,
                 "model": model,
                 "content_hash": content_hash,
@@ -524,6 +527,7 @@ def upsert_embedding(
     existing = embedding_exists(
         db,
         tenant_id=rec.tenant_id,
+        corpus_id=rec.corpus_id,
         chunk_id=rec.chunk_id,
         model=rec.embedding_model.value,
         content_hash=rec.content_hash,
@@ -541,7 +545,8 @@ def upsert_embedding(
             f"""
             UPDATE embedding_vectors
             SET embedding=({vec_expr}), dimensions=:dimensions, updated_at=:updated_at
-            WHERE tenant_id=:tenant_id AND chunk_id=:chunk_id
+            WHERE tenant_id=:tenant_id AND corpus_id=:corpus_id
+              AND chunk_id=:chunk_id
               AND model=:model AND content_hash=:content_hash
             """
         )
@@ -549,6 +554,7 @@ def upsert_embedding(
             "dimensions": rec.dimensions,
             "updated_at": now,
             "tenant_id": rec.tenant_id,
+            "corpus_id": rec.corpus_id,
             "chunk_id": rec.chunk_id,
             "model": rec.embedding_model.value,
             "content_hash": rec.content_hash,
@@ -558,7 +564,8 @@ def upsert_embedding(
             """
             UPDATE embedding_vectors
             SET embedding=:embedding, dimensions=:dimensions, updated_at=:updated_at
-            WHERE tenant_id=:tenant_id AND chunk_id=:chunk_id
+            WHERE tenant_id=:tenant_id AND corpus_id=:corpus_id
+              AND chunk_id=:chunk_id
               AND model=:model AND content_hash=:content_hash
             """
         )
@@ -567,6 +574,7 @@ def upsert_embedding(
             "dimensions": rec.dimensions,
             "updated_at": now.isoformat(),
             "tenant_id": rec.tenant_id,
+            "corpus_id": rec.corpus_id,
             "chunk_id": rec.chunk_id,
             "model": rec.embedding_model.value,
             "content_hash": rec.content_hash,

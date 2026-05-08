@@ -284,6 +284,7 @@ class TestEmbeddingExists:
         assert not embedding_exists(
             db,
             tenant_id=_TENANT,
+            corpus_id=_CORPUS,
             chunk_id=_CHUNK,
             model=_MODEL.value,
             content_hash=_HASH,
@@ -294,6 +295,7 @@ class TestEmbeddingExists:
         assert embedding_exists(
             db,
             tenant_id=_TENANT,
+            corpus_id=_CORPUS,
             chunk_id=_CHUNK,
             model=_MODEL.value,
             content_hash=_HASH,
@@ -304,6 +306,7 @@ class TestEmbeddingExists:
         assert not embedding_exists(
             db,
             tenant_id="other-tenant",
+            corpus_id=_CORPUS,
             chunk_id=_CHUNK,
             model=_MODEL.value,
             content_hash=_HASH,
@@ -374,6 +377,7 @@ class TestTenantRequirement:
             embedding_exists(
                 db,
                 tenant_id="",
+                corpus_id=_CORPUS,
                 chunk_id=_CHUNK,
                 model=_MODEL.value,
                 content_hash=_HASH,

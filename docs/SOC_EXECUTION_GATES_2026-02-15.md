@@ -2859,3 +2859,29 @@ Validation:
 - pytest tests/security/test_prod_invariants.py tests/security/test_required_env_enforcement.py tests/security/test_compliance_modules.py (56 passed)
 - make soc-review-sync
 - make fg-fast
+
+## PR 20 addendum — pgvector CI/Docker runtime dependency
+
+Reviewed critical files:
+- .github/workflows/ci.yml
+
+Changes:
+- Replaced `postgres:16` with `pgvector/pgvector:pg16` in both CI service
+  definitions (unit test job, lines 322 and 380). The plain postgres:16 image
+  does not ship the vector extension; migration 0038_embedding_vectors.sql runs
+  `CREATE EXTENSION IF NOT EXISTS vector` and would fail silently or at runtime.
+- Replaced `postgres:16-alpine` with `pgvector/pgvector:pg16` in docker-compose.yml
+  for local dev consistency.
+
+SOC review:
+- No security policy changed. This is a runtime dependency fix: the base image now
+  includes the pgvector extension required by the embedding persistence migration.
+  The pgvector/pgvector:pg16 image is the official upstream image published by the
+  pgvector project; it is based on the same postgres:16 base and adds only the
+  extension library.
+- No auth, enforcement, or access control logic altered.
+- No secrets, env vars, or deployment configuration changed beyond the image tag.
+
+Validation:
+- make fg-fast (141 embedding tests pass, all gates pass)
+- make soc-review-sync
