@@ -27,6 +27,8 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'audit/export', methods: new Set(['GET', 'HEAD']) },
   // Assessment + report flow: scoped-key-gated pre-tenant endpoints
   { prefix: 'ingest/assessment', methods: new Set(['GET', 'POST', 'PATCH', 'HEAD']) },
+  // AI assistant chat — governed end-user surface
+  { prefix: 'ui/ai/chat', methods: new Set(['POST']) },
 ];
 
 function getRequestId(request: NextRequest): string {
