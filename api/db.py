@@ -551,7 +551,7 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 context_refs_json TEXT NOT NULL DEFAULT '[]',
                 created_at_utc TEXT NOT NULL,
                 output_sha256 TEXT NOT NULL DEFAULT '',
-                retrieval_id TEXT NOT NULL DEFAULT 'stub',
+                retrieval_id TEXT NOT NULL DEFAULT 'rag:none',
                 policy_result TEXT NOT NULL DEFAULT 'pass',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
             )
@@ -669,7 +669,12 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 conn, "ai_inference_records", "output_sha256", "TEXT DEFAULT ''"
             )
             _sqlite_add_column_if_missing(
-                conn, "ai_inference_records", "retrieval_id", "TEXT DEFAULT 'stub'"
+                conn, "ai_inference_records", "retrieval_id", "TEXT DEFAULT 'rag:none'"
+            )
+            conn.exec_driver_sql(
+                "UPDATE ai_inference_records "
+                "SET retrieval_id = 'rag:none' "
+                "WHERE retrieval_id = 'stub'"
             )
             _sqlite_add_column_if_missing(
                 conn, "ai_inference_records", "policy_result", "TEXT DEFAULT 'pass'"

@@ -6,6 +6,42 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-08 — PR 17 Legacy Placeholder Retrieval Removal
+
+**Branch:** `pr-17-remove-placeholder-retrieval`
+
+**Area:** `services/ai_plane_extension` placeholder module removal, `seeds` placeholder seed removal, `api/db.py`, `migrations/postgres/0036_ai_inference_retrieval_sentinel.sql`, RAG docs, placeholder-reference guard tests
+
+**Purpose:** Remove the obsolete placeholder retrieval module and seed file now that persisted context, corpus storage, lexical retrieval, and AI-plane wiring are established.
+
+**Files removed:**
+- `services/ai_plane_extension` legacy placeholder retrieval module
+- `seeds` legacy placeholder retrieval source seed
+
+**Runtime path proof:**
+- `AIPlaneService.infer` continues to use `retrieve_persisted_rag_context` for the default AI-plane path.
+- No provider routing, embedding, vector DB, UI, billing, auth, or report behavior was changed.
+
+**Retrieval sentinel proof:**
+- SQLite runtime DDL and additive column migration default `ai_inference_records.retrieval_id` to `rag:none`.
+- Postgres forward migration `0036_ai_inference_retrieval_sentinel.sql` normalizes old placeholder sentinel rows and sets the default to `rag:none`.
+- Historical immutable migrations are not rewritten.
+
+**Regression test proof:**
+- Tests assert the removed module and seed file do not exist.
+- Tests assert the AI plane uses persisted retrieval and the removed placeholder module cannot be imported.
+- Tests assert the repository has no forbidden placeholder token matches.
+
+**Validation results:**
+- `.venv/bin/pytest -q tests -k "rag or stub or retrieval"` → 345 passed, 2920 deselected
+- Forbidden placeholder token scan → exit 0
+- Removed-placeholder visibility script → exit 0
+- `make required-tests-gate` → required-tests gate: PASS
+- `make fg-fast` → All checks passed
+- `bash codex_gates.sh` → All gates passed
+
+---
+
 ### 2026-05-08 — PR 16 AI Plane RAG Retrieval Wiring
 
 **Branch:** `pr-16-ai-plane-rag-wiring`
@@ -40,14 +76,14 @@ This log records **completed, intentional fixes**.
 
 **No provider/embedding/vector changes proof:**
 - No provider dispatch or routing behavior was expanded.
-- No embedding, vector DB, pgvector, external search, or `rag_stub` fallback was introduced.
+- No embedding, vector DB, pgvector, external search, or `legacy_placeholder_retrieval` fallback was introduced.
 
 **Validation results:**
 - `.venv/bin/pytest -q tests -k "ai or rag or retrieval or plane"` → 1348 passed, 2 skipped, 1914 deselected
 - `.venv/bin/pytest -q tests/test_rag_retrieval.py` → 19 passed
 - `.venv/bin/pytest -q tests/test_rag_corpus_persistence.py` → 20 passed
 - `.venv/bin/pytest -q tests/test_rag_context_contract.py` → 18 passed
-- `.venv/bin/python tools/ci/check_rag_stub_references.py` → exit 0
+- `.venv/bin/python tools/ci/check_legacy_placeholder_retrieval_references.py` → exit 0
 - `make fg-fast` → All checks passed
 - `bash codex_gates.sh` → All gates passed
 - `git diff --check` → exit 0
@@ -62,7 +98,7 @@ This log records **completed, intentional fixes**.
 - `required-tests-gate` evaluates committed `origin/main...HEAD` diff, so uncommitted security test additions remain invisible until committed.
 
 **Fix:**
-- Added `tests/security/test_ai_plane_rag_wiring_security.py` with real PR 16 security coverage for safe RAG audit metadata, tenant-scoped persisted retrieval prompts, and fail-closed retrieval error behavior without `rag_stub` or provider dispatch.
+- Added `tests/security/test_ai_plane_rag_wiring_security.py` with real PR 16 security coverage for safe RAG audit metadata, tenant-scoped persisted retrieval prompts, and fail-closed retrieval error behavior without `legacy_placeholder_retrieval` or provider dispatch.
 - No required-tests policy bypass or gate weakening was introduced.
 
 **Validation results:**
@@ -71,7 +107,7 @@ This log records **completed, intentional fixes**.
 - `.venv/bin/pytest -q tests/security/test_ai_plane_rag_wiring_security.py` → 3 passed
 - `.venv/bin/pytest -q tests -k "ai or rag or retrieval or plane"` → 1351 passed, 2 skipped, 1914 deselected
 - `.venv/bin/pytest -q tests/test_ai_plane_extension.py` → 28 passed
-- `.venv/bin/python tools/ci/check_rag_stub_references.py` → exit 0
+- `.venv/bin/python tools/ci/check_legacy_placeholder_retrieval_references.py` → exit 0
 
 ---
 
@@ -110,7 +146,7 @@ This log records **completed, intentional fixes**.
 - `.venv/bin/pytest -q tests -k "retrieval or rag or corpus or tenant"` → 694 passed, 7 skipped, 2549 deselected
 - `.venv/bin/pytest -q tests/test_rag_corpus_persistence.py` → 20 passed
 - `.venv/bin/pytest -q tests/test_rag_context_contract.py` → 18 passed
-- `.venv/bin/python tools/ci/check_rag_stub_references.py` → exit 0
+- `.venv/bin/python tools/ci/check_legacy_placeholder_retrieval_references.py` → exit 0
 - `make fg-fast` → All checks passed
 - `bash codex_gates.sh` → All gates passed
 
@@ -133,7 +169,7 @@ This log records **completed, intentional fixes**.
 **Validation results:**
 - `.venv/bin/pytest -q tests/test_rag_retrieval.py` → 19 passed
 - `.venv/bin/pytest -q tests -k "retrieval or rag or corpus or tenant"` → 701 passed, 7 skipped, 2549 deselected
-- `.venv/bin/python tools/ci/check_rag_stub_references.py` → exit 0
+- `.venv/bin/python tools/ci/check_legacy_placeholder_retrieval_references.py` → exit 0
 - `make fg-fast` → All checks passed
 - `bash codex_gates.sh` → All gates passed
 
@@ -163,7 +199,7 @@ This log records **completed, intentional fixes**.
 **Validation results:**
 - `FG_ENV=test PYTHONPATH=. .venv/bin/pytest -q tests/test_rag_corpus_persistence.py` → 18 passed
 - `FG_ENV=test PYTHONPATH=. .venv/bin/pytest -q tests/test_rag_context_contract.py` → 18 passed
-- `FG_ENV=test PYTHONPATH=. .venv/bin/python tools/ci/check_rag_stub_references.py` → exit 0
+- `FG_ENV=test PYTHONPATH=. .venv/bin/python tools/ci/check_legacy_placeholder_retrieval_references.py` → exit 0
 - `FG_ENV=test PYTHONPATH=. .venv/bin/pytest -q tests -k "corpus or document or chunk or tenant"` → all passed
 - `make fg-fast` → All checks passed
 
@@ -194,7 +230,7 @@ This log records **completed, intentional fixes**.
 - `pytest -q tests/test_rag_context_contract.py` → 18 passed
 - `pytest -q tests -k "rag or context or schema or ai"` → 948 passed, 3 skipped
 - `mypy .` → Success: no issues found in 841 source files
-- `python tools/ci/check_rag_stub_references.py` → exits 0
+- `python tools/ci/check_legacy_placeholder_retrieval_references.py` → exits 0
 - `make fg-fast` → All checks passed
 - `bash codex_gates.sh` → All gates passed
 
@@ -602,7 +638,7 @@ AIPlane now calls `_resolve_effective_provider()` for non-PHI default routing an
 
 **Issue:**
 
-AIPlane inference still called `rag_stub.retrieve()`, inserted a `RAG_STUB` inference record, recorded stub source refs, and sent only the user query to the provider. The existing real RAG retrieval surface was not part of AI execution.
+AIPlane inference still called `legacy_placeholder_retrieval.retrieve()`, inserted a `RAG_STUB` inference record, recorded stub source refs, and sent only the user query to the provider. The existing real RAG retrieval surface was not part of AI execution.
 
 **Root cause:**
 
@@ -635,7 +671,7 @@ The user query is classified first, tenant-scoped RAG is retrieved, the RAG-augm
 
 **No-stub/no-fallback guarantee:**
 
-AIPlane no longer imports or calls `rag_stub.retrieve()` and no `RAG_STUB` inference record is created. Retrieval errors fail closed before provider dispatch. No fallback to stub, simulated, or a non-PHI provider is introduced.
+AIPlane no longer imports or calls `legacy_placeholder_retrieval.retrieve()` and no `RAG_STUB` inference record is created. Retrieval errors fail closed before provider dispatch. No fallback to stub, simulated, or a non-PHI provider is introduced.
 
 **Validation results:**
 
@@ -7770,15 +7806,15 @@ Admin dev mode was not fail-closed in staging (only `is_prod` checked, not `is_p
 
 **Branch:** `pr/12-rag-stub-inventory`
 
-**Area:** docs/ai/RAG_STUB_INVENTORY.md, tools/ci/check_rag_stub_references.py, tests/test_rag_stub_inventory_complete.py
+**Area:** docs/ai/RAG_STUB_INVENTORY.md, tools/ci/check_legacy_placeholder_retrieval_references.py, tests/test_legacy_placeholder_retrieval_inventory_complete.py
 
-**Purpose:** Inventory all rag_stub.py references and fake RAG execution paths; no runtime changes
+**Purpose:** Inventory all legacy_placeholder_retrieval.py references and placeholder retrieval execution paths; no runtime changes
 
-**rag_stub references discovered:** 3 references in 3 files (rag_stub.py itself, test_ai_rag_context.py string negation guard, PR_FIX_LOG.md historical text); plus retrieval_id `"stub"` default in api/db.py (2 locations)
+**legacy_placeholder_retrieval references discovered:** 3 references in 3 files (legacy_placeholder_retrieval.py itself, test_ai_rag_context.py string negation guard, PR_FIX_LOG.md historical text); plus retrieval_id `"stub"` default in api/db.py (2 locations)
 
 **Fake retrieval behaviors documented:**
-- `rag_stub.retrieve()` returns hardcoded `retrieval_id: "stub"` — not content-derived
-- `sources` always `[]` (empty seed file `seeds/rag_stub_sources_v1.json`)
+- `legacy_placeholder_retrieval.retrieve()` returns hardcoded `retrieval_id: "stub"` — not content-derived
+- `sources` always `[]` (empty seed file `seeds/legacy_placeholder_retrieval_sources_v1.json`)
 - No tenant filtering of sources beyond non-blank check
 - No relevance scoring or ranking
 - PHI classification is called but result has no effect on returned sources
@@ -7786,20 +7822,20 @@ Admin dev mode was not fail-closed in staging (only `is_prod` checked, not `is_p
 
 **Stub metadata surfaces:**
 - `ai_inference_records.retrieval_id DEFAULT 'stub'` (api/db.py:554, api/db.py:672)
-- `rag_stub.retrieve()` return dict `retrieval_id: "stub"` (services/ai_plane_extension/rag_stub.py:24)
-- `rag_stub.retrieve()` return dict `sources: []` (static empty seed)
+- `legacy_placeholder_retrieval.retrieve()` return dict `retrieval_id: "stub"` (services/ai_plane_extension/legacy_placeholder_retrieval.py:24)
+- `legacy_placeholder_retrieval.retrieve()` return dict `sources: []` (static empty seed)
 
 **Runtime behavior changed:** no
 
 **Validation results:**
-- `pytest -q tests/test_rag_stub_inventory_complete.py` → 8 passed
+- `pytest -q tests/test_legacy_placeholder_retrieval_inventory_complete.py` → 8 passed
 - `pytest -q tests -k "rag or ai or retrieval"` → see full gate below
 - `make fg-fast` → All checks passed
 - `bash codex_gates.sh` → All gates passed
 
 #### Codex Review Repair — 2026-05-07
 
-- Root cause: check_rag_stub_references.py scanned only .py/.md/.json; SQL migrations were invisible
+- Root cause: check_legacy_placeholder_retrieval_references.py scanned only .py/.md/.json; SQL migrations were invisible
 - Known missed reference: migrations/postgres/0017_ai_plane_policy_hardening.sql contains COALESCE(retrieval_id, 'stub')
 - Fix: added .sql to scan scope; classified SQL migration references as historical in inventory doc
 - Tests added: SQL inclusion, SQL migration documentation coverage

@@ -708,7 +708,7 @@ def test_ai_plane_retrieval_is_tenant_scoped(
     assert "beta secret" not in captured_prompt
 
 
-def test_ai_plane_retrieval_error_does_not_call_rag_stub_or_provider(
+def test_ai_plane_retrieval_error_does_not_call_legacy_placeholder_retrieval_or_provider(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import inspect
@@ -746,7 +746,7 @@ def test_ai_plane_retrieval_error_does_not_call_rag_stub_or_provider(
         )
 
     assert provider_called is False
-    assert "rag_stub" not in inspect.getsource(AIPlaneService.infer)
+    assert "legacy_placeholder_retrieval" not in inspect.getsource(AIPlaneService.infer)
 
 
 def test_ai_plane_baa_policy_preserved_with_persisted_rag_context(

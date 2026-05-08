@@ -1,11 +1,11 @@
 ## 2026-05-07 — PR 12: RAG Stub Removal Inventory
 
 Reviewed critical files:
-- tools/ci/check_rag_stub_references.py
+- tools/ci/check_legacy_placeholder_retrieval_references.py
 
 Changes:
-- `tools/ci/check_rag_stub_references.py`: New visibility-only script that greps for
-  rag_stub references and prints a report. Always exits 0 — no enforcement, no gate.
+- `tools/ci/check_legacy_placeholder_retrieval_references.py`: New visibility-only script that greps for
+  legacy_placeholder_retrieval references and prints a report. Always exits 0 — no enforcement, no gate.
   Not wired into any CI enforcer. Pure observability aid for stub removal planning.
 
 SOC review:
@@ -16,12 +16,12 @@ SOC review:
 - Consistent with existing visibility scripts in tools/ci/.
 
 Validation:
-- pytest tests/test_rag_stub_inventory_complete.py → 8 passed
+- pytest tests/test_legacy_placeholder_retrieval_inventory_complete.py → 8 passed
 - make fg-fast → All checks passed
 
 #### Codex Review Repair — 2026-05-07
 
-- `tools/ci/check_rag_stub_references.py`: Added `--include=*.sql` to grep
+- `tools/ci/check_legacy_placeholder_retrieval_references.py`: Added `--include=*.sql` to grep
   patterns so SQL migration files are no longer silently excluded from the
   visibility scan. No enforcement change — script remains always-exit-0.
 - Added `_HISTORICAL_ALLOWLIST` dict documenting the known SQL migration

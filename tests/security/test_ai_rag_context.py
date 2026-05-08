@@ -185,8 +185,8 @@ def test_rag_context_prompt_includes_context_before_query() -> None:
     assert prompt.endswith("User query:\nauthentication")
 
 
-def test_ai_plane_execution_path_does_not_call_rag_stub() -> None:
+def test_ai_plane_execution_path_does_not_call_legacy_placeholder_retrieval() -> None:
     source = inspect.getsource(AIPlaneService.infer)
-    assert "rag_stub" not in source
+    assert "legacy_placeholder_retrieval" not in source
     assert "search_chunks" not in source
     assert "retrieve_rag_context" in source

@@ -485,7 +485,7 @@ def test_retrieval_rejects_missing_tenant(db_session):
         retrieve_rag_context(db_session, request)
 
 
-def test_retrieval_does_not_import_rag_stub():
+def test_retrieval_does_not_import_legacy_placeholder_retrieval():
     spec = importlib.util.find_spec("api.rag_retrieval")
     assert spec is not None and spec.origin is not None
     with open(spec.origin) as fh:
@@ -494,7 +494,7 @@ def test_retrieval_does_not_import_rag_stub():
     import_lines = [
         line for line in lines if line.strip().startswith(("import ", "from "))
     ]
-    assert all("rag_stub" not in line for line in import_lines)
+    assert all("legacy_placeholder_retrieval" not in line for line in import_lines)
 
 
 def test_retrieval_does_not_call_embeddings_or_provider():

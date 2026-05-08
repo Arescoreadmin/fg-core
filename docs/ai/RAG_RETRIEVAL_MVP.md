@@ -64,7 +64,7 @@ Chunk text comes from persisted `rag_chunks.text`.
 - No provider routing changes
 - No AI-plane wiring changes
 - No public endpoint
-- No runtime fallback to the legacy RAG stub
+- No runtime fallback to legacy placeholder retrieval
 
 ## PR 16 Handoff
 

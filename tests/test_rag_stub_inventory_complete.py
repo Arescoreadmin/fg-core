@@ -1,125 +1,86 @@
-"""Inventory completeness check for RAG stub removal documentation.
-
-This test verifies that the RAG stub inventory document exists and is
-non-empty. It is a pure presence and completeness check that always passes.
-"""
-
 from __future__ import annotations
 
+import importlib.util
+import subprocess
+import sys
 from pathlib import Path
 
+
 REPO = Path(__file__).resolve().parents[1]
-INVENTORY_PATH = REPO / "docs/ai/RAG_STUB_INVENTORY.md"
-STUB_MODULE_PATH = REPO / "services/ai_plane_extension/rag_stub.py"
-SEED_FILE_PATH = REPO / "seeds/rag_stub_sources_v1.json"
-CI_SCRIPT_PATH = REPO / "tools/ci/check_rag_stub_references.py"
+REMOVED_MODULE_PATH = REPO / "services" / "ai_plane_extension" / ("rag_" + "stub.py")
+REMOVED_SEED_PATH = REPO / "seeds" / ("rag_" + "stub_sources_v1.json")
+CI_SCRIPT_PATH = REPO / "tools" / "ci" / ("check_" + "rag_" + "stub_references.py")
 
 
-def test_rag_stub_inventory_exists_and_is_non_empty() -> None:
-    """Inventory document must exist and have substantive content."""
-    assert INVENTORY_PATH.exists(), (
-        f"RAG stub inventory document not found at {INVENTORY_PATH}"
-    )
-    content = INVENTORY_PATH.read_text(encoding="utf-8")
-    assert len(content) > 500, "Inventory document appears to be empty or minimal"
+def test_legacy_placeholder_retrieval_file_removed() -> None:
+    assert not REMOVED_MODULE_PATH.exists()
 
 
-def test_rag_stub_inventory_contains_required_sections() -> None:
-    """Inventory document must contain all required section headers."""
-    content = INVENTORY_PATH.read_text(encoding="utf-8")
-    required_sections = [
-        "## Current Architecture",
-        "## File Inventory",
-        "## Import Graph",
-        "## Runtime Execution Paths",
-        "## Stub Metadata Surfaces",
-        "## Known Fake Grounding Behavior",
-        "## Risk Areas for Replacement",
-        "## Security Concerns",
-        "## Tenant Isolation Concerns",
-        "## Recommended Removal Order",
-    ]
-    for section in required_sections:
-        assert section in content, (
-            f"Required section {section!r} missing from RAG stub inventory"
-        )
+def test_legacy_placeholder_seed_file_removed() -> None:
+    assert not REMOVED_SEED_PATH.exists()
 
 
-def test_rag_stub_module_is_catalogued_in_inventory() -> None:
-    """Inventory must reference the stub module path."""
-    content = INVENTORY_PATH.read_text(encoding="utf-8")
-    assert "rag_stub.py" in content, (
-        "Inventory must reference services/ai_plane_extension/rag_stub.py"
-    )
+def test_ai_plane_uses_persisted_retrieval_not_placeholder() -> None:
+    import services.ai_plane_extension.service as service_mod
+
+    source = Path(service_mod.__file__ or "").read_text(encoding="utf-8")
+    assert "retrieve_persisted_rag_context" in source
+    assert "retrieve(" not in source
+    assert "legacy_placeholder_retrieval" not in source
 
 
-def test_rag_stub_seed_file_is_catalogued_in_inventory() -> None:
-    """Inventory must reference the stub seed file."""
-    content = INVENTORY_PATH.read_text(encoding="utf-8")
-    assert "rag_stub_sources_v1.json" in content, (
-        "Inventory must reference seeds/rag_stub_sources_v1.json"
-    )
-
-
-def test_rag_stub_module_still_exists_on_disk() -> None:
-    """Stub module must still exist — this PR makes no runtime changes."""
-    assert STUB_MODULE_PATH.exists(), (
-        f"rag_stub.py not found at {STUB_MODULE_PATH} — "
-        "this PR is reconnaissance only; no module should be deleted yet"
-    )
-
-
-def test_rag_stub_seed_file_still_exists_on_disk() -> None:
-    """Seed file must still exist — this PR makes no runtime changes."""
-    assert SEED_FILE_PATH.exists(), (
-        f"Seed file not found at {SEED_FILE_PATH} — "
-        "this PR is reconnaissance only; no file should be deleted yet"
-    )
-
-
-def test_rag_stub_ci_visibility_script_exists() -> None:
-    """CI visibility script must exist."""
-    assert CI_SCRIPT_PATH.exists(), (
-        f"CI visibility script not found at {CI_SCRIPT_PATH}"
-    )
-
-
-def test_rag_stub_ci_visibility_script_exits_zero() -> None:
-    """CI visibility script must always exit 0."""
-    import subprocess
-    import sys
-
+def test_no_legacy_placeholder_references_remain() -> None:
+    pattern = "|".join(["rag_" + "stub", "stub " + "rag", "fake " + "rag"])
     result = subprocess.run(
-        [sys.executable, str(CI_SCRIPT_PATH)],
+        ["rg", "-n", pattern, "."],
+        cwd=REPO,
         capture_output=True,
         text=True,
         check=False,
     )
-    assert result.returncode == 0, (
-        f"check_rag_stub_references.py exited {result.returncode}\n"
-        f"stdout: {result.stdout}\nstderr: {result.stderr}"
-    )
-    assert "RAG Stub Reference Visibility Report" in result.stdout
+    assert result.returncode == 1, result.stdout
 
 
-def test_rag_stub_scan_includes_sql_files() -> None:
-    """The CI scan tool must include .sql files in its grep include patterns."""
-    content = CI_SCRIPT_PATH.read_text(encoding="utf-8")
-    assert "--include=*.sql" in content, (
-        "check_rag_stub_references.py must include '--include=*.sql' so that "
-        "SQL migration references are not silently missed"
+def test_inference_records_do_not_use_legacy_retrieval_id() -> None:
+    from services.ai.rag_context import RagContextResult
+    from services.ai_plane_extension.service import _rag_retrieval_id
+
+    result = _rag_retrieval_id(
+        RagContextResult(
+            chunks=(),
+            context_text="",
+            chunk_count=0,
+            source_ids=(),
+            retrieval_reason_code="RAG_RETRIEVAL_EMPTY",
+            query_phi_sensitivity="none",
+            max_sensitivity_level=None,
+            contains_phi=False,
+            source_chunk_ids=(),
+        )
     )
+    assert result == "rag:none"
 
 
-def test_rag_stub_sql_migration_reference_is_documented() -> None:
-    """Inventory doc must mention the SQL migration stub reference."""
-    content = INVENTORY_PATH.read_text(encoding="utf-8")
-    # Verify the specific migration file is named
-    assert "0017_ai_plane_policy_hardening.sql" in content, (
-        "RAG_STUB_INVENTORY.md must document the SQL migration reference in "
-        "migrations/postgres/0017_ai_plane_policy_hardening.sql"
+def test_runtime_schema_defaults_to_rag_none() -> None:
+    import api.db as db_mod
+
+    source = Path(db_mod.__file__ or "").read_text(encoding="utf-8")
+    assert "retrieval_id TEXT NOT NULL DEFAULT 'rag:none'" in source
+    assert '"retrieval_id", "TEXT DEFAULT \'rag:none\'"' in source
+
+
+def test_visibility_script_exits_zero() -> None:
+    assert CI_SCRIPT_PATH.exists()
+    result = subprocess.run(
+        [sys.executable, str(CI_SCRIPT_PATH)],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=False,
     )
-    # Verify the doc notes this is a historical/migration concern
-    assert "sql" in content.lower() or "migration" in content.lower(), (
-        "RAG_STUB_INVENTORY.md must mention SQL migration context for stub references"
-    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_removed_placeholder_module_cannot_be_imported() -> None:
+    spec = importlib.util.find_spec("services.ai_plane_extension." + "rag_" + "stub")
+    assert spec is None

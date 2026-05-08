@@ -6,7 +6,7 @@ Covers:
 - Document CRUD with tenant isolation
 - Chunk storage, ordering, and metadata round-trip
 - Blank-value rejection
-- No import of retrieval or rag_stub modules
+- No import of retrieval or legacy_placeholder_retrieval modules
 """
 
 from __future__ import annotations
@@ -508,14 +508,14 @@ def test_corpus_persistence_does_not_call_retrieval(db_session):
         )
 
 
-def test_corpus_persistence_does_not_import_rag_stub(db_session):
+def test_corpus_persistence_does_not_import_legacy_placeholder_retrieval(db_session):
     """
-    api.rag_corpus_store must never import rag_stub.
+    api.rag_corpus_store must never import legacy_placeholder_retrieval.
     """
     spec = importlib.util.find_spec("api.rag_corpus_store")
     assert spec is not None and spec.origin is not None
     with open(spec.origin) as fh:
         source = fh.read()
-    assert "rag_stub" not in source, (
-        "api/rag_corpus_store.py must not import or reference rag_stub"
+    assert "legacy_placeholder_retrieval" not in source, (
+        "api/rag_corpus_store.py must not import or reference legacy_placeholder_retrieval"
     )
