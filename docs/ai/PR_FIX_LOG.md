@@ -6,6 +6,67 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-08 — PR 18 Grounded Answer Validation
+
+**Branch:** `pr/18-grounded-answer-validation`
+
+**Task identifier:** PR 18 Grounded Answer Validation
+
+**Area:** `tests/test_grounded_answer_validation.py`, `docs/ai/RAG_FLOW.md`
+
+**Purpose:** Add validation proving AI responses are grounded when tenant corpus
+context exists, safe when no context exists, and audit-visible without leaking
+retrieved content. This is validation and safety hardening around the existing
+persisted lexical RAG path. No providers, embeddings, vector DB, or UI were
+added or changed.
+
+**Files changed:**
+- `tests/test_grounded_answer_validation.py` — 12 new tests (new file)
+- `docs/ai/RAG_FLOW.md` — new flow documentation (new file)
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Grounded response proof:**
+- `test_ai_answer_is_grounded_when_corpus_context_exists`: `used_rag=True`,
+  `context_count >= 1`, real persisted chunk ID in `source_chunk_ids`.
+- `test_grounded_answer_metadata_uses_real_source_chunk_ids`: all chunk IDs in
+  metadata start with `ck-` prefix (real persisted IDs, not fabricated).
+- `test_grounded_answer_context_count_matches_sources`: `context_count` equals
+  `len(source_chunk_ids)` when multiple chunks are retrieved.
+
+**No-context fallback proof:**
+- `test_no_context_sets_no_relevant_context_reason`: `used_rag=False`,
+  `context_count=0`, `source_chunk_ids=[]`, provider not called.
+- `test_no_context_does_not_fabricate_source_claims`: response is `NO_ANSWER`,
+  `sources=[]`, `confidence=0.0`, no fabricated content.
+
+**Audit event proof:**
+- `test_retrieval_usage_audit_event_emitted`: `ai_plane_infer` event has
+  `rag_used=True`, `rag_chunk_count >= 1`, `chunk_id in rag_source_chunk_ids`.
+- `test_retrieval_audit_does_not_log_chunk_text`: chunk text string absent from
+  all audit metadata.
+- `test_retrieval_audit_does_not_log_full_prompt`: full provider prompt string
+  absent from all audit metadata; `Retrieved context:` not in audit details.
+
+**Security boundary proof:**
+- `test_wrong_tenant_context_not_used_for_grounded_answer`: tenant-b chunk text
+  absent from tenant-a provider prompt; only tenant-a chunk IDs in metadata.
+- `test_grounded_answer_path_preserves_baa_policy`: PHI-containing retrieved
+  context triggers `AI_PHI_PROVIDER_NOT_BAA_CAPABLE` before provider dispatch;
+  provider not called.
+- `test_grounded_answer_validation_does_not_call_live_provider`: only simulated
+  provider called; no non-simulated provider IDs captured.
+- `test_grounded_answer_validation_does_not_call_embeddings`: static import and
+  call analysis confirms `api/rag_retrieval.py` and `services/ai/rag_context.py`
+  contain no embedding/pgvector/vector_search calls.
+
+**Validation results:**
+- `pytest -q tests/test_grounded_answer_validation.py` → 12 passed
+- Forbidden placeholder token scan → exit 0
+- `make fg-fast` → pending full run
+- `bash codex_gates.sh` → pending full run
+
+---
+
 ### 2026-05-08 — PR 17 Legacy Placeholder Retrieval Removal
 
 **Branch:** `pr-17-remove-placeholder-retrieval`
