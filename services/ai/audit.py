@@ -72,6 +72,7 @@ def build_ai_audit_metadata(
         "rag_used": False,
         "rag_chunk_count": 0,
         "rag_source_ids": [],
+        "rag_source_chunk_ids": [],
         "rag_retrieval_reason_code": None,
         "rag_query_phi_sensitivity": None,
         "rag_max_sensitivity_level": None,
@@ -97,6 +98,7 @@ def build_ai_audit_metadata(
         metadata["rag_used"] = rag_context.rag_used
         metadata["rag_chunk_count"] = rag_context.chunk_count
         metadata["rag_source_ids"] = list(rag_context.source_ids)
+        metadata["rag_source_chunk_ids"] = list(rag_context.source_chunk_ids)
         metadata["rag_retrieval_reason_code"] = rag_context.retrieval_reason_code
         metadata["rag_query_phi_sensitivity"] = rag_context.query_phi_sensitivity
         metadata["rag_max_sensitivity_level"] = rag_context.max_sensitivity_level

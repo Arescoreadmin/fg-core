@@ -3,8 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
+from pydantic import ValidationError
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
 from api.rag.chunking import CorpusChunk
 from api.rag.retrieval import RetrievalError, RetrievalQuery, search_chunks
+from api.rag_context import RagContextRequest
+from api.rag_retrieval import retrieve_rag_context as retrieve_persisted_context
 
 RAG_RETRIEVAL_EMPTY = "RAG_RETRIEVAL_EMPTY"
 RAG_RETRIEVAL_SELECTED = "RAG_RETRIEVAL_SELECTED"
@@ -44,6 +50,7 @@ class RagContextResult:
     query_phi_sensitivity: str | None
     max_sensitivity_level: str | None
     contains_phi: bool
+    source_chunk_ids: tuple[str, ...] = ()
 
     @property
     def rag_used(self) -> bool:
@@ -110,6 +117,7 @@ def retrieve_rag_context(
 
     context_text = _build_context_text(selected)
     source_ids = tuple(dict.fromkeys(chunk.source_id for chunk in selected))
+    source_chunk_ids = tuple(chunk.chunk_id for chunk in selected)
     max_sensitivity = _max_sensitivity(
         chunk.phi_sensitivity_level for chunk in selected
     )
@@ -122,12 +130,68 @@ def retrieve_rag_context(
         context_text=context_text,
         chunk_count=len(selected),
         source_ids=source_ids,
+        source_chunk_ids=source_chunk_ids,
         retrieval_reason_code=RAG_RETRIEVAL_SELECTED
         if selected
         else RAG_RETRIEVAL_EMPTY,
         query_phi_sensitivity=query_phi_sensitivity,
         max_sensitivity_level=max_sensitivity,
         contains_phi=contains_phi,
+    )
+
+
+def retrieve_persisted_rag_context(
+    *,
+    db: Session,
+    tenant_id: str,
+    query_text: str,
+    limit: int = DEFAULT_RAG_CONTEXT_LIMIT,
+    phi_detected: bool,
+    query_phi_sensitivity: str | None = None,
+    corpus_ids: list[str] | None = None,
+) -> RagContextResult:
+    tenant = _require_tenant(tenant_id)
+    bounded_limit = _bound_limit(limit)
+    try:
+        response = retrieve_persisted_context(
+            db,
+            RagContextRequest(
+                query=query_text,
+                tenant_id=tenant,
+                corpus_ids=list(corpus_ids or []),
+                top_k=bounded_limit,
+            ),
+        )
+    except (SQLAlchemyError, ValidationError, ValueError) as exc:
+        raise RagContextError(
+            RAG_RETRIEVAL_FAILED, "persisted retrieval failed"
+        ) from exc
+
+    selected = [
+        RagContextChunk(
+            source_id=chunk.provenance.chunk_id,
+            chunk_id=chunk.provenance.chunk_id,
+            chunk_index=index,
+            text=_bound_chunk_text(chunk.text),
+            phi_sensitivity_level=None,
+            phi_types=(),
+        )
+        for index, chunk in enumerate(response.chunks)
+    ]
+    context_text = _build_context_text(selected)
+    source_chunk_ids = tuple(chunk.chunk_id for chunk in selected)
+    return RagContextResult(
+        chunks=tuple(selected),
+        context_text=context_text,
+        chunk_count=len(selected),
+        source_ids=source_chunk_ids,
+        source_chunk_ids=source_chunk_ids,
+        retrieval_reason_code=RAG_RETRIEVAL_SELECTED
+        if selected
+        else RAG_RETRIEVAL_EMPTY,
+        query_phi_sensitivity=query_phi_sensitivity,
+        max_sensitivity_level=None,
+        contains_phi=bool(phi_detected),
     )
 
 
@@ -165,8 +229,8 @@ def _bound_chunk_text(text: str) -> str:
 def _build_context_text(chunks: list[RagContextChunk]) -> str:
     parts: list[str] = []
     total = 0
-    for index, chunk in enumerate(chunks, start=1):
-        part = f"[{index}]\n{chunk.text}"
+    for chunk in chunks:
+        part = f"[chunk_id={chunk.chunk_id}]\n{chunk.text}"
         remaining = MAX_RAG_CONTEXT_CHARS - total
         if remaining <= 0:
             break
