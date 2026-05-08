@@ -3,57 +3,195 @@
 import { useState } from 'react';
 import { getChainVerifyWithMeta, getForensicsAuditTrailWithMeta, getForensicsSnapshotWithMeta } from '@/lib/coreApi';
 import { toErrorDisplay } from '@/lib/errors';
+import {
+  TrustIndicator,
+  EvidenceCard,
+  AuditTimeline,
+} from '@/components/governance';
+import type { EvidenceField, TimelineEvent } from '@/components/governance';
+
+type ChainStatus = 'verified' | 'unverified' | 'unknown';
+
+const SNAPSHOT_FIELDS = new Set([
+  'event_id', 'tenant_id', 'source', 'threat_level', 'created_at',
+  'explain_summary', 'severity', 'action', 'decision_type',
+  'policy', 'reason', 'confidence',
+]);
+
+function toTimelineEvents(data: unknown): TimelineEvent[] | null {
+  if (!data || typeof data !== 'object') return null;
+  const d = data as Record<string, unknown>;
+  const arr = Array.isArray(d.events)
+    ? d.events
+    : Array.isArray(d.items)
+    ? d.items
+    : Array.isArray(d.audit_events)
+    ? d.audit_events
+    : null;
+  if (!arr) return null;
+  return arr.map((ev: unknown, i: number) => {
+    const e = (ev && typeof ev === 'object' ? ev : {}) as Record<string, unknown>;
+    return {
+      id: String(e.id ?? e.event_id ?? i),
+      ts: String(e.ts ?? e.timestamp ?? e.created_at ?? ''),
+      actor: e.actor ? String(e.actor) : undefined,
+      action: String(e.action ?? e.event_type ?? 'event'),
+      status: String(e.status ?? e.action ?? 'info'),
+      summary: e.summary ? String(e.summary) : undefined,
+      requestId: e.request_id ? String(e.request_id) : undefined,
+    };
+  });
+}
+
+function toEvidenceFields(data: unknown, knownKeys?: Set<string>): EvidenceField[] {
+  if (!data || typeof data !== 'object') return [];
+  return Object.entries(data as Record<string, unknown>)
+    .filter(([k]) => !knownKeys || knownKeys.has(k))
+    .map(([k, v]) => ({
+      label: k,
+      value: typeof v === 'object' ? JSON.stringify(v) : String(v ?? ''),
+    }));
+}
+
+function toExtraFields(data: unknown, knownKeys: Set<string>): EvidenceField[] {
+  if (!data || typeof data !== 'object') return [];
+  return Object.entries(data as Record<string, unknown>)
+    .filter(([k]) => !knownKeys.has(k))
+    .map(([k, v]) => ({
+      label: k,
+      value: typeof v === 'object' ? JSON.stringify(v) : String(v ?? ''),
+    }));
+}
 
 export default function ForensicsPage() {
   const [eventId, setEventId] = useState('');
-  const [result, setResult] = useState<unknown>(null);
-  const [chainStatus, setChainStatus] = useState<'Verified' | 'Not Verified' | 'Error'>('Error');
-  const [proof, setProof] = useState<{ requestId: string; timestamp: string; responseHash: string }>({ requestId: 'n/a', timestamp: 'n/a', responseHash: 'n/a' });
+  const [snapshotData, setSnapshotData] = useState<unknown>(null);
+  const [auditData, setAuditData] = useState<unknown>(null);
+  const [chainStatus, setChainStatus] = useState<ChainStatus>('unknown');
+  const [chainProof, setChainProof] = useState<{ requestId: string; timestamp: string; responseHash: string } | null>(null);
   const [error, setError] = useState<{ message: string; code: string; requestId: string } | null>(null);
+  const [loading, setLoading] = useState<'snapshot' | 'audit' | 'chain' | null>(null);
 
   async function run(kind: 'snapshot' | 'audit' | 'chain') {
     try {
       setError(null);
-      const response = kind === 'snapshot'
-        ? await getForensicsSnapshotWithMeta(eventId)
-        : kind === 'audit'
+      setLoading(kind);
+      const response =
+        kind === 'snapshot'
+          ? await getForensicsSnapshotWithMeta(eventId)
+          : kind === 'audit'
           ? await getForensicsAuditTrailWithMeta(eventId)
           : await getChainVerifyWithMeta();
-      setResult(response.data);
-      setProof({
-        requestId: response.meta.requestId || 'n/a',
-        timestamp: response.meta.receivedAt,
-        responseHash: response.meta.responseHash || 'n/a',
-      });
+
+      if (kind === 'snapshot') setSnapshotData(response.data);
+      if (kind === 'audit') setAuditData(response.data);
       if (kind === 'chain') {
-        const verified = Boolean((response.data as { verified?: unknown }).verified ?? (response.data as { pass?: unknown }).pass);
-        setChainStatus(verified ? 'Verified' : 'Not Verified');
+        const verified = Boolean(
+          (response.data as Record<string, unknown>).verified ??
+          (response.data as Record<string, unknown>).pass,
+        );
+        setChainStatus(verified ? 'verified' : 'unverified');
+        setChainProof({
+          requestId: response.meta.requestId ?? 'n/a',
+          timestamp: response.meta.receivedAt,
+          responseHash: response.meta.responseHash ?? 'n/a',
+        });
       }
     } catch (e) {
-      const err = toErrorDisplay(e);
-      setError(err);
-      if (kind === 'chain') setChainStatus('Error');
+      setError(toErrorDisplay(e));
+      if (kind === 'chain') setChainStatus('unverified');
+    } finally {
+      setLoading(null);
     }
   }
 
+  const auditTimeline = auditData ? toTimelineEvents(auditData) : null;
+  const snapshotCore = snapshotData ? toEvidenceFields(snapshotData, SNAPSHOT_FIELDS) : [];
+  const snapshotExtra = snapshotData ? toExtraFields(snapshotData, SNAPSHOT_FIELDS) : [];
+
   return (
-    <div style={{ display: 'grid', gap: '1rem' }}>
-      <h2>Forensics</h2>
-      <div style={{ border: '2px solid var(--border)', borderRadius: 8, padding: '0.8rem' }}>
-        Chain Verify Status: <strong>{chainStatus}</strong>
+    <div className="flex flex-col">
+      <div className="border-b border-border px-6 py-4">
+        <h1 className="text-base font-semibold text-foreground">Forensics</h1>
+        <p className="text-xs text-muted mt-0.5">Investigate events, verify chain integrity, retrieve audit trails</p>
       </div>
-      <input value={eventId} onChange={(e) => setEventId(e.target.value)} placeholder="event_id" />
-      <div style={{ display: 'flex', gap: '0.5rem' }}>
-        <button disabled={!eventId} onClick={() => run('snapshot')}>Snapshot</button>
-        <button disabled={!eventId} onClick={() => run('audit')}>Audit trail</button>
-        <button onClick={() => run('chain')}>Chain verify</button>
+
+      <div className="p-6 space-y-4">
+        {/* Chain verify status — always shown */}
+        <TrustIndicator
+          status={chainStatus}
+          requestId={chainProof?.requestId}
+          hash={chainProof?.responseHash}
+        />
+
+        {/* Controls */}
+        <div className="flex flex-wrap gap-2">
+          <input
+            value={eventId}
+            onChange={(e) => setEventId(e.target.value)}
+            placeholder="event_id"
+            className="rounded border border-border bg-surface-2 px-3 py-1.5 text-sm text-foreground placeholder:text-muted/40 focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <button
+            disabled={!eventId || loading === 'snapshot'}
+            onClick={() => run('snapshot')}
+            className="rounded border border-border bg-surface-2 px-3 py-1.5 text-xs text-muted hover:text-foreground disabled:opacity-40"
+          >
+            {loading === 'snapshot' ? 'Loading…' : 'Snapshot'}
+          </button>
+          <button
+            disabled={!eventId || loading === 'audit'}
+            onClick={() => run('audit')}
+            className="rounded border border-border bg-surface-2 px-3 py-1.5 text-xs text-muted hover:text-foreground disabled:opacity-40"
+          >
+            {loading === 'audit' ? 'Loading…' : 'Audit trail'}
+          </button>
+          <button
+            disabled={loading === 'chain'}
+            onClick={() => run('chain')}
+            className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover disabled:opacity-40"
+          >
+            {loading === 'chain' ? 'Verifying…' : 'Chain verify'}
+          </button>
+        </div>
+
+        {/* Error */}
+        {error && (
+          <p className="rounded border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">
+            {error.message} ({error.code}) · request_id: {error.requestId}
+          </p>
+        )}
+
+        {/* Snapshot result */}
+        {snapshotData && (
+          <div className="space-y-3">
+            {snapshotCore.length > 0 && (
+              <EvidenceCard title="Snapshot" fields={snapshotCore} highlight />
+            )}
+            {snapshotExtra.length > 0 && (
+              <EvidenceCard title="Additional fields" fields={snapshotExtra} />
+            )}
+          </div>
+        )}
+
+        {/* Audit trail result */}
+        {auditData && (
+          <div className="rounded-lg border border-border bg-surface-2 p-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted/70">Audit Trail</p>
+            {auditTimeline ? (
+              <AuditTimeline events={auditTimeline} />
+            ) : (
+              <EvidenceCard
+                title="Audit data"
+                fields={Object.entries(auditData as Record<string, unknown>).map(([k, v]) => ({
+                  label: k,
+                  value: typeof v === 'object' ? JSON.stringify(v) : String(v ?? ''),
+                }))}
+              />
+            )}
+          </div>
+        )}
       </div>
-      {error ? <p>{error.message} ({error.code}) request_id={error.requestId}</p> : null}
-      <section style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '0.8rem' }}>
-        <h4>Copy proof</h4>
-        <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(proof, null, 2)}</pre>
-      </section>
-      <pre style={{ whiteSpace: 'pre-wrap' }}>{result ? JSON.stringify(result, null, 2) : 'No data yet.'}</pre>
     </div>
   );
 }
