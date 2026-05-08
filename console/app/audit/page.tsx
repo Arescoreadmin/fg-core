@@ -8,6 +8,22 @@ import {
   type AuditEvent,
   type AuditSearchParams,
 } from '@/lib/api';
+import { AuditTimeline } from '@/components/governance';
+import type { TimelineEvent } from '@/components/governance';
+import { cn } from '@/lib/cn';
+
+function auditEventToTimeline(ev: AuditEvent): TimelineEvent {
+  const summary = [ev.resource_type, ev.resource_id].filter(Boolean).join(' ') || undefined;
+  return {
+    id: ev.id,
+    ts: ev.ts,
+    actor: ev.actor ?? undefined,
+    action: ev.action,
+    status: ev.status,
+    summary,
+    requestId: ev.request_id ?? undefined,
+  };
+}
 
 const DEFAULT_PAGE_SIZE = 100;
 
@@ -23,6 +39,7 @@ export default function AuditPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<'table' | 'timeline'>('table');
 
   const toIsoString = (value: string) =>
     value ? new Date(value).toISOString() : undefined;
@@ -209,7 +226,26 @@ export default function AuditPage() {
       <section style={styles.section}>
         <div style={styles.sectionHeader}>
           <h2 style={styles.sectionTitle}>Results</h2>
-          <span style={styles.count}>{events.length} events</span>
+          <div className="flex items-center gap-3">
+            <span style={styles.count}>{events.length} events</span>
+            {/* View toggle */}
+            <div className="flex rounded border border-border overflow-hidden">
+              {(['table', 'timeline'] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  className={cn(
+                    'px-3 py-1 text-xs font-medium capitalize',
+                    view === v
+                      ? 'bg-primary text-white'
+                      : 'bg-transparent text-muted hover:text-foreground',
+                  )}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
         <div style={styles.highlights}>
           <div style={styles.highlightCard}>
@@ -221,48 +257,58 @@ export default function AuditPage() {
             <p style={styles.highlightValue}>{canaryCount}</p>
           </div>
         </div>
-        <div style={styles.tableWrapper}>
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th style={styles.th}>Time</th>
-                <th style={styles.th}>Tenant</th>
-                <th style={styles.th}>Actor</th>
-                <th style={styles.th}>Action</th>
-                <th style={styles.th}>Status</th>
-                <th style={styles.th}>Request</th>
-                <th style={styles.th}>Resource</th>
-                <th style={styles.th}>IP</th>
-                <th style={styles.th}>User Agent</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.length === 0 ? (
+        {view === 'timeline' ? (
+          <div className="py-2">
+            {events.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted">No audit events loaded.</p>
+            ) : (
+              <AuditTimeline events={events.map(auditEventToTimeline)} />
+            )}
+          </div>
+        ) : (
+          <div style={styles.tableWrapper}>
+            <table style={styles.table}>
+              <thead>
                 <tr>
-                  <td style={styles.td} colSpan={10}>
-                    No audit events loaded.
-                  </td>
+                  <th style={styles.th}>Time</th>
+                  <th style={styles.th}>Tenant</th>
+                  <th style={styles.th}>Actor</th>
+                  <th style={styles.th}>Action</th>
+                  <th style={styles.th}>Status</th>
+                  <th style={styles.th}>Request</th>
+                  <th style={styles.th}>Resource</th>
+                  <th style={styles.th}>IP</th>
+                  <th style={styles.th}>User Agent</th>
                 </tr>
-              ) : (
-                events.map((event) => (
-                  <tr key={`${event.id}-${event.ts}`}>
-                    <td style={styles.td}>{event.ts}</td>
-                    <td style={styles.td}>{event.tenant_id}</td>
-                    <td style={styles.td}>{event.actor || '—'}</td>
-                    <td style={styles.td}>{event.action}</td>
-                    <td style={styles.td}>{event.status}</td>
-                    <td style={styles.td}>{event.request_id || '—'}</td>
-                    <td style={styles.td}>
-                      {event.resource_type || '—'} {event.resource_id || ''}
+              </thead>
+              <tbody>
+                {events.length === 0 ? (
+                  <tr>
+                    <td style={styles.td} colSpan={10}>
+                      No audit events loaded.
                     </td>
-                    <td style={styles.td}>{event.ip || '—'}</td>
-                    <td style={styles.td}>{event.user_agent || '—'}</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  events.map((event) => (
+                    <tr key={`${event.id}-${event.ts}`}>
+                      <td style={styles.td}>{event.ts}</td>
+                      <td style={styles.td}>{event.tenant_id}</td>
+                      <td style={styles.td}>{event.actor || '—'}</td>
+                      <td style={styles.td}>{event.action}</td>
+                      <td style={styles.td}>{event.status}</td>
+                      <td style={styles.td}>{event.request_id || '—'}</td>
+                      <td style={styles.td}>
+                        {event.resource_type || '—'} {event.resource_id || ''}
+                      </td>
+                      <td style={styles.td}>{event.ip || '—'}</td>
+                      <td style={styles.td}>{event.user_agent || '—'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
         <div style={styles.pagination}>
           <button
             style={styles.secondaryButton}
