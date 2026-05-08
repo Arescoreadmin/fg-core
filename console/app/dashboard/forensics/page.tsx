@@ -119,14 +119,14 @@ export default function ForensicsPage() {
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-widest text-muted/60">Chain Verify Status</span>
-            {chainProof && (
+            {chainProof !== null ? (
               <button
                 onClick={() => navigator.clipboard.writeText(JSON.stringify({ requestId: chainProof.requestId, responseHash: chainProof.responseHash, timestamp: chainProof.timestamp }))}
                 className="rounded border border-border bg-surface-2 px-2.5 py-1 text-xs text-muted hover:text-foreground"
               >
                 Copy proof
               </button>
-            )}
+            ) : null}
           </div>
           <TrustIndicator
             status={chainStatus}
@@ -174,7 +174,7 @@ export default function ForensicsPage() {
         )}
 
         {/* Snapshot result */}
-        {snapshotData && (
+        {snapshotData ? (
           <div className="space-y-3">
             {snapshotCore.length > 0 && (
               <EvidenceCard title="Snapshot" fields={snapshotCore} highlight />
@@ -183,10 +183,10 @@ export default function ForensicsPage() {
               <EvidenceCard title="Additional fields" fields={snapshotExtra} />
             )}
           </div>
-        )}
+        ) : null}
 
         {/* Audit trail result */}
-        {auditData && (
+        {auditData ? (
           <div className="rounded-lg border border-border bg-surface-2 p-4">
             <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted/70">Audit Trail</p>
             {auditTimeline ? (
@@ -201,7 +201,7 @@ export default function ForensicsPage() {
               />
             )}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
