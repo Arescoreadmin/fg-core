@@ -6,6 +6,70 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-07 — PR 15 Retrieval Service MVP
+
+**Branch:** `pr-15-retrieval-service-mvp`
+
+**Area:** `api/rag_retrieval.py` (new), `tests/test_rag_retrieval.py` (new), `docs/ai/RAG_RETRIEVAL_MVP.md` (new)
+
+**Purpose:** Add an internal tenant-scoped persisted RAG retrieval service returning PR 13 `RagContextResponse` objects from PR 14 `rag_chunks`. Lexical retrieval only — no embeddings, no vector DB, no provider routing, no AI answer changes.
+
+**Lexical scoring summary:**
+- Query and chunk text are lowercased and tokenized into stable alphanumeric terms.
+- Non-matching chunks are excluded.
+- Score is `unique_matched_query_terms + matching_term_occurrences / (chunk_term_count + 1)`.
+- Ranking is deterministic: score DESC, corpus_id ASC, document_id ASC, ordinal ASC, chunk_id ASC.
+
+**Tenant isolation proof:**
+- `tenant_id` is mandatory and blank values raise `ValueError`.
+- SQL filters `rag_chunks` by `tenant_id`.
+- `rag_documents` and `rag_corpora` joins include tenant_id.
+- `corpus_ids` filtering remains inside the tenant-scoped query.
+- Wrong tenant returns an empty context with no foreign metadata leakage.
+
+**Provenance proof:**
+- Returned chunks include corpus_id, document_id, chunk_id, finite score, document title/source, and uri/page from persisted metadata when present.
+- Chunk text is read from persisted `rag_chunks.text`.
+
+**No embeddings/vector/provider proof:**
+- Service imports only SQLAlchemy session/text support, JSON/logging/tokenization helpers, and PR 13 context models.
+- No provider, embedding, vector DB, pgvector, external search, or network call path is introduced.
+- No runtime reference to the legacy RAG stub is introduced.
+
+**Validation results:**
+- `.venv/bin/pytest -q tests/test_rag_retrieval.py` → 12 passed
+- `.venv/bin/pytest -q tests -k "retrieval or rag or corpus or tenant"` → 694 passed, 7 skipped, 2549 deselected
+- `.venv/bin/pytest -q tests/test_rag_corpus_persistence.py` → 20 passed
+- `.venv/bin/pytest -q tests/test_rag_context_contract.py` → 18 passed
+- `.venv/bin/python tools/ci/check_rag_stub_references.py` → exit 0
+- `make fg-fast` → All checks passed
+- `bash codex_gates.sh` → All gates passed
+
+#### Codex Review Repair — 2026-05-07
+
+**Root causes:**
+- Explicit blank corpus filters (`[" ", "\t"]`) were normalized to `[]`, which disabled filtering and broadened retrieval across all tenant corpora.
+- Retrieval used `.fetchall()` and held every tenant candidate row before Python scoring.
+
+**Fix:**
+- Added fail-closed corpus filter normalization: `None`/omitted corpus filter searches normally; a non-empty explicit filter with no valid IDs returns empty context; mixed valid/blank filters preserve only valid IDs.
+- Added SQL lexical prefilter predicates for query terms before Python scoring.
+- Replaced `.fetchall()` with streamed row iteration and kept only the current top_k ranked results in memory while preserving final lexical ranking semantics.
+
+**Tenant isolation proof:**
+- Tenant filtering remains in SQL.
+- Corpus filtering remains tenant-scoped and invalid explicit filters cannot widen scope.
+- Document and corpus joins still include tenant_id.
+
+**Validation results:**
+- `.venv/bin/pytest -q tests/test_rag_retrieval.py` → 19 passed
+- `.venv/bin/pytest -q tests -k "retrieval or rag or corpus or tenant"` → 701 passed, 7 skipped, 2549 deselected
+- `.venv/bin/python tools/ci/check_rag_stub_references.py` → exit 0
+- `make fg-fast` → All checks passed
+- `bash codex_gates.sh` → All gates passed
+
+---
+
 ### 2026-05-07 — PR 14 Corpus Persistence MVP
 
 **Branch:** `pr/14-corpus-persistence`
