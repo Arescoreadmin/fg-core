@@ -2885,3 +2885,36 @@ SOC review:
 Validation:
 - make fg-fast (141 embedding tests pass, all gates pass)
 - make soc-review-sync
+
+## PR 20 addendum — frostgate-migrate exit 1 root cause fix + CI diagnostics
+
+Reviewed critical files:
+- .github/workflows/docker-ci.yml
+
+Changes:
+- `scripts/postgres/init_roles.sh`: Added step 5 that creates the `vector`
+  extension as the bootstrap superuser (postgres) in the app database (frostgate)
+  during postgres initialization.  Root cause: migration 0038 runs
+  `CREATE EXTENSION IF NOT EXISTS vector` as `fg_user` (NOSUPERUSER); pgvector's
+  vector.control has `trusted=false`, so PostgreSQL requires superuser to install
+  it.  Pre-seeding in init_roles.sh makes the migration's CREATE EXTENSION a
+  no-op (IF NOT EXISTS with the extension already present requires no privilege).
+  Also adds an availability check that fails init with a clear message if the
+  wrong postgres image is used (without pgvector).
+- `docker-ci.yml`: Added "Start postgres for preflight", "Wait for postgres
+  preflight healthy", "pgvector preflight diagnostics" (fail-fast gate before
+  full stack startup), and "Wait for frostgate-migrate and inspect logs" steps.
+  These surface the real migration error inline rather than only in the artifact.
+
+SOC review:
+- No security policy changed. init_roles.sh already ran as the bootstrap
+  superuser; the new step extends it with extension creation, which is a
+  standard DBA operation in the same superuser session.
+- The added CI steps are read-only diagnostics (docker exec psql SELECT, docker
+  logs) plus a fail-fast guard that exits early; they weaken no gate.
+- No auth, enforcement, or access control logic altered.
+- No secrets added or changed.
+
+Validation:
+- make fg-fast
+- make soc-review-sync

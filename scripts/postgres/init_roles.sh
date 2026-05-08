@@ -101,3 +101,22 @@ SELECT format(
   :'app_user'
 ) \gexec
 SQL
+
+# 5) Pre-seed the pgvector extension in the application database.
+#    Migration 0038 runs CREATE EXTENSION IF NOT EXISTS vector as the application
+#    role (fg_user), which is NOSUPERUSER.  PostgreSQL requires superuser to
+#    install non-trusted extensions, and pgvector's vector.control has
+#    trusted=false.  Pre-creating the extension here as the bootstrap superuser
+#    means the migration step becomes a safe no-op (IF NOT EXISTS skips
+#    creation and requires no privilege when the extension already exists).
+#
+#    Exits non-zero with a clear message if the postgres image does not ship
+#    pgvector — use pgvector/pgvector:pg16 instead of plain postgres:16.
+if ! "${psql_app[@]}" -tAc \
+    "SELECT 1 FROM pg_available_extensions WHERE name='vector';" \
+    | grep -q 1; then
+  echo "ERROR: pgvector extension not available on this postgres server." >&2
+  echo "ERROR: docker-compose.yml must use image: pgvector/pgvector:pg16" >&2
+  exit 1
+fi
+"${psql_app[@]}" -c "CREATE EXTENSION IF NOT EXISTS vector;"
