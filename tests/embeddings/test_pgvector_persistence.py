@@ -39,25 +39,16 @@ from services.embeddings import (
     upsert_embedding,
 )
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
 _TENANT = "tenant-alpha"
 _CORPUS = "corpus-001"
 _DOCUMENT = "doc-001"
 _CHUNK = "chunk-001"
 _TEXT = "The quick brown fox."
 _HASH = canonical_content_hash(_TEXT)
-_MODEL = EmbeddingModel.INSTRUCTOR_XL  # dim=768 — smallest for fast tests
+_MODEL = EmbeddingModel.INSTRUCTOR_XL
 _DIM = 768
 _VECTOR = tuple(0.01 * i for i in range(_DIM))
 _NOW = datetime.now(timezone.utc)
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture()
@@ -74,25 +65,29 @@ def db(engine):
         session.rollback()
 
 
-def _record(**overrides: object) -> ChunkEmbeddingRecord:
-    kwargs: dict[str, object] = dict(
-        tenant_id=_TENANT,
-        corpus_id=_CORPUS,
-        document_id=_DOCUMENT,
-        chunk_id=_CHUNK,
-        content_hash=_HASH,
-        embedding_model=_MODEL,
-        dimensions=_DIM,
-        vector=_VECTOR,
-        created_at=_NOW,
+def _record(
+    *,
+    tenant_id: str = _TENANT,
+    corpus_id: str = _CORPUS,
+    document_id: str = _DOCUMENT,
+    chunk_id: str = _CHUNK,
+    content_hash: str = _HASH,
+    embedding_model: EmbeddingModel = _MODEL,
+    dimensions: int = _DIM,
+    vector: tuple[float, ...] = _VECTOR,
+    created_at: datetime = _NOW,
+) -> ChunkEmbeddingRecord:
+    return ChunkEmbeddingRecord(
+        tenant_id=tenant_id,
+        corpus_id=corpus_id,
+        document_id=document_id,
+        chunk_id=chunk_id,
+        content_hash=content_hash,
+        embedding_model=embedding_model,
+        dimensions=dimensions,
+        vector=vector,
+        created_at=created_at,
     )
-    kwargs.update(overrides)
-    return ChunkEmbeddingRecord(**kwargs)
-
-
-# ---------------------------------------------------------------------------
-# Schema / DDL
-# ---------------------------------------------------------------------------
 
 
 class TestSqliteSchema:
@@ -103,7 +98,6 @@ class TestSqliteSchema:
         assert "embedding_vectors" in inspector.get_table_names()
 
     def test_schema_idempotent(self, engine):
-        # calling twice must not raise
         ensure_sqlite_schema(engine)
         from sqlalchemy import inspect as sa_inspect
 
@@ -111,18 +105,12 @@ class TestSqliteSchema:
         assert "embedding_vectors" in inspector.get_table_names()
 
     def test_schema_rejects_postgres_engine(self):
-        # ensure_sqlite_schema must refuse to run against postgres engines
         from unittest.mock import MagicMock
 
         fake_engine = MagicMock()
         fake_engine.dialect.name = "postgresql"
         with pytest.raises(RuntimeError, match="postgres"):
             ensure_sqlite_schema(fake_engine)
-
-
-# ---------------------------------------------------------------------------
-# Insert / read
-# ---------------------------------------------------------------------------
 
 
 class TestSaveAndRead:
@@ -156,7 +144,6 @@ class TestSaveAndRead:
         assert result is None
 
     def test_get_with_model_filter(self, db):
-        # Save one embedding; lookup with wrong model returns None
         save_embedding(db, _record())
         result = get_embedding_for_chunk(
             db,
@@ -174,11 +161,6 @@ class TestSaveAndRead:
         assert fetched is not None
         assert len(fetched.vector) == _DIM
         assert abs(fetched.vector[0] - _VECTOR[0]) < 1e-6
-
-
-# ---------------------------------------------------------------------------
-# Duplicate prevention
-# ---------------------------------------------------------------------------
 
 
 class TestDuplicatePrevention:
@@ -201,7 +183,6 @@ class TestDuplicatePrevention:
 
     def test_different_model_is_allowed(self, db):
         save_embedding(db, _record())
-        # BGE_LARGE_EN dim=1024, use that
         row2 = save_embedding(
             db,
             _record(
@@ -214,11 +195,6 @@ class TestDuplicatePrevention:
         assert row2.model == EmbeddingModel.BGE_LARGE_EN.value
 
 
-# ---------------------------------------------------------------------------
-# Upsert
-# ---------------------------------------------------------------------------
-
-
 class TestUpsert:
     def test_upsert_inserts_when_missing(self, db):
         row = upsert_embedding(db, _record())
@@ -227,7 +203,6 @@ class TestUpsert:
     def test_upsert_is_idempotent_same_hash(self, db):
         row1 = upsert_embedding(db, _record())
         row2 = upsert_embedding(db, _record())
-        # Same identity — should be the same row (updated, not duplicated)
         assert row1.content_hash == row2.content_hash
         all_rows = list_embeddings_for_corpus(db, tenant_id=_TENANT, corpus_id=_CORPUS)
         assert len(all_rows) == 1
@@ -235,18 +210,12 @@ class TestUpsert:
     def test_upsert_updates_existing_row(self, db):
         upsert_embedding(db, _record())
         new_vector = tuple(0.99 for _ in range(_DIM))
-        # same hash → same "identity"; update the vector
         upsert_embedding(db, _record(vector=new_vector))
         fetched = get_embedding_for_chunk(
             db, tenant_id=_TENANT, chunk_id=_CHUNK, model=_MODEL.value
         )
         assert fetched is not None
         assert abs(fetched.vector[0] - 0.99) < 1e-6
-
-
-# ---------------------------------------------------------------------------
-# Delete
-# ---------------------------------------------------------------------------
 
 
 class TestDelete:
@@ -267,16 +236,10 @@ class TestDelete:
 
     def test_delete_cannot_cross_tenant(self, db):
         row = save_embedding(db, _record(tenant_id="tenant-x"))
-        # Delete with wrong tenant → returns False, row still exists
         result = delete_embedding(db, tenant_id="tenant-y", embedding_id=row.id)
         assert result is False
         still_there = get_embedding_for_chunk(db, tenant_id="tenant-x", chunk_id=_CHUNK)
         assert still_there is not None
-
-
-# ---------------------------------------------------------------------------
-# embedding_exists
-# ---------------------------------------------------------------------------
 
 
 class TestEmbeddingExists:
@@ -313,11 +276,6 @@ class TestEmbeddingExists:
         )
 
 
-# ---------------------------------------------------------------------------
-# List
-# ---------------------------------------------------------------------------
-
-
 class TestList:
     def test_list_empty_corpus(self, db):
         rows = list_embeddings_for_corpus(db, tenant_id=_TENANT, corpus_id=_CORPUS)
@@ -347,14 +305,7 @@ class TestList:
         assert rows[0].tenant_id == "tenant-a"
 
 
-# ---------------------------------------------------------------------------
-# Tenant requirement enforcement
-# ---------------------------------------------------------------------------
-
-
 class TestTenantRequirement:
-    # ChunkEmbeddingRecord validates tenant_id itself (raises ValueError),
-    # so for save/upsert we accept either ValueError or TenantRequiredError.
     @pytest.mark.parametrize("blank", ["", "   "])
     def test_save_rejects_blank_tenant(self, db, blank):
         with pytest.raises((TenantRequiredError, ValueError)):
@@ -386,11 +337,6 @@ class TestTenantRequirement:
     def test_upsert_rejects_blank_tenant(self, db):
         with pytest.raises((TenantRequiredError, ValueError)):
             upsert_embedding(db, _record(tenant_id=""))
-
-
-# ---------------------------------------------------------------------------
-# Contract compatibility with PR 19 (ChunkEmbeddingRecord)
-# ---------------------------------------------------------------------------
 
 
 class TestContractCompatibility:
