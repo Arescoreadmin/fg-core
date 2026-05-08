@@ -23,7 +23,7 @@ from api.config.startup_validation import (
     compliance_module_enabled,
     validate_startup_config,
 )
-from api.db import init_db
+from api.db import get_engine, init_db
 from api.attestation import router as attestation_router
 from api.audit import router as audit_router
 from api.auth_federation import router as auth_federation_router
@@ -255,6 +255,23 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             app.state.db_init_ok = False
             app.state.db_init_error = f"{type(exc).__name__}: {exc}"
             log.exception("DB init failed")
+            if is_production or is_strict_env_required():
+                raise
+
+        from services.embeddings.startup import (
+            is_retrieval_enabled,
+            startup_retrieval_service,
+        )
+
+        try:
+            if is_retrieval_enabled():
+                startup_retrieval_service(get_engine())
+                app.state.retrieval_service_ok = True
+            else:
+                app.state.retrieval_service_ok = False
+        except Exception as exc:
+            app.state.retrieval_service_ok = False
+            log.exception("Retrieval service startup failed: %s", exc)
             if is_production or is_strict_env_required():
                 raise
 

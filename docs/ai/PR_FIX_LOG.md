@@ -6,6 +6,76 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-08 — PR 20A Vector Index Readiness Guard
+
+**Branch:** `pr/20-pgvector-persistence`
+
+**Area:** Touching schema/migration — flagged explicitly.
+
+**Files changed:**
+- `migrations/postgres/0039_vector_index_runbook.sql` — creates `vector_index_registry` table; includes operator runbook for ivfflat/HNSW index creation
+- `services/embeddings/errors.py` — adds EMBED_P007 (`AnnIndexNotReadyError`) and EMBED_P008 (`PrimaryModelNotConfiguredError`)
+- `services/embeddings/config.py` — new module: `EmbeddingIndexConfig`, `get_embedding_index_config()`, `assert_ann_index_ready()`, `is_retrieval_index_ready()`, `ensure_sqlite_index_registry()`
+- `services/embeddings/__init__.py` — updated exports
+- `tests/test_embedding_vector_index_guard.py` — 46 tests covering all guard paths
+
+**Config env vars added:**
+- `FG_EMBEDDINGS_PRIMARY_MODEL` — required before semantic retrieval can be enabled in prod
+- `FG_EMBEDDINGS_ANN_INDEX_STATUS` — operator readiness override; must be `"ready"` in prod
+
+**Security guarantees:**
+- Prod fail-closed: `assert_ann_index_ready` raises `AnnIndexNotReadyError` (EMBED_P007) if either the operator flag is unset OR `vector_index_registry` has no row for the primary model
+- Prod fail-closed: raises `PrimaryModelNotConfiguredError` (EMBED_P008) if `FG_EMBEDDINGS_PRIMARY_MODEL` is unset in prod
+- Dual-condition gate: both flag AND registry row must be present to pass prod; neither alone is sufficient
+- Dev/test: warning only, no raise; SQLite: no-op
+
+**Validation results:**
+- `ruff check` + `ruff format --check` → All checks passed
+- `mypy services/embeddings/` → Success: no issues
+- `pytest tests/test_embedding_vector_index_guard.py` → 46 passed
+- `make fg-fast` → All checks passed
+
+---
+
+### 2026-05-08 — PR 20 pgvector Persistence Layer
+
+**Branch:** `pr/20-pgvector-persistence`
+
+**Area:** Touching schema/migration — flagged explicitly.
+
+**Files changed:**
+- `migrations/postgres/0038_embedding_vectors.sql` — new migration: enables `pgvector` extension, creates `embedding_vectors` table with uniqueness constraint on `(tenant_id, corpus_id, chunk_id, model, content_hash)`, B-tree indexes for tenant-scoped queries
+- `services/embeddings/__init__.py` — new package, public surface
+- `services/embeddings/errors.py` — typed error hierarchy (EMBED_P001–P006)
+- `services/embeddings/persistence.py` — main persistence API
+- `tests/embeddings/test_pgvector_persistence.py` — persistence / contract tests
+- `tests/security/test_embedding_tenant_isolation.py` — tenant isolation security tests
+- `tests/test_embedding_dimension_validation.py` — dimension validation tests
+- `tests/test_embedding_pgvector_startup.py` — prod fail-closed + audit log safety tests
+
+**Persistence API added:**
+`save_embedding`, `get_embedding_for_chunk`, `list_embeddings_for_corpus`, `delete_embedding`, `embedding_exists`, `upsert_embedding` — all return typed `EmbeddingRow`; all require tenant_id.
+
+**Security guarantees:**
+- Tenant isolation: every read/write/delete/query is scoped by `tenant_id`; cross-tenant access impossible at API boundary
+- Prod fail-closed: raises `PgvectorUnavailableError` (EMBED_P004) at startup if pgvector missing and `FG_ENV` ∈ {prod, production, staging}
+- Dev/test fallback: SQLite backend with JSON-serialized vectors; no ANN capability claimed
+- No raw vectors in audit logs; no chunk content in audit logs
+- Dimension validation enforced before persistence via `KNOWN_DIMENSIONS` registry
+
+**Assumptions / notes:**
+- IVFFlat/HNSW ANN indexes omitted from migration — multi-model setup requires per-dimension indexes; should be added in a follow-up migration once a production model is fixed
+- `vector` column uses no fixed-dimension constraint (`vector` not `vector(n)`) to support multiple models in one table
+
+**Validation results:**
+- `ruff check` → All checks passed
+- `ruff format --check` → All files formatted
+- `mypy services/embeddings/` → Success: no issues found
+- `pytest tests/embeddings/test_pgvector_persistence.py tests/security/test_embedding_tenant_isolation.py tests/test_embedding_dimension_validation.py tests/test_embedding_pgvector_startup.py` → 74 passed
+- `make fg-fast` → All checks passed
+
+---
+
 ### 2026-05-08 — PR 18 Grounded Answer Validation
 
 **Branch:** `pr/18-grounded-answer-validation`

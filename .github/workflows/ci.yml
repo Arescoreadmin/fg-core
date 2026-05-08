@@ -319,7 +319,7 @@ jobs:
       contents: read
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: fg_user
           POSTGRES_PASSWORD: fg_password
@@ -377,7 +377,7 @@ jobs:
       contents: read
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: fg_user
           POSTGRES_PASSWORD: fg_password

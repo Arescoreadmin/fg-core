@@ -2859,3 +2859,62 @@ Validation:
 - pytest tests/security/test_prod_invariants.py tests/security/test_required_env_enforcement.py tests/security/test_compliance_modules.py (56 passed)
 - make soc-review-sync
 - make fg-fast
+
+## PR 20 addendum — pgvector CI/Docker runtime dependency
+
+Reviewed critical files:
+- .github/workflows/ci.yml
+
+Changes:
+- Replaced `postgres:16` with `pgvector/pgvector:pg16` in both CI service
+  definitions (unit test job, lines 322 and 380). The plain postgres:16 image
+  does not ship the vector extension; migration 0038_embedding_vectors.sql runs
+  `CREATE EXTENSION IF NOT EXISTS vector` and would fail silently or at runtime.
+- Replaced `postgres:16-alpine` with `pgvector/pgvector:pg16` in docker-compose.yml
+  for local dev consistency.
+
+SOC review:
+- No security policy changed. This is a runtime dependency fix: the base image now
+  includes the pgvector extension required by the embedding persistence migration.
+  The pgvector/pgvector:pg16 image is the official upstream image published by the
+  pgvector project; it is based on the same postgres:16 base and adds only the
+  extension library.
+- No auth, enforcement, or access control logic altered.
+- No secrets, env vars, or deployment configuration changed beyond the image tag.
+
+Validation:
+- make fg-fast (141 embedding tests pass, all gates pass)
+- make soc-review-sync
+
+## PR 20 addendum — frostgate-migrate exit 1 root cause fix + CI diagnostics
+
+Reviewed critical files:
+- .github/workflows/docker-ci.yml
+
+Changes:
+- `scripts/postgres/init_roles.sh`: Added step 5 that creates the `vector`
+  extension as the bootstrap superuser (postgres) in the app database (frostgate)
+  during postgres initialization.  Root cause: migration 0038 runs
+  `CREATE EXTENSION IF NOT EXISTS vector` as `fg_user` (NOSUPERUSER); pgvector's
+  vector.control has `trusted=false`, so PostgreSQL requires superuser to install
+  it.  Pre-seeding in init_roles.sh makes the migration's CREATE EXTENSION a
+  no-op (IF NOT EXISTS with the extension already present requires no privilege).
+  Also adds an availability check that fails init with a clear message if the
+  wrong postgres image is used (without pgvector).
+- `docker-ci.yml`: Added "Start postgres for preflight", "Wait for postgres
+  preflight healthy", "pgvector preflight diagnostics" (fail-fast gate before
+  full stack startup), and "Wait for frostgate-migrate and inspect logs" steps.
+  These surface the real migration error inline rather than only in the artifact.
+
+SOC review:
+- No security policy changed. init_roles.sh already ran as the bootstrap
+  superuser; the new step extends it with extension creation, which is a
+  standard DBA operation in the same superuser session.
+- The added CI steps are read-only diagnostics (docker exec psql SELECT, docker
+  logs) plus a fail-fast guard that exits early; they weaken no gate.
+- No auth, enforcement, or access control logic altered.
+- No secrets added or changed.
+
+Validation:
+- make fg-fast
+- make soc-review-sync

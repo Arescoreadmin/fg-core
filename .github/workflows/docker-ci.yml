@@ -402,6 +402,68 @@ jobs:
             done
           '
 
+      - name: Start postgres for preflight
+        shell: bash
+        env:
+          DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+          FG_SIGNING_SECRET: ci-signing-secret-32-bytes-minimum
+          FG_INTERNAL_AUTH_SECRET: ci-internal-auth-secret-32-bytes
+        run: |
+          set -euo pipefail
+          docker compose --env-file .env.ci up -d postgres
+
+      - name: Wait for postgres preflight healthy
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Waiting for postgres to be healthy (includes init_roles.sh)..."
+          timeout 120 bash -c '
+            while true; do
+              health=$(docker inspect -f "{{.State.Health.Status}}" fg-core-postgres-1 2>/dev/null || echo "missing")
+              state=$(docker inspect -f "{{.State.Status}}" fg-core-postgres-1 2>/dev/null || echo "missing")
+              echo "postgres health=$health state=$state"
+              if [ "$health" = "healthy" ]; then break; fi
+              if [ "$state" = "exited" ] || [ "$state" = "dead" ]; then
+                echo "::error::postgres container exited during initialization"
+                docker logs fg-core-postgres-1 2>&1 | tail -60
+                exit 1
+              fi
+              sleep 3
+            done
+          '
+          echo "postgres: healthy"
+
+      - name: pgvector preflight diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=== Postgres image (rendered compose) ==="
+          grep -A1 'postgres:' /tmp/fg.compose.rendered.yml 2>/dev/null | head -10 || true
+
+          echo "=== Postgres server version ==="
+          docker exec fg-core-postgres-1 psql -U postgres -tAc "SELECT version();"
+
+          echo "=== pgvector availability (pg_available_extensions) ==="
+          docker exec fg-core-postgres-1 psql -U postgres -d frostgate \
+            -c "SELECT name, default_version, installed_version FROM pg_available_extensions WHERE name='vector';"
+
+          echo "=== Fail-fast gate: vector extension must be available on this server ==="
+          available=$(docker exec fg-core-postgres-1 psql -U postgres -d frostgate -tAc \
+            "SELECT COUNT(*) FROM pg_available_extensions WHERE name='vector' AND default_version IS NOT NULL;" 2>/dev/null || echo "0")
+          available=$(echo "$available" | tr -d '[:space:]')
+          if [ "$available" != "1" ]; then
+            echo "::error::pgvector is NOT available in the postgres image."
+            echo "::error::Ensure docker-compose.yml uses image: pgvector/pgvector:pg16"
+            exit 1
+          fi
+
+          echo "=== Installed extensions (vector) ==="
+          docker exec fg-core-postgres-1 psql -U postgres -d frostgate \
+            -c "SELECT extname, extversion FROM pg_extension WHERE extname='vector';"
+
+          echo "pgvector preflight: OK"
+
       - name: Start full stack
         shell: bash
         env:
@@ -411,6 +473,30 @@ jobs:
         run: |
           set -euo pipefail
           docker compose --env-file .env.ci up -d --force-recreate
+
+      - name: Wait for frostgate-migrate and inspect logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Waiting for frostgate-migrate to complete..."
+          timeout 120 bash -c '
+            while true; do
+              state=$(docker inspect -f "{{.State.Status}}" fg-core-frostgate-migrate-1 2>/dev/null || echo "missing")
+              echo "frostgate-migrate state=$state"
+              if [ "$state" = "exited" ]; then break; fi
+              if [ "$state" = "missing" ]; then sleep 2; continue; fi
+              sleep 3
+            done
+          '
+          echo "=== frostgate-migrate logs ==="
+          docker logs fg-core-frostgate-migrate-1 2>&1 || true
+          exit_code=$(docker inspect -f "{{.State.ExitCode}}" fg-core-frostgate-migrate-1 2>/dev/null || echo "unknown")
+          echo "frostgate-migrate exit code: $exit_code"
+          if [ "$exit_code" != "0" ]; then
+            echo "::error::frostgate-migrate failed (exit $exit_code) — see logs above"
+            exit 1
+          fi
+          echo "frostgate-migrate: OK"
 
       - name: Wait for admin-gateway health
         shell: bash
