@@ -20,6 +20,7 @@ from services.ai.rag_context import (
     RagContextError,
     RagContextResult,
     build_rag_augmented_prompt,
+    retrieve_persisted_rag_context,
     retrieve_rag_context,
 )
 from services.ai.response_validation import ResponseValidationResult
@@ -116,6 +117,14 @@ def _rag_retrieval_id(rag_context: RagContextResult) -> str:
     ]
     digest = hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
     return f"rag:{digest[:24]}"
+
+
+def _rag_answer_metadata(rag_context: RagContextResult) -> dict[str, object]:
+    return {
+        "used_rag": rag_context.rag_used,
+        "context_count": rag_context.chunk_count,
+        "source_chunk_ids": list(rag_context.source_chunk_ids),
+    }
 
 
 def _sensitivity_level(value: str | None) -> SensitivityLevel:
@@ -324,6 +333,7 @@ class AIPlaneService:
                     "rag_used": False,
                     "rag_chunk_count": 0,
                     "rag_source_ids": [],
+                    "rag_source_chunk_ids": [],
                     "rag_retrieval_reason_code": None,
                     "rag_query_phi_sensitivity": None,
                     "rag_max_sensitivity_level": None,
@@ -361,14 +371,24 @@ class AIPlaneService:
         request_id = f"inf-{pre_gate_prompt_sha[:16]}"
         phi_classification = _classify_baa_gate_phi(payload.query)
         try:
-            rag_context = retrieve_rag_context(
-                tenant_id=tenant_id,
-                query_text=payload.query,
-                chunks=self._rag_chunks,
-                limit=4,
-                phi_detected=phi_classification.contains_phi,
-                query_phi_sensitivity=phi_classification.sensitivity_level.value,
-            )
+            if self._rag_chunks:
+                rag_context = retrieve_rag_context(
+                    tenant_id=tenant_id,
+                    query_text=payload.query,
+                    chunks=self._rag_chunks,
+                    limit=4,
+                    phi_detected=phi_classification.contains_phi,
+                    query_phi_sensitivity=phi_classification.sensitivity_level.value,
+                )
+            else:
+                rag_context = retrieve_persisted_rag_context(
+                    db=db,
+                    tenant_id=tenant_id,
+                    query_text=payload.query,
+                    limit=4,
+                    phi_detected=phi_classification.contains_phi,
+                    query_phi_sensitivity=phi_classification.sensitivity_level.value,
+                )
         except RagContextError as exc:
             self._audit_infer(
                 tenant_id=tenant_id,
@@ -390,6 +410,7 @@ class AIPlaneService:
                     "rag_used": False,
                     "rag_chunk_count": 0,
                     "rag_source_ids": [],
+                    "rag_source_chunk_ids": [],
                     "rag_retrieval_reason_code": exc.error_code,
                     "rag_query_phi_sensitivity": phi_classification.sensitivity_level.value,
                     "rag_max_sensitivity_level": None,
@@ -453,6 +474,7 @@ class AIPlaneService:
                     "rag_used": rag_context.rag_used,
                     "rag_chunk_count": rag_context.chunk_count,
                     "rag_source_ids": list(rag_context.source_ids),
+                    "rag_source_chunk_ids": list(rag_context.source_chunk_ids),
                     "rag_retrieval_reason_code": rag_context.retrieval_reason_code,
                     "rag_query_phi_sensitivity": rag_context.query_phi_sensitivity,
                     "rag_max_sensitivity_level": rag_context.max_sensitivity_level,
@@ -647,6 +669,7 @@ class AIPlaneService:
             "response": out,
             "sources": _chat_sources(response_validation),
             "confidence": _chat_confidence(response_validation),
+            "metadata": _rag_answer_metadata(rag_context),
             "simulated": effective_provider == "simulated",
         }
 

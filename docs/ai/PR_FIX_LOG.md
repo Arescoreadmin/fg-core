@@ -6,6 +6,54 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-08 — PR 16 AI Plane RAG Retrieval Wiring
+
+**Branch:** `pr-16-ai-plane-rag-wiring`
+
+**Area:** `services/ai_plane_extension/service.py`, `services/ai/rag_context.py`, `services/ai/audit.py`, `tests/test_ai_plane_extension.py`, `docs/ai/RAG_AI_PLANE_WIRING.md`
+
+**Purpose:** Wire AI plane inference to persisted PR 15 RAG retrieval before provider dispatch, include retrieved context in the provider prompt safely, and expose response metadata proving whether RAG was used.
+
+**Retrieval-before-provider proof:**
+- `AIPlaneService.infer` calls `retrieve_persisted_rag_context(db=..., tenant_id=..., query_text=...)` before provider routing/BAA/provider dispatch on the default path.
+- The trusted tenant comes from `api/ai_plane_extension.py::require_bound_tenant`; request body tenant IDs are not accepted.
+- The existing in-memory chunk injection remains only for explicit test construction.
+
+**Prompt safety proof:**
+- Retrieved context is delimited before the user query.
+- Each chunk is marked as `[chunk_id=<id>]`.
+- Tenant IDs, corpus/document metadata dumps, secrets, and auth material are not added to the provider prompt.
+
+**Answer metadata proof:**
+- `/ai/infer` returns `metadata.used_rag`, `metadata.context_count`, and `metadata.source_chunk_ids`.
+- `context_count` equals the number of chunk IDs included in the prompt.
+- No-context responses return `used_rag=false`, `context_count=0`, `source_chunk_ids=[]`.
+
+**Audit boundary proof:**
+- Audit includes safe RAG counts/IDs only, including `rag_source_chunk_ids`.
+- Audit does not include retrieved chunk text or full provider prompts.
+- Request/response text remains hash-only.
+
+**Tenant isolation proof:**
+- Retrieval is executed by `api.rag_retrieval.retrieve_rag_context`, which filters persisted chunks by tenant_id in SQL and joins documents/corpora by tenant_id.
+- Tests seed tenant A and tenant B persisted chunks and prove tenant B text is not included in tenant A provider prompts.
+
+**No provider/embedding/vector changes proof:**
+- No provider dispatch or routing behavior was expanded.
+- No embedding, vector DB, pgvector, external search, or `rag_stub` fallback was introduced.
+
+**Validation results:**
+- `.venv/bin/pytest -q tests -k "ai or rag or retrieval or plane"` → 1348 passed, 2 skipped, 1914 deselected
+- `.venv/bin/pytest -q tests/test_rag_retrieval.py` → 19 passed
+- `.venv/bin/pytest -q tests/test_rag_corpus_persistence.py` → 20 passed
+- `.venv/bin/pytest -q tests/test_rag_context_contract.py` → 18 passed
+- `.venv/bin/python tools/ci/check_rag_stub_references.py` → exit 0
+- `make fg-fast` → All checks passed
+- `bash codex_gates.sh` → All gates passed
+- `git diff --check` → exit 0
+
+---
+
 ### 2026-05-07 — PR 15 Retrieval Service MVP
 
 **Branch:** `pr-15-retrieval-service-mvp`
