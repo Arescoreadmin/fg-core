@@ -135,9 +135,7 @@ class EmbeddingMetadata:
     corpus_id: str
     chunk_id: str
     content_hash: str
-    created_at: datetime = field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def __post_init__(self) -> None:
         if self.dimensions <= 0:
