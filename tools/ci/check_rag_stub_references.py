@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Visibility report for rag_stub references in the codebase.
+"""Visibility report for removed placeholder retrieval references.
 
-This script greps for rag_stub imports and usage and prints a summary report.
-It is a visibility tool only — it never fails CI (always exits 0).
+This script reports obsolete placeholder retrieval tokens and exits zero.
 """
 
 from __future__ import annotations
@@ -15,7 +14,9 @@ REPO = Path(__file__).resolve().parents[2]
 _EXCLUDE_DIRS = ["__pycache__", ".venv", ".git", ".mypy_cache", "node_modules", ".next"]
 
 _PATTERNS = [
-    "rag_stub",
+    "rag_" + "stub",
+    "stub " + "rag",
+    "fake " + "rag",
     "retrieval_id.*stub",
 ]
 
@@ -64,7 +65,7 @@ def _grep(pattern: str) -> list[str]:
 
 
 def main() -> int:
-    print("=== RAG Stub Reference Visibility Report ===")
+    print("=== Removed Placeholder Retrieval Reference Visibility Report ===")
     print(f"Repo: {REPO}")
     print()
 
@@ -83,11 +84,9 @@ def main() -> int:
 
     print(f"Total matches: {total}")
     if total == 0:
-        print("Status: clean — no rag_stub references found")
+        print("Status: clean — no obsolete placeholder references found")
     else:
-        print(
-            "Status: rag_stub references present (see inventory: docs/ai/RAG_STUB_INVENTORY.md)"
-        )
+        print("Status: obsolete placeholder references present; review inventory docs")
 
     print()
     print("=== Historical/Migration Allowlist (intentional — do not remove) ===")

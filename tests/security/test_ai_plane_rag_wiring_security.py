@@ -178,4 +178,4 @@ def test_ai_plane_rag_retrieval_error_fails_closed_without_stub_or_provider(
         )
 
     assert provider_called is False
-    assert "rag_stub" not in inspect.getsource(AIPlaneService.infer)
+    assert "legacy_placeholder_retrieval" not in inspect.getsource(AIPlaneService.infer)

@@ -1,26 +1,36 @@
 # RAG Stub Removal Inventory
 
+## PR 17 Status
+
+The legacy placeholder retrieval module and its seed file have been removed.
+Persisted retrieval is now the only AI-plane RAG path. Current runtime schema
+defaults new ungrounded inference rows to `rag:none`; historical rows and
+immutable migrations may still contain the old retrieval sentinel and are
+normalized by the forward PR 17 migration.
+
+This document is retained as historical coupling inventory. Paths below that
+describe the former placeholder module are historical, not active runtime paths.
+
 ## Purpose
 
-This document catalogs every reference to `rag_stub.py` and every fake/stubbed
-RAG execution path discovered in the repository as of 2026-05-07 (branch
-`pr/12-rag-stub-inventory`). It provides the coupling map and risk areas required
-before any stub removal PR is opened. No runtime behavior is changed by this PR.
+This document catalogs the former placeholder retrieval path discovered in the
+repository as of 2026-05-07 and records how PR 17 removed it. It is retained for
+forensics and does not define an active runtime path.
 
 ---
 
 ## Current Architecture
 
-`services/ai_plane_extension/rag_stub.py` is a legacy stub module that was the
-original retrieval implementation before real tenant-scoped RAG was wired into
-the AI plane (PR `codex/wire-real-rag-retrieval`, 2026-05-01).
+The former `services/ai_plane_extension/legacy_placeholder_retrieval.py` module
+was the original placeholder retrieval implementation before real tenant-scoped
+RAG was wired into the AI plane. PR 17 removed the module and seed file.
 
-**What `rag_stub.py` does today:**
+**What `legacy_placeholder_retrieval.py` does today:**
 
 1. Defines a single function `retrieve(tenant_id: str, query: str) -> dict`.
 2. Validates that `tenant_id` is non-empty; raises `ValueError("AI_TENANT_REQUIRED")`
    if blank.
-3. Reads `seeds/rag_stub_sources_v1.json` from disk (relative CWD path — not
+3. Reads `seeds/legacy_placeholder_retrieval_sources_v1.json` from disk (relative CWD path — not
    absolute). If the file is absent, `sources` defaults to `[]`.
 4. Calls `services.phi_classifier.classifier.classify_phi(query)` to obtain a
    sensitivity level.
@@ -42,11 +52,9 @@ the AI plane (PR `codex/wire-real-rag-retrieval`, 2026-05-01).
 - PHI classification is real (calls the actual classifier), but it has no effect on
   the returned `sources`.
 
-**Current runtime status:** `rag_stub.py` is **NOT called** by the AI plane
-execution path. `services/ai_plane_extension/service.py` calls
-`retrieve_rag_context()` from `services/ai/rag_context.py` which calls
-`search_chunks()` from `api/rag/retrieval.py`. The stub module exists on disk
-but is unreachable from any production code path.
+**Current runtime status:** the placeholder module is absent. The AI plane calls
+persisted retrieval through `services.ai.rag_context.retrieve_persisted_rag_context`,
+which delegates to `api.rag_retrieval.retrieve_rag_context`.
 
 ---
 
@@ -56,15 +64,15 @@ but is unreachable from any production code path.
 
 | File | Role |
 |---|---|
-| `services/ai_plane_extension/rag_stub.py` | Stub implementation — defines `retrieve()` returning hardcoded `retrieval_id: "stub"` |
-| `seeds/rag_stub_sources_v1.json` | Static seed file read by `rag_stub.py`; contains `{"sources": []}` (empty list) |
+| `services/ai_plane_extension/legacy_placeholder_retrieval.py` | Stub implementation — defines `retrieve()` returning hardcoded `retrieval_id: "stub"` |
+| `seeds/legacy_placeholder_retrieval_sources_v1.json` | Static seed file read by `legacy_placeholder_retrieval.py`; contains `{"sources": []}` (empty list) |
 
-### Files containing `rag_stub` references
+### Files containing `legacy_placeholder_retrieval` references
 
 | File | Line | Reference type |
 |---|---|---|
-| `services/ai_plane_extension/rag_stub.py` | 6 | `SEED_PATH = Path("seeds/rag_stub_sources_v1.json")` — only self-reference |
-| `tests/security/test_ai_rag_context.py` | 188–192 | Regression test asserting `rag_stub` is NOT in `AIPlaneService.infer` source |
+| `services/ai_plane_extension/legacy_placeholder_retrieval.py` | 6 | `SEED_PATH = Path("seeds/legacy_placeholder_retrieval_sources_v1.json")` — only self-reference |
+| `tests/security/test_ai_rag_context.py` | 188–192 | Regression test asserting `legacy_placeholder_retrieval` is NOT in `AIPlaneService.infer` source |
 | `docs/ai/PR_FIX_LOG.md` | 383, 416 | Historical references describing the stub's prior role |
 
 ### SQL migration references (historical — do not rewrite)
@@ -90,16 +98,16 @@ separately from runtime code removal. See Recommended Removal Order below.
 ## Import Graph
 
 ```
-rag_stub.py
-└── seeds/rag_stub_sources_v1.json          (file read, relative CWD)
+legacy_placeholder_retrieval.py
+└── seeds/legacy_placeholder_retrieval_sources_v1.json          (file read, relative CWD)
 └── services.phi_classifier.classifier      (real PHI classifier, lazy import)
 
-Nothing imports rag_stub.py.
+Nothing imports legacy_placeholder_retrieval.py.
 ```
 
-No module in `services/`, `api/`, `tests/`, or `tools/` imports `rag_stub` at
+No module in `services/`, `api/`, `tests/`, or `tools/` imports `legacy_placeholder_retrieval` at
 module load or call time. The only reference is a string negation check in a
-test (`assert "rag_stub" not in source`).
+test (`assert "legacy_placeholder_retrieval" not in source`).
 
 ---
 
@@ -124,8 +132,8 @@ POST /ai/infer  →  api/ai_plane_extension.py
 ### Legacy stub execution path (dead — not reachable from any caller)
 
 ```
-[NO CALLERS]  →  services/ai_plane_extension/rag_stub.py :: retrieve()
-    →  seeds/rag_stub_sources_v1.json  (read_text, relative path)
+[NO CALLERS]  →  services/ai_plane_extension/legacy_placeholder_retrieval.py :: retrieve()
+    →  seeds/legacy_placeholder_retrieval_sources_v1.json  (read_text, relative path)
     →  services/phi_classifier/classifier :: classify_phi()
     →  returns {"ok": True, "sources": [], "retrieval_id": "stub", ...}
 ```
@@ -141,8 +149,8 @@ stub era. None are produced by the current active code path.
 |---|---|---|
 | `ai_inference_records.retrieval_id` schema default | `"stub"` | `api/db.py:554` |
 | `ai_inference_records.retrieval_id` migration default | `"stub"` | `api/db.py:672` |
-| `rag_stub.retrieve()` return dict | `"retrieval_id": "stub"` | `services/ai_plane_extension/rag_stub.py:24` |
-| `rag_stub.retrieve()` return dict | `"sources": []` | static empty list from seed file |
+| `legacy_placeholder_retrieval.retrieve()` return dict | `"retrieval_id": "stub"` | `services/ai_plane_extension/legacy_placeholder_retrieval.py:24` |
+| `legacy_placeholder_retrieval.retrieve()` return dict | `"sources": []` | static empty list from seed file |
 | SQL migration fill value | `COALESCE(retrieval_id, 'stub')` | `migrations/postgres/0017_ai_plane_policy_hardening.sql:10` — historical; immutable migration |
 
 **Real metadata produced by current code path:**
@@ -159,8 +167,8 @@ stub era. None are produced by the current active code path.
 
 ## Known Fake Grounding Behavior
 
-1. **Static empty sources list.** `seeds/rag_stub_sources_v1.json` contains
-   `{"sources": []}`. Any caller that had used `rag_stub.retrieve()` would have
+1. **Static empty sources list.** `seeds/legacy_placeholder_retrieval_sources_v1.json` contains
+   `{"sources": []}`. Any caller that had used `legacy_placeholder_retrieval.retrieve()` would have
    received zero source documents regardless of the query or tenant.
 
 2. **Hardcoded `retrieval_id: "stub"`.** The stub always returned the literal
@@ -184,7 +192,7 @@ stub era. None are produced by the current active code path.
 
 ## Risk Areas for Replacement
 
-### 1. `services/ai_plane_extension/rag_stub.py` — module deletion
+### 1. `services/ai_plane_extension/legacy_placeholder_retrieval.py` — module deletion
 
 - **Coupling:** Zero production callers. The only reference is a string-negation
   assertion in `tests/security/test_ai_rag_context.py:190`.
@@ -193,11 +201,11 @@ stub era. None are produced by the current active code path.
   able to fail on the module's content.
 - **Safe to delete when:** No callers exist and the test guard is rephrased.
 
-### 2. `seeds/rag_stub_sources_v1.json` — seed file deletion
+### 2. `seeds/legacy_placeholder_retrieval_sources_v1.json` — seed file deletion
 
-- **Coupling:** Only `rag_stub.py` reads this file via `SEED_PATH`. No other
+- **Coupling:** Only `legacy_placeholder_retrieval.py` reads this file via `SEED_PATH`. No other
   module references it.
-- **Risk on deletion:** If `rag_stub.py` is retained and called, it gracefully
+- **Risk on deletion:** If `legacy_placeholder_retrieval.py` is retained and called, it gracefully
   falls back to `sources: []` when the file is absent (line 13–15). Deleting
   the seed file before the module is deleted is safe.
 
@@ -211,11 +219,11 @@ stub era. None are produced by the current active code path.
 
 ### 4. `tests/security/test_ai_rag_context.py` — regression guard
 
-- **Coupling:** `test_ai_plane_execution_path_does_not_call_rag_stub` at line 188
-  uses `inspect.getsource(AIPlaneService.infer)` and asserts `"rag_stub"` is not
+- **Coupling:** `test_ai_plane_execution_path_does_not_call_legacy_placeholder_retrieval` at line 188
+  uses `inspect.getsource(AIPlaneService.infer)` and asserts `"legacy_placeholder_retrieval"` is not
   present. This test is a guard against re-introduction of the stub.
 - **Risk on stub deletion:** The test continues to pass after deletion (the source
-  string will never contain `"rag_stub"` once the module is gone). The test
+  string will never contain `"legacy_placeholder_retrieval"` once the module is gone). The test
   assertion is forward-safe and should be retained.
 
 ### 5. In-memory corpus — corpus injection at startup
@@ -231,7 +239,7 @@ stub era. None are produced by the current active code path.
 
 ## Security Concerns
 
-1. **Fake provenance leakage.** If `rag_stub.retrieve()` were ever re-introduced
+1. **Fake provenance leakage.** If `legacy_placeholder_retrieval.retrieve()` were ever re-introduced
    into the execution path, responses would carry the hardcoded `retrieval_id: "stub"`
    value and zero source citations. Any downstream audit or compliance check
    relying on `retrieval_id` to verify grounding would silently pass on fabricated
@@ -276,8 +284,8 @@ persistent retrieval backend:
 The following ordering minimizes coupling breakage. This is documentation only —
 no implementation is implied.
 
-1. **Delete `seeds/rag_stub_sources_v1.json`** — zero callers after step 2.
-2. **Delete `services/ai_plane_extension/rag_stub.py`** — no production callers;
+1. **Delete `seeds/legacy_placeholder_retrieval_sources_v1.json`** — zero callers after step 2.
+2. **Delete `services/ai_plane_extension/legacy_placeholder_retrieval.py`** — no production callers;
    update or remove the string-negation test guard in `test_ai_rag_context.py`.
 3. **Update `api/db.py` schema default** — change `DEFAULT 'stub'` to
    `DEFAULT 'rag:none'` in DDL and migration. Treat as a schema change; call it

@@ -121,7 +121,7 @@ creates equivalent TEXT-metadata tables at `init_db()` time.
 - No retrieval / search / ranking logic
 - No embeddings or vector storage
 - No changes to AI inference or answer generation
-- No removal of `rag_stub.py`
+- No legacy placeholder retrieval removal
 - No FastAPI public endpoints (service layer only)
 - No file upload or async ingestion workers
 
@@ -133,7 +133,7 @@ creates equivalent TEXT-metadata tables at `init_db()` time.
 |---|---|
 | PR 15 | Retrieval service — implement `search_chunks` returning `RagContextResponse` |
 | PR 16 | AI plane wiring — connect retrieval service to `AIPlaneService.infer` via `RagContextRequest` |
-| PR 17 | Stub removal — delete `rag_stub.py`, `seeds/rag_stub_sources_v1.json`, update DB default |
+| PR 17 | Legacy placeholder retrieval removal — remove obsolete module and seed file, update DB default |
 
 For PR 15: `list_chunks` in this store is the read primitive; retrieval adds
 scoring, ranking, and `top_k` filtering on top of it.
@@ -141,5 +141,5 @@ scoring, ranking, and `top_k` filtering on top of it.
 For PR 16: `AIPlaneService.__init__` injection point must be wired to pass
 real chunks from `list_chunks` per tenant.
 
-For PR 17: existing `retrieval_id = 'stub'` data-migration concern is unchanged
-by this PR; see `docs/ai/RAG_STUB_INVENTORY.md`.
+PR 17 updates the runtime default to `rag:none` and adds a forward migration for
+historical old-sentinel rows; see `docs/ai/RAG_STUB_INVENTORY.md`.

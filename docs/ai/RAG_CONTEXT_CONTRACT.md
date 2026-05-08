@@ -77,7 +77,7 @@ Provenance metadata identifying where a chunk originated.
 - No corpus persistence or database access
 - No AI answer behavior changes
 - No FastAPI router or endpoint
-- No stub removal
+- No legacy placeholder retrieval removal
 
 ---
 
@@ -88,4 +88,4 @@ Provenance metadata identifying where a chunk originated.
 | PR 14 | Corpus persistence — store and index corpus documents |
 | PR 15 | Retrieval service — implement `search_chunks` returning `RagContextResponse` |
 | PR 16 | AI plane wiring — connect retrieval service to `AIPlaneService.infer` via `RagContextRequest` |
-| PR 17 | Stub removal — delete `rag_stub.py`, `seeds/rag_stub_sources_v1.json`, update DB default |
+| PR 17 | Legacy placeholder retrieval removal — remove obsolete module and seed file, update DB default |

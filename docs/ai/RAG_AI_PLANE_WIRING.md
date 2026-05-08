@@ -21,8 +21,8 @@ with:
 - the existing SQLAlchemy session
 - the bounded RAG limit
 
-The adapter calls `api.rag_retrieval.retrieve_rag_context`. There is no
-`rag_stub` fallback.
+The adapter calls `api.rag_retrieval.retrieve_rag_context`. There is no legacy
+placeholder retrieval fallback.
 
 ## Prompt Inclusion
 
@@ -75,9 +75,10 @@ document content, auth headers, cookies, or secrets.
 - No vector DB
 - No public endpoint changes
 - No UI changes
-- No `rag_stub.py` removal
+- No legacy placeholder retrieval removal
 
 ## PR 17 Handoff
 
-PR 17 can remove the legacy stub module and seed files after validating the
-remaining historical `retrieval_id = "stub"` database default/migration concern.
+PR 17 removes the legacy placeholder retrieval module and seed file. Persisted
+retrieval is the only AI-plane RAG path. PR 18 will validate grounded-answer
+behavior on top of this path.
