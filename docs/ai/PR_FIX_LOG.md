@@ -54,6 +54,27 @@ This log records **completed, intentional fixes**.
 
 ---
 
+#### Required Security Test Gate Repair — 2026-05-08
+
+**Root cause:**
+- `services/ai_plane_extension/**` changes require `security` category coverage under `tools/testing/policy/ownership_map.yaml`.
+- PR 16 added real RAG/security behavior tests only under top-level `tests/test_ai_plane_extension.py`, which satisfies `unit` but not `security` because `tools/testing/policy/required_tests.yaml` requires security updates under `tests/security/**`, `tools/ci/check_*security*.py`, `tools/testing/security/**`, or `tests/tools/**`.
+- `required-tests-gate` evaluates committed `origin/main...HEAD` diff, so uncommitted security test additions remain invisible until committed.
+
+**Fix:**
+- Added `tests/security/test_ai_plane_rag_wiring_security.py` with real PR 16 security coverage for safe RAG audit metadata, tenant-scoped persisted retrieval prompts, and fail-closed retrieval error behavior without `rag_stub` or provider dispatch.
+- No required-tests policy bypass or gate weakening was introduced.
+
+**Validation results:**
+- `make required-tests-gate` → required-tests gate: PASS
+- `make fg-security` → 648 passed, 1 skipped; fg-security: PASS
+- `.venv/bin/pytest -q tests/security/test_ai_plane_rag_wiring_security.py` → 3 passed
+- `.venv/bin/pytest -q tests -k "ai or rag or retrieval or plane"` → 1351 passed, 2 skipped, 1914 deselected
+- `.venv/bin/pytest -q tests/test_ai_plane_extension.py` → 28 passed
+- `.venv/bin/python tools/ci/check_rag_stub_references.py` → exit 0
+
+---
+
 ### 2026-05-07 — PR 15 Retrieval Service MVP
 
 **Branch:** `pr-15-retrieval-service-mvp`
