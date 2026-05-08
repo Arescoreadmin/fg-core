@@ -12,7 +12,7 @@ import {
   CheckCircle2,
   Clock,
   ArrowRight,
-  Zap,
+  Plus,
   CreditCard,
   FileText,
   Loader2,
@@ -382,7 +382,7 @@ export default function DashboardOverviewPage() {
         actions={
           <Link href="/onboarding">
             <Button size="sm" className="gap-1.5">
-              <Zap className="h-3.5 w-3.5" /> New Assessment
+              <Plus className="h-3.5 w-3.5" /> New Assessment
             </Button>
           </Link>
         }
@@ -508,7 +508,7 @@ export default function DashboardOverviewPage() {
                   </p>
                   <Link href="/onboarding">
                     <Button size="sm" variant="outline" className="gap-1.5">
-                      <Zap className="h-3.5 w-3.5" /> Run Assessment
+                      <Plus className="h-3.5 w-3.5" /> Run Assessment
                     </Button>
                   </Link>
                 </div>

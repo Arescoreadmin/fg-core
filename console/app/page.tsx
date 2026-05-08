@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import {
   Shield,
-  Zap,
+  BrainCircuit,
   Lock,
   BarChart3,
   FileCheck,
@@ -14,6 +14,7 @@ import {
   Gavel,
   HardHat,
 } from 'lucide-react';
+import { FrostGateShield } from '@/components/governance/FrostGateShield';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -103,7 +104,7 @@ const FEATURES = [
       'Profile-driven questionnaires that match your org size, industry, and regulatory exposure. No generic checklists.',
   },
   {
-    icon: Zap,
+    icon: BrainCircuit,
     title: 'AI-Generated Reports',
     description:
       'Claude-powered advisory reports in executive, technical, and compliance variants — always with a 30/60/90 day roadmap.',
@@ -141,9 +142,7 @@ export default function LandingPage() {
       <nav className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded bg-primary">
-              <Zap className="h-4 w-4 text-white" />
-            </div>
+            <FrostGateShield size={28} />
             <span className="font-semibold text-foreground">FrostGate</span>
           </div>
           <div className="hidden items-center gap-6 text-sm text-muted md:flex">
@@ -330,9 +329,7 @@ export default function LandingPage() {
       <footer className="border-t border-border py-8">
         <div className="mx-auto max-w-6xl px-6 flex flex-col items-center gap-2 sm:flex-row sm:justify-between">
           <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded bg-primary">
-              <Zap className="h-3.5 w-3.5 text-white" />
-            </div>
+            <FrostGateShield size={24} />
             <span className="text-sm font-medium text-foreground">FrostGate</span>
           </div>
           <p className="text-xs text-muted">

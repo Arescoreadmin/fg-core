@@ -11,9 +11,9 @@ import {
   Package,
   Activity,
   ChevronRight,
-  Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { FrostGateShield } from '@/components/governance/FrostGateShield';
 
 interface NavItem {
   label: string;
@@ -50,9 +50,7 @@ export function Sidebar() {
     <aside className="flex h-screen w-60 shrink-0 flex-col border-r border-border bg-surface">
       {/* Logo */}
       <div className="flex h-16 items-center gap-2 px-5 border-b border-border">
-        <div className="flex h-7 w-7 items-center justify-center rounded bg-primary">
-          <Zap className="h-4 w-4 text-white" />
-        </div>
+        <FrostGateShield size={28} />
         <span className="text-sm font-semibold tracking-wide text-foreground">FrostGate</span>
         <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
           CONSOLE
