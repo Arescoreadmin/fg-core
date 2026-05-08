@@ -37,7 +37,36 @@ This log records **completed, intentional fixes**.
 - No runtime reference to the legacy RAG stub is introduced.
 
 **Validation results:**
-- Pending final validation run in this branch.
+- `.venv/bin/pytest -q tests/test_rag_retrieval.py` → 12 passed
+- `.venv/bin/pytest -q tests -k "retrieval or rag or corpus or tenant"` → 694 passed, 7 skipped, 2549 deselected
+- `.venv/bin/pytest -q tests/test_rag_corpus_persistence.py` → 20 passed
+- `.venv/bin/pytest -q tests/test_rag_context_contract.py` → 18 passed
+- `.venv/bin/python tools/ci/check_rag_stub_references.py` → exit 0
+- `make fg-fast` → All checks passed
+- `bash codex_gates.sh` → All gates passed
+
+#### Codex Review Repair — 2026-05-07
+
+**Root causes:**
+- Explicit blank corpus filters (`[" ", "\t"]`) were normalized to `[]`, which disabled filtering and broadened retrieval across all tenant corpora.
+- Retrieval used `.fetchall()` and held every tenant candidate row before Python scoring.
+
+**Fix:**
+- Added fail-closed corpus filter normalization: `None`/omitted corpus filter searches normally; a non-empty explicit filter with no valid IDs returns empty context; mixed valid/blank filters preserve only valid IDs.
+- Added SQL lexical prefilter predicates for query terms before Python scoring.
+- Replaced `.fetchall()` with streamed row iteration and kept only the current top_k ranked results in memory while preserving final lexical ranking semantics.
+
+**Tenant isolation proof:**
+- Tenant filtering remains in SQL.
+- Corpus filtering remains tenant-scoped and invalid explicit filters cannot widen scope.
+- Document and corpus joins still include tenant_id.
+
+**Validation results:**
+- `.venv/bin/pytest -q tests/test_rag_retrieval.py` → 19 passed
+- `.venv/bin/pytest -q tests -k "retrieval or rag or corpus or tenant"` → 701 passed, 7 skipped, 2549 deselected
+- `.venv/bin/python tools/ci/check_rag_stub_references.py` → exit 0
+- `make fg-fast` → All checks passed
+- `bash codex_gates.sh` → All gates passed
 
 ---
 

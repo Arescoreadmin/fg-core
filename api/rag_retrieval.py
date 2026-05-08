@@ -54,6 +54,19 @@ def _tokenize(value: str) -> list[str]:
     return _TOKEN_RE.findall(value.lower())
 
 
+def _normalise_corpus_ids(corpus_ids: list[str] | None) -> tuple[list[str], bool]:
+    """Return trimmed corpus IDs and whether an explicit invalid filter was provided."""
+    if corpus_ids is None:
+        return [], False
+    trimmed = [str(corpus_id).strip() for corpus_id in corpus_ids]
+    valid = [corpus_id for corpus_id in trimmed if corpus_id]
+    return valid, bool(trimmed) and not valid
+
+
+def _escape_like_term(term: str) -> str:
+    return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _score_text(query_terms: list[str], chunk_text: str) -> float:
     if not query_terms:
         return 0.0
@@ -108,9 +121,25 @@ def retrieve_rag_context(
     if not query_terms:
         return RagContextResponse(query=request.query, chunks=[])
 
-    corpus_ids = [corpus_id for corpus_id in request.corpus_ids if corpus_id.strip()]
+    corpus_ids, invalid_explicit_filter = _normalise_corpus_ids(request.corpus_ids)
+    if invalid_explicit_filter:
+        return RagContextResponse(query=request.query, chunks=[])
+
+    unique_query_terms = list(dict.fromkeys(query_terms))
+    like_clauses = []
+    params: dict[str, Any] = {
+        "tenant_id": tenant_id,
+        "use_corpus_filter": 1 if corpus_ids else 0,
+        "corpus_ids": corpus_ids or ["__unused__"],
+    }
+    for index, term in enumerate(unique_query_terms):
+        param_name = f"term_{index}"
+        like_clauses.append(f"LOWER(c.text) LIKE :{param_name} ESCAPE '\\'")
+        params[param_name] = f"%{_escape_like_term(term)}%"
+
+    lexical_prefilter = " OR ".join(like_clauses)
     stmt = text(
-        """
+        f"""
         SELECT
             c.chunk_id,
             c.document_id,
@@ -131,24 +160,13 @@ def retrieve_rag_context(
          AND corp.tenant_id = c.tenant_id
         WHERE c.tenant_id = :tenant_id
           AND (:use_corpus_filter = 0 OR c.corpus_id IN :corpus_ids)
+          AND ({lexical_prefilter})
+        ORDER BY c.corpus_id ASC, c.document_id ASC, c.ordinal ASC, c.chunk_id ASC
         """
     ).bindparams(bindparam("corpus_ids", expanding=True))
 
-    rows = (
-        conn.execute(
-            stmt,
-            {
-                "tenant_id": tenant_id,
-                "use_corpus_filter": 1 if corpus_ids else 0,
-                "corpus_ids": corpus_ids or ["__unused__"],
-            },
-        )
-        .mappings()
-        .fetchall()
-    )
-
     ranked: list[tuple[float, str, str, int, str, RagContextChunk]] = []
-    for row in rows:
+    for row in conn.execute(stmt, params).mappings():
         row_dict = dict(row)
         score = _score_text(query_terms, str(row_dict["text"]))
         if score <= 0.0:
@@ -186,7 +204,9 @@ def retrieve_rag_context(
                 chunk,
             )
         )
+        ranked.sort(key=lambda item: (-item[0], item[1], item[2], item[3], item[4]))
+        if len(ranked) > request.top_k:
+            ranked.pop()
 
-    ranked.sort(key=lambda item: (-item[0], item[1], item[2], item[3], item[4]))
-    chunks = [item[5] for item in ranked[: request.top_k]]
+    chunks = [item[5] for item in ranked]
     return RagContextResponse(query=request.query, chunks=chunks)

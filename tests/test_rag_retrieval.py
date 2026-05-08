@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import importlib
 import os
+from typing import cast
 
 import pytest
 
 os.environ.setdefault("FG_ENV", "test")
+
+_CORPUS_IDS_OMITTED = object()
 
 
 @pytest.fixture()
@@ -61,15 +64,25 @@ def _seed_document(
 def _request(
     query: str,
     tenant_id: str = "tenant-a",
-    corpus_ids: list[str] | None = None,
+    corpus_ids: list[str] | None | object = _CORPUS_IDS_OMITTED,
     top_k: int = 5,
 ):
     from api.rag_context import RagContextRequest
 
+    if corpus_ids is None:
+        return RagContextRequest.model_construct(
+            query=query,
+            tenant_id=tenant_id,
+            corpus_ids=None,
+            top_k=top_k,
+        )
+
     return RagContextRequest(
         query=query,
         tenant_id=tenant_id,
-        corpus_ids=corpus_ids or [],
+        corpus_ids=[]
+        if corpus_ids is _CORPUS_IDS_OMITTED
+        else cast(list[str], corpus_ids),
         top_k=top_k,
     )
 
@@ -264,6 +277,95 @@ def test_retrieval_filters_by_corpus_ids(db_session):
     assert "allowed corpus" in response.chunks[0].text
 
 
+def test_retrieval_corpus_ids_none_searches_normally(db_session):
+    from api.rag_retrieval import retrieve_rag_context
+
+    _seed_document(
+        db_session,
+        tenant_id="tenant-a",
+        chunks=[{"text": "normal unrestricted policy result", "ordinal": 0}],
+    )
+
+    response = retrieve_rag_context(
+        db_session,
+        _request("unrestricted policy", corpus_ids=None),
+    )
+
+    assert len(response.chunks) == 1
+    assert response.chunks[0].text == "normal unrestricted policy result"
+
+
+def test_retrieval_blank_corpus_ids_return_empty_context(db_session):
+    from api.rag_retrieval import retrieve_rag_context
+
+    _seed_document(
+        db_session,
+        tenant_id="tenant-a",
+        chunks=[{"text": "policy that must not broaden", "ordinal": 0}],
+    )
+
+    response = retrieve_rag_context(
+        db_session,
+        _request("policy", corpus_ids=[" ", "\t"]),
+    )
+
+    assert response.chunks == []
+    assert response.context_count == 0
+    assert response.used_retrieval is False
+
+
+def test_retrieval_mixed_blank_corpus_ids_preserve_valid_filter(db_session):
+    from api.rag_retrieval import retrieve_rag_context
+
+    allowed, _, _ = _seed_document(
+        db_session,
+        tenant_id="tenant-a",
+        corpus_name="Allowed",
+        chunks=[{"text": "mixed filter policy allowed", "ordinal": 0}],
+    )
+    _seed_document(
+        db_session,
+        tenant_id="tenant-a",
+        corpus_name="Blocked",
+        chunks=[{"text": "mixed filter policy blocked", "ordinal": 0}],
+    )
+
+    response = retrieve_rag_context(
+        db_session,
+        _request("mixed filter policy", corpus_ids=[" ", allowed["corpus_id"], "\t"]),
+    )
+
+    assert len(response.chunks) == 1
+    assert response.chunks[0].provenance.corpus_id == allowed["corpus_id"]
+    assert response.chunks[0].text == "mixed filter policy allowed"
+
+
+def test_retrieval_blank_corpus_filter_never_broadens_to_all_corpora(db_session):
+    from api.rag_retrieval import retrieve_rag_context
+
+    _seed_document(
+        db_session,
+        tenant_id="tenant-a",
+        corpus_name="A",
+        chunks=[{"text": "broadening regression policy alpha", "ordinal": 0}],
+    )
+    _seed_document(
+        db_session,
+        tenant_id="tenant-a",
+        corpus_name="B",
+        chunks=[{"text": "broadening regression policy beta", "ordinal": 0}],
+    )
+
+    unfiltered = retrieve_rag_context(db_session, _request("broadening policy"))
+    blank_filtered = retrieve_rag_context(
+        db_session,
+        _request("broadening policy", corpus_ids=[" ", "\t"]),
+    )
+
+    assert len(unfiltered.chunks) == 2
+    assert blank_filtered.chunks == []
+
+
 def test_retrieval_respects_top_k(db_session):
     from api.rag_retrieval import retrieve_rag_context
 
@@ -281,6 +383,64 @@ def test_retrieval_respects_top_k(db_session):
 
     assert len(response.chunks) == 2
     assert response.context_count == 2
+
+
+def test_retrieval_streams_candidates_without_fetchall():
+    spec = importlib.util.find_spec("api.rag_retrieval")
+    assert spec is not None and spec.origin is not None
+    with open(spec.origin) as fh:
+        source = fh.read()
+
+    assert ".fetchall(" not in source
+
+
+def test_retrieval_preserves_top_k_under_many_prefiltered_candidates(db_session):
+    from api.rag_retrieval import retrieve_rag_context
+
+    chunks = [
+        {"text": f"policy low relevance {index}", "ordinal": index}
+        for index in range(30)
+    ]
+    chunks.append(
+        {
+            "text": "policy policy policy policy exact highest relevance",
+            "ordinal": 30,
+        }
+    )
+    _seed_document(db_session, tenant_id="tenant-a", chunks=chunks)
+
+    response = retrieve_rag_context(db_session, _request("policy exact", top_k=1))
+
+    assert len(response.chunks) == 1
+    assert (
+        response.chunks[0].text == "policy policy policy policy exact highest relevance"
+    )
+
+
+def test_retrieval_deterministic_ordering_preserved_with_prefilter(db_session):
+    from api.rag_retrieval import retrieve_rag_context
+
+    _seed_document(
+        db_session,
+        tenant_id="tenant-a",
+        chunks=[
+            {"text": "unmatched noise one", "ordinal": 0},
+            {"text": "stable bounded term", "ordinal": 2},
+            {"text": "stable bounded term", "ordinal": 1},
+            {"text": "unmatched noise two", "ordinal": 3},
+        ],
+    )
+
+    response_1 = retrieve_rag_context(db_session, _request("stable bounded"))
+    response_2 = retrieve_rag_context(db_session, _request("stable bounded"))
+
+    assert [chunk.provenance.chunk_id for chunk in response_1.chunks] == [
+        chunk.provenance.chunk_id for chunk in response_2.chunks
+    ]
+    assert [chunk.text for chunk in response_1.chunks] == [
+        "stable bounded term",
+        "stable bounded term",
+    ]
 
 
 def test_retrieval_returns_chunk_provenance(db_session):
