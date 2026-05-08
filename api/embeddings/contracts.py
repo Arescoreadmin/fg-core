@@ -84,6 +84,8 @@ class EmbeddingRequest:
             raise ValueError(f"{EMBED_ERR_EMPTY_TEXT}: text must not be blank")
         if not self.content_hash or not self.content_hash.strip():
             raise ValueError(f"{EMBED_ERR_MISSING_HASH}: content_hash required")
+        # Defensive copy: prevents callers from mutating metadata after construction.
+        object.__setattr__(self, "metadata", dict(self.metadata))
 
     @classmethod
     def from_chunk(
@@ -174,6 +176,10 @@ class EmbeddingResponse:
             raise ValueError(f"{EMBED_ERR_MISSING_CHUNK}: chunk_id required")
         if not self.tenant_id or not self.tenant_id.strip():
             raise ValueError(f"{EMBED_ERR_MISSING_TENANT}: tenant_id required")
+        # Coerce to tuple: the type annotation requires tuple but Python does not
+        # enforce it at runtime. Providers commonly return list[float]; coercing
+        # here guarantees immutability before dimension validation and persistence.
+        object.__setattr__(self, "vector", tuple(self.vector))
         if not self.vector:
             raise ValueError(f"{EMBED_ERR_EMPTY_VECTOR}: vector must not be empty")
         if len(self.vector) != self.metadata.dimensions:
@@ -224,6 +230,7 @@ class ChunkEmbeddingRecord:
             raise ValueError(f"{EMBED_ERR_MISSING_HASH}: content_hash required")
         if self.dimensions <= 0:
             raise ValueError("dimensions must be a positive integer")
+        object.__setattr__(self, "vector", tuple(self.vector))
         if len(self.vector) != self.dimensions:
             raise ValueError(
                 f"{EMBED_ERR_DIMENSION_MISMATCH}: "

@@ -961,14 +961,17 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
         conn.exec_driver_sql(
             """
             CREATE TABLE IF NOT EXISTS rag_chunks (
-                chunk_id    TEXT    NOT NULL PRIMARY KEY,
-                document_id TEXT    NOT NULL REFERENCES rag_documents (document_id),
-                corpus_id   TEXT    NOT NULL,
-                tenant_id   TEXT    NOT NULL,
-                text        TEXT    NOT NULL,
-                ordinal     INTEGER NOT NULL,
-                metadata    TEXT,
-                created_at  TEXT    NOT NULL
+                chunk_id        TEXT    NOT NULL PRIMARY KEY,
+                document_id     TEXT    NOT NULL REFERENCES rag_documents (document_id),
+                corpus_id       TEXT    NOT NULL,
+                tenant_id       TEXT    NOT NULL,
+                text            TEXT    NOT NULL,
+                ordinal         INTEGER NOT NULL,
+                metadata        TEXT,
+                created_at      TEXT    NOT NULL,
+                content_hash    TEXT,
+                embedding_state TEXT    NOT NULL DEFAULT 'pending'
+                    CHECK (embedding_state IN ('pending','processing','completed','failed','skipped'))
             )
             """
         )
@@ -979,6 +982,11 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
         conn.exec_driver_sql(
             "CREATE INDEX IF NOT EXISTS ix_rag_chunks_tenant_document "
             "ON rag_chunks (tenant_id, document_id)"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_rag_chunks_pending_embedding "
+            "ON rag_chunks (tenant_id, created_at) "
+            "WHERE embedding_state IN ('pending', 'failed')"
         )
 
 

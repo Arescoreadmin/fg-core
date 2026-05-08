@@ -231,6 +231,19 @@ class TestEmbeddingRequest:
         )
         assert req.metadata == meta
 
+    def test_metadata_is_defensive_copy(self) -> None:
+        original = {"key": "value"}
+        req = EmbeddingRequest.from_chunk(
+            tenant_id=_TENANT,
+            corpus_id=_CORPUS,
+            document_id=_DOCUMENT,
+            chunk_id=_CHUNK,
+            text=_TEXT,
+            metadata=original,
+        )
+        original["key"] = "mutated"
+        assert req.metadata["key"] == "value"
+
 
 # ===========================================================================
 # EmbeddingMetadata
@@ -325,6 +338,28 @@ class TestEmbeddingResponse:
         resp = _response()
         assert isinstance(resp.vector, tuple)
 
+    def test_list_vector_coerced_to_tuple(self) -> None:
+        list_vector = [0.1] * _DIM
+        resp = EmbeddingResponse(
+            chunk_id=_CHUNK,
+            tenant_id=_TENANT,
+            vector=list_vector,  # type: ignore[arg-type]
+            metadata=_metadata(),
+        )
+        assert isinstance(resp.vector, tuple)
+        assert len(resp.vector) == _DIM
+
+    def test_mutating_source_list_does_not_affect_response(self) -> None:
+        source = [0.1] * _DIM
+        resp = EmbeddingResponse(
+            chunk_id=_CHUNK,
+            tenant_id=_TENANT,
+            vector=source,  # type: ignore[arg-type]
+            metadata=_metadata(),
+        )
+        source[0] = 999.0
+        assert resp.vector[0] == pytest.approx(0.1)
+
 
 # ===========================================================================
 # ChunkEmbeddingRecord
@@ -399,6 +434,37 @@ class TestChunkEmbeddingRecord:
         rec = self._record()
         with pytest.raises((AttributeError, TypeError)):
             rec.tenant_id = "other"  # type: ignore[misc]
+
+    def test_list_vector_coerced_to_tuple(self) -> None:
+        list_vector = [0.1] * _DIM
+        rec = ChunkEmbeddingRecord(
+            tenant_id=_TENANT,
+            corpus_id=_CORPUS,
+            document_id=_DOCUMENT,
+            chunk_id=_CHUNK,
+            content_hash=_HASH,
+            embedding_model=EmbeddingModel.OPENAI_ADA_002,
+            dimensions=_DIM,
+            vector=list_vector,  # type: ignore[arg-type]
+            created_at=_NOW,
+        )
+        assert isinstance(rec.vector, tuple)
+
+    def test_mutating_source_list_does_not_affect_record(self) -> None:
+        source = [0.1] * _DIM
+        rec = ChunkEmbeddingRecord(
+            tenant_id=_TENANT,
+            corpus_id=_CORPUS,
+            document_id=_DOCUMENT,
+            chunk_id=_CHUNK,
+            content_hash=_HASH,
+            embedding_model=EmbeddingModel.OPENAI_ADA_002,
+            dimensions=_DIM,
+            vector=source,  # type: ignore[arg-type]
+            created_at=_NOW,
+        )
+        source[0] = 999.0
+        assert rec.vector[0] == pytest.approx(0.1)
 
 
 # ===========================================================================
