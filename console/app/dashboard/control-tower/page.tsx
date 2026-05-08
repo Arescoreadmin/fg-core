@@ -296,7 +296,7 @@ export default function ControlTowerPage() {
                       description: 'Isolates the device from the tenant network. All requests from this device will be blocked.',
                       fields: [{ name: 'device_id', label: 'Device ID', placeholder: 'dev_...', required: true }],
                       destructive: true,
-                      onConfirm: (v) => quarantineAgent(v.device_id, auditReason),
+                      onConfirm: (v) => quarantineAgent(v.device_id, v.audit_reason || auditReason),
                     })
                   }
                 />
@@ -307,7 +307,7 @@ export default function ControlTowerPage() {
                       title: 'Restore Agent Device',
                       description: 'Lifts quarantine and restores the device to normal operation.',
                       fields: [{ name: 'device_id', label: 'Device ID', placeholder: 'dev_...', required: true }],
-                      onConfirm: (v) => restoreAgent(v.device_id, auditReason),
+                      onConfirm: (v) => restoreAgent(v.device_id, v.audit_reason || auditReason),
                     })
                   }
                 />
@@ -340,7 +340,7 @@ export default function ControlTowerPage() {
                       description: 'Restarts the locker process. In-flight requests will be dropped.',
                       fields: [{ name: 'locker_id', label: 'Locker ID', placeholder: 'lck_...', required: true }],
                       destructive: true,
-                      onConfirm: (v) => lockerRestart(v.locker_id, auditReason),
+                      onConfirm: (v) => lockerRestart(v.locker_id, v.audit_reason || auditReason),
                     })
                   }
                 />
@@ -351,7 +351,7 @@ export default function ControlTowerPage() {
                       title: 'Resume Locker',
                       description: 'Resumes a paused locker and re-enables request processing.',
                       fields: [{ name: 'locker_id', label: 'Locker ID', placeholder: 'lck_...', required: true }],
-                      onConfirm: (v) => lockerResume(v.locker_id, auditReason),
+                      onConfirm: (v) => lockerResume(v.locker_id, v.audit_reason || auditReason),
                     })
                   }
                 />

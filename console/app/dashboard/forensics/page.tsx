@@ -86,10 +86,8 @@ export default function ForensicsPage() {
       if (kind === 'snapshot') setSnapshotData(response.data);
       if (kind === 'audit') setAuditData(response.data);
       if (kind === 'chain') {
-        const verified = Boolean(
-          (response.data as Record<string, unknown>).verified ??
-          (response.data as Record<string, unknown>).pass,
-        );
+        const d = response.data as Record<string, unknown>;
+        const verified = Boolean(d.verified ?? d.pass ?? d.ok);
         setChainStatus(verified ? 'verified' : 'unverified');
         setChainProof({
           requestId: response.meta.requestId ?? 'n/a',
