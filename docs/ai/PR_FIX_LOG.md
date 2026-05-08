@@ -6,6 +6,38 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-08 — PR 19 Embedding Architecture Contract
+
+**Branch:** `claude/embedding-architecture-contract-RsHIe`
+
+**Area:** `api/embeddings/` (new package), `migrations/postgres/0037_rag_chunk_embedding_state.sql`, `tests/embeddings/`
+
+**Purpose:** Define the embedding system contracts before any provider or pipeline implementation lands. Locks the stable wire types that PR 20 (pgvector persistence) and PR 21 (embedding generation pipeline) will consume.
+
+**Files added:**
+- `api/embeddings/__init__.py` — clean public surface
+- `api/embeddings/contracts.py` — `EmbeddingRequest`, `EmbeddingResponse`, `EmbeddingMetadata`, `ChunkEmbeddingRecord` with full field validation and stable `EMBED_Exxx` error codes
+- `api/embeddings/providers.py` — `EmbeddingModel` enum (10 models, `provider/name` format), `KNOWN_DIMENSIONS` registry, `EmbeddingProvider` runtime-checkable Protocol
+- `api/embeddings/state.py` — `EmbeddingState` enum with `can_transition_to()` transition guard
+- `migrations/postgres/0037_rag_chunk_embedding_state.sql` — additive: adds `content_hash TEXT` and `embedding_state TEXT CHECK(...)` to `rag_chunks`, plus two indexes for the PR 21 pipeline worker
+- `tests/embeddings/test_embedding_contracts.py` — 70 contract tests
+
+**Schema change proof (migration 0037):**
+- Additive only — `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` on `rag_chunks`.
+- `content_hash` is nullable (backfill by PR 21 pipeline).
+- `embedding_state` defaults to `'pending'` with a CHECK constraint matching `EmbeddingState` enum values exactly.
+- No existing indexes, rows, or constraints are modified.
+- SQLite-safe for tests (no vector extension required).
+
+**No-op proof:**
+- No provider implementations, no actual embedding generation, no pgvector, no OpenAI calls, no background jobs, no retrieval changes, no AI-plane routing changes.
+- All types are frozen dataclasses or Protocol — zero runtime side effects.
+
+**Validation results:**
+- `PYTHONPATH=. PYTHONHASHSEED=0 TZ=UTC .venv/bin/pytest tests/embeddings/ -v` → 70 passed, 0 failed
+
+---
+
 ### 2026-05-08 — PR 17 Legacy Placeholder Retrieval Removal
 
 **Branch:** `pr-17-remove-placeholder-retrieval`
