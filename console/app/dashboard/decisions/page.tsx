@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { DecisionsTable } from '@/components/tables/DecisionsTable';
 import { getDecision, listDecisions, type DecisionOut } from '@/lib/coreApi';
 import { toUserMessage } from '@/lib/errors';
+import { DecisionPanel } from '@/components/decisions/DecisionPanel';
 
 const PAGE_SIZE = 10;
 
@@ -12,11 +13,8 @@ export default function DecisionsPage() {
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
 
-  // Draft inputs (what the user is typing)
   const [eventType, setEventType] = useState('');
   const [threatLevel, setThreatLevel] = useState('');
-
-  // Applied filters (what the query actually uses)
   const [appliedEventType, setAppliedEventType] = useState('');
   const [appliedThreatLevel, setAppliedThreatLevel] = useState('');
 
@@ -39,9 +37,7 @@ export default function DecisionsPage() {
     }
   }, [offset, appliedEventType, appliedThreatLevel]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   const applyFilters = useCallback(() => {
     setAppliedEventType(eventType.trim());
@@ -51,69 +47,77 @@ export default function DecisionsPage() {
   }, [eventType, threatLevel]);
 
   return (
-    <div style={{ display: 'grid', gap: '1rem' }}>
-      <h2>Decisions</h2>
-
-      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-        <input
-          value={eventType}
-          onChange={(e) => setEventType(e.target.value)}
-          placeholder="event_type"
-        />
-        <input
-          value={threatLevel}
-          onChange={(e) => setThreatLevel(e.target.value)}
-          placeholder="threat_level"
-        />
-        <button onClick={applyFilters}>Apply Filters</button>
+    <div className="flex flex-col">
+      <div className="border-b border-border px-6 py-4">
+        <h1 className="text-base font-semibold text-foreground">Decisions</h1>
+        <p className="text-xs text-muted mt-0.5">Policy outcomes for every classified request</p>
       </div>
 
-      {error ? <p>{error}</p> : null}
+      <div className="p-6 space-y-4">
+        {/* Filters */}
+        <div className="flex flex-wrap gap-2">
+          <input
+            value={eventType}
+            onChange={(e) => setEventType(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
+            placeholder="Event type"
+            className="rounded border border-border bg-surface-2 px-3 py-1.5 text-sm text-foreground placeholder:text-muted/50 focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <input
+            value={threatLevel}
+            onChange={(e) => setThreatLevel(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
+            placeholder="Threat level"
+            className="rounded border border-border bg-surface-2 px-3 py-1.5 text-sm text-foreground placeholder:text-muted/50 focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <button
+            onClick={applyFilters}
+            className="rounded bg-primary px-4 py-1.5 text-sm font-medium text-white hover:bg-primary-hover"
+          >
+            Filter
+          </button>
+        </div>
 
-      <DecisionsTable
-        decisions={items}
-        onSelect={async (id) => {
-          try {
-            setError('');
-            setDetail(await getDecision(id));
-          } catch (e) {
-            setError(toUserMessage(e));
-          }
-        }}
-      />
+        {error && (
+          <p className="rounded border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">{error}</p>
+        )}
 
-      <div style={{ display: 'flex', gap: '0.5rem' }}>
-        <button
-          disabled={offset === 0}
-          onClick={() => setOffset(Math.max(offset - PAGE_SIZE, 0))}
-        >
-          Previous
-        </button>
-        <button
-          disabled={offset + PAGE_SIZE >= total}
-          onClick={() => setOffset(offset + PAGE_SIZE)}
-        >
-          Next
-        </button>
-        <span>
-          offset={offset} total={total}
-        </span>
-      </div>
-
-      {detail ? (
-        <section
-          style={{
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            padding: '1rem',
+        <DecisionsTable
+          decisions={items}
+          onSelect={async (id) => {
+            try {
+              setError('');
+              setDetail(await getDecision(id));
+            } catch (e) {
+              setError(toUserMessage(e));
+            }
           }}
-        >
-          <h3>Decision detail</h3>
-          <pre style={{ whiteSpace: 'pre-wrap' }}>
-            {JSON.stringify(detail, null, 2)}
-          </pre>
-        </section>
-      ) : null}
+        />
+
+        {/* Pagination */}
+        <div className="flex items-center gap-3">
+          <button
+            disabled={offset === 0}
+            onClick={() => setOffset(Math.max(offset - PAGE_SIZE, 0))}
+            className="rounded border border-border bg-surface-2 px-3 py-1.5 text-xs text-muted hover:text-foreground disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <span className="text-xs text-muted">
+            {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
+          </span>
+          <button
+            disabled={offset + PAGE_SIZE >= total}
+            onClick={() => setOffset(offset + PAGE_SIZE)}
+            className="rounded border border-border bg-surface-2 px-3 py-1.5 text-xs text-muted hover:text-foreground disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
+
+        {/* Decision detail */}
+        {detail && <DecisionPanel decision={detail} />}
+      </div>
     </div>
   );
 }

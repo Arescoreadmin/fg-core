@@ -1,4 +1,10 @@
 import type { DecisionOut } from '@/lib/coreApi';
+import { RiskBadge } from '@/components/governance/RiskBadge';
+
+function formatTs(ts?: string) {
+  if (!ts) return '—';
+  try { return new Date(ts).toLocaleString(); } catch { return ts; }
+}
 
 export function DecisionsTable({
   decisions,
@@ -8,31 +14,46 @@ export function DecisionsTable({
   onSelect: (id: string) => void;
 }) {
   if (!decisions.length) {
-    return <div style={{ padding: '1rem', border: '1px dashed var(--border)' }}>No decisions for this tenant yet.</div>;
+    return (
+      <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted">
+        No decisions yet — policy outcomes will appear here once traffic flows through FrostGate.
+      </div>
+    );
   }
 
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-      <thead>
-        <tr>
-          <th style={{ textAlign: 'left' }}>ID</th>
-          <th style={{ textAlign: 'left' }}>Event</th>
-          <th style={{ textAlign: 'left' }}>Threat</th>
-          <th style={{ textAlign: 'left' }}>Type</th>
-          <th style={{ textAlign: 'left' }}>Created</th>
-        </tr>
-      </thead>
-      <tbody>
-        {decisions.map((d) => (
-          <tr key={d.id} onClick={() => onSelect(d.id)} style={{ cursor: 'pointer', borderTop: '1px solid var(--border)' }}>
-            <td>{d.id}</td>
-            <td>{d.event_id}</td>
-            <td>{d.threat_level}</td>
-            <td>{d.event_type}</td>
-            <td>{d.created_at || '—'}</td>
+    <div className="overflow-x-auto rounded-lg border border-border">
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr className="border-b border-border bg-surface-2">
+            {['ID', 'Event', 'Threat', 'Type', 'Created'].map((h) => (
+              <th
+                key={h}
+                className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-widest text-muted/70"
+              >
+                {h}
+              </th>
+            ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {decisions.map((d) => (
+            <tr
+              key={d.id}
+              onClick={() => onSelect(d.id)}
+              className="cursor-pointer border-b border-border last:border-0 hover:bg-surface-2 transition-colors"
+            >
+              <td className="px-4 py-2.5 font-mono text-xs text-muted/80 max-w-[120px] truncate">{d.id}</td>
+              <td className="px-4 py-2.5 font-mono text-xs text-muted/80 max-w-[120px] truncate">{d.event_id || '—'}</td>
+              <td className="px-4 py-2.5">
+                <RiskBadge level={d.threat_level} />
+              </td>
+              <td className="px-4 py-2.5 text-xs text-muted">{d.event_type || '—'}</td>
+              <td className="px-4 py-2.5 text-xs text-muted">{formatTs(d.created_at)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
