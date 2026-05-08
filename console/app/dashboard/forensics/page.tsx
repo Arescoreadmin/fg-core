@@ -115,12 +115,25 @@ export default function ForensicsPage() {
       </div>
 
       <div className="p-6 space-y-4">
-        {/* Chain verify status — always shown */}
-        <TrustIndicator
-          status={chainStatus}
-          requestId={chainProof?.requestId}
-          hash={chainProof?.responseHash}
-        />
+        {/* Chain Verify Status — always shown */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-widest text-muted/60">Chain Verify Status</span>
+            {chainProof && (
+              <button
+                onClick={() => navigator.clipboard.writeText(JSON.stringify({ requestId: chainProof.requestId, responseHash: chainProof.responseHash, timestamp: chainProof.timestamp }))}
+                className="rounded border border-border bg-surface-2 px-2.5 py-1 text-xs text-muted hover:text-foreground"
+              >
+                Copy proof
+              </button>
+            )}
+          </div>
+          <TrustIndicator
+            status={chainStatus}
+            requestId={chainProof?.requestId}
+            hash={chainProof?.responseHash}
+          />
+        </div>
 
         {/* Controls */}
         <div className="flex flex-wrap gap-2">
