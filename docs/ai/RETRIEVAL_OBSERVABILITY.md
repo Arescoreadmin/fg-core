@@ -34,7 +34,8 @@ Each returned chunk also includes:
 
 `why_this_chunk` is deliberately safe. It may include:
 
-- matched query terms
+- matched query term count
+- coarse matched term categories
 - score components
 - rank reason
 - corpus ID
@@ -44,6 +45,7 @@ Each returned chunk also includes:
 It must not include:
 
 - raw chunk text
+- raw matched query terms
 - raw vectors
 - full prompts
 - secrets

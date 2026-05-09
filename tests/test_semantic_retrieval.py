@@ -711,7 +711,8 @@ def test_semantic_retrieval_score_metadata(db, provider):
 
 
 def test_semantic_retrieval_trace_and_explainability_metadata(db, provider, caplog):
-    sensitive_text = "alpha audit explainability secret phrase"
+    sensitive_token = "mrn12345"
+    sensitive_text = f"alpha audit explainability {sensitive_token} secret phrase"
     corpus, _, _ = _seed(
         db,
         tenant_id=_TENANT_A,
@@ -726,7 +727,7 @@ def test_semantic_retrieval_trace_and_explainability_metadata(db, provider, capl
 
     with caplog.at_level(logging.INFO, logger="frostgate.rag_semantic_retrieval"):
         resp = retrieve_rag_context_hybrid(
-            db, _request("alpha audit"), provider=provider
+            db, _request(f"alpha audit {sensitive_token}"), provider=provider
         )
 
     trace = resp.retrieval_trace
@@ -748,7 +749,11 @@ def test_semantic_retrieval_trace_and_explainability_metadata(db, provider, capl
     assert chunk.confidence == trace.confidence
     assert chunk.confidence_reason == trace.confidence_reason
     assert chunk.why_this_chunk is not None
-    assert chunk.why_this_chunk["matched_terms"] == ["alpha", "audit"]
+    assert chunk.why_this_chunk["matched_term_count"] >= 2
+    assert "alpha" not in str(chunk.why_this_chunk)
+    assert "audit" not in str(chunk.why_this_chunk)
+    assert sensitive_token not in str(chunk.why_this_chunk)
+    assert "matched_term_categories" in chunk.why_this_chunk
     assert chunk.why_this_chunk["chunk_id"] == chunk.provenance.chunk_id
     assert "score_components" in chunk.why_this_chunk
     assert sensitive_text not in str(chunk.why_this_chunk)

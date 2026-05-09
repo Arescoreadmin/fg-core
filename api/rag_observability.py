@@ -46,6 +46,16 @@ def query_terms_from_text(value: str) -> list[str]:
     return _tokenize(value)
 
 
+def _term_category(term: str) -> str:
+    if term.isdigit():
+        return "numeric"
+    if any(char.isdigit() for char in term) and any(char.isalpha() for char in term):
+        return "letters_digits"
+    if term.isalpha():
+        return "letters"
+    return "token"
+
+
 def why_this_chunk(
     *,
     matched_query_terms: list[str],
@@ -57,8 +67,12 @@ def why_this_chunk(
     document_id: str,
     chunk_id: str,
 ) -> dict[str, Any]:
+    matched_categories = sorted(
+        set(_term_category(term) for term in matched_query_terms)
+    )
     return {
-        "matched_terms": matched_query_terms,
+        "matched_term_count": len(matched_query_terms),
+        "matched_term_categories": matched_categories,
         "score_components": {
             "lexical_score": lexical_score,
             "semantic_score": semantic_score,

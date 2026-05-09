@@ -69,7 +69,7 @@ This log records **completed, intentional fixes**.
 
 **Files changed:**
 - `api/rag_context.py` — adds `RagRetrievalTrace` plus additive per-chunk trace, rank, explanation, and confidence fields.
-- `api/rag_observability.py` — new audit-safe trace ID, confidence, matched-term, and why-this-chunk helpers.
+- `api/rag_observability.py` — new audit-safe trace ID, confidence, matched-term counting/category, and why-this-chunk helpers.
 - `api/rag_retrieval.py` — lexical retrieval now emits safe trace metadata and audit-safe counts/timing/confidence.
 - `api/rag_semantic_retrieval.py` — semantic retrieval now emits safe trace metadata, ranks, why-this-chunk metadata, and confidence without changing ranking.
 - `services/ai/rag_context.py` — propagates persisted retrieval trace metadata into AI-plane RAG context results.
@@ -84,12 +84,13 @@ This log records **completed, intentional fixes**.
 - AI audit metadata receives only safe persisted-RAG trace fields.
 
 **Explainability proof:**
-- Returned chunks include safe matched terms, score components, rank reason, IDs, ranks, and confidence.
+- Returned chunks include safe matched term counts/categories, score components, rank reason, IDs, ranks, and confidence.
+- Raw matched query terms are not copied into `why_this_chunk`; this prevents sensitive query/chunk token leakage through explainability metadata.
 - Ranking score calculations and sort keys are unchanged.
 
 **Audit safety proof:**
 - Audit logs include safe counts/timing/confidence/trace metadata only.
-- Raw chunk text, raw vectors, full prompts, and secrets are not logged.
+- Raw chunk text, raw matched terms, raw vectors, full prompts, and secrets are not logged.
 
 **Validation results:**
 - `pytest -q tests/test_semantic_retrieval.py tests/test_ai_plane_extension.py -k "retrieval or observability or explainability or audit or persisted"` → 46 passed
