@@ -6,6 +6,64 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-08 — PR 21 Embedding Generation Pipeline MVP
+
+**Branch:** `pr-21-embedding-pipeline-mvp`
+
+**Task identifier:** PR 21 — Embedding Generation Pipeline MVP
+
+**Area:** New embedding pipeline service; no schema/migration changes; no auth/CI/deployment changes.
+
+**Purpose:** Implement the first real embedding generation pipeline over persisted RAG chunks. Creates a deterministic, tenant-safe embedding pipeline that reads persisted chunks, generates embeddings via a deterministic local provider stub, and persists via the PR 20 upsert layer.
+
+**Files changed:**
+- `services/embeddings/pipeline.py` — new pipeline service: `generate_embedding_for_chunk`, `generate_embeddings_for_document`, `generate_embeddings_for_corpus`; typed result dataclasses; structured audit log
+- `api/embeddings/stub_provider.py` — new `DeterministicStubProvider`: satisfies `EmbeddingProvider` Protocol; SHA-256 hash-based deterministic vectors; no network; no OpenAI
+- `api/embeddings/__init__.py` — exports `DeterministicStubProvider`
+- `services/embeddings/__init__.py` — exports pipeline symbols
+- `tests/embeddings/test_embedding_pipeline.py` — 26 new tests covering all pipeline paths, determinism, idempotency, tenant isolation, audit safety, no-network, no-inference-path
+- `docs/ai/EMBEDDING_PIPELINE_MVP.md` — pipeline architecture documentation
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Deterministic embedding proof:**
+- `DeterministicStubProvider` uses SHA-256(UTF-8 text) → extended hash bytes → float32 normalised to [0, 1]
+- Same text always produces the same vector (proven by `test_embedding_generation_is_deterministic`)
+- Different texts produce different vectors (proven by `test_different_texts_produce_different_vectors`)
+- Dimensions are always exactly `KNOWN_DIMENSIONS[model]` (proven by `test_embedding_dimensions_are_stable`)
+
+**Tenant isolation proof:**
+- All pipeline entry points call `_require_tenant(tenant_id)` before any read/write
+- Blank/whitespace `tenant_id` raises `PipelineTenantRequiredError` (proven by `test_generate_embedding_requires_tenant`, `test_generate_embedding_requires_tenant_whitespace`)
+- `list_chunks` and `list_documents` are always called with the validated `tenant_id`
+- `upsert_embedding` is always called with the same `tenant_id` bound in the record
+- Cross-tenant reads return `None`/empty (proven by `test_embedding_generation_preserves_tenant_isolation`, `test_corpus_pipeline_does_not_return_other_tenant_chunks`)
+
+**Idempotency proof:**
+- Pipeline uses `upsert_embedding` (not `save_embedding`) for all writes
+- Rerunning on the same chunk produces exactly 1 row (proven by `test_embedding_generation_is_idempotent`)
+- Three reruns of document pipeline produce 0 duplicate rows (proven by `test_embedding_generation_does_not_duplicate_rows`)
+- Content change triggers new vector via hash change (proven by `test_embedding_generation_updates_changed_content`)
+
+**Audit safety proof:**
+- `_audit_log` in pipeline.py never includes raw chunk text, raw vectors, provider secrets, or PHI
+- Fields logged: `tenant_id`, `corpus_id`, `document_id`, `chunk_id`, `embedding_model`, `dimensions`, `content_hash`, `counts`, `duration_ms`
+- Proven by `test_embedding_generation_audit_safe` and `test_audit_log_contains_safe_fields`
+
+**No network / no inference path proof:**
+- `test_embedding_pipeline_does_not_call_network`: patches `socket.socket.connect` to raise on any network call; pipeline passes
+- `test_embedding_pipeline_does_not_modify_inference_path`: AST scan verifies no import of `ai_plane_extension`, `AIPlaneService`, `openai`
+- `test_no_vector_search_in_pipeline`: token scan verifies no pgvector SQL operators (`<->`, `<#>`, `<=>`, `ivfflat`, `hnsw`) in pipeline code
+
+**Validation results:**
+- `ruff check .` → All checks passed
+- `ruff format --check .` → 868 files already formatted
+- `mypy services/embeddings/pipeline.py api/embeddings/stub_provider.py` → Success: no issues
+- `pytest -q tests/embeddings/` → 136 passed
+- `pytest -q tests/security/test_embedding_tenant_isolation.py` → 13 passed
+- `pytest -q tests/ -k "embedding or corpus or rag or tenant"` → 962 passed, 7 skipped
+
+---
+
 ### 2026-05-08 — PR 20A Vector Index Readiness Guard
 
 **Branch:** `pr/20-pgvector-persistence`
