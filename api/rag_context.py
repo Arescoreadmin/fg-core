@@ -38,7 +38,7 @@ class RagChunkProvenance(BaseModel):
 
 
 # Stable set of retrieval strategy identifiers.
-RetrievalStrategy = Literal["lexical", "hybrid", "semantic"]
+RetrievalStrategy = Literal["lexical", "hybrid", "semantic", "hybrid_rrf"]
 
 
 class RagContextChunk(BaseModel):
@@ -61,6 +61,7 @@ class RagContextChunk(BaseModel):
     # Default to None so that pure-lexical callers are unaffected.
     lexical_score: Optional[float] = None
     semantic_score: Optional[float] = None
+    rrf_score: Optional[float] = None
     combined_score: Optional[float] = None
     retrieval_strategy: Optional[RetrievalStrategy] = None
 
@@ -71,7 +72,13 @@ class RagContextChunk(BaseModel):
             raise ValueError("score must be a finite number")
         return v
 
-    @field_validator("lexical_score", "semantic_score", "combined_score", mode="before")
+    @field_validator(
+        "lexical_score",
+        "semantic_score",
+        "rrf_score",
+        "combined_score",
+        mode="before",
+    )
     @classmethod
     def optional_scores_must_be_finite(cls, v: Optional[float]) -> Optional[float]:
         if v is not None and not math.isfinite(v):
