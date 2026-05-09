@@ -963,3 +963,105 @@ def test_rag_chunk_rejects_nonfinite_component_scores():
             provenance=prov,
             semantic_score=float("nan"),
         )
+
+
+# ---------------------------------------------------------------------------
+# Model-scoped chunk embedding lookup
+# ---------------------------------------------------------------------------
+
+
+def test_chunk_embeddings_scoped_to_provider_model(db):
+    """Chunk vectors must be loaded using the provider's model, not the most
+    recent embedding regardless of model.
+
+    Seeds a corpus with embeddings from model A, then calls hybrid retrieval
+    with a provider backed by model A.  The resolved_embedding_model must
+    equal provider.model.value so that chunk vectors and query vectors come
+    from the same embedding space.
+    """
+    from api.embeddings import EmbeddingModel
+    from api.rag_semantic_retrieval import retrieve_rag_context_hybrid
+
+    provider_a = DeterministicStubProvider(model=EmbeddingModel.INSTRUCTOR_XL)
+
+    corpus, _, _ = _seed(
+        db,
+        tenant_id=_TENANT_A,
+        chunks=[{"text": "authentication token verification", "ordinal": 0}],
+    )
+    _embed_corpus(
+        db, tenant_id=_TENANT_A, corpus_id=corpus["corpus_id"], provider=provider_a
+    )
+
+    req = _request(
+        "authentication", tenant_id=_TENANT_A, corpus_ids=[corpus["corpus_id"]]
+    )
+    result = retrieve_rag_context_hybrid(db, req, provider=provider_a)
+
+    # With model-scoped lookup, the chunk embedding is found and semantic_score > 0.
+    assert result.chunks, "Expected at least one chunk"
+    chunk = result.chunks[0]
+    assert chunk.retrieval_strategy == "hybrid"
+    assert chunk.semantic_score is not None and chunk.semantic_score > 0.0, (
+        "semantic_score must be > 0 when chunk embedding matches provider model"
+    )
+
+
+def test_chunk_embeddings_use_explicit_model_override(db):
+    """An explicit embedding_model kwarg overrides the provider's model for
+    chunk lookup — allowing retrieval against embeddings from a different run.
+    """
+    from api.rag_semantic_retrieval import retrieve_rag_context_hybrid
+
+    provider_a = DeterministicStubProvider(model=_MODEL)
+
+    corpus, _, chunks = _seed(
+        db,
+        tenant_id=_TENANT_A,
+        chunks=[{"text": "authentication token verification", "ordinal": 0}],
+    )
+    _embed_corpus(
+        db, tenant_id=_TENANT_A, corpus_id=corpus["corpus_id"], provider=provider_a
+    )
+
+    req = _request(
+        "authentication", tenant_id=_TENANT_A, corpus_ids=[corpus["corpus_id"]]
+    )
+    # Explicit override uses same model — should still find the embedding.
+    result = retrieve_rag_context_hybrid(
+        db,
+        req,
+        provider=provider_a,
+        embedding_model=_MODEL.value,
+    )
+
+    assert result.chunks, "Expected at least one chunk"
+    chunk = result.chunks[0]
+    assert chunk.semantic_score is not None and chunk.semantic_score > 0.0
+
+
+def test_chunk_embeddings_missing_model_yields_zero_semantic_score(db):
+    """If no persisted embedding matches the provider's model, semantic_score
+    falls back to 0.0 for that chunk — the chunk is not excluded.
+    """
+    from api.embeddings import EmbeddingModel
+    from api.rag_semantic_retrieval import retrieve_rag_context_hybrid
+
+    provider_a = DeterministicStubProvider(model=EmbeddingModel.INSTRUCTOR_XL)
+
+    corpus, _, _ = _seed(
+        db,
+        tenant_id=_TENANT_A,
+        chunks=[{"text": "authentication token verification", "ordinal": 0}],
+    )
+    # Deliberately do NOT embed — no persisted vectors exist.
+    req = _request(
+        "authentication", tenant_id=_TENANT_A, corpus_ids=[corpus["corpus_id"]]
+    )
+    result = retrieve_rag_context_hybrid(db, req, provider=provider_a)
+
+    assert result.chunks, "Chunk should still appear via lexical score"
+    chunk = result.chunks[0]
+    # No embedding present → semantic_score must be 0.0, not a stale value.
+    assert chunk.semantic_score == 0.0
+    assert chunk.retrieval_strategy == "hybrid"

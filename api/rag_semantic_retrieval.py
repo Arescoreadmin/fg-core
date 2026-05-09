@@ -426,6 +426,11 @@ def retrieve_rag_context_hybrid(
     query_vector: tuple[float, ...] | None = None
     strategy: RetrievalStrategy = "lexical"
 
+    # Resolve the embedding model used for chunk lookups.
+    # An explicit override takes precedence; otherwise fall back to the
+    # provider's own model so that chunk vectors are always compared against
+    # a query vector from the same embedding space.
+    resolved_embedding_model: str | None = embedding_model
     if provider is not None:
         # Use first corpus_id for embed context; fallback to empty string.
         context_corpus = corpus_ids[0] if corpus_ids else ""
@@ -437,6 +442,8 @@ def retrieve_rag_context_hybrid(
         )
         if query_vector is not None:
             strategy = "hybrid"
+            if resolved_embedding_model is None:
+                resolved_embedding_model = provider.model.value
 
     # Lexical SQL pre-filter — returns all candidates before top_k.
     rows = _lexical_candidates(
@@ -460,6 +467,9 @@ def retrieve_rag_context_hybrid(
         return RagContextResponse(query=request.query, chunks=[])
 
     # Load persisted embeddings for candidates — batch by chunk_id.
+    # Uses resolved_embedding_model (provider.model when not explicitly
+    # overridden) so chunk vectors always come from the same embedding space
+    # as the query vector.
     chunk_vectors: dict[str, tuple[float, ...]] = {}
     if query_vector is not None:
         chunk_ids = [str(r["chunk_id"]) for r in rows]
@@ -467,7 +477,7 @@ def retrieve_rag_context_hybrid(
             db,
             tenant_id=tenant_id,
             chunk_ids=chunk_ids,
-            model=embedding_model,
+            model=resolved_embedding_model,
         )
 
     # Score and rank.
