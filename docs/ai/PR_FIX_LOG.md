@@ -6,6 +6,57 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-09 — PR 23 Hybrid Retrieval Engine
+
+**Branch:** `pr-23-hybrid-retrieval-engine`
+
+**Task identifier:** PR 23 — Hybrid Retrieval Engine
+
+**Area:** Additive hybrid retrieval module; additive scoring field on existing RAG context contract; docs/tests only otherwise.
+
+**Purpose:** Upgrade retrieval ranking to lexical + semantic candidate fusion with Reciprocal Rank Fusion while preserving tenant isolation, provenance, audit safety, deterministic ordering, and AI-plane boundaries.
+
+**Files changed:**
+- `api/rag_context.py` — adds `rrf_score` and `hybrid_rrf` retrieval strategy.
+- `api/rag_hybrid_retrieval.py` — new tenant-scoped hybrid RRF retrieval engine.
+- `tests/test_hybrid_retrieval.py` — tests for semantic-only candidates, lexical-only candidates, duplicate merge, deterministic ordering, top_k, finite scores, corpus filters, tenant isolation, and scope boundaries.
+- `docs/ai/HYBRID_RETRIEVAL_ENGINE.md` — RRF engine documentation.
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+
+**Hybrid retrieval proof:**
+- Lexical candidates come from tenant-scoped persisted corpus SQL.
+- Semantic candidates come from tenant-scoped persisted embedding SQL and can survive without a lexical match.
+- Duplicate lexical/semantic candidates merge by `chunk_id`.
+- Semantic candidate scoring ignores stale embedding rows whose `content_hash` no longer matches the canonical hash of current chunk text.
+
+**RRF proof:**
+- Default `k` is explicit: `DEFAULT_RRF_K = 60`.
+- `rrf_score = lexical_weight / (k + lexical_rank) + semantic_weight / (k + semantic_rank)`.
+- `combined_score` equals `rrf_score` for PR 23.
+- Final tie-break is `combined_score DESC → rrf_score DESC → semantic_score DESC → lexical_score DESC → corpus_id ASC → document_id ASC → ordinal ASC → chunk_id ASC`.
+
+**Tenant isolation proof:**
+- `tenant_id` required at entry point.
+- Lexical SQL filters chunks/documents/corpora by tenant.
+- Semantic SQL filters embeddings by tenant and joins only to tenant-matched chunks/documents/corpora.
+- Corpus filters are tenant-scoped; wrong-tenant reads return empty context.
+
+**Scope gates proven:**
+- No reranking.
+- No UI changes.
+- No provider routing changes.
+- No AI answer-generation changes.
+- No external vector DB.
+
+**Validation results:**
+- `pytest -q tests/test_hybrid_retrieval.py` → 13 passed
+- `pytest -q tests -k "hybrid or semantic or embedding or retrieval or rag"` → 660 passed
+- `pytest -q tests/security/test_embedding_tenant_isolation.py` → 13 passed
+- `make fg-fast` → passed
+- `bash codex_gates.sh` → passed
+
+---
+
 ### 2026-05-08 — PR 22 Semantic Retrieval MVP
 
 **Branch:** `pr-22-semantic-retrieval-mvp`
