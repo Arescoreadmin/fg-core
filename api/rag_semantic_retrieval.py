@@ -62,7 +62,14 @@ from api.rag_context import (
     RagContextChunk,
     RagContextRequest,
     RagContextResponse,
+    RagRetrievalTrace,
     RetrievalStrategy,
+)
+from api.rag_observability import (
+    confidence_from_scores,
+    matched_terms,
+    new_retrieval_trace_id,
+    why_this_chunk,
 )
 from api.rag_retrieval import (
     _decode_metadata,
@@ -412,15 +419,32 @@ def retrieve_rag_context_hybrid(
     - Degradation is always explicit in retrieval_strategy and audit log.
     """
     start = time.monotonic()
+    retrieval_trace_id = new_retrieval_trace_id()
     tenant_id = _require_tenant(request.tenant_id)
     query_terms = _tokenize(request.query)
 
     if not query_terms:
-        return RagContextResponse(query=request.query, chunks=[])
+        return _response_with_trace(
+            query=request.query,
+            chunks=[],
+            query_terms=query_terms,
+            retrieval_trace_id=retrieval_trace_id,
+            strategy="lexical",
+            candidate_count=0,
+            duration_ms=int((time.monotonic() - start) * 1000),
+        )
 
     corpus_ids, invalid_explicit_filter = _normalise_corpus_ids(request.corpus_ids)
     if invalid_explicit_filter:
-        return RagContextResponse(query=request.query, chunks=[])
+        return _response_with_trace(
+            query=request.query,
+            chunks=[],
+            query_terms=query_terms,
+            retrieval_trace_id=retrieval_trace_id,
+            strategy="lexical",
+            candidate_count=0,
+            duration_ms=int((time.monotonic() - start) * 1000),
+        )
 
     # Attempt to embed the query.
     query_vector: tuple[float, ...] | None = None
@@ -457,14 +481,25 @@ def retrieve_rag_context_hybrid(
     if not rows:
         _audit_retrieval(
             tenant_id=tenant_id,
+            retrieval_trace_id=retrieval_trace_id,
             strategy=strategy,
             corpus_count=len(corpus_ids),
             candidate_count=0,
             returned_count=0,
             semantic_available=(query_vector is not None),
             duration_ms=int((time.monotonic() - start) * 1000),
+            confidence=0.0,
+            confidence_reason="no_positive_scores",
         )
-        return RagContextResponse(query=request.query, chunks=[])
+        return _response_with_trace(
+            query=request.query,
+            chunks=[],
+            query_terms=query_terms,
+            retrieval_trace_id=retrieval_trace_id,
+            strategy=strategy,
+            candidate_count=0,
+            duration_ms=int((time.monotonic() - start) * 1000),
+        )
 
     # Load persisted embeddings for candidates — batch by chunk_id.
     # Uses resolved_embedding_model (provider.model when not explicitly
@@ -500,29 +535,130 @@ def retrieve_rag_context_hybrid(
             ranked.pop()
 
     chunks = [item[5] for item in ranked]
+    duration_ms = int((time.monotonic() - start) * 1000)
+    response = _response_with_trace(
+        query=request.query,
+        chunks=chunks,
+        query_terms=query_terms,
+        retrieval_trace_id=retrieval_trace_id,
+        strategy=strategy,
+        candidate_count=len(rows),
+        duration_ms=duration_ms,
+    )
 
     _audit_retrieval(
         tenant_id=tenant_id,
+        retrieval_trace_id=retrieval_trace_id,
         strategy=strategy,
         corpus_count=len(corpus_ids),
         candidate_count=len(rows),
         returned_count=len(chunks),
         semantic_available=(query_vector is not None),
-        duration_ms=int((time.monotonic() - start) * 1000),
+        duration_ms=duration_ms,
+        confidence=response.retrieval_trace.confidence
+        if response.retrieval_trace is not None
+        else 0.0,
+        confidence_reason=response.retrieval_trace.confidence_reason
+        if response.retrieval_trace is not None
+        else "no_positive_scores",
     )
 
-    return RagContextResponse(query=request.query, chunks=chunks)
+    return response
+
+
+def _response_with_trace(
+    *,
+    query: str,
+    chunks: list[RagContextChunk],
+    query_terms: list[str],
+    retrieval_trace_id: str,
+    strategy: RetrievalStrategy,
+    candidate_count: int,
+    duration_ms: int,
+) -> RagContextResponse:
+    confidence, confidence_reason = confidence_from_scores(
+        [chunk.score for chunk in chunks]
+    )
+    returned_count = len(chunks)
+    lexical_rank_by_chunk = {
+        chunk.provenance.chunk_id: rank
+        for rank, chunk in enumerate(
+            sorted(
+                chunks,
+                key=lambda item: (
+                    -(item.lexical_score or 0.0),
+                    item.provenance.corpus_id,
+                    item.provenance.document_id,
+                    item.provenance.chunk_id,
+                ),
+            ),
+            start=1,
+        )
+    }
+    semantic_rank_by_chunk = {
+        chunk.provenance.chunk_id: rank
+        for rank, chunk in enumerate(
+            sorted(
+                chunks,
+                key=lambda item: (
+                    -(item.semantic_score or 0.0),
+                    item.provenance.corpus_id,
+                    item.provenance.document_id,
+                    item.provenance.chunk_id,
+                ),
+            ),
+            start=1,
+        )
+        if (chunk.semantic_score or 0.0) > 0.0
+    }
+    for chunk in chunks:
+        chunk.retrieval_trace_id = retrieval_trace_id
+        chunk.candidate_count = candidate_count
+        chunk.returned_count = returned_count
+        chunk.lexical_rank = lexical_rank_by_chunk.get(chunk.provenance.chunk_id)
+        chunk.semantic_rank = semantic_rank_by_chunk.get(chunk.provenance.chunk_id)
+        chunk.rrf_rank = None
+        chunk.confidence = confidence
+        chunk.confidence_reason = confidence_reason
+        chunk.why_this_chunk = why_this_chunk(
+            matched_query_terms=matched_terms(query_terms, chunk.text),
+            lexical_score=chunk.lexical_score,
+            semantic_score=chunk.semantic_score,
+            combined_score=chunk.combined_score,
+            rank_reason="combined_score_desc_then_stable_ids"
+            if strategy == "hybrid"
+            else "lexical_score_desc_then_stable_ids",
+            corpus_id=chunk.provenance.corpus_id,
+            document_id=chunk.provenance.document_id,
+            chunk_id=chunk.provenance.chunk_id,
+        )
+    return RagContextResponse(
+        query=query,
+        chunks=chunks,
+        retrieval_trace=RagRetrievalTrace(
+            retrieval_trace_id=retrieval_trace_id,
+            retrieval_strategy=strategy,
+            candidate_count=candidate_count,
+            returned_count=returned_count,
+            duration_ms=duration_ms,
+            confidence=confidence,
+            confidence_reason=confidence_reason,
+        ),
+    )
 
 
 def _audit_retrieval(
     *,
     tenant_id: str,
+    retrieval_trace_id: str,
     strategy: str,
     corpus_count: int,
     candidate_count: int,
     returned_count: int,
     semantic_available: bool,
     duration_ms: int,
+    confidence: float,
+    confidence_reason: str,
 ) -> None:
     """Emit a structured audit log for a retrieval operation.
 
@@ -536,11 +672,14 @@ def _audit_retrieval(
         extra={
             "event": "rag_semantic_retrieval.retrieved",
             "tenant_id": tenant_id,
+            "retrieval_trace_id": retrieval_trace_id,
             "retrieval_strategy": strategy,
             "corpus_count": corpus_count,
             "candidate_count": candidate_count,
             "returned_count": returned_count,
             "semantic_available": semantic_available,
             "duration_ms": duration_ms,
+            "confidence": confidence,
+            "confidence_reason": confidence_reason,
         },
     )

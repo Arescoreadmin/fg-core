@@ -51,6 +51,12 @@ class RagContextResult:
     max_sensitivity_level: str | None
     contains_phi: bool
     source_chunk_ids: tuple[str, ...] = ()
+    retrieval_trace_id: str | None = None
+    retrieval_strategy: str | None = None
+    candidate_count: int | None = None
+    returned_count: int | None = None
+    confidence: float | None = None
+    confidence_reason: str | None = None
 
     @property
     def rag_used(self) -> bool:
@@ -137,6 +143,9 @@ def retrieve_rag_context(
         query_phi_sensitivity=query_phi_sensitivity,
         max_sensitivity_level=max_sensitivity,
         contains_phi=contains_phi,
+        retrieval_strategy="legacy_in_memory",
+        candidate_count=len(corpus),
+        returned_count=len(selected),
     )
 
 
@@ -180,6 +189,7 @@ def retrieve_persisted_rag_context(
     ]
     context_text = _build_context_text(selected)
     source_chunk_ids = tuple(chunk.chunk_id for chunk in selected)
+    trace = response.retrieval_trace
     return RagContextResult(
         chunks=tuple(selected),
         context_text=context_text,
@@ -192,6 +202,12 @@ def retrieve_persisted_rag_context(
         query_phi_sensitivity=query_phi_sensitivity,
         max_sensitivity_level=None,
         contains_phi=bool(phi_detected),
+        retrieval_trace_id=trace.retrieval_trace_id if trace is not None else None,
+        retrieval_strategy=trace.retrieval_strategy if trace is not None else None,
+        candidate_count=trace.candidate_count if trace is not None else None,
+        returned_count=trace.returned_count if trace is not None else None,
+        confidence=trace.confidence if trace is not None else None,
+        confidence_reason=trace.confidence_reason if trace is not None else None,
     )
 
 

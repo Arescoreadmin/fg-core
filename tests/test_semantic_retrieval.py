@@ -710,6 +710,106 @@ def test_semantic_retrieval_score_metadata(db, provider):
     assert abs(chunk.score - chunk.combined_score) < 1e-9
 
 
+def test_semantic_retrieval_trace_and_explainability_metadata(db, provider, caplog):
+    sensitive_token = "mrn12345"
+    sensitive_text = f"alpha audit explainability {sensitive_token} secret phrase"
+    corpus, _, _ = _seed(
+        db,
+        tenant_id=_TENANT_A,
+        chunks=[
+            {"text": sensitive_text, "ordinal": 0},
+            {"text": "alpha audit secondary", "ordinal": 1},
+        ],
+    )
+    _embed_corpus(
+        db, tenant_id=_TENANT_A, corpus_id=corpus["corpus_id"], provider=provider
+    )
+
+    with caplog.at_level(logging.INFO, logger="frostgate.rag_semantic_retrieval"):
+        resp = retrieve_rag_context_hybrid(
+            db, _request(f"alpha audit {sensitive_token}"), provider=provider
+        )
+
+    trace = resp.retrieval_trace
+    assert trace is not None
+    assert trace.retrieval_trace_id.startswith("rt-")
+    assert trace.retrieval_strategy == "hybrid"
+    assert trace.candidate_count == 2
+    assert trace.returned_count == len(resp.chunks)
+    assert 0.0 <= trace.confidence <= 1.0
+    assert trace.confidence_reason
+
+    chunk = resp.chunks[0]
+    assert chunk.retrieval_trace_id == trace.retrieval_trace_id
+    assert chunk.candidate_count == trace.candidate_count
+    assert chunk.returned_count == trace.returned_count
+    assert chunk.lexical_rank is not None
+    assert chunk.semantic_rank is not None
+    assert chunk.rrf_rank is None
+    assert chunk.confidence == trace.confidence
+    assert chunk.confidence_reason == trace.confidence_reason
+    assert chunk.why_this_chunk is not None
+    assert chunk.why_this_chunk["matched_term_count"] >= 2
+    assert "alpha" not in str(chunk.why_this_chunk)
+    assert "audit" not in str(chunk.why_this_chunk)
+    assert sensitive_token not in str(chunk.why_this_chunk)
+    assert "matched_term_categories" in chunk.why_this_chunk
+    assert chunk.why_this_chunk["chunk_id"] == chunk.provenance.chunk_id
+    assert "score_components" in chunk.why_this_chunk
+    assert sensitive_text not in str(chunk.why_this_chunk)
+
+    audit_text = " ".join(
+        str({key: value for key, value in record.__dict__.items() if key != "args"})
+        for record in caplog.records
+    )
+    assert trace.retrieval_trace_id in audit_text
+    assert sensitive_text not in audit_text
+    assert "Retrieved context:" not in audit_text
+    assert "0.1, 0.2" not in audit_text
+
+
+def test_semantic_retrieval_confidence_is_deterministic(db, provider):
+    corpus, _, _ = _seed(
+        db,
+        tenant_id=_TENANT_A,
+        chunks=[
+            {"text": "deterministic confidence alpha", "ordinal": 0},
+            {"text": "deterministic confidence beta", "ordinal": 1},
+        ],
+    )
+    _embed_corpus(
+        db, tenant_id=_TENANT_A, corpus_id=corpus["corpus_id"], provider=provider
+    )
+
+    resp1 = retrieve_rag_context_hybrid(
+        db, _request("deterministic confidence"), provider=provider
+    )
+    resp2 = retrieve_rag_context_hybrid(
+        db, _request("deterministic confidence"), provider=provider
+    )
+
+    assert resp1.retrieval_trace is not None
+    assert resp2.retrieval_trace is not None
+    assert resp1.retrieval_trace.confidence == resp2.retrieval_trace.confidence
+    assert (
+        resp1.retrieval_trace.confidence_reason
+        == resp2.retrieval_trace.confidence_reason
+    )
+
+
+def test_semantic_retrieval_empty_trace_safe(db, provider):
+    create_corpus(db, tenant_id=_TENANT_A, name="Empty Trace")
+
+    resp = retrieve_rag_context_hybrid(db, _request("nothing"), provider=provider)
+
+    assert resp.chunks == []
+    assert resp.retrieval_trace is not None
+    assert resp.retrieval_trace.returned_count == 0
+    assert resp.retrieval_trace.candidate_count == 0
+    assert resp.retrieval_trace.confidence == 0.0
+    assert resp.retrieval_trace.confidence_reason == "no_positive_scores"
+
+
 # ---------------------------------------------------------------------------
 # 18) Semantic retrieval does not bypass lexical filtering
 # ---------------------------------------------------------------------------
