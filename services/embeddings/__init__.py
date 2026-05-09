@@ -1,5 +1,5 @@
 """
-services/embeddings — pgvector persistence layer for chunk embeddings.
+services/embeddings — pgvector persistence layer and embedding generation pipeline.
 
 Public surface.  Import from here, not from sub-modules.
 """
@@ -29,6 +29,20 @@ from services.embeddings.errors import (
     PgvectorUnavailableError,
     PrimaryModelNotConfiguredError,
     TenantRequiredError,
+)
+from services.embeddings.pipeline import (
+    EMBED_PIPELINE_ERR_CHUNK_NOT_FOUND,
+    EMBED_PIPELINE_ERR_PROVIDER_UNAVAILABLE,
+    EMBED_PIPELINE_ERR_TENANT_REQUIRED,
+    ChunkEmbeddingResult,
+    CorpusEmbeddingResult,
+    DocumentEmbeddingResult,
+    EmbeddingPipelineError,
+    PipelineProviderUnavailableError,
+    PipelineTenantRequiredError,
+    generate_embedding_for_chunk,
+    generate_embeddings_for_corpus,
+    generate_embeddings_for_document,
 )
 from services.embeddings.persistence import (
     EmbeddingRow,
@@ -68,6 +82,19 @@ __all__ = [
     "assert_ann_index_ready",
     "is_retrieval_index_ready",
     "ensure_sqlite_index_registry",
+    # pipeline
+    "EmbeddingPipelineError",
+    "PipelineTenantRequiredError",
+    "PipelineProviderUnavailableError",
+    "EMBED_PIPELINE_ERR_TENANT_REQUIRED",
+    "EMBED_PIPELINE_ERR_PROVIDER_UNAVAILABLE",
+    "EMBED_PIPELINE_ERR_CHUNK_NOT_FOUND",
+    "ChunkEmbeddingResult",
+    "DocumentEmbeddingResult",
+    "CorpusEmbeddingResult",
+    "generate_embedding_for_chunk",
+    "generate_embeddings_for_document",
+    "generate_embeddings_for_corpus",
     # persistence
     "EmbeddingRow",
     "assert_pgvector_available",

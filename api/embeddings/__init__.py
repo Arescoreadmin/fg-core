@@ -28,6 +28,7 @@ from api.embeddings.providers import (
     expected_dimensions,
 )
 from api.embeddings.state import EmbeddingState
+from api.embeddings.stub_provider import DeterministicStubProvider
 
 __all__ = [
     # contracts
@@ -53,4 +54,6 @@ __all__ = [
     "expected_dimensions",
     # state
     "EmbeddingState",
+    # stub
+    "DeterministicStubProvider",
 ]
