@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import text as sqltext
 
 os.environ.setdefault("FG_ENV", "test")
 
@@ -270,6 +271,56 @@ def test_hybrid_rrf_duplicate_candidates_merge_by_chunk_id(db, provider):
     assert chunk.lexical_score is not None and chunk.lexical_score > 0.0
     assert chunk.semantic_score == 1.0
     assert chunk.rrf_score == pytest.approx(2 / (DEFAULT_RRF_K + 1))
+
+
+def test_hybrid_rrf_filters_stale_embedding_content_hashes(db):
+    provider = StaticQueryProvider(_vector(1.0, 0.0))
+    corpus, document, stored = _seed(
+        db,
+        chunks=[{"text": "legacy semantic text", "ordinal": 0}],
+    )
+    chunk = stored[0]
+    _persist_vector(
+        db,
+        tenant_id=_TENANT_A,
+        corpus_id=corpus["corpus_id"],
+        document_id=document["document_id"],
+        chunk_id=chunk["chunk_id"],
+        text="legacy semantic text",
+        vector=_vector(1.0, 0.0),
+    )
+    db.execute(
+        sqltext("UPDATE rag_chunks SET text = :text WHERE chunk_id = :chunk_id"),
+        {
+            "text": "current semantic text",
+            "chunk_id": chunk["chunk_id"],
+        },
+    )
+    db.commit()
+    _persist_vector(
+        db,
+        tenant_id=_TENANT_A,
+        corpus_id=corpus["corpus_id"],
+        document_id=document["document_id"],
+        chunk_id=chunk["chunk_id"],
+        text="current semantic text",
+        vector=_vector(0.0, 1.0),
+    )
+
+    response = retrieve_rag_context_hybrid_rrf(
+        db,
+        _request(
+            "no lexical overlap",
+            top_k=1,
+        ),
+        provider=provider,
+    )
+
+    assert len(response.chunks) == 1
+    chunk_result = response.chunks[0]
+    assert chunk_result.text == "current semantic text"
+    assert chunk_result.lexical_score == 0.0
+    assert chunk_result.semantic_score == pytest.approx(0.5)
 
 
 def test_hybrid_rrf_top_k_respected(db, provider):

@@ -29,6 +29,9 @@ Semantic candidates:
 - Query embedding comes from the supplied `EmbeddingProvider`.
 - Chunk vectors are read only from persisted `embedding_vectors`.
 - SQL joins embeddings back to tenant-scoped corpus chunks and documents.
+- Embedding rows are scored only when `embedding_vectors.content_hash` matches
+  the canonical hash of current `rag_chunks.text`; stale historical embeddings
+  are ignored.
 - Defaults to `semantic_candidate_limit=100`.
 
 Semantic candidates do not require a lexical match. This is the PR 23 change
@@ -86,6 +89,8 @@ Duplicate candidates from lexical and semantic lists merge by `chunk_id`.
 - All lexical SQL filters by `tenant_id`.
 - All semantic SQL filters by `embedding_vectors.tenant_id` and joins back to
   tenant-matched corpus chunks/documents/corpora.
+- Semantic scoring ignores stale persisted embeddings whose content hash no
+  longer matches current chunk text.
 - Corpus filters are applied only inside tenant-scoped SQL.
 - There is no cross-tenant fallback, global fallback, or enumeration path.
 

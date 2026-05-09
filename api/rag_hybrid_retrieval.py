@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
+from api.embeddings.contracts import canonical_content_hash
 from api.rag_context import (
     RagChunkProvenance,
     RagContextChunk,
@@ -251,6 +252,7 @@ def _semantic_candidates(
             d.title,
             d.source,
             d.metadata AS document_metadata,
+            e.content_hash AS embedding_content_hash,
             e.embedding
         FROM embedding_vectors e
         JOIN rag_chunks c
@@ -275,6 +277,10 @@ def _semantic_candidates(
     best_by_chunk: dict[str, _Candidate] = {}
     for row in db.execute(stmt, params).mappings():
         row_dict = dict(row)
+        if row_dict.get("embedding_content_hash") != canonical_content_hash(
+            str(row_dict["text"])
+        ):
+            continue
         chunk_vector = _decode_vector(row_dict.get("embedding"))
         if chunk_vector is None:
             continue

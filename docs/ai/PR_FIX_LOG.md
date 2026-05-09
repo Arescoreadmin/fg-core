@@ -27,6 +27,7 @@ This log records **completed, intentional fixes**.
 - Lexical candidates come from tenant-scoped persisted corpus SQL.
 - Semantic candidates come from tenant-scoped persisted embedding SQL and can survive without a lexical match.
 - Duplicate lexical/semantic candidates merge by `chunk_id`.
+- Semantic candidate scoring ignores stale embedding rows whose `content_hash` no longer matches the canonical hash of current chunk text.
 
 **RRF proof:**
 - Default `k` is explicit: `DEFAULT_RRF_K = 60`.
@@ -48,7 +49,11 @@ This log records **completed, intentional fixes**.
 - No external vector DB.
 
 **Validation results:**
-- Pending local gate execution.
+- `pytest -q tests/test_hybrid_retrieval.py` → 13 passed
+- `pytest -q tests -k "hybrid or semantic or embedding or retrieval or rag"` → 660 passed
+- `pytest -q tests/security/test_embedding_tenant_isolation.py` → 13 passed
+- `make fg-fast` → passed
+- `bash codex_gates.sh` → passed
 
 ---
 
