@@ -11,7 +11,7 @@ changes.  Internal models only — no FastAPI router.
 from __future__ import annotations
 
 import math
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -37,18 +37,45 @@ class RagChunkProvenance(BaseModel):
     page: Optional[int] = None
 
 
+# Stable set of retrieval strategy identifiers.
+RetrievalStrategy = Literal["lexical", "hybrid", "semantic"]
+
+
 class RagContextChunk(BaseModel):
-    """A single retrieved RAG chunk with its relevance score and provenance."""
+    """A single retrieved RAG chunk with its relevance score and provenance.
+
+    ``score`` is always the primary relevance score used for ranking.
+    For hybrid retrieval it equals ``combined_score``.
+    For lexical-only retrieval it equals ``lexical_score``.
+
+    Scoring fields are additive — existing callers that only consume ``score``
+    continue to work unchanged.  New callers may inspect the component scores
+    and ``retrieval_strategy`` for provenance.
+    """
 
     text: str = Field(..., min_length=1)
     score: float
     provenance: RagChunkProvenance
+
+    # Additive scoring fields (PR 22 — semantic retrieval provenance).
+    # Default to None so that pure-lexical callers are unaffected.
+    lexical_score: Optional[float] = None
+    semantic_score: Optional[float] = None
+    combined_score: Optional[float] = None
+    retrieval_strategy: Optional[RetrievalStrategy] = None
 
     @field_validator("score")
     @classmethod
     def score_must_be_finite(cls, v: float) -> float:
         if not math.isfinite(v):
             raise ValueError("score must be a finite number")
+        return v
+
+    @field_validator("lexical_score", "semantic_score", "combined_score", mode="before")
+    @classmethod
+    def optional_scores_must_be_finite(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and not math.isfinite(v):
+            raise ValueError("score components must be finite numbers")
         return v
 
 

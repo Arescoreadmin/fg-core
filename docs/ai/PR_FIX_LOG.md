@@ -6,6 +6,72 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-08 — PR 22 Semantic Retrieval MVP
+
+**Branch:** `pr-22-semantic-retrieval-mvp`
+
+**Task identifier:** PR 22 — Semantic Retrieval MVP
+
+**Area:** New hybrid retrieval service; additive scoring fields on existing contract; no schema/migration changes; no auth/CI/deployment changes.
+
+**Purpose:** Implement the first production-safe hybrid lexical + semantic retrieval layer using persisted embeddings and Python-side cosine similarity. Upgrades retrieval from purely lexical scoring to embedding-assisted semantic retrieval while preserving tenant isolation, auditability, determinism, retrieval provenance, governance boundaries, and fail-closed behavior.
+
+**Files changed:**
+- `api/rag_context.py` — additive scoring fields on `RagContextChunk`: `lexical_score`, `semantic_score`, `combined_score`, `retrieval_strategy`; `RetrievalStrategy` Literal type; field validators for finite score components. Backward-compatible — no existing fields removed.
+- `api/rag_semantic_retrieval.py` — new hybrid retrieval module: `retrieve_rag_context_hybrid`, cosine similarity, score normalisation, query embedding, chunk embedding load, fallback to lexical-only, structured audit log.
+- `tests/test_semantic_retrieval.py` — 35 new tests covering all 25 required scenarios plus cosine similarity unit tests and contract field tests.
+- `docs/ai/SEMANTIC_RETRIEVAL_MVP.md` — retrieval architecture documentation.
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+
+**Hybrid retrieval strategy proof:**
+- `retrieve_rag_context_hybrid` runs lexical SQL pre-filter first (same SQL as PR 15).
+- For each candidate, cosine similarity is computed between query vector and chunk vector.
+- `combined_score = 0.4 × lexical_score + 0.6 × semantic_score` (normalised to [0, 1]).
+- Proven by `test_hybrid_retrieval_preserves_lexical_relevance`, `test_semantic_similarity_improves_ranking`.
+
+**Semantic scoring proof:**
+- Cosine similarity: `dot(a, b) / (|a| × |b|)`, clamped to `[-1, 1]`.
+- Linear normalisation to `[0, 1]`: `(cosine + 1) / 2`.
+- Proven by `test_cosine_similarity_*`, `test_normalise_semantic_score_*` unit tests.
+- All scores finite: validated by `test_semantic_scores_are_finite`.
+
+**Tenant isolation proof:**
+- `tenant_id` required at entry point — raises `ValueError` on blank (proven by `test_semantic_retrieval_requires_tenant`).
+- Lexical SQL: `WHERE c.tenant_id = :tenant_id` + joined tenant filters on documents/corpora.
+- Embedding load: `get_embedding_for_chunk(tenant_id=tenant_id, ...)` — returns None for wrong tenant.
+- Cross-tenant leakage: proven by `test_semantic_retrieval_no_cross_tenant_leakage`.
+
+**Deterministic ranking proof:**
+- Tie-breaker: `combined_score DESC → corpus_id ASC → document_id ASC → ordinal ASC → chunk_id ASC`.
+- Proven by `test_semantic_retrieval_deterministic_ordering`, `test_semantic_retrieval_stable_tie_ordering`, `test_semantic_retrieval_deterministic_ci_behavior`.
+
+**Fallback behavior proof:**
+- `provider=None` → lexical-only, `retrieval_strategy="lexical"` (proven by `test_semantic_retrieval_lexical_only_fallback_no_provider`).
+- Missing chunk embeddings → `semantic_score=0.0`, chunk retained (proven by `test_semantic_retrieval_embedding_fallback`).
+- SQLite fallback: proven by `test_semantic_retrieval_pgvector_fallback`.
+
+**Audit safety proof:**
+- `_audit_retrieval` logs: `retrieval_strategy`, counts, `tenant_id`, `semantic_available`, `duration_ms`.
+- Never logs: raw vectors, raw chunk text, PHI, provider secrets, auth tokens.
+- Proven by `test_semantic_retrieval_audit_safe`, `test_semantic_retrieval_no_raw_vectors_logged`.
+
+**Scope gates proven:**
+- No provider routing changes: `test_semantic_retrieval_no_provider_routing_changes`.
+- No AI-plane auth boundary changes: `test_semantic_retrieval_no_ai_plane_auth_boundary_changes`.
+- No UI coupling: `test_semantic_retrieval_no_ui_coupling`.
+- No network dependency: `test_semantic_retrieval_no_network_dependency`.
+- Lexical filter not bypassed: `test_semantic_retrieval_does_not_bypass_lexical_filter`.
+
+**Validation results:**
+- `ruff check .` → All checks passed
+- `ruff format --check .` → All files already formatted
+- `pytest -q tests/embeddings` → 138 passed
+- `pytest -q tests/ -k "semantic or embedding or retrieval or rag"` → 644 passed
+- `pytest -q tests/security/test_embedding_tenant_isolation.py` → 13 passed
+- `pytest -q tests/test_semantic_retrieval.py` → 35 passed
+
+---
+
 ### 2026-05-08 — PR 21 Embedding Generation Pipeline MVP
 
 **Branch:** `pr-21-embedding-pipeline-mvp`
