@@ -473,6 +473,51 @@ def store_chunks(
     return persisted
 
 
+def get_chunk(
+    conn: Session,
+    tenant_id: str,
+    corpus_id: str,
+    document_id: str,
+    chunk_id: str,
+) -> Optional[dict[str, Any]]:
+    """
+    Fetch a chunk by chunk_id, scoped to tenant_id, corpus_id, and document_id.
+
+    Returns None if not found or if the chunk belongs to a different tenant/corpus/document.
+    Raises ValueError for blank tenant_id.
+    """
+    tid = _require_tenant(tenant_id)
+    row = (
+        conn.execute(
+            text(
+                """
+            SELECT chunk_id, document_id, corpus_id, tenant_id, text, ordinal, metadata, created_at
+            FROM rag_chunks
+            WHERE chunk_id    = :chunk_id
+              AND document_id = :document_id
+              AND corpus_id   = :corpus_id
+              AND tenant_id   = :tenant_id
+            """
+            ),
+            {
+                "chunk_id": chunk_id,
+                "document_id": document_id,
+                "corpus_id": corpus_id,
+                "tenant_id": tid,
+            },
+        )
+        .mappings()
+        .fetchone()
+    )
+
+    if row is None:
+        return None
+
+    r = dict(row)
+    r["metadata"] = _decode_metadata(r.get("metadata"))
+    return r
+
+
 def list_chunks(
     conn: Session,
     tenant_id: str,

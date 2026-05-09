@@ -39,6 +39,8 @@ from api.embeddings import (
 )
 from api.rag_corpus_store import create_corpus, create_document, store_chunks
 from services.embeddings import (
+    PipelineChunkNotFoundError,
+    PipelineCorpusMismatchError,
     PipelineTenantRequiredError,
     generate_embedding_for_chunk,
     generate_embeddings_for_corpus,
@@ -185,7 +187,6 @@ class TestGenerateEmbeddingForChunk:
             corpus_id=corpus["corpus_id"],
             document_id=document["document_id"],
             chunk_id=chunk["chunk_id"],
-            chunk_text=chunk["text"],
             provider=provider,
         )
         assert result.status == "persisted"
@@ -204,7 +205,6 @@ class TestGenerateEmbeddingForChunk:
             corpus_id=corpus["corpus_id"],
             document_id=document["document_id"],
             chunk_id=chunk["chunk_id"],
-            chunk_text=chunk["text"],
             provider=provider,
         )
         row = get_embedding_for_chunk(db, tenant_id=_TENANT, chunk_id=chunk["chunk_id"])
@@ -224,7 +224,6 @@ class TestGenerateEmbeddingForChunk:
                 corpus_id=corpus["corpus_id"],
                 document_id=document["document_id"],
                 chunk_id=chunk["chunk_id"],
-                chunk_text=chunk["text"],
                 provider=provider,
             )
 
@@ -239,7 +238,20 @@ class TestGenerateEmbeddingForChunk:
                 corpus_id=corpus["corpus_id"],
                 document_id=document["document_id"],
                 chunk_id=chunk["chunk_id"],
-                chunk_text=chunk["text"],
+                provider=provider,
+            )
+
+    def test_generate_embedding_for_chunk_rejects_unknown_chunk(
+        self, db, provider, corpus, document
+    ):
+        """Fabricated or stale chunk_id must be rejected before embedding."""
+        with pytest.raises(PipelineChunkNotFoundError):
+            generate_embedding_for_chunk(
+                db,
+                tenant_id=_TENANT,
+                corpus_id=corpus["corpus_id"],
+                document_id=document["document_id"],
+                chunk_id="ck-does-not-exist",
                 provider=provider,
             )
 
@@ -335,7 +347,6 @@ class TestEmbeddingGenerationIsIdempotent:
             corpus_id=corpus["corpus_id"],
             document_id=document["document_id"],
             chunk_id=chunk["chunk_id"],
-            chunk_text=chunk["text"],
             provider=provider,
         )
         generate_embedding_for_chunk(
@@ -344,7 +355,6 @@ class TestEmbeddingGenerationIsIdempotent:
             corpus_id=corpus["corpus_id"],
             document_id=document["document_id"],
             chunk_id=chunk["chunk_id"],
-            chunk_text=chunk["text"],
             provider=provider,
         )
         rows = list_embeddings_for_corpus(
@@ -391,14 +401,15 @@ class TestEmbeddingGenerationUpdatesChangedContent:
     def test_embedding_generation_updates_changed_content(
         self, db, provider, corpus, document, chunk
     ):
-        """When chunk text changes (different hash), the embedding is updated."""
+        """When persisted chunk text changes (different hash), embedding is updated."""
+        from sqlalchemy import text as sqltext
+
         generate_embedding_for_chunk(
             db,
             tenant_id=_TENANT,
             corpus_id=corpus["corpus_id"],
             document_id=document["document_id"],
             chunk_id=chunk["chunk_id"],
-            chunk_text="Original text.",
             provider=provider,
         )
         row1 = get_embedding_for_chunk(
@@ -407,13 +418,22 @@ class TestEmbeddingGenerationUpdatesChangedContent:
         assert row1 is not None
         old_hash = row1.content_hash
 
+        # Simulate a chunk text update in the corpus store
+        db.execute(
+            sqltext("UPDATE rag_chunks SET text = :text WHERE chunk_id = :chunk_id"),
+            {
+                "text": "Changed text — different content.",
+                "chunk_id": chunk["chunk_id"],
+            },
+        )
+        db.commit()
+
         generate_embedding_for_chunk(
             db,
             tenant_id=_TENANT,
             corpus_id=corpus["corpus_id"],
             document_id=document["document_id"],
             chunk_id=chunk["chunk_id"],
-            chunk_text="Changed text — different content.",
             provider=provider,
         )
         row2 = get_embedding_for_chunk(
@@ -482,6 +502,20 @@ class TestGenerateEmbeddingsForDocument:
         )
         assert result.total_chunks == 0
         assert result.persisted == 0
+
+    def test_generate_embeddings_for_document_rejects_wrong_corpus(
+        self, db, provider, corpus, document
+    ):
+        """document_id from a different corpus must be rejected before listing chunks."""
+        other_corpus = create_corpus(db, tenant_id=_TENANT, name="Other Corpus")
+        with pytest.raises(PipelineCorpusMismatchError):
+            generate_embeddings_for_document(
+                db,
+                tenant_id=_TENANT,
+                corpus_id=other_corpus["corpus_id"],
+                document_id=document["document_id"],
+                provider=provider,
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -580,7 +614,6 @@ class TestEmbeddingGenerationPreservesTenantIsolation:
             corpus_id=corpus_a["corpus_id"],
             document_id=doc_a["document_id"],
             chunk_id=chunks_a[0]["chunk_id"],
-            chunk_text=chunks_a[0]["text"],
             provider=provider,
         )
         # Tenant B must not see tenant A's embeddings
@@ -625,7 +658,6 @@ class TestEmbeddingGenerationAuditSafe:
         self, db, provider, corpus, document, chunk, caplog
     ):
         """Audit log entries must not contain raw chunk text or raw vectors."""
-        chunk_text = "Sensitive chunk content that must not appear in logs."
         with caplog.at_level(logging.INFO, logger="frostgate.embeddings.pipeline"):
             generate_embedding_for_chunk(
                 db,
@@ -633,10 +665,10 @@ class TestEmbeddingGenerationAuditSafe:
                 corpus_id=corpus["corpus_id"],
                 document_id=document["document_id"],
                 chunk_id=chunk["chunk_id"],
-                chunk_text=chunk_text,
                 provider=provider,
             )
 
+        chunk_text = chunk["text"]
         for record in caplog.records:
             # Raw chunk text must never appear
             assert chunk_text not in record.getMessage(), (
@@ -657,7 +689,6 @@ class TestEmbeddingGenerationAuditSafe:
                 corpus_id=corpus["corpus_id"],
                 document_id=document["document_id"],
                 chunk_id=chunk["chunk_id"],
-                chunk_text=chunk["text"],
                 provider=provider,
             )
         # At least one log record should reference our tenant_id
@@ -695,7 +726,6 @@ class TestEmbeddingPipelineDoesNotCallNetwork:
             corpus_id=corpus["corpus_id"],
             document_id=document["document_id"],
             chunk_id=chunk["chunk_id"],
-            chunk_text=chunk["text"],
             provider=provider,
         )
         assert result.status == "persisted"
@@ -810,7 +840,6 @@ class TestEmbeddingPersistenceLinkage:
             corpus_id=corpus["corpus_id"],
             document_id=document["document_id"],
             chunk_id=chunk["chunk_id"],
-            chunk_text=chunk["text"],
             provider=provider,
         )
         row = get_embedding_for_chunk(db, tenant_id=_TENANT, chunk_id=chunk["chunk_id"])
@@ -830,7 +859,6 @@ class TestEmbeddingPersistenceLinkage:
             corpus_id=corpus["corpus_id"],
             document_id=document["document_id"],
             chunk_id=chunk["chunk_id"],
-            chunk_text=chunk["text"],
             provider=provider,
         )
         row = get_embedding_for_chunk(db, tenant_id=_TENANT, chunk_id=chunk["chunk_id"])

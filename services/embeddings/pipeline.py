@@ -37,7 +37,7 @@ from api.embeddings.contracts import (
     canonical_content_hash,
 )
 from api.embeddings.providers import EmbeddingProvider
-from api.rag_corpus_store import list_chunks, list_documents
+from api.rag_corpus_store import get_chunk, get_document, list_chunks, list_documents
 from services.embeddings.errors import (
     TenantRequiredError,
 )
@@ -52,6 +52,7 @@ logger = logging.getLogger("frostgate.embeddings.pipeline")
 EMBED_PIPELINE_ERR_TENANT_REQUIRED = "EMBED_PIPE_001"
 EMBED_PIPELINE_ERR_PROVIDER_UNAVAILABLE = "EMBED_PIPE_002"
 EMBED_PIPELINE_ERR_CHUNK_NOT_FOUND = "EMBED_PIPE_003"
+EMBED_PIPELINE_ERR_CORPUS_MISMATCH = "EMBED_PIPE_004"
 
 
 class EmbeddingPipelineError(Exception):
@@ -64,6 +65,14 @@ class PipelineTenantRequiredError(EmbeddingPipelineError):
 
 class PipelineProviderUnavailableError(EmbeddingPipelineError):
     """Provider is not available — pipeline cannot generate embeddings."""
+
+
+class PipelineChunkNotFoundError(EmbeddingPipelineError):
+    """chunk_id not found under the given tenant/corpus/document scope."""
+
+
+class PipelineCorpusMismatchError(EmbeddingPipelineError):
+    """document_id does not belong to the given corpus_id under this tenant."""
 
 
 # ---------------------------------------------------------------------------
@@ -168,10 +177,13 @@ def generate_embedding_for_chunk(
     corpus_id: str,
     document_id: str,
     chunk_id: str,
-    chunk_text: str,
     provider: EmbeddingProvider,
 ) -> ChunkEmbeddingResult:
     """Generate and persist the embedding for a single persisted chunk.
+
+    Always loads the chunk from rag_chunks scoped by (tenant_id, corpus_id,
+    document_id, chunk_id) to validate provenance before embedding.  Caller-
+    supplied text is never trusted.
 
     Idempotent: if an embedding for (tenant, corpus, chunk, model, hash) already
     exists it is not duplicated.  Content-hash changes trigger a new embedding
@@ -181,6 +193,21 @@ def generate_embedding_for_chunk(
     Provider must satisfy the EmbeddingProvider protocol and be available.
     """
     tenant_id = _require_tenant(tenant_id)
+
+    persisted_chunk = get_chunk(
+        db,
+        tenant_id=tenant_id,
+        corpus_id=corpus_id,
+        document_id=document_id,
+        chunk_id=chunk_id,
+    )
+    if persisted_chunk is None:
+        raise PipelineChunkNotFoundError(
+            f"{EMBED_PIPELINE_ERR_CHUNK_NOT_FOUND}: "
+            f"chunk_id={chunk_id!r} not found for "
+            f"tenant_id={tenant_id!r} / corpus_id={corpus_id!r} / document_id={document_id!r}"
+        )
+    chunk_text = persisted_chunk["text"]
 
     if not provider.is_available():
         raise PipelineProviderUnavailableError(
@@ -301,6 +328,14 @@ def generate_embeddings_for_document(
     tenant_id = _require_tenant(tenant_id)
     start = time.monotonic()
 
+    doc = get_document(db, tenant_id=tenant_id, document_id=document_id)
+    if doc is None or doc["corpus_id"] != corpus_id:
+        raise PipelineCorpusMismatchError(
+            f"{EMBED_PIPELINE_ERR_CORPUS_MISMATCH}: "
+            f"document_id={document_id!r} does not belong to corpus_id={corpus_id!r} "
+            f"for tenant_id={tenant_id!r}"
+        )
+
     chunks = list_chunks(db, tenant_id=tenant_id, document_id=document_id)
 
     _audit_log(
@@ -320,7 +355,6 @@ def generate_embeddings_for_document(
             corpus_id=corpus_id,
             document_id=document_id,
             chunk_id=chunk["chunk_id"],
-            chunk_text=chunk["text"],
             provider=provider,
         )
         results.append(result)
