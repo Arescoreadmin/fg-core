@@ -11,7 +11,7 @@ changes.  Internal models only — no FastAPI router.
 from __future__ import annotations
 
 import math
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -35,6 +35,22 @@ class RagChunkProvenance(BaseModel):
     title: Optional[str] = None
     uri: Optional[str] = None
     page: Optional[int] = None
+
+
+class RagRetrievalTrace(BaseModel):
+    """Audit-safe retrieval trace summary.
+
+    Does not contain raw chunk text, raw vectors, prompts, secrets, or PHI
+    beyond already-approved IDs/counts/scores.
+    """
+
+    retrieval_trace_id: str = Field(..., min_length=1)
+    retrieval_strategy: str = Field(..., min_length=1)
+    candidate_count: int = Field(..., ge=0)
+    returned_count: int = Field(..., ge=0)
+    duration_ms: int = Field(..., ge=0)
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    confidence_reason: str = Field(..., min_length=1)
 
 
 # Stable set of retrieval strategy identifiers.
@@ -64,6 +80,15 @@ class RagContextChunk(BaseModel):
     rrf_score: Optional[float] = None
     combined_score: Optional[float] = None
     retrieval_strategy: Optional[RetrievalStrategy] = None
+    retrieval_trace_id: Optional[str] = None
+    candidate_count: Optional[int] = None
+    returned_count: Optional[int] = None
+    lexical_rank: Optional[int] = None
+    semantic_rank: Optional[int] = None
+    rrf_rank: Optional[int] = None
+    why_this_chunk: Optional[dict[str, Any]] = None
+    confidence: Optional[float] = None
+    confidence_reason: Optional[str] = None
 
     @field_validator("score")
     @classmethod
@@ -85,6 +110,13 @@ class RagContextChunk(BaseModel):
             raise ValueError("score components must be finite numbers")
         return v
 
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def optional_confidence_must_be_bounded(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and (not math.isfinite(v) or v < 0.0 or v > 1.0):
+            raise ValueError("confidence must be a finite number between 0 and 1")
+        return v
+
 
 class RagContextResponse(BaseModel):
     """Response containing retrieved RAG context chunks for a query.
@@ -99,6 +131,7 @@ class RagContextResponse(BaseModel):
     chunks: list[RagContextChunk] = Field(default_factory=list)
     context_count: int = 0
     used_retrieval: bool = False
+    retrieval_trace: Optional[RagRetrievalTrace] = None
 
     @model_validator(mode="after")
     def _derive_counts(self) -> "RagContextResponse":

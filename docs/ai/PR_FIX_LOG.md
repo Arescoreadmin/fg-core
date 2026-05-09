@@ -57,6 +57,48 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-09 — PR 24 Retrieval Observability + Explainability
+
+**Branch:** `pr-24-retrieval-observability-explainability`
+
+**Task identifier:** PR 24 — Retrieval Observability + Explainability
+
+**Area:** Additive RAG context trace/explainability fields; lexical and semantic retrieval telemetry; AI audit metadata propagation; docs/tests.
+
+**Purpose:** Make persisted retrieval explainable, auditable, and debuggable without leaking raw chunk text, raw vectors, full prompts, secrets, or provider internals.
+
+**Files changed:**
+- `api/rag_context.py` — adds `RagRetrievalTrace` plus additive per-chunk trace, rank, explanation, and confidence fields.
+- `api/rag_observability.py` — new audit-safe trace ID, confidence, matched-term, and why-this-chunk helpers.
+- `api/rag_retrieval.py` — lexical retrieval now emits safe trace metadata and audit-safe counts/timing/confidence.
+- `api/rag_semantic_retrieval.py` — semantic retrieval now emits safe trace metadata, ranks, why-this-chunk metadata, and confidence without changing ranking.
+- `services/ai/rag_context.py` — propagates persisted retrieval trace metadata into AI-plane RAG context results.
+- `services/ai/audit.py` — includes safe RAG retrieval trace fields in AI audit metadata.
+- `tests/test_semantic_retrieval.py` — observability, explainability, confidence, empty trace, and audit safety coverage.
+- `tests/test_ai_plane_extension.py` — AI-plane audit metadata trace coverage.
+- `docs/ai/RETRIEVAL_OBSERVABILITY.md` — trace/explainability design documentation.
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+
+**Observability proof:**
+- Persisted retrieval responses include trace ID, strategy, candidate count, returned count, duration, confidence, and confidence reason.
+- AI audit metadata receives only safe persisted-RAG trace fields.
+
+**Explainability proof:**
+- Returned chunks include safe matched terms, score components, rank reason, IDs, ranks, and confidence.
+- Ranking score calculations and sort keys are unchanged.
+
+**Audit safety proof:**
+- Audit logs include safe counts/timing/confidence/trace metadata only.
+- Raw chunk text, raw vectors, full prompts, and secrets are not logged.
+
+**Validation results:**
+- `pytest -q tests/test_semantic_retrieval.py tests/test_ai_plane_extension.py -k "retrieval or observability or explainability or audit or persisted"` → 46 passed
+- `pytest -q tests -k "retrieval or semantic or observability or explainability or audit"` → 497 passed
+- `make fg-fast` → passed
+- `bash codex_gates.sh` → passed
+
+---
+
 ### 2026-05-08 — PR 22 Semantic Retrieval MVP
 
 **Branch:** `pr-22-semantic-retrieval-mvp`

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from typing import Any, Optional
 
 from sqlalchemy import bindparam, text
@@ -20,6 +21,13 @@ from api.rag_context import (
     RagContextChunk,
     RagContextRequest,
     RagContextResponse,
+    RagRetrievalTrace,
+)
+from api.rag_observability import (
+    confidence_from_scores,
+    matched_terms,
+    new_retrieval_trace_id,
+    why_this_chunk,
 )
 
 logger = logging.getLogger("frostgate.rag_retrieval")
@@ -116,14 +124,28 @@ def retrieve_rag_context(
     score DESC → corpus_id ASC → document_id ASC → ordinal ASC → chunk_id ASC.
     Non-matching chunks are excluded.
     """
+    start = time.monotonic()
+    retrieval_trace_id = new_retrieval_trace_id()
     tenant_id = _require_tenant(request.tenant_id)
     query_terms = _tokenize(request.query)
     if not query_terms:
-        return RagContextResponse(query=request.query, chunks=[])
+        return _response_with_trace(
+            query=request.query,
+            chunks=[],
+            retrieval_trace_id=retrieval_trace_id,
+            candidate_count=0,
+            duration_ms=int((time.monotonic() - start) * 1000),
+        )
 
     corpus_ids, invalid_explicit_filter = _normalise_corpus_ids(request.corpus_ids)
     if invalid_explicit_filter:
-        return RagContextResponse(query=request.query, chunks=[])
+        return _response_with_trace(
+            query=request.query,
+            chunks=[],
+            retrieval_trace_id=retrieval_trace_id,
+            candidate_count=0,
+            duration_ms=int((time.monotonic() - start) * 1000),
+        )
 
     unique_query_terms = list(dict.fromkeys(query_terms))
     like_clauses = []
@@ -166,11 +188,13 @@ def retrieve_rag_context(
     ).bindparams(bindparam("corpus_ids", expanding=True))
 
     ranked: list[tuple[float, str, str, int, str, RagContextChunk]] = []
+    candidate_count = 0
     for row in conn.execute(stmt, params).mappings():
         row_dict = dict(row)
         score = _score_text(query_terms, str(row_dict["text"]))
         if score <= 0.0:
             continue
+        candidate_count += 1
 
         chunk_metadata = _decode_metadata(row_dict.get("chunk_metadata"))
         document_metadata = _decode_metadata(row_dict.get("document_metadata"))
@@ -209,4 +233,85 @@ def retrieve_rag_context(
             ranked.pop()
 
     chunks = [item[5] for item in ranked]
-    return RagContextResponse(query=request.query, chunks=chunks)
+    duration_ms = int((time.monotonic() - start) * 1000)
+    response = _response_with_trace(
+        query=request.query,
+        chunks=chunks,
+        retrieval_trace_id=retrieval_trace_id,
+        candidate_count=candidate_count,
+        duration_ms=duration_ms,
+    )
+    logger.info(
+        "rag_retrieval.retrieved",
+        extra={
+            "event": "rag_retrieval.retrieved",
+            "tenant_id": tenant_id,
+            "retrieval_trace_id": retrieval_trace_id,
+            "retrieval_strategy": "lexical",
+            "candidate_count": candidate_count,
+            "returned_count": len(chunks),
+            "duration_ms": duration_ms,
+            "confidence": response.retrieval_trace.confidence
+            if response.retrieval_trace is not None
+            else 0.0,
+            "confidence_reason": response.retrieval_trace.confidence_reason
+            if response.retrieval_trace is not None
+            else "no_positive_scores",
+        },
+    )
+    return response
+
+
+def _response_with_trace(
+    *,
+    query: str,
+    chunks: list[RagContextChunk],
+    retrieval_trace_id: str,
+    candidate_count: int,
+    duration_ms: int,
+) -> RagContextResponse:
+    confidence, confidence_reason = confidence_from_scores(
+        [chunk.score for chunk in chunks]
+    )
+    returned_count = len(chunks)
+    for rank, chunk in enumerate(chunks, start=1):
+        chunk.retrieval_trace_id = retrieval_trace_id
+        chunk.retrieval_strategy = "lexical"
+        chunk.candidate_count = candidate_count
+        chunk.returned_count = returned_count
+        chunk.lexical_rank = rank
+        chunk.semantic_rank = None
+        chunk.rrf_rank = None
+        chunk.lexical_score = chunk.score
+        chunk.combined_score = chunk.score
+        chunk.confidence = confidence
+        chunk.confidence_reason = confidence_reason
+        chunk.why_this_chunk = why_this_chunk(
+            matched_query_terms=matched_terms(
+                query_terms_from_query(query), chunk.text
+            ),
+            lexical_score=chunk.lexical_score,
+            semantic_score=chunk.semantic_score,
+            combined_score=chunk.combined_score,
+            rank_reason="lexical_score_desc_then_stable_ids",
+            corpus_id=chunk.provenance.corpus_id,
+            document_id=chunk.provenance.document_id,
+            chunk_id=chunk.provenance.chunk_id,
+        )
+    return RagContextResponse(
+        query=query,
+        chunks=chunks,
+        retrieval_trace=RagRetrievalTrace(
+            retrieval_trace_id=retrieval_trace_id,
+            retrieval_strategy="lexical",
+            candidate_count=candidate_count,
+            returned_count=returned_count,
+            duration_ms=duration_ms,
+            confidence=confidence,
+            confidence_reason=confidence_reason,
+        ),
+    )
+
+
+def query_terms_from_query(query: str) -> list[str]:
+    return _tokenize(query)

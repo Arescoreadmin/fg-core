@@ -102,6 +102,12 @@ def build_ai_audit_metadata(
         metadata["rag_retrieval_reason_code"] = rag_context.retrieval_reason_code
         metadata["rag_query_phi_sensitivity"] = rag_context.query_phi_sensitivity
         metadata["rag_max_sensitivity_level"] = rag_context.max_sensitivity_level
+        metadata["rag_retrieval_trace_id"] = rag_context.retrieval_trace_id
+        metadata["rag_retrieval_strategy"] = rag_context.retrieval_strategy
+        metadata["rag_candidate_count"] = rag_context.candidate_count
+        metadata["rag_returned_count"] = rag_context.returned_count
+        metadata["rag_confidence"] = rag_context.confidence
+        metadata["rag_confidence_reason"] = rag_context.confidence_reason
     if response_validation is not None:
         metadata["response_grounded"] = response_validation.grounded
         metadata["response_validation_result"] = response_validation.reason_code

@@ -615,6 +615,12 @@ def test_ai_plane_includes_persisted_retrieved_context_in_prompt(
     assert audit_details["rag_used"] is True
     assert audit_details["rag_chunk_count"] == 1
     assert audit_details["rag_source_chunk_ids"] == [chunk_id]
+    assert str(audit_details["rag_retrieval_trace_id"]).startswith("rt-")
+    assert audit_details["rag_retrieval_strategy"] == "lexical"
+    assert audit_details["rag_candidate_count"] == 1
+    assert audit_details["rag_returned_count"] == 1
+    assert 0.0 <= audit_details["rag_confidence"] <= 1.0
+    assert audit_details["rag_confidence_reason"]
     assert "alpha control evidence" not in str(audit_details)
     assert captured_prompt not in str(audit_details)
 
