@@ -38,6 +38,12 @@ This log records **completed, intentional fixes**.
 **Validation results:**
 - Focused PR 26 tests passed locally; full PR validation recorded in the PR summary.
 
+**Addendum — required-tests-gate security coverage repair:**
+- Added `tests/security/test_ai_plane_provenance_trust_path_security.py` so AI-plane provenance and trust-path changes have explicit security regression coverage detectable by `required-tests-gate`.
+- Coverage proves fake citations, prompt-excluded citations, no-context source claims, and provider citation smuggling are rejected fail-closed.
+- Runtime trust-path coverage verifies invalid provider citations return `NO_ANSWER`, clear sources/confidence, store only the final safe answer, and preserve audit-safe provenance outcome fields.
+- Leak checks assert raw chunk text, provider prompts, sensitive matched tokens, fake citation IDs, and vector-like payloads do not appear in returned provenance metadata or audit details.
+
 ---
 
 ### 2026-05-10 — PR 25 Provenance Enforcement Layer
