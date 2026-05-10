@@ -51,6 +51,7 @@ class RagContextResult:
     max_sensitivity_level: str | None
     contains_phi: bool
     source_chunk_ids: tuple[str, ...] = ()
+    retrieved_source_chunk_ids: tuple[str, ...] = ()
     retrieval_trace_id: str | None = None
     retrieval_strategy: str | None = None
     candidate_count: int | None = None
@@ -123,7 +124,8 @@ def retrieve_rag_context(
 
     context_text = _build_context_text(selected)
     source_ids = tuple(dict.fromkeys(chunk.source_id for chunk in selected))
-    source_chunk_ids = tuple(chunk.chunk_id for chunk in selected)
+    retrieved_source_chunk_ids = tuple(chunk.chunk_id for chunk in selected)
+    source_chunk_ids = _included_chunk_ids(context_text, selected)
     max_sensitivity = _max_sensitivity(
         chunk.phi_sensitivity_level for chunk in selected
     )
@@ -137,6 +139,7 @@ def retrieve_rag_context(
         chunk_count=len(selected),
         source_ids=source_ids,
         source_chunk_ids=source_chunk_ids,
+        retrieved_source_chunk_ids=retrieved_source_chunk_ids,
         retrieval_reason_code=RAG_RETRIEVAL_SELECTED
         if selected
         else RAG_RETRIEVAL_EMPTY,
@@ -188,7 +191,8 @@ def retrieve_persisted_rag_context(
         for index, chunk in enumerate(response.chunks)
     ]
     context_text = _build_context_text(selected)
-    source_chunk_ids = tuple(chunk.chunk_id for chunk in selected)
+    retrieved_source_chunk_ids = tuple(chunk.chunk_id for chunk in selected)
+    source_chunk_ids = _included_chunk_ids(context_text, selected)
     trace = response.retrieval_trace
     return RagContextResult(
         chunks=tuple(selected),
@@ -196,6 +200,7 @@ def retrieve_persisted_rag_context(
         chunk_count=len(selected),
         source_ids=source_chunk_ids,
         source_chunk_ids=source_chunk_ids,
+        retrieved_source_chunk_ids=retrieved_source_chunk_ids,
         retrieval_reason_code=RAG_RETRIEVAL_SELECTED
         if selected
         else RAG_RETRIEVAL_EMPTY,
@@ -255,6 +260,16 @@ def _build_context_text(chunks: list[RagContextChunk]) -> str:
         parts.append(part)
         total += len(part)
     return "\n\n".join(parts)
+
+
+def _included_chunk_ids(
+    context_text: str, chunks: list[RagContextChunk]
+) -> tuple[str, ...]:
+    included: list[str] = []
+    for chunk in chunks:
+        if f"[chunk_id={chunk.chunk_id}]" in context_text:
+            included.append(chunk.chunk_id)
+    return tuple(included)
 
 
 def _metadata_sensitivity(metadata: dict[str, object]) -> str | None:

@@ -6,6 +6,44 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-10 — PR 25 Provenance Enforcement Layer
+
+**Branch:** `pr-25-provenance-enforcement-layer`
+
+**Task identifier:** PR 25 — Provenance Enforcement Layer
+
+**Area:** AI-plane provenance validation; answer metadata validation; audit-safe provenance outcome fields; docs/tests.
+
+**Purpose:** Prevent fake citations and invalid source claims by enforcing that cited source/chunk IDs map to retrieved context actually included in the request prompt.
+
+**Files changed:**
+- `services/ai/provenance.py` — new provenance validator with stable reason codes.
+- `services/ai/response_validation.py` — additive provenance metadata on validation results and citation-marker stripping for grounding-token checks.
+- `services/ai/rag_context.py` — distinguishes prompt-included `source_chunk_ids` from full `retrieved_source_chunk_ids`.
+- `services/ai_plane_extension/service.py` — applies provenance validation after grounding and before audit/return.
+- `services/ai/audit.py` — emits audit-safe provenance validation outcome fields.
+- `tests/security/test_ai_provenance_enforcement.py` — provenance enforcement regression tests.
+- `docs/ai/PROVENANCE_ENFORCEMENT.md` — provenance enforcement documentation.
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+
+**Provenance enforcement proof:**
+- Valid source/chunk citations pass.
+- Nonexistent citations produce `PROVENANCE_SOURCE_NOT_RETRIEVED`.
+- Retrieved-but-not-prompt-included citations produce `PROVENANCE_SOURCE_NOT_IN_PROMPT`.
+- Empty-context source claims produce `PROVENANCE_NO_CONTEXT_AVAILABLE`.
+
+**Audit safety proof:**
+- Audit logs include provenance outcome booleans/reason codes only.
+- Raw chunk text, prompts, provider response text, and invalid source claim text are not logged.
+
+**Validation results:**
+- `pytest -q tests/security/test_ai_provenance_enforcement.py tests/security/test_ai_plane_rag_wiring_security.py` → 10 passed
+- `pytest -q tests -k "provenance or citation or rag or retrieval or audit"` → 763 passed
+- `make fg-fast` → passed
+- `bash codex_gates.sh` → passed
+
+---
+
 ### 2026-05-09 — PR 23 Hybrid Retrieval Engine
 
 **Branch:** `pr-23-hybrid-retrieval-engine`
