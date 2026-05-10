@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Any, Iterable
 
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
@@ -38,6 +38,7 @@ class RagContextChunk:
     text: str
     phi_sensitivity_level: str | None
     phi_types: tuple[str, ...]
+    why_this_chunk: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -187,6 +188,7 @@ def retrieve_persisted_rag_context(
             text=_bound_chunk_text(chunk.text),
             phi_sensitivity_level=None,
             phi_types=(),
+            why_this_chunk=chunk.why_this_chunk,
         )
         for index, chunk in enumerate(response.chunks)
     ]

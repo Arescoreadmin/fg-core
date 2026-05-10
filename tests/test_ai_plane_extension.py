@@ -625,6 +625,126 @@ def test_ai_plane_includes_persisted_retrieved_context_in_prompt(
     assert captured_prompt not in str(audit_details)
 
 
+def test_ai_infer_exposes_safe_provenance_ui_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from services.ai_plane_extension.models import AIInferRequest
+    from services.ai_plane_extension.service import AIPlaneService
+
+    db_path = tmp_path / "ai-plane-provenance-ui.db"
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
+    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated")
+    monkeypatch.setenv("FG_AI_DEFAULT_PROVIDER", "simulated")
+    monkeypatch.setenv("FG_AI_ENABLE_SIMULATED", "1")
+    reset_engine_cache()
+    init_db(sqlite_path=str(db_path))
+    captured_prompt = ""
+    sensitive_chunk_text = "alpha control evidence MRN12345 secretphrase"
+    with get_sessionmaker()() as db:
+        chunks = _seed_persisted_chunks(
+            db,
+            tenant_id="tenant-a",
+            chunks=[{"text": sensitive_chunk_text, "ordinal": 0}],
+        )
+        chunk_id = str(chunks[0]["chunk_id"])
+
+        def _provider(**kw) -> ProviderResponse:
+            nonlocal captured_prompt
+            captured_prompt = str(kw["prompt"])
+            return ProviderResponse(
+                provider_id="simulated",
+                text=f"alpha control evidence [chunk_id={chunk_id}]",
+                model="SIMULATED_V1",
+            )
+
+        monkeypatch.setattr(
+            "services.ai_plane_extension.service._call_provider", _provider
+        )
+        result = AIPlaneService().infer(
+            db,
+            "tenant-a",
+            AIInferRequest(query="alpha control MRN12345 secretphrase"),
+        )
+
+    provenance = cast(dict[str, Any], result["provenance"])
+    assert str(provenance["retrieval_trace_id"]).startswith("rt-")
+    assert provenance["used_rag"] is True
+    assert provenance["context_count"] == 1
+    assert provenance["source_chunk_ids"] == [chunk_id]
+    assert provenance["retrieval_strategy"] == "lexical"
+    assert provenance["provenance_status"] == "PROVENANCE_VALID"
+    assert 0.0 <= float(provenance["confidence"]) <= 1.0
+
+    summaries = cast(list[dict[str, Any]], provenance["source_summaries"])
+    assert summaries == [
+        {
+            "source_id": chunk_id,
+            "chunk_id": chunk_id,
+            "chunk_index": 0,
+            "included_in_prompt": True,
+            "phi_sensitivity_level": None,
+            "phi_types": [],
+        }
+    ]
+    why_by_chunk = cast(dict[str, Any], provenance["why_this_chunk"])
+    why = cast(dict[str, Any], why_by_chunk[chunk_id])
+    assert why["matched_term_count"] == 4
+    assert why["matched_term_categories"] == ["letters", "letters_digits"]
+    assert "score_components" in why
+
+    serialized = json.dumps(provenance, sort_keys=True)
+    assert sensitive_chunk_text not in serialized
+    assert captured_prompt not in serialized
+    assert "MRN12345" not in serialized
+    assert "secretphrase" not in serialized
+    assert "embedding" not in serialized.lower()
+    assert "vector" not in serialized.lower()
+
+
+def test_ai_infer_provenance_ui_payload_is_tenant_scoped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, _, key_b = _setup_client(tmp_path, ai_enabled=True)
+    with get_sessionmaker()() as db:
+        _seed_persisted_chunks(
+            db,
+            tenant_id="tenant-a",
+            chunks=[{"text": "tenant alpha control evidence", "ordinal": 0}],
+        )
+
+    resp = client.post(
+        "/ai/infer",
+        json={"query": "tenant alpha control"},
+        headers={"X-API-Key": key_b},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    provenance = body["provenance"]
+    assert provenance["used_rag"] is False
+    assert provenance["context_count"] == 0
+    assert provenance["source_chunk_ids"] == []
+    assert provenance["source_summaries"] == []
+    assert provenance["why_this_chunk"] == {}
+    assert provenance["provenance_status"] == "PROVENANCE_NO_CONTEXT_AVAILABLE"
+    assert "tenant alpha control evidence" not in json.dumps(body, sort_keys=True)
+
+
+def test_ai_infer_openapi_contract_remains_generic_for_additive_payload(
+    tmp_path: Path,
+) -> None:
+    _setup_client(tmp_path, ai_enabled=True)
+    schema = json.loads(Path("contracts/core/openapi.json").read_text(encoding="utf-8"))
+    response_schema = schema["paths"]["/ai/infer"]["post"]["responses"]["200"][
+        "content"
+    ]["application/json"]["schema"]
+    assert response_schema == {
+        "title": "Response Ai Infer Ai Infer Post",
+        "type": "object",
+    }
+
+
 def test_ai_plane_response_metadata_empty_when_no_context(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -6,6 +6,47 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-10 — PR 26 Provenance UI API
+
+**Branch:** `pr-26-provenance-ui-api`
+
+**Task identifier:** PR 26 — Provenance UI API
+
+**Area:** AI inference API response metadata; service-layer RAG context adapter; provenance validation metadata; docs/tests.
+
+**Purpose:** Expose safe provenance and retrieval explainability data for UI consumption without leaking raw chunk text, raw vectors, provider prompts, secrets, or cross-tenant data.
+
+**Files changed:**
+- `services/ai_plane_extension/service.py` — adds top-level safe `provenance` response payload for `/ai/infer`.
+- `services/ai/rag_context.py` — propagates audit-safe per-chunk `why_this_chunk` metadata from persisted retrieval into AI-plane context results.
+- `services/ai/provenance.py` — records `PROVENANCE_NO_CONTEXT_AVAILABLE` on valid empty-context response validation metadata.
+- `tests/test_ai_plane_extension.py` — adds runtime, tenant-scope, safety, and contract regression coverage for the provenance UI payload.
+- `docs/ai/PROVENANCE_UI_API.md` — documents the additive API payload and safety boundaries.
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+
+**API proof:**
+- `/ai/infer` returns additive `provenance` fields: trace ID, RAG usage, context count, source chunk IDs, source summaries, confidence, why-this-chunk metadata, retrieval strategy, and provenance status.
+- Existing `metadata` shape is unchanged for backward compatibility.
+- Current OpenAPI contract for `/ai/infer` remains a generic object response, so no generated contract artifact changed.
+
+**Safety proof:**
+- Source summaries expose IDs/counts/classification metadata only.
+- `why_this_chunk` exposes matched term counts/categories and score/rank metadata, not raw matched terms.
+- Runtime tests assert raw chunk text, provider prompt text, raw vectors, and sensitive matched tokens are absent from the UI provenance payload.
+- Wrong-tenant requests return empty provenance source summaries and explanations.
+
+**Validation results:**
+- Focused PR 26 tests passed locally; full PR validation recorded in the PR summary.
+
+**Addendum — required-tests-gate security coverage repair:**
+- Added `tests/security/test_ai_plane_provenance_trust_path_security.py` so AI-plane provenance and trust-path changes have explicit security regression coverage detectable by `required-tests-gate`.
+- Added `tests/security/test_ai_provenance_ui_api_security.py` so the provenance UI API exposure through `/ai/infer` has a clearly named security-category regression file.
+- Coverage proves fake citations, prompt-excluded citations, no-context source claims, and provider citation smuggling are rejected fail-closed.
+- Runtime trust-path coverage verifies invalid provider citations return `NO_ANSWER`, clear sources/confidence, store only the final safe answer, and preserve audit-safe provenance outcome fields.
+- Leak checks assert raw chunk text, provider prompts, sensitive matched tokens, auth/cookie values, fake citation IDs, and vector-like payloads do not appear in returned provenance metadata or audit details.
+
+---
+
 ### 2026-05-10 — PR 25 Provenance Enforcement Layer
 
 **Branch:** `pr-25-provenance-enforcement-layer`
