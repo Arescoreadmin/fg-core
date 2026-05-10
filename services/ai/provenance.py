@@ -59,7 +59,17 @@ def validate_answer_provenance(
             citation_source_ids=(),
             invalid_source_ids=(),
         )
-        return response_validation, result
+        updated_validation = ResponseValidationResult(
+            grounded=response_validation.grounded,
+            final_text=response_validation.final_text,
+            reason_code=response_validation.reason_code,
+            citation_source_ids=response_validation.citation_source_ids,
+            validator_version=response_validation.validator_version,
+            evidence_count=response_validation.evidence_count,
+            provenance_reason_code=PROVENANCE_NO_CONTEXT_AVAILABLE,
+            provenance_valid=True,
+        )
+        return updated_validation, result
 
     retrieved_ids = set(rag_context.retrieved_source_chunk_ids or ())
     valid_source_ids = set(rag_context.source_ids)

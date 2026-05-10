@@ -128,6 +128,47 @@ def _rag_answer_metadata(rag_context: RagContextResult) -> dict[str, object]:
     }
 
 
+def _safe_source_summaries(rag_context: RagContextResult) -> list[dict[str, object]]:
+    included_chunk_ids = set(rag_context.source_chunk_ids)
+    return [
+        {
+            "source_id": chunk.source_id,
+            "chunk_id": chunk.chunk_id,
+            "chunk_index": chunk.chunk_index,
+            "included_in_prompt": chunk.chunk_id in included_chunk_ids,
+            "phi_sensitivity_level": chunk.phi_sensitivity_level,
+            "phi_types": list(chunk.phi_types),
+        }
+        for chunk in rag_context.chunks
+    ]
+
+
+def _safe_why_this_chunk(rag_context: RagContextResult) -> dict[str, object]:
+    included_chunk_ids = set(rag_context.source_chunk_ids)
+    return {
+        chunk.chunk_id: dict(chunk.why_this_chunk)
+        for chunk in rag_context.chunks
+        if chunk.chunk_id in included_chunk_ids and chunk.why_this_chunk is not None
+    }
+
+
+def _rag_provenance_ui_metadata(
+    rag_context: RagContextResult,
+    response_validation: ResponseValidationResult,
+) -> dict[str, object]:
+    return {
+        "retrieval_trace_id": rag_context.retrieval_trace_id,
+        "used_rag": rag_context.rag_used,
+        "context_count": rag_context.chunk_count,
+        "source_chunk_ids": list(rag_context.source_chunk_ids),
+        "source_summaries": _safe_source_summaries(rag_context),
+        "confidence": rag_context.confidence,
+        "why_this_chunk": _safe_why_this_chunk(rag_context),
+        "retrieval_strategy": rag_context.retrieval_strategy,
+        "provenance_status": response_validation.provenance_reason_code,
+    }
+
+
 def _sensitivity_level(value: str | None) -> SensitivityLevel:
     try:
         return SensitivityLevel(value or SensitivityLevel.NONE.value)
@@ -682,6 +723,7 @@ class AIPlaneService:
             "sources": _chat_sources(response_validation),
             "confidence": _chat_confidence(response_validation),
             "metadata": _rag_answer_metadata(rag_context),
+            "provenance": _rag_provenance_ui_metadata(rag_context, response_validation),
             "simulated": effective_provider == "simulated",
         }
 
