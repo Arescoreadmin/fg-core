@@ -53,6 +53,20 @@ _RAG_RULE_FIELDS = frozenset(
         "no_answer_on_ungrounded",
     }
 )
+_RAG_RULE_OPTIONAL_FIELDS = frozenset(
+    {
+        "allowed_corpus_ids",
+        "denied_corpus_ids",
+        "max_top_k",
+        "allowed_retrieval_strategies",
+        "require_grounded_context",
+        "allow_lexical_fallback",
+        "allow_semantic",
+        "allow_no_context_answer",
+    }
+)
+_RAG_RULE_ALLOWED_FIELDS = _RAG_RULE_FIELDS | _RAG_RULE_OPTIONAL_FIELDS
+_RETRIEVAL_STRATEGIES = frozenset({"lexical", "semantic", "hybrid", "hybrid_rrf"})
 _AUDIT_RULE_FIELDS = frozenset(
     {
         "require_request_hash",
@@ -82,6 +96,14 @@ class AiRagRules:
     enabled: bool
     require_grounded_response: bool
     no_answer_on_ungrounded: bool
+    allowed_corpus_ids: tuple[str, ...]
+    denied_corpus_ids: tuple[str, ...]
+    max_top_k: int
+    allowed_retrieval_strategies: tuple[str, ...]
+    require_grounded_context: bool
+    allow_lexical_fallback: bool
+    allow_semantic: bool
+    allow_no_context_answer: bool
 
 
 @dataclass(frozen=True)
@@ -139,8 +161,26 @@ def _bool_rule(raw: Mapping[str, Any], key: str) -> bool:
     return value
 
 
+def _bool_rule_default(raw: Mapping[str, Any], key: str, default: bool) -> bool:
+    if key not in raw:
+        return default
+    return _bool_rule(raw, key)
+
+
 def _require_rule_object(
     payload: Mapping[str, Any], key: str, allowed_fields: frozenset[str]
+) -> Mapping[str, Any]:
+    return _require_rule_object_with_required(
+        payload, key, allowed_fields, required_fields=allowed_fields
+    )
+
+
+def _require_rule_object_with_required(
+    payload: Mapping[str, Any],
+    key: str,
+    allowed_fields: frozenset[str],
+    *,
+    required_fields: frozenset[str],
 ) -> Mapping[str, Any]:
     value = payload.get(key)
     if not isinstance(value, dict):
@@ -151,7 +191,7 @@ def _require_rule_object(
             AI_POLICY_INVALID,
             f"AI policy {key} has unknown fields: {','.join(unknown)}",
         )
-    missing = sorted(allowed_fields - set(value))
+    missing = sorted(required_fields - set(value))
     if missing:
         raise AiPolicyError(
             AI_POLICY_INVALID,
@@ -197,7 +237,56 @@ def _version(value: object) -> int:
     return version
 
 
-def _default_rules() -> dict[str, dict[str, bool]]:
+def _string_tuple_rule(raw: Mapping[str, Any], key: str) -> tuple[str, ...]:
+    value = raw.get(key, [])
+    if not isinstance(value, list):
+        raise AiPolicyError(AI_POLICY_INVALID, f"AI policy {key} must be a list")
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise AiPolicyError(
+                AI_POLICY_INVALID, f"AI policy {key} entries must be strings"
+            )
+        cleaned = item.strip()
+        if cleaned in seen:
+            raise AiPolicyError(
+                AI_POLICY_INVALID, f"AI policy {key} entries must be unique"
+            )
+        seen.add(cleaned)
+        normalized.append(cleaned)
+    return tuple(normalized)
+
+
+def _strategy_tuple_rule(
+    raw: Mapping[str, Any], key: str, default: list[str]
+) -> tuple[str, ...]:
+    payload = dict(raw)
+    payload.setdefault(key, default)
+    strategies = _string_tuple_rule(payload, key)
+    if not strategies:
+        raise AiPolicyError(
+            AI_POLICY_INVALID, "allowed_retrieval_strategies must be non-empty"
+        )
+    unknown = sorted(set(strategies) - _RETRIEVAL_STRATEGIES)
+    if unknown:
+        raise AiPolicyError(
+            AI_POLICY_INVALID,
+            f"unknown retrieval strategies: {','.join(unknown)}",
+        )
+    return tuple(sorted(strategies))
+
+
+def _positive_int_rule(raw: Mapping[str, Any], key: str, default: int) -> int:
+    value = raw.get(key, default)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise AiPolicyError(
+            AI_POLICY_INVALID, f"AI policy {key} must be a positive integer"
+        )
+    return value
+
+
+def _default_rules() -> dict[str, dict[str, Any]]:
     return {
         "phi_rules": {
             "require_baa": True,
@@ -209,6 +298,14 @@ def _default_rules() -> dict[str, dict[str, bool]]:
             "enabled": True,
             "require_grounded_response": True,
             "no_answer_on_ungrounded": True,
+            "max_top_k": 4,
+            "allowed_retrieval_strategies": ["lexical"],
+            "allow_lexical_fallback": False,
+            "allow_semantic": False,
+            "allow_no_context_answer": True,
+            "require_grounded_context": False,
+            "allowed_corpus_ids": [],
+            "denied_corpus_ids": [],
         },
         "audit_rules": {
             "require_request_hash": True,
@@ -330,7 +427,12 @@ def validate_ai_policy(
         raise AiPolicyError(AI_POLICY_INVALID, "phi_provider is not allowed")
 
     phi_raw = _require_rule_object(payload, "phi_rules", _PHI_RULE_FIELDS)
-    rag_raw = _require_rule_object(payload, "rag_rules", _RAG_RULE_FIELDS)
+    rag_raw = _require_rule_object_with_required(
+        payload,
+        "rag_rules",
+        _RAG_RULE_ALLOWED_FIELDS,
+        required_fields=_RAG_RULE_FIELDS,
+    )
     audit_raw = _require_rule_object(payload, "audit_rules", _AUDIT_RULE_FIELDS)
     phi_rules = AiPhiRules(
         require_baa=_bool_rule(phi_raw, "require_baa"),
@@ -346,6 +448,28 @@ def validate_ai_policy(
         enabled=_bool_rule(rag_raw, "enabled"),
         require_grounded_response=_bool_rule(rag_raw, "require_grounded_response"),
         no_answer_on_ungrounded=_bool_rule(rag_raw, "no_answer_on_ungrounded"),
+        allowed_corpus_ids=_string_tuple_rule(rag_raw, "allowed_corpus_ids"),
+        denied_corpus_ids=_string_tuple_rule(rag_raw, "denied_corpus_ids"),
+        max_top_k=_positive_int_rule(rag_raw, "max_top_k", 4),
+        allowed_retrieval_strategies=_strategy_tuple_rule(
+            rag_raw,
+            "allowed_retrieval_strategies",
+            ["lexical"],
+        ),
+        require_grounded_context=_bool_rule_default(
+            rag_raw,
+            "require_grounded_context",
+            False,
+        ),
+        allow_lexical_fallback=_bool_rule_default(
+            rag_raw, "allow_lexical_fallback", False
+        ),
+        allow_semantic=_bool_rule_default(rag_raw, "allow_semantic", False),
+        allow_no_context_answer=_bool_rule_default(
+            rag_raw,
+            "allow_no_context_answer",
+            True,
+        ),
     )
     audit_rules = AiAuditRules(
         require_request_hash=_bool_rule(audit_raw, "require_request_hash"),

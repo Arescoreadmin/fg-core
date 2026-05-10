@@ -430,6 +430,7 @@ class AIPlaneService:
                     limit=4,
                     phi_detected=phi_classification.contains_phi,
                     query_phi_sensitivity=phi_classification.sensitivity_level.value,
+                    rag_rules=ai_policy.rag_rules,
                 )
         except RagContextError as exc:
             self._audit_infer(

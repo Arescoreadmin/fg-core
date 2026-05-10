@@ -6,6 +6,43 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-10 — PR 27 Retrieval Policy Engine
+
+**Branch:** `pr-27-retrieval-policy-engine`
+
+**Task identifier:** PR 27 — Retrieval Policy Engine
+
+**Area:** AI RAG policy model; persisted retrieval policy enforcement; audit-safe retrieval policy decisions; docs/tests.
+
+**Purpose:** Add per-tenant retrieval governance for corpus scope, retrieval depth, strategy eligibility, semantic use, lexical fallback, and no-context answer behavior.
+
+**Files changed:**
+- `services/ai/policy.py` — extends `AiRagRules` with retrieval governance fields and safe defaults while preserving legacy policy compatibility.
+- `services/ai/retrieval_policy.py` — adds pre-retrieval policy evaluation, corpus allow/deny filtering, strategy/depth controls, and audit-safe decision logging.
+- `services/ai/rag_context.py` — enforces policy before persisted retrieval and blocks policy-scoped empty contexts when grounded context is required.
+- `services/ai_plane_extension/service.py` — passes tenant AI RAG policy into persisted retrieval.
+- `services/ai/audit.py` — emits safe retrieval policy decision metadata in AI audit records.
+- `tests/test_retrieval_policy_engine.py` — covers allow/deny corpus behavior, unknown scope safety, top-k clamping, semantic disablement, lexical fallback, no-context blocking, tenant isolation, and audit redaction.
+- `tests/security/test_ai_audit_enrichment.py` — updates direct policy construction for the expanded RAG policy model.
+- `docs/ai/RETRIEVAL_POLICY_ENGINE.md` — documents the engine, defaults, enforcement, audit surface, and failure modes.
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+
+**Policy proof:**
+- Denied, unknown, and wrong-tenant corpus IDs resolve to empty scope before SQL retrieval and cannot silently broaden to all tenant corpora.
+- `max_top_k` clamps requested depth before retrieval.
+- Semantic-family strategies require both strategy allowlisting and `allow_semantic=True`.
+- Lexical fallback is used only when `allow_lexical_fallback=True` and lexical is an allowed strategy.
+- Required grounded context raises `RETRIEVAL_POLICY_NO_CONTEXT_DENIED` on empty retrieval unless no-context answers are explicitly allowed; legacy policies keep the existing safe no-answer behavior unless `require_grounded_context` is set.
+
+**Audit safety proof:**
+- Policy decision logs and AI audit metadata include IDs/counts/booleans/reason codes only.
+- Tests assert raw chunk text and sensitive chunk tokens do not appear in policy audit records.
+
+**Validation results:**
+- Focused PR 27 tests passed locally; full PR validation recorded in the PR summary.
+
+---
+
 ### 2026-05-10 — PR 26 Provenance UI API
 
 **Branch:** `pr-26-provenance-ui-api`

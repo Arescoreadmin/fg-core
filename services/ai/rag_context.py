@@ -11,6 +11,13 @@ from api.rag.chunking import CorpusChunk
 from api.rag.retrieval import RetrievalError, RetrievalQuery, search_chunks
 from api.rag_context import RagContextRequest
 from api.rag_retrieval import retrieve_rag_context as retrieve_persisted_context
+from services.ai.policy import AiRagRules
+from services.ai.retrieval_policy import (
+    RETRIEVAL_POLICY_NO_CONTEXT_DENIED,
+    RetrievalPolicyDecision,
+    evaluate_retrieval_policy,
+    no_context_allowed,
+)
 
 RAG_RETRIEVAL_EMPTY = "RAG_RETRIEVAL_EMPTY"
 RAG_RETRIEVAL_SELECTED = "RAG_RETRIEVAL_SELECTED"
@@ -59,6 +66,8 @@ class RagContextResult:
     returned_count: int | None = None
     confidence: float | None = None
     confidence_reason: str | None = None
+    retrieval_policy_reason_code: str | None = None
+    retrieval_policy_metadata: dict[str, object] | None = None
 
     @property
     def rag_used(self) -> bool:
@@ -162,17 +171,57 @@ def retrieve_persisted_rag_context(
     phi_detected: bool,
     query_phi_sensitivity: str | None = None,
     corpus_ids: list[str] | None = None,
+    requested_strategy: str = "lexical",
+    rag_rules: AiRagRules | None = None,
 ) -> RagContextResult:
     tenant = _require_tenant(tenant_id)
     bounded_limit = _bound_limit(limit)
+    decision: RetrievalPolicyDecision | None = None
+    effective_corpus_ids = list(corpus_ids or [])
+    effective_limit = bounded_limit
+    if rag_rules is not None:
+        try:
+            decision = evaluate_retrieval_policy(
+                db,
+                tenant_id=tenant,
+                corpus_ids=corpus_ids,
+                top_k=bounded_limit,
+                requested_strategy=requested_strategy,
+                rag_rules=rag_rules,
+            )
+        except ValueError as exc:
+            raise RagContextError(
+                RAG_RETRIEVAL_FAILED, "retrieval policy evaluation failed"
+            ) from exc
+        if not decision.allowed:
+            raise RagContextError(decision.reason_code, "retrieval policy denied")
+        effective_limit = decision.effective_top_k
+        effective_corpus_ids = list(decision.effective_corpus_ids)
+        policy_scoped = bool(
+            decision.requested_corpus_ids
+            or decision.allowed_corpus_ids
+            or decision.denied_corpus_ids
+        )
+        if policy_scoped and not effective_corpus_ids:
+            result = _empty_persisted_result(
+                query_phi_sensitivity=query_phi_sensitivity,
+                phi_detected=phi_detected,
+                decision=decision,
+            )
+            if not no_context_allowed(decision):
+                raise RagContextError(
+                    RETRIEVAL_POLICY_NO_CONTEXT_DENIED,
+                    "retrieval policy requires grounded context",
+                )
+            return result
     try:
         response = retrieve_persisted_context(
             db,
             RagContextRequest(
                 query=query_text,
                 tenant_id=tenant,
-                corpus_ids=list(corpus_ids or []),
-                top_k=bounded_limit,
+                corpus_ids=effective_corpus_ids,
+                top_k=effective_limit,
             ),
         )
     except (SQLAlchemyError, ValidationError, ValueError) as exc:
@@ -196,7 +245,7 @@ def retrieve_persisted_rag_context(
     retrieved_source_chunk_ids = tuple(chunk.chunk_id for chunk in selected)
     source_chunk_ids = _included_chunk_ids(context_text, selected)
     trace = response.retrieval_trace
-    return RagContextResult(
+    result = RagContextResult(
         chunks=tuple(selected),
         context_text=context_text,
         chunk_count=len(selected),
@@ -215,6 +264,47 @@ def retrieve_persisted_rag_context(
         returned_count=trace.returned_count if trace is not None else None,
         confidence=trace.confidence if trace is not None else None,
         confidence_reason=trace.confidence_reason if trace is not None else None,
+        retrieval_policy_reason_code=decision.reason_code
+        if decision is not None
+        else None,
+        retrieval_policy_metadata=decision.audit_metadata()
+        if decision is not None
+        else None,
+    )
+    if (
+        decision is not None
+        and not result.rag_used
+        and not no_context_allowed(decision)
+    ):
+        raise RagContextError(
+            RETRIEVAL_POLICY_NO_CONTEXT_DENIED,
+            "retrieval policy requires grounded context",
+        )
+    return result
+
+
+def _empty_persisted_result(
+    *,
+    query_phi_sensitivity: str | None,
+    phi_detected: bool,
+    decision: RetrievalPolicyDecision,
+) -> RagContextResult:
+    return RagContextResult(
+        chunks=(),
+        context_text="",
+        chunk_count=0,
+        source_ids=(),
+        source_chunk_ids=(),
+        retrieved_source_chunk_ids=(),
+        retrieval_reason_code=RAG_RETRIEVAL_EMPTY,
+        query_phi_sensitivity=query_phi_sensitivity,
+        max_sensitivity_level=None,
+        contains_phi=bool(phi_detected),
+        retrieval_strategy=decision.effective_strategy,
+        candidate_count=0,
+        returned_count=0,
+        retrieval_policy_reason_code=decision.reason_code,
+        retrieval_policy_metadata=decision.audit_metadata(),
     )
 
 

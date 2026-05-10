@@ -76,6 +76,15 @@ def build_ai_audit_metadata(
         "rag_retrieval_reason_code": None,
         "rag_query_phi_sensitivity": None,
         "rag_max_sensitivity_level": None,
+        "rag_policy_reason_code": None,
+        "rag_policy_allowed": None,
+        "rag_policy_requested_corpus_count": None,
+        "rag_policy_effective_corpus_count": None,
+        "rag_policy_requested_top_k": None,
+        "rag_policy_effective_top_k": None,
+        "rag_policy_requested_strategy": None,
+        "rag_policy_effective_strategy": None,
+        "rag_policy_lexical_fallback_used": None,
         "response_grounded": False,
         "response_validation_result": None,
         "response_validator_version": None,
@@ -110,6 +119,29 @@ def build_ai_audit_metadata(
         metadata["rag_returned_count"] = rag_context.returned_count
         metadata["rag_confidence"] = rag_context.confidence
         metadata["rag_confidence_reason"] = rag_context.confidence_reason
+        policy_metadata = rag_context.retrieval_policy_metadata or {}
+        metadata["rag_policy_reason_code"] = (
+            rag_context.retrieval_policy_reason_code
+            or policy_metadata.get("reason_code")
+        )
+        metadata["rag_policy_allowed"] = policy_metadata.get("allowed")
+        metadata["rag_policy_requested_corpus_count"] = policy_metadata.get(
+            "requested_corpus_count"
+        )
+        metadata["rag_policy_effective_corpus_count"] = policy_metadata.get(
+            "effective_corpus_count"
+        )
+        metadata["rag_policy_requested_top_k"] = policy_metadata.get("requested_top_k")
+        metadata["rag_policy_effective_top_k"] = policy_metadata.get("effective_top_k")
+        metadata["rag_policy_requested_strategy"] = policy_metadata.get(
+            "requested_strategy"
+        )
+        metadata["rag_policy_effective_strategy"] = policy_metadata.get(
+            "effective_strategy"
+        )
+        metadata["rag_policy_lexical_fallback_used"] = policy_metadata.get(
+            "lexical_fallback_used"
+        )
     if response_validation is not None:
         metadata["response_grounded"] = response_validation.grounded
         metadata["response_validation_result"] = response_validation.reason_code
