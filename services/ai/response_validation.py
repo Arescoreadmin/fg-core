@@ -16,6 +16,9 @@ RESPONSE_VALIDATION_FAILED = "RESPONSE_VALIDATION_FAILED"
 RESPONSE_VALIDATOR_VERSION = "rag_lexical_grounding_v1"
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
+_CITATION_RE = re.compile(
+    r"(?:chunk_id|source_id)\s*[:=]\s*[A-Za-z0-9_.:-]+|\[ck-[A-Za-z0-9_.:-]+\]"
+)
 _STOPWORDS = frozenset(
     {
         "about",
@@ -60,6 +63,8 @@ class ResponseValidationResult:
     citation_source_ids: tuple[str, ...]
     validator_version: str
     evidence_count: int
+    provenance_reason_code: str | None = None
+    provenance_valid: bool | None = None
 
 
 class ResponseValidationError(Exception):
@@ -87,7 +92,7 @@ def validate_provider_response_grounding(
     if not isinstance(response_text, str) or not response_text.strip():
         return _no_answer(RESPONSE_EMPTY)
 
-    response_tokens = _significant_tokens(response_text)
+    response_tokens = _significant_tokens(_strip_citation_markers(response_text))
     if not response_tokens:
         return _no_answer(RESPONSE_UNGROUNDED)
 
@@ -143,3 +148,7 @@ def _significant_tokens(text: str) -> set[str]:
         if len(token) >= 3 and token not in _STOPWORDS
     }
     return tokens
+
+
+def _strip_citation_markers(text: str) -> str:
+    return _CITATION_RE.sub(" ", text)

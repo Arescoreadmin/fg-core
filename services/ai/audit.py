@@ -81,6 +81,8 @@ def build_ai_audit_metadata(
         "response_validator_version": None,
         "response_citation_source_ids": [],
         "response_evidence_count": 0,
+        "provenance_validation_result": None,
+        "provenance_valid": None,
         "policy_source": None,
         "policy_version": None,
         "policy_reason_code": None,
@@ -116,6 +118,10 @@ def build_ai_audit_metadata(
             response_validation.citation_source_ids
         )
         metadata["response_evidence_count"] = response_validation.evidence_count
+        metadata["provenance_validation_result"] = (
+            response_validation.provenance_reason_code
+        )
+        metadata["provenance_valid"] = response_validation.provenance_valid
     if ai_policy is not None:
         metadata["policy_source"] = ai_policy.source
         metadata["policy_version"] = ai_policy.version

@@ -23,6 +23,7 @@ from services.ai.rag_context import (
     retrieve_persisted_rag_context,
     retrieve_rag_context,
 )
+from services.ai.provenance import validate_answer_provenance
 from services.ai.response_validation import ResponseValidationResult
 from services.ai.response_validation import validate_provider_response_grounding
 from services.ai.routing import (
@@ -598,6 +599,17 @@ class AIPlaneService:
                 response_text=prov_resp.text,
                 rag_context=rag_context,
                 tenant_id=tenant_id,
+            )
+            response_validation, _provenance_validation = validate_answer_provenance(
+                response_text=prov_resp.text,
+                rag_context=rag_context,
+                response_validation=response_validation,
+            )
+        if prov_resp is None:
+            response_validation, _provenance_validation = validate_answer_provenance(
+                response_text="",
+                rag_context=rag_context,
+                response_validation=response_validation,
             )
         out = response_validation.final_text
         ok_out, code_out = policy_engine.evaluate_output(out)
