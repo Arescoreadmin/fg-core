@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { TopBar } from '@/components/layout/TopBar';
 import { DecisionsTable } from '@/components/tables/DecisionsTable';
 import { getDecision, listDecisions, type DecisionOut } from '@/lib/coreApi';
 import { toUserMessage } from '@/lib/errors';
@@ -48,10 +49,7 @@ export default function DecisionsPage() {
 
   return (
     <div className="flex flex-col">
-      <div className="border-b border-border px-6 py-4">
-        <h1 className="text-base font-semibold text-foreground">Decisions</h1>
-        <p className="text-xs text-muted mt-0.5">Policy outcomes for every classified request</p>
-      </div>
+      <TopBar title="Decisions" subtitle="Policy outcomes for every classified request" />
 
       <div className="p-6 space-y-4">
         {/* Filters */}

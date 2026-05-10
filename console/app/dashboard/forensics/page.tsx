@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { TopBar } from '@/components/layout/TopBar';
 import { getChainVerifyWithMeta, getForensicsAuditTrailWithMeta, getForensicsSnapshotWithMeta } from '@/lib/coreApi';
 import { toErrorDisplay } from '@/lib/errors';
 import {
@@ -169,12 +170,10 @@ export default function ForensicsPage() {
 
   return (
     <div className="flex flex-col">
-      <div className="border-b border-border px-6 py-4">
-        <h1 className="text-base font-semibold text-foreground">Forensics</h1>
-        <p className="mt-0.5 text-xs text-muted">
-          Investigate events, verify chain integrity, retrieve audit trails
-        </p>
-      </div>
+      <TopBar
+        title="Forensics"
+        subtitle="Investigate events, verify chain integrity, retrieve audit trails"
+      />
 
       <div className="space-y-4 p-6">
         <div className="space-y-1.5">

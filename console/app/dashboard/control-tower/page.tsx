@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
+import { TopBar } from '@/components/layout/TopBar';
+import { Button } from '@/components/ui/button';
 import {
   createKey,
   exportEvidenceBundle,
@@ -133,18 +135,15 @@ export default function ControlTowerPage() {
 
   return (
     <div className="flex flex-col">
-      <div className="flex items-center justify-between border-b border-border px-6 py-4">
-        <div>
-          <h1 className="text-base font-semibold text-foreground">Control Tower</h1>
-          <p className="text-xs text-muted mt-0.5">Tenant controls, key lifecycle, agent management</p>
-        </div>
-        <button
-          onClick={refresh}
-          className="flex items-center gap-1.5 rounded border border-border px-3 py-1.5 text-xs text-muted hover:text-foreground"
-        >
-          <RefreshCw className="h-3.5 w-3.5" /> Refresh
-        </button>
-      </div>
+      <TopBar
+        title="Control Tower"
+        subtitle="Tenant controls, key lifecycle, agent management"
+        actions={
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={refresh}>
+            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+          </Button>
+        }
+      />
 
       <div className="p-6 space-y-4">
         {!s && (

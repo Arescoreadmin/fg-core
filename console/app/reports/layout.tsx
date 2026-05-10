@@ -1,5 +1,5 @@
 import { ShellLayout } from '@/components/layout/ShellLayout';
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function ReportsLayout({ children }: { children: React.ReactNode }) {
   return <ShellLayout>{children}</ShellLayout>;
 }
