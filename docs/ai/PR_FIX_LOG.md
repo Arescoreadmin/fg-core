@@ -30,6 +30,7 @@ This log records **completed, intentional fixes**.
 - Valid source/chunk citations pass.
 - Nonexistent citations produce `PROVENANCE_SOURCE_NOT_RETRIEVED`.
 - Retrieved-but-not-prompt-included citations produce `PROVENANCE_SOURCE_NOT_IN_PROMPT`.
+- Source-level citations are rejected when any retrieved chunk for that source was truncated out of the prompt.
 - Empty-context source claims produce `PROVENANCE_NO_CONTEXT_AVAILABLE`.
 
 **Audit safety proof:**
@@ -37,7 +38,7 @@ This log records **completed, intentional fixes**.
 - Raw chunk text, prompts, provider response text, and invalid source claim text are not logged.
 
 **Validation results:**
-- `pytest -q tests/security/test_ai_provenance_enforcement.py tests/security/test_ai_plane_rag_wiring_security.py` → 10 passed
+- `pytest -q tests/security/test_ai_provenance_enforcement.py tests/security/test_ai_plane_rag_wiring_security.py` → 12 passed
 - `pytest -q tests -k "provenance or citation or rag or retrieval or audit"` → 763 passed
 - `make fg-fast` → passed
 - `bash codex_gates.sh` → passed

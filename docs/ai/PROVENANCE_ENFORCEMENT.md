@@ -28,6 +28,9 @@ Rules:
 
 - A cited source/chunk must exist in the retrieved context for the request.
 - A cited source/chunk must also be present in the prompt-included context.
+- A source-level citation is valid only when every retrieved chunk for that
+  source was included in the prompt context. If any retrieved chunk from that
+  source was truncated out of the prompt, source-level citation is rejected.
 - Empty-context answers cannot claim sources.
 - Invalid provenance is stripped by replacing the answer with `NO_ANSWER`,
   emptying citation metadata, and setting an explicit provenance reason.

@@ -46,10 +46,11 @@ def _context(
     *,
     source_chunk_ids: tuple[str, ...] = ("ck-a",),
     retrieved_source_chunk_ids: tuple[str, ...] = ("ck-a",),
+    source_ids_by_chunk: dict[str, str] | None = None,
 ) -> RagContextResult:
     chunks = tuple(
         RagContextChunk(
-            source_id=chunk_id,
+            source_id=(source_ids_by_chunk or {}).get(chunk_id, chunk_id),
             chunk_id=chunk_id,
             chunk_index=index,
             text="alpha control evidence",
@@ -65,7 +66,12 @@ def _context(
             for chunk_id in source_chunk_ids
         ),
         chunk_count=len(chunks),
-        source_ids=retrieved_source_chunk_ids,
+        source_ids=tuple(
+            dict.fromkeys(
+                (source_ids_by_chunk or {}).get(chunk_id, chunk_id)
+                for chunk_id in retrieved_source_chunk_ids
+            )
+        ),
         retrieval_reason_code="RAG_RETRIEVAL_SELECTED"
         if chunks
         else "RAG_RETRIEVAL_EMPTY",
@@ -117,6 +123,38 @@ def test_retrieved_but_not_included_citation_rejected() -> None:
     assert validation.final_text == NO_ANSWER_TEXT
     assert validation.provenance_reason_code == PROVENANCE_SOURCE_NOT_IN_PROMPT
     assert provenance.invalid_source_ids == ("ck-b",)
+
+
+def test_source_level_citation_rejected_when_source_has_truncated_chunk() -> None:
+    validation, provenance = validate_answer_provenance(
+        response_text="alpha control evidence source_id=src-shared",
+        rag_context=_context(
+            source_chunk_ids=("ck-a",),
+            retrieved_source_chunk_ids=("ck-a", "ck-b"),
+            source_ids_by_chunk={"ck-a": "src-shared", "ck-b": "src-shared"},
+        ),
+        response_validation=_validation("src-shared"),
+    )
+
+    assert validation.final_text == NO_ANSWER_TEXT
+    assert validation.provenance_reason_code == PROVENANCE_SOURCE_NOT_IN_PROMPT
+    assert provenance.invalid_source_ids == ("src-shared",)
+
+
+def test_source_level_citation_passes_when_all_source_chunks_in_prompt() -> None:
+    validation, provenance = validate_answer_provenance(
+        response_text="alpha control evidence source_id=src-shared",
+        rag_context=_context(
+            source_chunk_ids=("ck-a", "ck-b"),
+            retrieved_source_chunk_ids=("ck-a", "ck-b"),
+            source_ids_by_chunk={"ck-a": "src-shared", "ck-b": "src-shared"},
+        ),
+        response_validation=_validation("src-shared"),
+    )
+
+    assert validation.final_text == "alpha control evidence"
+    assert validation.provenance_reason_code == PROVENANCE_VALID
+    assert provenance.valid is True
 
 
 def test_no_context_source_claim_rejected() -> None:

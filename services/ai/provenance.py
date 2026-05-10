@@ -64,10 +64,13 @@ def validate_answer_provenance(
     retrieved_ids = set(rag_context.retrieved_source_chunk_ids or ())
     valid_source_ids = set(rag_context.source_ids)
     included_chunk_ids = set(rag_context.source_chunk_ids)
+    source_chunks: dict[str, set[str]] = {}
+    for chunk in rag_context.chunks:
+        source_chunks.setdefault(chunk.source_id, set()).add(chunk.chunk_id)
     included_source_ids = {
-        chunk.source_id
-        for chunk in rag_context.chunks
-        if chunk.chunk_id in included_chunk_ids
+        source_id
+        for source_id, chunk_ids in source_chunks.items()
+        if chunk_ids and chunk_ids <= included_chunk_ids
     }
     prompt_ids = included_chunk_ids | included_source_ids
 
