@@ -12,6 +12,7 @@ from api.rag.retrieval import RetrievalError, RetrievalQuery, search_chunks
 from api.rag_context import RagContextRequest, RagContextResponse, RetrievalStrategy
 from api.rag_hybrid_retrieval import retrieve_rag_context_hybrid_rrf
 from api.rag_retrieval import retrieve_rag_context as retrieve_persisted_context
+from api.rag_reranking import RerankConfig, Reranker, rerank_response
 from api.rag_semantic_retrieval import retrieve_rag_context_hybrid
 from services.ai.policy import AiRagRules
 from services.ai.retrieval_policy import (
@@ -180,6 +181,8 @@ def retrieve_persisted_rag_context(
     rag_rules: AiRagRules | None = None,
     embedding_provider: "EmbeddingProvider | None" = None,
     embedding_model: str | None = None,
+    reranker: Reranker | None = None,
+    rerank_config: RerankConfig | None = None,
 ) -> RagContextResult:
     tenant = _require_tenant(tenant_id)
     bounded_limit = _bound_limit(limit)
@@ -236,6 +239,12 @@ def retrieve_persisted_rag_context(
             strategy=effective_strategy,
             provider=embedding_provider,
             embedding_model=embedding_model,
+        )
+        response = rerank_response(
+            response,
+            query=query_text,
+            reranker=reranker,
+            config=rerank_config,
         )
     except (SQLAlchemyError, ValidationError, ValueError) as exc:
         raise RagContextError(

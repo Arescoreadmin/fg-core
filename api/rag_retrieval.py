@@ -216,6 +216,7 @@ def retrieve_rag_context(
                 title=row_dict.get("title"),
                 uri=uri,
                 page=page,
+                ordinal=int(row_dict["ordinal"]),
             ),
         )
         ranked.append(

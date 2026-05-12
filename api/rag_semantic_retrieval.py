@@ -348,6 +348,7 @@ def _build_chunk(
             title=row.get("title"),
             uri=uri,
             page=page,
+            ordinal=int(row["ordinal"]),
         ),
         lexical_score=lexical_score,
         semantic_score=semantic_score,

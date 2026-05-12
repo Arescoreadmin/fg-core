@@ -6,6 +6,41 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-12 — PR 28 Reranking Layer
+
+**Branch:** `pr-28-reranking-layer`
+
+**Task identifier:** PR 28 — Reranking Layer
+
+**Area:** Additive RAG candidate reranking; deterministic local reranker; rerank metadata; docs/tests.
+
+**Purpose:** Add a production-safe reranking layer over policy-approved top-N retrieval candidates to improve final grounding context order.
+
+**Files changed:**
+- `api/rag_context.py` — adds additive rerank metadata fields and chunk ordinal provenance for deterministic tie-breaks.
+- `api/rag_retrieval.py` — carries chunk ordinal into provenance for lexical retrieval.
+- `api/rag_semantic_retrieval.py` — carries chunk ordinal into provenance for semantic/hybrid retrieval.
+- `api/rag_hybrid_retrieval.py` — carries chunk ordinal into provenance for hybrid RRF retrieval.
+- `api/rag_reranking.py` — adds reranker abstraction, deterministic local reranker, top-N controls, fallback behavior, and audit-safe rerank logging.
+- `services/ai/rag_context.py` — applies reranking after policy-approved persisted retrieval.
+- `tests/test_rag_reranking.py` — covers reranking order, top-N limit, determinism, tenant/policy preservation, metadata, no network calls, audit safety, fallback, provenance, and lexical routing preservation.
+- `docs/ai/RERANKING_LAYER.md` — documents boundaries, controls, ordering, metadata, audit safety, and non-goals.
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+
+**Reranking proof:**
+- Reranking consumes only chunks already returned by retrieval.
+- `max_rerank_candidates` limits the reranked window and leaves later candidates in original order.
+- Original retrieval scores remain unchanged; rerank metadata is additive.
+- Final ordering is deterministic: `final_score DESC`, `rerank_score DESC`, `combined_score DESC`, then corpus/document/ordinal/chunk IDs.
+
+**Safety proof:**
+- Reranking happens after PR 27 policy evaluation and effective retriever execution, so tenant and corpus governance are preserved.
+- The deterministic local reranker performs no network I/O and does not create providers.
+- Audit logs include counts, timeout, and trace ID only; tests assert raw chunk text and sensitive tokens are not logged.
+- Provenance validation remains ID-only and passes after reranking.
+
+---
+
 ### 2026-05-10 — PR 27 Retrieval Policy Engine
 
 **Branch:** `pr-27-retrieval-policy-engine`

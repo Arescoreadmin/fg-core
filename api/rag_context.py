@@ -35,6 +35,7 @@ class RagChunkProvenance(BaseModel):
     title: Optional[str] = None
     uri: Optional[str] = None
     page: Optional[int] = None
+    ordinal: Optional[int] = None
 
 
 class RagRetrievalTrace(BaseModel):
@@ -79,6 +80,9 @@ class RagContextChunk(BaseModel):
     semantic_score: Optional[float] = None
     rrf_score: Optional[float] = None
     combined_score: Optional[float] = None
+    rerank_score: Optional[float] = None
+    final_score: Optional[float] = None
+    rerank_reason: Optional[str] = None
     retrieval_strategy: Optional[RetrievalStrategy] = None
     retrieval_trace_id: Optional[str] = None
     candidate_count: Optional[int] = None
@@ -102,6 +106,8 @@ class RagContextChunk(BaseModel):
         "semantic_score",
         "rrf_score",
         "combined_score",
+        "rerank_score",
+        "final_score",
         mode="before",
     )
     @classmethod

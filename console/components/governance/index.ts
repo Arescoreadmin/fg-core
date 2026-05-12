@@ -13,3 +13,12 @@ export type { Citation } from './CitationViewer';
 export { RetrievalTrace } from './RetrievalTrace';
 export type { TraceStep } from './RetrievalTrace';
 export { ProviderRouteCard } from './ProviderRouteCard';
+export { SourceEvidencePanel } from './SourceEvidencePanel';
+export type {
+  SourceEvidencePanelProps,
+  SourceEvidenceData,
+  SourceSummaryItem,
+  SourceCitation,
+} from './SourceEvidencePanel';
+export { RetrievalTraceExplorer } from './RetrievalTraceExplorer';
+export type { RetrievalTraceExplorerProps } from './RetrievalTraceExplorer';
