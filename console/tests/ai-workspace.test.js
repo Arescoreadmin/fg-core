@@ -27,6 +27,7 @@ function exists(relPath) {
 }
 
 const PAGE = 'app/dashboard/assistant/page.tsx';
+const EVIDENCE_PANEL = 'components/governance/SourceEvidencePanel.tsx';
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
 
@@ -42,9 +43,11 @@ test('ai workspace includes conversation metadata and evidence columns', () => {
   assert.match(page, /conversation-panel/);
   assert.match(page, /metadata-column/);
   assert.match(page, /evidence-column/);
-  // All three columns must be present in one file
   assert.match(page, /answer-metadata-panel/);
-  assert.match(page, /evidence-sources-panel/);
+  // Evidence panel is now the SourceEvidencePanel component
+  assert.match(page, /SourceEvidencePanel/);
+  const panel = read(EVIDENCE_PANEL);
+  assert.match(panel, /source-evidence-panel/);
 });
 
 test('ai workspace has 3-column responsive structure', () => {
@@ -79,10 +82,14 @@ test('ai workspace answer metadata panel renders', () => {
 
 test('ai workspace evidence source panel renders', () => {
   const page = read(PAGE);
-  assert.match(page, /evidence-sources-panel/);
-  assert.match(page, /evidence-empty/);
-  assert.match(page, /no-sources-state/);
-  assert.match(page, /Evidence.*Sources/);
+  // Page uses SourceEvidencePanel component for the right column
+  assert.match(page, /SourceEvidencePanel/);
+  assert.match(page, /Evidence.*Sources/s);
+  // Panel component carries the evidence content
+  const panel = read(EVIDENCE_PANEL);
+  assert.match(panel, /source-evidence-panel/);
+  assert.match(panel, /evidence-empty/);
+  assert.match(panel, /no-source-state/);
 });
 
 // ─── Provider / model ─────────────────────────────────────────────────────────
@@ -143,31 +150,39 @@ test('ai workspace renders no-context state explicitly', () => {
 // ─── Source references ────────────────────────────────────────────────────────
 
 test('ai workspace renders source references from safe payload', () => {
+  // Source evidence panel renders all source reference patterns
+  const panel = read(EVIDENCE_PANEL);
+  assert.match(panel, /source-card/);
+  assert.match(panel, /chunk-ids-section/);
+  assert.match(panel, /chunk-reference/);
+  assert.match(panel, /citations-section/);
+  assert.match(panel, /citation-item/);
+  // Page passes provenance data to the panel
   const page = read(PAGE);
-  assert.match(page, /source-citations/);
-  assert.match(page, /source-summaries/);
-  assert.match(page, /source-chunk-ids/);
-  assert.match(page, /source-summary-item/);
-  assert.match(page, /CitationViewer/);
+  assert.match(page, /provenance.*provenance/s);
 });
 
 test('ai workspace renders why-this-chunk explanations', () => {
-  const page = read(PAGE);
-  assert.match(page, /why-this-chunk/);
-  assert.match(page, /Retrieval Explanation/);
-  assert.match(page, /rank_reason/);
+  // Why-this-chunk is rendered in SourceEvidencePanel
+  const panel = read(EVIDENCE_PANEL);
+  assert.match(panel, /why-this-chunk-section/);
+  assert.match(panel, /Why Retrieved/);
+  assert.match(panel, /rank_reason/);
+  assert.match(panel, /rank-reason/);
 });
 
 // ─── Missing fields ───────────────────────────────────────────────────────────
 
 test('ai workspace renders deterministic unavailable states for missing fields', () => {
   const page = read(PAGE);
-  // All three panels have empty/unavailable states
+  // Metadata panel empty states remain in page.tsx
   assert.match(page, /metadata-empty/);
-  assert.match(page, /evidence-empty/);
-  assert.match(page, /no-sources-state/);
   assert.match(page, /provider-unavailable/);
   assert.match(page, /confidence-unavailable/);
+  // Evidence panel empty states live in SourceEvidencePanel
+  const panel = read(EVIDENCE_PANEL);
+  assert.match(panel, /evidence-empty/);
+  assert.match(panel, /no-source-state/);
 });
 
 // ─── API failure ──────────────────────────────────────────────────────────────
@@ -284,12 +299,13 @@ test('ai workspace answer text renders as plain text not HTML', () => {
 
 test('ai workspace does not render fake sources', () => {
   const page = read(PAGE);
-  // No hardcoded fake citations or source names
+  // No hardcoded fake citations or source names in page
   assert.doesNotMatch(page, /Apex National Bank/);
   assert.doesNotMatch(page, /meridian-health/);
   assert.doesNotMatch(page, /source-1.*fake/i);
-  // Sources only rendered when API provides them
-  assert.match(page, /meta\.citations.*length/);
+  // Sources only rendered when API provides them — check in SourceEvidencePanel
+  const panel = read(EVIDENCE_PANEL);
+  assert.match(panel, /citations.*length/);
 });
 
 test('ai workspace does not expose raw vectors', () => {
