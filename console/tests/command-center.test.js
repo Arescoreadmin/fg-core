@@ -55,6 +55,16 @@ test('command center includes required widgets', () => {
 
 // ─── Severity model ───────────────────────────────────────────────────────────
 
+test('severity map includes chain_integrity pass and fail strings', () => {
+  const severity = read('lib/severity.ts');
+  // chain_integrity.status emits exactly "pass" or "fail" — both must be mapped
+  assert.match(severity, /pass: 'ok'/);
+  assert.match(severity, /fail: 'critical'/);
+  // "failed" and "failure" must also remain (other callers)
+  assert.match(severity, /failed: 'critical'/);
+  assert.match(severity, /failure: 'critical'/);
+});
+
 test('severity mapping is deterministic', () => {
   const severity = read('lib/severity.ts');
   // Type must enumerate all five values

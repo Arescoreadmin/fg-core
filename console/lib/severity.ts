@@ -2,6 +2,7 @@ export type Severity = 'ok' | 'info' | 'warning' | 'critical' | 'unknown';
 
 const SEVERITY_MAP: Record<string, Severity> = {
   ok: 'ok',
+  pass: 'ok',
   healthy: 'ok',
   verified: 'ok',
   operational: 'ok',
@@ -16,6 +17,7 @@ const SEVERITY_MAP: Record<string, Severity> = {
   unverified: 'critical',
   critical: 'critical',
   error: 'critical',
+  fail: 'critical',
   failed: 'critical',
   failure: 'critical',
   unavailable: 'critical',
