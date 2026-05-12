@@ -6,6 +6,64 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-12 — PR 46 Source & Evidence Side Panel
+
+**Branch:** `pr-46-source-evidence-panel`
+
+**Task identifier:** PR 46 — Source & Evidence Side Panel
+
+**Area:** Frontend evidence panel; retrieval explainability; confidence grounding; source transparency.
+
+**Purpose:** Replace the inline `EvidencePanel` embedded in the AI Workspace page with a production-grade `SourceEvidencePanel` governance component. Exposes retrieval evidence, provenance signals, retrieval reasoning, and source transparency. This is trust infrastructure UX — operators can understand why an answer was produced, what evidence supported it, which chunks were retrieved, how confidence was derived, and which retrieval strategy was used.
+
+**Files changed:**
+- `console/components/governance/SourceEvidencePanel.tsx` — new component: source cards, retrieval scores, why-this-chunk, confidence grounding, retrieval strategy display, collapsible sections, deterministic ordering, safe fallback states, future-ready placeholders.
+- `console/components/governance/index.ts` — exports `SourceEvidencePanel`, `SourceEvidencePanelProps`, `SourceEvidenceData`, `SourceSummaryItem`, `SourceCitation`.
+- `console/app/dashboard/assistant/page.tsx` — removes inline `EvidencePanel`; adds `SourceEvidencePanel` import; extends `ProvenanceData` with `confidence_reason` and `lexical_fallback`; passes `provenance` and `citations` to `SourceEvidencePanel`.
+- `console/tests/source-evidence-panel.test.js` — 52 static-analysis tests covering all acceptance criteria.
+- `console/tests/ai-workspace.test.js` — updated 6 tests to read evidence panel content from `SourceEvidencePanel.tsx` instead of the now-removed inline function.
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+
+**Evidence panel behavior:**
+- Source cards: each card shows retrieval rank, chunk_id, source_id, inclusion status, and a collapsible body with retrieval scores, why-this-chunk, and metadata.
+- Retrieval scores: lexical_score, semantic_score, rrf_score, combined_score rendered via `formatScore(toFixed(3))` only when real finite numbers. `safeNum()` guards all values. `score-unavailable` renders explicitly when no scores.
+- Why-this-chunk: `parseWhyEntry()` safely extracts rank_reason, matched_term_count, matched_categories from `Record<string, unknown>` without exposing raw matched terms, raw vectors, or provider reasoning.
+- Source/document metadata: chunk_index, corpus_id, document_id, PHI sensitivity exposed safely. No raw storage paths, no tenant secrets.
+- Future-ready placeholders: Rerank visualization, Source freshness, Conflicting evidence, Citation lineage — all labeled "not yet available", no fake numbers.
+
+**Confidence rendering behavior:**
+- Four grounding levels: `grounded` (≥0.7), `weakly-grounded` (≥0.4), `ungrounded` (>0), `unavailable` (null).
+- Each level rendered with text label + icon (non-color-only indicator) + status explanation text.
+- `formatScore(toFixed(3))` for the raw value when present.
+- No invented math; no fake certainty; no percentages derived from scores.
+
+**Deterministic ordering proof:**
+- `orderSummaries()` sorts by: (1) rrf_rank or lexical_rank ascending, (2) combined_score or rrf_score descending, (3) chunk_id `localeCompare` tie-break.
+- Tests verify ordering function exists and all three sort keys are present.
+
+**Audit-safe rendering proof:**
+- No `dangerouslySetInnerHTML`.
+- No `raw_vector`, `embedding_vector`, `raw_prompt`, `system_prompt`, `provider_payload`.
+- `parseWhyEntry()` extracts only declared safe fields; rejects unknown/unsafe raw values.
+- Every suppressed or unavailable field renders an explicit label (`score-unavailable`, `Retrieval strategy not reported`, `Explanation not available`).
+
+**Lexical fallback rendering:**
+- `isLexicalFallback` is `true` when `provenance.lexical_fallback === true` OR when strategy is `'lexical'` and summaries exist.
+- Renders `lexical-fallback-indicator` with warning text: "Lexical fallback active — semantic retrieval was unavailable or disabled."
+
+**Invalid provenance rendering:**
+- `isInvalidProvenance` triggers an `invalid-provenance-state` alert banner with `role="alert"` and text "Provenance validation did not pass".
+
+**Validation results:**
+- `cd console && npm test`: 191 passed, 0 failed.
+- `cd console && npm run lint`: no warnings or errors.
+- `cd console && npm run build`: all routes compiled; `/dashboard/assistant` builds as client component.
+- `make fg-fast`: passed.
+- `bash codex_gates.sh` (ruff check): passed.
+- `git diff --check`: clean.
+
+---
+
 ### 2026-05-12 — PR 43 Unified Console Shell
 
 **Branch:** `pr-43-unified-console-shell`

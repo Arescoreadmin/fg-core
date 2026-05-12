@@ -16,13 +16,13 @@ import {
 import { TopBar } from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/button';
 import {
-  CitationViewer,
   ConfidenceMeter,
   PolicyDecision,
   ProviderRouteCard,
   RetrievalTrace,
+  SourceEvidencePanel,
 } from '@/components/governance';
-import type { Citation, TraceStep } from '@/components/governance';
+import type { Citation, TraceStep, SourceEvidenceData } from '@/components/governance';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,16 +35,18 @@ interface SourceSummary {
   phi_types?: string[] | null;
 }
 
-interface ProvenanceData {
+interface ProvenanceData extends SourceEvidenceData {
   retrieval_trace_id?: string | null;
   used_rag?: boolean;
   context_count?: number | null;
   source_chunk_ids?: string[] | null;
   source_summaries?: SourceSummary[] | null;
   confidence?: number | null;
+  confidence_reason?: string | null;
   why_this_chunk?: Record<string, unknown> | null;
   retrieval_strategy?: string | null;
   provenance_status?: string | null;
+  lexical_fallback?: boolean;
 }
 
 interface ApiResponse {
@@ -280,162 +282,6 @@ function MetadataPanel({ meta }: { meta: MessageMeta | undefined }) {
               </p>
             )}
           </div>
-        </section>
-      )}
-    </div>
-  );
-}
-
-// ─── Evidence Panel (right column) ───────────────────────────────────────────
-
-function EvidencePanel({ meta }: { meta: MessageMeta | undefined }) {
-  if (!meta) {
-    return (
-      <div
-        className="flex flex-col items-center justify-center gap-2 py-12 text-center"
-        aria-label="evidence-empty"
-      >
-        <BookOpen className="h-7 w-7 text-muted/20" aria-hidden="true" />
-        <p className="text-xs text-muted">Sources will appear here</p>
-      </div>
-    );
-  }
-
-  const prov = meta.provenance;
-  const chunkIds = prov?.source_chunk_ids ?? [];
-  const summaries = prov?.source_summaries ?? [];
-  const whyChunk = prov?.why_this_chunk ?? null;
-  const hasSources =
-    chunkIds.length > 0 ||
-    summaries.length > 0 ||
-    (meta.citations != null && meta.citations.length > 0);
-
-  if (!hasSources) {
-    return (
-      <div
-        className="flex flex-col items-center justify-center gap-2 py-12 text-center"
-        aria-label="no-sources-state"
-      >
-        <BookOpen className="h-7 w-7 text-muted/20" aria-hidden="true" />
-        <p className="text-xs text-muted">No sources for this response</p>
-        <p className="max-w-[200px] text-[10px] text-muted/50">
-          {prov?.provenance_status === 'PROVENANCE_NO_CONTEXT_AVAILABLE'
-            ? 'No retrieval context was available for this request.'
-            : 'No source references were returned.'}
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-5" aria-label="evidence-sources-panel">
-
-      {/* Source validity */}
-      <section>
-        <h3 className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted/60">
-          Source Validity
-        </h3>
-        <ProvenanceStatusBadge status={prov?.provenance_status} />
-      </section>
-
-      {/* API-provided citations */}
-      {meta.citations && meta.citations.length > 0 && (
-        <section aria-label="source-citations">
-          <h3 className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted/60">
-            Citations
-          </h3>
-          <CitationViewer citations={meta.citations} />
-        </section>
-      )}
-
-      {/* Provenance source summaries */}
-      {summaries.length > 0 && (
-        <section aria-label="source-summaries">
-          <h3 className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted/60">
-            Source Summaries ({summaries.length})
-          </h3>
-          <ul className="space-y-2">
-            {summaries.map((s, i) => (
-              <li
-                key={s.chunk_id ?? i}
-                className="rounded-lg border border-border bg-surface-2 p-2.5"
-                aria-label="source-summary-item"
-              >
-                {s.chunk_id && (
-                  <p className="truncate font-mono text-[10px] text-muted/70">
-                    chunk: {s.chunk_id}
-                  </p>
-                )}
-                {s.source_id && (
-                  <p className="truncate font-mono text-[10px] text-muted/70">
-                    src: {s.source_id}
-                  </p>
-                )}
-                {s.chunk_index != null && (
-                  <p className="font-mono text-[10px] text-muted/50">idx: {s.chunk_index}</p>
-                )}
-                {s.included_in_prompt !== undefined && (
-                  <p
-                    className={`mt-0.5 text-[10px] ${
-                      s.included_in_prompt ? 'text-success' : 'text-muted/50'
-                    }`}
-                  >
-                    {s.included_in_prompt ? 'Included in prompt' : 'Not in prompt'}
-                  </p>
-                )}
-                {s.phi_sensitivity_level && s.phi_sensitivity_level !== 'NONE' && (
-                  <p className="mt-0.5 text-[10px] text-warning">
-                    PHI: {s.phi_sensitivity_level}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {/* Chunk IDs (fallback when no summaries) */}
-      {chunkIds.length > 0 && summaries.length === 0 && (
-        <section aria-label="source-chunk-ids">
-          <h3 className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted/60">
-            Chunk IDs
-          </h3>
-          <ul className="space-y-1">
-            {chunkIds.slice(0, 10).map((id) => (
-              <li key={id} className="truncate font-mono text-[10px] text-muted/70">
-                {id}
-              </li>
-            ))}
-            {chunkIds.length > 10 && (
-              <li className="text-[10px] text-muted/50">+{chunkIds.length - 10} more</li>
-            )}
-          </ul>
-        </section>
-      )}
-
-      {/* Why-this-chunk explanations */}
-      {whyChunk != null && Object.keys(whyChunk).length > 0 && (
-        <section aria-label="why-this-chunk">
-          <h3 className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted/60">
-            Retrieval Explanation
-          </h3>
-          <ul className="space-y-1.5">
-            {Object.entries(whyChunk)
-              .slice(0, 5)
-              .map(([chunkId, reason]) => (
-                <li
-                  key={chunkId}
-                  className="rounded border border-border bg-surface-2 p-2 text-[10px]"
-                >
-                  <p className="truncate font-mono text-muted/70">{chunkId}</p>
-                  {reason != null && typeof reason === 'object' && (
-                    <p className="mt-0.5 text-muted">
-                      {(reason as { rank_reason?: string }).rank_reason ?? 'Retrieved'}
-                    </p>
-                  )}
-                </li>
-              ))}
-          </ul>
         </section>
       )}
     </div>
@@ -790,7 +636,10 @@ export default function WorkspacePage() {
             <h2 className="text-xs font-semibold text-foreground">Evidence &amp; Sources</h2>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
-            <EvidencePanel meta={latestAssistant?.meta} />
+            <SourceEvidencePanel
+              provenance={latestAssistant?.meta?.provenance}
+              citations={latestAssistant?.meta?.citations}
+            />
           </div>
         </div>
 
