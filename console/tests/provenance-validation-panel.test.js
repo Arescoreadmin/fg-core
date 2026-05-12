@@ -285,6 +285,73 @@ test('provenance validation panel deriveCitationsFromProvenance is deterministic
   assert.match(src, /data\.citations.*length/);
 });
 
+test('deriveCitationsFromProvenance has three-tier resolution documented', () => {
+  const src = read(PANEL);
+  // Tier 1: explicit structured citations
+  assert.match(src, /Tier 1/);
+  // Tier 2: explicit ID lists (future API extension)
+  assert.match(src, /Tier 2/);
+  // Tier 3: fallback from source_summaries
+  assert.match(src, /Tier 3/);
+  assert.match(src, /_rag_provenance_ui_metadata/);
+});
+
+test('deriveCitationsFromProvenance falls back to source_summaries when citation IDs absent', () => {
+  const src = read(PANEL);
+  // Must check for explicit ID list presence before using fallback
+  assert.match(src, /data\.citation_source_ids != null \|\| data\.invalid_source_ids != null/);
+  // Fallback must read source_summaries
+  assert.match(src, /data\.source_summaries.*\?\?.*\[\]/);
+  // Fallback must filter for valid objects
+  assert.match(src, /s.*!=.*null.*typeof.*s.*==='object'/s);
+});
+
+test('deriveCitationsFromProvenance derives valid citations from summaries on PROVENANCE_VALID', () => {
+  const src = read(PANEL);
+  // On PROVENANCE_VALID, chunks must be mapped to valid citations
+  assert.match(src, /status === 'PROVENANCE_VALID'/);
+  assert.match(src, /status: 'valid' as const/);
+  // cited flag must reflect included_in_prompt
+  assert.match(src, /cited: s\.included_in_prompt === true/);
+});
+
+test('deriveCitationsFromProvenance derives invalid citations from not-included summaries on NOT_IN_PROMPT', () => {
+  const src = read(PANEL);
+  // NOT_IN_PROMPT + included_in_prompt === false → invalid citation
+  assert.match(src, /PROVENANCE_SOURCE_NOT_IN_PROMPT.*s\.included_in_prompt === false/s);
+  assert.match(src, /status: 'invalid' as const/);
+  assert.match(src, /reason_code: status/);
+});
+
+test('deriveCitationsFromProvenance shows unavailable for present chunks when NOT_RETRIEVED', () => {
+  const src = read(PANEL);
+  // NOT_RETRIEVED: invalid source was never retrieved, not in summaries; show as unavailable
+  assert.match(src, /NOT_RETRIEVED.*absent from.*source_summaries/s);
+  assert.match(src, /status: 'unavailable' as const/);
+});
+
+test('buildProvenanceExportSummary has fallback derivation from source_summaries', () => {
+  const src = read(PANEL);
+  // Must check hasExplicitCitationData before falling back
+  assert.match(src, /hasExplicitCitationData/);
+  assert.match(src, /data\.citation_source_ids != null \|\| data\.invalid_source_ids != null/);
+});
+
+test('buildProvenanceExportSummary citation_count reflects included chunks on PROVENANCE_VALID when IDs absent', () => {
+  const src = read(PANEL);
+  // On PROVENANCE_VALID without explicit IDs, citation_count = includedCount
+  assert.match(src, /status === 'PROVENANCE_VALID'/);
+  assert.match(src, /citationCount = includedCount/);
+  assert.match(src, /invalidCitationCount = 0/);
+});
+
+test('buildProvenanceExportSummary citation_count uses not-included count for NOT_IN_PROMPT', () => {
+  const src = read(PANEL);
+  assert.match(src, /PROVENANCE_SOURCE_NOT_IN_PROMPT/);
+  assert.match(src, /notIncludedCount/);
+  assert.match(src, /invalidCitationCount = notIncludedCount/);
+});
+
 // ─── Retrieved / prompt-included / cited distinction ─────────────────────────
 
 test('provenance validation panel distinguishes retrieved included and cited chunks', () => {

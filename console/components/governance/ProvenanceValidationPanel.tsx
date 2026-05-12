@@ -245,11 +245,43 @@ export function buildProvenanceExportSummary(
 ): ProvenanceExportSummary {
   const summaries = data.source_summaries ?? [];
   const includedCount = summaries.filter(s => s.included_in_prompt === true).length;
+
+  // Derive citation counts from explicit fields when available; fall back to
+  // source_summaries + provenance_status for the current _rag_provenance_ui_metadata
+  // payload which does not yet include citation_source_ids or invalid_source_ids.
+  const hasExplicitCitationData =
+    data.citation_source_ids != null || data.invalid_source_ids != null;
+
+  let citationCount: number;
+  let invalidCitationCount: number;
+
+  if (hasExplicitCitationData) {
+    citationCount = (data.citation_source_ids ?? []).length;
+    invalidCitationCount = (data.invalid_source_ids ?? []).length;
+  } else {
+    const status = data.provenance_status;
+    if (status === 'PROVENANCE_VALID') {
+      // Prompt-included chunks are the validated citations on a PROVENANCE_VALID response
+      citationCount = includedCount;
+      invalidCitationCount = 0;
+    } else if (status === 'PROVENANCE_SOURCE_NOT_IN_PROMPT') {
+      // Not-included chunks are the invalid ones; included chunks would have been valid
+      const notIncludedCount = summaries.filter(s => s.included_in_prompt === false).length;
+      citationCount = includedCount;
+      invalidCitationCount = notIncludedCount;
+    } else {
+      // For NOT_RETRIEVED the invalid source was never retrieved so it is absent from
+      // summaries; cannot derive a count without the future citation_source_ids field.
+      citationCount = 0;
+      invalidCitationCount = 0;
+    }
+  }
+
   return {
     provenance_status: data.provenance_status ?? null,
     trust_level: deriveTrustLevel(data.provenance_status),
-    citation_count: (data.citation_source_ids ?? []).length,
-    invalid_citation_count: (data.invalid_source_ids ?? []).length,
+    citation_count: citationCount,
+    invalid_citation_count: invalidCitationCount,
     prompt_included_chunk_count: includedCount,
     retrieved_chunk_count: summaries.length,
     used_rag: data.used_rag ?? null,
@@ -290,41 +322,100 @@ export function sortCitations(
   });
 }
 
-// Derive structured citations from raw provenance data when explicit citation
-// objects are absent (current API does not return per-citation detail).
+// Derive structured citations from raw provenance data. Three-tier resolution:
+//   1. Explicit structured citations prop (richer future API contract)
+//   2. Explicit citation_source_ids / invalid_source_ids (future API extension)
+//   3. Fallback: source_summaries + provenance_status (current API payload from
+//      _rag_provenance_ui_metadata which has included_in_prompt per chunk but no
+//      citation_source_ids or invalid_source_ids)
 export function deriveCitationsFromProvenance(
   data: ProvenanceValidationData,
 ): ProvenanceValidationCitation[] {
+  // Tier 1: explicit structured citations
   if (data.citations != null && data.citations.length > 0) {
     return sortCitations(data.citations);
   }
-  const result: ProvenanceValidationCitation[] = [];
-  const invalidSet = new Set(data.invalid_source_ids ?? []);
-  const citationIds = data.citation_source_ids ?? [];
 
-  for (const id of citationIds) {
-    result.push({
-      citation_id: id,
-      source_id: id,
-      status: invalidSet.has(id) ? 'invalid' : 'valid',
-      retrieved: !invalidSet.has(id) || data.provenance_status !== 'PROVENANCE_SOURCE_NOT_RETRIEVED',
-      included_in_prompt:
-        !invalidSet.has(id) || data.provenance_status !== 'PROVENANCE_SOURCE_NOT_IN_PROMPT',
-    });
-  }
-  for (const id of data.invalid_source_ids ?? []) {
-    if (!citationIds.includes(id)) {
+  // Tier 2: explicit ID lists
+  if (data.citation_source_ids != null || data.invalid_source_ids != null) {
+    const result: ProvenanceValidationCitation[] = [];
+    const invalidSet = new Set(data.invalid_source_ids ?? []);
+    const citationIds = data.citation_source_ids ?? [];
+
+    for (const id of citationIds) {
       result.push({
         citation_id: id,
         source_id: id,
-        status: 'invalid',
-        reason_code: data.provenance_status,
-        retrieved: data.provenance_status !== 'PROVENANCE_SOURCE_NOT_RETRIEVED',
-        included_in_prompt: false,
+        status: invalidSet.has(id) ? 'invalid' : 'valid',
+        retrieved: !invalidSet.has(id) || data.provenance_status !== 'PROVENANCE_SOURCE_NOT_RETRIEVED',
+        included_in_prompt:
+          !invalidSet.has(id) || data.provenance_status !== 'PROVENANCE_SOURCE_NOT_IN_PROMPT',
       });
     }
+    for (const id of data.invalid_source_ids ?? []) {
+      if (!citationIds.includes(id)) {
+        result.push({
+          citation_id: id,
+          source_id: id,
+          status: 'invalid',
+          reason_code: data.provenance_status,
+          retrieved: data.provenance_status !== 'PROVENANCE_SOURCE_NOT_RETRIEVED',
+          included_in_prompt: false,
+        });
+      }
+    }
+    return sortCitations(result);
   }
-  return sortCitations(result);
+
+  // Tier 3: fallback — derive from source_summaries + provenance_status
+  const summaries = (data.source_summaries ?? []).filter(
+    (s): s is ProvenanceValidationSourceSummary => s != null && typeof s === 'object',
+  );
+  if (summaries.length === 0) return [];
+
+  const status = data.provenance_status;
+  return sortCitations(
+    summaries.map(s => {
+      const id = s.chunk_id ?? s.source_id ?? null;
+      if (status === 'PROVENANCE_VALID') {
+        // All retrieved chunks are validated citations on a clean provenance result
+        return {
+          citation_id: id,
+          source_id: s.source_id ?? null,
+          chunk_id: s.chunk_id ?? null,
+          status: 'valid' as const,
+          retrieved: true,
+          included_in_prompt: s.included_in_prompt ?? null,
+          cited: s.included_in_prompt === true,
+        };
+      }
+      if (status === 'PROVENANCE_SOURCE_NOT_IN_PROMPT' && s.included_in_prompt === false) {
+        // This chunk was retrieved but not included in the prompt — the cause of rejection
+        return {
+          citation_id: id,
+          source_id: s.source_id ?? null,
+          chunk_id: s.chunk_id ?? null,
+          status: 'invalid' as const,
+          reason_code: status,
+          retrieved: true,
+          included_in_prompt: false,
+          cited: false,
+        };
+      }
+      // NOT_RETRIEVED: the invalid source was never retrieved so it is absent from
+      // source_summaries; show present retrieved chunks as unavailable in this context.
+      // NOT_IN_PROMPT (included chunks): retrieved+included but overall validation failed.
+      return {
+        citation_id: id,
+        source_id: s.source_id ?? null,
+        chunk_id: s.chunk_id ?? null,
+        status: 'unavailable' as const,
+        retrieved: true,
+        included_in_prompt: s.included_in_prompt ?? null,
+        cited: false,
+      };
+    }),
+  );
 }
 
 // ─── Collapsible section ──────────────────────────────────────────────────────
