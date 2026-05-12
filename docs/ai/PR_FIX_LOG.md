@@ -6,6 +6,64 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-12 — PR 48 Provenance Validation UI
+
+**Branch:** `pr-48-provenance-validation-ui`
+
+**Task identifier:** PR 48 — Provenance Validation UI
+
+**Area:** Frontend governance UI; provenance validation display; citation validation; audit-safe rendering.
+
+**Purpose:** Expose citation/provenance validation state in the governance UI. Operators, auditors, compliance reviewers, and legal reviewers can now see whether citations are valid, rejected, or unavailable; why citations were rejected; which chunks were retrieved vs prompt-included vs cited; whether the provenance trust state is acceptable; and whether the answer is export-safe.
+
+**Files changed:**
+- `console/components/governance/ProvenanceValidationPanel.tsx` — new governance component providing full provenance validation UX.
+- `console/components/governance/index.ts` — adds exports for `ProvenanceValidationPanel`, `deriveTrustLevel`, `buildProvenanceExportSummary`, `sortCitations`, `deriveCitationsFromProvenance`, and related types.
+- `console/app/dashboard/provenance/page.tsx` — integrates `ProvenanceValidationPanel` into the dedicated provenance route.
+- `console/tests/provenance-validation-panel.test.js` — 90+ static-analysis tests covering all acceptance criteria.
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+- `docs/ai/PROVENANCE_VALIDATION_UI.md` — operational documentation.
+
+**Validation states:**
+- `PROVENANCE_VALID` → Provenance Valid / trusted
+- `PROVENANCE_SOURCE_NOT_RETRIEVED` → Provenance Invalid / untrusted, answer suppressed
+- `PROVENANCE_SOURCE_NOT_IN_PROMPT` → Provenance Invalid / untrusted, answer suppressed
+- `PROVENANCE_NO_CONTEXT_AVAILABLE` → No Context / no_context
+- null/unknown → Unavailable (rendered safely, not hidden)
+
+**Citation rejection behavior:**
+- Rejection reasons rendered with both human-readable detail and machine-readable reason code.
+- Invalid/rejected citations sorted before valid citations (deterministic order: invalid→rejected→valid→unknown→unavailable, tie-break by IDs via localeCompare).
+- CitationCard renders: citation_id, source_id, chunk_id, document_id, corpus_id, retrieved state, included-in-prompt state, cited state.
+
+**Retrieved / prompt-included / cited distinctions:**
+- `source_summaries[*].included_in_prompt` drives the Retrieved vs In-Prompt distinction.
+- `citation_source_ids` set drives the Cited count.
+- Chunk breakdown table shows per-chunk Retrieved / In Prompt / Cited columns.
+- Distinction note explicitly rendered: "Retrieved ≠ Included in prompt. Included ≠ Cited. Cited ≠ Valid."
+
+**Export/legal safety:**
+- `buildProvenanceExportSummary()` constructs a safe export payload: provenance_status, trust_level, citation counts, chunk counts, retrieval_trace_id, retrieval_strategy, generated_at, export_safe: true.
+- Excluded: raw vectors, raw prompts, raw chunk text, provider payloads, credentials.
+- Legal/compliance wording is conservative. No legal approval implied. Future legal review mode marked "not yet available" with no fake data.
+- `dangerouslySetInnerHTML` not used.
+
+**Audit/legal-safe rendering proof:**
+- No raw vectors, prompts, provider internals, or credentials exposed.
+- Trust level derives only from real provenance status codes (documented in comments).
+- Future placeholders clearly marked "not yet available" with no fabricated graph nodes, lineage, or legal approval status.
+- `role="alert"` used only on invalid/high-risk states.
+
+**Validation results:**
+- `cd console && npm test`: PASS (325/325)
+- `cd console && npm run lint`: PASS
+- `cd console && npm run build`: PASS
+- `make fg-fast`: PASS
+- `ruff check .`: PASS
+- `git diff --check`: PASS
+
+---
+
 ### 2026-05-12 — PR 28 Reranking Layer
 
 **Branch:** `pr-28-reranking-layer`
