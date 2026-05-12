@@ -303,7 +303,7 @@ test('deriveCitationsFromProvenance falls back to source_summaries when citation
   // Fallback must read source_summaries
   assert.match(src, /data\.source_summaries.*\?\?.*\[\]/);
   // Fallback must filter for valid objects
-  assert.match(src, /s.*!=.*null.*typeof.*s.*==='object'/s);
+  assert.match(src, /s.*!=.*null.*typeof.*s.*===\s*'object'/s);
 });
 
 test('deriveCitationsFromProvenance derives valid citations from summaries on PROVENANCE_VALID', () => {
