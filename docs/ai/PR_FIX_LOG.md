@@ -41,6 +41,16 @@ This log records **completed, intentional fixes**.
 **Validation results:**
 - Focused PR 27 tests passed locally; full PR validation recorded in the PR summary.
 
+**Addendum — retrieval strategy routing and policy contract schema repair:**
+- Fixed `services/ai/rag_context.py` so policy-approved `semantic`, `hybrid`, and `hybrid_rrf` strategies route to existing semantic/hybrid retrievers instead of always executing lexical retrieval.
+- Added fail-closed provider validation for semantic-family retrieval strategies; no provider is created by the adapter and no AI provider routing is changed.
+- Updated `contracts/ai/schema/policy.schema.json` to explicitly allow and validate retrieval governance fields while keeping `additionalProperties=false`.
+- Updated `contracts/ai/policies/default.json` to exercise the new schema fields in the active AI contract validation lane.
+- Updated `tools/ci/validate_ai_contracts.py` so `python tools/ci/validate_ai_contracts.py` works directly from the repo root, matching the PR validation command.
+- Extended `services/schema_validation.py` to enforce nested object fields, array item schemas, enum values, and integer minimums used by the AI policy schema.
+- Expanded `tests/test_retrieval_policy_engine.py` to prove strategy routing, fallback behavior, metadata alignment, corpus scoping, schema acceptance, invalid strategy/max-top-k rejection, unknown-field rejection, and legacy policy compatibility.
+- Updated `docs/SOC_ARCH_REVIEW_2026-02-15.md` for SOC-HIGH-002 coverage of the AI contract validator tool change.
+
 ---
 
 ### 2026-05-10 — PR 26 Provenance UI API

@@ -1,10 +1,20 @@
 from __future__ import annotations
 
 import logging
+import json
+from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
+from api.rag_context import (
+    RagChunkProvenance,
+    RagContextChunk as ApiRagContextChunk,
+    RagContextResponse as ApiRagContextResponse,
+    RagRetrievalTrace,
+    RetrievalStrategy,
+)
+from api.embeddings.providers import EmbeddingProvider
 from services.ai.policy import AiRagRules
 from services.ai.rag_context import (
     RagContextResult,
@@ -17,6 +27,7 @@ from services.ai.retrieval_policy import (
     RETRIEVAL_POLICY_STRATEGY_DENIED,
     evaluate_retrieval_policy,
 )
+from services.schema_validation import validate_payload_against_schema
 
 
 @pytest.fixture()
@@ -102,6 +113,80 @@ def _seed_document(
         "corpus_id": str(corpus["corpus_id"]),
         "document_id": str(document["document_id"]),
         "chunk_id": str(chunks[0]["chunk_id"]),
+    }
+
+
+def _api_response(strategy: RetrievalStrategy) -> ApiRagContextResponse:
+    return ApiRagContextResponse(
+        query="policy route",
+        chunks=[
+            ApiRagContextChunk(
+                text="policy route evidence",
+                score=1.0,
+                provenance=RagChunkProvenance(
+                    corpus_id="corp-route",
+                    document_id="doc-route",
+                    chunk_id=f"ck-{strategy}",
+                ),
+                retrieval_strategy=strategy,
+            )
+        ],
+        retrieval_trace=RagRetrievalTrace(
+            retrieval_trace_id=f"rt-{strategy}",
+            retrieval_strategy=strategy,
+            candidate_count=1,
+            returned_count=1,
+            duration_ms=1,
+            confidence=1.0,
+            confidence_reason="high_confidence",
+        ),
+    )
+
+
+def _policy_schema() -> dict[str, Any]:
+    return json.loads(
+        Path("contracts/ai/schema/policy.schema.json").read_text(encoding="utf-8")
+    )
+
+
+def _contract_policy() -> dict[str, Any]:
+    return {
+        "id": "policy-test",
+        "version": "1.0.0",
+        "allowed_providers": ["simulated"],
+        "default_provider": "simulated",
+        "phi_provider": "simulated",
+        "phi_rules": {
+            "require_baa": True,
+            "require_prompt_minimization": True,
+            "deny_if_phi_provider_unavailable": True,
+            "deny_explicit_non_phi_provider_for_phi": True,
+        },
+        "rag_rules": {
+            "enabled": True,
+            "require_grounded_response": True,
+            "no_answer_on_ungrounded": True,
+            "allowed_corpus_ids": ["corp-a"],
+            "denied_corpus_ids": ["corp-b"],
+            "max_top_k": 4,
+            "allowed_retrieval_strategies": [
+                "lexical",
+                "semantic",
+                "hybrid",
+                "hybrid_rrf",
+            ],
+            "require_grounded_context": True,
+            "allow_lexical_fallback": False,
+            "allow_semantic": True,
+            "allow_no_context_answer": False,
+        },
+        "audit_rules": {
+            "require_request_hash": True,
+            "require_response_hash": True,
+            "include_routing_metadata": True,
+        },
+        "default_model": "SIMULATED_V1",
+        "tenant_max_tokens_per_day": 100,
     }
 
 
@@ -259,6 +344,224 @@ def test_lexical_fallback_policy_uses_lexical_strategy(db_session) -> None:
     assert _policy_metadata(result)["lexical_fallback_used"] is True
 
 
+def test_lexical_route_uses_lexical_retriever(
+    db_session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import services.ai.rag_context as rag_context_mod
+
+    seeded = _seed_document(
+        db_session,
+        tenant_id="tenant-a",
+        corpus_name="Route",
+        text="policy route evidence",
+    )
+    calls: list[str] = []
+
+    def _lexical(_db, request):
+        calls.append("lexical")
+        assert request.tenant_id == "tenant-a"
+        assert request.corpus_ids == [seeded["corpus_id"]]
+        assert request.top_k == 2
+        return _api_response("lexical")
+
+    monkeypatch.setattr(rag_context_mod, "retrieve_persisted_context", _lexical)
+
+    result = retrieve_persisted_rag_context(
+        db=db_session,
+        tenant_id="tenant-a",
+        query_text="policy route",
+        limit=4,
+        phi_detected=False,
+        corpus_ids=[seeded["corpus_id"]],
+        rag_rules=_rules(
+            allowed_corpus_ids=(seeded["corpus_id"],),
+            max_top_k=2,
+            require_grounded_context=False,
+        ),
+    )
+
+    assert calls == ["lexical"]
+    assert result.retrieval_strategy == "lexical"
+    assert _policy_metadata(result)["effective_strategy"] == "lexical"
+
+
+def test_semantic_route_uses_semantic_retriever_when_allowed(
+    db_session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import services.ai.rag_context as rag_context_mod
+
+    seeded = _seed_document(
+        db_session,
+        tenant_id="tenant-a",
+        corpus_name="SemanticRoute",
+        text="policy route evidence",
+    )
+    calls: list[str] = []
+
+    def _semantic(_db, request, *, provider=None, embedding_model=None, **_kwargs):
+        calls.append("semantic")
+        assert provider is not None
+        assert embedding_model == "test-model"
+        assert request.corpus_ids == [seeded["corpus_id"]]
+        return _api_response("hybrid")
+
+    monkeypatch.setattr(rag_context_mod, "retrieve_rag_context_hybrid", _semantic)
+
+    result = retrieve_persisted_rag_context(
+        db=db_session,
+        tenant_id="tenant-a",
+        query_text="policy route",
+        limit=4,
+        phi_detected=False,
+        corpus_ids=[seeded["corpus_id"]],
+        requested_strategy="semantic",
+        rag_rules=_rules(
+            allowed_corpus_ids=(seeded["corpus_id"],),
+            allowed_retrieval_strategies=("semantic",),
+            allow_semantic=True,
+            require_grounded_context=False,
+        ),
+        embedding_provider=cast(EmbeddingProvider, object()),
+        embedding_model="test-model",
+    )
+
+    assert calls == ["semantic"]
+    assert result.retrieval_strategy == "semantic"
+    assert _policy_metadata(result)["effective_strategy"] == "semantic"
+
+
+def test_hybrid_route_uses_semantic_hybrid_retriever_when_allowed(
+    db_session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import services.ai.rag_context as rag_context_mod
+
+    calls: list[str] = []
+
+    def _hybrid(_db, request, *, provider=None, embedding_model=None, **_kwargs):
+        calls.append("hybrid")
+        assert provider is not None
+        assert request.top_k == 3
+        return _api_response("hybrid")
+
+    monkeypatch.setattr(rag_context_mod, "retrieve_rag_context_hybrid", _hybrid)
+
+    result = retrieve_persisted_rag_context(
+        db=db_session,
+        tenant_id="tenant-a",
+        query_text="policy route",
+        limit=4,
+        phi_detected=False,
+        requested_strategy="hybrid",
+        rag_rules=_rules(
+            max_top_k=3,
+            allowed_retrieval_strategies=("hybrid",),
+            allow_semantic=True,
+            require_grounded_context=False,
+        ),
+        embedding_provider=cast(EmbeddingProvider, object()),
+    )
+
+    assert calls == ["hybrid"]
+    assert result.retrieval_strategy == "hybrid"
+    assert _policy_metadata(result)["effective_strategy"] == "hybrid"
+
+
+def test_hybrid_rrf_route_uses_rrf_retriever_when_allowed(
+    db_session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import services.ai.rag_context as rag_context_mod
+
+    calls: list[str] = []
+
+    def _hybrid_rrf(_db, request, *, provider=None, embedding_model=None, **_kwargs):
+        calls.append("hybrid_rrf")
+        assert provider is not None
+        return _api_response("hybrid_rrf")
+
+    monkeypatch.setattr(rag_context_mod, "retrieve_rag_context_hybrid_rrf", _hybrid_rrf)
+
+    result = retrieve_persisted_rag_context(
+        db=db_session,
+        tenant_id="tenant-a",
+        query_text="policy route",
+        limit=4,
+        phi_detected=False,
+        requested_strategy="hybrid_rrf",
+        rag_rules=_rules(
+            allowed_retrieval_strategies=("hybrid_rrf",),
+            allow_semantic=True,
+            require_grounded_context=False,
+        ),
+        embedding_provider=cast(EmbeddingProvider, object()),
+    )
+
+    assert calls == ["hybrid_rrf"]
+    assert result.retrieval_strategy == "hybrid_rrf"
+    assert _policy_metadata(result)["effective_strategy"] == "hybrid_rrf"
+
+
+def test_denied_semantic_without_fallback_does_not_retrieve(
+    db_session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import services.ai.rag_context as rag_context_mod
+
+    def _fail(*_args, **_kwargs):
+        raise AssertionError("retriever must not be called")
+
+    monkeypatch.setattr(rag_context_mod, "retrieve_persisted_context", _fail)
+    monkeypatch.setattr(rag_context_mod, "retrieve_rag_context_hybrid", _fail)
+
+    with pytest.raises(RagContextError) as exc:
+        retrieve_persisted_rag_context(
+            db=db_session,
+            tenant_id="tenant-a",
+            query_text="policy route",
+            limit=4,
+            phi_detected=False,
+            requested_strategy="semantic",
+            rag_rules=_rules(),
+            embedding_provider=cast(EmbeddingProvider, object()),
+        )
+
+    assert exc.value.error_code == RETRIEVAL_POLICY_STRATEGY_DENIED
+
+
+def test_denied_semantic_with_fallback_retrieves_lexical_only(
+    db_session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import services.ai.rag_context as rag_context_mod
+
+    calls: list[str] = []
+
+    def _lexical(_db, _request):
+        calls.append("lexical")
+        return _api_response("lexical")
+
+    def _semantic(*_args, **_kwargs):
+        raise AssertionError("semantic retriever must not be called")
+
+    monkeypatch.setattr(rag_context_mod, "retrieve_persisted_context", _lexical)
+    monkeypatch.setattr(rag_context_mod, "retrieve_rag_context_hybrid", _semantic)
+
+    result = retrieve_persisted_rag_context(
+        db=db_session,
+        tenant_id="tenant-a",
+        query_text="policy route",
+        limit=4,
+        phi_detected=False,
+        requested_strategy="semantic",
+        rag_rules=_rules(
+            allow_lexical_fallback=True,
+            require_grounded_context=False,
+        ),
+        embedding_provider=cast(EmbeddingProvider, object()),
+    )
+
+    assert calls == ["lexical"]
+    assert result.retrieval_policy_reason_code == RETRIEVAL_POLICY_LEXICAL_FALLBACK
+    assert result.retrieval_strategy == "lexical"
+
+
 def test_require_grounded_context_blocks_no_context_answer(db_session) -> None:
     _seed_document(
         db_session,
@@ -341,3 +644,42 @@ def test_policy_decision_audited_without_chunk_text(db_session, caplog) -> None:
     for record in records:
         assert secret_text not in str(record.__dict__)
         assert "123-45-6789" not in str(record.__dict__)
+
+
+def test_ai_policy_contract_accepts_retrieval_governance_fields() -> None:
+    validate_payload_against_schema(_contract_policy(), _policy_schema())
+
+
+def test_ai_policy_contract_rejects_unknown_rag_rule_field() -> None:
+    payload = _contract_policy()
+    payload["rag_rules"]["raw_policy"] = "forbidden"
+
+    with pytest.raises(ValueError, match="SCHEMA_ADDITIONAL_PROPERTY_FORBIDDEN"):
+        validate_payload_against_schema(payload, _policy_schema())
+
+
+def test_ai_policy_contract_rejects_invalid_retrieval_strategy() -> None:
+    payload = _contract_policy()
+    payload["rag_rules"]["allowed_retrieval_strategies"] = ["lexical", "graph"]
+
+    with pytest.raises(ValueError, match="SCHEMA_ENUM_MISMATCH"):
+        validate_payload_against_schema(payload, _policy_schema())
+
+
+def test_ai_policy_contract_rejects_invalid_max_top_k() -> None:
+    payload = _contract_policy()
+    payload["rag_rules"]["max_top_k"] = 0
+
+    with pytest.raises(ValueError, match="SCHEMA_MINIMUM_VIOLATION"):
+        validate_payload_against_schema(payload, _policy_schema())
+
+
+def test_ai_policy_contract_legacy_policy_remains_valid() -> None:
+    payload = _contract_policy()
+    payload["rag_rules"] = {
+        "enabled": True,
+        "require_grounded_response": True,
+        "no_answer_on_ungrounded": True,
+    }
+
+    validate_payload_against_schema(payload, _policy_schema())

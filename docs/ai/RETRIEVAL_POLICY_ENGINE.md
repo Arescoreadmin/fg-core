@@ -80,9 +80,18 @@ Semantic-family strategies also require `allow_semantic=True`. If a semantic
 strategy is requested but denied, the request fails closed unless
 `allow_lexical_fallback=True` and lexical retrieval is allowed.
 
-The AI-plane persisted RAG path continues to use lexical retrieval unless a
-caller explicitly requests another strategy through the service adapter. This
-PR does not change provider routing, answer generation, scoring, or reranking.
+The persisted RAG service adapter routes the policy-approved effective strategy
+to the matching retriever:
+
+- `lexical` uses `api.rag_retrieval.retrieve_rag_context`
+- `semantic` uses the existing semantic retrieval module with semantic-only
+  weighting
+- `hybrid` uses `api.rag_semantic_retrieval.retrieve_rag_context_hybrid`
+- `hybrid_rrf` uses `api.rag_hybrid_retrieval.retrieve_rag_context_hybrid_rrf`
+
+Semantic-family strategies require an explicit embedding provider from the
+caller. The adapter does not create network-backed providers and does not alter
+AI provider routing, answer generation, or reranking.
 
 ## No-Context Behavior
 
