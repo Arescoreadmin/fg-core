@@ -62,6 +62,55 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-12 — PR 44 Command Center Dashboard
+
+**Branch:** `pr-44-command-center-dashboard`
+
+**Task identifier:** PR 44 — Command Center Dashboard
+
+**Area:** Frontend dashboard; operational widgets; severity model; control tower integration.
+
+**Purpose:** Replace the placeholder dashboard with a full operational Command Center that renders live data from existing API endpoints. Adds 9 real-data widgets (System Health, Retrieval Health, Audit Status, Tenant Context, Provider Health, Active Alerts, plus three safe unavailable-metric placeholders) and 4 future-capability stubs. Introduces a deterministic severity model in `lib/severity.ts`. Preserves all existing test-anchoring patterns.
+
+**Files changed:**
+- `console/lib/severity.ts` — new `Severity` type and `mapToSeverity()` function; deterministic, text-labelled, no Math.random.
+- `console/lib/coreApi.ts` — added `getCommandCenterSnapshot()` SafeResult wrapper around `getControlTowerSnapshot()`.
+- `console/app/dashboard/page.tsx` — full Command Center rewrite: 4 sections (Operational Status, Governance & Tenancy, Quality Metrics, Future Capabilities) plus preserved Platform Activity section; 60s polling with cancelled-flag and clearInterval cleanup.
+- `console/tests/command-center.test.js` — 16 static-analysis tests covering widgets, severity model, loading states, unavailable metrics, API failure paths, future placeholders, tenant display-only, no secrets.
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+
+**Severity model proof:**
+- `Severity = 'ok' | 'info' | 'warning' | 'critical' | 'unknown'` — five explicit values.
+- `mapToSeverity()` normalises to lowercase, returns `unknown` for null/undefined.
+- `SEVERITY_CONFIG` maps each severity to a text label, className, and icon; `displayLabel` is always rendered as text (icons are `aria-hidden`).
+- No color-only indicators; no Math.random; fully deterministic.
+
+**Widget proof:**
+- 6 operational widgets backed by real API data from `getCommandCenterSnapshot()`.
+- 3 `UnavailableMetricWidget` instances render `metric-not-configured` / `Not yet measured` — no fake percentages.
+- 4 `FuturePlaceholderWidget` instances have `border-dashed opacity-60` styling and `future-placeholder` aria-label — visually distinct from live widgets, no operational numbers.
+- Tenant widget shows `Display only — no switching authority`; no `<select>`, no `switchTenant`, no form elements.
+
+**Polling / SSR proof:**
+- `ctLoading` initial state is `true` (SSR renders loading skeleton, no hydration mismatch).
+- `cancelled = true` flag + `clearInterval` in `useEffect` return — no stale state updates on unmount.
+- `Date.now()` used only inside event handler callbacks, not at module scope.
+
+**Safety proof:**
+- All existing `dashboard-truth.test.js` anchors preserved: `billing-ready`, `billing-not-ready`, `billing-loading`, `billing-error`, `events-loading`, `events-error`, `events-empty`, `chart-loading`, `chart-error`, `chart-empty`, `domain-scores-empty`, `feedResult && !feedResult.ok`, `action === 'blocked' || action === 'block'`.
+- No `NEXT_PUBLIC_CORE_API_KEY`, `NEXT_PUBLIC_CORE_API_URL`, or other secrets in any new file.
+- No direct core fetch calls; all data flows through BFF `/api/core/...` or typed helpers.
+
+**Validation results:**
+- `cd console && npm test`: 106 passed (16 new + 90 pre-existing), 0 failed.
+- `cd console && npm run lint`: no warnings or errors.
+- `cd console && npm run build`: all routes compiled; `/dashboard` builds as client component.
+- `make fg-fast`: passed.
+- `bash codex_gates.sh`: ruff check passed; mypy passed; pytest passed.
+- `git diff --check`: clean.
+
+---
+
 ### 2026-05-10 — PR 26 Provenance UI API
 
 **Branch:** `pr-26-provenance-ui-api`
