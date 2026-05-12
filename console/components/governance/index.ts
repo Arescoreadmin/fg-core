@@ -22,3 +22,12 @@ export type {
 } from './SourceEvidencePanel';
 export { RetrievalTraceExplorer } from './RetrievalTraceExplorer';
 export type { RetrievalTraceExplorerProps } from './RetrievalTraceExplorer';
+export { ProvenanceValidationPanel, deriveTrustLevel, buildProvenanceExportSummary, sortCitations, deriveCitationsFromProvenance } from './ProvenanceValidationPanel';
+export type {
+  ProvenanceValidationPanelProps,
+  ProvenanceValidationData,
+  ProvenanceValidationCitation,
+  ProvenanceValidationSourceSummary,
+  ProvenanceExportSummary,
+  TrustLevel,
+} from './ProvenanceValidationPanel';
