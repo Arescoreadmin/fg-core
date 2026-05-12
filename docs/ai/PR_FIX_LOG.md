@@ -6,6 +6,62 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-12 — PR 43 Unified Console Shell
+
+**Branch:** `pr-43-unified-console-shell`
+
+**Task identifier:** PR 43 — Unified Console Shell
+
+**Area:** Frontend console shell; navigation; layout; placeholder routes; accessibility.
+
+**Purpose:** Replace disconnected dashboard layout with a unified governed operations shell providing persistent navigation, responsive layout, accessibility foundations (skip-to-content, aria-current, aria-label landmarks), and placeholder scaffolding for all future governance modules.
+
+**Files changed:**
+- `console/app/dashboard/layout.tsx` — client component with skip-to-content, mobile nav toggle, responsive sidebar control, and stable `id="main-content"` main landmark.
+- `console/components/layout/Sidebar.tsx` — updated nav groups covering all 11 required sections (Command Center, AI Workspace, Corpus, Retrieval, Provenance, Policies, Audit & Forensics, Providers, Readiness, Evaluation Lab, Settings); `aria-label="Main navigation"`, `aria-current="page"` on active links, `id="sidebar-nav"` for aria-controls reference, responsive open/close, mobile close button.
+- `console/app/dashboard/corpus/page.tsx` — safe placeholder.
+- `console/app/dashboard/retrieval/page.tsx` — safe placeholder.
+- `console/app/dashboard/provenance/page.tsx` — safe placeholder.
+- `console/app/dashboard/policies/page.tsx` — safe placeholder.
+- `console/app/dashboard/providers/page.tsx` — safe placeholder.
+- `console/app/dashboard/readiness/page.tsx` — safe placeholder.
+- `console/app/dashboard/evaluation/page.tsx` — safe placeholder.
+- `console/app/dashboard/settings/page.tsx` — safe placeholder.
+- `console/tests/console-shell.test.js` — 24 static-analysis tests covering shell structure, accessibility, SSR safety, secret safety, placeholder correctness, and existing route preservation.
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+
+**Shell proof:**
+- Skip-to-content link is `sr-only focus:not-sr-only`, targets `#main-content`.
+- Mobile nav toggle uses `aria-expanded`, `aria-controls="sidebar-nav"`, `aria-label="Open navigation"`.
+- Mobile overlay has `aria-hidden="true"` to exclude from assistive technology.
+- No `Math.random`, `randomUUID`, `Date.now()`, or browser-only APIs at module level (SSR-safe).
+- `useState(false)` initial render is SSR-deterministic; sidebar renders closed on server.
+
+**Navigation proof:**
+- All 11 required sections present with stable labels and route paths.
+- `aria-current="page"` emitted on active links only; `undefined` otherwise (no false positives).
+- Existing `/dashboard/control-tower` preserved; `/dashboard/keys` absent from nav (existing test enforced).
+
+**Placeholder proof:**
+- 8 placeholder pages are server components (no `'use client'`, no `useEffect`, no `fetch`).
+- Each renders `aria-label="module-not-configured"` and "not yet configured" text.
+- No fake scores, percentages, charts, or operational data.
+
+**Safety proof:**
+- No `NEXT_PUBLIC_CORE_API_KEY` or `NEXT_PUBLIC_CORE_API_URL` in any shell file.
+- No backend behavior changed; no retrieval/provenance/policy logic touched.
+- BFF proxy, auth flow, tenant resolution, and existing pages unchanged.
+
+**Validation results:**
+- `cd console && npm test`: 90 passed (24 new shell tests + 66 pre-existing).
+- `cd console && npm run lint`: no warnings or errors.
+- `cd console && npm run build`: 25 routes compiled successfully, all placeholder routes confirmed static.
+- `make fg-fast`: passed.
+- `bash codex_gates.sh`: ruff check passed; pytest passed.
+- `git diff --check`: clean.
+
+---
+
 ### 2026-05-10 — PR 26 Provenance UI API
 
 **Branch:** `pr-26-provenance-ui-api`
