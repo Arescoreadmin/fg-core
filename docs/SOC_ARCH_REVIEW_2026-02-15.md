@@ -549,6 +549,27 @@ Deterministic PHI-aware routing requires `azure_openai` as the configured PHI pr
 - `make fg-fast`: All checks passed
 - `bash codex_gates.sh`: All gates passed
 
+## Retrieval policy contract validation — tools/ci/validate_ai_contracts.py addendum (2026-05-10)
+
+### Files reviewed (required by SOC-HIGH-002)
+- `tools/ci/validate_ai_contracts.py`: Added repo-root path resolution so direct execution with `python tools/ci/validate_ai_contracts.py` uses the same imports as the Make contract lane.
+
+### Why
+PR 27 retrieval governance adds strict AI policy schema fields for corpus scope,
+retrieval depth, semantic strategy eligibility, lexical fallback, and no-context
+behavior. The review addendum requires the direct validator command to be a
+first-class gate, not only the Make-wrapped `PYTHONPATH=.` invocation.
+
+### Security posture impact
+- No provider allowlist expansion and no runtime AI provider routing change.
+- Contract validation remains strict: unknown policy fields are rejected, allowed retrieval strategies are enum-bound, and `max_top_k` is bounded to integer values >= 1.
+- The validator path change is import/bootstrap only; it does not bypass schema validation or weaken `additionalProperties=false`.
+- Retrieval policy audit metadata remains ID/count/reason-code only and excludes chunk text, prompts, vectors, provider payloads, and secrets.
+
+### Verification
+- `python tools/ci/validate_ai_contracts.py`: Passed
+- `pytest -q tests/test_retrieval_policy_engine.py`: Passed
+
 ## Simple AI chat endpoint — OpenAPI security diff and route inventory addendum (2026-05-01)
 
 ### Files reviewed (required by SOC-HIGH-002)

@@ -6,216 +6,50 @@ This log records **completed, intentional fixes**.
 
 ---
 
-### 2026-05-12 — PR 46 Source & Evidence Side Panel
+### 2026-05-10 — PR 27 Retrieval Policy Engine
 
-**Branch:** `pr-46-source-evidence-panel`
+**Branch:** `pr-27-retrieval-policy-engine`
 
-**Task identifier:** PR 46 — Source & Evidence Side Panel
+**Task identifier:** PR 27 — Retrieval Policy Engine
 
-**Area:** Frontend evidence panel; retrieval explainability; confidence grounding; source transparency.
+**Area:** AI RAG policy model; persisted retrieval policy enforcement; audit-safe retrieval policy decisions; docs/tests.
 
-**Purpose:** Replace the inline `EvidencePanel` embedded in the AI Workspace page with a production-grade `SourceEvidencePanel` governance component. Exposes retrieval evidence, provenance signals, retrieval reasoning, and source transparency. This is trust infrastructure UX — operators can understand why an answer was produced, what evidence supported it, which chunks were retrieved, how confidence was derived, and which retrieval strategy was used.
-
-**Files changed:**
-- `console/components/governance/SourceEvidencePanel.tsx` — new component: source cards, retrieval scores, why-this-chunk, confidence grounding, retrieval strategy display, collapsible sections, deterministic ordering, safe fallback states, future-ready placeholders.
-- `console/components/governance/index.ts` — exports `SourceEvidencePanel`, `SourceEvidencePanelProps`, `SourceEvidenceData`, `SourceSummaryItem`, `SourceCitation`.
-- `console/app/dashboard/assistant/page.tsx` — removes inline `EvidencePanel`; adds `SourceEvidencePanel` import; extends `ProvenanceData` with `confidence_reason` and `lexical_fallback`; passes `provenance` and `citations` to `SourceEvidencePanel`.
-- `console/tests/source-evidence-panel.test.js` — 52 static-analysis tests covering all acceptance criteria.
-- `console/tests/ai-workspace.test.js` — updated 6 tests to read evidence panel content from `SourceEvidencePanel.tsx` instead of the now-removed inline function.
-- `docs/ai/PR_FIX_LOG.md` — this entry.
-
-**Evidence panel behavior:**
-- Source cards: each card shows retrieval rank, chunk_id, source_id, inclusion status, and a collapsible body with retrieval scores, why-this-chunk, and metadata.
-- Retrieval scores: lexical_score, semantic_score, rrf_score, combined_score rendered via `formatScore(toFixed(3))` only when real finite numbers. `safeNum()` guards all values. `score-unavailable` renders explicitly when no scores.
-- Why-this-chunk: `parseWhyEntry()` safely extracts rank_reason, matched_term_count, matched_categories from `Record<string, unknown>` without exposing raw matched terms, raw vectors, or provider reasoning.
-- Source/document metadata: chunk_index, corpus_id, document_id, PHI sensitivity exposed safely. No raw storage paths, no tenant secrets.
-- Future-ready placeholders: Rerank visualization, Source freshness, Conflicting evidence, Citation lineage — all labeled "not yet available", no fake numbers.
-
-**Confidence rendering behavior:**
-- Four grounding levels: `grounded` (≥0.7), `weakly-grounded` (≥0.4), `ungrounded` (>0), `unavailable` (null).
-- Each level rendered with text label + icon (non-color-only indicator) + status explanation text.
-- `formatScore(toFixed(3))` for the raw value when present.
-- No invented math; no fake certainty; no percentages derived from scores.
-
-**Deterministic ordering proof:**
-- `orderSummaries()` sorts by: (1) rrf_rank or lexical_rank ascending, (2) combined_score or rrf_score descending, (3) chunk_id `localeCompare` tie-break.
-- Tests verify ordering function exists and all three sort keys are present.
-
-**Audit-safe rendering proof:**
-- No `dangerouslySetInnerHTML`.
-- No `raw_vector`, `embedding_vector`, `raw_prompt`, `system_prompt`, `provider_payload`.
-- `parseWhyEntry()` extracts only declared safe fields; rejects unknown/unsafe raw values.
-- Every suppressed or unavailable field renders an explicit label (`score-unavailable`, `Retrieval strategy not reported`, `Explanation not available`).
-
-**Lexical fallback rendering:**
-- `isLexicalFallback` is `true` when `provenance.lexical_fallback === true` OR when strategy is `'lexical'` and summaries exist.
-- Renders `lexical-fallback-indicator` with warning text: "Lexical fallback active — semantic retrieval was unavailable or disabled."
-
-**Invalid provenance rendering:**
-- `isInvalidProvenance` triggers an `invalid-provenance-state` alert banner with `role="alert"` and text "Provenance validation did not pass".
-
-**Validation results:**
-- `cd console && npm test`: 191 passed, 0 failed.
-- `cd console && npm run lint`: no warnings or errors.
-- `cd console && npm run build`: all routes compiled; `/dashboard/assistant` builds as client component.
-- `make fg-fast`: passed.
-- `bash codex_gates.sh` (ruff check): passed.
-- `git diff --check`: clean.
-
----
-
-### 2026-05-12 — PR 43 Unified Console Shell
-
-**Branch:** `pr-43-unified-console-shell`
-
-**Task identifier:** PR 43 — Unified Console Shell
-
-**Area:** Frontend console shell; navigation; layout; placeholder routes; accessibility.
-
-**Purpose:** Replace disconnected dashboard layout with a unified governed operations shell providing persistent navigation, responsive layout, accessibility foundations (skip-to-content, aria-current, aria-label landmarks), and placeholder scaffolding for all future governance modules.
+**Purpose:** Add per-tenant retrieval governance for corpus scope, retrieval depth, strategy eligibility, semantic use, lexical fallback, and no-context answer behavior.
 
 **Files changed:**
-- `console/app/dashboard/layout.tsx` — client component with skip-to-content, mobile nav toggle, responsive sidebar control, and stable `id="main-content"` main landmark.
-- `console/components/layout/Sidebar.tsx` — updated nav groups covering all 11 required sections (Command Center, AI Workspace, Corpus, Retrieval, Provenance, Policies, Audit & Forensics, Providers, Readiness, Evaluation Lab, Settings); `aria-label="Main navigation"`, `aria-current="page"` on active links, `id="sidebar-nav"` for aria-controls reference, responsive open/close, mobile close button.
-- `console/app/dashboard/corpus/page.tsx` — safe placeholder.
-- `console/app/dashboard/retrieval/page.tsx` — safe placeholder.
-- `console/app/dashboard/provenance/page.tsx` — safe placeholder.
-- `console/app/dashboard/policies/page.tsx` — safe placeholder.
-- `console/app/dashboard/providers/page.tsx` — safe placeholder.
-- `console/app/dashboard/readiness/page.tsx` — safe placeholder.
-- `console/app/dashboard/evaluation/page.tsx` — safe placeholder.
-- `console/app/dashboard/settings/page.tsx` — safe placeholder.
-- `console/tests/console-shell.test.js` — 24 static-analysis tests covering shell structure, accessibility, SSR safety, secret safety, placeholder correctness, and existing route preservation.
+- `services/ai/policy.py` — extends `AiRagRules` with retrieval governance fields and safe defaults while preserving legacy policy compatibility.
+- `services/ai/retrieval_policy.py` — adds pre-retrieval policy evaluation, corpus allow/deny filtering, strategy/depth controls, and audit-safe decision logging.
+- `services/ai/rag_context.py` — enforces policy before persisted retrieval and blocks policy-scoped empty contexts when grounded context is required.
+- `services/ai_plane_extension/service.py` — passes tenant AI RAG policy into persisted retrieval.
+- `services/ai/audit.py` — emits safe retrieval policy decision metadata in AI audit records.
+- `tests/test_retrieval_policy_engine.py` — covers allow/deny corpus behavior, unknown scope safety, top-k clamping, semantic disablement, lexical fallback, no-context blocking, tenant isolation, and audit redaction.
+- `tests/security/test_ai_audit_enrichment.py` — updates direct policy construction for the expanded RAG policy model.
+- `docs/ai/RETRIEVAL_POLICY_ENGINE.md` — documents the engine, defaults, enforcement, audit surface, and failure modes.
 - `docs/ai/PR_FIX_LOG.md` — this entry.
 
-**Shell proof:**
-- Skip-to-content link is `sr-only focus:not-sr-only`, targets `#main-content`.
-- Mobile nav toggle uses `aria-expanded`, `aria-controls="sidebar-nav"`, `aria-label="Open navigation"`.
-- Mobile overlay has `aria-hidden="true"` to exclude from assistive technology.
-- No `Math.random`, `randomUUID`, `Date.now()`, or browser-only APIs at module level (SSR-safe).
-- `useState(false)` initial render is SSR-deterministic; sidebar renders closed on server.
+**Policy proof:**
+- Denied, unknown, and wrong-tenant corpus IDs resolve to empty scope before SQL retrieval and cannot silently broaden to all tenant corpora.
+- `max_top_k` clamps requested depth before retrieval.
+- Semantic-family strategies require both strategy allowlisting and `allow_semantic=True`.
+- Lexical fallback is used only when `allow_lexical_fallback=True` and lexical is an allowed strategy.
+- Required grounded context raises `RETRIEVAL_POLICY_NO_CONTEXT_DENIED` on empty retrieval unless no-context answers are explicitly allowed; legacy policies keep the existing safe no-answer behavior unless `require_grounded_context` is set.
 
-**Navigation proof:**
-- All 11 required sections present with stable labels and route paths.
-- `aria-current="page"` emitted on active links only; `undefined` otherwise (no false positives).
-- Existing `/dashboard/control-tower` preserved; `/dashboard/keys` absent from nav (existing test enforced).
-
-**Placeholder proof:**
-- 8 placeholder pages are server components (no `'use client'`, no `useEffect`, no `fetch`).
-- Each renders `aria-label="module-not-configured"` and "not yet configured" text.
-- No fake scores, percentages, charts, or operational data.
-
-**Safety proof:**
-- No `NEXT_PUBLIC_CORE_API_KEY` or `NEXT_PUBLIC_CORE_API_URL` in any shell file.
-- No backend behavior changed; no retrieval/provenance/policy logic touched.
-- BFF proxy, auth flow, tenant resolution, and existing pages unchanged.
+**Audit safety proof:**
+- Policy decision logs and AI audit metadata include IDs/counts/booleans/reason codes only.
+- Tests assert raw chunk text and sensitive chunk tokens do not appear in policy audit records.
 
 **Validation results:**
-- `cd console && npm test`: 90 passed (24 new shell tests + 66 pre-existing).
-- `cd console && npm run lint`: no warnings or errors.
-- `cd console && npm run build`: 25 routes compiled successfully, all placeholder routes confirmed static.
-- `make fg-fast`: passed.
-- `bash codex_gates.sh`: ruff check passed; pytest passed.
-- `git diff --check`: clean.
+- Focused PR 27 tests passed locally; full PR validation recorded in the PR summary.
 
----
-
-### 2026-05-12 — PR 45 AI Workspace Governed Chat UX
-
-**Branch:** `pr-45-ai-workspace`
-
-**Task identifier:** PR 45 — AI Workspace (Governed Chat UX)
-
-**Area:** Frontend AI Workspace; governed chat; provenance display; source evidence panel.
-
-**Purpose:** Replace single-column assistant page with a full 3-column AI Workspace that surfaces AI trust metadata (provider/model, confidence, provenance status, context count, retrieval strategy, source references, why-this-chunk) alongside the conversation. Makes AI trust visible — not just a chatbot. All data from live API; no fake citations, no fake confidence, no raw vectors.
-
-**Files changed:**
-- `console/app/dashboard/assistant/page.tsx` — full rewrite as 3-column workspace: LEFT (conversation, input, retry/copy/export), CENTER (answer metadata panel: provider, confidence, provenance, context count, retrieval strategy, trace IDs), RIGHT (evidence panel: citations, source summaries, chunk IDs, why-this-chunk, no-source state).
-- `console/tests/ai-workspace.test.js` — 32 static-analysis tests.
-- `docs/ai/PR_FIX_LOG.md` — this entry.
-
-**Layout proof:**
-- `lg:flex-row` with `lg:w-72` (metadata) and `lg:w-64` (evidence) side panels.
-- Mobile/tablet: `flex-col` — sections stack vertically (conversation → metadata → evidence).
-- Each column has independent `overflow-y-auto` scroll on desktop.
-
-**Provenance/source display behavior:**
-- `PROVENANCE_CONFIG` maps the four stable `provenance_status` values to labelled, icon-tagged states (never color-only).
-- Evidence panel shows: citations (CitationViewer), source summaries (chunk_id, source_id, included_in_prompt, PHI level), chunk IDs, why-this-chunk rank_reason entries.
-- No-context state (`used_rag === false || context_count === 0`) shows explicit "No context available" message — never hides absence of grounding.
-- Provenance invalid states show "Provenance validation did not pass" warning banner.
-
-**Safe markdown proof:**
-- `AnswerText` renders via React text node inside `<p className="whitespace-pre-wrap">` — no `innerHTML`, no `dangerouslySetInnerHTML`, no `eval`.
-- No `<iframe>`, `<object>`, `<embed>`, no inline event handlers.
-
-**Copy/export proof:**
-- Export payload: `answer`, `provider`, `model`, `request_id`, `correlation_id`, `provenance_status`, `context_count`, `retrieval_strategy`, `used_rag`, `source_chunk_ids`, `confidence`.
-- Excluded: `session_id`, `phi_types`, `why_this_chunk`, raw vectors, provider internals.
-- `copyToClipboard` guarded with `typeof navigator !== 'undefined'`; failure handled safely.
-- Export falls back to `Blob` download if clipboard write fails.
-
-**No fake data proof:**
-- All metadata panels show deterministic "not reported" / "not measured" / "no sources" states when fields are absent.
-- No hardcoded confidence values, no hardcoded citations, no hardcoded provider names.
-- Message IDs use counter ref (`msg-N`) — no `Math.random()`, no `crypto.randomUUID()` for render IDs.
-
-**Validation results:**
-- `cd console && npm test`: 139 passed, 0 failed.
-- `cd console && npm run lint`: no warnings or errors.
-- `cd console && npm run build`: all routes compiled; `/dashboard/assistant` builds as client component.
-- `make fg-fast`: passed.
-- `git diff --check`: clean.
-
----
-
-### 2026-05-12 — PR 44 Command Center Dashboard
-
-**Branch:** `pr-44-command-center-dashboard`
-
-**Task identifier:** PR 44 — Command Center Dashboard
-
-**Area:** Frontend dashboard; operational widgets; severity model; control tower integration.
-
-**Purpose:** Replace the placeholder dashboard with a full operational Command Center that renders live data from existing API endpoints. Adds 9 real-data widgets (System Health, Retrieval Health, Audit Status, Tenant Context, Provider Health, Active Alerts, plus three safe unavailable-metric placeholders) and 4 future-capability stubs. Introduces a deterministic severity model in `lib/severity.ts`. Preserves all existing test-anchoring patterns.
-
-**Files changed:**
-- `console/lib/severity.ts` — new `Severity` type and `mapToSeverity()` function; deterministic, text-labelled, no Math.random.
-- `console/lib/coreApi.ts` — added `getCommandCenterSnapshot()` SafeResult wrapper around `getControlTowerSnapshot()`.
-- `console/app/dashboard/page.tsx` — full Command Center rewrite: 4 sections (Operational Status, Governance & Tenancy, Quality Metrics, Future Capabilities) plus preserved Platform Activity section; 60s polling with cancelled-flag and clearInterval cleanup.
-- `console/tests/command-center.test.js` — 16 static-analysis tests covering widgets, severity model, loading states, unavailable metrics, API failure paths, future placeholders, tenant display-only, no secrets.
-- `docs/ai/PR_FIX_LOG.md` — this entry.
-
-**Severity model proof:**
-- `Severity = 'ok' | 'info' | 'warning' | 'critical' | 'unknown'` — five explicit values.
-- `mapToSeverity()` normalises to lowercase, returns `unknown` for null/undefined.
-- `SEVERITY_CONFIG` maps each severity to a text label, className, and icon; `displayLabel` is always rendered as text (icons are `aria-hidden`).
-- No color-only indicators; no Math.random; fully deterministic.
-
-**Widget proof:**
-- 6 operational widgets backed by real API data from `getCommandCenterSnapshot()`.
-- 3 `UnavailableMetricWidget` instances render `metric-not-configured` / `Not yet measured` — no fake percentages.
-- 4 `FuturePlaceholderWidget` instances have `border-dashed opacity-60` styling and `future-placeholder` aria-label — visually distinct from live widgets, no operational numbers.
-- Tenant widget shows `Display only — no switching authority`; no `<select>`, no `switchTenant`, no form elements.
-
-**Polling / SSR proof:**
-- `ctLoading` initial state is `true` (SSR renders loading skeleton, no hydration mismatch).
-- `cancelled = true` flag + `clearInterval` in `useEffect` return — no stale state updates on unmount.
-- `Date.now()` used only inside event handler callbacks, not at module scope.
-
-**Safety proof:**
-- All existing `dashboard-truth.test.js` anchors preserved: `billing-ready`, `billing-not-ready`, `billing-loading`, `billing-error`, `events-loading`, `events-error`, `events-empty`, `chart-loading`, `chart-error`, `chart-empty`, `domain-scores-empty`, `feedResult && !feedResult.ok`, `action === 'blocked' || action === 'block'`.
-- No `NEXT_PUBLIC_CORE_API_KEY`, `NEXT_PUBLIC_CORE_API_URL`, or other secrets in any new file.
-- No direct core fetch calls; all data flows through BFF `/api/core/...` or typed helpers.
-
-**Validation results:**
-- `cd console && npm test`: 106 passed (16 new + 90 pre-existing), 0 failed.
-- `cd console && npm run lint`: no warnings or errors.
-- `cd console && npm run build`: all routes compiled; `/dashboard` builds as client component.
-- `make fg-fast`: passed.
-- `bash codex_gates.sh`: ruff check passed; mypy passed; pytest passed.
-- `git diff --check`: clean.
+**Addendum — retrieval strategy routing and policy contract schema repair:**
+- Fixed `services/ai/rag_context.py` so policy-approved `semantic`, `hybrid`, and `hybrid_rrf` strategies route to existing semantic/hybrid retrievers instead of always executing lexical retrieval.
+- Added fail-closed provider validation for semantic-family retrieval strategies; no provider is created by the adapter and no AI provider routing is changed.
+- Updated `contracts/ai/schema/policy.schema.json` to explicitly allow and validate retrieval governance fields while keeping `additionalProperties=false`.
+- Updated `contracts/ai/policies/default.json` to exercise the new schema fields in the active AI contract validation lane.
+- Updated `tools/ci/validate_ai_contracts.py` so `python tools/ci/validate_ai_contracts.py` works directly from the repo root, matching the PR validation command.
+- Extended `services/schema_validation.py` to enforce nested object fields, array item schemas, enum values, and integer minimums used by the AI policy schema.
+- Expanded `tests/test_retrieval_policy_engine.py` to prove strategy routing, fallback behavior, metadata alignment, corpus scoping, schema acceptance, invalid strategy/max-top-k rejection, unknown-field rejection, and legacy policy compatibility.
+- Updated `docs/SOC_ARCH_REVIEW_2026-02-15.md` for SOC-HIGH-002 coverage of the AI contract validator tool change.
 
 ---
 

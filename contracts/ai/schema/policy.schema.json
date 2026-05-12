@@ -56,26 +56,66 @@
         }
       }
     },
-    "rag_rules": {
-      "type": "object",
-      "required": [
-        "enabled",
-        "require_grounded_response",
-        "no_answer_on_ungrounded"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "enabled": {
-          "type": "boolean"
+        "rag_rules": {
+            "type": "object",
+            "required": [
+                "enabled",
+                "require_grounded_response",
+                "no_answer_on_ungrounded"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "require_grounded_response": {
+                    "type": "boolean"
+                },
+                "no_answer_on_ungrounded": {
+                    "type": "boolean"
+                },
+                "allowed_corpus_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "denied_corpus_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "max_top_k": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "allowed_retrieval_strategies": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "lexical",
+                            "semantic",
+                            "hybrid",
+                            "hybrid_rrf"
+                        ]
+                    }
+                },
+                "require_grounded_context": {
+                    "type": "boolean"
+                },
+                "allow_lexical_fallback": {
+                    "type": "boolean"
+                },
+                "allow_semantic": {
+                    "type": "boolean"
+                },
+                "allow_no_context_answer": {
+                    "type": "boolean"
+                }
+            }
         },
-        "require_grounded_response": {
-          "type": "boolean"
-        },
-        "no_answer_on_ungrounded": {
-          "type": "boolean"
-        }
-      }
-    },
     "audit_rules": {
       "type": "object",
       "required": [

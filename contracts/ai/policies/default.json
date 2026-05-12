@@ -17,7 +17,17 @@
   "rag_rules": {
     "enabled": true,
     "require_grounded_response": true,
-    "no_answer_on_ungrounded": true
+    "no_answer_on_ungrounded": true,
+    "allowed_corpus_ids": [],
+    "denied_corpus_ids": [],
+    "max_top_k": 4,
+    "allowed_retrieval_strategies": [
+      "lexical"
+    ],
+    "require_grounded_context": false,
+    "allow_lexical_fallback": false,
+    "allow_semantic": false,
+    "allow_no_context_answer": true
   },
   "audit_rules": {
     "require_request_hash": true,
