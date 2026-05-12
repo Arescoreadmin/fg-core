@@ -62,6 +62,56 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-12 — PR 45 AI Workspace Governed Chat UX
+
+**Branch:** `pr-45-ai-workspace`
+
+**Task identifier:** PR 45 — AI Workspace (Governed Chat UX)
+
+**Area:** Frontend AI Workspace; governed chat; provenance display; source evidence panel.
+
+**Purpose:** Replace single-column assistant page with a full 3-column AI Workspace that surfaces AI trust metadata (provider/model, confidence, provenance status, context count, retrieval strategy, source references, why-this-chunk) alongside the conversation. Makes AI trust visible — not just a chatbot. All data from live API; no fake citations, no fake confidence, no raw vectors.
+
+**Files changed:**
+- `console/app/dashboard/assistant/page.tsx` — full rewrite as 3-column workspace: LEFT (conversation, input, retry/copy/export), CENTER (answer metadata panel: provider, confidence, provenance, context count, retrieval strategy, trace IDs), RIGHT (evidence panel: citations, source summaries, chunk IDs, why-this-chunk, no-source state).
+- `console/tests/ai-workspace.test.js` — 32 static-analysis tests.
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+
+**Layout proof:**
+- `lg:flex-row` with `lg:w-72` (metadata) and `lg:w-64` (evidence) side panels.
+- Mobile/tablet: `flex-col` — sections stack vertically (conversation → metadata → evidence).
+- Each column has independent `overflow-y-auto` scroll on desktop.
+
+**Provenance/source display behavior:**
+- `PROVENANCE_CONFIG` maps the four stable `provenance_status` values to labelled, icon-tagged states (never color-only).
+- Evidence panel shows: citations (CitationViewer), source summaries (chunk_id, source_id, included_in_prompt, PHI level), chunk IDs, why-this-chunk rank_reason entries.
+- No-context state (`used_rag === false || context_count === 0`) shows explicit "No context available" message — never hides absence of grounding.
+- Provenance invalid states show "Provenance validation did not pass" warning banner.
+
+**Safe markdown proof:**
+- `AnswerText` renders via React text node inside `<p className="whitespace-pre-wrap">` — no `innerHTML`, no `dangerouslySetInnerHTML`, no `eval`.
+- No `<iframe>`, `<object>`, `<embed>`, no inline event handlers.
+
+**Copy/export proof:**
+- Export payload: `answer`, `provider`, `model`, `request_id`, `correlation_id`, `provenance_status`, `context_count`, `retrieval_strategy`, `used_rag`, `source_chunk_ids`, `confidence`.
+- Excluded: `session_id`, `phi_types`, `why_this_chunk`, raw vectors, provider internals.
+- `copyToClipboard` guarded with `typeof navigator !== 'undefined'`; failure handled safely.
+- Export falls back to `Blob` download if clipboard write fails.
+
+**No fake data proof:**
+- All metadata panels show deterministic "not reported" / "not measured" / "no sources" states when fields are absent.
+- No hardcoded confidence values, no hardcoded citations, no hardcoded provider names.
+- Message IDs use counter ref (`msg-N`) — no `Math.random()`, no `crypto.randomUUID()` for render IDs.
+
+**Validation results:**
+- `cd console && npm test`: 139 passed, 0 failed.
+- `cd console && npm run lint`: no warnings or errors.
+- `cd console && npm run build`: all routes compiled; `/dashboard/assistant` builds as client component.
+- `make fg-fast`: passed.
+- `git diff --check`: clean.
+
+---
+
 ### 2026-05-12 — PR 44 Command Center Dashboard
 
 **Branch:** `pr-44-command-center-dashboard`
