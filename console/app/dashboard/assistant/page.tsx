@@ -19,7 +19,7 @@ import {
   ConfidenceMeter,
   PolicyDecision,
   ProviderRouteCard,
-  RetrievalTrace,
+  RetrievalTraceExplorer,
   SourceEvidencePanel,
 } from '@/components/governance';
 import type { Citation, TraceStep, SourceEvidenceData } from '@/components/governance';
@@ -237,24 +237,13 @@ function MetadataPanel({ meta }: { meta: MessageMeta | undefined }) {
         )}
       </section>
 
-      {/* Retrieval strategy */}
-      {prov?.retrieval_strategy && (
-        <section>
-          <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted/60">
-            Retrieval Strategy
-          </h3>
-          <p className="font-mono text-xs text-foreground" aria-label="retrieval-strategy">
-            {prov.retrieval_strategy}
-          </p>
-        </section>
-      )}
-
-      {/* Retrieval trace steps */}
-      {meta.retrievalSteps && meta.retrievalSteps.length > 0 && (
-        <section>
-          <RetrievalTrace steps={meta.retrievalSteps} defaultCollapsed />
-        </section>
-      )}
+      {/* Retrieval trace explorer */}
+      <section>
+        <RetrievalTraceExplorer
+          provenance={prov}
+          retrievalSteps={meta.retrievalSteps}
+        />
+      </section>
 
       {/* Trace IDs */}
       {(meta.requestId || meta.correlationId || prov?.retrieval_trace_id) && (
