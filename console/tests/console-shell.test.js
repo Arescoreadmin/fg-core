@@ -99,6 +99,11 @@ test('sidebar preserves existing control-tower route and excludes legacy keys ro
   assert.doesNotMatch(sidebar, /\/dashboard\/keys/);
 });
 
+test('sidebar nav links call onClose on click so mobile drawer closes after navigation', () => {
+  const sidebar = read('components/layout/Sidebar.tsx');
+  assert.match(sidebar, /onClick={onClose}/);
+});
+
 // ─── Accessibility ────────────────────────────────────────────────────────────
 
 test('sidebar uses semantic nav landmark with aria-label', () => {
