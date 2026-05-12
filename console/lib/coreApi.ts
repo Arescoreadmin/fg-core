@@ -405,3 +405,12 @@ export function lockerResume(lockerId: string, reason: string) {
 export function exportEvidenceBundle() {
   return request<Record<string, unknown>>('/audit/export?format=json');
 }
+
+export async function getCommandCenterSnapshot(): Promise<SafeResult<ControlTowerSnapshotV1>> {
+  try {
+    const result = await getControlTowerSnapshot();
+    return { ok: true, data: result.data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'fetch_error' };
+  }
+}
