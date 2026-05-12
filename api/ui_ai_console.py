@@ -1187,6 +1187,18 @@ def ai_chat(
         "tenant_id": tenant_id,
         "device_id": device_id,
         "response": output,
+        "answer": output,
+        "provenance": {
+            "used_rag": False,
+            "context_count": 0,
+            "source_summaries": [],
+            "source_chunk_ids": [],
+            "why_this_chunk": {},
+            "retrieval_strategy": None,
+            "provenance_status": "PROVENANCE_NO_CONTEXT_AVAILABLE",
+            "retrieval_trace_id": None,
+            "lexical_fallback": False,
+        },
         "usage": {
             "usage_record_id": usage_record_id,
             "prompt_tokens": prompt_tokens,

@@ -74,10 +74,10 @@ function parseWhyEntry(raw: unknown): WhyEntry {
       : {};
   return {
     rank_reason: safeStr(o['rank_reason']),
-    lexical_score: safeNum(o['lexical_score']),
-    semantic_score: safeNum(o['semantic_score']),
-    rrf_score: safeNum(o['rrf_score']),
-    combined_score: safeNum(o['combined_score']),
+    lexical_score: safeNum(sc['lexical_score']) ?? safeNum(o['lexical_score']),
+    semantic_score: safeNum(sc['semantic_score']) ?? safeNum(o['semantic_score']),
+    rrf_score: safeNum(sc['rrf_score']) ?? safeNum(o['rrf_score']),
+    combined_score: safeNum(sc['combined_score']) ?? safeNum(o['combined_score']),
     matched_term_count: safeNum(o['matched_term_count']),
     matched_categories: safeStrArr(o['matched_categories']),
     corpus_id: safeStr(o['corpus_id']),
