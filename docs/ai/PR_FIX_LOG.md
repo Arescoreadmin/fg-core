@@ -6,6 +6,73 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-12 — PR 47 Retrieval Trace Explorer
+
+**Branch:** `pr-47-retrieval-trace-explorer`
+
+**Task identifier:** PR 47 — Retrieval Trace Explorer
+
+**Area:** Frontend retrieval observability; operational trace UX; sort/filter controls; confidence derivation.
+
+**Purpose:** Add a `RetrievalTraceExplorer` governance component that surfaces retrieval execution flow inside the AI Workspace metadata panel. Replaces the basic `RetrievalTrace` + inline retrieval-strategy section with a full operational observability surface: retrieval path visualization, execution timeline, candidate flow counts, sortable/filterable chunk rankings table, and confidence derivation display. This is trust infrastructure UX — operators can audit how retrieval executed, which chunks competed, how they were ranked, and why confidence was assigned.
+
+**Files changed:**
+- `console/components/governance/RetrievalTraceExplorer.tsx` — new component: retrieval path stage pills, execution timeline (ol with stage-timing), candidate flow dl, sortable/filterable chunk rankings table (aria-sort on th, aria-pressed filter buttons, score-unavailable cells, large-result-truncation at MAX_VISIBLE_CHUNKS=20), confidence derivation section, future capabilities placeholders.
+- `console/components/governance/index.ts` — exports `RetrievalTraceExplorer` and `RetrievalTraceExplorerProps`.
+- `console/app/dashboard/assistant/page.tsx` — replaces `RetrievalTrace` + inline retrieval-strategy section in `MetadataPanel` with `<RetrievalTraceExplorer provenance={prov} retrievalSteps={meta.retrievalSteps} />`.
+- `console/tests/retrieval-trace-explorer.test.js` — 53 static-analysis tests covering all acceptance criteria.
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+
+**Retrieval path behavior:**
+- `STRATEGY_PATH` maps `lexical`, `semantic`, `hybrid`, `hybrid_rrf`, `legacy_in_memory` to ordered stage arrays.
+- `hybrid_rrf` path: `['Lexical', 'Semantic', 'RRF Fusion', 'Combined Rank']`.
+- Unknown strategy: rendered as single pill with raw strategy string (no fallback to fake path).
+- `lexical-fallback-indicator` appears when `prov.lexical_fallback === true` or strategy is `lexical` with context present.
+
+**Deterministic sort proof:**
+- `sortRows()` primary sort on selected field (nulls sorted to end via `Infinity` sentinel), stable tie-break via `chunkId.localeCompare()`.
+- Default sort: `rank` ascending (retrieval order from API).
+- Sort state: `SortField × SortDir`, toggled by clicking `SortHeaderBtn`; `aria-sort` attribute on `<th>` (not button, which is not a valid role for that attribute).
+
+**Audit-safe rendering proof:**
+- No `dangerouslySetInnerHTML`. No `raw_vector`. No `raw_prompt`. No fake operational data.
+- `safeNum()`: `typeof v === 'number' && isFinite(v)`. `fmt()`: `toFixed(3)`.
+- `MAX_VISIBLE_CHUNKS = 20`: rows beyond limit render `large-result-truncation` notice.
+- Fallback states: `trace-api-failure-state`, `no-trace-state`, `timing-unavailable-state`, `no-context-trace-state`, `retrieval-path-unavailable`, `confidence-unavailable`, `no-chunks-for-filter`.
+
+**Constraint preserved:**
+- `app/dashboard/retrieval/page.tsx` was NOT modified. It remains a placeholder (`module-not-configured`, no `'use client'`, no `useEffect`, no `fetch`), preserving all `console-shell.test.js` assertions.
+
+**Validation results:**
+- `npm test`: 244 pass, 0 fail (53 new tests in retrieval-trace-explorer.test.js, 191 pre-existing).
+- `npm run lint`: 0 warnings, 0 errors.
+- `npm run build`: clean, 0 type errors.
+
+---
+
+### 2026-05-12 — PR 46 Source & Evidence Side Panel
+
+**Branch:** `pr-46-source-evidence-panel`
+
+**Task identifier:** PR 46 — Source & Evidence Side Panel
+
+**Area:** Frontend evidence panel; retrieval explainability; confidence grounding; source transparency.
+
+**Purpose:** Replace the inline `EvidencePanel` embedded in the AI Workspace page with a production-grade `SourceEvidencePanel` governance component. Exposes retrieval evidence, provenance signals, retrieval reasoning, and source transparency. This is trust infrastructure UX — operators can understand why an answer was produced, what evidence supported it, which chunks were retrieved, how confidence was derived, and which retrieval strategy was used.
+
+**Files changed:**
+- `console/components/governance/SourceEvidencePanel.tsx` — new component: source cards, retrieval scores, why-this-chunk, confidence grounding, retrieval strategy display, collapsible sections, deterministic ordering, safe fallback states, future-ready placeholders.
+- `console/components/governance/index.ts` — exports `SourceEvidencePanel`, `SourceEvidencePanelProps`, `SourceEvidenceData`, `SourceSummaryItem`, `SourceCitation`.
+- `console/app/dashboard/assistant/page.tsx` — removes inline `EvidencePanel`; adds `SourceEvidencePanel` import; extends `ProvenanceData` with `confidence_reason` and `lexical_fallback`; passes `provenance` and `citations` to `SourceEvidencePanel`.
+- `console/tests/source-evidence-panel.test.js` — 52 static-analysis tests covering all acceptance criteria.
+- `console/tests/ai-workspace.test.js` — updated 6 tests to read evidence panel content from `SourceEvidencePanel.tsx` instead of the now-removed inline function.
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+
+**Validation results:**
+- `npm test`: 191 pass, 0 fail. `npm run lint`: 0 warnings. `npm run build`: clean.
+
+---
+
 ### 2026-05-10 — PR 27 Retrieval Policy Engine
 
 **Branch:** `pr-27-retrieval-policy-engine`

@@ -20,3 +20,5 @@ export type {
   SourceSummaryItem,
   SourceCitation,
 } from './SourceEvidencePanel';
+export { RetrievalTraceExplorer } from './RetrievalTraceExplorer';
+export type { RetrievalTraceExplorerProps } from './RetrievalTraceExplorer';
