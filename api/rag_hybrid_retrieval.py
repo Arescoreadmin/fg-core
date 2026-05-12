@@ -399,6 +399,7 @@ def _to_chunk(item: _RankedCandidate) -> RagContextChunk:
             title=candidate.title,
             uri=uri,
             page=page,
+            ordinal=candidate.ordinal,
         ),
         lexical_score=candidate.lexical_score,
         semantic_score=candidate.semantic_score,

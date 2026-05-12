@@ -2,6 +2,7 @@
  * source-evidence-panel.test.js
  *
  * Static-analysis tests for PR 46 — Source & Evidence Side Panel
+ * Extended in PR 28 — Reranking Layer (rerank_score, final_score, rerank_reason)
  *
  * Coverage:
  *   - source cards render with rank, chunk ref, scores, metadata
@@ -17,7 +18,7 @@
  *   - invalid provenance state renders explicitly
  *   - no-source state renders safely
  *   - collapsible evidence sections present
- *   - evidence ordering deterministic
+ *   - evidence ordering deterministic (uses final_score when present)
  *   - evidence ordering tie-break deterministic
  *   - no raw vectors rendered
  *   - no raw prompts rendered
@@ -29,6 +30,8 @@
  *   - accessibility basics present
  *   - existing AI workspace tests still pass (smoke)
  *   - existing shell/dashboard tests still pass (smoke)
+ *   - rerank_score and final_score rendered from score_components
+ *   - rerank_reason rendered in why-this-chunk section
  */
 
 const assert = require('node:assert/strict');
@@ -108,7 +111,8 @@ test('source evidence panel renders deterministic ordering', () => {
   // Must sort by rank first
   assert.match(panel, /rrf_rank/);
   assert.match(panel, /lexical_rank/);
-  // Must sort by combined_score second
+  // Must sort by score second (final_score preferred over combined_score)
+  assert.match(panel, /final_score/);
   assert.match(panel, /combined_score/);
   // Must have tie-break by chunk_id
   assert.match(panel, /localeCompare/);
@@ -152,6 +156,47 @@ test('source evidence panel renders scores only when real finite numbers', () =>
   assert.match(panel, /function safeNum/);
   assert.match(panel, /typeof val.*number/);
   assert.match(panel, /isFinite/);
+});
+
+// ─── Reranking scores (PR 28) ─────────────────────────────────────────────────
+
+test('source evidence panel renders rerank_score from score_components', () => {
+  const panel = read(PANEL);
+  assert.match(panel, /rerank_score/);
+  assert.match(panel, /rerank-score-label/);
+  assert.match(panel, /rerank-score-value/);
+  // Must read from score_components sub-object
+  assert.match(panel, /score_components/);
+});
+
+test('source evidence panel renders final_score from score_components', () => {
+  const panel = read(PANEL);
+  assert.match(panel, /final_score/);
+  assert.match(panel, /final-score-label/);
+  assert.match(panel, /final-score-value/);
+});
+
+test('source evidence panel renders rerank_reason in why-this-chunk section', () => {
+  const panel = read(PANEL);
+  assert.match(panel, /rerank_reason/);
+  assert.match(panel, /rerank-reason/);
+  assert.match(panel, /Rerank:/);
+});
+
+test('source evidence panel parseWhyEntry extracts rerank fields from score_components', () => {
+  const panel = read(PANEL);
+  // Must access score_components sub-object safely
+  assert.match(panel, /score_components/);
+  assert.match(panel, /typeof.*score_components.*object/);
+  // Must extract rerank_score and final_score from it
+  assert.match(panel, /sc\[.rerank_score.\]/);
+  assert.match(panel, /sc\[.final_score.\]/);
+});
+
+test('source evidence panel ordering uses final_score when available', () => {
+  const panel = read(PANEL);
+  // orderSummaries must prefer final_score over combined_score
+  assert.match(panel, /final_score.*combined_score/s);
 });
 
 // ─── Why-this-chunk ───────────────────────────────────────────────────────────
@@ -399,12 +444,11 @@ test('source evidence panel future placeholders render safely', () => {
 
 test('source evidence panel future placeholders do not fake metrics', () => {
   const panel = read(PANEL);
-  // Placeholder items must be labeled "not yet available", not have numbers
-  assert.match(panel, /Rerank visualization/);
+  // Rerank visualization is now a real feature — verify remaining placeholders
   assert.match(panel, /Source freshness/);
   assert.match(panel, /Conflicting evidence/);
   assert.match(panel, /Citation lineage/);
-  // Must not show fake rerank scores
+  // Must not show fake rerank scores as literals
   assert.doesNotMatch(panel, /rerank_score.*\d+\.\d+/);
   assert.doesNotMatch(panel, /freshness.*\d+ days/i);
 });

@@ -68,12 +68,16 @@ function safeStrArr(val: unknown): string[] | null {
 function parseWhyEntry(raw: unknown): WhyEntry {
   if (raw === null || typeof raw !== 'object') return {};
   const o = raw as Record<string, unknown>;
+  const sc =
+    o['score_components'] != null && typeof o['score_components'] === 'object'
+      ? (o['score_components'] as Record<string, unknown>)
+      : {};
   return {
     rank_reason: safeStr(o['rank_reason']),
-    lexical_score: safeNum(o['lexical_score']),
-    semantic_score: safeNum(o['semantic_score']),
-    rrf_score: safeNum(o['rrf_score']),
-    combined_score: safeNum(o['combined_score']),
+    lexical_score: safeNum(sc['lexical_score']) ?? safeNum(o['lexical_score']),
+    semantic_score: safeNum(sc['semantic_score']) ?? safeNum(o['semantic_score']),
+    rrf_score: safeNum(sc['rrf_score']) ?? safeNum(o['rrf_score']),
+    combined_score: safeNum(sc['combined_score']) ?? safeNum(o['combined_score']),
     matched_term_count: safeNum(o['matched_term_count']),
     matched_categories: safeStrArr(o['matched_categories']),
     corpus_id: safeStr(o['corpus_id']),
@@ -81,6 +85,9 @@ function parseWhyEntry(raw: unknown): WhyEntry {
     lexical_rank: safeNum(o['lexical_rank']),
     semantic_rank: safeNum(o['semantic_rank']),
     rrf_rank: safeNum(o['rrf_rank']),
+    rerank_score: safeNum(sc['rerank_score']),
+    final_score: safeNum(sc['final_score']),
+    rerank_reason: safeStr(o['rerank_reason']),
   };
 }
 
@@ -97,6 +104,9 @@ interface WhyEntry {
   lexical_rank?: number | null;
   semantic_rank?: number | null;
   rrf_rank?: number | null;
+  rerank_score?: number | null;
+  final_score?: number | null;
+  rerank_reason?: string | null;
 }
 
 function formatScore(n: number): string {
@@ -116,9 +126,9 @@ function orderSummaries(
     const rankA = wa?.rrf_rank ?? wa?.lexical_rank ?? Infinity;
     const rankB = wb?.rrf_rank ?? wb?.lexical_rank ?? Infinity;
     if (rankA !== rankB) return rankA - rankB;
-    // 2) combined_score (higher = better)
-    const scoreA = wa?.combined_score ?? wa?.rrf_score ?? -Infinity;
-    const scoreB = wb?.combined_score ?? wb?.rrf_score ?? -Infinity;
+    // 2) final_score if available, then combined_score (higher = better)
+    const scoreA = wa?.final_score ?? wa?.combined_score ?? wa?.rrf_score ?? -Infinity;
+    const scoreB = wb?.final_score ?? wb?.combined_score ?? wb?.rrf_score ?? -Infinity;
     if (scoreA !== scoreB) return scoreB - scoreA;
     // 3) chunk_id tie-break (stable alphabetical)
     return (a.chunk_id ?? '').localeCompare(b.chunk_id ?? '');
@@ -240,7 +250,9 @@ function SourceCard({
     (whyEntry.lexical_score != null ||
       whyEntry.semantic_score != null ||
       whyEntry.rrf_score != null ||
-      whyEntry.combined_score != null);
+      whyEntry.combined_score != null ||
+      whyEntry.rerank_score != null ||
+      whyEntry.final_score != null);
 
   const retrievalRank =
     whyEntry?.rrf_rank ?? whyEntry?.lexical_rank ?? whyEntry?.semantic_rank ?? rank + 1;
@@ -339,6 +351,22 @@ function SourceCard({
                     </dd>
                   </>
                 )}
+                {whyEntry?.rerank_score != null && (
+                  <>
+                    <dt className="text-[9px] text-muted/60" aria-label="rerank-score-label">Rerank</dt>
+                    <dd className="font-mono text-[10px] text-foreground" aria-label="rerank-score-value">
+                      {formatScore(whyEntry.rerank_score)}
+                    </dd>
+                  </>
+                )}
+                {whyEntry?.final_score != null && (
+                  <>
+                    <dt className="text-[9px] text-muted/60" aria-label="final-score-label">Final</dt>
+                    <dd className="font-mono text-[10px] text-foreground font-semibold" aria-label="final-score-value">
+                      {formatScore(whyEntry.final_score)}
+                    </dd>
+                  </>
+                )}
               </dl>
             ) : (
               <p className="text-[10px] text-muted/50" aria-label="score-unavailable">
@@ -356,6 +384,11 @@ function SourceCard({
                   {whyEntry.rank_reason}
                 </p>
               )}
+              {whyEntry.rerank_reason && (
+                <p className="text-[10px] text-muted/70" aria-label="rerank-reason">
+                  Rerank: {whyEntry.rerank_reason.replace(/_/g, ' ')}
+                </p>
+              )}
               {whyEntry.matched_term_count != null && (
                 <p className="text-[10px] text-muted/60">
                   Matched terms: {whyEntry.matched_term_count}
@@ -367,6 +400,7 @@ function SourceCard({
                 </p>
               )}
               {whyEntry.rank_reason == null &&
+                whyEntry.rerank_reason == null &&
                 whyEntry.matched_term_count == null &&
                 whyEntry.matched_categories == null && (
                   <p className="text-[10px] text-muted/50">Explanation not available</p>
@@ -657,7 +691,6 @@ export function SourceEvidencePanel({
       <CollapsibleSection id="future-capabilities-section" title="Future Capabilities" defaultOpen={false}>
         <ul className="mt-1.5 space-y-1.5" aria-label="future-placeholders-list">
           {[
-            'Rerank visualization',
             'Source freshness',
             'Conflicting evidence detection',
             'Citation lineage',
