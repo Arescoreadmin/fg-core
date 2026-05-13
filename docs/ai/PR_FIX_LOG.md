@@ -8738,3 +8738,50 @@ Added proxy rule: `{ prefix: 'rag/documents', methods: new Set(['GET', 'HEAD']) 
 - PYTHONPATH=. python tools/ci/check_route_inventory.py: route inventory OK
 - make fg-contract: passed
 - Full pytest suite: 417 passed, 3 skipped
+
+---
+
+### 2026-05-13 — PR 50 CI Addendum: corpus placeholder test regression
+
+**Problem**
+ci-console failed with 551/552 tests passing. Single failure:
+  `not ok 99 - placeholder pages display not-configured state`
+  file: `console/tests/console-shell.test.js:188`
+  error: `app/dashboard/corpus/page.tsx: missing not-configured state`
+
+**Root cause**
+`console-shell.test.js` contained three tests with a `placeholders` array that included
+`app/dashboard/corpus/page.tsx`. These tests were written when every dashboard route was
+a stub. PR 50 promoted `corpus/page.tsx` to a full implementation, which no longer
+contains the `/not yet configured/` text or `module-not-configured` aria-label the
+placeholder tests required.
+
+The two companion placeholder tests (no live data fetching; no fake operational data)
+also listed corpus in their arrays but were not yet failing because `page.tsx` itself
+is a server component with no `useEffect`/`fetch()`/`'use client'` directly in the
+file — those are in the `CorpusManagementConsole` component it imports.
+
+**Fix**
+Removed `app/dashboard/corpus/page.tsx` from all three `placeholders` arrays in
+`console-shell.test.js` (lines covering "not-configured state", "no live data fetch",
+"no fake operational data"). Added explanatory comment: corpus graduated to full
+implementation in PR 50.
+
+This is a stale expectation fix, not an implementation fix. The implementation is
+correct. The corpus page is fully covered by `corpus-management-console.test.js` (80
+tests) which validates all invariants including accessibility, governance safety, tenant
+isolation, and export completeness.
+
+**Files changed**
+- `console/tests/console-shell.test.js` — removed corpus from three placeholder arrays
+
+**Validation**
+- npm test (console): 552 passed, 0 failed
+- npm run lint: no warnings or errors
+- npm run build: passed
+- make fg-fast: all checks passed
+- git diff --check: clean
+
+**Governance/provenance regression check**
+None. No governance, provenance, retrieval, or tenant-isolation code changed.
+The only file changed is the test that had a stale placeholder expectation.

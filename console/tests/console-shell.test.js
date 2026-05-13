@@ -187,7 +187,7 @@ test('all required placeholder route files exist', () => {
 
 test('placeholder pages display not-configured state', () => {
   const placeholders = [
-    'app/dashboard/corpus/page.tsx',
+    // corpus graduated to full implementation in PR 50 — no longer a placeholder
     'app/dashboard/retrieval/page.tsx',
     'app/dashboard/provenance/page.tsx',
     'app/dashboard/policies/page.tsx',
@@ -205,7 +205,7 @@ test('placeholder pages display not-configured state', () => {
 
 test('placeholder pages do not fetch live data or use client-side effects', () => {
   const placeholders = [
-    'app/dashboard/corpus/page.tsx',
+    // corpus graduated to full implementation in PR 50 — no longer a placeholder
     'app/dashboard/retrieval/page.tsx',
     'app/dashboard/provenance/page.tsx',
     'app/dashboard/policies/page.tsx',
@@ -224,7 +224,7 @@ test('placeholder pages do not fetch live data or use client-side effects', () =
 
 test('placeholder pages do not render fake operational data', () => {
   const placeholders = [
-    'app/dashboard/corpus/page.tsx',
+    // corpus graduated to full implementation in PR 50 — no longer a placeholder
     'app/dashboard/retrieval/page.tsx',
     'app/dashboard/provenance/page.tsx',
     'app/dashboard/policies/page.tsx',
