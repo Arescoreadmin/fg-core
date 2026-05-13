@@ -6,6 +6,75 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-12 — PR 29 Ingestion Pipeline Hardening
+
+**Branch:** `pr-29-ingestion-pipeline-hardening`
+
+**Task identifier:** PR 29 — Ingestion Pipeline Hardening
+
+**Area:** Persisted RAG ingestion lifecycle; document versioning; deduplication; quarantine; re-index safety; retrieval lifecycle filtering.
+
+**Purpose:** Harden enterprise RAG ingestion so persisted documents and chunks are deterministic, tenant-scoped, auditable, duplicate-aware, quarantine-aware, and safe for future provenance replay, evidence graph, fact extraction, and RAG evaluation features.
+
+**Files changed:**
+- `api/rag_corpus_store.py` — adds lifecycle constants, deterministic source/chunk hashing, hardened document-version ingestion, tenant-scoped deduplication, quarantine records, re-index safety, and source/chunk binding metadata.
+- `api/rag_retrieval.py` — excludes non-current, non-indexed, or inactive chunks when lifecycle columns exist.
+- `api/rag_semantic_retrieval.py` — applies the same lifecycle filtering to semantic/hybrid lexical candidate loading.
+- `api/rag_hybrid_retrieval.py` — applies lifecycle filtering to hybrid RRF lexical and semantic candidate loading.
+- `api/db.py` — extends SQLite bootstrap/auto-migration with additive ingestion lifecycle columns and indexes.
+- `migrations/postgres/0040_rag_ingestion_lifecycle.sql` — adds additive Postgres lifecycle/version/chunk proof columns, status constraint, and tenant-scoped indexes.
+- `tests/test_rag_ingestion_hardening.py` — covers versioning, duplicate handling, cross-tenant duplicate isolation, quarantine, re-index safety, source hash mismatch, stale chunk exclusion, audit redaction, and source/chunk proof fields.
+- `docs/ai/INGESTION_PIPELINE_HARDENING.md` — documents lifecycle, versioning, dedupe, quarantine, re-index safety, retrieval boundary, audit safety, and known limitation.
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+
+**Schema/migration changes:**
+- `rag_documents`: `version_id`, `source_hash`, `normalized_source_hash`, `version_number`, `is_current`, `ingestion_status`, `quarantine_reason`, `failure_reason`, `indexed_at`, `superseded_at`, `superseded_by_version_id`.
+- `rag_chunks`: `document_version_id`, `source_hash`, `is_active`.
+- Existing rows default to current indexed active behavior for backward compatibility.
+
+**Ingestion lifecycle changes:**
+- New hardened path creates indexed document versions or quarantined document records.
+- Superseded versions remain auditable and their chunks are inactive by default retrieval.
+- Failed/quarantined documents are not marked indexed.
+
+**Deduplication behavior:**
+- Duplicate detection is tenant/corpus scoped by deterministic `source_hash`.
+- Same tenant/corpus duplicate returns `duplicate` and does not add chunks.
+- Cross-tenant identical content ingests independently without existence leakage.
+
+**Re-index safety behavior:**
+- Re-index requires tenant, corpus, document, and version binding.
+- Superseded/stale versions and source-hash mismatches fail closed.
+- Replacement chunks are deterministic and old chunks for the same version are marked inactive.
+- Limitation: current helper-level commits prevent a full shadow-index atomic swap; the implementation uses the smallest safe approximation and tests stale/partial visibility boundaries.
+
+**Quarantine behavior:**
+- Empty and unsupported documents produce tenant-scoped `quarantined` rows with safe reason/detail metadata.
+- Quarantined rows create no active chunks or embeddings and are excluded from retrieval.
+
+**Tenant isolation proof:**
+- Every lookup and mutation is tenant scoped.
+- Cross-tenant duplicate and re-index tests verify no foreign document visibility or mutation.
+
+**Provenance/source binding impact:**
+- Hardened chunks carry `document_version_id`, `source_hash`, chunk content hash, deterministic chunk IDs, and future-ready evidence/fact/evaluation metadata.
+
+**Validation results:**
+- `pytest -q tests/test_rag_ingestion_hardening.py`: PASS — 9 passed.
+- `pytest -q tests/test_migrations_postgres_replay.py tests/test_migrations_postgres_smoke.py`: SKIPPED — Postgres migration prerequisites unavailable locally.
+- `pytest -q tests/embeddings`: PASS — 138 passed.
+- `pytest -q tests/security`: PASS — 677 passed, 1 skipped.
+- `pytest -q tests -k "ingest or ingestion or corpus or document or chunk or embedding or rag or retrieval"`: PASS — 788 passed, 2 skipped, 2857 deselected.
+- `make fg-fast`: PASS.
+- `bash codex_gates.sh`: PASS — 3631 passed, 26 skipped; dependency audit clean; contract/authority checks passed.
+- `pytest -q tests/test_ai_plane_extension.py::test_ai_chat_grounded_response_returns_safe_contract tests/test_ai_plane_extension.py::test_ai_chat_ungrounded_response_returns_no_answer_and_hashes_final_answer`: PASS after removing `provenance` from `/ai/chat` responses — 2 passed.
+
+**Known limitations:**
+- Full transactional shadow-index swap is deferred until the persistence layer stops committing inside helper functions.
+- No new public ingestion API route is added; hardening is service-layer and retrieval-boundary only.
+
+---
+
 ### 2026-05-12 — PR 48 Provenance Validation UI
 
 **Branch:** `pr-48-provenance-validation-ui`

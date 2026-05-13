@@ -753,7 +753,6 @@ class AIPlaneService:
             "answer": str(result.get("response") or ""),
             "sources": sources,
             "confidence": confidence,
-            "provenance": result.get("provenance"),
         }
 
     def list_inference(self, db: Session, tenant_id: str) -> list[dict[str, object]]:

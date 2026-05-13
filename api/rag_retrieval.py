@@ -113,6 +113,37 @@ def _metadata_int(metadata: dict[str, Any], *keys: str) -> int | None:
     return None
 
 
+def _table_columns(conn: Session, table: str) -> set[str]:
+    bind = conn.get_bind()
+    dialect = bind.dialect.name if bind is not None else ""
+    if dialect == "sqlite":
+        rows = list(conn.execute(text(f"PRAGMA table_info({table})")))
+        return {str(row[1]) for row in rows}
+    rows = list(
+        conn.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = :table"
+            ),
+            {"table": table},
+        )
+    )
+    return {str(row[0]) for row in rows}
+
+
+def _lifecycle_filter(conn: Session) -> str:
+    doc_cols = _table_columns(conn, "rag_documents")
+    chunk_cols = _table_columns(conn, "rag_chunks")
+    clauses: list[str] = []
+    if "is_active" in chunk_cols:
+        clauses.append("COALESCE(c.is_active, TRUE) = TRUE")
+    if "ingestion_status" in doc_cols:
+        clauses.append("COALESCE(d.ingestion_status, 'indexed') = 'indexed'")
+    if "is_current" in doc_cols:
+        clauses.append("COALESCE(d.is_current, TRUE) = TRUE")
+    return "\n          AND ".join(clauses)
+
+
 def retrieve_rag_context(
     conn: Session,
     request: RagContextRequest,
@@ -148,6 +179,8 @@ def retrieve_rag_context(
         )
 
     unique_query_terms = list(dict.fromkeys(query_terms))
+    lifecycle_filter = _lifecycle_filter(conn)
+    lifecycle_sql = f"AND {lifecycle_filter}" if lifecycle_filter else ""
     like_clauses = []
     params: dict[str, Any] = {
         "tenant_id": tenant_id,
@@ -182,6 +215,7 @@ def retrieve_rag_context(
          AND corp.tenant_id = c.tenant_id
         WHERE c.tenant_id = :tenant_id
           AND (:use_corpus_filter = 0 OR c.corpus_id IN :corpus_ids)
+          {lifecycle_sql}
           AND ({lexical_prefilter})
         ORDER BY c.corpus_id ASC, c.document_id ASC, c.ordinal ASC, c.chunk_id ASC
         """
