@@ -674,13 +674,18 @@ class AIPlaneService:
             )
         out = response_validation.final_text
 
-        # Enforce require_grounded_response / no_answer_on_ungrounded from effective
-        # retrieval policy (DB-stored takes precedence over file-based default).
-        if effective_rag_rules.require_grounded_response and not response_validation.grounded:
-            if effective_rag_rules.no_answer_on_ungrounded:
-                self._record_violation(db, tenant_id, "RETRIEVAL_POLICY_GROUNDING_REQUIRED")
-                db.commit()
-                raise ValueError("RETRIEVAL_POLICY_GROUNDING_REQUIRED")
+        # Enforce require_grounded_response / no_answer_on_ungrounded only when an
+        # operator has explicitly saved a DB retrieval policy. File-based defaults
+        # use the existing NO_ANSWER return path and must not raise.
+        if (
+            _db_rag_rules is not None
+            and effective_rag_rules.require_grounded_response
+            and not response_validation.grounded
+            and effective_rag_rules.no_answer_on_ungrounded
+        ):
+            self._record_violation(db, tenant_id, "RETRIEVAL_POLICY_GROUNDING_REQUIRED")
+            db.commit()
+            raise ValueError("RETRIEVAL_POLICY_GROUNDING_REQUIRED")
 
         ok_out, code_out = policy_engine.evaluate_output(out)
         if not ok_out:
@@ -787,7 +792,6 @@ class AIPlaneService:
             "answer": str(result.get("response") or ""),
             "sources": sources,
             "confidence": confidence,
-            "provenance": result.get("provenance"),
         }
 
     def list_inference(self, db: Session, tenant_id: str) -> list[dict[str, object]]:

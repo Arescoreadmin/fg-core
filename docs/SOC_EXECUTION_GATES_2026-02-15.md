@@ -2942,3 +2942,24 @@ Validation:
 - make route-inventory-generate
 - make fg-fast
 - make soc-review-sync
+
+## PR 49 Addendum — /rag plane registry registration (2026-05-13)
+
+`services/plane_registry/registry.py`: added `/rag` route prefix to the `control` plane.
+`tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory.json`,
+`tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256` regenerated via
+`make route-inventory-generate` + `python3 scripts/generate_platform_inventory.py`.
+
+SOC review:
+- `/rag` routes use `governance:write` scope — correctly assigned to the `control` plane
+  (same scope family as `/governance/changes` and other governance endpoints).
+- No auth, middleware, CI workflow, or OPA policy altered.
+- No secrets added or changed. tools/ci changes are route-inventory regeneration only.
+- Plane registry snapshot is a generated audit artifact; no enforcement logic changed.
+
+Validation:
+- make route-inventory-generate
+- python3 scripts/generate_platform_inventory.py
+- pytest tests/test_plane_registry.py tests/test_platform_inventory_determinism.py
+- make fg-fast
+- make soc-review-sync

@@ -560,7 +560,8 @@
         "/admin",
         "/_debug",
         "/_legacy",
-        "/dev"
+        "/dev",
+        "/rag"
       ]
     },
     {
@@ -975,7 +976,7 @@
       ]
     }
   ],
-  "generated_at": "2026-05-13T09:53:41.479122+00:00",
+  "generated_at": "2026-05-13T12:12:39.881374+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 import pytest
 
 os.environ.setdefault("FG_ENV", "test")
@@ -128,7 +128,7 @@ def test_db_rag_policy_loaded_and_used_in_infer(
         )
 
     assert result["ok"] is True
-    prov = result["provenance"]
+    prov = cast(dict[str, Any], result["provenance"])
     assert prov["retrieval_policy_applied"] is True
     assert prov["rag_enabled"] is True
 
@@ -346,7 +346,7 @@ def test_no_db_policy_reranking_uses_default(
     # rerank_config=None passed → backward-compatible default (enabled=True inside rag_context)
     assert len(captured_configs) == 1
     assert captured_configs[0] is None
-    prov = result["provenance"]
+    prov = cast(dict[str, Any], result["provenance"])
     assert prov["retrieval_policy_applied"] is False
 
 
@@ -614,7 +614,7 @@ def test_denied_corpus_excluded_via_db_policy_in_infer(
             db, "tenant-a", AIInferRequest(query="mfa policy content")
         )
 
-    prov = result["provenance"]
+    prov = cast(dict[str, Any], result["provenance"])
     assert prov["retrieval_policy_applied"] is True
     # Corpus-level enforcement is proven in test_rag_retrieval_policy_wiring.py;
     # here we verify the infer() path returns ok with policy applied.
