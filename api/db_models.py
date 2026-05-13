@@ -1917,6 +1917,48 @@ class ReportRecord(Base):
     completed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class TenantRetrievalPolicy(Base):
+    """DB-backed tenant-scoped retrieval policy. One row per tenant, upserted on PUT."""
+
+    __tablename__ = "tenant_retrieval_policies"
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[Any] = mapped_column(
+        String(128), nullable=False, unique=True, index=True
+    )
+    rag_enabled: Mapped[Any] = mapped_column(Boolean, nullable=False, default=True)
+    allowed_corpus_ids: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    denied_corpus_ids: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    max_top_k: Mapped[Any] = mapped_column(Integer, nullable=False, default=4)
+    allowed_retrieval_strategies: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=lambda: ["lexical"]
+    )
+    require_grounded_response: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    no_answer_on_ungrounded: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    require_grounded_context: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    allow_lexical_fallback: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    allow_semantic: Mapped[Any] = mapped_column(Boolean, nullable=False, default=False)
+    allow_no_context_answer: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    reranking_enabled: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    policy_version: Mapped[Any] = mapped_column(Integer, nullable=False, default=1)
+    updated_by: Mapped[Any] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
 class StripeEvent(Base):
     """Raw Stripe webhook events — used for idempotency and audit."""
 

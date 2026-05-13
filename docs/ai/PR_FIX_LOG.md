@@ -8477,3 +8477,159 @@ Admin dev mode was not fail-closed in staging (only `is_prod` checked, not `is_p
 - Known missed reference: migrations/postgres/0017_ai_plane_policy_hardening.sql contains COALESCE(retrieval_id, 'stub')
 - Fix: added .sql to scan scope; classified SQL migration references as historical in inventory doc
 - Tests added: SQL inclusion, SQL migration documentation coverage
+
+---
+
+## PR 49 Addendum — Retrieval Policy Persistence & Enforcement Wiring
+
+### Summary
+Wired the Retrieval Policy Center (PR 49) to a real DB-backed backend. The UI
+now calls live endpoints; all policy saves are validated server-side, audit-logged,
+and persisted. Denied corpora are enforced by the retrieval policy engine via the
+stored AiRagRules, not just previewed in the UI.
+
+### Files changed
+- `migrations/postgres/0041_rag_retrieval_policy.sql` — NEW: tenant_retrieval_policies table
+- `api/db_models.py` — added TenantRetrievalPolicy ORM model
+- `api/rag_retrieval_policy_store.py` — NEW: get/upsert/rag_rules_from_db
+- `api/rag_retrieval_policy.py` — NEW: FastAPI router (GET + PUT /rag/retrieval-policy, GET /rag/corpora)
+- `api/main.py` — registered rag_retrieval_policy_router
+- `console/app/api/core/[...path]/route.ts` — added rag/retrieval-policy + rag/corpora to PROXY_RULES
+- `console/lib/retrievalPolicyApi.ts` — NEW: typed API client (getRetrievalPolicy, putRetrievalPolicy, getCorpora)
+- `console/components/governance/RetrievalPolicyCenterContainer.tsx` — NEW: client component with data fetch + onSave
+- `console/components/governance/index.ts` — exports RetrievalPolicyCenterContainer
+- `console/app/dashboard/retrieval/page.tsx` — uses RetrievalPolicyCenterContainer (real data, not null)
+- `tests/test_rag_retrieval_policy_wiring.py` — NEW: backend wiring tests
+- `console/tests/retrieval-policy-center.test.js` — extended: addendum wiring tests
+
+### Schema/API changes
+- New table: `tenant_retrieval_policies` (one row per tenant, upserted on PUT)
+- New endpoints: GET /rag/retrieval-policy, PUT /rag/retrieval-policy, GET /rag/corpora
+- All gated on: verify_api_key + governance:write scope
+
+### Retrieval governance behavior
+- Policy persists to DB; survives restart
+- GET returns stored policy or 404 (not configured)
+- PUT validates then writes; audit-logged
+- rag_rules_from_db() converts DB row to AiRagRules for evaluate_retrieval_policy()
+- Denied corpora: excluded from effective_corpus_ids by evaluate_retrieval_policy()
+
+### Validation behavior
+- top_k: 1–20 enforced server-side; rejects out-of-bounds values with INVALID_TOP_K
+- strategy: rejects unknown values with UNSUPPORTED_STRATEGY
+- corpus: rejects allow+deny overlap with CONTRADICTORY_CORPUS
+- semantic: rejects allow_semantic=True without semantic strategy with INCOMPATIBLE_SEMANTIC
+- All errors machine-readable; no silent coercion; fail-closed
+
+### Tenant isolation proof
+- get_retrieval_policy() filters strictly by tenant_id; returns None for other tenants
+- upsert_retrieval_policy() creates separate rows; never touches another tenant's row
+- rag_rules_from_db() isolates by tenant_id; never constructs rules from another tenant
+- BFF proxy injects CORE_TENANT_ID; client cannot supply a different tenant_id
+
+### Audit behavior
+- PUT _audit_policy_change() logs: tenant_id, actor (key prefix), policy_version,
+  request_id, max_top_k, boolean enforcement flags, corpus list counts
+- Does NOT log: corpus IDs, provider secrets, raw prompts, vectors, document content
+
+### UI/export-safety notes
+- RetrievalPolicyCenterContainer: 'use client'; no dangerouslySetInnerHTML
+- Loading / apiFailure / notConfigured states render safely with aria labels
+- Save errors from backend parsed into RetrievalPolicyValidationError[] for UI display
+- Available corpora fetched from tenant-scoped GET /rag/corpora (no cross-tenant)
+- grounded_answer_required persisted in DB and reflected in UI (no fake toggle)
+
+### Tests added/updated
+- tests/test_rag_retrieval_policy_wiring.py: 30+ tests covering persistence, isolation,
+  validation, rag_rules_from_db, retrieval engine enforcement, audit safety
+- console/tests/retrieval-policy-center.test.js: ~40 addendum tests for container,
+  api client, proxy rules, page integration
+
+### Known limitations
+- PUT /rag/retrieval-policy stores policy in DB but the UI_AI_CONSOLE answering path
+  (ui_ai_console.py) still loads AiRagRules from resolve_ai_policy_for_tenant()
+  (file-based). The DB policy affects retrieval when rag_rules_from_db() is explicitly
+  called; wiring into the AI answer path requires a separate PR.
+- Router-level integration tests (TestClient) are skipped — require full auth middleware
+  stack. Backend logic is covered by direct store + engine tests.
+
+### Future-ready hooks intentionally added
+- rag_rules_from_db() provides the hook for any caller to load policy from DB
+- TenantRetrievalPolicy model includes reranking_enabled for future rerank policy wiring
+
+---
+
+## PR 49 Addendum — Grounded Enforcement Runtime Closure + Initial Policy Draft (2026-05-13)
+
+**Branch**: pr-49-retrieval-policy-center
+
+### Summary
+Closes the gap identified in PR 49's known-limitations section: wires the DB-stored
+retrieval policy into both AI answer paths and enables new tenants to create their
+first policy from the UI.
+
+### Part A — CI Route Authority Fix (committed in PR #322)
+Root cause: rag_retrieval_policy_router was included in the runtime app but NOT in
+build_contract_app() in api/main.py, so scripts/contracts_gen_core.py omitted the
+/rag/ routes from contracts/core/openapi.json, triggering UNAUTHORIZED runtime_only
+drift errors in make fg-fast.
+Fix: added app.include_router(rag_retrieval_policy_router) to build_contract_app(),
+regenerated contract, updated Contract-Authority-SHA256 markers in BLUEPRINT_STAGED.md
+and CONTRACT.md, fixed ruff lint, regenerated route inventory.
+
+### Part B — Runtime Policy Enforcement
+
+**services/ai_plane_extension/service.py (AIPlaneService.infer)**
+- Loads DB policy at infer() time: get_retrieval_policy() for reranking_enabled flag,
+  rag_rules_from_db() for AiRagRules. DB policy takes precedence over file-based rules.
+- Passes effective_rag_rules to retrieve_persisted_rag_context() for corpus filtering,
+  top-k capping, and strategy enforcement.
+- Passes RerankConfig(enabled=...) derived from DB reranking_enabled field to rerank_response().
+- Enforces grounding after validation: if require_grounded_response and not grounded and
+  no_answer_on_ungrounded → records violation + raises RETRIEVAL_POLICY_GROUNDING_REQUIRED.
+- Provenance dict now includes: retrieval_policy_applied, grounded_required,
+  no_answer_on_ungrounded, rag_enabled.
+
+**api/ui_ai_console.py (POST /ui/ai/chat)**
+- Loads rag_rules_from_db() after auth; falls back to ai_policy.rag_rules if no DB policy.
+- Checks allow_no_context_answer: if policy requires grounded answer and disallows no-context
+  answers, returns 400 RETRIEVAL_POLICY_NO_CONTEXT before consuming quota.
+- Provenance dict updated with same policy metadata fields as service.py.
+
+### Part C — Initial Policy Creation (new tenant flow)
+
+**console/components/governance/RetrievalPolicyCenter.tsx**
+- Exported buildDefaultRetrievalPolicyDraft(): returns sensible lexical defaults.
+- Removed MISSING_TENANT_ID validation (tenant_id is display-only from backend,
+  never sent in PUT body).
+- Header conditionally renders tenant line only when tenant_id is non-empty.
+
+**console/components/governance/RetrievalPolicyCenterContainer.tsx**
+- On GET 404: setPolicy(buildDefaultRetrievalPolicyDraft()) instead of leaving
+  policy=null. Operator sees the full editor, not a placeholder.
+- Removed notConfigured && !policy early-return block (now dead code).
+- Adds an amber "No retrieval policy saved yet" banner above the center when
+  notConfigured=true. Banner cleared on successful PUT.
+
+### Tests added
+- tests/test_rag_grounded_enforcement.py: 13 tests covering:
+  - DB policy loaded and used in infer() with precedence over file rules
+  - require_grounded_response=True blocks ungrounded answer (ValueError)
+  - no_answer_on_ungrounded=False allows ungrounded answer through
+  - reranking_enabled=False from DB disables reranker
+  - reranking_enabled=True from DB enables reranker
+  - No DB policy row: reranking defaults enabled (backward compatible)
+  - rag_enabled=False blocks retrieval (RETRIEVAL_POLICY_DISABLED)
+  - UI console: allow_no_context_answer=False + require_grounded blocks (400)
+  - UI console: default policy does not block
+  - Tenant A policy does not affect tenant B
+  - No DB policy row: falls back to ai_policy.rag_rules
+  - Denied corpus excluded via DB policy in infer()
+  - UI console provenance contains policy metadata fields
+
+### Validation
+- make fg-fast: passes (all checks + pytest fast suite)
+- .venv/bin/pytest tests/test_rag_grounded_enforcement.py
+  tests/test_rag_retrieval_policy_wiring.py: 39 passed, 3 skipped
+- npm run lint (console): no warnings or errors
+- npx tsc --noEmit: no type errors

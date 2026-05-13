@@ -27,9 +27,9 @@
     }
   ],
   "governance": {
-    "contract_count": 167,
+    "contract_count": 170,
     "contract_only": [],
-    "runtime_count": 253,
+    "runtime_count": 256,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -117,7 +117,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "75717ae59a339a5e2974c6ac3e70798f8995d2bbdcc8735b3b15a56d50223254",
+  "governance_fingerprint": "681f224a66f9d1665bb02e4ea18fd8b3b2dd43871b6be928d0f931cc80469a44",
   "planes": [
     {
       "compat": {
@@ -187,6 +187,7 @@
         "/health",
         "/internal",
         "/planes",
+        "/rag",
         "/status"
       ]
     },
@@ -354,6 +355,8 @@
       "GET /health/live",
       "GET /health/ready",
       "GET /planes",
+      "GET /rag/corpora",
+      "GET /rag/retrieval-policy",
       "GET /status",
       "POST /admin/agent/commands/issue",
       "POST /admin/agent/devices/{device_id}/disable",
@@ -410,7 +413,8 @@
       "POST /internal/connectors/{connector_id}/ingest",
       "PUT /admin/agent/version-floor",
       "PUT /admin/tenants/{tenant_id}/quota",
-      "PUT /admin/tenants/{tenant_id}/tier"
+      "PUT /admin/tenants/{tenant_id}/tier",
+      "PUT /rag/retrieval-policy"
     ],
     "data": [
       "GET /billing/devices",
