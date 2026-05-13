@@ -75,6 +75,25 @@
       "AIInferRequest": {
         "additionalProperties": false,
         "properties": {
+          "compliance_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "strict_grounded",
+                  "retrieval_preferred",
+                  "phi_restricted",
+                  "legal_grade",
+                  "finance_grade",
+                  "internal_ops"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compliance Mode"
+          },
           "provider": {
             "anyOf": [
               {

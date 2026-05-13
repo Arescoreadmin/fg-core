@@ -745,6 +745,270 @@ def test_ai_infer_openapi_contract_remains_generic_for_additive_payload(
     }
 
 
+def test_ai_infer_returns_evidence_aware_response_with_source_proof(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from services.ai_plane_extension.models import AIInferRequest
+    from services.ai_plane_extension.service import AIPlaneService
+
+    db_path = tmp_path / "ai-plane-evidence-aware.db"
+    source_hash = hashlib.sha256(b"alpha-source").hexdigest()
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
+    monkeypatch.setenv("FG_AI_ALLOWED_PROVIDERS", "simulated")
+    monkeypatch.setenv("FG_AI_DEFAULT_PROVIDER", "simulated")
+    monkeypatch.setenv("FG_AI_ENABLE_SIMULATED", "1")
+    reset_engine_cache()
+    init_db(sqlite_path=str(db_path))
+    with get_sessionmaker()() as db:
+        chunks = _seed_persisted_chunks(
+            db,
+            tenant_id="tenant-a",
+            chunks=[
+                {
+                    "text": "alpha control evidence",
+                    "ordinal": 0,
+                    "source_hash": source_hash,
+                }
+            ],
+        )
+        chunk_id = str(chunks[0]["chunk_id"])
+        corpus_id = str(chunks[0]["corpus_id"])
+        document_id = str(chunks[0]["document_id"])
+
+        def _provider(**_kw) -> ProviderResponse:
+            return ProviderResponse(
+                provider_id="simulated",
+                text=f"alpha control evidence [chunk_id={chunk_id}]",
+                model="SIMULATED_V1",
+            )
+
+        monkeypatch.setattr(
+            "services.ai_plane_extension.service._call_provider", _provider
+        )
+        result = AIPlaneService().infer(
+            db,
+            "tenant-a",
+            AIInferRequest(
+                query="alpha control",
+                compliance_mode="strict_grounded",
+            ),
+        )
+
+    assert result["answer"] == "alpha control evidence [chunk_id=%s]" % chunk_id
+    assert result["response"] == result["answer"]
+    evidence = cast(list[dict[str, Any]], result["evidence"])
+    assert len(evidence) == 1
+    item = evidence[0]
+    assert item["doc_id"] == document_id
+    assert item["chunk_id"] == chunk_id
+    assert item["source_hash"] == source_hash
+    assert item["corpus_id"] == corpus_id
+    assert item["citation_label"] == chunk_id
+    assert item["source_title"] == "Test RAG Document"
+    assert item["support_summary"] == (
+        "Source-backed retrieved chunk #1; raw chunk text omitted."
+    )
+    assert 0.0 <= float(item["confidence"]) <= 1.0
+    assert item["retrieval_rank"] == 1
+    assert item["provenance_status"] == "PROVENANCE_VALID"
+    assert result["uncertainty"] == []
+    assert float(cast(float, result["risk_score"])) < 0.25
+    assert result["requires_human_review"] is False
+    evidence_response = cast(dict[str, Any], result["evidence_response"])
+    assert evidence_response["compliance_mode"] == "strict_grounded"
+    assert evidence_response["retrieval_policy_applied"] is False
+    assert evidence_response["provenance_status"] == "PROVENANCE_VALID"
+    assert evidence_response["risk_factors"] == []
+    assert "alpha control evidence" not in json.dumps(evidence, sort_keys=True)
+
+
+def test_ai_infer_missing_source_hash_increases_risk_and_uncertainty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.ai_plane_extension as ai_api
+    from services.ai_plane_extension.service import AIPlaneService
+
+    client, key_a, _ = _setup_client(tmp_path, ai_enabled=True)
+    rag_chunks = _chunks("tenant-a", "source-a", "authentication control evidence")
+    monkeypatch.setattr(ai_api, "service", AIPlaneService(rag_chunks=rag_chunks))
+
+    def _provider(**_kw) -> ProviderResponse:
+        return ProviderResponse(
+            provider_id="simulated",
+            text="authentication control evidence",
+            model="SIMULATED_V1",
+        )
+
+    monkeypatch.setattr("services.ai_plane_extension.service._call_provider", _provider)
+
+    resp = client.post(
+        "/ai/infer",
+        json={
+            "query": "authentication control",
+            "compliance_mode": "legal_grade",
+        },
+        headers={"X-API-Key": key_a},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["evidence"][0]["source_hash"] is None
+    assert "source_hash_missing" in body["evidence_response"]["risk_factors"]
+    reason_codes = {item["reason_code"] for item in body["uncertainty"]}
+    assert {"source_hash_missing", "regulated_domain"} <= reason_codes
+    assert body["risk_score"] >= 0.35
+    assert body["requires_human_review"] is True
+    assert "risk_threshold_exceeded" in body["evidence_response"]["review_reasons"]
+
+
+def test_ai_infer_invalid_citation_not_labeled_as_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import api.ai_plane_extension as ai_api
+    from services.ai_plane_extension.service import AIPlaneService
+
+    client, key_a, _ = _setup_client(tmp_path, ai_enabled=True)
+    rag_chunks = _chunks("tenant-a", "source-a", "authentication control evidence")
+    monkeypatch.setattr(ai_api, "service", AIPlaneService(rag_chunks=rag_chunks))
+
+    def _provider(**_kw) -> ProviderResponse:
+        return ProviderResponse(
+            provider_id="simulated",
+            text="authentication control evidence [chunk_id=ck-fake]",
+            model="SIMULATED_V1",
+        )
+
+    monkeypatch.setattr("services.ai_plane_extension.service._call_provider", _provider)
+
+    resp = client.post(
+        "/ai/infer",
+        json={"query": "authentication control", "compliance_mode": "strict_grounded"},
+        headers={"X-API-Key": key_a},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["answer"] == "NO_ANSWER"
+    assert body["evidence"] == []
+    assert body["inference"] == []
+    assert body["provenance"]["provenance_status"] == "PROVENANCE_SOURCE_NOT_RETRIEVED"
+    assert body["risk_score"] == 1.0
+    assert body["requires_human_review"] is True
+    assert "provenance_validation_failed" in body["evidence_response"]["review_reasons"]
+    assert "ck-fake" not in json.dumps(body["evidence"], sort_keys=True)
+
+
+def test_ai_infer_unknown_compliance_mode_fails_closed(tmp_path: Path) -> None:
+    client, key_a, _ = _setup_client(tmp_path, ai_enabled=True)
+    resp = client.post(
+        "/ai/infer",
+        json={"query": "hello", "compliance_mode": "casual"},
+        headers={"X-API-Key": key_a},
+    )
+
+    assert resp.status_code == 422
+
+
+def test_evidence_response_detects_multi_corpus_disagreement() -> None:
+    from services.ai.rag_context import RagContextChunk, RagContextResult
+    from services.ai.response_validation import ResponseValidationResult
+    from services.ai.policy import AiRagRules
+    from services.ai_plane_extension.service import _build_evidence_aware_response
+
+    rag_context = RagContextResult(
+        chunks=(
+            RagContextChunk(
+                source_id="ck-a",
+                chunk_id="ck-a",
+                chunk_index=0,
+                text="retention period is 30 days",
+                phi_sensitivity_level=None,
+                phi_types=(),
+                doc_id="doc-a",
+                corpus_id="corpus-a",
+                source_hash="a" * 64,
+                confidence=0.8,
+                retrieval_rank=1,
+            ),
+            RagContextChunk(
+                source_id="ck-b",
+                chunk_id="ck-b",
+                chunk_index=1,
+                text="retention period has a conflicting different value",
+                phi_sensitivity_level=None,
+                phi_types=(),
+                doc_id="doc-b",
+                corpus_id="corpus-b",
+                source_hash="b" * 64,
+                confidence=0.8,
+                retrieval_rank=2,
+            ),
+        ),
+        context_text="[chunk_id=ck-a]\nretention period is 30 days\n\n"
+        "[chunk_id=ck-b]\nretention period has a conflicting different value",
+        chunk_count=2,
+        source_ids=("ck-a", "ck-b"),
+        retrieval_reason_code="RAG_RETRIEVAL_SELECTED",
+        query_phi_sensitivity="none",
+        max_sensitivity_level=None,
+        contains_phi=False,
+        source_chunk_ids=("ck-a", "ck-b"),
+        retrieved_source_chunk_ids=("ck-a", "ck-b"),
+        retrieval_strategy="lexical",
+        confidence=0.8,
+    )
+    validation = ResponseValidationResult(
+        grounded=True,
+        final_text="retention period is 30 days",
+        reason_code="RESPONSE_GROUNDED",
+        citation_source_ids=("ck-a", "ck-b"),
+        validator_version="test",
+        evidence_count=2,
+        provenance_reason_code="PROVENANCE_VALID",
+        provenance_valid=True,
+    )
+    rules = AiRagRules(
+        enabled=True,
+        require_grounded_response=True,
+        no_answer_on_ungrounded=True,
+        allowed_corpus_ids=(),
+        denied_corpus_ids=(),
+        max_top_k=4,
+        allowed_retrieval_strategies=("lexical",),
+        require_grounded_context=False,
+        allow_lexical_fallback=False,
+        allow_semantic=False,
+        allow_no_context_answer=True,
+    )
+
+    response = _build_evidence_aware_response(
+        answer="retention period is 30 days",
+        rag_context=rag_context,
+        response_validation=validation,
+        compliance_mode="retrieval_preferred",
+        retrieval_policy_applied=False,
+        effective_rag_rules=rules,
+        policy_version=1,
+    )
+
+    response_evidence = cast(list[dict[str, Any]], response["evidence"])
+    response_risk_factors = cast(list[str], response["risk_factors"])
+    response_uncertainty = cast(list[dict[str, Any]], response["uncertainty"])
+    response_review_reasons = cast(list[str], response["review_reasons"])
+    assert {item["corpus_id"] for item in response_evidence} == {
+        "corpus-a",
+        "corpus-b",
+    }
+    assert "corpus_disagreement" in response_risk_factors
+    assert any(
+        item["reason_code"] == "corpus_disagreement" for item in response_uncertainty
+    )
+    assert response["requires_human_review"] is True
+    assert "corpus_disagreement" in response_review_reasons
+    assert float(cast(float, response["risk_score"])) >= 0.25
+
+
 def test_ai_plane_response_metadata_empty_when_no_context(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -31,6 +31,8 @@ class RagChunkProvenance(BaseModel):
     corpus_id: str = Field(..., min_length=1)
     document_id: str = Field(..., min_length=1)
     chunk_id: str = Field(..., min_length=1)
+    source_hash: Optional[str] = None
+    document_version_id: Optional[str] = None
     source: Optional[str] = None
     title: Optional[str] = None
     uri: Optional[str] = None

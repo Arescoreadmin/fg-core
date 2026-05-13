@@ -80,6 +80,7 @@ from api.rag_retrieval import (
     _require_tenant,
     _lifecycle_filter,
     _score_text,
+    _table_columns,
     _tokenize,
 )
 
@@ -256,6 +257,23 @@ def _lexical_candidates(
     unique_query_terms = list(dict.fromkeys(query_terms))
     lifecycle_filter = _lifecycle_filter(db)
     lifecycle_sql = f"AND {lifecycle_filter}" if lifecycle_filter else ""
+    chunk_columns = _table_columns(db, "rag_chunks")
+    document_columns = _table_columns(db, "rag_documents")
+    chunk_source_hash_sql = (
+        "c.source_hash AS chunk_source_hash"
+        if "source_hash" in chunk_columns
+        else "NULL AS chunk_source_hash"
+    )
+    document_version_sql = (
+        "c.document_version_id"
+        if "document_version_id" in chunk_columns
+        else "NULL AS document_version_id"
+    )
+    document_source_hash_sql = (
+        "d.source_hash AS document_source_hash"
+        if "source_hash" in document_columns
+        else "NULL AS document_source_hash"
+    )
     like_clauses = []
     params: dict = {
         "tenant_id": tenant_id,
@@ -276,9 +294,12 @@ def _lexical_candidates(
             c.corpus_id,
             c.text,
             c.ordinal,
+            {chunk_source_hash_sql},
+            {document_version_sql},
             c.metadata AS chunk_metadata,
             d.title,
             d.source,
+            {document_source_hash_sql},
             d.metadata AS document_metadata
         FROM rag_chunks c
         JOIN rag_documents d
@@ -348,6 +369,8 @@ def _build_chunk(
             corpus_id=str(row["corpus_id"]),
             document_id=str(row["document_id"]),
             chunk_id=chunk_id,
+            source_hash=row.get("chunk_source_hash") or row.get("document_source_hash"),
+            document_version_id=row.get("document_version_id"),
             source=row.get("source"),
             title=row.get("title"),
             uri=uri,
