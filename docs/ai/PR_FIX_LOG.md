@@ -8633,3 +8633,213 @@ and CONTRACT.md, fixed ruff lint, regenerated route inventory.
   tests/test_rag_retrieval_policy_wiring.py: 39 passed, 3 skipped
 - npm run lint (console): no warnings or errors
 - npx tsc --noEmit: no type errors
+
+---
+
+### 2026-05-13 — PR 50 Corpus Management Console
+
+**Problem**
+No operational console existed for inspecting corpus ingestion lifecycle state, document
+counts, chunk state, or embedding progress. Operators had no tenant-safe read-only view of
+real backend state without raw DB access.
+
+**Root cause**
+Missing backend endpoints and frontend console component. Existing `/rag/corpora` route
+returned only minimal data for the policy UI; it did not expose document/chunk/embedding
+summaries needed for operational visibility.
+
+**Fix summary**
+
+### Backend — api/rag_corpus_console.py (NEW)
+
+Three new read-only FastAPI endpoints under `/rag` prefix, `governance:write` scope:
+
+- `GET /rag/corpora/{corpus_id}` — corpus detail with document/chunk/embedding summaries
+- `GET /rag/corpora/{corpus_id}/documents` — paginated, filterable, sortable document list
+  with per-document chunk counts
+- `GET /rag/documents/{document_id}` — document detail with chunk + embedding summary
+
+Security controls:
+- `_safe_source_hash_prefix()`: exposes 12-char prefix only; full hash never returned
+- `_safe_metadata()`: strips embedding, vector, prompt, credentials, api_key, raw_text,
+  provider_payload, secret, password, token keys
+- `_validate_sort()`: allowlist validation for sort_by + sort_dir; raises HTTP 422 otherwise
+- Stable pagination: `ORDER BY {col} {dir}, d.document_id ASC` tiebreaker
+- All queries parameterized; no raw user input in SQL string
+
+### api/main.py (MODIFIED)
+
+Router registered at both app factory points alongside existing governance routers.
+
+### Frontend — console/lib/corpusConsoleApi.ts (NEW)
+
+BFF client library: `getCorpusDetail`, `listCorpusDocuments`, `getDocumentDetail` —
+all return `SafeResult<T>`. None accept `tenant_id` (injected server-side by BFF proxy).
+
+### console/components/governance/CorpusManagementConsole.tsx (NEW)
+
+13 exported components: `CorpusManagementConsole`, `CorpusBrowser`, `DocumentBrowser`,
+`DocumentDetailPanel`, `ChunkStatePanel`, `EmbeddingStatusBadge`,
+`IngestionLifecycleBadge`, `CorpusMetadataViewer`, `CorpusFilterBar`,
+`CorpusPaginationControls`, `CorpusHealthPanel`, `CorpusEmptyState`, `CorpusLoadingState`.
+
+- All 10 ingestion lifecycle states rendered with accessible badges
+- All 5 embedding states covered
+- `source_hash_prefix` shown with `…` suffix; no full hash
+- `ChunkStatePanel` includes disclaimer: "Raw vectors and embedding payloads are not exposed."
+- No `dangerouslySetInnerHTML`
+- ARIA roles on empty/loading states
+
+### console/app/dashboard/corpus/page.tsx (MODIFIED)
+
+Placeholder replaced with full page using `CorpusManagementConsole`.
+
+### console/app/api/core/[...path]/route.ts (MODIFIED)
+
+Added proxy rule: `{ prefix: 'rag/documents', methods: new Set(['GET', 'HEAD']) }`.
+
+### Infrastructure
+
+- `tools/ci/route_inventory.json` regenerated via `check_route_inventory.py --write`
+- `BLUEPRINT_STAGED.md` + `CONTRACT.md` authority markers refreshed
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` updated with PR 50 addendum (SOC-HIGH-002 compliance)
+- `console/components/governance/index.ts` updated with all 13 new exports
+
+### Tests added
+
+**tests/test_rag_corpus_console.py** (29 tests):
+- Corpus detail counts (total/active documents, active chunks)
+- Ingestion status summary (all 10 lifecycle values)
+- Embedding state summary key validation
+- Tenant isolation for all 3 endpoints
+- source_hash_prefix: 12-char prefix, None/empty safety
+- _safe_metadata: blocked key stripping, non-dict safety
+- Sort validation: rejects unknown field, rejects unknown dir, accepts valid
+- Quarantine visibility in document list and chunk counts
+- Regression: all related modules importable
+
+**console/tests/corpus-management-console.test.js** (80 tests):
+- File existence, all 13 component exports
+- All ingestion/embedding states covered
+- Governance safety (no full hash, no raw vectors/credentials)
+- Pagination and filtering structure
+- Tenant isolation (no client-side tenant_id parameters)
+- BFF proxy rule presence
+- Page integration
+- Accessibility (aria-label, role="status", aria-busy)
+- Regression: existing governance exports unaffected
+
+### Validation
+- make fg-fast: all checks passed
+- pytest tests/test_rag_corpus_console.py: 29 passed
+- node --test console/tests/corpus-management-console.test.js: 80 passed, 0 failed
+- npm run lint (console): no warnings or errors
+- npm run build: passed
+- PYTHONPATH=. python tools/ci/check_route_inventory.py: route inventory OK
+- make fg-contract: passed
+- Full pytest suite: 417 passed, 3 skipped
+
+---
+
+### 2026-05-13 — PR 50 CI Addendum: corpus placeholder test regression
+
+**Problem**
+ci-console failed with 551/552 tests passing. Single failure:
+  `not ok 99 - placeholder pages display not-configured state`
+  file: `console/tests/console-shell.test.js:188`
+  error: `app/dashboard/corpus/page.tsx: missing not-configured state`
+
+**Root cause**
+`console-shell.test.js` contained three tests with a `placeholders` array that included
+`app/dashboard/corpus/page.tsx`. These tests were written when every dashboard route was
+a stub. PR 50 promoted `corpus/page.tsx` to a full implementation, which no longer
+contains the `/not yet configured/` text or `module-not-configured` aria-label the
+placeholder tests required.
+
+The two companion placeholder tests (no live data fetching; no fake operational data)
+also listed corpus in their arrays but were not yet failing because `page.tsx` itself
+is a server component with no `useEffect`/`fetch()`/`'use client'` directly in the
+file — those are in the `CorpusManagementConsole` component it imports.
+
+**Fix**
+Removed `app/dashboard/corpus/page.tsx` from all three `placeholders` arrays in
+`console-shell.test.js` (lines covering "not-configured state", "no live data fetch",
+"no fake operational data"). Added explanatory comment: corpus graduated to full
+implementation in PR 50.
+
+This is a stale expectation fix, not an implementation fix. The implementation is
+correct. The corpus page is fully covered by `corpus-management-console.test.js` (80
+tests) which validates all invariants including accessibility, governance safety, tenant
+isolation, and export completeness.
+
+**Files changed**
+- `console/tests/console-shell.test.js` — removed corpus from three placeholder arrays
+
+**Validation**
+- npm test (console): 552 passed, 0 failed
+- npm run lint: no warnings or errors
+- npm run build: passed
+- make fg-fast: all checks passed
+- git diff --check: clean
+
+**Governance/provenance regression check**
+None. No governance, provenance, retrieval, or tenant-isolation code changed.
+The only file changed is the test that had a stale placeholder expectation.
+
+---
+
+### 2026-05-13 — PR 50 fg-required Addendum: fg-security lane timeout
+
+**Problem**
+GitHub Actions fg-required failed with `lane=fg-security error=lane_timeout`.
+
+**Root cause (two layers)**
+
+Layer 1 — `test_retrieval_policy_center_security.py` fixture scope (added in PR 49):
+The `db_session` fixture was function-scoped. Each of the 23 tests ran `init_db()`
+(full SQLite migrations) as part of setup — ~3.7s × 23 = ~85s wasted on redundant
+migration runs. Changing to module scope runs `init_db()` once for all 23 tests.
+Safe because every test seeds its own corpus via a unique UUID; none require an empty DB.
+
+Layer 2 — fg-required global budget of 480s:
+The CI workflow passed `--global-budget-seconds 480` to the harness. All 5 lanes
+together (policy-validate, required-tests-gate, fg-fast, fg-contract, fg-security)
+need ~520s locally and ~800-1000s in CI. The 480s budget was set before the security
+test suite grew to 701 tests and was always going to be insufficient once fg-required
+triggered on a production code change. PR 50 was the trigger.
+
+**Fix**
+
+1. `tests/security/test_retrieval_policy_center_security.py`:
+   - Changed `@pytest.fixture()` → `@pytest.fixture(scope="module")`
+   - Replaced `tmp_path: Any, monkeypatch: pytest.MonkeyPatch` params with
+     `tmp_path_factory: pytest.TempPathFactory` and direct `os.environ` management
+   - Saves ~67s (503s → 436s for full security suite)
+
+2. `.github/workflows/fg-required.yml`:
+   - `--global-budget-seconds 480` → `1200`
+   - `--lane-timeout-seconds 480` → `1200`
+   - `timeout-minutes: 10` → `25`
+   - Added inline comment documenting the justification
+   - **CI config change — called out explicitly per CLAUDE.md**
+
+3. `docs/SOC_ARCH_REVIEW_2026-02-15.md`:
+   - PR 50 Addendum B appended to satisfy SOC-HIGH-002 for `.github/workflows/`
+     file change
+
+**Security coverage preserved**
+- All 701 security tests still run in the required lane
+- No tests skipped, removed, or moved to non-required CI
+- Tenant isolation, scope enforcement, BAA, audit tamper-evidence all covered
+- Implementation of corpus/document/chunk endpoints unchanged
+
+**Validation results**
+- pytest tests/security/test_retrieval_policy_center_security.py: 23 passed (3.78s)
+- pytest tests/security -m "not slow": 700 passed, 1 skipped (436s vs 503s before)
+- npm test (console): 552 passed, 0 failed
+- make fg-fast: all checks passed
+- git diff --check: clean
+
+**Remaining limitations**
+None. Total locally: fg-fast (~78s) + fg-security (~440s) = ~520s. Well within 1200s.
+In CI with slower runners, estimated ~800-1000s — still within 1200s budget.

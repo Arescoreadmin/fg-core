@@ -18,6 +18,7 @@ Covers:
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, cast
 
 import pytest
@@ -37,11 +38,17 @@ _TENANT_B = "tenant-rpc-sec-b"
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture()
-def db_session(tmp_path: Any, monkeypatch: pytest.MonkeyPatch):
-    db_path = str(tmp_path / "rpc-security-test.db")
-    monkeypatch.setenv("FG_SQLITE_PATH", db_path)
-    monkeypatch.setenv("FG_ENV", "test")
+@pytest.fixture(scope="module")
+def db_session(tmp_path_factory: pytest.TempPathFactory):
+    # Module scope: init_db (migrations) runs once for all 21 tests in this
+    # module instead of once per test. Safe because every test seeds its own
+    # corpus via UUID — none require an empty database.
+    db_path = str(tmp_path_factory.mktemp("rpc_security") / "rpc-security-test.db")
+
+    old_sqlite = os.environ.get("FG_SQLITE_PATH")
+    old_env = os.environ.get("FG_ENV")
+    os.environ["FG_SQLITE_PATH"] = db_path
+    os.environ["FG_ENV"] = "test"
 
     from api.db import get_sessionmaker, init_db, reset_engine_cache
 
@@ -54,6 +61,14 @@ def db_session(tmp_path: Any, monkeypatch: pytest.MonkeyPatch):
     finally:
         session.close()
         reset_engine_cache()
+        if old_sqlite is not None:
+            os.environ["FG_SQLITE_PATH"] = old_sqlite
+        else:
+            os.environ.pop("FG_SQLITE_PATH", None)
+        if old_env is not None:
+            os.environ["FG_ENV"] = old_env
+        else:
+            os.environ.pop("FG_ENV", None)
 
 
 def _rules(**overrides: Any) -> AiRagRules:

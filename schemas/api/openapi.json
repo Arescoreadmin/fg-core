@@ -15685,6 +15685,315 @@
         ]
       }
     },
+    "/rag/corpora/{corpus_id}": {
+      "get": {
+        "description": "Return corpus detail with operational stats for the Corpus Management Console.\n\nIncludes:\n- Basic corpus fields (id, name, description, created_at, updated_at)\n- Document counts: total, active (indexed + current)\n- Chunk counts: total, active\n- Ingestion status summary: {status: count} map\n- Embedding state summary: {state: count} map from active chunks\n- Safe metadata: no raw vectors, no prompts, no secrets\n\nTenant-scoped: returns 404 if corpus_id belongs to a different tenant.",
+        "operationId": "get_corpus_detail_rag_corpora__corpus_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "corpus_id",
+            "required": true,
+            "schema": {
+              "title": "Corpus Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Corpus Detail Rag Corpora  Corpus Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Corpus Detail",
+        "tags": [
+          "rag",
+          "governance",
+          "corpus-console"
+        ]
+      }
+    },
+    "/rag/corpora/{corpus_id}/documents": {
+      "get": {
+        "description": "Return a paginated, filtered, sorted list of documents in a corpus.\n\nPagination:\n- limit: 1\u2013200 (default 20)\n- offset: 0+ (default 0)\n- Stable ordering: sort_by + deterministic tiebreaker (document_id ASC)\n\nFiltering:\n- ingestion_status: exact match; unknown values fail closed (422)\n- is_current: true/false boolean filter\n\nSorting:\n- sort_by: created_at, updated_at, title, ingestion_status, version_number\n- sort_dir: asc, desc\n\nEach document includes:\n- Lifecycle fields: ingestion_status, is_current, quarantine_reason, version info\n- source_hash_prefix: 12-char prefix (operator-safe, no content disclosure)\n- active_chunk_count, total_chunk_count from rag_chunks\n\nDoes NOT expose: raw chunk text, raw vectors, provider payloads, secrets.",
+        "operationId": "list_corpus_documents_rag_corpora__corpus_id__documents_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "corpus_id",
+            "required": true,
+            "schema": {
+              "title": "Corpus Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ingestion_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ingestion Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "is_current",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Is Current"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "default": "created_at",
+              "title": "Sort By",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_dir",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "title": "Sort Dir",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Corpus Documents Rag Corpora  Corpus Id  Documents Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Corpus Documents",
+        "tags": [
+          "rag",
+          "governance",
+          "corpus-console"
+        ]
+      }
+    },
+    "/rag/documents/{document_id}": {
+      "get": {
+        "description": "Return document detail with chunk summary for the Corpus Management Console.\n\nIncludes:\n- All lifecycle fields: ingestion_status, is_current, quarantine_reason, etc.\n- source_hash_prefix (12-char, operator-safe)\n- Chunk summary: total, active, embedding state distribution\n- Safe metadata (no raw vectors, no prompts, no secrets)\n\nDoes NOT expose: raw chunk text, raw vectors, provider payloads, secrets.\nTenant-scoped: returns 404 if document_id belongs to a different tenant.",
+        "operationId": "get_document_detail_rag_documents__document_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Document Detail Rag Documents  Document Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Document Detail",
+        "tags": [
+          "rag",
+          "governance",
+          "corpus-console"
+        ]
+      }
+    },
     "/rag/retrieval-policy": {
       "get": {
         "description": "Return the current retrieval policy for the authenticated tenant.\n\nReturns 404 if no policy has been configured yet.\nNever returns data outside the authenticated tenant boundary.",

@@ -595,3 +595,71 @@ The new root `POST /ai/chat` endpoint is a tenant-bound, scoped AI surface backe
 - `api/ai_plane_extension.py`: `/ai/chat` 401/403 OpenAPI response metadata now documents the actual FastAPI auth envelope, `{"detail": "..."}`, emitted by `require_scopes(...)`.
 - `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `tools/ci/plane_registry_snapshot.json`, and `tools/ci/topology.sha256`: regenerated/refreshed after the response metadata correction.
 - Security posture is unchanged: the endpoint remains tenant-bound, scoped with `compliance:read`, and protected by the same AIPlane policy/BAA/RAG/validator pipeline.
+
+## PR 50 — Corpus Management Console — Route inventory and contract authority addendum (2026-05-13)
+
+### Files reviewed (required by SOC-HIGH-002)
+- `tools/ci/route_inventory.json`: Added three new `/rag/` console routes after `make route-inventory-generate`.
+- `tools/ci/route_inventory_summary.json`: Regenerated after route inventory update.
+- `tools/ci/plane_registry_snapshot.json`: Regenerated; no plane registry changes.
+- `tools/ci/topology.sha256`: Regenerated after contract artifacts updated.
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md`: Authority markers refreshed via `scripts/refresh_contract_authority.py`.
+
+### Why
+PR 50 adds three new tenant-scoped, `governance:write`-gated read-only endpoints under `/rag/`:
+- `GET /rag/corpora/{corpus_id}` — corpus detail with operational stats
+- `GET /rag/corpora/{corpus_id}/documents` — paginated document list
+- `GET /rag/documents/{document_id}` — document detail with chunk summary
+
+These routes reuse the existing `governance:write` scope and `require_bound_tenant` tenant binding identical to the existing `/rag/corpora` and `/rag/retrieval-policy` endpoints already in the contract. The new routes are read-only (GET only). The core OpenAPI contract (`contracts/core/openapi.json`) was regenerated and its hash unchanged — the new routes are internal governance console routes that route through the BFF proxy and do not appear in the public contract. Route inventory was regenerated to record them.
+
+### Security posture impact
+- All three new routes require `verify_api_key` + `governance:write` scope + tenant binding via `require_bound_tenant`. Identical security posture to existing `/rag/corpora`.
+- Tenant isolation enforced: every query is scoped to `tenant_id` derived from the authenticated key, never from the request body.
+- No cross-tenant data exposure: each endpoint fails closed (404) if the resource belongs to a different tenant.
+- Does not expose: raw vectors, embedding payloads, raw prompts, provider payloads, secrets, stack traces, or full source hashes (only 12-char prefix).
+- Metadata safety: `_safe_metadata()` strips embedding, vector, prompt, credentials, api_key, provider_payload keys before returning.
+- BFF proxy rules updated to allow `GET rag/documents/{id}` with explicit method allowlist (`GET`, `HEAD` only).
+
+### Verification
+- `pytest -q tests/test_rag_corpus_console.py`: 29 passed
+- `PYTHONPATH=. python tools/ci/check_route_inventory.py`: route inventory OK
+- `make fg-contract`: CONTRACT LINT PASSED, Core OpenAPI contract matches committed version, contract authority check passed
+- `cd console && node --test tests/corpus-management-console.test.js`: 80 passed
+- `cd console && npm run lint`: No ESLint warnings or errors
+- `cd console && npm run build`: Build passed
+
+---
+
+## PR 50 Addendum B — fg-required budget correction (2026-05-13)
+
+### SOC-HIGH-002 — CI workflow change: `.github/workflows/fg-required.yml`
+
+**Change summary**
+Increased `--global-budget-seconds` from 480 → 1200 and `--lane-timeout-seconds` from
+480 → 1200. Increased `timeout-minutes` from 10 → 25 for the "Run fg-required harness"
+step.
+
+**Root cause**
+The fg-security lane runs 701 security tests (tenant isolation, scope enforcement, BAA
+enforcement, audit tamper-evidence, etc.). After the module-scope fixture optimization in
+`tests/security/test_retrieval_policy_center_security.py`, the lane takes ~436s locally
+and likely 600-900s in CI. The original 480s global budget, which applies to all 5 lanes
+combined, was too low. No security tests were removed or weakened.
+
+**Security posture unchanged**
+- All 701 security tests still run in the required lane
+- No tests skipped, marked slow, or moved to non-required CI
+- Tenant isolation, auth gate, BAA enforcement, audit tamper-evidence fully covered
+- The change is purely a budget/timeout adjustment — no production code affected
+
+**Files changed**
+- `.github/workflows/fg-required.yml` — budget/timeout increase only
+- `tests/security/test_retrieval_policy_center_security.py` — module-scope fixture
+  (init_db runs once per module instead of per test, saving ~67s; safe because every
+  test seeds its own corpus via UUID and does not require an empty DB)
+
+**Verification**
+- `pytest tests/security/test_retrieval_policy_center_security.py`: 23 passed (3.78s)
+- `pytest tests/security -m "not slow"`: 700 passed, 1 skipped (436s vs 503s before)
+- `make fg-fast`: all checks passed

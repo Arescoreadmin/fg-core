@@ -111,16 +111,21 @@ jobs:
 
       - name: Run fg-required harness
         id: fg_required
-        timeout-minutes: 10
+        timeout-minutes: 25
         shell: bash
         run: |
           set -euo pipefail
 
           mkdir -p artifacts/fg-required artifacts/testing
 
+          # Budget raised from 480s → 1200s (PR 50 addendum):
+          # fg-security-pytest runs 701 security tests (~420s after fixture
+          # optimisation). Combined with fg-fast (~150s in CI), the original
+          # 480s budget was always insufficient. No tests removed; coverage
+          # unchanged. See docs/ai/PR_FIX_LOG.md for full justification.
           .venv/bin/python tools/testing/harness/fg_required.py \
-            --global-budget-seconds 480 \
-            --lane-timeout-seconds 480 \
+            --global-budget-seconds 1200 \
+            --lane-timeout-seconds 1200 \
             2>&1 | tee artifacts/fg-required/fg-required.stdout.log
 
       - name: Prepare fallback artifact notices

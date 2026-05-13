@@ -57,3 +57,23 @@ export type {
   RetrievalStrategy,
 } from './RetrievalPolicyCenter';
 export { RetrievalPolicyCenterContainer } from './RetrievalPolicyCenterContainer';
+export {
+  CorpusManagementConsole,
+  CorpusBrowser,
+  DocumentBrowser,
+  DocumentDetailPanel,
+  ChunkStatePanel,
+  EmbeddingStatusBadge,
+  IngestionLifecycleBadge,
+  CorpusMetadataViewer,
+  CorpusFilterBar,
+  CorpusPaginationControls,
+  CorpusHealthPanel,
+  CorpusEmptyState,
+  CorpusLoadingState,
+} from './CorpusManagementConsole';
+export type {
+  CorpusManagementConsoleProps,
+  CorpusFilterBarProps,
+  CorpusPaginationControlsProps,
+} from './CorpusManagementConsole';
