@@ -4261,6 +4261,78 @@
         "title": "RequirementUpdateAvailableRequest",
         "type": "object"
       },
+      "RetrievalPolicyRequest": {
+        "properties": {
+          "allow_lexical_fallback": {
+            "default": false,
+            "title": "Allow Lexical Fallback",
+            "type": "boolean"
+          },
+          "allow_no_context_answer": {
+            "default": true,
+            "title": "Allow No Context Answer",
+            "type": "boolean"
+          },
+          "allow_semantic": {
+            "default": false,
+            "title": "Allow Semantic",
+            "type": "boolean"
+          },
+          "allowed_corpus_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Corpus Ids",
+            "type": "array"
+          },
+          "allowed_retrieval_strategies": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Retrieval Strategies",
+            "type": "array"
+          },
+          "denied_corpus_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Denied Corpus Ids",
+            "type": "array"
+          },
+          "max_top_k": {
+            "default": 4,
+            "title": "Max Top K",
+            "type": "integer"
+          },
+          "no_answer_on_ungrounded": {
+            "default": true,
+            "title": "No Answer On Ungrounded",
+            "type": "boolean"
+          },
+          "rag_enabled": {
+            "default": true,
+            "title": "Rag Enabled",
+            "type": "boolean"
+          },
+          "require_grounded_context": {
+            "default": false,
+            "title": "Require Grounded Context",
+            "type": "boolean"
+          },
+          "require_grounded_response": {
+            "default": true,
+            "title": "Require Grounded Response",
+            "type": "boolean"
+          },
+          "reranking_enabled": {
+            "default": false,
+            "title": "Reranking Enabled",
+            "type": "boolean"
+          }
+        },
+        "title": "RetrievalPolicyRequest",
+        "type": "object"
+      },
       "RevokeKeyRequest": {
         "description": "Request to revoke an API key.",
         "properties": {
@@ -15539,6 +15611,221 @@
         "summary": "Get Planes",
         "tags": [
           "planes"
+        ]
+      }
+    },
+    "/rag/corpora": {
+      "get": {
+        "description": "Return all tenant-scoped corpora for use in the policy UI.\n\nNever returns cross-tenant corpora.\nReturns [] if no corpora have been ingested yet.\nDoes not expose raw vectors, embeddings, or document content.",
+        "operationId": "list_corpora_endpoint_rag_corpora_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "Response List Corpora Endpoint Rag Corpora Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Corpora Endpoint",
+        "tags": [
+          "rag",
+          "governance"
+        ]
+      }
+    },
+    "/rag/retrieval-policy": {
+      "get": {
+        "description": "Return the current retrieval policy for the authenticated tenant.\n\nReturns 404 if no policy has been configured yet.\nNever returns data outside the authenticated tenant boundary.",
+        "operationId": "get_retrieval_policy_endpoint_rag_retrieval_policy_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Retrieval Policy Endpoint Rag Retrieval Policy Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Retrieval Policy Endpoint",
+        "tags": [
+          "rag",
+          "governance"
+        ]
+      },
+      "put": {
+        "description": "Validate and persist the retrieval policy for the authenticated tenant.\n\nValidation is authoritative and executes before any write.\nInvalid configurations fail closed with machine-readable error codes.\nAll successful saves are audit-logged.",
+        "operationId": "put_retrieval_policy_endpoint_rag_retrieval_policy_put",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tenant_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetrievalPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Put Retrieval Policy Endpoint Rag Retrieval Policy Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Retrieval Policy Endpoint",
+        "tags": [
+          "rag",
+          "governance"
         ]
       }
     },

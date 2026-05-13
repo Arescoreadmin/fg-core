@@ -31,3 +31,29 @@ export type {
   ProvenanceExportSummary,
   TrustLevel,
 } from './ProvenanceValidationPanel';
+export {
+  RetrievalPolicyCenter,
+  RetrievalPolicyEditor,
+  RetrievalPolicyPreview,
+  CorpusPolicyMatrix,
+  RetrievalStrategyPanel,
+  GroundingEnforcementPanel,
+  RetrievalFallbackPanel,
+  RetrievalPolicyAuditSummary,
+  validateRetrievalPolicy,
+  buildRetrievalPolicyPreview,
+  RETRIEVAL_STRATEGIES,
+  TOP_K_MIN,
+  TOP_K_MAX,
+} from './RetrievalPolicyCenter';
+export type {
+  RetrievalPolicyCenterProps,
+  RetrievalPolicyData,
+  RetrievalPolicyValidationError,
+  RetrievalPolicyPreviewData,
+  RetrievalPolicyAuditEntry,
+  CorpusEntry,
+  CorpusAccessState,
+  RetrievalStrategy,
+} from './RetrievalPolicyCenter';
+export { RetrievalPolicyCenterContainer } from './RetrievalPolicyCenterContainer';
