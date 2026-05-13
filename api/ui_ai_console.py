@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from api.auth_scopes import bind_tenant_id, require_bound_tenant, require_scopes
 from api.config.env import is_production_env
+from api.rag_retrieval_policy_store import rag_rules_from_db
 from api.config_versioning import canonicalize_config, hash_config
 from api.deps import tenant_db_required
 from api.security_audit import AuditEvent, EventType, Severity, get_auditor
@@ -801,6 +802,10 @@ def ai_chat(
 
     _enforce_device_enabled(db, tenant_id, device_id, request)
 
+    # Load DB-stored retrieval policy; falls back to file-based rag_rules.
+    _db_rag_rules = rag_rules_from_db(db, tenant_id)
+    _rag_rules = _db_rag_rules if _db_rag_rules is not None else ai_policy.rag_rules
+
     deny_terms = [str(x) for x in (policy.get("pii_deny_terms") or [])]
     from services.provider_baa.gate import (  # noqa: PLC0415
         classify_baa_gate_phi as _classify_baa_gate_phi,
@@ -958,6 +963,21 @@ def ai_chat(
         if _contains_pii(payload.message, deny_terms):
             blocked_error = _error(
                 400, "AI_INPUT_POLICY_BLOCKED", "input blocked by policy"
+            )
+            raise blocked_error
+
+        # Enforce retrieval policy: the UI console path does not execute RAG retrieval.
+        # If policy forbids no-context answers and requires grounded output, block before
+        # consuming quota or calling the LLM provider.
+        if (
+            _rag_rules.require_grounded_response
+            and _rag_rules.no_answer_on_ungrounded
+            and not _rag_rules.allow_no_context_answer
+        ):
+            blocked_error = _error(
+                400,
+                "RETRIEVAL_POLICY_NO_CONTEXT",
+                "retrieval policy requires grounded answer; no retrieval context available",
             )
             raise blocked_error
 
@@ -1198,6 +1218,10 @@ def ai_chat(
             "provenance_status": "PROVENANCE_NO_CONTEXT_AVAILABLE",
             "retrieval_trace_id": None,
             "lexical_fallback": False,
+            "retrieval_policy_applied": _db_rag_rules is not None,
+            "grounded_required": _rag_rules.require_grounded_response,
+            "no_answer_on_ungrounded": _rag_rules.no_answer_on_ungrounded,
+            "rag_enabled": _rag_rules.enabled,
         },
         "usage": {
             "usage_record_id": usage_record_id,

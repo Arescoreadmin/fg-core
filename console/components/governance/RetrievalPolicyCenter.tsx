@@ -167,16 +167,28 @@ export function validateRetrievalPolicy(
     });
   }
 
-  // tenant_id required
-  if (!policy.tenant_id || !policy.tenant_id.trim()) {
-    errors.push({
-      field: 'tenant_id',
-      code: 'MISSING_TENANT_ID',
-      message: 'tenant_id is required.',
-    });
-  }
-
   return errors;
+}
+
+// ─── Default draft ────────────────────────────────────────────────────────────
+
+/** Sensible defaults for an operator creating their first retrieval policy. */
+export function buildDefaultRetrievalPolicyDraft(): RetrievalPolicyData {
+  return {
+    tenant_id: '',
+    allowed_corpora: [],
+    denied_corpora: [],
+    retrieval_strategy: 'lexical',
+    top_k: 4,
+    semantic_enabled: false,
+    grounded_answer_required: true,
+    lexical_fallback_enabled: false,
+    fallback_strategy: null,
+    reranking_enabled: false,
+    policy_version: null,
+    updated_by: null,
+    updated_at: null,
+  };
 }
 
 // ─── Preview builder ──────────────────────────────────────────────────────────
@@ -1414,9 +1426,11 @@ export function RetrievalPolicyCenter({
             <p className="text-xs font-semibold text-foreground">
               Retrieval Policy
             </p>
-            <p className="text-[10px] text-muted">
-              Tenant: <span className="font-mono">{policy.tenant_id}</span>
-            </p>
+            {policy.tenant_id && (
+              <p className="text-[10px] text-muted">
+                Tenant: <span className="font-mono">{policy.tenant_id}</span>
+              </p>
+            )}
           </div>
         </div>
         <div className="flex gap-2">

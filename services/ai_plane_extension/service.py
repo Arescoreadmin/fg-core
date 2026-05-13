@@ -11,11 +11,13 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.rag.chunking import CorpusChunk
+from api.rag_reranking import RerankConfig
+from api.rag_retrieval_policy_store import get_retrieval_policy, rag_rules_from_db
 from services.ai.audit import build_ai_audit_metadata
 from services.ai.dispatch import ProviderCallError as _ProviderCallError
 from services.ai.dispatch import call_provider as _call_provider
 from services.ai.dispatch import known_provider_ids
-from services.ai.policy import AiPolicyError, resolve_ai_policy_for_tenant
+from services.ai.policy import AiPolicyError, AiRagRules, resolve_ai_policy_for_tenant
 from services.ai.rag_context import (
     RagContextError,
     RagContextResult,
@@ -392,6 +394,22 @@ class AIPlaneService:
         max_prompt_chars = _int_or_default(policy.get("max_prompt_chars"), 2000)
         denylist = _str_list(policy.get("denylist"))
 
+        # Load DB-stored retrieval policy; takes precedence over file-based rag_rules.
+        # Falls back to ai_policy.rag_rules when no row exists (backward compatible).
+        _stored_retrieval_policy = get_retrieval_policy(db, tenant_id)
+        _db_rag_rules = rag_rules_from_db(db, tenant_id)
+        effective_rag_rules: AiRagRules = (
+            _db_rag_rules if _db_rag_rules is not None else ai_policy.rag_rules
+        )
+        # Gate reranker: when DB policy exists, respect reranking_enabled flag.
+        # When no DB policy row exists, pass None (retrieve_persisted_rag_context
+        # default: RerankConfig(enabled=True) — preserves existing behavior).
+        _rerank_config: RerankConfig | None = None
+        if _stored_retrieval_policy is not None:
+            _rerank_config = RerankConfig(
+                enabled=bool(_stored_retrieval_policy.get("reranking_enabled", True))
+            )
+
         if len(payload.query) > max_prompt_chars:
             self._record_violation(db, tenant_id, "AI_INPUT_POLICY_BLOCKED")
             db.commit()
@@ -430,7 +448,8 @@ class AIPlaneService:
                     limit=4,
                     phi_detected=phi_classification.contains_phi,
                     query_phi_sensitivity=phi_classification.sensitivity_level.value,
-                    rag_rules=ai_policy.rag_rules,
+                    rag_rules=effective_rag_rules,
+                    rerank_config=_rerank_config,
                 )
         except RagContextError as exc:
             self._audit_infer(
@@ -654,6 +673,15 @@ class AIPlaneService:
                 response_validation=response_validation,
             )
         out = response_validation.final_text
+
+        # Enforce require_grounded_response / no_answer_on_ungrounded from effective
+        # retrieval policy (DB-stored takes precedence over file-based default).
+        if effective_rag_rules.require_grounded_response and not response_validation.grounded:
+            if effective_rag_rules.no_answer_on_ungrounded:
+                self._record_violation(db, tenant_id, "RETRIEVAL_POLICY_GROUNDING_REQUIRED")
+                db.commit()
+                raise ValueError("RETRIEVAL_POLICY_GROUNDING_REQUIRED")
+
         ok_out, code_out = policy_engine.evaluate_output(out)
         if not ok_out:
             self._record_violation(
@@ -724,7 +752,13 @@ class AIPlaneService:
             "sources": _chat_sources(response_validation),
             "confidence": _chat_confidence(response_validation),
             "metadata": _rag_answer_metadata(rag_context),
-            "provenance": _rag_provenance_ui_metadata(rag_context, response_validation),
+            "provenance": {
+                **_rag_provenance_ui_metadata(rag_context, response_validation),
+                "retrieval_policy_applied": _db_rag_rules is not None,
+                "grounded_required": effective_rag_rules.require_grounded_response,
+                "no_answer_on_ungrounded": effective_rag_rules.no_answer_on_ungrounded,
+                "rag_enabled": effective_rag_rules.enabled,
+            },
             "simulated": effective_provider == "simulated",
         }
 

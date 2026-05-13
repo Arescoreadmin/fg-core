@@ -9,6 +9,7 @@ import {
   type RetrievalPolicyValidationError,
   RetrievalPolicyCenter,
   RETRIEVAL_STRATEGIES,
+  buildDefaultRetrievalPolicyDraft,
 } from './RetrievalPolicyCenter';
 import {
   type CorpusListEntry,
@@ -137,6 +138,7 @@ export function RetrievalPolicyCenterContainer() {
         const err = stored.reason as { code?: string; status?: number };
         if (err?.code === 'NOT_FOUND' || err?.status === 404) {
           setNotConfigured(true);
+          setPolicy(buildDefaultRetrievalPolicyDraft());
         } else {
           setApiFailure(true);
         }
@@ -225,29 +227,6 @@ export function RetrievalPolicyCenterContainer() {
     );
   }
 
-  if (notConfigured && !policy) {
-    return (
-      <div
-        className="flex flex-col items-center gap-2 py-6 text-center"
-        aria-label="policy-not-configured"
-      >
-        <p className="text-sm font-medium text-foreground">
-          No retrieval policy configured
-        </p>
-        <p className="max-w-sm text-xs text-muted">
-          Use the editor below to create the initial policy for this tenant.
-        </p>
-        <RetrievalPolicyCenter
-          policy={null}
-          availableCorpora={corpora}
-          saving={saving}
-          validationErrors={saveErrors.length > 0 ? saveErrors : null}
-          onSave={handleSave}
-        />
-      </div>
-    );
-  }
-
   if (apiFailure && !policy) {
     return (
       <div
@@ -260,14 +239,30 @@ export function RetrievalPolicyCenterContainer() {
   }
 
   return (
-    <RetrievalPolicyCenter
-      policy={policy}
-      availableCorpora={corpora}
-      auditEntries={auditEntries.length > 0 ? auditEntries : null}
-      apiFailure={apiFailure}
-      saving={saving}
-      validationErrors={saveErrors.length > 0 ? saveErrors : null}
-      onSave={handleSave}
-    />
+    <div className="space-y-3">
+      {notConfigured && (
+        <div
+          className="rounded border border-warning/30 bg-warning/5 px-3 py-2"
+          role="status"
+          aria-label="policy-draft-unsaved-banner"
+        >
+          <p className="text-xs font-medium text-warning">
+            No retrieval policy saved yet
+          </p>
+          <p className="text-[10px] text-muted">
+            Configure the settings below and click Save Policy to create the initial policy for this tenant.
+          </p>
+        </div>
+      )}
+      <RetrievalPolicyCenter
+        policy={policy}
+        availableCorpora={corpora}
+        auditEntries={auditEntries.length > 0 ? auditEntries : null}
+        apiFailure={apiFailure}
+        saving={saving}
+        validationErrors={saveErrors.length > 0 ? saveErrors : null}
+        onSave={handleSave}
+      />
+    </div>
   );
 }

@@ -8581,3 +8581,80 @@ stored AiRagRules, not just previewed in the UI.
 ### Future-ready hooks intentionally added
 - rag_rules_from_db() provides the hook for any caller to load policy from DB
 - TenantRetrievalPolicy model includes reranking_enabled for future rerank policy wiring
+
+---
+
+## PR 49 Addendum — Grounded Enforcement Runtime Closure + Initial Policy Draft (2026-05-13)
+
+**Branch**: pr-49-retrieval-policy-center
+
+### Summary
+Closes the gap identified in PR 49's known-limitations section: wires the DB-stored
+retrieval policy into both AI answer paths and enables new tenants to create their
+first policy from the UI.
+
+### Part A — CI Route Authority Fix (committed in PR #322)
+Root cause: rag_retrieval_policy_router was included in the runtime app but NOT in
+build_contract_app() in api/main.py, so scripts/contracts_gen_core.py omitted the
+/rag/ routes from contracts/core/openapi.json, triggering UNAUTHORIZED runtime_only
+drift errors in make fg-fast.
+Fix: added app.include_router(rag_retrieval_policy_router) to build_contract_app(),
+regenerated contract, updated Contract-Authority-SHA256 markers in BLUEPRINT_STAGED.md
+and CONTRACT.md, fixed ruff lint, regenerated route inventory.
+
+### Part B — Runtime Policy Enforcement
+
+**services/ai_plane_extension/service.py (AIPlaneService.infer)**
+- Loads DB policy at infer() time: get_retrieval_policy() for reranking_enabled flag,
+  rag_rules_from_db() for AiRagRules. DB policy takes precedence over file-based rules.
+- Passes effective_rag_rules to retrieve_persisted_rag_context() for corpus filtering,
+  top-k capping, and strategy enforcement.
+- Passes RerankConfig(enabled=...) derived from DB reranking_enabled field to rerank_response().
+- Enforces grounding after validation: if require_grounded_response and not grounded and
+  no_answer_on_ungrounded → records violation + raises RETRIEVAL_POLICY_GROUNDING_REQUIRED.
+- Provenance dict now includes: retrieval_policy_applied, grounded_required,
+  no_answer_on_ungrounded, rag_enabled.
+
+**api/ui_ai_console.py (POST /ui/ai/chat)**
+- Loads rag_rules_from_db() after auth; falls back to ai_policy.rag_rules if no DB policy.
+- Checks allow_no_context_answer: if policy requires grounded answer and disallows no-context
+  answers, returns 400 RETRIEVAL_POLICY_NO_CONTEXT before consuming quota.
+- Provenance dict updated with same policy metadata fields as service.py.
+
+### Part C — Initial Policy Creation (new tenant flow)
+
+**console/components/governance/RetrievalPolicyCenter.tsx**
+- Exported buildDefaultRetrievalPolicyDraft(): returns sensible lexical defaults.
+- Removed MISSING_TENANT_ID validation (tenant_id is display-only from backend,
+  never sent in PUT body).
+- Header conditionally renders tenant line only when tenant_id is non-empty.
+
+**console/components/governance/RetrievalPolicyCenterContainer.tsx**
+- On GET 404: setPolicy(buildDefaultRetrievalPolicyDraft()) instead of leaving
+  policy=null. Operator sees the full editor, not a placeholder.
+- Removed notConfigured && !policy early-return block (now dead code).
+- Adds an amber "No retrieval policy saved yet" banner above the center when
+  notConfigured=true. Banner cleared on successful PUT.
+
+### Tests added
+- tests/test_rag_grounded_enforcement.py: 13 tests covering:
+  - DB policy loaded and used in infer() with precedence over file rules
+  - require_grounded_response=True blocks ungrounded answer (ValueError)
+  - no_answer_on_ungrounded=False allows ungrounded answer through
+  - reranking_enabled=False from DB disables reranker
+  - reranking_enabled=True from DB enables reranker
+  - No DB policy row: reranking defaults enabled (backward compatible)
+  - rag_enabled=False blocks retrieval (RETRIEVAL_POLICY_DISABLED)
+  - UI console: allow_no_context_answer=False + require_grounded blocks (400)
+  - UI console: default policy does not block
+  - Tenant A policy does not affect tenant B
+  - No DB policy row: falls back to ai_policy.rag_rules
+  - Denied corpus excluded via DB policy in infer()
+  - UI console provenance contains policy metadata fields
+
+### Validation
+- make fg-fast: passes (all checks + pytest fast suite)
+- .venv/bin/pytest tests/test_rag_grounded_enforcement.py
+  tests/test_rag_retrieval_policy_wiring.py: 39 passed, 3 skipped
+- npm run lint (console): no warnings or errors
+- npx tsc --noEmit: no type errors
