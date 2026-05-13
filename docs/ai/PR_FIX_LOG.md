@@ -6,97 +6,72 @@ This log records **completed, intentional fixes**.
 
 ---
 
-### 2026-05-12 — PR 49 Retrieval Policy Center
+### 2026-05-12 — PR 29 Ingestion Pipeline Hardening
 
-**Branch:** `pr-49-retrieval-policy-center`
+**Branch:** `pr-29-ingestion-pipeline-hardening`
 
-**Task identifier:** PR 49 — Retrieval Policy Center
+**Task identifier:** PR 29 — Ingestion Pipeline Hardening
 
-**Area:** Frontend governance UI; retrieval policy management; corpus access control; policy validation; policy preview; audit-safe editing.
+**Area:** Persisted RAG ingestion lifecycle; document versioning; deduplication; quarantine; re-index safety; retrieval lifecycle filtering.
 
-**Purpose:** Build a production-grade governance interface and policy management layer for retrieval behavior. Operators can manage retrieval governance visually, control corpus access safely, configure retrieval behavior deterministically, preview policy effects before save, validate retrieval policy, and understand effective retrieval state clearly.
+**Purpose:** Harden enterprise RAG ingestion so persisted documents and chunks are deterministic, tenant-scoped, auditable, duplicate-aware, quarantine-aware, and safe for future provenance replay, evidence graph, fact extraction, and RAG evaluation features.
 
 **Files changed:**
-- `console/components/governance/RetrievalPolicyCenter.tsx` — new governance component providing full retrieval policy UX.
-- `console/components/governance/index.ts` — adds exports for `RetrievalPolicyCenter` and all sub-components, utilities, types, and constants.
-- `console/app/dashboard/retrieval/page.tsx` — integrates `RetrievalPolicyCenter` into the dedicated retrieval route.
-- `console/tests/retrieval-policy-center.test.js` — 120+ static-analysis tests covering all acceptance criteria.
-- `tests/security/test_retrieval_policy_center_security.py` — 23 backend security regression tests.
+- `api/rag_corpus_store.py` — adds lifecycle constants, deterministic source/chunk hashing, hardened document-version ingestion, tenant-scoped deduplication, quarantine records, re-index safety, and source/chunk binding metadata.
+- `api/rag_retrieval.py` — excludes non-current, non-indexed, or inactive chunks when lifecycle columns exist.
+- `api/rag_semantic_retrieval.py` — applies the same lifecycle filtering to semantic/hybrid lexical candidate loading.
+- `api/rag_hybrid_retrieval.py` — applies lifecycle filtering to hybrid RRF lexical and semantic candidate loading.
+- `api/db.py` — extends SQLite bootstrap/auto-migration with additive ingestion lifecycle columns and indexes.
+- `migrations/postgres/0040_rag_ingestion_lifecycle.sql` — adds additive Postgres lifecycle/version/chunk proof columns, status constraint, and tenant-scoped indexes.
+- `tests/test_rag_ingestion_hardening.py` — covers versioning, duplicate handling, cross-tenant duplicate isolation, quarantine, re-index safety, source hash mismatch, stale chunk exclusion, audit redaction, and source/chunk proof fields.
+- `docs/ai/INGESTION_PIPELINE_HARDENING.md` — documents lifecycle, versioning, dedupe, quarantine, re-index safety, retrieval boundary, audit safety, and known limitation.
 - `docs/ai/PR_FIX_LOG.md` — this entry.
 
-**Retrieval governance behavior added:**
-- `RetrievalPolicyCenter` — tenant-scoped, operator-readable policy display with edit, preview, and audit summary.
-- `RetrievalPolicyEditor` — tabbed editor for corpus, strategy, grounding, and fallback policy sections.
-- `RetrievalPolicyPreview` — deterministic preview of effective policy state; does NOT execute live retrieval.
-- `CorpusPolicyMatrix` — per-corpus allowed/denied/inherited state table with operator allow/deny actions.
-- `RetrievalStrategyPanel` — strategy selector (lexical/semantic/hybrid/hybrid_rrf only), semantic toggle, fallback toggle, reranking toggle.
-- `GroundingEnforcementPanel` — grounded-answer enforcement display; read-only mode for enforcement-locked deployments; warning when disabling.
-- `RetrievalFallbackPanel` — fallback configuration; explicit safety note that fallback does not bypass denied corpora, tenant isolation, or provenance enforcement.
-- `RetrievalPolicyAuditSummary` — collapsible audit log with timestamps, actors, changed fields, policy version, updated_by, updated_at.
+**Schema/migration changes:**
+- `rag_documents`: `version_id`, `source_hash`, `normalized_source_hash`, `version_number`, `is_current`, `ingestion_status`, `quarantine_reason`, `failure_reason`, `indexed_at`, `superseded_at`, `superseded_by_version_id`.
+- `rag_chunks`: `document_version_id`, `source_hash`, `is_active`.
+- Existing rows default to current indexed active behavior for backward compatibility.
 
-**Validation behavior:**
-- `validateRetrievalPolicy()` performs client-side validation before any save:
-  - Invalid top_k (outside 1–20 bounds) → `INVALID_TOP_K`
-  - Unsupported strategy value → `UNSUPPORTED_STRATEGY`
-  - Semantic strategy + semantic disabled → `SEMANTIC_DISABLED_WITH_SEMANTIC_STRATEGY`
-  - Corpus in both allowed and denied lists → `CONTRADICTORY_CORPUS_POLICY`
-  - Missing tenant_id → `MISSING_TENANT_ID`
-  - Unsupported fallback strategy → `UNSUPPORTED_FALLBACK_STRATEGY`
-- Save button disabled when any validation error exists.
-- Errors rendered per-field with machine-readable code and human-readable message.
-- Invalid configuration fails closed — no silent coercion.
+**Ingestion lifecycle changes:**
+- New hardened path creates indexed document versions or quarantined document records.
+- Superseded versions remain auditable and their chunks are inactive by default retrieval.
+- Failed/quarantined documents are not marked indexed.
 
-**Policy preview behavior:**
-- `buildRetrievalPolicyPreview()` computes effective corpora (allowed minus denied), semantic active state, fallback state, grounded-answer state, effective top-k.
-- Warns when: effective scope is empty, semantic strategy used with semantic disabled, all candidates are denied.
-- Legal note explicitly states no compliance approval is implied.
-- Does not execute live retrieval, does not fabricate results.
+**Deduplication behavior:**
+- Duplicate detection is tenant/corpus scoped by deterministic `source_hash`.
+- Same tenant/corpus duplicate returns `duplicate` and does not add chunks.
+- Cross-tenant identical content ingests independently without existence leakage.
+
+**Re-index safety behavior:**
+- Re-index requires tenant, corpus, document, and version binding.
+- Superseded/stale versions and source-hash mismatches fail closed.
+- Replacement chunks are deterministic and old chunks for the same version are marked inactive.
+- Limitation: current helper-level commits prevent a full shadow-index atomic swap; the implementation uses the smallest safe approximation and tests stale/partial visibility boundaries.
+
+**Quarantine behavior:**
+- Empty and unsupported documents produce tenant-scoped `quarantined` rows with safe reason/detail metadata.
+- Quarantined rows create no active chunks or embeddings and are excluded from retrieval.
 
 **Tenant isolation proof:**
-- `CorpusPolicyMatrix` has explicit note: "Cross-tenant corpora are never shown."
-- `RetrievalPolicyCenter` requires policy with tenant_id; renders null policy as `policy-not-configured` state.
-- Backend security tests assert: tenant A corpus not accessible to tenant B, blank tenant_id raises ValueError, cross-tenant corpus request yields empty effective scope.
-- All corpus scope resolution delegated to existing `_effective_corpus_ids()` which calls `get_corpus(db, tenant_id, corpus_id)` — tenant binding enforced at DB layer.
+- Every lookup and mutation is tenant scoped.
+- Cross-tenant duplicate and re-index tests verify no foreign document visibility or mutation.
 
-**Audit behavior:**
-- `RetrievalPolicyAuditEntry` type includes: timestamp, actor (optional), changed_fields, reason_code (optional), request_id (optional).
-- Audit summary displays policy_version, updated_at, updated_by from policy metadata.
-- Backend audit metadata test asserts all required fields present and all values are safe types (bool/int/str/None).
-- Backend audit test asserts raw chunk text, document body, raw text not in audit logs.
-
-**UI/export-safety notes:**
-- No `dangerouslySetInnerHTML`.
-- No raw vectors, raw prompts, provider payloads, or credentials exposed.
-- No fake retrieval results, fake policy approval, or hidden/system corpus IDs.
-- All icons are `aria-hidden="true"` with text labels.
-- Status badges use `aria-label` not color-only meaning.
-- Tabs use `role="tablist"`, `role="tab"`, `role="tabpanel"`, `aria-selected`.
-- Warnings use `role="alert"`.
-- Interactive buttons have explicit `aria-label`.
-- `aria-expanded` on collapsible audit log toggle.
-
-**Tests added/updated:**
-- `console/tests/retrieval-policy-center.test.js` (new): 120+ static-analysis tests covering file existence, exports, component signatures, strategy values, top-k validation, preview behavior, corpus matrix states, strategy panel, grounding panel, fallback panel, audit summary, tenant isolation, governance safety, retrieval page integration, validation before save, policy model fields, and regression checks.
-- `tests/security/test_retrieval_policy_center_security.py` (new): 23 backend tests covering cross-tenant corpus isolation, denied corpus enforcement, denied overrides allowed, top-k clamping, strategy enforcement, semantic denial, lexical fallback safety, RAG disabled blocking, audit log safety, required audit fields, and provenance/policy engine regression.
+**Provenance/source binding impact:**
+- Hardened chunks carry `document_version_id`, `source_hash`, chunk content hash, deterministic chunk IDs, and future-ready evidence/fact/evaluation metadata.
 
 **Validation results:**
-- `cd console && npm test`: PASS (443/443)
-- `cd console && npm run lint`: PASS
-- `cd console && npm run build`: PASS
-- `pytest tests/security/test_retrieval_policy_center_security.py`: PASS (23/23)
-- `git diff --check`: PASS
+- `pytest -q tests/test_rag_ingestion_hardening.py`: PASS — 9 passed.
+- `pytest -q tests/test_migrations_postgres_replay.py tests/test_migrations_postgres_smoke.py`: SKIPPED — Postgres migration prerequisites unavailable locally.
+- `pytest -q tests/embeddings`: PASS — 138 passed.
+- `pytest -q tests/security`: PASS — 677 passed, 1 skipped.
+- `pytest -q tests -k "ingest or ingestion or corpus or document or chunk or embedding or rag or retrieval"`: PASS — 788 passed, 2 skipped, 2857 deselected.
+- `make fg-fast`: PASS.
+- `bash codex_gates.sh`: PASS — 3631 passed, 26 skipped; dependency audit clean; contract/authority checks passed.
+- `pytest -q tests/test_ai_plane_extension.py::test_ai_chat_grounded_response_returns_safe_contract tests/test_ai_plane_extension.py::test_ai_chat_ungrounded_response_returns_no_answer_and_hashes_final_answer`: PASS after removing `provenance` from `/ai/chat` responses — 2 passed.
 
 **Known limitations:**
-- Policy center renders in read-only / not-configured state until a backend policy API endpoint is wired. Live policy editing (onSave) requires a backend endpoint not yet added in this PR — frontend contract is complete and ready for backend integration.
-- `availableCorpora` prop must be populated by a parent component that fetches tenant-scoped corpora from the backend API. No fake corpora are generated.
-- Audit entries are display-only; backend audit persistence not added in this PR (existing audit infrastructure in `services/ai/audit.py` already logs retrieval policy decisions).
-
-**Future-ready hooks intentionally added:**
-- `onSave` callback accepts `RetrievalPolicyData` payload — ready for backend policy persistence endpoint.
-- `auditEntries` prop accepts `RetrievalPolicyAuditEntry[]` — ready for backend audit log API.
-- `availableCorpora` prop with `CorpusEntry` type — ready for corpus listing API integration.
-- `saving` prop and `validationErrors` prop for backend async save flow.
-- `policy_version`, `updated_by`, `updated_at` fields in policy model — ready for backend versioned policy storage.
+- Full transactional shadow-index swap is deferred until the persistence layer stops committing inside helper functions.
+- No new public ingestion API route is added; hardening is service-layer and retrieval-boundary only.
 
 ---
 

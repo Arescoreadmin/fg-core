@@ -78,6 +78,7 @@ from api.rag_retrieval import (
     _metadata_string,
     _normalise_corpus_ids,
     _require_tenant,
+    _lifecycle_filter,
     _score_text,
     _tokenize,
 )
@@ -253,6 +254,8 @@ def _lexical_candidates(
         return []
 
     unique_query_terms = list(dict.fromkeys(query_terms))
+    lifecycle_filter = _lifecycle_filter(db)
+    lifecycle_sql = f"AND {lifecycle_filter}" if lifecycle_filter else ""
     like_clauses = []
     params: dict = {
         "tenant_id": tenant_id,
@@ -287,6 +290,7 @@ def _lexical_candidates(
          AND corp.tenant_id = c.tenant_id
         WHERE c.tenant_id = :tenant_id
           AND (:use_corpus_filter = 0 OR c.corpus_id IN :corpus_ids)
+          {lifecycle_sql}
           AND ({lexical_prefilter})
         ORDER BY c.corpus_id ASC, c.document_id ASC, c.ordinal ASC, c.chunk_id ASC
         """

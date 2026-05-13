@@ -447,6 +447,59 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 "CREATE INDEX IF NOT EXISTS ix_decisions_tenant_config_created ON decisions(tenant_id, config_hash, created_at)"
             )
 
+        if "rag_documents" in tables:
+            _sqlite_add_column_if_missing(conn, "rag_documents", "version_id", "TEXT")
+            _sqlite_add_column_if_missing(conn, "rag_documents", "source_hash", "TEXT")
+            _sqlite_add_column_if_missing(
+                conn, "rag_documents", "normalized_source_hash", "TEXT"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "rag_documents", "version_number", "INTEGER NOT NULL DEFAULT 1"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "rag_documents", "is_current", "INTEGER NOT NULL DEFAULT 1"
+            )
+            _sqlite_add_column_if_missing(
+                conn,
+                "rag_documents",
+                "ingestion_status",
+                "TEXT NOT NULL DEFAULT 'indexed'",
+            )
+            _sqlite_add_column_if_missing(
+                conn, "rag_documents", "quarantine_reason", "TEXT"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "rag_documents", "failure_reason", "TEXT"
+            )
+            _sqlite_add_column_if_missing(conn, "rag_documents", "indexed_at", "TEXT")
+            _sqlite_add_column_if_missing(
+                conn, "rag_documents", "superseded_at", "TEXT"
+            )
+            _sqlite_add_column_if_missing(
+                conn, "rag_documents", "superseded_by_version_id", "TEXT"
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_rag_documents_tenant_source_hash "
+                "ON rag_documents (tenant_id, corpus_id, source_hash)"
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_rag_documents_tenant_status "
+                "ON rag_documents (tenant_id, corpus_id, ingestion_status, is_current)"
+            )
+
+        if "rag_chunks" in tables:
+            _sqlite_add_column_if_missing(
+                conn, "rag_chunks", "document_version_id", "TEXT"
+            )
+            _sqlite_add_column_if_missing(conn, "rag_chunks", "source_hash", "TEXT")
+            _sqlite_add_column_if_missing(
+                conn, "rag_chunks", "is_active", "INTEGER NOT NULL DEFAULT 1"
+            )
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_rag_chunks_tenant_version_active "
+                "ON rag_chunks (tenant_id, document_version_id, is_active)"
+            )
+
         # (The rest of your large sqlite schema block continues unchanged)
         # NOTE: You pasted duplicated ai_policy_violations creation twice; leaving it as-is is sloppy.
         # If you want it fixed: remove the duplicate block.
@@ -946,7 +999,18 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 source      TEXT,
                 metadata    TEXT,
                 created_at  TEXT NOT NULL,
-                updated_at  TEXT NOT NULL
+                updated_at  TEXT NOT NULL,
+                version_id  TEXT,
+                source_hash TEXT,
+                normalized_source_hash TEXT,
+                version_number INTEGER NOT NULL DEFAULT 1,
+                is_current INTEGER NOT NULL DEFAULT 1,
+                ingestion_status TEXT NOT NULL DEFAULT 'indexed',
+                quarantine_reason TEXT,
+                failure_reason TEXT,
+                indexed_at TEXT,
+                superseded_at TEXT,
+                superseded_by_version_id TEXT
             )
             """
         )
@@ -971,7 +1035,10 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 created_at      TEXT    NOT NULL,
                 content_hash    TEXT,
                 embedding_state TEXT    NOT NULL DEFAULT 'pending'
-                    CHECK (embedding_state IN ('pending','processing','completed','failed','skipped'))
+                    CHECK (embedding_state IN ('pending','processing','completed','failed','skipped')),
+                document_version_id TEXT,
+                source_hash TEXT,
+                is_active INTEGER NOT NULL DEFAULT 1
             )
             """
         )

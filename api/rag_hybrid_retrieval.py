@@ -32,6 +32,7 @@ from api.rag_retrieval import (
     _metadata_string,
     _normalise_corpus_ids,
     _require_tenant,
+    _lifecycle_filter,
     _score_text,
     _tokenize,
 )
@@ -162,6 +163,8 @@ def _lexical_candidates(
         return []
 
     unique_query_terms = list(dict.fromkeys(query_terms))
+    lifecycle_filter = _lifecycle_filter(db)
+    lifecycle_sql = f"AND {lifecycle_filter}" if lifecycle_filter else ""
     like_clauses = []
     params: dict[str, Any] = {
         "tenant_id": tenant_id,
@@ -195,6 +198,7 @@ def _lexical_candidates(
          AND corp.tenant_id = c.tenant_id
         WHERE c.tenant_id = :tenant_id
           AND (:use_corpus_filter = 0 OR c.corpus_id IN :corpus_ids)
+          {lifecycle_sql}
           AND ({" OR ".join(like_clauses)})
         ORDER BY c.corpus_id ASC, c.document_id ASC, c.ordinal ASC, c.chunk_id ASC
         """
@@ -232,6 +236,8 @@ def _semantic_candidates(
 ) -> list[_Candidate]:
     if query_vector is None or invalid_explicit_filter:
         return []
+    lifecycle_filter = _lifecycle_filter(db)
+    lifecycle_sql = f"AND {lifecycle_filter}" if lifecycle_filter else ""
 
     params: dict[str, Any] = {
         "tenant_id": tenant_id,
@@ -241,7 +247,7 @@ def _semantic_candidates(
         "model": model or "__unused__",
     }
     stmt = text(
-        """
+        f"""
         SELECT
             c.chunk_id,
             c.document_id,
@@ -269,6 +275,7 @@ def _semantic_candidates(
          AND corp.tenant_id = c.tenant_id
         WHERE e.tenant_id = :tenant_id
           AND (:use_corpus_filter = 0 OR c.corpus_id IN :corpus_ids)
+          {lifecycle_sql}
           AND (:use_model_filter = 0 OR e.model = :model)
         ORDER BY c.corpus_id ASC, c.document_id ASC, c.ordinal ASC, c.chunk_id ASC
         """
