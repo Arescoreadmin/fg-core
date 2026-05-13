@@ -2918,3 +2918,27 @@ SOC review:
 Validation:
 - make fg-fast
 - make soc-review-sync
+
+
+## PR 49 Addendum — Retrieval Policy Persistence & Enforcement Wiring (2026-05-13)
+
+Route inventory update: three new endpoints added to `tools/ci/route_inventory.json`,
+`tools/ci/route_inventory_summary.json`, and `tools/ci/topology.sha256` via
+`make route-inventory-generate` after registering `rag_retrieval_policy_router`:
+
+- `GET /rag/retrieval-policy` — governance:write gated, tenant-scoped
+- `PUT /rag/retrieval-policy` — governance:write gated, tenant-scoped
+- `GET /rag/corpora` — governance:write gated, tenant-scoped
+
+SOC review:
+- No security policy changed. All three routes sit behind verify_api_key +
+  require_scopes("governance:write") — same guard pattern as /governance/changes.
+- Tenant isolation is structural: require_bound_tenant() on every call.
+- No auth, middleware, CI workflows, or OPA policy altered.
+- No secrets added or changed. Route inventory is a read-only audit artifact.
+- tools/ci changes are exclusively route-inventory regeneration; no CI logic altered.
+
+Validation:
+- make route-inventory-generate
+- make fg-fast
+- make soc-review-sync

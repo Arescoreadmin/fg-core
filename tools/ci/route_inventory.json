@@ -3518,6 +3518,57 @@
       "tenant_bound": true
     },
     {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/rag_retrieval_policy.py",
+      "method": "GET",
+      "path": "/rag/corpora",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/rag_retrieval_policy.py",
+      "method": "GET",
+      "path": "/rag/retrieval-policy",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/rag_retrieval_policy.py",
+      "method": "PUT",
+      "path": "/rag/retrieval-policy",
+      "plane": "unmapped",
+      "plane_id": "unmapped",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
       "dependency_categories": [],
       "file": "api/ring_router.py",
       "method": "GET",
@@ -4210,7 +4261,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-05-05T23:03:17.004857+00:00",
+  "generated_at": "2026-05-13T09:46:11.732578+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

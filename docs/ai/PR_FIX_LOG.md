@@ -6,6 +6,100 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-12 — PR 49 Retrieval Policy Center
+
+**Branch:** `pr-49-retrieval-policy-center`
+
+**Task identifier:** PR 49 — Retrieval Policy Center
+
+**Area:** Frontend governance UI; retrieval policy management; corpus access control; policy validation; policy preview; audit-safe editing.
+
+**Purpose:** Build a production-grade governance interface and policy management layer for retrieval behavior. Operators can manage retrieval governance visually, control corpus access safely, configure retrieval behavior deterministically, preview policy effects before save, validate retrieval policy, and understand effective retrieval state clearly.
+
+**Files changed:**
+- `console/components/governance/RetrievalPolicyCenter.tsx` — new governance component providing full retrieval policy UX.
+- `console/components/governance/index.ts` — adds exports for `RetrievalPolicyCenter` and all sub-components, utilities, types, and constants.
+- `console/app/dashboard/retrieval/page.tsx` — integrates `RetrievalPolicyCenter` into the dedicated retrieval route.
+- `console/tests/retrieval-policy-center.test.js` — 120+ static-analysis tests covering all acceptance criteria.
+- `tests/security/test_retrieval_policy_center_security.py` — 23 backend security regression tests.
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+
+**Retrieval governance behavior added:**
+- `RetrievalPolicyCenter` — tenant-scoped, operator-readable policy display with edit, preview, and audit summary.
+- `RetrievalPolicyEditor` — tabbed editor for corpus, strategy, grounding, and fallback policy sections.
+- `RetrievalPolicyPreview` — deterministic preview of effective policy state; does NOT execute live retrieval.
+- `CorpusPolicyMatrix` — per-corpus allowed/denied/inherited state table with operator allow/deny actions.
+- `RetrievalStrategyPanel` — strategy selector (lexical/semantic/hybrid/hybrid_rrf only), semantic toggle, fallback toggle, reranking toggle.
+- `GroundingEnforcementPanel` — grounded-answer enforcement display; read-only mode for enforcement-locked deployments; warning when disabling.
+- `RetrievalFallbackPanel` — fallback configuration; explicit safety note that fallback does not bypass denied corpora, tenant isolation, or provenance enforcement.
+- `RetrievalPolicyAuditSummary` — collapsible audit log with timestamps, actors, changed fields, policy version, updated_by, updated_at.
+
+**Validation behavior:**
+- `validateRetrievalPolicy()` performs client-side validation before any save:
+  - Invalid top_k (outside 1–20 bounds) → `INVALID_TOP_K`
+  - Unsupported strategy value → `UNSUPPORTED_STRATEGY`
+  - Semantic strategy + semantic disabled → `SEMANTIC_DISABLED_WITH_SEMANTIC_STRATEGY`
+  - Corpus in both allowed and denied lists → `CONTRADICTORY_CORPUS_POLICY`
+  - Missing tenant_id → `MISSING_TENANT_ID`
+  - Unsupported fallback strategy → `UNSUPPORTED_FALLBACK_STRATEGY`
+- Save button disabled when any validation error exists.
+- Errors rendered per-field with machine-readable code and human-readable message.
+- Invalid configuration fails closed — no silent coercion.
+
+**Policy preview behavior:**
+- `buildRetrievalPolicyPreview()` computes effective corpora (allowed minus denied), semantic active state, fallback state, grounded-answer state, effective top-k.
+- Warns when: effective scope is empty, semantic strategy used with semantic disabled, all candidates are denied.
+- Legal note explicitly states no compliance approval is implied.
+- Does not execute live retrieval, does not fabricate results.
+
+**Tenant isolation proof:**
+- `CorpusPolicyMatrix` has explicit note: "Cross-tenant corpora are never shown."
+- `RetrievalPolicyCenter` requires policy with tenant_id; renders null policy as `policy-not-configured` state.
+- Backend security tests assert: tenant A corpus not accessible to tenant B, blank tenant_id raises ValueError, cross-tenant corpus request yields empty effective scope.
+- All corpus scope resolution delegated to existing `_effective_corpus_ids()` which calls `get_corpus(db, tenant_id, corpus_id)` — tenant binding enforced at DB layer.
+
+**Audit behavior:**
+- `RetrievalPolicyAuditEntry` type includes: timestamp, actor (optional), changed_fields, reason_code (optional), request_id (optional).
+- Audit summary displays policy_version, updated_at, updated_by from policy metadata.
+- Backend audit metadata test asserts all required fields present and all values are safe types (bool/int/str/None).
+- Backend audit test asserts raw chunk text, document body, raw text not in audit logs.
+
+**UI/export-safety notes:**
+- No `dangerouslySetInnerHTML`.
+- No raw vectors, raw prompts, provider payloads, or credentials exposed.
+- No fake retrieval results, fake policy approval, or hidden/system corpus IDs.
+- All icons are `aria-hidden="true"` with text labels.
+- Status badges use `aria-label` not color-only meaning.
+- Tabs use `role="tablist"`, `role="tab"`, `role="tabpanel"`, `aria-selected`.
+- Warnings use `role="alert"`.
+- Interactive buttons have explicit `aria-label`.
+- `aria-expanded` on collapsible audit log toggle.
+
+**Tests added/updated:**
+- `console/tests/retrieval-policy-center.test.js` (new): 120+ static-analysis tests covering file existence, exports, component signatures, strategy values, top-k validation, preview behavior, corpus matrix states, strategy panel, grounding panel, fallback panel, audit summary, tenant isolation, governance safety, retrieval page integration, validation before save, policy model fields, and regression checks.
+- `tests/security/test_retrieval_policy_center_security.py` (new): 23 backend tests covering cross-tenant corpus isolation, denied corpus enforcement, denied overrides allowed, top-k clamping, strategy enforcement, semantic denial, lexical fallback safety, RAG disabled blocking, audit log safety, required audit fields, and provenance/policy engine regression.
+
+**Validation results:**
+- `cd console && npm test`: PASS (443/443)
+- `cd console && npm run lint`: PASS
+- `cd console && npm run build`: PASS
+- `pytest tests/security/test_retrieval_policy_center_security.py`: PASS (23/23)
+- `git diff --check`: PASS
+
+**Known limitations:**
+- Policy center renders in read-only / not-configured state until a backend policy API endpoint is wired. Live policy editing (onSave) requires a backend endpoint not yet added in this PR — frontend contract is complete and ready for backend integration.
+- `availableCorpora` prop must be populated by a parent component that fetches tenant-scoped corpora from the backend API. No fake corpora are generated.
+- Audit entries are display-only; backend audit persistence not added in this PR (existing audit infrastructure in `services/ai/audit.py` already logs retrieval policy decisions).
+
+**Future-ready hooks intentionally added:**
+- `onSave` callback accepts `RetrievalPolicyData` payload — ready for backend policy persistence endpoint.
+- `auditEntries` prop accepts `RetrievalPolicyAuditEntry[]` — ready for backend audit log API.
+- `availableCorpora` prop with `CorpusEntry` type — ready for corpus listing API integration.
+- `saving` prop and `validationErrors` prop for backend async save flow.
+- `policy_version`, `updated_by`, `updated_at` fields in policy model — ready for backend versioned policy storage.
+
+---
+
 ### 2026-05-12 — PR 48 Provenance Validation UI
 
 **Branch:** `pr-48-provenance-validation-ui`
@@ -8408,3 +8502,82 @@ Admin dev mode was not fail-closed in staging (only `is_prod` checked, not `is_p
 - Known missed reference: migrations/postgres/0017_ai_plane_policy_hardening.sql contains COALESCE(retrieval_id, 'stub')
 - Fix: added .sql to scan scope; classified SQL migration references as historical in inventory doc
 - Tests added: SQL inclusion, SQL migration documentation coverage
+
+---
+
+## PR 49 Addendum — Retrieval Policy Persistence & Enforcement Wiring
+
+### Summary
+Wired the Retrieval Policy Center (PR 49) to a real DB-backed backend. The UI
+now calls live endpoints; all policy saves are validated server-side, audit-logged,
+and persisted. Denied corpora are enforced by the retrieval policy engine via the
+stored AiRagRules, not just previewed in the UI.
+
+### Files changed
+- `migrations/postgres/0041_rag_retrieval_policy.sql` — NEW: tenant_retrieval_policies table
+- `api/db_models.py` — added TenantRetrievalPolicy ORM model
+- `api/rag_retrieval_policy_store.py` — NEW: get/upsert/rag_rules_from_db
+- `api/rag_retrieval_policy.py` — NEW: FastAPI router (GET + PUT /rag/retrieval-policy, GET /rag/corpora)
+- `api/main.py` — registered rag_retrieval_policy_router
+- `console/app/api/core/[...path]/route.ts` — added rag/retrieval-policy + rag/corpora to PROXY_RULES
+- `console/lib/retrievalPolicyApi.ts` — NEW: typed API client (getRetrievalPolicy, putRetrievalPolicy, getCorpora)
+- `console/components/governance/RetrievalPolicyCenterContainer.tsx` — NEW: client component with data fetch + onSave
+- `console/components/governance/index.ts` — exports RetrievalPolicyCenterContainer
+- `console/app/dashboard/retrieval/page.tsx` — uses RetrievalPolicyCenterContainer (real data, not null)
+- `tests/test_rag_retrieval_policy_wiring.py` — NEW: backend wiring tests
+- `console/tests/retrieval-policy-center.test.js` — extended: addendum wiring tests
+
+### Schema/API changes
+- New table: `tenant_retrieval_policies` (one row per tenant, upserted on PUT)
+- New endpoints: GET /rag/retrieval-policy, PUT /rag/retrieval-policy, GET /rag/corpora
+- All gated on: verify_api_key + governance:write scope
+
+### Retrieval governance behavior
+- Policy persists to DB; survives restart
+- GET returns stored policy or 404 (not configured)
+- PUT validates then writes; audit-logged
+- rag_rules_from_db() converts DB row to AiRagRules for evaluate_retrieval_policy()
+- Denied corpora: excluded from effective_corpus_ids by evaluate_retrieval_policy()
+
+### Validation behavior
+- top_k: 1–20 enforced server-side; rejects out-of-bounds values with INVALID_TOP_K
+- strategy: rejects unknown values with UNSUPPORTED_STRATEGY
+- corpus: rejects allow+deny overlap with CONTRADICTORY_CORPUS
+- semantic: rejects allow_semantic=True without semantic strategy with INCOMPATIBLE_SEMANTIC
+- All errors machine-readable; no silent coercion; fail-closed
+
+### Tenant isolation proof
+- get_retrieval_policy() filters strictly by tenant_id; returns None for other tenants
+- upsert_retrieval_policy() creates separate rows; never touches another tenant's row
+- rag_rules_from_db() isolates by tenant_id; never constructs rules from another tenant
+- BFF proxy injects CORE_TENANT_ID; client cannot supply a different tenant_id
+
+### Audit behavior
+- PUT _audit_policy_change() logs: tenant_id, actor (key prefix), policy_version,
+  request_id, max_top_k, boolean enforcement flags, corpus list counts
+- Does NOT log: corpus IDs, provider secrets, raw prompts, vectors, document content
+
+### UI/export-safety notes
+- RetrievalPolicyCenterContainer: 'use client'; no dangerouslySetInnerHTML
+- Loading / apiFailure / notConfigured states render safely with aria labels
+- Save errors from backend parsed into RetrievalPolicyValidationError[] for UI display
+- Available corpora fetched from tenant-scoped GET /rag/corpora (no cross-tenant)
+- grounded_answer_required persisted in DB and reflected in UI (no fake toggle)
+
+### Tests added/updated
+- tests/test_rag_retrieval_policy_wiring.py: 30+ tests covering persistence, isolation,
+  validation, rag_rules_from_db, retrieval engine enforcement, audit safety
+- console/tests/retrieval-policy-center.test.js: ~40 addendum tests for container,
+  api client, proxy rules, page integration
+
+### Known limitations
+- PUT /rag/retrieval-policy stores policy in DB but the UI_AI_CONSOLE answering path
+  (ui_ai_console.py) still loads AiRagRules from resolve_ai_policy_for_tenant()
+  (file-based). The DB policy affects retrieval when rag_rules_from_db() is explicitly
+  called; wiring into the AI answer path requires a separate PR.
+- Router-level integration tests (TestClient) are skipped — require full auth middleware
+  stack. Backend logic is covered by direct store + engine tests.
+
+### Future-ready hooks intentionally added
+- rag_rules_from_db() provides the hook for any caller to load policy from DB
+- TenantRetrievalPolicy model includes reranking_enabled for future rerank policy wiring
