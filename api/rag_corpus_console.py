@@ -110,28 +110,50 @@ def _safe_source_hash_prefix(source_hash: Optional[str]) -> Optional[str]:
     return str(source_hash)[:_SAFE_SOURCE_HASH_PREFIX_LEN]
 
 
+_BLOCKED_METADATA_KEYS = frozenset(
+    {
+        "embedding",
+        "vector",
+        "prompt",
+        "credentials",
+        "secret",
+        "password",
+        "token",
+        "api_key",
+        "raw_text",
+        "provider_payload",
+    }
+)
+
+
+def _is_blocked_key(key: str) -> bool:
+    k = str(key).lower()
+    return any(blocked in k for blocked in _BLOCKED_METADATA_KEYS)
+
+
+def _sanitize_value(value: Any) -> Any:
+    """Recursively strip blocked keys from nested dicts; drop list elements that are blocked dicts."""
+    if isinstance(value, dict):
+        return _safe_metadata(value)
+    if isinstance(value, list):
+        result = []
+        for item in value:
+            if isinstance(item, dict):
+                cleaned = _safe_metadata(item)
+                if cleaned is not None:
+                    result.append(cleaned)
+            elif not isinstance(item, (dict, list)):
+                result.append(item)
+        return result
+    return value
+
+
 def _safe_metadata(metadata: Any) -> Optional[dict[str, Any]]:
-    """Return only operator-safe metadata keys; strip any that might contain secrets."""
+    """Return only operator-safe metadata keys; recursively strip secrets from nested structures."""
     if not isinstance(metadata, dict):
         return None
-    _BLOCKED_KEYS = frozenset(
-        {
-            "embedding",
-            "vector",
-            "prompt",
-            "credentials",
-            "secret",
-            "password",
-            "token",
-            "api_key",
-            "raw_text",
-            "provider_payload",
-        }
-    )
     return {
-        k: v
-        for k, v in metadata.items()
-        if not any(blocked in str(k).lower() for blocked in _BLOCKED_KEYS)
+        k: _sanitize_value(v) for k, v in metadata.items() if not _is_blocked_key(k)
     }
 
 

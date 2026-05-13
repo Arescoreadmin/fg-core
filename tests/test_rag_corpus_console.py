@@ -296,6 +296,63 @@ def test_safe_metadata_non_dict_returns_none():
     assert _safe_metadata(42) is None  # type: ignore[arg-type]
 
 
+def test_safe_metadata_strips_nested_blocked_keys():
+    from api.rag_corpus_console import _safe_metadata
+
+    # Nested dict whose key is safe but whose value contains a blocked sub-key
+    metadata = {
+        "connector": {
+            "api_key": "should-be-gone",
+            "name": "keep-this",
+        },
+        "tags": ["finance", "legal"],
+        "title": "top-level-safe",
+    }
+    result = _safe_metadata(metadata)
+    assert result is not None
+    assert result["title"] == "top-level-safe"
+    assert result["tags"] == ["finance", "legal"]
+    connector = result.get("connector")
+    assert connector is not None
+    assert "api_key" not in connector
+    assert connector.get("name") == "keep-this"
+
+
+def test_safe_metadata_strips_deeply_nested_blocked_keys():
+    from api.rag_corpus_console import _safe_metadata
+
+    metadata = {
+        "provider": {
+            "credentials": {"key": "secret-value"},
+            "region": "us-east-1",
+        }
+    }
+    result = _safe_metadata(metadata)
+    assert result is not None
+    provider = result.get("provider")
+    assert provider is not None
+    assert "credentials" not in provider
+    assert provider.get("region") == "us-east-1"
+
+
+def test_safe_metadata_list_of_dicts_stripped():
+    from api.rag_corpus_console import _safe_metadata
+
+    metadata = {
+        "sources": [
+            {"url": "https://example.com", "api_key": "leaked"},
+            {"url": "https://other.com"},
+        ]
+    }
+    result = _safe_metadata(metadata)
+    assert result is not None
+    sources = result.get("sources")
+    assert isinstance(sources, list)
+    assert len(sources) == 2
+    for src in sources:
+        assert "api_key" not in src
+
+
 # ---------------------------------------------------------------------------
 # Ingestion status coverage
 # ---------------------------------------------------------------------------
