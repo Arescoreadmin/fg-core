@@ -63,6 +63,7 @@ from api.agent_phase2 import router as agent_phase2_router
 from api.agent_tokens import router as agent_tokens_router
 from api.assessments import router as assessments_router
 from api.rag_retrieval_policy import router as rag_retrieval_policy_router
+from api.rag_corpus_console import router as rag_corpus_console_router
 from api.reports_engine import router as reports_engine_router
 from api.stripe_webhooks import router as stripe_webhooks_router
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
@@ -567,6 +568,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(assessments_router)
     app.include_router(reports_engine_router)
     app.include_router(rag_retrieval_policy_router)
+    app.include_router(rag_corpus_console_router)
     app.include_router(stripe_webhooks_router)
     app.include_router(connectors_control_plane_router)
     app.include_router(control_plane_router)
@@ -861,6 +863,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(assessments_router)
     app.include_router(reports_engine_router)
     app.include_router(rag_retrieval_policy_router)
+    app.include_router(rag_corpus_console_router)
     app.include_router(stripe_webhooks_router)
     app.include_router(connectors_control_plane_router)
     app.include_router(control_plane_router)

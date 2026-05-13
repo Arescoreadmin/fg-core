@@ -29,7 +29,7 @@
   "governance": {
     "contract_count": 170,
     "contract_only": [],
-    "runtime_count": 256,
+    "runtime_count": 259,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -51,6 +51,9 @@
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
+      "GET /rag/corpora/{corpus_id}",
+      "GET /rag/corpora/{corpus_id}/documents",
+      "GET /rag/documents/{document_id}",
       "GET /ui/ai",
       "GET /ui/ai/experience",
       "GET /ui/ai/usage",
@@ -117,7 +120,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "681f224a66f9d1665bb02e4ea18fd8b3b2dd43871b6be928d0f931cc80469a44",
+  "governance_fingerprint": "264898c96fe3d89604daec68b0be2fc1926e6fba3f0e76c088f45afb3b9b6a44",
   "planes": [
     {
       "compat": {
@@ -356,6 +359,9 @@
       "GET /health/ready",
       "GET /planes",
       "GET /rag/corpora",
+      "GET /rag/corpora/{corpus_id}",
+      "GET /rag/corpora/{corpus_id}/documents",
+      "GET /rag/documents/{document_id}",
       "GET /rag/retrieval-policy",
       "GET /status",
       "POST /admin/agent/commands/issue",

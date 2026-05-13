@@ -8633,3 +8633,108 @@ and CONTRACT.md, fixed ruff lint, regenerated route inventory.
   tests/test_rag_retrieval_policy_wiring.py: 39 passed, 3 skipped
 - npm run lint (console): no warnings or errors
 - npx tsc --noEmit: no type errors
+
+---
+
+### 2026-05-13 — PR 50 Corpus Management Console
+
+**Problem**
+No operational console existed for inspecting corpus ingestion lifecycle state, document
+counts, chunk state, or embedding progress. Operators had no tenant-safe read-only view of
+real backend state without raw DB access.
+
+**Root cause**
+Missing backend endpoints and frontend console component. Existing `/rag/corpora` route
+returned only minimal data for the policy UI; it did not expose document/chunk/embedding
+summaries needed for operational visibility.
+
+**Fix summary**
+
+### Backend — api/rag_corpus_console.py (NEW)
+
+Three new read-only FastAPI endpoints under `/rag` prefix, `governance:write` scope:
+
+- `GET /rag/corpora/{corpus_id}` — corpus detail with document/chunk/embedding summaries
+- `GET /rag/corpora/{corpus_id}/documents` — paginated, filterable, sortable document list
+  with per-document chunk counts
+- `GET /rag/documents/{document_id}` — document detail with chunk + embedding summary
+
+Security controls:
+- `_safe_source_hash_prefix()`: exposes 12-char prefix only; full hash never returned
+- `_safe_metadata()`: strips embedding, vector, prompt, credentials, api_key, raw_text,
+  provider_payload, secret, password, token keys
+- `_validate_sort()`: allowlist validation for sort_by + sort_dir; raises HTTP 422 otherwise
+- Stable pagination: `ORDER BY {col} {dir}, d.document_id ASC` tiebreaker
+- All queries parameterized; no raw user input in SQL string
+
+### api/main.py (MODIFIED)
+
+Router registered at both app factory points alongside existing governance routers.
+
+### Frontend — console/lib/corpusConsoleApi.ts (NEW)
+
+BFF client library: `getCorpusDetail`, `listCorpusDocuments`, `getDocumentDetail` —
+all return `SafeResult<T>`. None accept `tenant_id` (injected server-side by BFF proxy).
+
+### console/components/governance/CorpusManagementConsole.tsx (NEW)
+
+13 exported components: `CorpusManagementConsole`, `CorpusBrowser`, `DocumentBrowser`,
+`DocumentDetailPanel`, `ChunkStatePanel`, `EmbeddingStatusBadge`,
+`IngestionLifecycleBadge`, `CorpusMetadataViewer`, `CorpusFilterBar`,
+`CorpusPaginationControls`, `CorpusHealthPanel`, `CorpusEmptyState`, `CorpusLoadingState`.
+
+- All 10 ingestion lifecycle states rendered with accessible badges
+- All 5 embedding states covered
+- `source_hash_prefix` shown with `…` suffix; no full hash
+- `ChunkStatePanel` includes disclaimer: "Raw vectors and embedding payloads are not exposed."
+- No `dangerouslySetInnerHTML`
+- ARIA roles on empty/loading states
+
+### console/app/dashboard/corpus/page.tsx (MODIFIED)
+
+Placeholder replaced with full page using `CorpusManagementConsole`.
+
+### console/app/api/core/[...path]/route.ts (MODIFIED)
+
+Added proxy rule: `{ prefix: 'rag/documents', methods: new Set(['GET', 'HEAD']) }`.
+
+### Infrastructure
+
+- `tools/ci/route_inventory.json` regenerated via `check_route_inventory.py --write`
+- `BLUEPRINT_STAGED.md` + `CONTRACT.md` authority markers refreshed
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` updated with PR 50 addendum (SOC-HIGH-002 compliance)
+- `console/components/governance/index.ts` updated with all 13 new exports
+
+### Tests added
+
+**tests/test_rag_corpus_console.py** (29 tests):
+- Corpus detail counts (total/active documents, active chunks)
+- Ingestion status summary (all 10 lifecycle values)
+- Embedding state summary key validation
+- Tenant isolation for all 3 endpoints
+- source_hash_prefix: 12-char prefix, None/empty safety
+- _safe_metadata: blocked key stripping, non-dict safety
+- Sort validation: rejects unknown field, rejects unknown dir, accepts valid
+- Quarantine visibility in document list and chunk counts
+- Regression: all related modules importable
+
+**console/tests/corpus-management-console.test.js** (80 tests):
+- File existence, all 13 component exports
+- All ingestion/embedding states covered
+- Governance safety (no full hash, no raw vectors/credentials)
+- Pagination and filtering structure
+- Tenant isolation (no client-side tenant_id parameters)
+- BFF proxy rule presence
+- Page integration
+- Accessibility (aria-label, role="status", aria-busy)
+- Regression: existing governance exports unaffected
+
+### Validation
+- make fg-fast: all checks passed
+- pytest tests/test_rag_corpus_console.py: 29 passed
+- node --test console/tests/corpus-management-console.test.js: 80 passed, 0 failed
+- npm run lint (console): no warnings or errors
+- npm run build: passed
+- PYTHONPATH=. python tools/ci/check_route_inventory.py: route inventory OK
+- make fg-contract: passed
+- Full pytest suite: 417 passed, 3 skipped

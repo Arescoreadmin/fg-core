@@ -31,7 +31,9 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'ui/ai/chat', methods: new Set(['POST']) },
   // Retrieval policy governance — tenant-scoped, governance:write gated
   { prefix: 'rag/retrieval-policy', methods: new Set(['GET', 'PUT', 'HEAD']) },
+  // Corpus list (policy UI + corpus console) and corpus/document detail console routes
   { prefix: 'rag/corpora', methods: new Set(['GET', 'HEAD']) },
+  { prefix: 'rag/documents', methods: new Set(['GET', 'HEAD']) },
 ];
 
 function getRequestId(request: NextRequest): string {

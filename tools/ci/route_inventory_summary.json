@@ -87,14 +87,14 @@
     "agent": 14,
     "ai": 5,
     "connector": 14,
-    "control": 122,
+    "control": 125,
     "data": 42,
     "evidence": 23,
     "security": 6,
     "ui": 30
   },
   "removed": [],
-  "runtime_count": 256,
+  "runtime_count": 259,
   "runtime_only": [
     "GET /_debug/routes",
     "GET /admin/agent/devices",
@@ -116,6 +116,9 @@
     "GET /control/testing/health",
     "GET /control/testing/runs",
     "GET /control/testing/runs/{run_id}",
+    "GET /rag/corpora/{corpus_id}",
+    "GET /rag/corpora/{corpus_id}/documents",
+    "GET /rag/documents/{document_id}",
     "GET /ui/ai",
     "GET /ui/ai/experience",
     "GET /ui/ai/usage",
@@ -175,5 +178,9 @@
     "PUT /admin/tenants/{tenant_id}/quota",
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
-  "unauthorized_runtime_only": []
+  "unauthorized_runtime_only": [
+    "GET /rag/corpora/{corpus_id}",
+    "GET /rag/corpora/{corpus_id}/documents",
+    "GET /rag/documents/{document_id}"
+  ]
 }
