@@ -8843,3 +8843,109 @@ triggered on a production code change. PR 50 was the trigger.
 **Remaining limitations**
 None. Total locally: fg-fast (~78s) + fg-security (~440s) = ~520s. Well within 1200s.
 In CI with slower runners, estimated ~800-1000s — still within 1200s budget.
+
+---
+
+### 2026-05-13 — PR 30 Competitive Differentiation Layer
+
+**Branch:** `pr-30-competitive-differentiation-layer`
+
+**Task identifier:** PR 30 — Competitive Differentiation Layer
+
+**Area:** AI-plane evidence-aware response contract; retrieval proof propagation; provenance/grounding risk scoring; compliance retrieval modes; audit/export-safe evidence metadata.
+
+**Purpose:** Separate AI answers from source-backed evidence, inference, uncertainty, deterministic risk, and human review state so `/ai/infer` can return an enterprise-grade evidence-aware response without weakening the strict `/ai/chat` contract.
+
+**Files changed:**
+- `services/ai_plane_extension/models.py` — adds strict evidence-aware response models, evidence/inference/uncertainty item models, and bounded `compliance_mode` values.
+- `services/ai_plane_extension/service.py` — builds additive top-level and nested evidence-aware `/ai/infer` response fields, deterministic risk scoring, review reasons, compliance-mode handling, provenance integration, and export-safe evidence summaries.
+- `services/ai/rag_context.py` — carries safe document/corpus/source-hash/rank/rerank proof fields from retrieval into the AI plane.
+- `api/rag_context.py` — adds optional `source_hash` and `document_version_id` to internal chunk provenance.
+- `api/rag_retrieval.py`, `api/rag_semantic_retrieval.py`, `api/rag_hybrid_retrieval.py` — propagate source hash/version proof fields when present and degrade safely to null when legacy schemas lack those columns.
+- `contracts/core/openapi.json`, `schemas/api/openapi.json`, `CONTRACT.md`, `BLUEPRINT_STAGED.md` — regenerated because `/ai/infer` request schema now accepts optional `compliance_mode`.
+- `tests/test_ai_plane_extension.py` — adds response separation, evidence integrity, missing source hash, invalid citation, unknown mode, and multi-corpus disagreement coverage.
+- `tests/security/test_ai_evidence_response_security.py` — adds cross-tenant evidence leak and export-safety regressions.
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+
+**Response schema/contract changes:**
+- `/ai/infer` remains response-compatible because its OpenAPI 200 response is still a generic object.
+- `/ai/infer` request now accepts optional `compliance_mode` enum: `strict_grounded`, `retrieval_preferred`, `phi_restricted`, `legal_grade`, `finance_grade`, `internal_ops`.
+- `/ai/infer` now returns additive top-level fields: `answer`, `evidence`, `inference`, `uncertainty`, `risk_score`, `requires_human_review`.
+- `/ai/infer` also returns nested `evidence_response` with review reasons, mode, provenance status, retrieval mode, policy version, confidence, no-answer reason, and risk factors.
+- `/ai/chat` remains backward compatible with strict `answer`, `sources`, `confidence` only.
+
+**Evidence separation behavior:**
+- Evidence is emitted only when the final answer is grounded and provenance validation did not fail.
+- Evidence items bind to retrieved/prompt-included chunk IDs and include doc ID, chunk ID, corpus ID, source hash where available, safe title/label, bounded support summary, confidence, retrieval rank, rerank score, and provenance status.
+- Raw chunk text, raw vectors, raw prompts, provider payloads, tenant IDs, secrets, and stack traces are not included in evidence metadata.
+- Invalid or fake citations produce no evidence.
+
+**Inference separation behavior:**
+- Inference is separate from evidence and references evidence chunk IDs.
+- Unsupported provider output is not surfaced as evidence and is replaced by existing `NO_ANSWER` behavior.
+
+**Uncertainty behavior:**
+- Adds explicit uncertainty items for missing evidence, weak evidence, invalid citation/provenance, source hash missing, corpus disagreement, regulated mode, and policy restriction.
+- Missing source hash preserves evidence binding but adds uncertainty and risk.
+
+**Risk scoring rules:**
+- Deterministic bounded score in `[0.0, 1.0]`.
+- Base risk is low only when evidence exists and provenance did not fail; otherwise base risk is high.
+- Risk increases for missing evidence, source hash missing, low retrieval confidence, regulated mode, corpus disagreement, policy restriction, ungrounded/no-context/empty answers, and provenance failure.
+- High retrieval confidence with valid evidence can reduce risk slightly but cannot erase other risk factors.
+
+**Compliance modes added/updated:**
+- `strict_grounded` uses the lowest review threshold and flags missing evidence.
+- `retrieval_preferred` allows existing no-answer/uncertainty behavior with a higher review threshold.
+- `phi_restricted`, `legal_grade`, and `finance_grade` add regulated-domain uncertainty and lower review thresholds.
+- `internal_ops` preserves safe operational metadata only.
+- Unknown modes fail closed through strict request validation.
+
+**Multi-corpus behavior:**
+- Evidence preserves safe `corpus_id` where available.
+- Retrieval policy corpus allow/deny enforcement remains upstream in the existing retrieval policy engine.
+- Multiple corpus evidence with detectable conflict markers adds `corpus_disagreement` uncertainty/risk and requires review.
+
+**Human review behavior:**
+- `requires_human_review` is true when risk exceeds the mode threshold, strict grounded mode lacks evidence, regulated weak evidence is present, provenance fails, corpus disagreement is detected, or grounded response is required but not satisfied.
+- `review_reasons` are safe machine-readable strings; no review queue was added.
+
+**Tenant isolation proof:**
+- Retrieval remains tenant-scoped before evidence construction.
+- Cross-tenant security tests prove wrong-tenant evidence remains empty and raw foreign chunk text is not returned.
+- Tenant IDs are not exposed in evidence metadata.
+
+**Provenance/grounding integration:**
+- Uses existing grounded-answer verifier and provenance validator before evidence construction.
+- Provenance failures suppress evidence and raise risk/review.
+- No-context behavior stays safe and returns `NO_ANSWER` with explicit uncertainty/risk.
+- PR 29 lifecycle filtering remains in retrieval before evidence construction.
+- Rerank metadata is included only as bounded score metadata when available.
+
+**Tests added/updated:**
+- Evidence-aware `/ai/infer` separation and source proof.
+- Missing source hash uncertainty/risk/review.
+- Invalid citation not labeled as evidence.
+- Unknown compliance mode fail-closed validation.
+- Multi-corpus disagreement risk/review.
+- Cross-tenant evidence leak prevention.
+- Export-safe metadata regression.
+- Existing `/ai/chat` strict response contract regressions remain covered.
+
+**Validation results:**
+- `.venv/bin/ruff check services/ai_plane_extension api/rag_context.py api/rag_retrieval.py api/rag_semantic_retrieval.py api/rag_hybrid_retrieval.py tests/test_ai_plane_extension.py tests/security/test_ai_evidence_response_security.py`: PASS.
+- `python -m compileall services/ai_plane_extension api/rag_context.py api/rag_retrieval.py api/rag_semantic_retrieval.py api/rag_hybrid_retrieval.py tests/test_ai_plane_extension.py tests/security/test_ai_evidence_response_security.py`: PASS.
+- `.venv/bin/python -m pytest -q tests/test_ai_plane_extension.py -k "evidence or provenance_ui or chat_grounded or chat_ungrounded or metadata_empty"`: PASS — 8 passed, 28 deselected.
+- `.venv/bin/python -m pytest -q tests/security/test_ai_evidence_response_security.py`: PASS — 2 passed.
+- `.venv/bin/python -m pytest -q tests/test_rag_retrieval.py tests/test_semantic_retrieval.py tests/test_hybrid_retrieval.py tests/test_rag_reranking.py -k "retrieval or semantic or hybrid or rerank or source_hash"`: PASS — 83 passed.
+- `.venv/bin/pytest -q tests -k "rag or retrieval or evidence or verifier or provenance or ai"`: PASS — 1333 passed, 4 skipped, 2414 deselected.
+- `.venv/bin/pytest -q tests/security`: PASS — 702 passed, 1 skipped.
+- `make contracts-gen`: PASS — regenerated OpenAPI/authority artifacts for the request enum change.
+- `make fg-fast`: PASS.
+- `bash codex_gates.sh`: PASS — 3732 passed, 29 skipped; pip check clean; dependency audit clean; contract checks passed; canonical tester flow skipped because admin gateway was not running.
+- `git diff --check`: PASS.
+
+**Known limitations:**
+- Human review queue/workflow is not implemented; response metadata marks review requirement for future workflow integration.
+- Multi-corpus disagreement detection is intentionally minimal and marker-based; this PR does not implement GraphRAG or fact graph traversal.
+- `pytest -q ...` using the system pytest binary fails locally due an environment-level unknown `asyncio_default_fixture_loop_scope` config option; validation used the repository `.venv/bin/pytest` runner.

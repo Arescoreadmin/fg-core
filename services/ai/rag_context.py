@@ -52,6 +52,13 @@ class RagContextChunk:
     phi_sensitivity_level: str | None
     phi_types: tuple[str, ...]
     why_this_chunk: dict[str, Any] | None = None
+    doc_id: str | None = None
+    corpus_id: str | None = None
+    source_hash: str | None = None
+    source_title: str | None = None
+    confidence: float | None = None
+    retrieval_rank: int | None = None
+    rerank_score: float | None = None
 
 
 @dataclass(frozen=True)
@@ -260,6 +267,16 @@ def retrieve_persisted_rag_context(
             phi_sensitivity_level=None,
             phi_types=(),
             why_this_chunk=chunk.why_this_chunk,
+            doc_id=chunk.provenance.document_id,
+            corpus_id=chunk.provenance.corpus_id,
+            source_hash=chunk.provenance.source_hash,
+            source_title=chunk.provenance.title,
+            confidence=chunk.confidence,
+            retrieval_rank=chunk.lexical_rank
+            or chunk.semantic_rank
+            or chunk.rrf_rank
+            or index + 1,
+            rerank_score=chunk.rerank_score,
         )
         for index, chunk in enumerate(response.chunks)
     ]

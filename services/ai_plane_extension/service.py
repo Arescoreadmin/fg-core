@@ -36,6 +36,8 @@ from services.ai.routing import (
 from services.ai_plane_extension import policy_engine
 from services.ai_plane_extension.models import (
     AIChatRequest,
+    ComplianceMode,
+    EvidenceAwareResponse,
     AIInferRequest,
     AIPolicyUpsertRequest,
 )
@@ -48,6 +50,18 @@ if TYPE_CHECKING:
 
 _SIMULATED_MODEL = "SIMULATED_V1"
 AI_PLANE_EVIDENCE_SCHEMA_VERSION = "v1"
+_DEFAULT_COMPLIANCE_MODE: ComplianceMode = "retrieval_preferred"
+_REGULATED_MODES = frozenset({"phi_restricted", "legal_grade", "finance_grade"})
+_LEGAL_TERMS = frozenset({"legal", "contract", "liability", "lawsuit", "regulation"})
+_FINANCE_TERMS = frozenset({"finance", "financial", "revenue", "invoice", "payment"})
+_REVIEW_THRESHOLDS: dict[ComplianceMode, float] = {
+    "strict_grounded": 0.25,
+    "retrieval_preferred": 0.70,
+    "phi_restricted": 0.35,
+    "legal_grade": 0.35,
+    "finance_grade": 0.35,
+    "internal_ops": 0.55,
+}
 
 
 def _utc_now() -> str:
@@ -169,6 +183,300 @@ def _rag_provenance_ui_metadata(
         "retrieval_strategy": rag_context.retrieval_strategy,
         "provenance_status": response_validation.provenance_reason_code,
     }
+
+
+def _resolve_compliance_mode(
+    *,
+    requested_mode: ComplianceMode | None,
+    query_text: str,
+    phi_detected: bool,
+) -> ComplianceMode:
+    if requested_mode is not None:
+        return requested_mode
+    if phi_detected:
+        return "phi_restricted"
+    query_terms = set(str(query_text).lower().split())
+    if query_terms & _LEGAL_TERMS:
+        return "legal_grade"
+    if query_terms & _FINANCE_TERMS:
+        return "finance_grade"
+    return _DEFAULT_COMPLIANCE_MODE
+
+
+def _bounded_confidence(*values: float | None) -> float:
+    for value in values:
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            return max(0.0, min(float(value), 1.0))
+    return 0.0
+
+
+def _safe_support_summary(chunk_index: int) -> str:
+    return f"Source-backed retrieved chunk #{chunk_index + 1}; raw chunk text omitted."
+
+
+def _evidence_for_response(
+    *,
+    rag_context: RagContextResult,
+    response_validation: ResponseValidationResult,
+) -> list[dict[str, object]]:
+    if (
+        not response_validation.grounded
+        or response_validation.provenance_valid is False
+    ):
+        return []
+    cited = set(response_validation.citation_source_ids)
+    evidence: list[dict[str, object]] = []
+    for chunk in rag_context.chunks:
+        if chunk.source_id not in cited and chunk.chunk_id not in cited:
+            continue
+        evidence.append(
+            {
+                "doc_id": chunk.doc_id or chunk.source_id,
+                "chunk_id": chunk.chunk_id,
+                "source_hash": chunk.source_hash,
+                "corpus_id": chunk.corpus_id,
+                "citation_label": chunk.source_id,
+                "source_title": chunk.source_title,
+                "support_summary": _safe_support_summary(chunk.chunk_index),
+                "confidence": _bounded_confidence(
+                    chunk.confidence, rag_context.confidence, 1.0
+                ),
+                "retrieval_rank": chunk.retrieval_rank or chunk.chunk_index + 1,
+                "rerank_score": _bounded_confidence(chunk.rerank_score)
+                if chunk.rerank_score is not None
+                else None,
+                "provenance_status": response_validation.provenance_reason_code,
+            }
+        )
+    return evidence
+
+
+def _uncertainty_item(
+    *,
+    issue: str,
+    reason_code: str,
+    affected_claim_or_area: str,
+    severity: str,
+    evidence_refs: list[str] | None = None,
+) -> dict[str, object]:
+    return {
+        "issue": issue,
+        "reason_code": reason_code,
+        "affected_claim_or_area": affected_claim_or_area,
+        "severity": severity,
+        "evidence_refs": evidence_refs or [],
+    }
+
+
+def _corpus_disagreement_detected(rag_context: RagContextResult) -> bool:
+    corpus_ids = {chunk.corpus_id for chunk in rag_context.chunks if chunk.corpus_id}
+    if len(corpus_ids) < 2:
+        return False
+    conflict_markers = ("conflict", "contradict", "disagree", "different value")
+    return any(
+        marker in chunk.text.lower()
+        for chunk in rag_context.chunks
+        for marker in conflict_markers
+    )
+
+
+def _build_evidence_aware_response(
+    *,
+    answer: str,
+    rag_context: RagContextResult,
+    response_validation: ResponseValidationResult,
+    compliance_mode: ComplianceMode,
+    retrieval_policy_applied: bool,
+    effective_rag_rules: AiRagRules,
+    policy_version: int | None,
+) -> dict[str, object]:
+    evidence = _evidence_for_response(
+        rag_context=rag_context, response_validation=response_validation
+    )
+    evidence_refs = [str(item["chunk_id"]) for item in evidence]
+    uncertainty: list[dict[str, object]] = []
+    risk_factors: list[str] = []
+
+    if not evidence:
+        uncertainty.append(
+            _uncertainty_item(
+                issue="No source-backed evidence supports the final answer.",
+                reason_code="missing_evidence",
+                affected_claim_or_area="answer",
+                severity="high",
+            )
+        )
+        risk_factors.append("missing_evidence")
+    missing_hash_refs = [
+        str(item["chunk_id"]) for item in evidence if not item.get("source_hash")
+    ]
+    if missing_hash_refs:
+        uncertainty.append(
+            _uncertainty_item(
+                issue="One or more evidence items lacks source hash proof.",
+                reason_code="source_hash_missing",
+                affected_claim_or_area="evidence",
+                severity="medium",
+                evidence_refs=missing_hash_refs,
+            )
+        )
+        risk_factors.append("source_hash_missing")
+    if response_validation.provenance_valid is False:
+        reason_code = response_validation.provenance_reason_code or "citation_invalid"
+        uncertainty.append(
+            _uncertainty_item(
+                issue="Citation/provenance validation failed.",
+                reason_code="citation_invalid",
+                affected_claim_or_area="citations",
+                severity="high",
+            )
+        )
+        risk_factors.append(str(reason_code))
+    if response_validation.reason_code not in {"RESPONSE_GROUNDED"}:
+        uncertainty.append(
+            _uncertainty_item(
+                issue="Grounded-answer validation did not approve the provider answer.",
+                reason_code="weak_evidence"
+                if rag_context.rag_used
+                else "missing_evidence",
+                affected_claim_or_area="answer",
+                severity="high" if not rag_context.rag_used else "medium",
+            )
+        )
+        risk_factors.append(response_validation.reason_code)
+    if rag_context.confidence is not None and rag_context.confidence < 0.50:
+        uncertainty.append(
+            _uncertainty_item(
+                issue="Retrieval confidence is below the evidence threshold.",
+                reason_code="weak_evidence",
+                affected_claim_or_area="retrieval",
+                severity="medium",
+                evidence_refs=evidence_refs,
+            )
+        )
+        risk_factors.append("low_retrieval_confidence")
+    if _corpus_disagreement_detected(rag_context):
+        uncertainty.append(
+            _uncertainty_item(
+                issue="Retrieved corpus evidence contains conflict markers.",
+                reason_code="corpus_disagreement",
+                affected_claim_or_area="multi_corpus_evidence",
+                severity="high",
+                evidence_refs=evidence_refs,
+            )
+        )
+        risk_factors.append("corpus_disagreement")
+    if compliance_mode in _REGULATED_MODES:
+        uncertainty.append(
+            _uncertainty_item(
+                issue="Regulated compliance mode requires elevated review sensitivity.",
+                reason_code="regulated_domain",
+                affected_claim_or_area=compliance_mode,
+                severity="medium",
+                evidence_refs=evidence_refs,
+            )
+        )
+        risk_factors.append("regulated_domain")
+    if (
+        rag_context.retrieval_policy_reason_code
+        and rag_context.retrieval_policy_reason_code != "RETRIEVAL_POLICY_ALLOWED"
+    ):
+        uncertainty.append(
+            _uncertainty_item(
+                issue="Retrieval policy changed or restricted the requested retrieval path.",
+                reason_code="policy_restricted",
+                affected_claim_or_area="retrieval_policy",
+                severity="medium",
+            )
+        )
+        risk_factors.append(str(rag_context.retrieval_policy_reason_code))
+
+    inference: list[dict[str, object]] = []
+    if response_validation.grounded and evidence:
+        inference.append(
+            {
+                "claim": "Final answer is grounded in retrieved evidence references.",
+                "based_on_evidence_refs": evidence_refs,
+                "confidence": _bounded_confidence(rag_context.confidence, 1.0),
+                "reasoning_type": "grounded_extractive_validation",
+                "limitation": None,
+            }
+        )
+
+    risk = (
+        0.05 if evidence and response_validation.provenance_valid is not False else 0.75
+    )
+    weights = {
+        "missing_evidence": 0.30,
+        "source_hash_missing": 0.15,
+        "low_retrieval_confidence": 0.15,
+        "regulated_domain": 0.15,
+        "corpus_disagreement": 0.25,
+        "policy_restricted": 0.15,
+        "RESPONSE_UNGROUNDED": 0.25,
+        "RESPONSE_NO_RAG_CONTEXT": 0.25,
+        "RESPONSE_EMPTY": 0.20,
+        "PROVENANCE_SOURCE_NOT_RETRIEVED": 0.30,
+        "PROVENANCE_SOURCE_NOT_IN_PROMPT": 0.30,
+        "PROVENANCE_NO_CONTEXT_AVAILABLE": 0.20,
+        "RETRIEVAL_POLICY_LEXICAL_FALLBACK": 0.10,
+        "RETRIEVAL_POLICY_EMPTY_SCOPE": 0.25,
+    }
+    for factor in dict.fromkeys(risk_factors):
+        risk += weights.get(factor, 0.10)
+    if (
+        rag_context.confidence is not None
+        and rag_context.confidence >= 0.80
+        and evidence
+    ):
+        risk -= 0.05
+    risk_score = round(max(0.0, min(risk, 1.0)), 4)
+
+    review_reasons: list[str] = []
+    threshold = _REVIEW_THRESHOLDS[compliance_mode]
+    if risk_score >= threshold:
+        review_reasons.append("risk_threshold_exceeded")
+    if compliance_mode == "strict_grounded" and not evidence:
+        review_reasons.append("strict_grounded_missing_evidence")
+    if compliance_mode in _REGULATED_MODES and (
+        "missing_evidence" in risk_factors or "low_retrieval_confidence" in risk_factors
+    ):
+        review_reasons.append("regulated_mode_weak_evidence")
+    if response_validation.provenance_valid is False:
+        review_reasons.append("provenance_validation_failed")
+    if "corpus_disagreement" in risk_factors:
+        review_reasons.append("corpus_disagreement")
+    if (
+        effective_rag_rules.require_grounded_response
+        and not response_validation.grounded
+    ):
+        review_reasons.append("grounded_response_required")
+
+    response = EvidenceAwareResponse.model_validate(
+        {
+            "answer": answer,
+            "evidence": evidence,
+            "inference": inference,
+            "uncertainty": uncertainty,
+            "risk_score": risk_score,
+            "requires_human_review": bool(review_reasons),
+            "review_reasons": sorted(dict.fromkeys(review_reasons)),
+            "compliance_mode": compliance_mode,
+            "retrieval_mode": rag_context.retrieval_strategy,
+            "policy_version": policy_version,
+            "provenance_status": response_validation.provenance_reason_code,
+            "retrieval_policy_applied": retrieval_policy_applied,
+            "confidence": _bounded_confidence(
+                rag_context.confidence, _chat_confidence(response_validation)
+            ),
+            "answer_reason": response_validation.reason_code,
+            "no_answer_reason": response_validation.reason_code
+            if answer == "NO_ANSWER"
+            else None,
+            "risk_factors": sorted(dict.fromkeys(risk_factors)),
+        }
+    )
+    return response.model_dump()
 
 
 def _sensitivity_level(value: str | None) -> SensitivityLevel:
@@ -430,6 +738,11 @@ class AIPlaneService:
         pre_gate_prompt_sha = hashlib.sha256(payload.query.encode("utf-8")).hexdigest()
         request_id = f"inf-{pre_gate_prompt_sha[:16]}"
         phi_classification = _classify_baa_gate_phi(payload.query)
+        compliance_mode = _resolve_compliance_mode(
+            requested_mode=payload.compliance_mode,
+            query_text=payload.query,
+            phi_detected=phi_classification.contains_phi,
+        )
         try:
             if self._rag_chunks:
                 rag_context = retrieve_rag_context(
@@ -748,12 +1061,29 @@ class AIPlaneService:
                 ai_policy=ai_policy,
             ),
         )
+        evidence_response = _build_evidence_aware_response(
+            answer=out,
+            rag_context=rag_context,
+            response_validation=response_validation,
+            compliance_mode=compliance_mode,
+            retrieval_policy_applied=_db_rag_rules is not None,
+            effective_rag_rules=effective_rag_rules,
+            policy_version=int(_stored_retrieval_policy["policy_version"])
+            if _stored_retrieval_policy is not None
+            else ai_policy.version,
+        )
 
         return {
             "ok": True,
             "provider": effective_provider,
             "model": prov_resp.model if prov_resp is not None else effective_provider,
             "response": out,
+            "answer": evidence_response["answer"],
+            "evidence": evidence_response["evidence"],
+            "inference": evidence_response["inference"],
+            "uncertainty": evidence_response["uncertainty"],
+            "risk_score": evidence_response["risk_score"],
+            "requires_human_review": evidence_response["requires_human_review"],
             "sources": _chat_sources(response_validation),
             "confidence": _chat_confidence(response_validation),
             "metadata": _rag_answer_metadata(rag_context),
@@ -764,6 +1094,7 @@ class AIPlaneService:
                 "no_answer_on_ungrounded": effective_rag_rules.no_answer_on_ungrounded,
                 "rag_enabled": effective_rag_rules.enabled,
             },
+            "evidence_response": evidence_response,
             "simulated": effective_provider == "simulated",
         }
 

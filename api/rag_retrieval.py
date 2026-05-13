@@ -181,6 +181,23 @@ def retrieve_rag_context(
     unique_query_terms = list(dict.fromkeys(query_terms))
     lifecycle_filter = _lifecycle_filter(conn)
     lifecycle_sql = f"AND {lifecycle_filter}" if lifecycle_filter else ""
+    chunk_columns = _table_columns(conn, "rag_chunks")
+    document_columns = _table_columns(conn, "rag_documents")
+    chunk_source_hash_sql = (
+        "c.source_hash AS chunk_source_hash"
+        if "source_hash" in chunk_columns
+        else "NULL AS chunk_source_hash"
+    )
+    document_version_sql = (
+        "c.document_version_id"
+        if "document_version_id" in chunk_columns
+        else "NULL AS document_version_id"
+    )
+    document_source_hash_sql = (
+        "d.source_hash AS document_source_hash"
+        if "source_hash" in document_columns
+        else "NULL AS document_source_hash"
+    )
     like_clauses = []
     params: dict[str, Any] = {
         "tenant_id": tenant_id,
@@ -201,9 +218,12 @@ def retrieve_rag_context(
             c.corpus_id,
             c.text,
             c.ordinal,
+            {chunk_source_hash_sql},
+            {document_version_sql},
             c.metadata AS chunk_metadata,
             d.title,
             d.source,
+            {document_source_hash_sql},
             d.metadata AS document_metadata
         FROM rag_chunks c
         JOIN rag_documents d
@@ -246,6 +266,9 @@ def retrieve_rag_context(
                 corpus_id=str(row_dict["corpus_id"]),
                 document_id=str(row_dict["document_id"]),
                 chunk_id=str(row_dict["chunk_id"]),
+                source_hash=row_dict.get("chunk_source_hash")
+                or row_dict.get("document_source_hash"),
+                document_version_id=row_dict.get("document_version_id"),
                 source=row_dict.get("source"),
                 title=row_dict.get("title"),
                 uri=uri,
