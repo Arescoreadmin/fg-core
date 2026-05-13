@@ -167,6 +167,15 @@ export function validateRetrievalPolicy(
     });
   }
 
+  // Empty string is valid for new drafts; only reject non-empty whitespace-only values.
+  if (policy.tenant_id.length > 0 && !policy.tenant_id.trim()) {
+    errors.push({
+      field: 'tenant_id',
+      code: 'MISSING_TENANT_ID',
+      message: 'tenant_id must not be blank.',
+    });
+  }
+
   return errors;
 }
 

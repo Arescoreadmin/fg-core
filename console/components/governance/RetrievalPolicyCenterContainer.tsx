@@ -244,7 +244,7 @@ export function RetrievalPolicyCenterContainer() {
         <div
           className="rounded border border-warning/30 bg-warning/5 px-3 py-2"
           role="status"
-          aria-label="policy-draft-unsaved-banner"
+          aria-label="policy-not-configured"
         >
           <p className="text-xs font-medium text-warning">
             No retrieval policy saved yet

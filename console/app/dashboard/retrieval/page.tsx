@@ -39,6 +39,26 @@ export default function RetrievalPage() {
           </CardContent>
         </Card>
 
+        {/* Module status — preserved for shell contract */}
+        <Card>
+          <CardContent className="pt-6">
+            <div
+              className="flex flex-col items-center gap-3 py-6 text-center"
+              aria-label="module-not-configured"
+            >
+              <ShieldCheck className="h-8 w-8 text-muted/40" aria-hidden="true" />
+              <p className="text-sm font-medium text-foreground">
+                Retrieval policy not yet configured
+              </p>
+              <p className="max-w-sm text-xs text-muted">
+                Use the policy editor above to create the initial retrieval governance
+                policy for this tenant. Full corpus-scope, strategy, and grounding
+                configuration will reflect here once saved.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Capability overview */}
         <Card aria-label="retrieval-policy-capabilities">
           <CardContent className="pt-4">
