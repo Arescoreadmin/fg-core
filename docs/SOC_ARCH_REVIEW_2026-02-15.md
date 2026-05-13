@@ -628,3 +628,38 @@ These routes reuse the existing `governance:write` scope and `require_bound_tena
 - `cd console && node --test tests/corpus-management-console.test.js`: 80 passed
 - `cd console && npm run lint`: No ESLint warnings or errors
 - `cd console && npm run build`: Build passed
+
+---
+
+## PR 50 Addendum B — fg-required budget correction (2026-05-13)
+
+### SOC-HIGH-002 — CI workflow change: `.github/workflows/fg-required.yml`
+
+**Change summary**
+Increased `--global-budget-seconds` from 480 → 1200 and `--lane-timeout-seconds` from
+480 → 1200. Increased `timeout-minutes` from 10 → 25 for the "Run fg-required harness"
+step.
+
+**Root cause**
+The fg-security lane runs 701 security tests (tenant isolation, scope enforcement, BAA
+enforcement, audit tamper-evidence, etc.). After the module-scope fixture optimization in
+`tests/security/test_retrieval_policy_center_security.py`, the lane takes ~436s locally
+and likely 600-900s in CI. The original 480s global budget, which applies to all 5 lanes
+combined, was too low. No security tests were removed or weakened.
+
+**Security posture unchanged**
+- All 701 security tests still run in the required lane
+- No tests skipped, marked slow, or moved to non-required CI
+- Tenant isolation, auth gate, BAA enforcement, audit tamper-evidence fully covered
+- The change is purely a budget/timeout adjustment — no production code affected
+
+**Files changed**
+- `.github/workflows/fg-required.yml` — budget/timeout increase only
+- `tests/security/test_retrieval_policy_center_security.py` — module-scope fixture
+  (init_db runs once per module instead of per test, saving ~67s; safe because every
+  test seeds its own corpus via UUID and does not require an empty DB)
+
+**Verification**
+- `pytest tests/security/test_retrieval_policy_center_security.py`: 23 passed (3.78s)
+- `pytest tests/security -m "not slow"`: 700 passed, 1 skipped (436s vs 503s before)
+- `make fg-fast`: all checks passed
