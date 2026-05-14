@@ -3027,3 +3027,35 @@ Validation:
 - cd console && npm run build: passed
 - make fg-contract: CONTRACT LINT PASSED
 - make soc-review-sync
+
+
+## PR 53 Addendum — /ui/provider and /ui/evaluation governance routes (2026-05-14)
+
+**PR:** 53 — Provider Governance UI + Evaluation Foundation
+**Branch:** pr/53-provider-governance-ui
+**Date:** 2026-05-14
+
+### Routes added
+
+Provider Governance (4 routes): `/ui/provider/governance`, `/ui/provider/governance/{provider_id}`, `/ui/provider/routing`, `/ui/provider/failover`
+
+Retrieval Evaluation Foundation (3 routes): `/ui/evaluation/runs`, `/ui/evaluation/runs/{run_ref}`, `/ui/evaluation/quality`
+
+All `ui:read` scoped. All tenant-bound. All `allowed_internal`. All under `not _is_production_runtime()` guard.
+
+### Gate results
+
+- `python tools/ci/check_soc_review_sync.py`: soc-review-sync: OK
+- `PYTHONPATH=. python tools/ci/check_route_inventory.py`: route inventory OK
+- `.venv/bin/python -m pytest tests/security/test_provider_governance.py`: 27 passed
+- `make fg-fast`: All checks passed
+- `cd console && npm run lint`: no ESLint warnings or errors
+- `cd console && npm run build`: passed
+
+### Compliance posture
+
+- Provider governance state is derived from authoritative backend (`ProviderGovernanceRecord`, `ProviderBaaRecord`). No fabricated state.
+- BAA status exposed deterministically. Missing/revoked/expired states rendered explicitly.
+- No provider credentials, API keys, or raw topology exposed.
+- Evaluation foundation exposes structural run metadata only. No fabricated scores, no raw prompts/completions.
+- All surfaces are export-safe and audit-lineage compatible.

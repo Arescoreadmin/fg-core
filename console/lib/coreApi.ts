@@ -492,3 +492,210 @@ export async function getForensicsExport(query?: Pick<ForensicsEventsQuery, 'fro
   const qs = params.toString();
   return request<ForensicsExportPayload>(`/ui/forensics/events/export${qs ? `?${qs}` : ''}`);
 }
+
+// ─── Provider Governance types ────────────────────────────────────────────────
+
+export type ProviderOperationalState =
+  | 'healthy'
+  | 'degraded'
+  | 'unavailable'
+  | 'blocked'
+  | 'restricted'
+  | 'maintenance';
+
+export type ProviderGovernanceState =
+  | 'approved'
+  | 'restricted'
+  | 'blocked'
+  | 'pending_review';
+
+export type ProviderTrustClassification =
+  | 'trusted'
+  | 'regulated'
+  | 'untrusted'
+  | 'unknown';
+
+export type BaaStatus = 'active' | 'expired' | 'missing' | 'revoked' | 'pending';
+
+export interface ProviderBaaDetail {
+  provider_id: string;
+  baa_status: BaaStatus;
+  expiry_date: string | null;
+  signed_at: string | null;
+  created_at: string | null;
+}
+
+export interface ProviderGovernanceRecord {
+  provider_id: string;
+  operational_state: ProviderOperationalState;
+  governance_state: ProviderGovernanceState;
+  trust_classification: ProviderTrustClassification;
+  routing_eligible: boolean;
+  failover_eligible: boolean;
+  restrictions: string[];
+  blocked_at: string | null;
+  block_reason: string | null;
+  policy_version: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ProviderGovernancePage {
+  providers: ProviderGovernanceRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+  note: string;
+}
+
+export interface ProviderGovernanceDetail {
+  provider_id: string;
+  governance: ProviderGovernanceRecord | null;
+  baa: ProviderBaaDetail | null;
+  governance_available: boolean;
+  baa_available: boolean;
+}
+
+export interface ProviderRoutingEntry {
+  provider_id: string;
+  operational_state: ProviderOperationalState;
+  governance_state: ProviderGovernanceState;
+  routing_eligible: boolean;
+  failover_eligible: boolean;
+  baa_status: BaaStatus | 'missing';
+  trust_classification: ProviderTrustClassification;
+  restrictions: string[];
+}
+
+export interface ProviderRoutingPolicy {
+  tenant_id: string;
+  allowed_providers: ProviderRoutingEntry[];
+  blocked_providers: ProviderRoutingEntry[];
+  restricted_providers: ProviderRoutingEntry[];
+  failover_providers: ProviderRoutingEntry[];
+  routing_policy_note: string;
+}
+
+export interface ProviderFailoverEntry {
+  provider_id: string;
+  operational_state: ProviderOperationalState;
+  governance_state: ProviderGovernanceState;
+  routing_eligible: boolean;
+  failover_eligible: boolean;
+}
+
+export interface ProviderFailoverState {
+  degraded_providers: ProviderFailoverEntry[];
+  failover_ready_providers: ProviderFailoverEntry[];
+  failover_note: string;
+  telemetry_available: false;
+}
+
+export interface ProviderGovernanceQuery {
+  limit?: number;
+  offset?: number;
+  operational_state?: ProviderOperationalState;
+  governance_state?: ProviderGovernanceState;
+}
+
+export async function getProviderGovernance(
+  query?: ProviderGovernanceQuery,
+): Promise<ProviderGovernancePage> {
+  const params = new URLSearchParams();
+  if (query?.limit != null) params.set('limit', String(query.limit));
+  if (query?.offset != null) params.set('offset', String(query.offset));
+  if (query?.operational_state) params.set('operational_state', query.operational_state);
+  if (query?.governance_state) params.set('governance_state', query.governance_state);
+  const qs = params.toString();
+  return request<ProviderGovernancePage>(`/ui/provider/governance${qs ? `?${qs}` : ''}`);
+}
+
+export async function getProviderGovernanceDetail(
+  providerId: string,
+): Promise<ProviderGovernanceDetail> {
+  return request<ProviderGovernanceDetail>(
+    `/ui/provider/governance/${encodeURIComponent(providerId)}`,
+  );
+}
+
+export async function getProviderRoutingPolicy(): Promise<ProviderRoutingPolicy> {
+  return request<ProviderRoutingPolicy>('/ui/provider/routing');
+}
+
+export async function getProviderFailoverState(): Promise<ProviderFailoverState> {
+  return request<ProviderFailoverState>('/ui/provider/failover');
+}
+
+// ─── Retrieval Evaluation types ───────────────────────────────────────────────
+
+export type EvaluationRunStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface RetrievalIndicators {
+  [key: string]: unknown;
+}
+
+export interface EvaluationRun {
+  run_ref: string;
+  corpus_id: string | null;
+  status: EvaluationRunStatus;
+  started_at: string | null;
+  completed_at: string | null;
+  query_count: number;
+  relevance_indicators: RetrievalIndicators;
+  coverage_indicators: RetrievalIndicators;
+  correctness_indicators: RetrievalIndicators;
+  evaluator_ref: string | null;
+  evaluation_metadata: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface EvaluationRunPage {
+  runs: EvaluationRun[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface EvaluationQualitySummary {
+  corpus_id: string | null;
+  completed_run_count: number;
+  total_queries_evaluated: number;
+  runs_with_relevance_indicators: number;
+  runs_with_coverage_indicators: number;
+  runs_with_correctness_indicators: number;
+  quality_note: string;
+  evaluation_algorithms_available: false;
+}
+
+export interface EvaluationRunsQuery {
+  limit?: number;
+  offset?: number;
+  status?: EvaluationRunStatus;
+  corpus_id?: string;
+}
+
+export async function getEvaluationRuns(
+  query?: EvaluationRunsQuery,
+): Promise<EvaluationRunPage> {
+  const params = new URLSearchParams();
+  if (query?.limit != null) params.set('limit', String(query.limit));
+  if (query?.offset != null) params.set('offset', String(query.offset));
+  if (query?.status) params.set('status', query.status);
+  if (query?.corpus_id) params.set('corpus_id', query.corpus_id);
+  const qs = params.toString();
+  return request<EvaluationRunPage>(`/ui/evaluation/runs${qs ? `?${qs}` : ''}`);
+}
+
+export async function getEvaluationRun(runRef: string): Promise<EvaluationRun> {
+  return request<EvaluationRun>(`/ui/evaluation/runs/${encodeURIComponent(runRef)}`);
+}
+
+export async function getEvaluationQuality(
+  corpusId?: string,
+): Promise<EvaluationQualitySummary> {
+  const params = new URLSearchParams();
+  if (corpusId) params.set('corpus_id', corpusId);
+  const qs = params.toString();
+  return request<EvaluationQualitySummary>(`/ui/evaluation/quality${qs ? `?${qs}` : ''}`);
+}

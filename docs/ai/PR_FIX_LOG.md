@@ -9121,3 +9121,82 @@ In CI with slower runners, estimated ~800-1000s — still within 1200s budget.
 - `cd console && npm run lint`: No ESLint warnings or errors
 - `cd console && npm run build`: PASS
 - `git diff --check`: PASS
+
+---
+
+### 2026-05-14 — PR 53 — Provider Governance UI + Evaluation Foundation
+
+**Branch:** `pr/53-provider-governance-ui`
+
+**Area:** AI provider governance control plane; retrieval evaluation quality foundation; BAA compliance visibility; tenant routing visibility; failover state visibility.
+
+**Purpose:** Evolve the platform from "multi-provider AI routing" to "governed, measurable, enterprise AI orchestration". Establish authoritative backend-driven provider governance state, compliance-aware routing visibility, deterministic BAA rendering, and a durable retrieval evaluation substrate.
+
+**No fake data — explicitly documented:**
+- No fabricated provider telemetry. Failover state marked `telemetry_available: false`.
+- No fabricated evaluation metrics. Quality summary marked `evaluation_algorithms_available: false`.
+- No fabricated uptime or availability percentages.
+- No frontend-only governance truth. All state originates from authoritative DB records.
+
+**Files changed:**
+
+- `api/db_models.py` — Added `ProviderGovernanceRecord` (tenant-scoped provider governance state) and `RetrievalEvaluationRun` (tenant-scoped retrieval evaluation substrate).
+- `api/db.py` — Added SQLite CREATE TABLE IF NOT EXISTS for both new tables with indexes.
+- `migrations/postgres/0042_provider_governance.sql` — Postgres migration for both tables.
+- `api/ui_provider_governance.py` — New: 4 endpoints (`/ui/provider/governance`, `/ui/provider/governance/{provider_id}`, `/ui/provider/routing`, `/ui/provider/failover`). All `ui:read` scoped, tenant-bound via `bind_tenant_id`.
+- `api/ui_evaluation.py` — New: 3 endpoints (`/ui/evaluation/runs`, `/ui/evaluation/runs/{run_ref}`, `/ui/evaluation/quality`). All `ui:read` scoped, tenant-bound.
+- `api/main.py` — Registered both new routers under `not _is_production_runtime()` guard.
+- `console/lib/coreApi.ts` — Added provider governance types (`ProviderGovernanceRecord`, `ProviderGovernancePage`, `ProviderGovernanceDetail`, `ProviderRoutingPolicy`, `ProviderFailoverState`) and evaluation types (`EvaluationRun`, `EvaluationRunPage`, `EvaluationQualitySummary`); added 7 new API client functions.
+- `console/components/governance/ProviderGovernanceConsole.tsx` — New: `ProviderGovernanceConsole`, `ProviderHealthPanel`, `ProviderTrustPanel`, `BAACompliancePanel`, `TenantRoutingPanel`, `FailoverVisibilityPanel`.
+- `console/components/governance/RetrievalEvaluationConsole.tsx` — New: `RetrievalEvaluationConsole`, `RetrievalEvaluationPanel`, `RetrievalQualityPanel`.
+- `console/components/governance/index.ts` — Barrel export for all new components.
+- `console/app/api/core/[...path]/route.ts` — Added 5 new BFF proxy rule entries.
+- `tools/ci/route_inventory.json` — Added 8 new route entries (4 provider governance, 3 evaluation + 1 detail).
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` — Appended PR 53 route inventory addendum.
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — Appended PR 53 addendum.
+- `tests/security/test_provider_governance.py` — 27 security tests.
+- `docs/ai/PR_FIX_LOG.md` — This entry.
+
+**Tenant isolation guarantees:**
+- `ProviderGovernanceRecord` queries filter by `tenant_id == bind_tenant_id(...)`.
+- `RetrievalEvaluationRun` queries filter by `tenant_id == bind_tenant_id(...)`.
+- Cross-tenant isolation proven by tests: governance list, governance detail, routing policy, failover, evaluation runs, evaluation run detail, evaluation quality.
+
+**Deterministic rendering guarantees:**
+- All state derives from DB records — identical DB state produces identical API response.
+- Blocked providers: `governance_state == "blocked"` deterministically surfaces in routing blocked list.
+- Degraded providers: `operational_state in ("degraded", "unavailable", "maintenance")` deterministically surfaces in failover list.
+- Unknown provider: returns `governance_available: false`, `governance: null` — no 404 panic.
+- Missing BAA: returns `baa_available: false`, `baa: null` — never implied present.
+
+**Export safety:**
+- Governance responses exclude: API keys, credentials, tokens, raw provider endpoints, internal topology.
+- Evaluation responses exclude: raw prompts, completions, PII, raw source material.
+- Both surfaces are audit-lineage compatible (export_safe pattern).
+
+**Schema/migration changes (flagged per CLAUDE.md):**
+- New tables: `provider_governance_records`, `retrieval_evaluation_runs`.
+- No existing table modifications. No RLS changes to existing tables.
+- SQLite auto-migration added in `_auto_migrate_sqlite`.
+- Postgres migration: `migrations/postgres/0042_provider_governance.sql`.
+
+**Deferred work:**
+- Provider health telemetry polling (real-time operational state from provider health checks).
+- Evaluation algorithm implementations (external evaluator integration).
+- Provider governance write endpoints (allow/block provider via control-plane API).
+- Incident reconstruction and replay using governance audit trail.
+- Compliance export for provider governance state.
+
+**Known limitations:**
+- `telemetry_available: false` — no live health monitoring yet.
+- `evaluation_algorithms_available: false` — evaluation pipeline not yet connected.
+- Provider governance records must be written via DB or future control-plane endpoints; no self-population from routing decisions yet.
+
+**Validation results:**
+- `.venv/bin/python -m pytest tests/security/test_provider_governance.py`: 27 passed
+- `python tools/ci/check_soc_review_sync.py`: soc-review-sync: OK
+- `make fg-fast`: All checks passed
+- `cd console && npm run lint`: No ESLint warnings or errors
+- `cd console && npm run build`: PASS
+- `git diff --check`: PASS
+- `bash codex_gates.sh`: in progress at commit time

@@ -4432,9 +4432,135 @@
       ],
       "source": "runtime-ast",
       "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/ui_provider_governance.py",
+      "method": "GET",
+      "path": "/ui/provider/governance",
+      "plane": "ui",
+      "plane_id": "ui",
+      "scoped": true,
+      "scopes": [
+        "ui:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/ui_provider_governance.py",
+      "method": "GET",
+      "path": "/ui/provider/governance/{provider_id}",
+      "plane": "ui",
+      "plane_id": "ui",
+      "scoped": true,
+      "scopes": [
+        "ui:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/ui_provider_governance.py",
+      "method": "GET",
+      "path": "/ui/provider/routing",
+      "plane": "ui",
+      "plane_id": "ui",
+      "scoped": true,
+      "scopes": [
+        "ui:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/ui_provider_governance.py",
+      "method": "GET",
+      "path": "/ui/provider/failover",
+      "plane": "ui",
+      "plane_id": "ui",
+      "scoped": true,
+      "scopes": [
+        "ui:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/ui_evaluation.py",
+      "method": "GET",
+      "path": "/ui/evaluation/runs",
+      "plane": "ui",
+      "plane_id": "ui",
+      "scoped": true,
+      "scopes": [
+        "ui:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/ui_evaluation.py",
+      "method": "GET",
+      "path": "/ui/evaluation/runs/{run_ref}",
+      "plane": "ui",
+      "plane_id": "ui",
+      "scoped": true,
+      "scopes": [
+        "ui:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/ui_evaluation.py",
+      "method": "GET",
+      "path": "/ui/evaluation/quality",
+      "plane": "ui",
+      "plane_id": "ui",
+      "scoped": true,
+      "scopes": [
+        "ui:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
     }
   ],
-  "generated_at": "2026-05-13T23:58:42.352667+00:00",
+  "generated_at": "2026-05-14T00:00:00.000000+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

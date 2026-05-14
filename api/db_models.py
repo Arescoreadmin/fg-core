@@ -1971,3 +1971,125 @@ class StripeEvent(Base):
     created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
+
+
+# =============================================================================
+# Provider Governance models (PR 53)
+# =============================================================================
+
+
+class ProviderGovernanceRecord(Base):
+    """
+    Tenant-scoped provider governance state.
+
+    One row per (tenant_id, provider_id). Tracks operational state, governance
+    posture, BAA-derived trust, routing/failover eligibility, and policy
+    restrictions for a provider as seen by a specific tenant.
+
+    This table is append-safe: mutations go through the governance control-plane
+    only; direct SQL writes are not permitted by application code.
+    """
+
+    __tablename__ = "provider_governance_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "provider_id",
+            name="uq_provider_governance_tenant_provider",
+        ),
+        Index("ix_provider_governance_tenant_provider", "tenant_id", "provider_id"),
+        Index(
+            "ix_provider_governance_tenant_opstate",
+            "tenant_id",
+            "operational_state",
+        ),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    provider_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    # healthy | degraded | unavailable | blocked | restricted | maintenance
+    operational_state: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="healthy"
+    )
+    # approved | restricted | blocked | pending_review
+    governance_state: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="approved"
+    )
+    # trusted | regulated | untrusted | unknown
+    trust_classification: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="unknown"
+    )
+    routing_eligible: Mapped[Any] = mapped_column(Boolean, nullable=False, default=True)
+    failover_eligible: Mapped[Any] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    restrictions_json: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    blocked_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    block_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    policy_version: Mapped[Any] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+# =============================================================================
+# Retrieval Evaluation models (PR 53 — Phase 5 foundation)
+# =============================================================================
+
+
+class RetrievalEvaluationRun(Base):
+    """
+    Tenant-scoped retrieval evaluation run record.
+
+    Captures evaluation metadata for a retrieval quality run. Does NOT store
+    raw prompts, completions, or PII. Scores are structural indicators only —
+    no fabricated metrics. Evaluation algorithms are external; this model is
+    the persistence substrate.
+    """
+
+    __tablename__ = "retrieval_evaluation_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "run_ref",
+            name="uq_retrieval_eval_tenant_run_ref",
+        ),
+        Index("ix_retrieval_eval_tenant_run", "tenant_id", "run_ref"),
+        Index("ix_retrieval_eval_tenant_status", "tenant_id", "status"),
+        Index("ix_retrieval_eval_tenant_corpus", "tenant_id", "corpus_id"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    run_ref: Mapped[Any] = mapped_column(
+        Text, nullable=False, default=lambda: str(uuid.uuid4())
+    )
+    corpus_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    # pending | running | completed | failed
+    status: Mapped[Any] = mapped_column(Text, nullable=False, default="pending")
+    started_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    query_count: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    relevance_indicators_json: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    coverage_indicators_json: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    correctness_indicators_json: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    evaluator_ref: Mapped[Any] = mapped_column(Text, nullable=True)
+    evaluation_metadata_json: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )

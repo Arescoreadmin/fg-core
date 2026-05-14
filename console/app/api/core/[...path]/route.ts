@@ -40,6 +40,13 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'rag/uploads', methods: new Set(['GET', 'HEAD']) },
   { prefix: 'ui/forensics/events', methods: new Set(['GET', 'HEAD']) },
   { prefix: 'ui/forensics/trace', methods: new Set(['GET', 'HEAD']) },
+  // Provider governance console — tenant-scoped, ui:read gated (PR 53)
+  { prefix: 'ui/provider/governance', methods: new Set(['GET', 'HEAD']) },
+  { prefix: 'ui/provider/routing', methods: new Set(['GET', 'HEAD']) },
+  { prefix: 'ui/provider/failover', methods: new Set(['GET', 'HEAD']) },
+  // Retrieval evaluation foundation — tenant-scoped, ui:read gated (PR 53)
+  { prefix: 'ui/evaluation/runs', methods: new Set(['GET', 'HEAD']) },
+  { prefix: 'ui/evaluation/quality', methods: new Set(['GET', 'HEAD']) },
 ];
 
 function getRequestId(request: NextRequest): string {
