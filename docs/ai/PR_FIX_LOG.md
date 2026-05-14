@@ -9408,3 +9408,33 @@ In CI with slower runners, estimated ~800-1000s — still within 1200s budget.
 - Public API routes are deferred until auth scope and contract authority are explicitly assigned.
 - Human review workflow UI is deferred; `needs_review` is the durable escalation hook.
 - Ontology management and graph traversal are intentionally deferred.
+
+## PR #332 — Bot review P2 fixes for PDF ingestion pipeline (2026-05-14)
+
+**PR:** #332 (follow-up to #331 — enterprise PDF ingestion pipeline)
+**Branch:** fix/pr-55-bot-review
+**Files changed:** `api/db.py`, `api/rag_corpus_store.py`
+
+**Root causes fixed:**
+
+**P2 #1 — Fresh SQLite schemas missing PDF columns**
+`_auto_migrate_sqlite` adds `source_page`, `extraction_version`, and `content_type` via `ALTER TABLE` when the tables already exist, but the `CREATE TABLE IF NOT EXISTS` definitions used for fresh init lacked these columns entirely. On a brand-new SQLite database, those columns would never be created.
+- Added `content_type TEXT` to the `CREATE TABLE IF NOT EXISTS rag_documents` definition.
+- Added `source_page INTEGER` and `extraction_version TEXT` to the `CREATE TABLE IF NOT EXISTS rag_chunks` definition.
+
+**P2 #2 — `content_type` persisted as NULL on PDF ingestion**
+`ingest_pdf_document` used a hardcoded column list in its `INSERT INTO rag_documents` statement that omitted the `content_type` column. Even after migration 0045 added the column, PDF document rows were written with `content_type = NULL`.
+- Replaced hardcoded INSERT with a dynamic build using the `_table_columns` guard pattern (same pattern used in `ingest_document_version`), which conditionally includes `content_type = 'application/pdf'` when the column exists.
+
+**Latent bug also fixed:**
+The rewritten dynamic INSERT was missing `is_current = 1` from the params dict. Without it, new PDF document rows would have `is_current = NULL`, causing them to be excluded from `COALESCE(is_current, 1) = 1` list/search queries.
+- Added `"is_current": 1` to `doc_insert_params`.
+
+**Invariants preserved:**
+- `_table_columns` guard ensures the INSERT works on both migrated and fresh DBs.
+- Dynamic column list uses the same dict-key ordering as the surrounding code; no SQL injection surface (no user input reaches the column name list).
+- `is_current = 1` matches the value set by `ingest_document_version` for a new version row.
+
+**Validation results:**
+- `ruff check api/db.py api/rag_corpus_store.py`: PASS.
+- `tests/rag/test_pdf_ingestion.py`: PASS — 19 passed.
