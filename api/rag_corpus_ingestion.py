@@ -224,6 +224,7 @@ def _build_ingestion_lifecycle_response(
         "source_hash_prefix": _safe_source_hash_prefix(
             str(doc.get("source_hash") or "")
         ),
+        "duplicate_of_document_id": None,
         "quarantine_reason": quarantine_reason,
         "quarantine_reason_label": _quarantine_label(quarantine_reason)
         if quarantine_reason
@@ -380,6 +381,7 @@ async def upload_document(
         "source": filename,
         "ingestion_status": ingestion_status,
         "ingestion_status_label": _ingestion_status_label(ingestion_status),
+        "is_current": bool(result.get("is_current", True)),
         "version_id": version_id,
         "version_number": int(result.get("version_number") or 1),
         "source_hash_prefix": _safe_source_hash_prefix(
@@ -509,6 +511,8 @@ def list_uploads(
         select_cols += ", d.quarantine_reason"
     if "failure_reason" in table_cols:
         select_cols += ", d.failure_reason"
+    if "indexed_at" in table_cols:
+        select_cols += ", d.indexed_at"
 
     rows = (
         db.execute(
@@ -545,6 +549,7 @@ def list_uploads(
                 "total_chunk_count": chunks["total_chunk_count"],
                 "created_at": row.get("created_at"),
                 "updated_at": row.get("updated_at"),
+                "indexed_at": row.get("indexed_at"),
             }
         )
 

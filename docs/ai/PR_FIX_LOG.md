@@ -8998,3 +8998,11 @@ In CI with slower runners, estimated ~800-1000s — still within 1200s budget.
 - POST /rag/documents/{document_id}/retry-ingestion returns 503 (planned). Full async re-ingestion pipeline is out of scope for this PR.
 - Connector ingestion (S3, GCS, SharePoint, etc.) is placeholder-only; all marked "not yet available".
 - Embedding state summary requires `embedding_state` column in `rag_chunks`; returns empty dict if column absent (graceful degradation).
+
+**Addendum — 2026-05-14 response contract and React lifecycle cleanup:**
+- Fixed `DocumentIngestionConsole` to load corpora from `useEffect` instead of triggering async work from a `useState` initializer.
+- Aligned ingestion API responses with the console TypeScript contract by returning `is_current`, `duplicate_of_document_id`, and upload-list `indexed_at` fields.
+- Validation: `.venv/bin/pytest -q tests/test_rag_corpus_ingestion.py tests/security/test_rag_ingestion_upload_security.py` PASS — 54 passed.
+- Validation: `cd console && npm test -- tests/document-ingestion-console.test.js` PASS — 77 passed.
+- Validation: `.venv/bin/ruff check api/rag_corpus_ingestion.py tests/test_rag_corpus_ingestion.py tests/security/test_rag_ingestion_upload_security.py` PASS.
+- Validation: `cd console && npm run lint` PASS.

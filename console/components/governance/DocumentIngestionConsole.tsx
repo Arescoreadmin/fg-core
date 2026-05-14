@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   AlertTriangle,
@@ -406,7 +406,11 @@ export function DocumentIngestionConsole({ initialCorpora }: DocumentIngestionCo
     setCorporaLoading(false);
   }, []);
 
-  useState(() => { if (!initialCorpora) { loadCorpora(); } });
+  useEffect(() => {
+    if (!initialCorpora) {
+      void loadCorpora();
+    }
+  }, [initialCorpora, loadCorpora]);
 
   const handleFiles = useCallback(async (files: File[], corpusId: string) => {
     if (!corpusId || files.length === 0) return;
