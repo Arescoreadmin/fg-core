@@ -618,3 +618,148 @@ def test_failover_no_fabricated_telemetry(
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["telemetry_available"] is False
+
+
+# ─── BAA-aware routing classification ────────────────────────────────────────
+
+
+def test_expired_baa_provider_not_in_allowed_routing(
+    client: TestClient,
+    fresh_db: str,
+    tenant_a_id: str,
+    tenant_a_key: str,
+) -> None:
+    """Provider with an expired BAA record must appear in restricted, not allowed."""
+    _insert_governance_record(
+        fresh_db,
+        tenant_id=tenant_a_id,
+        provider_id="openai",
+        governance_state="approved",
+        routing_eligible=1,
+    )
+    _insert_baa_record(
+        fresh_db, tenant_id=tenant_a_id, provider_id="openai", baa_status="expired"
+    )
+
+    r = client.get("/ui/provider/routing", headers=_auth_headers(tenant_a_key))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    allowed_ids = [p["provider_id"] for p in body["allowed_providers"]]
+    restricted_ids = [p["provider_id"] for p in body["restricted_providers"]]
+    assert "openai" not in allowed_ids, (
+        f"Expired-BAA provider appeared in allowed_providers: {body}"
+    )
+    assert "openai" in restricted_ids, (
+        f"Expired-BAA provider not in restricted_providers: {body}"
+    )
+
+
+def test_revoked_baa_provider_not_in_allowed_routing(
+    client: TestClient,
+    fresh_db: str,
+    tenant_a_id: str,
+    tenant_a_key: str,
+) -> None:
+    """Provider with a revoked BAA must appear in restricted, not allowed."""
+    _insert_governance_record(
+        fresh_db,
+        tenant_id=tenant_a_id,
+        provider_id="anthropic",
+        governance_state="approved",
+        routing_eligible=1,
+    )
+    _insert_baa_record(
+        fresh_db, tenant_id=tenant_a_id, provider_id="anthropic", baa_status="revoked"
+    )
+
+    r = client.get("/ui/provider/routing", headers=_auth_headers(tenant_a_key))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    allowed_ids = [p["provider_id"] for p in body["allowed_providers"]]
+    restricted_ids = [p["provider_id"] for p in body["restricted_providers"]]
+    assert "anthropic" not in allowed_ids
+    assert "anthropic" in restricted_ids
+
+
+def test_pending_baa_provider_not_in_allowed_routing(
+    client: TestClient,
+    fresh_db: str,
+    tenant_a_id: str,
+    tenant_a_key: str,
+) -> None:
+    """Provider with a pending BAA must appear in restricted, not allowed."""
+    _insert_governance_record(
+        fresh_db,
+        tenant_id=tenant_a_id,
+        provider_id="azure_openai",
+        governance_state="approved",
+        routing_eligible=1,
+    )
+    _insert_baa_record(
+        fresh_db,
+        tenant_id=tenant_a_id,
+        provider_id="azure_openai",
+        baa_status="pending",
+    )
+
+    r = client.get("/ui/provider/routing", headers=_auth_headers(tenant_a_key))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    allowed_ids = [p["provider_id"] for p in body["allowed_providers"]]
+    restricted_ids = [p["provider_id"] for p in body["restricted_providers"]]
+    assert "azure_openai" not in allowed_ids
+    assert "azure_openai" in restricted_ids
+
+
+def test_active_baa_provider_in_allowed_routing(
+    client: TestClient,
+    fresh_db: str,
+    tenant_a_id: str,
+    tenant_a_key: str,
+) -> None:
+    """Provider with an active BAA and approved governance appears in allowed_providers."""
+    _insert_governance_record(
+        fresh_db,
+        tenant_id=tenant_a_id,
+        provider_id="openai",
+        governance_state="approved",
+        routing_eligible=1,
+    )
+    _insert_baa_record(
+        fresh_db, tenant_id=tenant_a_id, provider_id="openai", baa_status="active"
+    )
+
+    r = client.get("/ui/provider/routing", headers=_auth_headers(tenant_a_key))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    allowed_ids = [p["provider_id"] for p in body["allowed_providers"]]
+    assert "openai" in allowed_ids, (
+        f"Active-BAA provider missing from allowed_providers: {body}"
+    )
+
+
+def test_no_baa_record_provider_classification(
+    client: TestClient,
+    fresh_db: str,
+    tenant_a_id: str,
+    tenant_a_key: str,
+) -> None:
+    """Provider with no BAA record (synthesized 'missing') is not forced into restricted
+    by the routing endpoint — only explicit non-active BAA records trigger restriction."""
+    _insert_governance_record(
+        fresh_db,
+        tenant_id=tenant_a_id,
+        provider_id="unregulated_provider",
+        governance_state="approved",
+        routing_eligible=1,
+    )
+    # No BAA record inserted — baa_status will be synthesized as 'missing'
+
+    r = client.get("/ui/provider/routing", headers=_auth_headers(tenant_a_key))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # Should appear in allowed (no explicit non-active BAA record)
+    allowed_ids = [p["provider_id"] for p in body["allowed_providers"]]
+    assert "unregulated_provider" in allowed_ids, (
+        f"Provider without BAA record should be in allowed, got: {body}"
+    )

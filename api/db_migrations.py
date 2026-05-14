@@ -165,6 +165,8 @@ def assert_tenant_rls(engine: Engine) -> None:
         "ai_device_registry",
         "ai_token_usage",
         "ai_quota_daily",
+        "provider_governance_records",
+        "retrieval_evaluation_runs",
     }
     with engine.begin() as conn:
         rows = conn.execute(

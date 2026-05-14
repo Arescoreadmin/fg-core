@@ -201,9 +201,15 @@ def ui_provider_routing(
             "trust_classification": row.trust_classification,
             "restrictions": row.restrictions_json or [],
         }
+        # BAA records with a non-active status block backend routing
+        # (services/provider_baa/policy.py::check_provider_baa denies any
+        # status other than "active"). Mirror that here so the console's
+        # routing buckets match the actual routing outcome.
+        baa_denied = baa is not None and baa.baa_status != "active"
+
         if row.governance_state == "blocked" or not row.routing_eligible:
             blocked.append(entry)
-        elif row.governance_state == "restricted":
+        elif row.governance_state == "restricted" or baa_denied:
             restricted.append(entry)
         elif row.failover_eligible:
             failover.append(entry)

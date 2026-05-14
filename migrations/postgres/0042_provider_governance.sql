@@ -39,6 +39,24 @@ CREATE INDEX IF NOT EXISTS ix_provider_governance_tenant_provider
 CREATE INDEX IF NOT EXISTS ix_provider_governance_tenant_opstate
     ON provider_governance_records (tenant_id, operational_state);
 
+ALTER TABLE IF EXISTS provider_governance_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS provider_governance_records FORCE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename   = 'provider_governance_records'
+          AND policyname  = 'provider_governance_records_tenant_isolation'
+    ) THEN
+        CREATE POLICY provider_governance_records_tenant_isolation
+            ON provider_governance_records
+            USING  (tenant_id = current_setting('app.tenant_id', true))
+            WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+    END IF;
+END $$;
+
 -- ─── Retrieval Evaluation Foundation ─────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS retrieval_evaluation_runs (
@@ -70,3 +88,21 @@ CREATE INDEX IF NOT EXISTS ix_retrieval_eval_tenant_status
 
 CREATE INDEX IF NOT EXISTS ix_retrieval_eval_tenant_corpus
     ON retrieval_evaluation_runs (tenant_id, corpus_id);
+
+ALTER TABLE IF EXISTS retrieval_evaluation_runs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS retrieval_evaluation_runs FORCE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename   = 'retrieval_evaluation_runs'
+          AND policyname  = 'retrieval_evaluation_runs_tenant_isolation'
+    ) THEN
+        CREATE POLICY retrieval_evaluation_runs_tenant_isolation
+            ON retrieval_evaluation_runs
+            USING  (tenant_id = current_setting('app.tenant_id', true))
+            WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+    END IF;
+END $$;
