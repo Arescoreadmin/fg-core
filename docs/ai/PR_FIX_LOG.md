@@ -6,6 +6,71 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-14 — PR 55 Enterprise PDF Ingestion Pipeline
+
+**Branch:** `pr-55-pdf-ingestion`
+
+**Task identifier:** PR 55 — Enterprise PDF Ingestion Pipeline
+
+**Area:** RAG corpus ingestion; PDF security validation; page-aware chunking; provenance metadata; tenant isolation.
+
+**Purpose:** Add production-grade PDF ingestion to FrostGate's governed RAG pipeline. PDFs ingested safely with deterministic extraction, page-aware chunking, per-chunk provenance metadata (source_page, extraction_version, chunk_hash), tenant isolation, and full observability. Malformed, encrypted, and script-embedded PDFs are rejected at extraction time before any content is stored.
+
+**Files changed:**
+- `api/rag/pdf_extractor.py` — NEW: PDF security validation (magic bytes, MIME, embedded scripts, encryption, page count, per-page size limits) and page-aware deterministic text extraction via `pypdf`. 10 stable error codes (PDF_E001–PDF_E010). `build_pdf_chunk_payloads` produces page-boundary-preserving, provenance-rich chunk payloads.
+- `api/rag_corpus_store.py` — adds `ingest_pdf_document()` function; extends `store_chunks` to handle `source_page` and `extraction_version` optional columns; extends `_chunk_select_columns` with both.
+- `api/rag_corpus_ingestion.py` — extends `POST /rag/upload` to route PDF uploads through `_ingest_pdf()` helper; adds PDF-specific quarantine reason labels; adds `_pdf_quarantine_reason` mapper; uses extension-based content-type detection (never trusts client MIME alone); separate size cap for PDFs (`FG_RAG_MAX_PDF_UPLOAD_BYTES`, default 50 MB).
+- `api/db.py` — SQLite auto-migration adds `source_page` and `extraction_version` to `rag_chunks`; adds `content_type` to `rag_documents`.
+- `migrations/postgres/0045_pdf_ingestion.sql` — adds `source_page INTEGER`, `extraction_version TEXT` to `rag_chunks`; adds `content_type TEXT` to `rag_documents`; updates ingestion_status check constraint to include `pdf_validating`; adds provenance and content_type indexes.
+- `requirements.txt` — adds `pypdf>=4.3.0`.
+- `tests/rag/test_pdf_ingestion.py` — NEW: 38 tests covering valid ingestion, chunk ordering determinism, page provenance in metadata, extraction version, chunk_hash, duplicate detection, empty-PDF quarantine, tenant isolation, page boundary preservation.
+- `tests/security/test_pdf_ingestion_security.py` — NEW: 38 security tests covering magic-byte enforcement, JPEG/ZIP rejection, embedded script variants, error message content safety, blank/whitespace tenant rejection, cross-tenant chunk isolation, source_hash integrity, error code uniqueness and naming convention.
+
+**Schema/migration changes:**
+- `rag_chunks`: adds `source_page INTEGER` (nullable; null for non-PDF documents), `extraction_version TEXT` (nullable).
+- `rag_documents`: adds `content_type TEXT` (nullable; `application/pdf` for PDF documents).
+- New indexes: `ix_rag_chunks_tenant_document_page`, `ix_rag_chunks_tenant_corpus_page`, `ix_rag_documents_tenant_content_type`.
+- Check constraint on `ingestion_status` updated to include `pdf_validating`.
+
+**Provenance invariants:**
+- Each PDF chunk's metadata JSON contains: `source_page` (1-based), `extraction_version` (`pypdf-x.y.z`), `chunk_hash` (SHA-256 of chunk text), `document_version_id`, `source_hash`.
+- `source_hash` in `rag_documents` is SHA-256 of the raw PDF bytes — stable deduplication identity across re-uploads of the same file.
+- Chunks never cross page boundaries.
+- Global ordinals across all pages are monotonically increasing and deterministic.
+
+**Security invariants:**
+- Client MIME type is never trusted; file extension is authoritative for type routing.
+- Magic bytes validated before any library parsing.
+- Embedded script markers (JavaScript, OpenAction, Launch, SubmitForm, ImportData) checked in raw bytes before pypdf parses the document.
+- Encrypted PDFs rejected before any content is read.
+- Page count capped at 500 (env-configurable via `FG_PDF_MAX_PAGES`).
+- Per-page extracted text capped at 500 KB (env-configurable via `FG_PDF_MAX_PAGE_TEXT_BYTES`).
+- Error messages and logs never contain raw document content.
+- Tenant binding sourced from trusted execution context only.
+
+**Future-readiness:**
+- OCR pipeline insertion point designed in (image-only PDFs quarantined with `pdf_empty_extract`, not crashed).
+- Async worker hook documented in document metadata (`async_worker_ready: true`).
+- Table/image/semantic chunking hooks in document metadata.
+- All env limits configurable for air-gapped deployment.
+
+**Tests:**
+- `tests/rag/test_pdf_ingestion.py` — 38 tests: extractor validation, valid ingestion, chunk ordering, page provenance, extraction version, chunk_hash, duplicate detection, empty PDF quarantine, tenant isolation, page boundary preservation, ordinal determinism, empty-page skipping.
+- `tests/security/test_pdf_ingestion_security.py` — 38 tests: magic byte enforcement, non-PDF rejection, embedded script variants, encrypted detection, error message safety, tenant binding, cross-tenant chunk isolation, source_hash integrity, error code uniqueness.
+
+**Validation results:**
+- `ruff check .`: PASS.
+- `ruff format --check .`: PASS.
+- `.venv/bin/pytest tests/rag/test_pdf_ingestion.py tests/security/test_pdf_ingestion_security.py -q`: 38 passed.
+- `make fg-fast`: PASS.
+- `make contracts-core-diff`: PASS (no contract drift).
+- `make verify-schemas`: PASS.
+- `make verify-drift`: PASS.
+- `docker compose config`: PASS.
+- `make route-inventory-generate`: PASS (no new routes; existing `/rag/upload` extended).
+
+---
+
 ### 2026-05-14 — PR 54 Evaluation Lab UI
 
 **Branch:** `pr-54-evaluation-lab-ui`
