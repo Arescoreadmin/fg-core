@@ -1228,37 +1228,31 @@ def ingest_pdf_document(
             "superseded": INGESTION_SUPERSEDED,
         },
     )
+    doc_insert_params: dict[str, Any] = {
+        "document_id": document_id,
+        "corpus_id": corpus_id,
+        "tenant_id": tid,
+        "title": checked_title,
+        "source": checked_source,
+        "metadata": meta_str,
+        "created_at": now,
+        "updated_at": now,
+        "version_id": version_id,
+        "source_hash": source_hash,
+        "normalized_source_hash": normalized_source_hash,
+        "version_number": version_number,
+        "is_current": 1,
+        "ingestion_status": INGESTION_CHUNKING,
+        "indexed_at": None,
+    }
+    doc_cols = _table_columns(conn, "rag_documents")
+    if "content_type" in doc_cols:
+        doc_insert_params["content_type"] = "application/pdf"
+    col_names = ", ".join(doc_insert_params)
+    col_placeholders = ", ".join(f":{k}" for k in doc_insert_params)
     conn.execute(
-        text(
-            """
-            INSERT INTO rag_documents
-                (document_id, corpus_id, tenant_id, title, source, metadata,
-                 created_at, updated_at, version_id, source_hash,
-                 normalized_source_hash, version_number, is_current,
-                 ingestion_status, indexed_at)
-            VALUES
-                (:document_id, :corpus_id, :tenant_id, :title, :source, :metadata,
-                 :created_at, :updated_at, :version_id, :source_hash,
-                 :normalized_source_hash, :version_number, 1, :ingestion_status,
-                 :indexed_at)
-            """
-        ),
-        {
-            "document_id": document_id,
-            "corpus_id": corpus_id,
-            "tenant_id": tid,
-            "title": checked_title,
-            "source": checked_source,
-            "metadata": meta_str,
-            "created_at": now,
-            "updated_at": now,
-            "version_id": version_id,
-            "source_hash": source_hash,
-            "normalized_source_hash": normalized_source_hash,
-            "version_number": version_number,
-            "ingestion_status": INGESTION_CHUNKING,
-            "indexed_at": None,
-        },
+        text(f"INSERT INTO rag_documents ({col_names}) VALUES ({col_placeholders})"),
+        doc_insert_params,
     )
 
     try:

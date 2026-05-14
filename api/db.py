@@ -1019,7 +1019,8 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                 failure_reason TEXT,
                 indexed_at TEXT,
                 superseded_at TEXT,
-                superseded_by_version_id TEXT
+                superseded_by_version_id TEXT,
+                content_type TEXT
             )
             """
         )
@@ -1047,7 +1048,9 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
                     CHECK (embedding_state IN ('pending','processing','completed','failed','skipped')),
                 document_version_id TEXT,
                 source_hash TEXT,
-                is_active INTEGER NOT NULL DEFAULT 1
+                is_active INTEGER NOT NULL DEFAULT 1,
+                source_page INTEGER,
+                extraction_version TEXT
             )
             """
         )
