@@ -234,6 +234,14 @@ class TestDocxExtractorExtraction:
         result = extract_docx_paragraphs(raw)
         assert result.paragraphs[0].paragraph_number == 1
 
+    def test_paragraph_number_reflects_document_position_not_retained_ordinal(self):
+        # Blank paragraphs before real content must not compress paragraph numbers.
+        # A paragraph at document position 3 must report paragraph_number=3, not 1.
+        raw = _make_raw_docx(["   ", "   ", "Real content at position three"])
+        result = extract_docx_paragraphs(raw)
+        real = next(p for p in result.paragraphs if "Real content" in p.text)
+        assert real.paragraph_number >= 3
+
     def test_paragraph_char_count_accurate(self):
         raw = _make_raw_docx(["Hello"])
         result = extract_docx_paragraphs(raw)

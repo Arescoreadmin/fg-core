@@ -300,8 +300,7 @@ def extract_docx_paragraphs(raw_bytes: bytes) -> DOCXExtractionResult:
         )
 
     paragraphs: list[DOCXParagraph] = []
-    para_number = 0
-    for raw_para in raw_paragraphs:
+    for doc_position, raw_para in enumerate(raw_paragraphs, start=1):
         try:
             raw_text = raw_para.text or ""
             style_name = raw_para.style.name if raw_para.style else "Normal"
@@ -311,21 +310,19 @@ def extract_docx_paragraphs(raw_bytes: bytes) -> DOCXExtractionResult:
 
         text = _normalize_paragraph_text(raw_text)
         if not text:
-            continue  # skip blank/whitespace-only paragraphs
-
-        para_number += 1
+            continue  # skip blank/whitespace-only paragraphs; preserve doc_position
         text_bytes = len(text.encode("utf-8"))
         if text_bytes > _MAX_PARAGRAPH_TEXT_BYTES:
             raise DOCXExtractionError(
                 DOCX_ERR_OVERSIZED_PARAGRAPH,
-                f"Paragraph {para_number} text exceeds the per-paragraph size limit "
+                f"Paragraph {doc_position} text exceeds the per-paragraph size limit "
                 f"({text_bytes} bytes > {_MAX_PARAGRAPH_TEXT_BYTES} bytes)",
             )
 
         heading_level = _parse_heading_level(style_name)
         paragraphs.append(
             DOCXParagraph(
-                paragraph_number=para_number,
+                paragraph_number=doc_position,
                 text=text,
                 char_count=len(text),
                 heading_level=heading_level,
