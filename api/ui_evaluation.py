@@ -8,7 +8,7 @@ from sqlalchemy import asc, desc
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import bind_tenant_id, require_scopes
-from api.db import get_engine
+from api.db import get_engine, set_tenant_context
 from api.db_models import (
     EvaluationQueryItem,
     EvaluationQuerySet,
@@ -65,6 +65,7 @@ def ui_evaluation_runs(
     tenant_id = bind_tenant_id(request, None, require_explicit_for_unscoped=True)
     engine = get_engine()
     with Session(engine) as session:
+        set_tenant_context(session, tenant_id)
         q = session.query(RetrievalEvaluationRun).filter(
             RetrievalEvaluationRun.tenant_id == tenant_id
         )
@@ -108,6 +109,7 @@ def ui_evaluation_run_detail(
     tenant_id = bind_tenant_id(request, None, require_explicit_for_unscoped=True)
     engine = get_engine()
     with Session(engine) as session:
+        set_tenant_context(session, tenant_id)
         row = (
             session.query(RetrievalEvaluationRun)
             .filter(
@@ -135,6 +137,7 @@ def ui_evaluation_quality(
     tenant_id = bind_tenant_id(request, None, require_explicit_for_unscoped=True)
     engine = get_engine()
     with Session(engine) as session:
+        set_tenant_context(session, tenant_id)
         q = session.query(RetrievalEvaluationRun).filter(
             RetrievalEvaluationRun.tenant_id == tenant_id,
             RetrievalEvaluationRun.status == "completed",
@@ -163,6 +166,44 @@ def ui_evaluation_quality(
 
 
 # ─── Query Set helpers ────────────────────────────────────────────────────────
+
+
+_SENSITIVE_EXPORT_META_KEY_PARTS = (
+    "api_key",
+    "apikey",
+    "authorization",
+    "auth",
+    "bearer",
+    "secret",
+    "token",
+    "password",
+    "credential",
+    "provider_payload",
+    "headers",
+    "cookie",
+)
+
+
+def _is_sensitive_export_meta_key(key: object) -> bool:
+    normalized = str(key).lower().replace("-", "_")
+    return any(part in normalized for part in _SENSITIVE_EXPORT_META_KEY_PARTS)
+
+
+def _sanitize_export_metadata(value: object) -> object:
+    if isinstance(value, dict):
+        return {
+            str(k): _sanitize_export_metadata(v)
+            for k, v in value.items()
+            if not _is_sensitive_export_meta_key(k)
+        }
+
+    if isinstance(value, list):
+        return [_sanitize_export_metadata(item) for item in value]
+
+    if isinstance(value, tuple):
+        return [_sanitize_export_metadata(item) for item in value]
+
+    return value
 
 
 def _safe_query_set(row: EvaluationQuerySet) -> dict[str, Any]:
@@ -221,6 +262,7 @@ def ui_evaluation_query_sets(
     tenant_id = bind_tenant_id(request, None, require_explicit_for_unscoped=True)
     engine = get_engine()
     with Session(engine) as session:
+        set_tenant_context(session, tenant_id)
         q = session.query(EvaluationQuerySet).filter(
             EvaluationQuerySet.tenant_id == tenant_id
         )
@@ -265,6 +307,7 @@ def ui_evaluation_query_set_detail(
     tenant_id = bind_tenant_id(request, None, require_explicit_for_unscoped=True)
     engine = get_engine()
     with Session(engine) as session:
+        set_tenant_context(session, tenant_id)
         qs_row = (
             session.query(EvaluationQuerySet)
             .filter(
@@ -338,6 +381,7 @@ def ui_evaluation_run_comparison(
     tenant_id = bind_tenant_id(request, None, require_explicit_for_unscoped=True)
     engine = get_engine()
     with Session(engine) as session:
+        set_tenant_context(session, tenant_id)
         row = _get_run_or_404(session, tenant_id, run_ref)
         relevance = row.relevance_indicators_json or {}
         coverage = row.coverage_indicators_json or {}
@@ -385,6 +429,7 @@ def ui_evaluation_run_confidence(
     tenant_id = bind_tenant_id(request, None, require_explicit_for_unscoped=True)
     engine = get_engine()
     with Session(engine) as session:
+        set_tenant_context(session, tenant_id)
         row = _get_run_or_404(session, tenant_id, run_ref)
         correctness = row.correctness_indicators_json or {}
         meta = row.evaluation_metadata_json or {}
@@ -435,6 +480,7 @@ def ui_evaluation_run_hallucination(
     tenant_id = bind_tenant_id(request, None, require_explicit_for_unscoped=True)
     engine = get_engine()
     with Session(engine) as session:
+        set_tenant_context(session, tenant_id)
         row = _get_run_or_404(session, tenant_id, run_ref)
         relevance = row.relevance_indicators_json or {}
         coverage = row.coverage_indicators_json or {}
@@ -490,6 +536,7 @@ def ui_evaluation_run_reranker(
     tenant_id = bind_tenant_id(request, None, require_explicit_for_unscoped=True)
     engine = get_engine()
     with Session(engine) as session:
+        set_tenant_context(session, tenant_id)
         row = _get_run_or_404(session, tenant_id, run_ref)
         meta = row.evaluation_metadata_json or {}
         relevance = row.relevance_indicators_json or {}
@@ -552,6 +599,7 @@ def ui_evaluation_run_export(
     )
 
     with Session(engine) as session:
+        set_tenant_context(session, tenant_id)
         row = _get_run_or_404(session, tenant_id, run_ref)
 
         def _tz(dt: Any) -> Any:
@@ -560,9 +608,9 @@ def ui_evaluation_run_export(
             return dt
 
         meta = row.evaluation_metadata_json or {}
-        safe_meta = {
-            k: v for k, v in meta.items() if k.lower() not in _BLOCKED_META_KEYS
-        }
+        safe_meta = _sanitize_export_metadata(meta)
+        if not isinstance(safe_meta, dict):
+            safe_meta = {}
 
     return {
         "export_safe": True,
