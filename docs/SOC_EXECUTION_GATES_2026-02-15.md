@@ -2963,3 +2963,32 @@ Validation:
 - pytest tests/test_plane_registry.py tests/test_platform_inventory_determinism.py
 - make fg-fast
 - make soc-review-sync
+
+## PR 51 Addendum — /rag document ingestion UX routes (2026-05-13)
+
+`api/rag_corpus_ingestion.py`: new FastAPI router with 4 endpoints:
+- POST /rag/upload — multipart file upload to corpus
+- GET /rag/uploads — paginated upload list with corpus/status filters
+- GET /rag/documents/{document_id}/ingestion — ingestion lifecycle detail
+- POST /rag/documents/{document_id}/retry-ingestion — retry placeholder (503)
+
+`tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`,
+`tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`,
+`tools/ci/topology.sha256` regenerated via `make route-inventory-generate` +
+`make fg-contract`.
+
+SOC review:
+- All 4 new routes use `governance:write` scope — control plane, tenant-bound.
+- Cross-tenant isolation enforced via `require_bound_tenant()` / `_require_tenant()`.
+- No auth, middleware, CI workflow, or OPA policy altered.
+- No secrets added or changed. tools/ci changes are route-inventory regeneration only.
+- Upload size capped at 1 MB; unsupported content types quarantined, not crashed.
+- No dangerouslySetInnerHTML in any frontend component.
+
+Validation:
+- make route-inventory-generate
+- make fg-contract
+- pytest -q tests/test_rag_corpus_ingestion.py
+- pytest -q tests/security/test_rag_ingestion_upload_security.py
+- make fg-fast
+- make soc-review-sync

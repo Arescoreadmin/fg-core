@@ -950,6 +950,36 @@
     },
     {
       "method": "GET",
+      "path": "/rag/corpora/{corpus_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/rag/corpora/{corpus_id}/documents",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/rag/documents/{document_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/rag/documents/{document_id}/ingestion",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/rag/documents/{document_id}/retry-ingestion",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/rag/retrieval-policy",
       "scopes": [],
       "source": "contract"
@@ -957,6 +987,18 @@
     {
       "method": "PUT",
       "path": "/rag/retrieval-policy",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/rag/upload",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/rag/uploads",
       "scopes": [],
       "source": "contract"
     },
@@ -1021,7 +1063,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-13T09:53:41.480597+00:00",
+  "generated_at": "2026-05-13T23:58:42.356923+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
