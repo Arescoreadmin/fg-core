@@ -115,3 +115,23 @@ export type {
   RetrievalEvaluationPanelProps,
   RetrievalQualityPanelProps,
 } from './RetrievalEvaluationConsole';
+export {
+  EvaluationLabConsole,
+  QuerySetPanel,
+  RetrievalPrecisionPanel,
+  GroundingReviewPanel,
+  HallucinationReviewPanel,
+  ConfidenceDistributionPanel,
+  RerankerComparisonPanel,
+  EvaluationExportPanel,
+} from './EvaluationLabConsole';
+export type {
+  EvaluationLabConsoleProps,
+  QuerySetPanelProps,
+  RetrievalPrecisionPanelProps,
+  GroundingReviewPanelProps,
+  HallucinationReviewPanelProps,
+  ConfidenceDistributionPanelProps,
+  RerankerComparisonPanelProps,
+  EvaluationExportPanelProps,
+} from './EvaluationLabConsole';

@@ -6,6 +6,88 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-14 — PR 54 Evaluation Lab UI
+
+**Branch:** `pr-54-evaluation-lab-ui`
+
+**Task identifier:** PR 54 — Evaluation Lab UI
+
+**Area:** Evaluation Lab frontend workspace; query set management; retrieval precision visibility; hallucination review; confidence distribution; reranker comparison; evaluation export; backend API; DB models; migration.
+
+**Purpose:** Build the operator-grade Evaluation Lab — a durable retrieval quality measurement, grounding verification, and hallucination investigation workspace. Transforms retrieval from "it seems good" into measurable, reproducible, auditable, and exportable evaluation state. Foundation for future A/B retrieval testing, golden dataset management, and retrieval regression detection.
+
+**Files changed:**
+- `api/db_models.py` — adds `EvaluationQuerySet` and `EvaluationQueryItem` ORM models.
+- `api/db.py` — adds SQLite auto-migration bootstrap for both new tables with tenant-scoped indexes.
+- `migrations/postgres/0044_evaluation_lab.sql` — new Postgres migration with RLS policies for both tables.
+- `api/ui_evaluation.py` — extends with 7 new routes: `GET /ui/evaluation/query-sets`, `GET /ui/evaluation/query-sets/{set_ref}`, `GET /ui/evaluation/runs/{run_ref}/comparison`, `GET /ui/evaluation/runs/{run_ref}/confidence`, `GET /ui/evaluation/runs/{run_ref}/hallucination`, `GET /ui/evaluation/runs/{run_ref}/reranker`, `GET /ui/evaluation/runs/{run_ref}/export`.
+- `console/lib/coreApi.ts` — adds 9 new TypeScript types and 7 new API functions for the Evaluation Lab.
+- `console/components/governance/EvaluationLabConsole.tsx` — new component file with `EvaluationLabConsole`, `QuerySetPanel`, `RetrievalPrecisionPanel`, `GroundingReviewPanel`, `HallucinationReviewPanel`, `ConfidenceDistributionPanel`, `RerankerComparisonPanel`, `EvaluationExportPanel`.
+- `console/app/dashboard/evaluation/page.tsx` — wires `EvaluationLabConsole` into the evaluation dashboard route (previously placeholder).
+- `console/components/governance/index.ts` — exports all new Evaluation Lab components and prop types.
+- `tests/security/test_evaluation_lab_security.py` — 27 security tests.
+- `console/tests/evaluation-lab-console.test.js` — 82 static-analysis tests.
+- `tools/ci/route_inventory.json` — regenerated with 7 new evaluation lab routes.
+- `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256` — route inventory artifacts regenerated.
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` — SOC review addendum for new routes and schema.
+- `docs/ai/PR_FIX_LOG.md` — this entry.
+
+**Schema/migration changes:**
+- `evaluation_query_sets`: `id`, `tenant_id`, `set_ref`, `name`, `corpus_id`, `description`, `operator_notes_json`, `export_safe_metadata_json`, `created_at`, `updated_at`. RLS policy on `tenant_id`.
+- `evaluation_query_items`: `id`, `tenant_id`, `set_ref`, `item_ref`, `query_category`, `expected_source_ids_json`, `expected_chunk_ids_json`, `expected_source_hashes_json`, `expected_provenance_ids_json`, `retrieval_expectations_json`, `operator_notes`, `created_at`, `updated_at`. RLS policy on `tenant_id`.
+- Raw query text is NOT stored. Query identity by `item_ref` UUID only.
+
+**Evaluation Lab behavior:**
+- Query sets list and detail views expose expected source IDs, chunk IDs, source hashes, and provenance IDs per query item — no raw query text.
+- Retrieval comparison derives from stored `relevance_indicators_json` and `coverage_indicators_json`. No fabricated precision scores. Missing evaluation metadata renders as explicit structural absence.
+- Confidence distribution derives from `correctness_indicators_json`. Unknown confidence renders as `"unknown"` — not fabricated. Confidence source labeled.
+- Hallucination review type is explicitly `"heuristic"`. Review note states operator validation required. Not claimed as guaranteed detection.
+- Reranker comparison derives from `evaluation_metadata_json`. `ordering_deterministic: true` flag. Unsupported metrics not fabricated.
+- Export endpoint strips `api_key`, `auth_header`, `authorization`, `secret`, `token`, `provider_payload`, `raw_prompt`, `raw_completion`, `credentials` from `evaluation_metadata` before returning. `export_safe: true` always present.
+
+**Determinism proof:**
+- Query item ordering: `created_at ASC`, `item_ref ASC` (deterministic).
+- Run ordering: `created_at DESC`, `id DESC` (deterministic, consistent with existing routes).
+- Export metadata key filtering is deterministic (frozenset-based).
+- No client-side randomization.
+
+**Tenant isolation proof:**
+- All new routes use `bind_tenant_id(request, None, require_explicit_for_unscoped=True)`.
+- `EvaluationQuerySet` queries filter by `tenant_id` at every boundary.
+- `EvaluationQueryItem` queries filter by both `tenant_id` and `set_ref` — cross-tenant item access returns 404.
+- Export endpoint tenant-scopes the run lookup before returning any metadata.
+
+**Unsupported metrics proof:**
+- Hallucination review explicitly labeled `review_type: heuristic`.
+- Confidence distribution explicitly labels unknown source as `"unknown"`, not `0` or a fake value.
+- Comparison note states "No fabricated precision scores."
+- Reranker note states "Unsupported reranker metrics are not fabricated."
+- Quality note from existing route unchanged: "No fabricated metrics."
+
+**Tests added/updated:**
+- `tests/security/test_evaluation_lab_security.py` — 27 tests: auth enforcement (7 endpoints), tenant isolation (query sets, items, 5 run sub-resources), export safety (blocked key stripping, export_safe flag), input validation, empty-state, no fabricated metrics, unknown confidence safe rendering, heuristic label, deterministic ordering.
+- `console/tests/evaluation-lab-console.test.js` — 82 tests: file existence, exports, governance index re-exports, evaluation page integration, coreApi types and functions, all panel rendering patterns, safety checks (no dangerouslySetInnerHTML, no fabricated metrics, no hardcoded datasets), client component directive, deterministic ordering, tenant isolation.
+
+**Validation results:**
+- `ruff check api/ui_evaluation.py api/db_models.py api/db.py`: PASS.
+- `ruff format --check ...`: PASS.
+- `pytest -q tests/security/test_evaluation_lab_security.py`: 27 passed.
+- `cd console && node --test tests/evaluation-lab-console.test.js`: 82 passed.
+- `cd console && npm run lint`: PASS (no ESLint warnings or errors).
+- `cd console && npm run build`: PASS.
+- `make fg-fast`: PASS.
+- `git diff --check`: PASS.
+- `python tools/ci/check_soc_review_sync.py`: soc-review-sync: OK.
+
+**Deferred work / known limitations:**
+- Evaluation algorithms are external; no backend precision/recall scoring is implemented in this PR. Structural indicator presence/absence is the metric floor.
+- `evaluation_query_sets` and `evaluation_query_items` are read-only via UI API in this PR — write endpoints deferred.
+- A/B retrieval testing, golden dataset management, retrieval regression tracking, and evaluation scheduling are future extensions. Data model is extension-safe.
+- Raw query text storage is intentionally excluded — future benchmark dataset integration requires a separate write path with appropriate PII governance.
+- Hallucination classification remains heuristic — guaranteed automated detection requires future model integration.
+
+---
+
 ### 2026-05-12 — PR 29 Ingestion Pipeline Hardening
 
 **Branch:** `pr-29-ingestion-pipeline-hardening`

@@ -2294,3 +2294,100 @@ class RetrievalEvaluationRun(Base):
     updated_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
+
+
+# =============================================================================
+# Evaluation Lab models (PR 54 — Evaluation Lab UI)
+# =============================================================================
+
+
+class EvaluationQuerySet(Base):
+    """
+    Tenant-scoped evaluation query set.
+
+    Stores operator-defined query set metadata for retrieval evaluation.
+    Does NOT store raw query text or PII — query identity is by item_ref UUID.
+    Expected source/chunk references enable retrieval precision measurement.
+    """
+
+    __tablename__ = "evaluation_query_sets"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "set_ref",
+            name="uq_eval_query_set_tenant_ref",
+        ),
+        Index("ix_eval_query_set_tenant_ref", "tenant_id", "set_ref"),
+        Index("ix_eval_query_set_tenant_corpus", "tenant_id", "corpus_id"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    set_ref: Mapped[Any] = mapped_column(
+        Text, nullable=False, default=lambda: str(uuid.uuid4())
+    )
+    name: Mapped[Any] = mapped_column(Text, nullable=False)
+    corpus_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    description: Mapped[Any] = mapped_column(Text, nullable=True)
+    operator_notes_json: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    export_safe_metadata_json: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class EvaluationQueryItem(Base):
+    """
+    Tenant-scoped evaluation query item within a query set.
+
+    Stores expected source/chunk/provenance references per query.
+    Raw query text is NOT stored — item identity is by item_ref UUID.
+    Expected source hashes enable retrieval grounding validation.
+    """
+
+    __tablename__ = "evaluation_query_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "set_ref",
+            "item_ref",
+            name="uq_eval_query_item_tenant_set_ref",
+        ),
+        Index("ix_eval_query_item_tenant_set", "tenant_id", "set_ref"),
+        Index("ix_eval_query_item_tenant_ref", "tenant_id", "item_ref"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    set_ref: Mapped[Any] = mapped_column(Text, nullable=False)
+    item_ref: Mapped[Any] = mapped_column(
+        Text, nullable=False, default=lambda: str(uuid.uuid4())
+    )
+    query_category: Mapped[Any] = mapped_column(Text, nullable=True)
+    expected_source_ids_json: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    expected_chunk_ids_json: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    expected_source_hashes_json: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    expected_provenance_ids_json: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    retrieval_expectations_json: Mapped[Any] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    operator_notes: Mapped[Any] = mapped_column(Text, nullable=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )

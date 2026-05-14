@@ -699,3 +699,197 @@ export async function getEvaluationQuality(
   const qs = params.toString();
   return request<EvaluationQualitySummary>(`/ui/evaluation/quality${qs ? `?${qs}` : ''}`);
 }
+
+// ─── Evaluation Lab types (PR 54) ─────────────────────────────────────────────
+
+export interface EvaluationQuerySetRecord {
+  set_ref: string;
+  name: string;
+  corpus_id: string | null;
+  description: string | null;
+  operator_notes: unknown[];
+  export_safe_metadata: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface EvaluationQueryItemRecord {
+  item_ref: string;
+  set_ref: string;
+  query_category: string | null;
+  expected_source_ids: string[];
+  expected_chunk_ids: string[];
+  expected_source_hashes: string[];
+  expected_provenance_ids: string[];
+  retrieval_expectations: Record<string, unknown>;
+  operator_notes: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface EvaluationQuerySetDetail extends EvaluationQuerySetRecord {
+  items: EvaluationQueryItemRecord[];
+  items_total: number;
+  items_limit: number;
+  items_offset: number;
+}
+
+export interface EvaluationQuerySetsPage {
+  query_sets: EvaluationQuerySetRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface EvaluationRunComparison {
+  run_ref: string;
+  corpus_id: string | null;
+  status: EvaluationRunStatus;
+  query_count: number;
+  retrieval_comparison: {
+    has_relevance_data: boolean;
+    has_coverage_data: boolean;
+    relevance_keys: string[];
+    coverage_keys: string[];
+    comparison_note: string;
+    reranker_comparison_available: boolean;
+    retrieval_strategy: string | null;
+    comparison_strategy: string | null;
+  };
+}
+
+export interface EvaluationRunConfidence {
+  run_ref: string;
+  corpus_id: string | null;
+  status: EvaluationRunStatus;
+  query_count: number;
+  confidence_distribution: {
+    has_confidence_data: boolean;
+    confidence_source: string;
+    confidence_source_labeled: boolean;
+    correctness_keys: string[];
+    provider_confidence_available: boolean;
+    reranker_score_available: boolean;
+    distribution_note: string;
+  };
+}
+
+export interface EvaluationRunHallucination {
+  run_ref: string;
+  corpus_id: string | null;
+  status: EvaluationRunStatus;
+  query_count: number;
+  hallucination_review: {
+    review_type: string;
+    review_note: string;
+    grounding_data_available: boolean;
+    missing_evidence_count: number | null;
+    weak_grounding_count: number | null;
+    unsupported_answer_detection_available: boolean;
+    evidence_mismatch_available: boolean;
+    export_safe: boolean;
+    tenant_scoped: boolean;
+  };
+}
+
+export interface EvaluationRunReranker {
+  run_ref: string;
+  corpus_id: string | null;
+  status: EvaluationRunStatus;
+  query_count: number;
+  reranker_comparison: {
+    reranker_available: boolean;
+    reranker_strategy: string | null;
+    retrieval_strategy: string | null;
+    ordering_deterministic: boolean;
+    overlap_keys: string[];
+    reranker_note: string;
+  };
+}
+
+export interface EvaluationRunExport {
+  export_safe: boolean;
+  export_schema_version: string;
+  run_ref: string;
+  corpus_id: string | null;
+  status: EvaluationRunStatus;
+  query_count: number;
+  evaluator_ref: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string | null;
+  has_relevance_indicators: boolean;
+  has_coverage_indicators: boolean;
+  has_correctness_indicators: boolean;
+  evaluation_metadata: Record<string, unknown>;
+  export_note: string;
+}
+
+export interface EvaluationQuerySetsQuery {
+  limit?: number;
+  offset?: number;
+  corpus_id?: string;
+}
+
+export async function getEvaluationQuerySets(
+  query?: EvaluationQuerySetsQuery,
+): Promise<EvaluationQuerySetsPage> {
+  const params = new URLSearchParams();
+  if (query?.limit != null) params.set('limit', String(query.limit));
+  if (query?.offset != null) params.set('offset', String(query.offset));
+  if (query?.corpus_id) params.set('corpus_id', query.corpus_id);
+  const qs = params.toString();
+  return request<EvaluationQuerySetsPage>(`/ui/evaluation/query-sets${qs ? `?${qs}` : ''}`);
+}
+
+export async function getEvaluationQuerySetDetail(
+  setRef: string,
+  itemsOffset?: number,
+): Promise<EvaluationQuerySetDetail> {
+  const params = new URLSearchParams();
+  if (itemsOffset != null) params.set('items_offset', String(itemsOffset));
+  const qs = params.toString();
+  return request<EvaluationQuerySetDetail>(
+    `/ui/evaluation/query-sets/${encodeURIComponent(setRef)}${qs ? `?${qs}` : ''}`,
+  );
+}
+
+export async function getEvaluationRunComparison(
+  runRef: string,
+): Promise<EvaluationRunComparison> {
+  return request<EvaluationRunComparison>(
+    `/ui/evaluation/runs/${encodeURIComponent(runRef)}/comparison`,
+  );
+}
+
+export async function getEvaluationRunConfidence(
+  runRef: string,
+): Promise<EvaluationRunConfidence> {
+  return request<EvaluationRunConfidence>(
+    `/ui/evaluation/runs/${encodeURIComponent(runRef)}/confidence`,
+  );
+}
+
+export async function getEvaluationRunHallucination(
+  runRef: string,
+): Promise<EvaluationRunHallucination> {
+  return request<EvaluationRunHallucination>(
+    `/ui/evaluation/runs/${encodeURIComponent(runRef)}/hallucination`,
+  );
+}
+
+export async function getEvaluationRunReranker(
+  runRef: string,
+): Promise<EvaluationRunReranker> {
+  return request<EvaluationRunReranker>(
+    `/ui/evaluation/runs/${encodeURIComponent(runRef)}/reranker`,
+  );
+}
+
+export async function getEvaluationRunExport(
+  runRef: string,
+): Promise<EvaluationRunExport> {
+  return request<EvaluationRunExport>(
+    `/ui/evaluation/runs/${encodeURIComponent(runRef)}/export`,
+  );
+}
