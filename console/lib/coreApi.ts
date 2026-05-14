@@ -414,3 +414,81 @@ export async function getCommandCenterSnapshot(): Promise<SafeResult<ControlTowe
     return { ok: false, error: err instanceof Error ? err.message : 'fetch_error' };
   }
 }
+
+// ─── Forensics Console types ──────────────────────────────────────────────────
+
+export interface ForensicsEvent {
+  event_id: number;
+  event_type: string;
+  event_category: string;
+  severity: string;
+  request_id: string | null;
+  request_path: string | null;
+  request_method: string | null;
+  success: boolean;
+  reason: string | null;
+  created_at: string | null;
+}
+
+export interface ForensicsEventsPage {
+  events: ForensicsEvent[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ForensicsTrace {
+  request_id: string;
+  events: ForensicsEvent[];
+  event_count: number;
+  trace_available: boolean;
+}
+
+export interface ForensicsExportPayload {
+  export_safe: true;
+  redactions_applied: boolean;
+  generated_at: string;
+  filters_applied: Record<string, string>;
+  event_count: number;
+  limitation_note: string;
+  events: ForensicsEvent[];
+}
+
+export interface ForensicsEventsQuery {
+  limit?: number;
+  offset?: number;
+  event_type?: string;
+  severity?: string;
+  success?: boolean;
+  request_id?: string;
+  from?: string;
+  to?: string;
+}
+
+export async function getForensicsEvents(query?: ForensicsEventsQuery): Promise<ForensicsEventsPage> {
+  const params = new URLSearchParams();
+  if (query?.limit != null) params.set('limit', String(query.limit));
+  if (query?.offset != null) params.set('offset', String(query.offset));
+  if (query?.event_type) params.set('event_type', query.event_type);
+  if (query?.severity) params.set('severity', query.severity);
+  if (query?.success != null) params.set('success', String(query.success));
+  if (query?.request_id) params.set('request_id', query.request_id);
+  if (query?.from) params.set('from', query.from);
+  if (query?.to) params.set('to', query.to);
+  const qs = params.toString();
+  return request<ForensicsEventsPage>(`/ui/forensics/events${qs ? `?${qs}` : ''}`);
+}
+
+export async function getForensicsTrace(requestId: string): Promise<ForensicsTrace> {
+  return request<ForensicsTrace>(`/ui/forensics/trace/${encodeURIComponent(requestId)}`);
+}
+
+export async function getForensicsExport(query?: Pick<ForensicsEventsQuery, 'from' | 'to' | 'event_type' | 'severity'>): Promise<ForensicsExportPayload> {
+  const params = new URLSearchParams();
+  if (query?.event_type) params.set('event_type', query.event_type);
+  if (query?.severity) params.set('severity', query.severity);
+  if (query?.from) params.set('from', query.from);
+  if (query?.to) params.set('to', query.to);
+  const qs = params.toString();
+  return request<ForensicsExportPayload>(`/ui/forensics/events/export${qs ? `?${qs}` : ''}`);
+}

@@ -7,6 +7,7 @@ import {
   TrustIndicator,
   EvidenceCard,
   AuditTimeline,
+  AuditForensicsConsole,
 } from '@/components/governance';
 import type { EvidenceField, TimelineEvent } from '@/components/governance';
 
@@ -120,6 +121,7 @@ export default function ForensicsPage() {
   const [chainProof, setChainProof] = useState<ChainProof | null>(null);
   const [error, setError] = useState<UiError | null>(null);
   const [loading, setLoading] = useState<'snapshot' | 'audit' | 'chain' | null>(null);
+  const [lookupOpen, setLookupOpen] = useState(false);
 
   async function run(kind: 'snapshot' | 'audit' | 'chain'): Promise<void> {
     try {
@@ -176,101 +178,119 @@ export default function ForensicsPage() {
         </p>
       </div>
 
-      <div className="space-y-4 p-6">
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-widest text-muted/60">
-              Chain Verify Status
-            </span>
-            {chainProof ? (
+      {/* Primary: Audit & Forensics Console */}
+      <AuditForensicsConsole />
+
+      {/* Secondary: Event Lookup (collapsible) */}
+      <div className="border-t border-border">
+        <button
+          onClick={() => setLookupOpen((prev) => !prev)}
+          aria-expanded={lookupOpen}
+          aria-controls="event-lookup-section"
+          className="flex w-full items-center justify-between px-6 py-3 text-left text-xs font-semibold uppercase tracking-widest text-muted/70 hover:text-foreground"
+        >
+          <span>Event Lookup (chain-verify, snapshot, audit-trail)</span>
+          <span>{lookupOpen ? '▲' : '▼'}</span>
+        </button>
+
+        {lookupOpen && (
+          <div id="event-lookup-section" className="space-y-4 p-6">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-widest text-muted/60">
+                  Chain Verify Status
+                </span>
+                {chainProof ? (
+                  <button
+                    onClick={() => {
+                      void navigator.clipboard.writeText(
+                        JSON.stringify({
+                          requestId: chainProof.requestId,
+                          responseHash: chainProof.responseHash,
+                          timestamp: chainProof.timestamp,
+                        }),
+                      );
+                    }}
+                    className="rounded border border-border bg-surface-2 px-2.5 py-1 text-xs text-muted hover:text-foreground"
+                  >
+                    Copy proof
+                  </button>
+                ) : null}
+              </div>
+
+              <TrustIndicator
+                status={chainStatus}
+                requestId={chainProof?.requestId}
+                hash={chainProof?.responseHash}
+              />
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <input
+                value={eventId}
+                onChange={(e) => setEventId(e.target.value)}
+                placeholder="event_id"
+                className="rounded border border-border bg-surface-2 px-3 py-1.5 text-sm text-foreground placeholder:text-muted/40 focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+
               <button
-                onClick={() => {
-                  void navigator.clipboard.writeText(
-                    JSON.stringify({
-                      requestId: chainProof.requestId,
-                      responseHash: chainProof.responseHash,
-                      timestamp: chainProof.timestamp,
-                    }),
-                  );
-                }}
-                className="rounded border border-border bg-surface-2 px-2.5 py-1 text-xs text-muted hover:text-foreground"
+                disabled={!eventId || loading === 'snapshot'}
+                onClick={() => void run('snapshot')}
+                className="rounded border border-border bg-surface-2 px-3 py-1.5 text-xs text-muted hover:text-foreground disabled:opacity-40"
               >
-                Copy proof
+                {loading === 'snapshot' ? 'Loading…' : 'Snapshot'}
               </button>
-            ) : null}
-          </div>
 
-          <TrustIndicator
-            status={chainStatus}
-            requestId={chainProof?.requestId}
-            hash={chainProof?.responseHash}
-          />
-        </div>
+              <button
+                disabled={!eventId || loading === 'audit'}
+                onClick={() => void run('audit')}
+                className="rounded border border-border bg-surface-2 px-3 py-1.5 text-xs text-muted hover:text-foreground disabled:opacity-40"
+              >
+                {loading === 'audit' ? 'Loading…' : 'Audit trail'}
+              </button>
 
-        <div className="flex flex-wrap gap-2">
-          <input
-            value={eventId}
-            onChange={(e) => setEventId(e.target.value)}
-            placeholder="event_id"
-            className="rounded border border-border bg-surface-2 px-3 py-1.5 text-sm text-foreground placeholder:text-muted/40 focus:outline-none focus:ring-1 focus:ring-primary"
-          />
+              <button
+                disabled={loading === 'chain'}
+                onClick={() => void run('chain')}
+                className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover disabled:opacity-40"
+              >
+                {loading === 'chain' ? 'Verifying…' : 'Chain verify'}
+              </button>
+            </div>
 
-          <button
-            disabled={!eventId || loading === 'snapshot'}
-            onClick={() => void run('snapshot')}
-            className="rounded border border-border bg-surface-2 px-3 py-1.5 text-xs text-muted hover:text-foreground disabled:opacity-40"
-          >
-            {loading === 'snapshot' ? 'Loading…' : 'Snapshot'}
-          </button>
-
-          <button
-            disabled={!eventId || loading === 'audit'}
-            onClick={() => void run('audit')}
-            className="rounded border border-border bg-surface-2 px-3 py-1.5 text-xs text-muted hover:text-foreground disabled:opacity-40"
-          >
-            {loading === 'audit' ? 'Loading…' : 'Audit trail'}
-          </button>
-
-          <button
-            disabled={loading === 'chain'}
-            onClick={() => void run('chain')}
-            className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover disabled:opacity-40"
-          >
-            {loading === 'chain' ? 'Verifying…' : 'Chain verify'}
-          </button>
-        </div>
-
-        {error ? (
-          <p className="rounded border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">
-            {error.message} ({error.code}) · request_id: {error.requestId}
-          </p>
-        ) : null}
-
-        {snapshotData ? (
-          <div className="space-y-3">
-            {snapshotCore.length > 0 ? (
-              <EvidenceCard title="Snapshot" fields={snapshotCore} highlight />
+            {error ? (
+              <p className="rounded border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">
+                {error.message} ({error.code}) · request_id: {error.requestId}
+              </p>
             ) : null}
 
-            {snapshotExtra.length > 0 ? (
-              <EvidenceCard title="Additional fields" fields={snapshotExtra} />
+            {snapshotData ? (
+              <div className="space-y-3">
+                {snapshotCore.length > 0 ? (
+                  <EvidenceCard title="Snapshot" fields={snapshotCore} highlight />
+                ) : null}
+
+                {snapshotExtra.length > 0 ? (
+                  <EvidenceCard title="Additional fields" fields={snapshotExtra} />
+                ) : null}
+              </div>
+            ) : null}
+
+            {auditData ? (
+              <div className="rounded-lg border border-border bg-surface-2 p-4">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted/70">
+                  Audit Trail
+                </p>
+
+                {auditTimeline ? (
+                  <AuditTimeline events={auditTimeline} />
+                ) : (
+                  <EvidenceCard title="Audit data" fields={auditFallbackFields} />
+                )}
+              </div>
             ) : null}
           </div>
-        ) : null}
-
-        {auditData ? (
-          <div className="rounded-lg border border-border bg-surface-2 p-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted/70">
-              Audit Trail
-            </p>
-
-            {auditTimeline ? (
-              <AuditTimeline events={auditTimeline} />
-            ) : (
-              <EvidenceCard title="Audit data" fields={auditFallbackFields} />
-            )}
-          </div>
-        ) : null}
+        )}
       </div>
     </div>
   );

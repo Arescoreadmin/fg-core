@@ -88,3 +88,4 @@ export {
   ConnectorIngestionPlaceholder,
 } from './DocumentIngestionConsole';
 export type { DocumentIngestionConsoleProps } from './DocumentIngestionConsole';
+export { AuditForensicsConsole } from './AuditForensicsConsole';

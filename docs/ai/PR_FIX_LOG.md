@@ -9006,3 +9006,64 @@ In CI with slower runners, estimated ~800-1000s — still within 1200s budget.
 - Validation: `cd console && npm test -- tests/document-ingestion-console.test.js` PASS — 77 passed.
 - Validation: `.venv/bin/ruff check api/rag_corpus_ingestion.py tests/test_rag_corpus_ingestion.py tests/security/test_rag_ingestion_upload_security.py` PASS.
 - Validation: `cd console && npm run lint` PASS.
+
+---
+
+### 2026-05-14 — PR 52 Audit & Forensics Console
+
+**Scope:** SOC/operator investigation layer for AI activity. Adds searchable, filterable, export-safe audit & forensics console surfacing SecurityAuditLog events, request tracing, and future-ready replay/incident reconstruction scaffolding.
+
+**Files added:**
+- `api/ui_forensics_console.py` — 3-endpoint FastAPI router: GET /ui/forensics/events, GET /ui/forensics/trace/{request_id}, GET /ui/forensics/events/export. All ui:read scope + require_bound_tenant.
+- `console/components/governance/AuditForensicsConsole.tsx` — SOC console React component: ForensicsSearchBar, ForensicsFilterPanel, AuditEventCard, AuditEventTimeline, RequestTracePanel, ForensicsExportPanel, ReplayReadinessPanel.
+- `tests/security/test_forensics_console.py` — 9 security/tenant isolation tests for new API routes.
+
+**Files modified:**
+- `api/main.py` — registered ui_forensics_console_router.
+- `console/app/api/core/[...path]/route.ts` — added ui/forensics/events and ui/forensics/trace to BFF PROXY_RULES.
+- `console/lib/coreApi.ts` — added ForensicsEvent, ForensicsEventsPage, ForensicsTrace, ForensicsExportPayload types and getForensicsEvents, getForensicsTrace, getForensicsExport functions.
+- `console/app/dashboard/forensics/page.tsx` — extended page with AuditForensicsConsole as primary surface; existing chain-verify/snapshot/audit-trail preserved in collapsible section.
+- `console/components/governance/index.ts` — exported AuditForensicsConsole.
+- `tools/ci/route_inventory.json` — added 3 new routes.
+- `docs/ai/PR_FIX_LOG.md` — appended this entry.
+
+**Audit timeline behavior:**
+- Displays SecurityAuditLog rows for the resolved tenant, sorted desc(created_at), desc(id). Stable tiebreaker via id.
+- Severity labels are text-only (not color-only): Info / Warning / Error / Critical.
+- Empty state and error state are explicit and safe.
+
+**Request trace behavior:**
+- GET /ui/forensics/trace/{request_id} returns all events for that request_id within the tenant's chain, sorted asc(created_at), asc(id).
+- Missing trace renders as trace_available: false, empty events list. No fake trace data.
+
+**Export-safe behavior:**
+- Excludes: key_prefix, client_ip, user_agent, prev_hash, entry_hash, chain_id, details_json.
+- Includes: event_id, event_type, event_category, severity, request_id, request_path, request_method, success, reason, created_at.
+- Response marks export_safe: true, redactions_applied: true, generated_at, filters_applied, event_count, limitation_note.
+- Max 500 events per export.
+
+**Replay/incident reconstruction behavior:**
+- ReplayReadinessPanel component is clearly labeled "Replay mode — not yet available". No request re-execution. No provider replay. No mutation.
+- Future-ready structure: components accept request_id and event grouping for future replay wiring.
+
+**Tenant isolation proof:**
+- All three new routes filter SecurityAuditLog by chain_id == require_bound_tenant(request). Tenant ID is never accepted from request params or body.
+- Test: tenant A events not returned for tenant B token.
+- Test: trace lookup for request_id belonging to tenant B returns empty for tenant A token.
+- Test: export for tenant A excludes tenant B events.
+
+**Tests added:**
+- 9 tests in tests/security/test_forensics_console.py covering: cross-tenant event isolation, cross-tenant trace isolation, cross-tenant export isolation, auth required, wrong scope, pagination, event_type filter, severity filter, invalid request_id validation.
+
+**Validation results:**
+- `cd console && npm run lint`: PASS.
+- `cd console && npm run build`: PASS.
+- `.venv/bin/python -m pytest -q tests/security/test_forensics_console.py`: PASS.
+- `make fg-contract`: PASS.
+- `git diff --check`: PASS.
+
+**Known limitations:**
+- Replay mode is not implemented; placeholder clearly marks as unavailable.
+- Incident reconstruction is not implemented; placeholder clearly marks as unavailable.
+- SecurityAuditLog details_json is excluded from all surfaces; safe summary via reason field only.
+- Compliance export and legal packet export are future capabilities, marked unavailable.

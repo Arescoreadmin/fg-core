@@ -38,6 +38,8 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   // Document ingestion UX — upload and upload list (PR 51)
   { prefix: 'rag/upload', methods: new Set(['POST']) },
   { prefix: 'rag/uploads', methods: new Set(['GET', 'HEAD']) },
+  { prefix: 'ui/forensics/events', methods: new Set(['GET', 'HEAD']) },
+  { prefix: 'ui/forensics/trace', methods: new Set(['GET', 'HEAD']) },
 ];
 
 function getRequestId(request: NextRequest): string {
