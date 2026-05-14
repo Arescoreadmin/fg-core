@@ -495,10 +495,19 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             _sqlite_add_column_if_missing(
                 conn, "rag_chunks", "is_active", "INTEGER NOT NULL DEFAULT 1"
             )
+            # PR 55 — PDF ingestion: page provenance columns
+            _sqlite_add_column_if_missing(conn, "rag_chunks", "source_page", "INTEGER")
+            _sqlite_add_column_if_missing(
+                conn, "rag_chunks", "extraction_version", "TEXT"
+            )
             conn.exec_driver_sql(
                 "CREATE INDEX IF NOT EXISTS ix_rag_chunks_tenant_version_active "
                 "ON rag_chunks (tenant_id, document_version_id, is_active)"
             )
+
+        if "rag_documents" in tables:
+            # PR 55 — PDF ingestion: content_type provenance column
+            _sqlite_add_column_if_missing(conn, "rag_documents", "content_type", "TEXT")
 
         # (The rest of your large sqlite schema block continues unchanged)
         # NOTE: You pasted duplicated ai_policy_violations creation twice; leaving it as-is is sloppy.

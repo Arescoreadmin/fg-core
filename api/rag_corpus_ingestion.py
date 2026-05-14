@@ -35,6 +35,18 @@ from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes, verify_api_key
 from api.deps import tenant_db_required
+from api.rag.pdf_extractor import (
+    PDF_ERR_EMPTY_EXTRACT,
+    PDF_ERR_ENCRYPTED,
+    PDF_ERR_EMBEDDED_SCRIPT,
+    PDF_ERR_MALFORMED,
+    PDF_ERR_INVALID_MAGIC,
+    PDF_ERR_TOO_MANY_PAGES,
+    PDF_ERR_OVERSIZED_PAGE,
+    PDF_ERR_LIBRARY_MISSING,
+    PDFExtractionError,
+    extract_pdf_pages,
+)
 from api.rag_corpus_store import (
     INGESTION_CHUNKING,
     INGESTION_DUPLICATE,
@@ -53,20 +65,24 @@ from api.rag_corpus_store import (
     get_corpus,
     get_document,
     ingest_document_version,
+    ingest_pdf_document,
     _table_columns,
 )
 
 log = logging.getLogger("frostgate.rag_corpus_ingestion")
 
 _MAX_UPLOAD_BYTES = int(os.getenv("FG_RAG_MAX_UPLOAD_BYTES", str(1_000_000)))
+_MAX_PDF_UPLOAD_BYTES = int(os.getenv("FG_RAG_MAX_PDF_UPLOAD_BYTES", str(50_000_000)))
 _MAX_TITLE_LEN = 512
 _MAX_CORPUS_ID_LEN = 256
 _SAFE_SOURCE_HASH_PREFIX_LEN = 12
 _SUPPORTED_CONTENT_TYPES = frozenset({"text/plain", "text/markdown"})
+_PDF_CONTENT_TYPE = "application/pdf"
 _EXT_TO_CONTENT_TYPE: dict[str, str] = {
     ".txt": "text/plain",
     ".md": "text/markdown",
     ".markdown": "text/markdown",
+    ".pdf": "application/pdf",
 }
 _KNOWN_INGESTION_STATUSES = frozenset(
     {
@@ -91,6 +107,14 @@ _QUARANTINE_REASON_LABELS: dict[str, str] = {
     "unsafe_content": "Policy rejected: unsafe content",
     "chunking_failed": "Chunking failed",
     "metadata_invalid": "Metadata validation failed",
+    "pdf_encrypted": "PDF is password-protected",
+    "pdf_malformed": "PDF is malformed or corrupted",
+    "pdf_embedded_script": "PDF contains embedded scripts",
+    "pdf_too_many_pages": "PDF exceeds page limit",
+    "pdf_oversized_page": "PDF page content exceeds size limit",
+    "pdf_empty_extract": "PDF extraction produced no text (scanned/image-only)",
+    "pdf_extraction_failed": "PDF extraction failed",
+    "pdf_invalid_magic": "File does not appear to be a valid PDF",
     "unknown": "Unknown quarantine reason",
 }
 _ALLOWED_UPLOAD_SORT_DIRS = frozenset({"asc", "desc"})
@@ -116,6 +140,7 @@ def _safe_source_hash_prefix(source_hash: Optional[str]) -> Optional[str]:
 
 
 def _detect_content_type(filename: Optional[str], declared_ct: Optional[str]) -> str:
+    # Extension is authoritative for type routing; client MIME is never trusted alone.
     if filename and "." in filename:
         ext = "." + filename.rsplit(".", 1)[-1].lower()
         if ext in _EXT_TO_CONTENT_TYPE:
@@ -125,6 +150,20 @@ def _detect_content_type(filename: Optional[str], declared_ct: Optional[str]) ->
         if base in _SUPPORTED_CONTENT_TYPES:
             return base
     return "application/octet-stream"
+
+
+def _pdf_quarantine_reason(error_code: str) -> str:
+    _MAP = {
+        PDF_ERR_ENCRYPTED: "pdf_encrypted",
+        PDF_ERR_MALFORMED: "pdf_malformed",
+        PDF_ERR_EMBEDDED_SCRIPT: "pdf_embedded_script",
+        PDF_ERR_TOO_MANY_PAGES: "pdf_too_many_pages",
+        PDF_ERR_OVERSIZED_PAGE: "pdf_oversized_page",
+        PDF_ERR_EMPTY_EXTRACT: "pdf_empty_extract",
+        PDF_ERR_INVALID_MAGIC: "pdf_invalid_magic",
+        PDF_ERR_LIBRARY_MISSING: "pdf_extraction_failed",
+    }
+    return _MAP.get(error_code, "pdf_extraction_failed")
 
 
 def _quarantine_label(reason: Optional[str]) -> str:
@@ -276,22 +315,60 @@ async def upload_document(
         doc_title = filename
 
     content_type = _detect_content_type(filename, file.content_type)
-    raw_bytes = await file.read(_MAX_UPLOAD_BYTES + 1)
-    if len(raw_bytes) > _MAX_UPLOAD_BYTES:
+
+    # PDF uploads have a separate (larger) size cap.
+    effective_max = (
+        _MAX_PDF_UPLOAD_BYTES
+        if content_type == _PDF_CONTENT_TYPE
+        else _MAX_UPLOAD_BYTES
+    )
+    raw_bytes = await file.read(effective_max + 1)
+    if len(raw_bytes) > effective_max:
         log.warning(
             "rag_corpus_ingestion.upload_too_large",
             extra={
                 "event": "ingestion.upload_rejected",
+                "reason": "size_exceeded",
                 "tenant_id": tenant_id,
                 "corpus_id": corpus_id,
+                "content_type": content_type,
                 "request_id": request_id,
             },
         )
         raise HTTPException(
             status_code=413,
-            detail={"code": "UPLOAD_TOO_LARGE", "max_bytes": _MAX_UPLOAD_BYTES},
+            detail={
+                "code": "UPLOAD_TOO_LARGE",
+                "max_bytes": effective_max,
+                "content_type": content_type,
+            },
         )
 
+    log.info(
+        "rag_corpus_ingestion.upload_received",
+        extra={
+            "event": "ingestion.upload_received",
+            "tenant_id": tenant_id,
+            "corpus_id": corpus_id,
+            "content_type": content_type,
+            "byte_count": len(raw_bytes),
+            "request_id": request_id,
+        },
+    )
+
+    # --- PDF ingestion path ---
+    if content_type == _PDF_CONTENT_TYPE:
+        return await _ingest_pdf(
+            db=db,
+            tenant_id=tenant_id,
+            corpus_id=corpus_id,
+            doc_title=doc_title,
+            filename=filename,
+            raw_bytes=raw_bytes,
+            request_id=request_id,
+        )
+
+    # --- Text / Markdown ingestion path (unchanged) ---
     if content_type in _SUPPORTED_CONTENT_TYPES:
         try:
             content = raw_bytes.decode("utf-8", errors="strict")
@@ -308,17 +385,6 @@ async def upload_document(
         content_type
         if content_type in _SUPPORTED_CONTENT_TYPES
         else "application/octet-stream"
-    )
-
-    log.info(
-        "rag_corpus_ingestion.upload_received",
-        extra={
-            "event": "ingestion.upload_received",
-            "tenant_id": tenant_id,
-            "corpus_id": corpus_id,
-            "content_type": content_type,
-            "request_id": request_id,
-        },
     )
 
     try:
@@ -410,6 +476,167 @@ async def upload_document(
             "connector_sync": None,
             "batch_ingestion": None,
             "delta_sync": None,
+        },
+    }
+
+
+async def _ingest_pdf(
+    *,
+    db: Session,
+    tenant_id: str,
+    corpus_id: str,
+    doc_title: str,
+    filename: str,
+    raw_bytes: bytes,
+    request_id: Optional[str],
+) -> dict[str, Any]:
+    """Handle PDF upload: validate, extract, and ingest with page-aware chunking."""
+    import time
+
+    t0 = time.monotonic()
+
+    try:
+        pdf_result = extract_pdf_pages(raw_bytes)
+    except PDFExtractionError as exc:
+        quarantine_reason = _pdf_quarantine_reason(exc.error_code)
+        log.warning(
+            "rag_corpus_ingestion.pdf_rejected",
+            extra={
+                "event": "ingestion.pdf_rejected",
+                "tenant_id": tenant_id,
+                "corpus_id": corpus_id,
+                "error_code": exc.error_code,
+                "quarantine_reason": quarantine_reason,
+                "request_id": request_id,
+            },
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "PDF_REJECTED",
+                "error_code": exc.error_code,
+                "quarantine_reason": quarantine_reason,
+                "quarantine_reason_label": _quarantine_label(quarantine_reason),
+                "message": exc.message,
+            },
+        )
+
+    extraction_ms = int((time.monotonic() - t0) * 1000)
+
+    log.info(
+        "rag_corpus_ingestion.pdf_extracted",
+        extra={
+            "event": "ingestion.pdf_extracted",
+            "tenant_id": tenant_id,
+            "corpus_id": corpus_id,
+            "page_count": pdf_result.page_count,
+            "has_text": pdf_result.has_text,
+            "extraction_version": pdf_result.extraction_version,
+            "extraction_ms": extraction_ms,
+            "request_id": request_id,
+        },
+    )
+
+    try:
+        result = ingest_pdf_document(
+            db,
+            tenant_id=tenant_id,
+            corpus_id=corpus_id,
+            title=doc_title,
+            source=filename,
+            pdf_result=pdf_result,
+        )
+    except ValueError as exc:
+        log.warning(
+            "rag_corpus_ingestion.pdf_ingest_error",
+            extra={
+                "event": "ingestion.pdf_ingest_error",
+                "tenant_id": tenant_id,
+                "corpus_id": corpus_id,
+                "request_id": request_id,
+            },
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "PDF_INGEST_ERROR", "message": str(exc)},
+        ) from exc
+
+    ingestion_status = str(result.get("ingestion_status") or INGESTION_INDEXED)
+    document_id = str(result.get("document_id", ""))
+    version_id = str(result.get("version_id") or "")
+    total_ms = int((time.monotonic() - t0) * 1000)
+
+    log.info(
+        "rag_corpus_ingestion.pdf_upload_complete",
+        extra={
+            "event": "ingestion.pdf_upload_complete",
+            "tenant_id": tenant_id,
+            "corpus_id": corpus_id,
+            "document_id": document_id,
+            "ingestion_status": ingestion_status,
+            "page_count": pdf_result.page_count,
+            "chunk_count": result.get("chunk_count", 0),
+            "extraction_ms": extraction_ms,
+            "total_ms": total_ms,
+            "request_id": request_id,
+        },
+    )
+
+    chunk_summary = (
+        _document_chunk_summary(db, tenant_id=tenant_id, document_id=document_id)
+        if document_id
+        else {"active_chunk_count": 0, "total_chunk_count": 0}
+    )
+    embedding_summary = (
+        _document_embedding_summary(db, tenant_id=tenant_id, document_id=document_id)
+        if document_id
+        else {}
+    )
+    is_duplicate = ingestion_status == INGESTION_DUPLICATE
+    is_quarantined = ingestion_status == INGESTION_QUARANTINED
+
+    return {
+        "document_id": document_id,
+        "corpus_id": corpus_id,
+        "title": doc_title,
+        "source": filename,
+        "content_type": "application/pdf",
+        "ingestion_status": ingestion_status,
+        "ingestion_status_label": _ingestion_status_label(ingestion_status),
+        "is_current": bool(result.get("is_current", True)),
+        "version_id": version_id,
+        "version_number": int(result.get("version_number") or 1),
+        "source_hash_prefix": _safe_source_hash_prefix(
+            str(result.get("source_hash") or "")
+        ),
+        "page_count": pdf_result.page_count,
+        "extraction_version": pdf_result.extraction_version,
+        "extraction_ms": extraction_ms,
+        "active_chunk_count": chunk_summary["active_chunk_count"],
+        "total_chunk_count": chunk_summary["total_chunk_count"],
+        "embedding_state_summary": embedding_summary,
+        "is_duplicate": is_duplicate,
+        "duplicate_of_document_id": result.get("duplicate_of_document_id")
+        if is_duplicate
+        else None,
+        "is_quarantined": is_quarantined,
+        "quarantine_reason": result.get("quarantine_reason")
+        if is_quarantined
+        else None,
+        "quarantine_reason_label": _quarantine_label(result.get("quarantine_reason"))
+        if is_quarantined
+        else None,
+        "failure_reason": result.get("failure_reason"),
+        "indexed_at": result.get("indexed_at"),
+        "created_at": result.get("created_at"),
+        "audit_safe": True,
+        "future_hooks": {
+            "retry_available": False,
+            "ocr_pipeline": None,
+            "scanned_pdf": None,
+            "table_extraction": None,
+            "image_extraction": None,
+            "async_worker": None,
         },
     }
 
