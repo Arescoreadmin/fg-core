@@ -177,7 +177,6 @@ test('all required placeholder route files exist', () => {
     'app/dashboard/policies/page.tsx',
     'app/dashboard/providers/page.tsx',
     'app/dashboard/readiness/page.tsx',
-    'app/dashboard/evaluation/page.tsx',
     'app/dashboard/settings/page.tsx',
   ];
   for (const route of routes) {
@@ -193,7 +192,6 @@ test('placeholder pages display not-configured state', () => {
     'app/dashboard/policies/page.tsx',
     'app/dashboard/providers/page.tsx',
     'app/dashboard/readiness/page.tsx',
-    'app/dashboard/evaluation/page.tsx',
     'app/dashboard/settings/page.tsx',
   ];
   for (const file of placeholders) {
@@ -211,7 +209,6 @@ test('placeholder pages do not fetch live data or use client-side effects', () =
     'app/dashboard/policies/page.tsx',
     'app/dashboard/providers/page.tsx',
     'app/dashboard/readiness/page.tsx',
-    'app/dashboard/evaluation/page.tsx',
     'app/dashboard/settings/page.tsx',
   ];
   for (const file of placeholders) {
@@ -222,6 +219,14 @@ test('placeholder pages do not fetch live data or use client-side effects', () =
   }
 });
 
+test('evaluation page is implemented and no longer a placeholder', () => {
+  const content = read('app/dashboard/evaluation/page.tsx');
+  assert.match(content, /EvaluationLabConsole/);
+  assert.match(content, /Operator-grade retrieval and grounding evaluation workspace/);
+  assert.doesNotMatch(content, /not yet configured/);
+  assert.doesNotMatch(content, /module-not-configured/);
+});
+
 test('placeholder pages do not render fake operational data', () => {
   const placeholders = [
     // corpus graduated to full implementation in PR 50 — no longer a placeholder
@@ -230,7 +235,6 @@ test('placeholder pages do not render fake operational data', () => {
     'app/dashboard/policies/page.tsx',
     'app/dashboard/providers/page.tsx',
     'app/dashboard/readiness/page.tsx',
-    'app/dashboard/evaluation/page.tsx',
     'app/dashboard/settings/page.tsx',
   ];
   for (const file of placeholders) {
