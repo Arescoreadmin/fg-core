@@ -1121,6 +1121,61 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             "ON retrieval_evaluation_runs (tenant_id, corpus_id)"
         )
 
+        # PR 54 — Evaluation Lab UI
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS evaluation_query_sets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL,
+                set_ref TEXT NOT NULL,
+                name TEXT NOT NULL,
+                corpus_id TEXT,
+                description TEXT,
+                operator_notes_json TEXT NOT NULL DEFAULT '[]',
+                export_safe_metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                UNIQUE(tenant_id, set_ref)
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_eval_query_set_tenant_ref "
+            "ON evaluation_query_sets (tenant_id, set_ref)"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_eval_query_set_tenant_corpus "
+            "ON evaluation_query_sets (tenant_id, corpus_id)"
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS evaluation_query_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL,
+                set_ref TEXT NOT NULL,
+                item_ref TEXT NOT NULL,
+                query_category TEXT,
+                expected_source_ids_json TEXT NOT NULL DEFAULT '[]',
+                expected_chunk_ids_json TEXT NOT NULL DEFAULT '[]',
+                expected_source_hashes_json TEXT NOT NULL DEFAULT '[]',
+                expected_provenance_ids_json TEXT NOT NULL DEFAULT '[]',
+                retrieval_expectations_json TEXT NOT NULL DEFAULT '{}',
+                operator_notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                UNIQUE(tenant_id, set_ref, item_ref)
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_eval_query_item_tenant_set "
+            "ON evaluation_query_items (tenant_id, set_ref)"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_eval_query_item_tenant_ref "
+            "ON evaluation_query_items (tenant_id, item_ref)"
+        )
+
 
 # ---------------------------------------------------------------------
 # Public API

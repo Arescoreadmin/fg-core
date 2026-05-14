@@ -746,3 +746,57 @@ No existing tables modified. No RLS changes to existing tables.
 - `.venv/bin/python -m pytest tests/security/test_provider_governance.py`: 27 passed
 - `cd console && npm run lint`: no ESLint warnings or errors
 - `cd console && npm run build`: passed
+
+---
+
+## PR 54 — Evaluation Lab UI — Route inventory addendum (2026-05-14)
+
+### New routes added
+
+7 new `/ui/evaluation/` routes added to `tools/ci/route_inventory.json`:
+
+| Route | Method | Scope | Tenant-bound |
+|---|---|---|---|
+| `/ui/evaluation/query-sets` | GET | ui:read | yes |
+| `/ui/evaluation/query-sets/{set_ref}` | GET | ui:read | yes |
+| `/ui/evaluation/runs/{run_ref}/comparison` | GET | ui:read | yes |
+| `/ui/evaluation/runs/{run_ref}/confidence` | GET | ui:read | yes |
+| `/ui/evaluation/runs/{run_ref}/hallucination` | GET | ui:read | yes |
+| `/ui/evaluation/runs/{run_ref}/reranker` | GET | ui:read | yes |
+| `/ui/evaluation/runs/{run_ref}/export` | GET | ui:read | yes |
+
+All routes are `allowed_internal`, `plane: ui`, registered under the `not _is_production_runtime()` guard in `api/main.py`.
+
+### Security posture
+
+- All routes require `ui:read` scope via `require_scopes("ui:read")` dependency at router level.
+- All routes enforce tenant isolation via `bind_tenant_id(request, None, require_explicit_for_unscoped=True)`.
+- Export endpoint strips secret/token/auth/credential keys from `evaluation_metadata` before returning.
+- No raw query text, raw prompts, raw completions, or PII stored or returned.
+- Hallucination review explicitly labeled `review_type: heuristic` — no guaranteed detection claimed.
+- Confidence source labeled and rendered as `unknown` when absent — not fabricated.
+- Reranker ordering flag `ordering_deterministic: true` — deterministic server-side ordering.
+- Query items do not store raw query text — identity by `item_ref` UUID only.
+
+### Tenant isolation proof
+
+- `EvaluationQuerySet` and `EvaluationQueryItem` filter by `tenant_id` at every query boundary.
+- Cross-tenant query set detail access returns 404 (not a timing-safe 403 leak).
+- Query items returned only when `tenant_id` matches on both set and item rows.
+- 27 security tests in `tests/security/test_evaluation_lab_security.py` cover: auth required (7 endpoints), tenant isolation (query sets, items, all run sub-resources), cross-tenant rejection (5 sub-resources), export safety (secret key stripping), input validation (oversized refs), empty-state safety, no fabricated metrics, unknown confidence safe rendering, heuristic label enforcement, deterministic ordering.
+
+### Schema changes
+
+New tables (PR 54, migration `0044_evaluation_lab.sql`):
+- `evaluation_query_sets` — tenant-scoped operator query set metadata
+- `evaluation_query_items` — tenant-scoped expected source/chunk references per query
+
+RLS policies added for both new tables. No existing tables modified.
+
+### Verification evidence
+
+- `python tools/ci/check_soc_review_sync.py`: soc-review-sync: OK
+- `.venv/bin/python -m pytest tests/security/test_evaluation_lab_security.py`: 27 passed
+- `cd console && node --test tests/evaluation-lab-console.test.js`: 82 passed
+- `cd console && npm run lint`: no ESLint warnings or errors
+- `cd console && npm run build`: passed
