@@ -9006,3 +9006,118 @@ In CI with slower runners, estimated ~800-1000s — still within 1200s budget.
 - Validation: `cd console && npm test -- tests/document-ingestion-console.test.js` PASS — 77 passed.
 - Validation: `.venv/bin/ruff check api/rag_corpus_ingestion.py tests/test_rag_corpus_ingestion.py tests/security/test_rag_ingestion_upload_security.py` PASS.
 - Validation: `cd console && npm run lint` PASS.
+
+---
+
+### 2026-05-14 — PR 52 Audit & Forensics Console
+
+**Scope:** SOC/operator investigation layer for AI activity. Adds searchable, filterable, export-safe audit & forensics console surfacing SecurityAuditLog events, request tracing, and future-ready replay/incident reconstruction scaffolding.
+
+**Files added:**
+- `api/ui_forensics_console.py` — 3-endpoint FastAPI router: GET /ui/forensics/events, GET /ui/forensics/trace/{request_id}, GET /ui/forensics/events/export. All ui:read scope + require_bound_tenant.
+- `console/components/governance/AuditForensicsConsole.tsx` — SOC console React component: ForensicsSearchBar, ForensicsFilterPanel, AuditEventCard, AuditEventTimeline, RequestTracePanel, ForensicsExportPanel, ReplayReadinessPanel.
+- `tests/security/test_forensics_console.py` — 9 security/tenant isolation tests for new API routes.
+
+**Files modified:**
+- `api/main.py` — registered ui_forensics_console_router.
+- `console/app/api/core/[...path]/route.ts` — added ui/forensics/events and ui/forensics/trace to BFF PROXY_RULES.
+- `console/lib/coreApi.ts` — added ForensicsEvent, ForensicsEventsPage, ForensicsTrace, ForensicsExportPayload types and getForensicsEvents, getForensicsTrace, getForensicsExport functions.
+- `console/app/dashboard/forensics/page.tsx` — extended page with AuditForensicsConsole as primary surface; existing chain-verify/snapshot/audit-trail preserved in collapsible section.
+- `console/components/governance/index.ts` — exported AuditForensicsConsole.
+- `tools/ci/route_inventory.json` — added 3 new routes.
+- `docs/ai/PR_FIX_LOG.md` — appended this entry.
+
+**Audit timeline behavior:**
+- Displays SecurityAuditLog rows for the resolved tenant, sorted desc(created_at), desc(id). Stable tiebreaker via id.
+- Severity labels are text-only (not color-only): Info / Warning / Error / Critical.
+- Empty state and error state are explicit and safe.
+
+**Request trace behavior:**
+- GET /ui/forensics/trace/{request_id} returns all events for that request_id within the tenant's chain, sorted asc(created_at), asc(id).
+- Missing trace renders as trace_available: false, empty events list. No fake trace data.
+
+**Export-safe behavior:**
+- Excludes: key_prefix, client_ip, user_agent, prev_hash, entry_hash, chain_id, details_json.
+- Includes: event_id, event_type, event_category, severity, request_id, request_path, request_method, success, reason, created_at.
+- Response marks export_safe: true, redactions_applied: true, generated_at, filters_applied, event_count, limitation_note.
+- Max 500 events per export.
+
+**Replay/incident reconstruction behavior:**
+- ReplayReadinessPanel component is clearly labeled "Replay mode — not yet available". No request re-execution. No provider replay. No mutation.
+- Future-ready structure: components accept request_id and event grouping for future replay wiring.
+
+**Tenant isolation proof:**
+- All three new routes filter SecurityAuditLog by chain_id == require_bound_tenant(request). Tenant ID is never accepted from request params or body.
+- Test: tenant A events not returned for tenant B token.
+- Test: trace lookup for request_id belonging to tenant B returns empty for tenant A token.
+- Test: export for tenant A excludes tenant B events.
+
+**Tests added:**
+- 9 tests in tests/security/test_forensics_console.py covering: cross-tenant event isolation, cross-tenant trace isolation, cross-tenant export isolation, auth required, wrong scope, pagination, event_type filter, severity filter, invalid request_id validation.
+
+**Validation results:**
+- `cd console && npm run lint`: PASS.
+- `cd console && npm run build`: PASS.
+- `.venv/bin/python -m pytest -q tests/security/test_forensics_console.py`: PASS.
+- `make fg-contract`: PASS.
+- `git diff --check`: PASS.
+
+**Known limitations:**
+- Replay mode is not implemented; placeholder clearly marks as unavailable.
+- Incident reconstruction is not implemented; placeholder clearly marks as unavailable.
+- SecurityAuditLog details_json is excluded from all surfaces; safe summary via reason field only.
+- Compliance export and legal packet export are future capabilities, marked unavailable.
+
+---
+
+### 2026-05-14 — PR 52 Addendum: SOC review sync CI failure repair
+
+**Root cause:** `tools/ci/route_inventory.json` was modified by PR 52 (3 new `/ui/forensics/` routes added). The `soc-review-sync` gate classifies any `tools/ci/` change as a critical-prefix change requiring a corresponding update to `docs/SOC_ARCH_REVIEW_2026-02-15.md` or `docs/SOC_EXECUTION_GATES_2026-02-15.md`. PR 52 did not include that update, causing CI gate failure.
+
+**Missing governance artifact:** Addenda to both SOC review documents documenting the route inventory change for PR 52.
+
+**Repair performed:**
+- Appended `## PR 52 Addendum — /ui/forensics audit & forensics console routes (2026-05-14)` to `docs/SOC_EXECUTION_GATES_2026-02-15.md`.
+- Appended `## PR 52 — Audit & Forensics Console — Route inventory addendum (2026-05-14)` to `docs/SOC_ARCH_REVIEW_2026-02-15.md`.
+- Both addenda document: 3 new routes, ui:read scope, tenant isolation via bind_tenant_id(), export redaction behavior, replay disabled state, no unsafe field exposure.
+
+**Route inventory synchronization:** `PYTHONPATH=. python tools/ci/check_route_inventory.py` — route inventory OK (81 allowed_internal routes). No `make route-inventory-generate` required; the 3 new `/ui/forensics/` routes were added manually and fall under the `/ui/` allowed_internal prefix policy.
+
+**Validation results:**
+- `python tools/ci/check_soc_review_sync.py`: soc-review-sync: OK
+- `PYTHONPATH=. python tools/ci/check_route_inventory.py`: route inventory OK
+- `pytest -q tests/security/test_forensics_console.py`: 9 passed
+- `git diff --check`: PASS
+
+---
+
+### 2026-05-14 — PR 52 Addendum: Historical audit visibility repair
+
+**Root cause:** `api/ui_forensics_console.py` filtered `SecurityAuditLog` records using `chain_id == tenant_id` only. Legacy rows backfilled by `_auto_migrate_sqlite` (in `api/db.py`) have `chain_id = 'global'` with the real tenant stored in `tenant_id`, not `chain_id`. This made all pre-migration audit history invisible to tenants on the forensics console despite the data being present and correctly tenant-attributed.
+
+**Evidence for repair:** `api/admin.py:458` filters by `tenant_id` column directly — the established correct pattern for mixed-schema data pre- and post-chain_id column addition.
+
+**Row taxonomy:**
+- Modern rows: `chain_id == tenant_id` (set by `SecurityAuditor._persist_event`)
+- Legacy-migrated rows: `chain_id == 'global'`, `tenant_id == actual_tenant_id` (backfilled by `_auto_migrate_sqlite` DEFAULT 'global')
+- System events: `chain_id == 'global'`, `tenant_id IS NULL` (must never leak to any tenant)
+
+**Repair performed:**
+- Added `_tenant_filter(tenant_id)` helper in `api/ui_forensics_console.py` using `or_(chain_id == tenant_id, and_(tenant_id == tenant_id, chain_id.in_(["global", None])))`.
+- Updated all three endpoints (`/ui/forensics/events`, `/ui/forensics/trace/{request_id}`, `/ui/forensics/events/export`) to use `_tenant_filter(tenant_id)` in place of the single-column filter.
+- Added `_insert_legacy_event()` and `_insert_global_system_event()` test helpers to `tests/security/test_forensics_console.py`.
+- Added 9 new test functions covering: modern row scoping, legacy row visibility to owning tenant, legacy row cross-tenant isolation, mixed timeline, trace with both row types, export with legacy rows, global system event non-leakage, pagination/count with mixed rows, filter behavior with mixed rows.
+
+**Isolation guarantee preserved:** The legacy branch of the OR requires `tenant_id == tenant_id`, so system events (`tenant_id IS NULL`) and other-tenant legacy rows are never returned.
+
+**Files changed:**
+- `api/ui_forensics_console.py` — `_tenant_filter()` helper, all 3 endpoints updated.
+- `tests/security/test_forensics_console.py` — 2 new helpers, 9 new test functions (18 total).
+
+**Validation results:**
+- `.venv/bin/python -m pytest tests/security/test_forensics_console.py`: 18 passed
+- `GITHUB_BASE_REF=main python tools/ci/check_soc_review_sync.py`: soc-review-sync: OK
+- `make fg-fast`: All checks passed
+- `cd console && npm run lint`: No ESLint warnings or errors
+- `cd console && npm run build`: PASS
+- `git diff --check`: PASS

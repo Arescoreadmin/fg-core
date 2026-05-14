@@ -2992,3 +2992,38 @@ Validation:
 - pytest -q tests/security/test_rag_ingestion_upload_security.py
 - make fg-fast
 - make soc-review-sync
+
+## PR 52 Addendum — /ui/forensics audit & forensics console routes (2026-05-14)
+
+`api/ui_forensics_console.py`: new FastAPI router with 3 endpoints:
+- GET /ui/forensics/events — paginated, filterable SecurityAuditLog event list
+- GET /ui/forensics/trace/{request_id} — all events for a request_id within tenant scope
+- GET /ui/forensics/events/export — export-safe JSON payload (500-event max, redacted)
+
+`tools/ci/route_inventory.json`: 3 new `/ui/forensics/` entries added manually (route
+inventory audit confirmed: 81 allowed_internal routes, OK).
+
+SOC review:
+- All 3 new routes use `ui:read` scope — UI plane, tenant-bound via `bind_tenant_id()`.
+- Tenant isolation enforced: all DB queries filter by `chain_id == resolved_tenant_id`.
+  Tenant ID comes from the authenticated key only; never from request params or body.
+- Export payload excludes: key_prefix, client_ip, user_agent, prev_hash, entry_hash,
+  chain_id, details_json. Marks export_safe=True, redactions_applied=True.
+- No raw prompts, provider payloads, vectors, embeddings, or stack traces exposed.
+- Replay mode not implemented; ReplayReadinessPanel clearly labels "not yet available".
+- No auth, middleware, CI workflow, or OPA policy altered.
+- No secrets added or changed. tools/ci changes are route-inventory update only.
+- No dangerouslySetInnerHTML in any frontend component.
+- 9 security tests added in tests/security/test_forensics_console.py covering:
+  cross-tenant event isolation, trace isolation, export isolation, auth required,
+  wrong scope rejection, pagination, event_type filter, severity filter, invalid
+  request_id (422).
+
+Validation:
+- PYTHONPATH=. python tools/ci/check_route_inventory.py: route inventory OK (81 allowed_internal)
+- pytest -q tests/security/test_forensics_console.py: 9 passed
+- pytest -q tests/security/test_forensics_leakage.py: passed
+- cd console && npm run lint: no ESLint warnings or errors
+- cd console && npm run build: passed
+- make fg-contract: CONTRACT LINT PASSED
+- make soc-review-sync

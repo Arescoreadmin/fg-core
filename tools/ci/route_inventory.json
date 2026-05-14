@@ -4378,6 +4378,60 @@
       "scopes": [],
       "source": "runtime-ast",
       "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/ui_forensics_console.py",
+      "method": "GET",
+      "path": "/ui/forensics/events",
+      "plane": "ui",
+      "plane_id": "ui",
+      "scoped": true,
+      "scopes": [
+        "ui:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/ui_forensics_console.py",
+      "method": "GET",
+      "path": "/ui/forensics/trace/{request_id}",
+      "plane": "ui",
+      "plane_id": "ui",
+      "scoped": true,
+      "scopes": [
+        "ui:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/ui_forensics_console.py",
+      "method": "GET",
+      "path": "/ui/forensics/events/export",
+      "plane": "ui",
+      "plane_id": "ui",
+      "scoped": true,
+      "scopes": [
+        "ui:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
     }
   ],
   "generated_at": "2026-05-13T23:58:42.352667+00:00",

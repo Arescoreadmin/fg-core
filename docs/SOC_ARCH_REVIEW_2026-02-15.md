@@ -663,3 +663,36 @@ combined, was too low. No security tests were removed or weakened.
 - `pytest tests/security/test_retrieval_policy_center_security.py`: 23 passed (3.78s)
 - `pytest tests/security -m "not slow"`: 700 passed, 1 skipped (436s vs 503s before)
 - `make fg-fast`: all checks passed
+
+---
+
+## PR 52 — Audit & Forensics Console — Route inventory addendum (2026-05-14)
+
+### Files reviewed (required by SOC-HIGH-002)
+- `tools/ci/route_inventory.json`: Added 3 new `/ui/forensics/` routes; route inventory audit confirmed OK (81 allowed_internal routes).
+
+### Why
+PR 52 adds a SOC-style audit & forensics console surfacing SecurityAuditLog events.
+Three new tenant-scoped, `ui:read`-gated read-only endpoints under `/ui/forensics/`:
+- `GET /ui/forensics/events` — paginated, filterable SecurityAuditLog event list
+- `GET /ui/forensics/trace/{request_id}` — all events for a request_id within tenant scope
+- `GET /ui/forensics/events/export` — export-safe redacted JSON payload (500-event max)
+
+These routes are UI-plane internal surfaces consistent with the existing `/ui/audit/*`
+and `/ui/compliance/*` endpoints already in the inventory. They do not appear in the
+public core OpenAPI contract (allowed_internal by `/ui/` prefix policy).
+
+### Security posture impact
+- All 3 routes require `verify_api_key` + `ui:read` scope + tenant binding via `bind_tenant_id()`.
+- Tenant isolation: every DB query filters by `SecurityAuditLog.chain_id == resolved_tenant_id`. Tenant ID is never accepted from request params or body.
+- Export payload redacts: key_prefix, client_ip, user_agent, prev_hash, entry_hash, chain_id, details_json. Response marks export_safe=True, redactions_applied=True, limitation_note present.
+- Does not expose: raw prompts, provider payloads, vectors, embeddings, stack traces, credentials, or cross-tenant data.
+- Replay mode not implemented; explicitly marked unavailable in UI and documentation.
+- 9 security tests added covering cross-tenant isolation, wrong-scope rejection, export safety.
+
+### Verification
+- `PYTHONPATH=. python tools/ci/check_route_inventory.py`: route inventory OK
+- `pytest -q tests/security/test_forensics_console.py`: 9 passed
+- `cd console && npm run lint`: no ESLint warnings or errors
+- `cd console && npm run build`: passed
+- `make fg-contract`: CONTRACT LINT PASSED
