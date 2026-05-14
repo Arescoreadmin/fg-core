@@ -89,3 +89,29 @@ export {
 } from './DocumentIngestionConsole';
 export type { DocumentIngestionConsoleProps } from './DocumentIngestionConsole';
 export { AuditForensicsConsole } from './AuditForensicsConsole';
+export {
+  ProviderGovernanceConsole,
+  ProviderHealthPanel,
+  ProviderTrustPanel,
+  BAACompliancePanel,
+  TenantRoutingPanel,
+  FailoverVisibilityPanel,
+} from './ProviderGovernanceConsole';
+export type {
+  ProviderGovernanceConsoleProps,
+  ProviderHealthPanelProps,
+  ProviderTrustPanelProps,
+  BAACompliancePanelProps,
+  TenantRoutingPanelProps,
+  FailoverVisibilityPanelProps,
+} from './ProviderGovernanceConsole';
+export {
+  RetrievalEvaluationConsole,
+  RetrievalEvaluationPanel,
+  RetrievalQualityPanel,
+} from './RetrievalEvaluationConsole';
+export type {
+  RetrievalEvaluationConsoleProps,
+  RetrievalEvaluationPanelProps,
+  RetrievalQualityPanelProps,
+} from './RetrievalEvaluationConsole';

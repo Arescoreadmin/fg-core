@@ -696,3 +696,53 @@ public core OpenAPI contract (allowed_internal by `/ui/` prefix policy).
 - `cd console && npm run lint`: no ESLint warnings or errors
 - `cd console && npm run build`: passed
 - `make fg-contract`: CONTRACT LINT PASSED
+
+
+## PR 53 — Provider Governance UI + Evaluation Foundation — Route inventory addendum (2026-05-14)
+
+### New routes added
+
+8 new `/ui/` routes added to `tools/ci/route_inventory.json`:
+
+| Route | Method | Scope | Tenant-bound |
+|---|---|---|---|
+| `/ui/provider/governance` | GET | ui:read | yes |
+| `/ui/provider/governance/{provider_id}` | GET | ui:read | yes |
+| `/ui/provider/routing` | GET | ui:read | yes |
+| `/ui/provider/failover` | GET | ui:read | yes |
+| `/ui/evaluation/runs` | GET | ui:read | yes |
+| `/ui/evaluation/runs/{run_ref}` | GET | ui:read | yes |
+| `/ui/evaluation/quality` | GET | ui:read | yes |
+
+All routes are `allowed_internal`, `plane: ui`, registered under the `not _is_production_runtime()` guard in `api/main.py`.
+
+### Security posture
+
+- All routes require `ui:read` scope via `require_scopes("ui:read")` dependency at router level.
+- All routes enforce tenant isolation via `bind_tenant_id(request, None, require_explicit_for_unscoped=True)`.
+- No raw provider credentials, API keys, or provider secrets are exposed in any response.
+- No raw prompts or completions are exposed in evaluation endpoints.
+- Export-safe serialization: governance responses exclude internal config, credentials, and topology.
+- Failover state explicitly marks `telemetry_available: false` — no fabricated uptime or availability metrics.
+- Evaluation quality explicitly marks `evaluation_algorithms_available: false` — no fabricated scores.
+- Routing policy derived exclusively from `ProviderGovernanceRecord` and `ProviderBaaRecord` — no raw config leakage.
+
+### Tenant isolation proof
+
+- `ProviderGovernanceRecord` and `RetrievalEvaluationRun` filter by `tenant_id == bind_tenant_id(...)`.
+- 27 security tests in `tests/security/test_provider_governance.py` cover: auth required, scope enforcement, cross-tenant isolation (governance/routing/failover/evaluation), export-safe serialization, deterministic blocked/degraded state rendering, unknown provider safe rendering, BAA status, no-telemetry/no-algorithm markers.
+
+### Schema changes
+
+New tables (PR 53, migration `0042_provider_governance.sql`):
+- `provider_governance_records` — tenant-scoped provider governance state
+- `retrieval_evaluation_runs` — tenant-scoped retrieval evaluation substrate
+
+No existing tables modified. No RLS changes to existing tables.
+
+### Verification evidence
+
+- `python tools/ci/check_soc_review_sync.py`: soc-review-sync: OK
+- `.venv/bin/python -m pytest tests/security/test_provider_governance.py`: 27 passed
+- `cd console && npm run lint`: no ESLint warnings or errors
+- `cd console && npm run build`: passed

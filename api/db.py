@@ -1056,6 +1056,71 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             "WHERE embedding_state IN ('pending', 'failed')"
         )
 
+        # PR 53 — Provider Governance + Retrieval Evaluation Foundation
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS provider_governance_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL,
+                provider_id TEXT NOT NULL,
+                operational_state TEXT NOT NULL DEFAULT 'healthy',
+                governance_state TEXT NOT NULL DEFAULT 'approved',
+                trust_classification TEXT NOT NULL DEFAULT 'unknown',
+                routing_eligible INTEGER NOT NULL DEFAULT 1,
+                failover_eligible INTEGER NOT NULL DEFAULT 0,
+                restrictions_json TEXT NOT NULL DEFAULT '[]',
+                blocked_at TIMESTAMP,
+                block_reason TEXT,
+                policy_version INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                UNIQUE(tenant_id, provider_id)
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_provider_governance_tenant_provider "
+            "ON provider_governance_records (tenant_id, provider_id)"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_provider_governance_tenant_opstate "
+            "ON provider_governance_records (tenant_id, operational_state)"
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS retrieval_evaluation_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id TEXT NOT NULL,
+                run_ref TEXT NOT NULL,
+                corpus_id TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                started_at TIMESTAMP,
+                completed_at TIMESTAMP,
+                query_count INTEGER NOT NULL DEFAULT 0,
+                relevance_indicators_json TEXT NOT NULL DEFAULT '{}',
+                coverage_indicators_json TEXT NOT NULL DEFAULT '{}',
+                correctness_indicators_json TEXT NOT NULL DEFAULT '{}',
+                evaluator_ref TEXT,
+                evaluation_metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                UNIQUE(tenant_id, run_ref)
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_retrieval_eval_tenant_run "
+            "ON retrieval_evaluation_runs (tenant_id, run_ref)"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_retrieval_eval_tenant_status "
+            "ON retrieval_evaluation_runs (tenant_id, status)"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_retrieval_eval_tenant_corpus "
+            "ON retrieval_evaluation_runs (tenant_id, corpus_id)"
+        )
+
 
 # ---------------------------------------------------------------------
 # Public API
