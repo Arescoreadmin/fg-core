@@ -4,14 +4,16 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import asc, desc
+from sqlalchemy import and_, asc, desc, or_
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import bind_tenant_id, require_scopes
 from api.db import get_engine
 from api.db_models import SecurityAuditLog
 
-router = APIRouter(tags=["ui-forensics"], dependencies=[Depends(require_scopes("ui:read"))])
+router = APIRouter(
+    tags=["ui-forensics"], dependencies=[Depends(require_scopes("ui:read"))]
+)
 
 
 def _safe_event(row: SecurityAuditLog) -> dict[str, Any]:
@@ -30,6 +32,26 @@ def _safe_event(row: SecurityAuditLog) -> dict[str, Any]:
         "reason": row.reason,
         "created_at": created_at.isoformat() if created_at else None,
     }
+
+
+def _tenant_filter(tenant_id: str):  # type: ignore[return]
+    """Return a SQLAlchemy filter covering modern AND legacy-migrated rows.
+
+    Modern rows:   chain_id == tenant_id (set by SecurityAuditor._persist_event)
+    Legacy rows:   tenant_id == tenant_id AND chain_id IN ('global', NULL)
+                   (chain_id column added by _auto_migrate_sqlite with DEFAULT 'global')
+
+    This preserves tenant isolation: the legacy branch requires tenant_id to match, so
+    chain_id='global' rows belonging to other tenants or system-only events
+    (tenant_id IS NULL) are never returned.
+    """
+    return or_(
+        SecurityAuditLog.chain_id == tenant_id,
+        and_(
+            SecurityAuditLog.tenant_id == tenant_id,
+            SecurityAuditLog.chain_id.in_(["global", None]),
+        ),
+    )
 
 
 def _parse_dt(value: Optional[str]) -> Optional[datetime]:
@@ -59,9 +81,7 @@ def ui_forensics_events(
     tenant_id = bind_tenant_id(request, None, require_explicit_for_unscoped=True)
     engine = get_engine()
     with Session(engine) as session:
-        q = session.query(SecurityAuditLog).filter(
-            SecurityAuditLog.chain_id == tenant_id
-        )
+        q = session.query(SecurityAuditLog).filter(_tenant_filter(tenant_id))
         if event_type:
             q = q.filter(SecurityAuditLog.event_type == event_type)
         if severity:
@@ -99,14 +119,17 @@ def ui_forensics_trace(
     request_id: str,
 ) -> dict[str, Any]:
     if not request_id or len(request_id) > 64:
-        raise HTTPException(status_code=422, detail="request_id must be non-empty and at most 64 characters")
+        raise HTTPException(
+            status_code=422,
+            detail="request_id must be non-empty and at most 64 characters",
+        )
     tenant_id = bind_tenant_id(request, None, require_explicit_for_unscoped=True)
     engine = get_engine()
     with Session(engine) as session:
         rows = (
             session.query(SecurityAuditLog)
             .filter(
-                SecurityAuditLog.chain_id == tenant_id,
+                _tenant_filter(tenant_id),
                 SecurityAuditLog.request_id == request_id,
             )
             .order_by(asc(SecurityAuditLog.created_at), asc(SecurityAuditLog.id))
@@ -145,9 +168,7 @@ def ui_forensics_export(
         filters_applied["to"] = to
 
     with Session(engine) as session:
-        q = session.query(SecurityAuditLog).filter(
-            SecurityAuditLog.chain_id == tenant_id
-        )
+        q = session.query(SecurityAuditLog).filter(_tenant_filter(tenant_id))
         if event_type:
             q = q.filter(SecurityAuditLog.event_type == event_type)
         if severity:

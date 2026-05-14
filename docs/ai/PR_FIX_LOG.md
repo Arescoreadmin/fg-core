@@ -9088,3 +9088,36 @@ In CI with slower runners, estimated ~800-1000s — still within 1200s budget.
 - `PYTHONPATH=. python tools/ci/check_route_inventory.py`: route inventory OK
 - `pytest -q tests/security/test_forensics_console.py`: 9 passed
 - `git diff --check`: PASS
+
+---
+
+### 2026-05-14 — PR 52 Addendum: Historical audit visibility repair
+
+**Root cause:** `api/ui_forensics_console.py` filtered `SecurityAuditLog` records using `chain_id == tenant_id` only. Legacy rows backfilled by `_auto_migrate_sqlite` (in `api/db.py`) have `chain_id = 'global'` with the real tenant stored in `tenant_id`, not `chain_id`. This made all pre-migration audit history invisible to tenants on the forensics console despite the data being present and correctly tenant-attributed.
+
+**Evidence for repair:** `api/admin.py:458` filters by `tenant_id` column directly — the established correct pattern for mixed-schema data pre- and post-chain_id column addition.
+
+**Row taxonomy:**
+- Modern rows: `chain_id == tenant_id` (set by `SecurityAuditor._persist_event`)
+- Legacy-migrated rows: `chain_id == 'global'`, `tenant_id == actual_tenant_id` (backfilled by `_auto_migrate_sqlite` DEFAULT 'global')
+- System events: `chain_id == 'global'`, `tenant_id IS NULL` (must never leak to any tenant)
+
+**Repair performed:**
+- Added `_tenant_filter(tenant_id)` helper in `api/ui_forensics_console.py` using `or_(chain_id == tenant_id, and_(tenant_id == tenant_id, chain_id.in_(["global", None])))`.
+- Updated all three endpoints (`/ui/forensics/events`, `/ui/forensics/trace/{request_id}`, `/ui/forensics/events/export`) to use `_tenant_filter(tenant_id)` in place of the single-column filter.
+- Added `_insert_legacy_event()` and `_insert_global_system_event()` test helpers to `tests/security/test_forensics_console.py`.
+- Added 9 new test functions covering: modern row scoping, legacy row visibility to owning tenant, legacy row cross-tenant isolation, mixed timeline, trace with both row types, export with legacy rows, global system event non-leakage, pagination/count with mixed rows, filter behavior with mixed rows.
+
+**Isolation guarantee preserved:** The legacy branch of the OR requires `tenant_id == tenant_id`, so system events (`tenant_id IS NULL`) and other-tenant legacy rows are never returned.
+
+**Files changed:**
+- `api/ui_forensics_console.py` — `_tenant_filter()` helper, all 3 endpoints updated.
+- `tests/security/test_forensics_console.py` — 2 new helpers, 9 new test functions (18 total).
+
+**Validation results:**
+- `.venv/bin/python -m pytest tests/security/test_forensics_console.py`: 18 passed
+- `GITHUB_BASE_REF=main python tools/ci/check_soc_review_sync.py`: soc-review-sync: OK
+- `make fg-fast`: All checks passed
+- `cd console && npm run lint`: No ESLint warnings or errors
+- `cd console && npm run build`: PASS
+- `git diff --check`: PASS
