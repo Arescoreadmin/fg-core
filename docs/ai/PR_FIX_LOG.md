@@ -9200,3 +9200,64 @@ In CI with slower runners, estimated ~800-1000s — still within 1200s budget.
 - `cd console && npm run build`: PASS
 - `git diff --check`: PASS
 - `bash codex_gates.sh`: in progress at commit time
+
+---
+
+### 2026-05-14 — PR 31 Verified Knowledge Base Layer
+
+**Branch:** `pr-31-verified-knowledge-base`
+
+**Task identifier:** PR 31 — VERIFIED KNOWLEDGE BASE LAYER
+
+**Area:** Source-bound verified knowledge facts, entities, relationships, contradiction detection, expiration/versioning, and retrieval-safe fact lookup.
+
+**Schema changes:**
+- Added `knowledge_facts` with deterministic UUID primary key, tenant scope, normalized subject/predicate/object, confidence bounds, source document/chunk/hash binding, validity window, review status, contradiction pointer, timestamps, tenant-safe indexes, and idempotent source/fact uniqueness.
+- Added `knowledge_entities` with UUID primary key, tenant scope, normalized label identity, optional type, optional confidence, optional source binding, timestamps, and tenant-safe uniqueness.
+- Added `knowledge_relationships` with UUID primary key, tenant scope, entity/literal linkage, predicate, source binding, confidence bounds, validity window, review status, timestamps, and tenant-safe indexes.
+- Added Postgres RLS policies for all three knowledge tables.
+
+**Migration files changed:**
+- `migrations/postgres/0043_verified_knowledge_base.sql`
+- `api/db_migrations.py` RLS assertion coverage now includes the three knowledge tables.
+
+**Behavior changes:**
+- Added `api/knowledge_facts.py` service methods for creating verified facts, listing current/historical facts, inspecting source proof, inspecting contradiction state, listing entities/relationships, and listing retrieval-safe current facts.
+- Fact IDs are deterministic UUIDv5 values over tenant/source/normalized fact proof fields.
+- Same tenant/source/subject/predicate/object/source_hash insertion is idempotent.
+
+**Source-proof enforcement summary:**
+- Fact creation rejects missing tenant, empty subject/predicate/object, missing source_doc_id, missing source_chunk_id, missing source_hash, invalid confidence, invalid validity windows, missing source rows, cross-tenant source rows, source hash mismatch, quarantined documents, non-current/inactive source evidence, and corpus-policy denial.
+- Caller-provided source metadata is not trusted; source proof is resolved from `rag_documents` and `rag_chunks`.
+
+**Contradiction behavior:**
+- High-confidence facts (`>= 0.70`) with same tenant/normalized subject/predicate, different normalized object, and overlapping validity windows are persisted as `needs_review`.
+- Prior facts are not deleted or overwritten. Both source bindings are preserved.
+
+**Expiration/versioning behavior:**
+- `valid_from` and `valid_to` are supported.
+- `valid_to <= now` is excluded from current lookup.
+- Historical lookup remains tenant-scoped.
+
+**Retrieval integration behavior:**
+- `list_retrieval_safe_current_facts()` exposes facts only as source-bound fast-path evidence.
+- Retrieval-safe lookup excludes expired, low-confidence, non-active/review, invalid-proof, quarantined, superseded, inactive, or corpus-policy-denied facts and logs a safe exclusion event.
+- RAG retrieval is not replaced.
+
+**Tests added/updated:**
+- `tests/test_knowledge_facts.py`
+- `tests/security/test_knowledge_facts_security.py`
+
+**Validation results:**
+- `.venv/bin/pytest -q tests/test_knowledge_facts.py tests/security/test_knowledge_facts_security.py`: PASS — 11 passed.
+- `.venv/bin/pytest -q tests -k "knowledge or fact or rag or retrieval"`: PASS — 694 passed, 3 skipped, 3137 deselected.
+- `.venv/bin/pytest -q tests/security`: PASS — 744 passed, 1 skipped.
+- `.venv/bin/python -m api.db_migrations --backend postgres --assert`: PASS — local Docker Postgres app role returned `Migration assertions: OK` after applying pending migrations `0038` through `0043`.
+- `make fg-fast`: PASS.
+- `bash codex_gates.sh`: PASS — 3815 passed, 29 skipped; pip check clean; dependency audit found no known vulnerabilities; canonical tester flow skipped because admin gateway was not running.
+- `git diff --check`: PASS.
+
+**Known risks/deferred work:**
+- Public API routes are deferred until auth scope and contract authority are explicitly assigned.
+- Human review workflow UI is deferred; `needs_review` is the durable escalation hook.
+- Ontology management and graph traversal are intentionally deferred.

@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Float,
@@ -1956,6 +1957,206 @@ class TenantRetrievalPolicy(Base):
     updated_by: Mapped[Any] = mapped_column(Text, nullable=True)
     updated_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class KnowledgeFact(Base):
+    """Source-bound, tenant-scoped verified fact substrate."""
+
+    __tablename__ = "knowledge_facts"
+    __table_args__ = (
+        CheckConstraint("trim(subject) <> ''", name="ck_knowledge_facts_subject"),
+        CheckConstraint("trim(predicate) <> ''", name="ck_knowledge_facts_predicate"),
+        CheckConstraint("trim(object) <> ''", name="ck_knowledge_facts_object"),
+        CheckConstraint(
+            "trim(source_hash) <> ''", name="ck_knowledge_facts_source_hash"
+        ),
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="ck_knowledge_facts_confidence",
+        ),
+        CheckConstraint(
+            "valid_to IS NULL OR valid_from IS NULL OR valid_to > valid_from",
+            name="ck_knowledge_facts_valid_window",
+        ),
+        CheckConstraint(
+            "review_status IN ('active','contradicted','needs_review','superseded','expired')",
+            name="ck_knowledge_facts_review_status",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "source_doc_id",
+            "source_chunk_id",
+            "source_hash",
+            "normalized_subject",
+            "normalized_predicate",
+            "normalized_object",
+            name="uq_knowledge_facts_source_fact",
+        ),
+        Index(
+            "ix_knowledge_facts_tenant_current",
+            "tenant_id",
+            "review_status",
+            "valid_to",
+        ),
+        Index(
+            "ix_knowledge_facts_tenant_sp",
+            "tenant_id",
+            "normalized_subject",
+            "normalized_predicate",
+        ),
+        Index(
+            "ix_knowledge_facts_tenant_source",
+            "tenant_id",
+            "source_doc_id",
+            "source_chunk_id",
+        ),
+    )
+
+    id: Mapped[Any] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    subject: Mapped[Any] = mapped_column(Text, nullable=False)
+    predicate: Mapped[Any] = mapped_column(Text, nullable=False)
+    object: Mapped[Any] = mapped_column(Text, nullable=False)
+    normalized_subject: Mapped[Any] = mapped_column(Text, nullable=False)
+    normalized_predicate: Mapped[Any] = mapped_column(Text, nullable=False)
+    normalized_object: Mapped[Any] = mapped_column(Text, nullable=False)
+    confidence: Mapped[Any] = mapped_column(Float, nullable=False)
+    source_doc_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    source_chunk_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    source_hash: Mapped[Any] = mapped_column(Text, nullable=False)
+    valid_from: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_to: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_status: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="active", server_default="active"
+    )
+    contradiction_of_fact_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class KnowledgeEntity(Base):
+    """Tenant-scoped entity identity derived only from source-bound evidence."""
+
+    __tablename__ = "knowledge_entities"
+    __table_args__ = (
+        CheckConstraint("trim(label) <> ''", name="ck_knowledge_entities_label"),
+        CheckConstraint(
+            "trim(normalized_label) <> ''",
+            name="ck_knowledge_entities_normalized_label",
+        ),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)",
+            name="ck_knowledge_entities_confidence",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "normalized_label",
+            "entity_type",
+            name="uq_knowledge_entities_identity",
+        ),
+        Index("ix_knowledge_entities_tenant_label", "tenant_id", "normalized_label"),
+    )
+
+    id: Mapped[Any] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    label: Mapped[Any] = mapped_column(Text, nullable=False)
+    normalized_label: Mapped[Any] = mapped_column(Text, nullable=False)
+    entity_type: Mapped[Any] = mapped_column(Text, nullable=False, default="")
+    confidence: Mapped[Any] = mapped_column(Float, nullable=True)
+    source_doc_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    source_chunk_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    source_hash: Mapped[Any] = mapped_column(Text, nullable=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class KnowledgeRelationship(Base):
+    """Tenant-scoped source-bound relationship between entities or literals."""
+
+    __tablename__ = "knowledge_relationships"
+    __table_args__ = (
+        CheckConstraint(
+            "trim(predicate) <> ''", name="ck_knowledge_relationships_predicate"
+        ),
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="ck_knowledge_relationships_confidence",
+        ),
+        CheckConstraint(
+            "object_entity_id IS NOT NULL OR trim(coalesce(object_literal, '')) <> ''",
+            name="ck_knowledge_relationships_object",
+        ),
+        CheckConstraint(
+            "valid_to IS NULL OR valid_from IS NULL OR valid_to > valid_from",
+            name="ck_knowledge_relationships_valid_window",
+        ),
+        CheckConstraint(
+            "review_status IN ('active','contradicted','needs_review','superseded','expired')",
+            name="ck_knowledge_relationships_review_status",
+        ),
+        CheckConstraint(
+            "trim(source_hash) <> ''", name="ck_knowledge_relationships_source_hash"
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "subject_entity_id",
+            "predicate",
+            "object_entity_id",
+            "object_literal",
+            "source_hash",
+            name="uq_knowledge_relationships_source_relation",
+        ),
+        Index(
+            "ix_knowledge_relationships_tenant_subject",
+            "tenant_id",
+            "subject_entity_id",
+        ),
+        Index(
+            "ix_knowledge_relationships_tenant_source",
+            "tenant_id",
+            "source_doc_id",
+            "source_chunk_id",
+        ),
+    )
+
+    id: Mapped[Any] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    subject_entity_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    predicate: Mapped[Any] = mapped_column(Text, nullable=False)
+    object_entity_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    object_literal: Mapped[Any] = mapped_column(Text, nullable=True)
+    confidence: Mapped[Any] = mapped_column(Float, nullable=False)
+    source_doc_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    source_chunk_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    source_hash: Mapped[Any] = mapped_column(Text, nullable=False)
+    valid_from: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    valid_to: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_status: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="active", server_default="active"
+    )
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )
 
 
