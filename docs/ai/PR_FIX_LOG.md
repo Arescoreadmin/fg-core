@@ -9067,3 +9067,24 @@ In CI with slower runners, estimated ~800-1000s — still within 1200s budget.
 - Incident reconstruction is not implemented; placeholder clearly marks as unavailable.
 - SecurityAuditLog details_json is excluded from all surfaces; safe summary via reason field only.
 - Compliance export and legal packet export are future capabilities, marked unavailable.
+
+---
+
+### 2026-05-14 — PR 52 Addendum: SOC review sync CI failure repair
+
+**Root cause:** `tools/ci/route_inventory.json` was modified by PR 52 (3 new `/ui/forensics/` routes added). The `soc-review-sync` gate classifies any `tools/ci/` change as a critical-prefix change requiring a corresponding update to `docs/SOC_ARCH_REVIEW_2026-02-15.md` or `docs/SOC_EXECUTION_GATES_2026-02-15.md`. PR 52 did not include that update, causing CI gate failure.
+
+**Missing governance artifact:** Addenda to both SOC review documents documenting the route inventory change for PR 52.
+
+**Repair performed:**
+- Appended `## PR 52 Addendum — /ui/forensics audit & forensics console routes (2026-05-14)` to `docs/SOC_EXECUTION_GATES_2026-02-15.md`.
+- Appended `## PR 52 — Audit & Forensics Console — Route inventory addendum (2026-05-14)` to `docs/SOC_ARCH_REVIEW_2026-02-15.md`.
+- Both addenda document: 3 new routes, ui:read scope, tenant isolation via bind_tenant_id(), export redaction behavior, replay disabled state, no unsafe field exposure.
+
+**Route inventory synchronization:** `PYTHONPATH=. python tools/ci/check_route_inventory.py` — route inventory OK (81 allowed_internal routes). No `make route-inventory-generate` required; the 3 new `/ui/forensics/` routes were added manually and fall under the `/ui/` allowed_internal prefix policy.
+
+**Validation results:**
+- `python tools/ci/check_soc_review_sync.py`: soc-review-sync: OK
+- `PYTHONPATH=. python tools/ci/check_route_inventory.py`: route inventory OK
+- `pytest -q tests/security/test_forensics_console.py`: 9 passed
+- `git diff --check`: PASS
