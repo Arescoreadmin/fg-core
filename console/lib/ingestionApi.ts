@@ -49,9 +49,11 @@ export interface UploadListItem {
 export interface UploadListPage {
   items: UploadListItem[];
   total: number;
-  page: number;
-  page_size: number;
-  has_more: boolean;
+  limit: number;
+  offset: number;
+  sort_dir: string;
+  corpus_id_filter: string | null;
+  ingestion_status_filter: string | null;
 }
 
 export interface DocumentIngestionDetail {
@@ -80,8 +82,8 @@ export interface DocumentIngestionDetail {
 export interface UploadListQuery {
   corpus_id?: string;
   ingestion_status?: IngestionStatus;
-  page?: number;
-  page_size?: number;
+  limit?: number;
+  offset?: number;
   sort_dir?: 'asc' | 'desc';
 }
 
@@ -128,8 +130,8 @@ export async function listUploads(
   const params = new URLSearchParams();
   if (query.corpus_id) params.set('corpus_id', query.corpus_id);
   if (query.ingestion_status) params.set('ingestion_status', query.ingestion_status);
-  if (query.page != null) params.set('page', String(query.page));
-  if (query.page_size != null) params.set('page_size', String(query.page_size));
+  if (query.limit != null) params.set('limit', String(query.limit));
+  if (query.offset != null) params.set('offset', String(query.offset));
   if (query.sort_dir) params.set('sort_dir', query.sort_dir);
   const qs = params.toString();
   return coreRequest<UploadListPage>(`rag/uploads${qs ? '?' + qs : ''}`);

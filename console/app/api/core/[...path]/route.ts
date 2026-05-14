@@ -31,14 +31,13 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'ui/ai/chat', methods: new Set(['POST']) },
   // Retrieval policy governance — tenant-scoped, governance:write gated
   { prefix: 'rag/retrieval-policy', methods: new Set(['GET', 'PUT', 'HEAD']) },
-  // Corpus list (policy UI + corpus console) and corpus/document detail console routes
+  // Corpus list (policy UI + corpus console) and corpus/document detail + ingestion routes
   { prefix: 'rag/corpora', methods: new Set(['GET', 'HEAD']) },
-  { prefix: 'rag/documents', methods: new Set(['GET', 'HEAD']) },
-  // Document ingestion UX — upload, ingestion status, retry (PR 51)
+  // POST needed for retry-ingestion placeholder; GET/HEAD for document detail
+  { prefix: 'rag/documents', methods: new Set(['GET', 'POST', 'HEAD']) },
+  // Document ingestion UX — upload and upload list (PR 51)
   { prefix: 'rag/upload', methods: new Set(['POST']) },
   { prefix: 'rag/uploads', methods: new Set(['GET', 'HEAD']) },
-  // Ingestion detail + retry per document (GET is read-only; POST for retry placeholder)
-  { prefix: 'rag/documents', methods: new Set(['GET', 'POST', 'HEAD']) },
 ];
 
 function getRequestId(request: NextRequest): string {

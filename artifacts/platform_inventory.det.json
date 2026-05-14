@@ -27,9 +27,9 @@
     }
   ],
   "governance": {
-    "contract_count": 170,
+    "contract_count": 177,
     "contract_only": [],
-    "runtime_count": 259,
+    "runtime_count": 263,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -51,9 +51,6 @@
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
-      "GET /rag/corpora/{corpus_id}",
-      "GET /rag/corpora/{corpus_id}/documents",
-      "GET /rag/documents/{document_id}",
       "GET /ui/ai",
       "GET /ui/ai/experience",
       "GET /ui/ai/usage",
@@ -120,7 +117,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "264898c96fe3d89604daec68b0be2fc1926e6fba3f0e76c088f45afb3b9b6a44",
+  "governance_fingerprint": "9bdc337fe272dfb246f08b54f780919b443dd9bc6ae4c78467182104a802bf3c",
   "planes": [
     {
       "compat": {
@@ -362,7 +359,9 @@
       "GET /rag/corpora/{corpus_id}",
       "GET /rag/corpora/{corpus_id}/documents",
       "GET /rag/documents/{document_id}",
+      "GET /rag/documents/{document_id}/ingestion",
       "GET /rag/retrieval-policy",
+      "GET /rag/uploads",
       "GET /status",
       "POST /admin/agent/commands/issue",
       "POST /admin/agent/devices/{device_id}/disable",
@@ -417,6 +416,8 @@
       "POST /governance/changes",
       "POST /governance/changes/{change_id}/approve",
       "POST /internal/connectors/{connector_id}/ingest",
+      "POST /rag/documents/{document_id}/retry-ingestion",
+      "POST /rag/upload",
       "PUT /admin/agent/version-floor",
       "PUT /admin/tenants/{tenant_id}/quota",
       "PUT /admin/tenants/{tenant_id}/tier",
