@@ -850,3 +850,29 @@ Additive only (migration `0045_pdf_ingestion.sql`):
 - `make verify-schemas`: PASS.
 - `make verify-drift`: PASS.
 - `docker compose config`: PASS.
+
+## PR 56 Addendum — Enterprise DOCX Ingestion Pipeline (2026-05-14)
+
+**Scope:** Additive DOCX ingestion capability alongside existing PDF and text ingestion.
+
+**New surface:** `POST /rag/upload` now routes `.docx` files through `_ingest_docx()` and `ingest_docx_document()`.
+
+**Security posture:**
+- ZIP magic bytes (`PK\x03\x04`) validated before any library parsing.
+- VBA binary members (`word/vbaProject.bin`) detected in raw ZIP pre-parse; document rejected.
+- Macro-enabled content types detected via `[Content_Types].xml` scan pre-parse; document rejected.
+- Zip bomb guard: total uncompressed size checked via `ZipInfo.file_size` sum before extraction.
+- Paragraph count and per-paragraph text size capped (env-overridable: `FG_DOCX_MAX_PARAGRAPHS`, `FG_DOCX_MAX_PARAGRAPH_TEXT_BYTES`).
+- Raw document content never appears in error messages or logs.
+- Client-declared MIME type never trusted; file extension routes to magic byte check.
+- All security checks run before `python-docx` library parsing.
+
+**Data flow:** Same tenant isolation and provenance chain as PDF ingestion.
+- `source_hash` = SHA-256 of raw DOCX bytes (dedup key).
+- `source_page` column reused for paragraph position (1-based).
+- `extraction_version` column = `python-docx-x.y.z`.
+- Chunk `metadata` carries `source_paragraph`, `heading_level`, `section_heading`, `style_name`.
+
+**No new schema columns** — 0046 migration only extends the `ingestion_status` constraint and relies on `source_page`, `extraction_version`, and `content_type` already added by 0045.
+
+**Validation:** `make fg-fast` PASS. 48 new tests PASS.
