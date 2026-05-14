@@ -34,6 +34,11 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   // Corpus list (policy UI + corpus console) and corpus/document detail console routes
   { prefix: 'rag/corpora', methods: new Set(['GET', 'HEAD']) },
   { prefix: 'rag/documents', methods: new Set(['GET', 'HEAD']) },
+  // Document ingestion UX — upload, ingestion status, retry (PR 51)
+  { prefix: 'rag/upload', methods: new Set(['POST']) },
+  { prefix: 'rag/uploads', methods: new Set(['GET', 'HEAD']) },
+  // Ingestion detail + retry per document (GET is read-only; POST for retry placeholder)
+  { prefix: 'rag/documents', methods: new Set(['GET', 'POST', 'HEAD']) },
 ];
 
 function getRequestId(request: NextRequest): string {
@@ -165,7 +170,18 @@ async function proxyToCore(request: NextRequest, path: string[], requestId: stri
   }
 
   const init: RequestInit = { method: request.method, headers, cache: 'no-store' };
-  if (request.method !== 'GET' && request.method !== 'HEAD') init.body = await request.text();
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    // For multipart uploads, stream the raw body and forward the content-type boundary.
+    // For all other mutation methods, read as text (JSON payloads).
+    const isMultipart = contentType?.toLowerCase().startsWith('multipart/form-data');
+    if (isMultipart && request.body) {
+      init.body = request.body;
+      // duplex is required for streaming request bodies in some Node.js environments
+      (init as Record<string, unknown>)['duplex'] = 'half';
+    } else {
+      init.body = await request.text();
+    }
+  }
 
   const target = buildCoreUrl(path, request);
   console.info(`[core-proxy] ${requestId} ${request.method} ${target}`);

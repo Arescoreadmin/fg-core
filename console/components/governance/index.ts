@@ -77,3 +77,14 @@ export type {
   CorpusFilterBarProps,
   CorpusPaginationControlsProps,
 } from './CorpusManagementConsole';
+export {
+  DocumentIngestionConsole,
+  UploadDropzone,
+  ChunkingProgressPanel,
+  EmbeddingProgressPanel,
+  IngestionFailurePanel,
+  IngestionLifecycleTimeline,
+  UploadAuditSummary,
+  ConnectorIngestionPlaceholder,
+} from './DocumentIngestionConsole';
+export type { DocumentIngestionConsoleProps } from './DocumentIngestionConsole';

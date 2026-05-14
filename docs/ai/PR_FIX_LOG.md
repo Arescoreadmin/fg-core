@@ -8949,3 +8949,52 @@ In CI with slower runners, estimated ~800-1000s — still within 1200s budget.
 - Human review queue/workflow is not implemented; response metadata marks review requirement for future workflow integration.
 - Multi-corpus disagreement detection is intentionally minimal and marker-based; this PR does not implement GraphRAG or fact graph traversal.
 - `pytest -q ...` using the system pytest binary fails locally due an environment-level unknown `asyncio_default_fixture_loop_scope` config option; validation used the repository `.venv/bin/pytest` runner.
+
+---
+
+### 2026-05-13 — PR 51 Document Ingestion UX
+
+**Scope:** Full document ingestion UX with upload flow, ingestion lifecycle visibility, chunking/embedding progress, failure/quarantine panels, resumable UX, and audit-safe surfaces.
+
+**Files added:**
+- `api/rag_corpus_ingestion.py` — 4-endpoint FastAPI router: POST /rag/upload, GET /rag/uploads, GET /rag/documents/{document_id}/ingestion, POST /rag/documents/{document_id}/retry-ingestion (503 placeholder).
+- `console/lib/ingestionApi.ts` — TypeScript API client with types (IngestionStatus, UploadResult, UploadListPage, DocumentIngestionDetail) and functions (uploadDocument, listUploads, getDocumentIngestion). No tenant_id parameter; BFF injects.
+- `console/components/governance/DocumentIngestionConsole.tsx` — Full React UX: UploadDropzone, ChunkingProgressPanel, EmbeddingProgressPanel, IngestionFailurePanel, IngestionLifecycleTimeline, UploadAuditSummary, ConnectorIngestionPlaceholder. No dangerouslySetInnerHTML. All 10 lifecycle states covered.
+- `console/app/dashboard/ingestion/page.tsx` — Dashboard ingestion page wiring DocumentIngestionConsole.
+- `tests/test_rag_corpus_ingestion.py` — 33 backend unit tests.
+- `tests/security/test_rag_ingestion_upload_security.py` — 21 security/isolation tests.
+- `console/tests/document-ingestion-console.test.js` — 77 frontend static analysis tests.
+
+**Files modified:**
+- `api/main.py` — router registration for rag_corpus_ingestion.
+- `requirements.txt` — added python-multipart==0.0.20.
+- `tools/ci/route_inventory.json` — regenerated to include 4 new routes.
+- `console/components/governance/index.ts` — added exports for new components.
+- `console/app/api/core/[...path]/route.ts` — BFF proxy rules for rag/upload, rag/uploads, rag/documents POST; multipart streaming.
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` — PR 51 addendum for tools/ci changes.
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md` — contract authority refreshed.
+
+**Key design decisions:**
+- Upload size capped at 1 MB (FG_RAG_MAX_UPLOAD_BYTES env override).
+- Only text/plain and text/markdown supported; all other types quarantined with `unsupported_type` reason.
+- Retry endpoint is an explicit 503 with `planned: true` to avoid fabricating functionality.
+- Source hash exposed as 12-char prefix only (`_safe_source_hash_prefix`).
+- Tenant isolation: `require_bound_tenant()` on every endpoint; cross-tenant ingest raises ValueError.
+- ConnectorIngestionPlaceholder marks all future hooks as "not yet available".
+- EmbeddingProgressPanel shows state distribution without raw vectors.
+- Resumable UX reloads from backend via `getDocumentIngestion` on refresh.
+
+**Validation results:**
+- `.venv/bin/python -m pytest -q tests/test_rag_corpus_ingestion.py`: PASS — 33 passed.
+- `.venv/bin/python -m pytest -q tests/security/test_rag_ingestion_upload_security.py`: PASS — 21 passed.
+- `node --test console/tests/document-ingestion-console.test.js`: PASS — 77 passed.
+- `cd console && npm run lint`: PASS — no ESLint warnings or errors.
+- `cd console && npm run build`: PASS — TypeScript compiles, production build succeeds.
+- `make fg-contract`: PASS.
+- `make fg-fast`: PASS.
+- `git diff --check`: PASS.
+
+**Known limitations:**
+- POST /rag/documents/{document_id}/retry-ingestion returns 503 (planned). Full async re-ingestion pipeline is out of scope for this PR.
+- Connector ingestion (S3, GCS, SharePoint, etc.) is placeholder-only; all marked "not yet available".
+- Embedding state summary requires `embedding_state` column in `rag_chunks`; returns empty dict if column absent (graceful degradation).
