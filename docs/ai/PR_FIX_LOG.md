@@ -6,6 +6,26 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-15 — Dynamic Telemetry Policy Engine
+
+**Branch:** `feat/observability-enterprise`
+
+**Area:** Observability; compliance; runtime configuration.
+
+**Files changed:**
+- `api/observability/telemetry_policy.py` (new) — `TelemetryPolicy` class with 3-mode architecture (`standard`/`regulated`/`strict`), per-tenant suppression, attribute allowlist enforcement, OTLP export gating; singleton + `reload_policy()` for runtime reconfiguration
+- `api/observability/tracing.py` (modified) — `setup_tracing()` respects `policy.allows_external_otlp()`; `_pipeline_span()` yields `NonRecordingSpan` for suppressed tenants and filters attributes via policy
+- `api/middleware/otel_tracing.py` (modified) — `_attach_request_attributes` routes all span attributes through `get_policy().filter_span_attributes()` before `set_attribute()`
+- `api/observability/__init__.py` (modified) — exports `TelemetryPolicy`, `get_policy`, `reload_policy`, `APPROVED_SPAN_ATTRIBUTES`
+- `tests/test_telemetry_policy.py` (new) — 20 tests: mode parsing, OTLP enforcement, attribute filtering, tenant suppression, `setup_tracing()` integration, middleware integration, `reload_policy()`
+- `docs/observability/telemetry_policy.md` (new) — operator reference for all `FG_OBSERVABILITY_MODE`, `FG_DISABLE_EXTERNAL_OTLP`, `FG_RESTRICT_TRACE_ATTRIBUTES`, `FG_TELEMETRY_SUPPRESSED_TENANTS` env vars
+
+**Validation:**
+- `pytest tests/test_telemetry_policy.py`: 20 passed
+- `make fg-fast`: all gates green
+
+---
+
 ### 2026-05-15 — Observability Hardening: Safe Telemetry Gate + Operational Docs
 
 **Branch:** `feat/observability-enterprise`

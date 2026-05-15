@@ -81,18 +81,29 @@ def setup_tracing(service_name: str = "frostgate-core") -> None:
 
     otlp_endpoint = os.getenv("FG_OTEL_ENDPOINT", "").strip()
     if otlp_endpoint:
-        try:
-            from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
-                OTLPSpanExporter,
-            )
+        from api.observability.telemetry_policy import get_policy
 
-            exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
-            provider.add_span_processor(BatchSpanProcessor(exporter))
-            _log.info("otel_otlp_configured endpoint=%s", otlp_endpoint)
-        except ImportError:
+        if not get_policy().allows_external_otlp():
+            policy = get_policy()
             _log.warning(
-                "opentelemetry-exporter-otlp-proto-http not installed; OTLP export disabled"
+                "otel_otlp_blocked_by_policy mode=%s disable_external_otlp=%s endpoint=%s",
+                policy.mode,
+                policy.disable_external_otlp,
+                otlp_endpoint,
             )
+        else:
+            try:
+                from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+                    OTLPSpanExporter,
+                )
+
+                exporter = OTLPSpanExporter(endpoint=otlp_endpoint)
+                provider.add_span_processor(BatchSpanProcessor(exporter))
+                _log.info("otel_otlp_configured endpoint=%s", otlp_endpoint)
+            except ImportError:
+                _log.warning(
+                    "opentelemetry-exporter-otlp-proto-http not installed; OTLP export disabled"
+                )
     elif os.getenv("FG_OTEL_CONSOLE", "").strip().lower() in {"1", "true", "yes"}:
         provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
         _log.info("otel_console_exporter_enabled")
@@ -132,11 +143,24 @@ def _pipeline_span(
     tracer_name: str = "frostgate.pipeline",
     **attributes: str,
 ) -> Generator["Span", None, None]:
+    from opentelemetry.trace import NonRecordingSpan, INVALID_SPAN_CONTEXT
+
+    from api.observability.telemetry_policy import get_policy
+
+    policy = get_policy()
+
+    # Per-tenant suppression: yield a non-recording span so the call site
+    # works identically but nothing is exported for this tenant.
+    tenant_id = attributes.get("tenant.id", "")
+    if policy.is_tenant_suppressed(tenant_id):
+        yield NonRecordingSpan(INVALID_SPAN_CONTEXT)
+        return
+
     tracer = get_tracer(tracer_name)
+    safe_attrs = policy.filter_span_attributes(dict(attributes))
     with tracer.start_as_current_span(span_name, kind=SpanKind.INTERNAL) as span:
-        for k, v in attributes.items():
-            if v:
-                span.set_attribute(k, v)
+        for k, v in safe_attrs.items():
+            span.set_attribute(k, v)
         try:
             yield span
         except Exception as exc:

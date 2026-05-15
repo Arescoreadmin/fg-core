@@ -87,17 +87,22 @@ class OTelTracingMiddleware:
 def _attach_request_attributes(
     span: trace.Span, scope: dict[str, Any], headers: dict[str, str]
 ) -> None:
-    span.set_attribute("http.method", scope.get("method", ""))
-    span.set_attribute("http.target", scope.get("path", ""))
-    span.set_attribute("http.scheme", scope.get("scheme", "http"))
+    from api.observability.telemetry_policy import get_policy
 
+    attrs: dict[str, str] = {
+        "http.method": scope.get("method", ""),
+        "http.target": scope.get("path", ""),
+        "http.scheme": scope.get("scheme", "http"),
+    }
     tenant_id = headers.get("x-tenant-id", "")
     if tenant_id:
-        span.set_attribute("frostgate.tenant_id", tenant_id)
-
+        attrs["frostgate.tenant_id"] = tenant_id
     request_id = headers.get("x-request-id", "")
     if request_id:
-        span.set_attribute("frostgate.request_id", request_id)
+        attrs["frostgate.request_id"] = request_id
+
+    for k, v in get_policy().filter_span_attributes(attrs).items():
+        span.set_attribute(k, v)
 
 
 def _set_state(scope: dict[str, Any], key: str, value: Any) -> None:

@@ -21,6 +21,8 @@
 
 **Second follow-up (observability hardening):** `tools/ci/check_safe_telemetry.py` (new) — AST-based static analysis gate that prevents future contributors from accidentally emitting sensitive field names (`raw_prompt`, `api_key`, `provider_payload`, `authorization`, `bearer_*token`, `password`, `secret`, etc.) as metric labels, OTel span attributes, or structured log `extra=` keys. Added to `fg-fast` as `safe-telemetry-check`. No auth logic change. No schema change. No route change. 13 new tests pass. Gate is additive-only: it blocks additions of forbidden fields, does not modify existing behavior.
 
+**Third follow-up (dynamic telemetry policy):** `api/middleware/otel_tracing.py` (modified) — `_attach_request_attributes` now routes all span attributes through `get_policy().filter_span_attributes()` before calling `span.set_attribute()`. In regulated/strict mode this silently drops any attribute not in `APPROVED_SPAN_ATTRIBUTES`. No new routes. No auth logic change. `api/observability/telemetry_policy.py` (new) — read-only policy module; no middleware, no auth, no routes. `api/observability/tracing.py` (modified) — OTLP exporter construction gated on `policy.allows_external_otlp()`; no behavioral change when policy allows OTLP. 20 new tests pass.
+
 ---
 
 ## 2026-03-01T21:24:06Z — SOC-HIGH-002 — Route inventory artifact updated

@@ -1,5 +1,11 @@
-"""FrostGate enterprise observability: tracing, metrics, and log context."""
+"""FrostGate enterprise observability: tracing, metrics, log context, and policy."""
 
+from api.observability.telemetry_policy import (
+    TelemetryPolicy,
+    get_policy,
+    reload_policy,
+    APPROVED_SPAN_ATTRIBUTES,
+)
 from api.observability.tracing import (
     setup_tracing,
     get_tracer,
@@ -34,6 +40,10 @@ from api.observability.log_context import (
 )
 
 __all__ = [
+    "TelemetryPolicy",
+    "get_policy",
+    "reload_policy",
+    "APPROVED_SPAN_ATTRIBUTES",
     "setup_tracing",
     "get_tracer",
     "current_trace_id",
