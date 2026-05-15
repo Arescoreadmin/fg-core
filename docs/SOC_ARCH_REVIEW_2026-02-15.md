@@ -19,6 +19,8 @@
 
 **Follow-up (same PR):** cardinality guard tests, secret redaction tests, OTel failure-safety tests, metric-name contract test, alert-to-metric and dashboard-to-metric validation tests, and structured log schema doc (`docs/observability/log_schema.md`) added. No additional middleware or auth changes beyond what is described above.
 
+**Second follow-up (observability hardening):** `tools/ci/check_safe_telemetry.py` (new) — AST-based static analysis gate that prevents future contributors from accidentally emitting sensitive field names (`raw_prompt`, `api_key`, `provider_payload`, `authorization`, `bearer_*token`, `password`, `secret`, etc.) as metric labels, OTel span attributes, or structured log `extra=` keys. Added to `fg-fast` as `safe-telemetry-check`. No auth logic change. No schema change. No route change. 13 new tests pass. Gate is additive-only: it blocks additions of forbidden fields, does not modify existing behavior.
+
 ---
 
 ## 2026-03-01T21:24:06Z — SOC-HIGH-002 — Route inventory artifact updated

@@ -6,6 +6,30 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-15 — Observability Hardening: Safe Telemetry Gate + Operational Docs
+
+**Branch:** `feat/observability-enterprise`
+
+**Area:** Observability; CI; documentation.
+
+**Files changed:**
+- `tools/ci/check_safe_telemetry.py` (new) — AST-based CI gate preventing forbidden sensitive field names in metric labels, span attributes, log extras
+- `Makefile` (modified) — adds `safe-telemetry-check` target; wired into `fg-fast` (**CI config change — explicitly called out**)
+- `tests/test_safe_telemetry.py` (new) — 13 tests covering positive detection, false-positive prevention, and integration scan of production code
+- `docs/observability/investigation_workflows.md` (new) — operational runbooks for failed ingestion, provenance spike, provider degradation, tenant latency investigations with full trace↔log correlation chains
+- `docs/observability/slo_targets.md` (new) — SLO definitions (retrieval latency, HTTP success, provenance, ingestion, provider availability, DB connectivity) + metrics versioning policy (breaking vs. non-breaking changes, SIEM coordination)
+- `docs/observability/audit_telemetry_separation.md` (new) — boundary between audit compliance evidence and operational telemetry; rules, retention differences, legal exposure differences
+- `docs/observability/deployment_topology.md` (new) — 7 deployment topologies: local Prometheus, remote scrape, OTLP collector, Splunk, CloudWatch ADOT, Grafana-only, air-gapped/GovCon/HIPAA
+- `docs/observability/retention_policy.md` (new) — retention guidance: 90-day operational logs, 30-day traces, 1-year metrics, 7-year audit records; regulatory mapping for SOC 2, HIPAA, FedRAMP, GDPR
+
+**Validation:**
+- `make safe-telemetry-check`: OK
+- `pytest tests/test_safe_telemetry.py`: 13 passed
+- `make soc-review-sync`: OK
+- `make fg-fast`: all gates green
+
+---
+
 ### 2026-05-15 — Enterprise Observability and Alerting Infrastructure
 
 **Branch:** `feat/observability-enterprise`
