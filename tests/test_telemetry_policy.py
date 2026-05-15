@@ -27,9 +27,7 @@ def _make_policy(**env: str):
     """Create a TelemetryPolicy with specific env vars, then clean up."""
     from api.observability.telemetry_policy import TelemetryPolicy
 
-    old_env: dict[str, str | None] = {
-        key: os.environ.pop(key, None) for key in env
-    }
+    old_env: dict[str, str | None] = {key: os.environ.pop(key, None) for key in env}
     for env_key, env_value in env.items():
         os.environ[env_key] = env_value
 
