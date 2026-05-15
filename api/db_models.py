@@ -2391,3 +2391,163 @@ class EvaluationQueryItem(Base):
     updated_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
+
+
+# ---------------------------------------------------------------------------
+# PR 80 — Deployment Manager Foundation
+# Touching schema — flagged explicitly per CLAUDE.md.
+# ---------------------------------------------------------------------------
+
+
+class DeploymentEnvironmentRecord(Base):
+    """Immutable deployment environment descriptor.
+
+    tenant_id=None denotes a platform-level environment accessible to all
+    operators with sufficient scope. tenant_id set denotes a tenant-dedicated
+    environment visible only within that tenant's context.
+    """
+
+    __tablename__ = "deployment_environments"
+    __table_args__ = (
+        Index("ix_deployment_env_tenant_type", "tenant_id", "env_type"),
+        Index("ix_deployment_env_lifecycle", "lifecycle_state"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    env_id: Mapped[Any] = mapped_column(Text, nullable=False, unique=True, index=True)
+    env_type: Mapped[Any] = mapped_column(Text, nullable=False)
+    region: Mapped[Any] = mapped_column(Text, nullable=False)
+    lifecycle_state: Mapped[Any] = mapped_column(Text, nullable=False, default="active")
+    compliance_classification: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="standard"
+    )
+    created_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    deployment_policy_json: Mapped[Any] = mapped_column(Text, nullable=True)
+
+
+class DeploymentRecordORM(Base):
+    """Mutable deployment lifecycle record.
+
+    state field is the canonical lifecycle state and transitions must be
+    validated against VALID_TRANSITIONS before writing. Every mutation
+    must produce a corresponding DeploymentEventRecord.
+
+    artifact_hash is the SHA-256 of the deployment artifact bundle.
+    It is nullable until the artifact is resolved during validation.
+    """
+
+    __tablename__ = "deployment_records"
+    __table_args__ = (
+        Index("ix_deploy_record_env_state", "env_id", "state"),
+        Index("ix_deploy_record_tenant_state", "tenant_id", "state"),
+        Index("ix_deploy_record_initiated_at", "initiated_at"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    deployment_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    env_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    version_ref: Mapped[Any] = mapped_column(Text, nullable=False)
+    strategy: Mapped[Any] = mapped_column(Text, nullable=False)
+    state: Mapped[Any] = mapped_column(Text, nullable=False, default="pending")
+    initiated_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    initiated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    completed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    artifact_hash: Mapped[Any] = mapped_column(Text, nullable=True)
+    rollback_from_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    rollback_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    approval_required: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    approval_granted_by: Mapped[Any] = mapped_column(Text, nullable=True)
+    approval_granted_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    approval_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    approval_policy_version: Mapped[Any] = mapped_column(Text, nullable=True)
+    spec_image_digest: Mapped[Any] = mapped_column(Text, nullable=True)
+    spec_commit_sha: Mapped[Any] = mapped_column(Text, nullable=True)
+    spec_contract_hash: Mapped[Any] = mapped_column(Text, nullable=True)
+    spec_topology_hash: Mapped[Any] = mapped_column(Text, nullable=True)
+    spec_policy_bundle_version: Mapped[Any] = mapped_column(Text, nullable=True)
+    spec_migration_fingerprint: Mapped[Any] = mapped_column(Text, nullable=True)
+    state_version: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    deployment_metadata_json: Mapped[Any] = mapped_column(Text, nullable=True)
+
+
+class DeploymentEventRecord(Base):
+    """Append-only audit event for deployment lifecycle changes.
+
+    Rows are never updated or deleted (enforced at DB level via rules in
+    the Postgres migration). Every deployment mutation must write an event
+    before returning to the caller.
+    """
+
+    __tablename__ = "deployment_events"
+    __table_args__ = (
+        Index("ix_deploy_event_deployment_ts", "deployment_id", "timestamp"),
+        Index("ix_deploy_event_env_ts", "env_id", "timestamp"),
+        Index("ix_deploy_event_tenant_ts", "tenant_id", "timestamp"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[Any] = mapped_column(Text, nullable=False, unique=True, index=True)
+    deployment_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    env_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    event_type: Mapped[Any] = mapped_column(Text, nullable=False)
+    actor: Mapped[Any] = mapped_column(Text, nullable=False)
+    timestamp: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    from_state: Mapped[Any] = mapped_column(Text, nullable=True)
+    to_state: Mapped[Any] = mapped_column(Text, nullable=True)
+    details_json: Mapped[Any] = mapped_column(Text, nullable=True)
+    event_hash: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    previous_event_hash: Mapped[Any] = mapped_column(Text, nullable=True)
+
+
+class DeploymentHealthRecord(Base):
+    """Point-in-time health assessment record for a deployment.
+
+    rollback_trigger_reason is set only when this health check caused or
+    recommended a rollback. Must never contain secrets or raw error messages.
+    """
+
+    __tablename__ = "deployment_health_records"
+    __table_args__ = (
+        Index("ix_deploy_health_deployment_ts", "deployment_id", "checked_at"),
+        Index("ix_deploy_health_tenant_ts", "tenant_id", "checked_at"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    record_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    deployment_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    env_id: Mapped[Any] = mapped_column(Text, nullable=False)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    readiness_result: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="unknown"
+    )
+    liveness_result: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="unknown"
+    )
+    smoke_test_result: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="unknown"
+    )
+    validation_result: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="unknown"
+    )
+    checked_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    checked_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    rollback_trigger_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)

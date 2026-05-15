@@ -30,19 +30,12 @@
       "plane": "rbac",
       "suggested_fix": "Add SOC gate mapping entry for plane.",
       "type": "missing_soc_gate_reference"
-    },
-    {
-      "details": [
-        "/metrics"
-      ],
-      "suggested_fix": "Map route prefixes to a plane or explicitly exempt in inventory governance.",
-      "type": "unexpected_route_prefixes"
     }
   ],
   "governance": {
-    "contract_count": 182,
+    "contract_count": 194,
     "contract_only": [],
-    "runtime_count": 286,
+    "runtime_count": 298,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -148,7 +141,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "43420378a96658dc385ddd133dbf076a17661e29217fa5b2840008c4efc40014",
+  "governance_fingerprint": "4d5732289d1256740bbcc044dce8bad73764418b8cfe6a61d4ea03bb22aa0781",
   "planes": [
     {
       "compat": {
@@ -217,6 +210,7 @@
         "/governance",
         "/health",
         "/internal",
+        "/metrics",
         "/planes",
         "/rag",
         "/status"
@@ -367,6 +361,13 @@
       "GET /compliance/requirements/updates",
       "GET /control-plane/audit",
       "GET /control-plane/dependency-matrix",
+      "GET /control-plane/deployments",
+      "GET /control-plane/deployments/environments",
+      "GET /control-plane/deployments/environments/{env_id}",
+      "GET /control-plane/deployments/{deployment_id}",
+      "GET /control-plane/deployments/{deployment_id}/health",
+      "GET /control-plane/deployments/{deployment_id}/history",
+      "GET /control-plane/deployments/{deployment_id}/rollback-lineage",
       "GET /control-plane/evidence/bundle",
       "GET /control-plane/lockers",
       "GET /control-plane/modules",
@@ -397,6 +398,7 @@
       "GET /health/detailed",
       "GET /health/live",
       "GET /health/ready",
+      "GET /metrics",
       "GET /planes",
       "GET /rag/corpora",
       "GET /rag/corpora/{corpus_id}",
@@ -435,6 +437,11 @@
       "POST /compliance/requirements/updates/available",
       "POST /compliance/requirements/updates/{update_id}/apply",
       "POST /config/versions",
+      "POST /control-plane/deployments",
+      "POST /control-plane/deployments/environments",
+      "POST /control-plane/deployments/{deployment_id}/approval",
+      "POST /control-plane/deployments/{deployment_id}/health",
+      "POST /control-plane/deployments/{deployment_id}/transition",
       "POST /control-plane/lockers/{locker_id}/pause",
       "POST /control-plane/lockers/{locker_id}/quarantine",
       "POST /control-plane/lockers/{locker_id}/restart",

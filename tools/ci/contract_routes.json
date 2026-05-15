@@ -404,6 +404,78 @@
     },
     {
       "method": "GET",
+      "path": "/control-plane/deployments",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/control-plane/deployments",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/deployments/environments",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/control-plane/deployments/environments",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/deployments/environments/{env_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/deployments/{deployment_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/control-plane/deployments/{deployment_id}/approval",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/deployments/{deployment_id}/health",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/control-plane/deployments/{deployment_id}/health",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/deployments/{deployment_id}/history",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/deployments/{deployment_id}/rollback-lineage",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/control-plane/deployments/{deployment_id}/transition",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/control-plane/evidence/bundle",
       "scopes": [],
       "source": "contract"
@@ -1093,7 +1165,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-15T01:33:24.534646+00:00",
+  "generated_at": "2026-05-15T18:43:24.241043+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
