@@ -98,5 +98,17 @@ def configure_logging(service: str = "fg-core") -> None:
     level = os.getenv("FG_LOG_LEVEL", "INFO").upper()
     handler = logging.StreamHandler()
     handler.setFormatter(_JsonFormatter(service=service))
+
+    try:
+        from api.observability.log_context import (
+            TraceContextFilter,
+            RequestContextFilter,
+        )
+
+        handler.addFilter(TraceContextFilter())
+        handler.addFilter(RequestContextFilter())
+    except Exception:
+        pass  # observability package unavailable in minimal test environments
+
     root.handlers = [handler]
     root.setLevel(level)

@@ -1,0 +1,197 @@
+groups:
+  - name: frostgate.provider
+    rules:
+      - alert: FrostgateProviderFailureHigh
+        expr: |
+          (
+            rate(frostgate_provider_failures_total[5m])
+            / (rate(frostgate_provider_requests_total[5m]) + 0.001)
+          ) > 0.10
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Provider {{ $labels.provider_id }} failure rate > 10%"
+          description: >
+            Provider {{ $labels.provider_id }} has a failure rate of
+            {{ $value | humanizePercentage }} over the last 5 minutes.
+          runbook: https://docs.frostgate.io/runbooks/provider-failure
+
+      - alert: FrostgateProviderLatencyHigh
+        expr: |
+          histogram_quantile(0.99,
+            rate(frostgate_provider_latency_seconds_bucket[5m])
+          ) > 5
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Provider {{ $labels.provider_id }} p99 latency > 5s"
+          description: >
+            Provider {{ $labels.provider_id }} p99 latency is {{ $value | humanizeDuration }}.
+          runbook: https://docs.frostgate.io/runbooks/provider-latency
+
+  - name: frostgate.retrieval
+    rules:
+      - alert: FrostgateRetrievalLatencyHigh
+        expr: |
+          histogram_quantile(0.99,
+            rate(frostgate_retrieval_latency_seconds_bucket[5m])
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Retrieval p99 latency > 2s (mode={{ $labels.mode }})"
+          description: >
+            Retrieval pipeline (mode={{ $labels.mode }}) p99 latency is
+            {{ $value | humanizeDuration }}.
+          runbook: https://docs.frostgate.io/runbooks/retrieval-degradation
+
+      - alert: FrostgateRetrievalFailureHigh
+        expr: |
+          (
+            rate(frostgate_retrieval_requests_total{status="failure"}[5m])
+            / (rate(frostgate_retrieval_requests_total[5m]) + 0.001)
+          ) > 0.05
+        for: 3m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Retrieval failure rate > 5% (mode={{ $labels.mode }})"
+          description: >
+            Retrieval (mode={{ $labels.mode }}) failure rate is
+            {{ $value | humanizePercentage }}.
+          runbook: https://docs.frostgate.io/runbooks/retrieval-degradation
+
+  - name: frostgate.ingestion
+    rules:
+      - alert: FrostgateIngestionFailureHigh
+        expr: |
+          (
+            rate(frostgate_ingestion_requests_total{status="failure"}[5m])
+            / (rate(frostgate_ingestion_requests_total[5m]) + 0.001)
+          ) > 0.05
+        for: 3m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Ingestion failure rate > 5% (tenant={{ $labels.tenant_id }})"
+          description: >
+            Ingestion failure rate for tenant {{ $labels.tenant_id }} is
+            {{ $value | humanizePercentage }}.
+          runbook: https://docs.frostgate.io/runbooks/ingestion-failure
+
+      - alert: FrostgateIngestionLatencyHigh
+        expr: |
+          histogram_quantile(0.99,
+            rate(frostgate_ingestion_latency_seconds_bucket[10m])
+          ) > 30
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Ingestion p99 latency > 30s (doc_type={{ $labels.doc_type }})"
+          runbook: https://docs.frostgate.io/runbooks/ingestion-latency
+
+  - name: frostgate.audit
+    rules:
+      - alert: FrostgateAuditPipelineFailure
+        expr: |
+          rate(frostgate_audit_pipeline_failures_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          team: compliance
+        annotations:
+          summary: "Audit pipeline failures detected (type={{ $labels.failure_type }})"
+          description: >
+            Audit pipeline is experiencing failures at
+            {{ $value | humanize }} failures/sec.
+          runbook: https://docs.frostgate.io/runbooks/audit-pipeline
+
+      - alert: FrostgateAuditExportFailureHigh
+        expr: |
+          (
+            rate(frostgate_audit_export_total{status="failure"}[10m])
+            / (rate(frostgate_audit_export_total[10m]) + 0.001)
+          ) > 0.02
+        for: 5m
+        labels:
+          severity: warning
+          team: compliance
+        annotations:
+          summary: "Audit export failure rate > 2% (tenant={{ $labels.tenant_id }})"
+          runbook: https://docs.frostgate.io/runbooks/audit-export
+
+  - name: frostgate.provenance
+    rules:
+      - alert: FrostgateProvenanceFailureSpike
+        expr: |
+          (
+            rate(frostgate_provenance_validation_total{result="fail"}[5m])
+            / (rate(frostgate_provenance_validation_total[5m]) + 0.001)
+          ) > 0.10
+        for: 2m
+        labels:
+          severity: critical
+          team: compliance
+        annotations:
+          summary: "Provenance validation failure rate > 10%"
+          description: >
+            Provenance failure rate is {{ $value | humanizePercentage }}.
+            Possible integrity breach or policy misconfiguration.
+          runbook: https://docs.frostgate.io/runbooks/provenance-failures
+
+  - name: frostgate.infrastructure
+    rules:
+      - alert: FrostgateDBConnectivityFailure
+        expr: |
+          rate(frostgate_db_connectivity_failures_total[2m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Database connectivity failures detected"
+          description: >
+            FrostGate is unable to reach the database.
+            {{ $value | humanize }} failures/sec.
+          runbook: https://docs.frostgate.io/runbooks/db-connectivity
+
+      - alert: FrostgateHttp5xxRateHigh
+        expr: |
+          (
+            rate(frostgate_http_5xx_total[5m])
+            / (rate(frostgate_http_request_duration_seconds_count[5m]) + 0.001)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "HTTP 5xx rate > 5%"
+          description: >
+            HTTP 5xx rate is {{ $value | humanizePercentage }} over 5 minutes.
+          runbook: https://docs.frostgate.io/runbooks/5xx-rate
+
+      - alert: FrostgateRequestLatencyAbnormal
+        expr: |
+          histogram_quantile(0.99,
+            rate(frostgate_http_request_duration_seconds_bucket[5m])
+          ) > 5
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "p99 request latency > 5s"
+          description: >
+            Overall p99 latency is {{ $value | humanizeDuration }}.
+          runbook: https://docs.frostgate.io/runbooks/latency-abnormal

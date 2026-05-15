@@ -95,6 +95,7 @@ ALLOWED_INTERNAL_PREFIXES: tuple[str, ...] = (
     "/dev/",
     "/control/testing/",
     "/_debug/",
+    "/metrics",  # Prometheus scrape endpoint; internal-only, no tenant data
 )
 
 

@@ -1,0 +1,141 @@
+{
+  "__requires": [{"type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0"}],
+  "annotations": {"list": []},
+  "description": "FrostGate pipeline observability: retrieval latency, ingestion throughput, provenance validation failures, audit export activity",
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 200,
+      "title": "Retrieval Latency",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 1},
+      "id": 1,
+      "title": "Retrieval Latency Percentiles by Mode",
+      "type": "timeseries",
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "histogram_quantile(0.50, sum by (mode, le) (rate(frostgate_retrieval_latency_seconds_bucket[5m])))", "legendFormat": "{{ mode }} p50"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "histogram_quantile(0.99, sum by (mode, le) (rate(frostgate_retrieval_latency_seconds_bucket[5m])))", "legendFormat": "{{ mode }} p99"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 1},
+      "id": 2,
+      "title": "Retrieval Request Rate by Mode and Status",
+      "type": "timeseries",
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum by (mode, status) (rate(frostgate_retrieval_requests_total[5m]))", "legendFormat": "{{ mode }} / {{ status }}"}
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 9},
+      "id": 201,
+      "title": "Ingestion Throughput",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 10},
+      "id": 10,
+      "title": "Ingestion Request Rate by Doc Type and Status",
+      "type": "timeseries",
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum by (doc_type, status) (rate(frostgate_ingestion_requests_total[5m]))", "legendFormat": "{{ doc_type }} / {{ status }}"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "Bps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 10},
+      "id": 11,
+      "title": "Ingestion Byte Rate",
+      "type": "timeseries",
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum by (doc_type) (rate(frostgate_ingestion_bytes_total[5m]))", "legendFormat": "{{ doc_type }}"}
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 18},
+      "id": 202,
+      "title": "Provenance Validation Failures",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "color": {"mode": "thresholds"}, "thresholds": {"steps": [{"color": "green"}, {"color": "yellow", "value": 0.05}, {"color": "red", "value": 0.10}]}}, "overrides": []},
+      "gridPos": {"h": 4, "w": 8, "x": 0, "y": 19},
+      "id": 20,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background"},
+      "title": "Provenance Failure Rate",
+      "type": "stat",
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "rate(frostgate_provenance_validation_total{result='fail'}[5m]) / (rate(frostgate_provenance_validation_total[5m]) + 0.001)", "legendFormat": "failure rate"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 16, "x": 8, "y": 19},
+      "id": 21,
+      "title": "Provenance Validation Results Over Time",
+      "type": "timeseries",
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum by (result) (rate(frostgate_provenance_validation_total[5m]))", "legendFormat": "{{ result }}"}
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 27},
+      "id": 203,
+      "title": "Audit Export Activity",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 28},
+      "id": 30,
+      "title": "Audit Export Rate by Tenant and Status",
+      "type": "timeseries",
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum by (tenant_id, status) (rate(frostgate_audit_export_total[10m]))", "legendFormat": "{{ tenant_id }} / {{ status }}"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 28},
+      "id": 31,
+      "title": "Audit Export p99 Latency by Tenant",
+      "type": "timeseries",
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "histogram_quantile(0.99, sum by (tenant_id, le) (rate(frostgate_audit_export_latency_seconds_bucket[10m])))", "legendFormat": "{{ tenant_id }} p99"}
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["frostgate", "pipelines"],
+  "templating": {
+    "list": [
+      {"current": {}, "hide": 0, "includeAll": false, "name": "datasource", "options": [], "query": "prometheus", "refresh": 1, "type": "datasource"},
+      {"current": {"text": "All", "value": "$__all"}, "datasource": {"type": "prometheus", "uid": "${datasource}"}, "definition": "label_values(frostgate_ingestion_requests_total, tenant_id)", "hide": 0, "includeAll": true, "multi": true, "name": "tenant", "query": "label_values(frostgate_ingestion_requests_total, tenant_id)", "refresh": 2, "type": "query"}
+    ]
+  },
+  "time": {"from": "now-3h", "to": "now"},
+  "timezone": "browser",
+  "title": "FrostGate — Pipelines (Retrieval, Ingestion, Provenance, Audit)",
+  "uid": "fg-pipelines",
+  "version": 1
+}

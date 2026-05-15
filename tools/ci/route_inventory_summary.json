@@ -109,10 +109,11 @@
     "evidence": 23,
     "rbac": 5,
     "security": 6,
-    "ui": 47
+    "ui": 47,
+    "unmapped": 1
   },
   "removed": [],
-  "runtime_count": 285,
+  "runtime_count": 286,
   "runtime_only": [
     "GET /_debug/routes",
     "GET /admin/agent/devices",
@@ -134,6 +135,7 @@
     "GET /control/testing/health",
     "GET /control/testing/runs",
     "GET /control/testing/runs/{run_id}",
+    "GET /metrics",
     "GET /ui/ai",
     "GET /ui/ai/experience",
     "GET /ui/ai/usage",
@@ -210,5 +212,7 @@
     "PUT /admin/tenants/{tenant_id}/quota",
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
-  "unauthorized_runtime_only": []
+  "unauthorized_runtime_only": [
+    "GET /metrics"
+  ]
 }

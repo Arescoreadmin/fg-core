@@ -22,3 +22,22 @@ DECISION_DB_ERRORS = Counter(
     "frostgate_decision_db_errors_total",
     "Count of failed decision log writes to the database",
 )
+
+# Re-export enterprise metrics so callers can import from either location.
+from api.observability.metrics import (  # noqa: E402, F401
+    PROVIDER_REQUESTS,
+    PROVIDER_LATENCY,
+    PROVIDER_FAILURES,
+    RETRIEVAL_REQUESTS,
+    RETRIEVAL_LATENCY,
+    INGESTION_REQUESTS,
+    INGESTION_LATENCY,
+    AUDIT_EXPORT_TOTAL,
+    AUDIT_EXPORT_LATENCY,
+    AUDIT_PIPELINE_FAILURES,
+    PROVENANCE_VALIDATION_TOTAL,
+    DB_ERRORS_TOTAL,
+    DB_CONNECTIVITY_FAILURES,
+    HTTP_5XX_TOTAL,
+    HTTP_REQUEST_DURATION,
+)

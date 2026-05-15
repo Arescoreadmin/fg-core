@@ -1,3 +1,24 @@
+## 2026-05-15 — SOC-HIGH-002 — Enterprise observability middleware and route inventory
+
+**Reviewer:** EmpireOverloard | **Classification:** SOC-HIGH-002 (api/middleware changes)
+
+**Files changed:**
+- `api/middleware/otel_tracing.py` (new) — raw ASGI middleware that extracts W3C TraceContext from inbound headers, creates a server-side OTel span wrapping the full request lifecycle, and writes trace_id/span_id into `request.state`. No auth logic. Reads only standard HTTP headers (traceparent, tracestate); writes no cookies or credentials.
+- `api/middleware/logging.py` (minor) — adds `trace_id`, `span_id`, and `tenant_id` to the per-request structured log entry (all read from `request.state`). No behavioral change to request handling; logging only.
+- `api/observability/` (new package) — Prometheus metrics registry, OTel tracing setup, log context filters, alert condition definitions.
+- `api/main.py` (minor) — adds `OTelTracingMiddleware` as the outermost user middleware and a `/metrics` Prometheus scrape endpoint (unauthenticated, internal-only).
+- `tools/ci/check_route_inventory.py` (minor) — added `/metrics` to `ALLOWED_INTERNAL_PREFIXES`. The `/metrics` path is the standard Prometheus scrape endpoint; it exposes only counters/histograms, contains no tenant data, and is classified as internal-only.
+- `tools/ci/route_inventory.json` — regenerated via `make route-inventory-generate` to include `GET /metrics`.
+
+**Security posture:**
+- `OTelTracingMiddleware` performs no authentication or authorization. It passively reads trace propagation headers and emits OTel spans to a configurable backend (disabled by default; activated only when `FG_OTEL_ENDPOINT` is set).
+- `/metrics` endpoint exposes only Prometheus counter/histogram text. No tenant data. No credentials. Classified as `allowed_internal` in route inventory.
+- `RequestContextFilter` and `TraceContextFilter` read from Python contextvars and the OTel span context — both are write-once per request, isolated by async context.
+
+**No auth logic change. No schema change. No contract change. 28 observability tests pass.**
+
+---
+
 ## 2026-03-01T21:24:06Z — SOC-HIGH-002 — Route inventory artifact updated
 
 **Issue:** `tools/ci/route_inventory.json` changed and is classified as a critical SOC-tracked artifact.
