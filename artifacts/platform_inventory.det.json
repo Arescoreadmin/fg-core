@@ -30,13 +30,6 @@
       "plane": "rbac",
       "suggested_fix": "Add SOC gate mapping entry for plane.",
       "type": "missing_soc_gate_reference"
-    },
-    {
-      "details": [
-        "/metrics"
-      ],
-      "suggested_fix": "Map route prefixes to a plane or explicitly exempt in inventory governance.",
-      "type": "unexpected_route_prefixes"
     }
   ],
   "governance": {
@@ -148,7 +141,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "43420378a96658dc385ddd133dbf076a17661e29217fa5b2840008c4efc40014",
+  "governance_fingerprint": "c7c9f7c48f4058e9babd955e5f4dcc214262861e7eb68cddb02f06b4cee0bf43",
   "planes": [
     {
       "compat": {
@@ -217,6 +210,7 @@
         "/governance",
         "/health",
         "/internal",
+        "/metrics",
         "/planes",
         "/rag",
         "/status"
@@ -397,6 +391,7 @@
       "GET /health/detailed",
       "GET /health/live",
       "GET /health/ready",
+      "GET /metrics",
       "GET /planes",
       "GET /rag/corpora",
       "GET /rag/corpora/{corpus_id}",

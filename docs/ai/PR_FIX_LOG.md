@@ -9626,3 +9626,31 @@ The rewritten dynamic INSERT was missing `is_current = 1` from the params dict. 
 - `ruff check` + `ruff format`: PASS.
 - `tests/test_tenant_rbac.py` + `tests/security/test_rbac_security.py`: 56 passed.
 - `make fg-fast`: PASS — all CI gates green.
+
+---
+
+### 2026-05-15 — PR 80: Deployment Manager Foundation
+
+**Branch:** `feat/deployment-manager-foundation`
+
+**Area:** Deployment orchestration; audit; governance; schema (flagged).
+
+**Files changed:**
+- `migrations/postgres/0048_deployment_manager.sql` (new) — **schema change** — 4 idempotent tables: `deployment_environments`, `deployment_records`, `deployment_events` (append-only via Postgres rules), `deployment_health_records`; all with CHECK constraints on enum columns
+- `api/db_models.py` (modified) — **schema change** — 4 ORM model classes appended: `DeploymentEnvironmentRecord`, `DeploymentRecordORM`, `DeploymentEventRecord`, `DeploymentHealthRecord`
+- `services/deployment/__init__.py` (new) — package exports
+- `services/deployment/models.py` (new) — pure-Python domain models, enums, `VALID_TRANSITIONS` state machine, `validate_transition()`, frozen dataclasses
+- `services/deployment/audit.py` (new) — `emit_deployment_event()` with safe_keys allowlist; logs to `frostgate.deployment.audit`
+- `services/deployment/store.py` (new) — `DeploymentStore` with full CRUD, approval gate, rollback lineage traversal with cycle detection, `_emit_event()` on every mutation
+- `api/deployment_manager.py` (new) — 11-endpoint FastAPI router under `/control-plane/deployments/`; all routes require `control-plane:read` or `control-plane:admin` scope; Pydantic models with `extra="forbid"`, field validators, deterministic error codes (DEPLOY-API-001..006)
+- `api/main.py` (modified) — deployment_manager_router registered in both `build_app` and `build_runtime_app`
+- `tests/test_deployment_manager.py` (new) — 44 tests: state machine, audit events, rollback lineage, env isolation, tenant isolation, approval gate, health records, not-found, API serialization safety, pagination, HTTP error codes
+- `tools/ci/route_inventory.json` (regenerated) — 11 new `/control-plane/deployments/` routes, all `plane_id: control`
+- `docs/deployment/lifecycle.md` (new) — lifecycle reference for operators and integrators
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` (modified) — fifth follow-up entry
+
+**Validation:**
+- `ruff check` + `ruff format`: PASS
+- `pytest tests/test_deployment_manager.py`: 44 passed
+- `make route-inventory-generate`: OK
+- `make fg-fast`: all gates green

@@ -538,6 +538,20 @@
         "title": "ApprovalCreateRequest",
         "type": "object"
       },
+      "ApprovalRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "approved": {
+            "title": "Approved",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "approved"
+        ],
+        "title": "ApprovalRequest",
+        "type": "object"
+      },
       "ApprovalVerifyRequest": {
         "properties": {
           "subject_id": {
@@ -1015,6 +1029,17 @@
         "title": "ComplianceCPEvidenceIngestRequest",
         "type": "object"
       },
+      "ComplianceClassification": {
+        "enum": [
+          "standard",
+          "regulated",
+          "hipaa",
+          "fedramp",
+          "govcon"
+        ],
+        "title": "ComplianceClassification",
+        "type": "string"
+      },
       "ConfigWriteRequest": {
         "properties": {
           "config_payload": {
@@ -1175,6 +1200,103 @@
           "policy_hash"
         ],
         "title": "CoverageChangeRequest",
+        "type": "object"
+      },
+      "CreateDeploymentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_hash": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "pattern": "^[0-9a-fA-F]{64}$|^$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "SHA-256 hex digest of the deployment artifact. Empty string or omit if not yet resolved.",
+            "title": "Artifact Hash"
+          },
+          "deployment_metadata": {
+            "title": "Deployment Metadata",
+            "type": "object"
+          },
+          "env_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Env Id",
+            "type": "string"
+          },
+          "rollback_from_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rollback From Id"
+          },
+          "rollback_reason": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rollback Reason"
+          },
+          "strategy": {
+            "$ref": "#/components/schemas/DeploymentStrategy",
+            "default": "rolling"
+          },
+          "version_ref": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Version Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "env_id",
+          "version_ref"
+        ],
+        "title": "CreateDeploymentRequest",
+        "type": "object"
+      },
+      "CreateEnvironmentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "compliance_classification": {
+            "$ref": "#/components/schemas/ComplianceClassification",
+            "default": "standard"
+          },
+          "deployment_policy": {
+            "title": "Deployment Policy",
+            "type": "object"
+          },
+          "env_type": {
+            "$ref": "#/components/schemas/EnvironmentType"
+          },
+          "region": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Region",
+            "type": "string"
+          }
+        },
+        "required": [
+          "env_type",
+          "region"
+        ],
+        "title": "CreateEnvironmentRequest",
         "type": "object"
       },
       "CreateKeyRequest": {
@@ -1712,6 +1834,29 @@
         "title": "DelegationRevokeRequest",
         "type": "object"
       },
+      "DeploymentState": {
+        "enum": [
+          "pending",
+          "validating",
+          "deploying",
+          "healthy",
+          "degraded",
+          "failed",
+          "rolled_back"
+        ],
+        "title": "DeploymentState",
+        "type": "string"
+      },
+      "DeploymentStrategy": {
+        "enum": [
+          "rolling",
+          "blue_green",
+          "canary",
+          "direct"
+        ],
+        "title": "DeploymentStrategy",
+        "type": "string"
+      },
       "DeviceActivityProofRequest": {
         "properties": {
           "activity_day": {
@@ -2059,6 +2204,27 @@
         ],
         "title": "EnrollmentTokenCreateResponse",
         "type": "object"
+      },
+      "EnvironmentLifecycleState": {
+        "enum": [
+          "active",
+          "maintenance",
+          "decommissioned"
+        ],
+        "title": "EnvironmentLifecycleState",
+        "type": "string"
+      },
+      "EnvironmentType": {
+        "enum": [
+          "local",
+          "dev",
+          "staging",
+          "production",
+          "tenant-dedicated",
+          "regulated"
+        ],
+        "title": "EnvironmentType",
+        "type": "string"
       },
       "EvidenceAnchorCreate": {
         "additionalProperties": false,
@@ -2755,6 +2921,16 @@
       },
       "Health": {
         "$ref": "schemas/api/health.schema.json"
+      },
+      "HealthResult": {
+        "enum": [
+          "pass",
+          "fail",
+          "skip",
+          "unknown"
+        ],
+        "title": "HealthResult",
+        "type": "string"
       },
       "HeartbeatRequest": {
         "additionalProperties": false,
@@ -4136,6 +4312,43 @@
         "title": "ReceiptRequest",
         "type": "object"
       },
+      "RecordHealthRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "liveness_result": {
+            "$ref": "#/components/schemas/HealthResult"
+          },
+          "readiness_result": {
+            "$ref": "#/components/schemas/HealthResult"
+          },
+          "rollback_trigger_reason": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rollback Trigger Reason"
+          },
+          "smoke_test_result": {
+            "$ref": "#/components/schemas/HealthResult",
+            "default": "unknown"
+          },
+          "validation_result": {
+            "$ref": "#/components/schemas/HealthResult",
+            "default": "unknown"
+          }
+        },
+        "required": [
+          "readiness_result",
+          "liveness_result"
+        ],
+        "title": "RecordHealthRequest",
+        "type": "object"
+      },
       "ReproduceRequest": {
         "properties": {
           "session_id": {
@@ -5085,6 +5298,23 @@
           "count"
         ],
         "title": "TopItem",
+        "type": "object"
+      },
+      "TransitionStateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "details": {
+            "title": "Details",
+            "type": "object"
+          },
+          "to_state": {
+            "$ref": "#/components/schemas/DeploymentState"
+          }
+        },
+        "required": [
+          "to_state"
+        ],
+        "title": "TransitionStateRequest",
         "type": "object"
       },
       "UpdateReportRequest": {
@@ -9349,6 +9579,879 @@
         "summary": "Grid view of all module dependency health statuses",
         "tags": [
           "control-plane"
+        ]
+      }
+    },
+    "/control-plane/deployments": {
+      "get": {
+        "operationId": "list_deployments_control_plane_deployments_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "env_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Env Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/DeploymentState"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Deployments Control Plane Deployments Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Deployments",
+        "tags": [
+          "deployment"
+        ]
+      },
+      "post": {
+        "operationId": "create_deployment_control_plane_deployments_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDeploymentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Create Deployment Control Plane Deployments Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Deployment",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
+    "/control-plane/deployments/environments": {
+      "get": {
+        "operationId": "list_environments_control_plane_deployments_environments_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "env_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EnvironmentType"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Env Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lifecycle_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EnvironmentLifecycleState"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lifecycle State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Environments Control Plane Deployments Environments Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Environments",
+        "tags": [
+          "deployment"
+        ]
+      },
+      "post": {
+        "operationId": "create_environment_control_plane_deployments_environments_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEnvironmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Create Environment Control Plane Deployments Environments Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Environment",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
+    "/control-plane/deployments/environments/{env_id}": {
+      "get": {
+        "operationId": "get_environment_control_plane_deployments_environments__env_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "env_id",
+            "required": true,
+            "schema": {
+              "title": "Env Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Environment Control Plane Deployments Environments  Env Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Environment",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
+    "/control-plane/deployments/{deployment_id}": {
+      "get": {
+        "operationId": "get_deployment_control_plane_deployments__deployment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Deployment Control Plane Deployments  Deployment Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Deployment",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
+    "/control-plane/deployments/{deployment_id}/approval": {
+      "post": {
+        "operationId": "record_deployment_approval_control_plane_deployments__deployment_id__approval_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Record Deployment Approval Control Plane Deployments  Deployment Id  Approval Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Deployment Approval",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
+    "/control-plane/deployments/{deployment_id}/health": {
+      "get": {
+        "operationId": "get_deployment_health_control_plane_deployments__deployment_id__health_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Deployment Health Control Plane Deployments  Deployment Id  Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Deployment Health",
+        "tags": [
+          "deployment"
+        ]
+      },
+      "post": {
+        "operationId": "record_deployment_health_control_plane_deployments__deployment_id__health_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordHealthRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Record Deployment Health Control Plane Deployments  Deployment Id  Health Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Deployment Health",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
+    "/control-plane/deployments/{deployment_id}/history": {
+      "get": {
+        "operationId": "get_deployment_history_control_plane_deployments__deployment_id__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Deployment History Control Plane Deployments  Deployment Id  History Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Deployment History",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
+    "/control-plane/deployments/{deployment_id}/rollback-lineage": {
+      "get": {
+        "operationId": "get_rollback_lineage_control_plane_deployments__deployment_id__rollback_lineage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Rollback Lineage Control Plane Deployments  Deployment Id  Rollback Lineage Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Rollback Lineage",
+        "tags": [
+          "deployment"
+        ]
+      }
+    },
+    "/control-plane/deployments/{deployment_id}/transition": {
+      "post": {
+        "operationId": "transition_deployment_state_control_plane_deployments__deployment_id__transition_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deployment_id",
+            "required": true,
+            "schema": {
+              "title": "Deployment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionStateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Transition Deployment State Control Plane Deployments  Deployment Id  Transition Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transition Deployment State",
+        "tags": [
+          "deployment"
         ]
       }
     },
