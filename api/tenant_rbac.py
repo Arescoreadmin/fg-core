@@ -24,7 +24,7 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from api.deps import get_db
+from api.deps import auth_ctx_db_session
 
 log = logging.getLogger("frostgate.rbac")
 
@@ -530,7 +530,7 @@ def require_role(*allowed_roles: str):
 
     def _dep(
         request: Request,
-        conn: Session = Depends(get_db),
+        conn: Session = Depends(auth_ctx_db_session),
     ) -> None:
         auth = getattr(getattr(request, "state", None), "auth", None)
         if auth is None:
@@ -561,7 +561,7 @@ def require_role(*allowed_roles: str):
 
 def get_request_role(
     request: Request,
-    conn: Session = Depends(get_db),
+    conn: Session = Depends(auth_ctx_db_session),
 ) -> Optional[str]:
     """FastAPI dependency: resolve the authenticated key's role (None if unassigned)."""
     return _get_auth_role(request, conn)

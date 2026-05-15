@@ -3689,7 +3689,6 @@
     },
     {
       "dependency_categories": [
-        "db",
         "tenant"
       ],
       "file": "api/tenant_rbac_router.py",
@@ -3704,7 +3703,6 @@
     },
     {
       "dependency_categories": [
-        "db",
         "tenant"
       ],
       "file": "api/tenant_rbac_router.py",
@@ -3719,7 +3717,6 @@
     },
     {
       "dependency_categories": [
-        "db",
         "tenant"
       ],
       "file": "api/tenant_rbac_router.py",
@@ -3734,7 +3731,6 @@
     },
     {
       "dependency_categories": [
-        "db",
         "tenant"
       ],
       "file": "api/tenant_rbac_router.py",
@@ -4758,7 +4754,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-05-15T09:43:28.982723+00:00",
+  "generated_at": "2026-05-15T10:06:56.204010+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

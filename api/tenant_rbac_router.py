@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant
-from api.deps import get_db
+from api.deps import auth_ctx_db_session
 from api.tenant_rbac import (
     BUILTIN_ROLES,
     _ROLE_SCOPES,
@@ -84,7 +84,7 @@ def list_roles() -> list[RoleDetail]:
 )
 def get_assignments(
     request: Request,
-    conn: Session = Depends(get_db),
+    conn: Session = Depends(auth_ctx_db_session),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> list[dict[str, Any]]:
@@ -101,7 +101,7 @@ def get_assignments(
 def assign_role_endpoint(
     body: AssignRoleRequest,
     request: Request,
-    conn: Session = Depends(get_db),
+    conn: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
     tenant_id = require_bound_tenant(request)
     actor = _actor_key_prefix(request)
@@ -125,7 +125,7 @@ def assign_role_endpoint(
 def revoke_role_endpoint(
     key_id: int,
     request: Request,
-    conn: Session = Depends(get_db),
+    conn: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
     tenant_id = require_bound_tenant(request)
     actor = _actor_key_prefix(request)
@@ -147,7 +147,7 @@ def revoke_role_endpoint(
 )
 def get_audit_log(
     request: Request,
-    conn: Session = Depends(get_db),
+    conn: Session = Depends(auth_ctx_db_session),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> list[dict[str, Any]]:

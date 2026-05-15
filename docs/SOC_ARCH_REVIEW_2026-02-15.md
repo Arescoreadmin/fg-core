@@ -947,3 +947,17 @@ All minted API keys share `api_keys.prefix = "fgk"`. The original RBAC implement
 **Contract and inventory:** OpenAPI contract regenerated; SHA256 updated in `BLUEPRINT_STAGED.md` and `CONTRACT.md`. Route inventory regenerated via `make route-inventory-generate`.
 
 **Validation:** `make fg-fast` PASS. 63 tests PASS (40 functional + 19 security + 4 new disambiguation). New tests: `TestMultiKeyDisambiguation` (4 tests proving id-based lookup is unambiguous under prefix collisions), `TestScopelessRoleAuthorization` (3 tests proving role alone is sufficient for RBAC route access).
+
+---
+
+## PR 57 Fix Addendum 2 — Tenant-Bound DB Dependency (2026-05-15)
+
+**Reviewer:** EmpireOverloard | **Classification:** SOC-HIGH-002 (tools/ci changes)
+
+**Files changed:** `api/tenant_rbac_router.py`, `api/tenant_rbac.py`, `tools/ci/route_inventory.json`, `tools/ci/topology.sha256`
+
+**Change:** RBAC router and `require_role` dependency replaced `Depends(get_db)` with `Depends(auth_ctx_db_session)`. The raw `get_db` dependency bypasses tenant context binding, RLS GUC application, and request-scoped audit lineage. `auth_ctx_db_session` (already used by all `control_plane_v2.py` routes) resolves tenant from `request.state.auth.tenant_id`, calls `set_tenant_context`, and binds `request.state.db_session` — the same pattern enforced for all non-public routes.
+
+**Route inventory:** regenerated via `make route-inventory-generate`. Dependency category `"db"` no longer appears for RBAC routes (consistent with governance routes using `tenant_db_required`, which the AST categorizer also does not tag as `"db"`). The plane registry `allowed_dependency_categories` for the `rbac` plane includes `"db"` to allow future routes that use `get_db` internally for non-tenant operations.
+
+**No auth logic change.** No schema change. No contract change. 63 tests pass.
