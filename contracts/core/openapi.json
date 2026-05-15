@@ -592,6 +592,27 @@
         "title": "ArtifactMeta",
         "type": "object"
       },
+      "AssignRoleRequest": {
+        "properties": {
+          "key_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Key Id",
+            "type": "integer"
+          },
+          "role": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key_id",
+          "role"
+        ],
+        "title": "AssignRoleRequest",
+        "type": "object"
+      },
       "BillingRunCreateRequest": {
         "properties": {
           "contract_hash": {
@@ -4487,6 +4508,27 @@
           "policy"
         ],
         "title": "RingRouteResponse",
+        "type": "object"
+      },
+      "RoleDetail": {
+        "properties": {
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "role",
+          "scopes"
+        ],
+        "title": "RoleDetail",
         "type": "object"
       },
       "RotateKeyRequest": {
@@ -16547,6 +16589,234 @@
           "rag",
           "governance",
           "ingestion"
+        ]
+      }
+    },
+    "/rbac/assignments": {
+      "get": {
+        "operationId": "get_assignments_rbac_assignments_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "Response Get Assignments Rbac Assignments Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List API keys with assigned roles for this tenant",
+        "tags": [
+          "rbac"
+        ]
+      },
+      "post": {
+        "operationId": "assign_role_endpoint_rbac_assignments_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Assign Role Endpoint Rbac Assignments Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign a role to an API key (tenant_admin only)",
+        "tags": [
+          "rbac"
+        ]
+      }
+    },
+    "/rbac/assignments/{key_id}": {
+      "delete": {
+        "operationId": "revoke_role_endpoint_rbac_assignments__key_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Revoke Role Endpoint Rbac Assignments  Key Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke the role from an API key (tenant_admin only)",
+        "tags": [
+          "rbac"
+        ]
+      }
+    },
+    "/rbac/audit": {
+      "get": {
+        "operationId": "get_audit_log_rbac_audit_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "Response Get Audit Log Rbac Audit Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Return immutable role change audit log for this tenant",
+        "tags": [
+          "rbac"
+        ]
+      }
+    },
+    "/rbac/roles": {
+      "get": {
+        "operationId": "list_roles_rbac_roles_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RoleDetail"
+                  },
+                  "title": "Response List Roles Rbac Roles Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List available built-in roles and their scope bundles",
+        "tags": [
+          "rbac"
         ]
       }
     },

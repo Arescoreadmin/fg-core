@@ -178,6 +178,28 @@ PLANE_REGISTRY: list[PlaneDef] = [
         ),
     ),
     PlaneDef(
+        plane_id="rbac",
+        route_prefixes=("/rbac",),
+        allowed_dependency_categories=("auth", "tenant", "db", "rate"),
+        required_make_targets=("security-regression-gates",),
+        required_ci_gates=COMMON_GATES,
+        maturity_tag="tester-ready",
+        required_route_invariants=("auth", "tenant_bound"),
+        auth_class=AuthClass(
+            required_scope_prefixes=(),
+            require_any_scope=False,
+            tenant_binding_required=True,
+        ),
+        global_routes=[
+            ex(
+                "GET",
+                "/rbac/roles",
+                "global_admin",
+                "RBAC role catalog is tenant-invariant static metadata; role auth enforced by require_role.",
+            ),
+        ],
+    ),
+    PlaneDef(
         plane_id="data",
         route_prefixes=(
             "/ingest",

@@ -207,6 +207,28 @@ def _ensure_api_keys_sqlite(sqlite_path: str) -> None:
         _sqlite_add_col_if_missing(con, "api_keys", "hash_alg", "TEXT")
         _sqlite_add_col_if_missing(con, "api_keys", "hash_params", "TEXT")
         _sqlite_add_col_if_missing(con, "api_keys", "key_lookup", "TEXT")
+        _sqlite_add_col_if_missing(con, "api_keys", "role", "TEXT")
+
+        # PR 57 — tenant RBAC: append-only audit table
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tenant_role_audit (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id          TEXT    NOT NULL UNIQUE,
+                tenant_id         TEXT    NOT NULL,
+                actor_key_prefix  TEXT,
+                action            TEXT    NOT NULL,
+                target_key_prefix TEXT,
+                role_name         TEXT,
+                timestamp         TEXT    NOT NULL,
+                success           INTEGER NOT NULL DEFAULT 1
+            )
+            """
+        )
+        con.execute(
+            "CREATE INDEX IF NOT EXISTS ix_tenant_role_audit_tenant_ts "
+            "ON tenant_role_audit (tenant_id, timestamp)"
+        )
         con.commit()
     finally:
         con.close()
@@ -349,6 +371,29 @@ def _auto_migrate_sqlite(engine: Engine) -> None:
             _sqlite_add_column_if_missing(conn, "api_keys", "hash_alg", "TEXT")
             _sqlite_add_column_if_missing(conn, "api_keys", "hash_params", "TEXT")
             _sqlite_add_column_if_missing(conn, "api_keys", "key_lookup", "TEXT")
+            # PR 57 — tenant RBAC
+            _sqlite_add_column_if_missing(conn, "api_keys", "role", "TEXT")
+
+        # PR 57 — tenant RBAC: append-only role audit (idempotent)
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS tenant_role_audit (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id          TEXT    NOT NULL UNIQUE,
+                tenant_id         TEXT    NOT NULL,
+                actor_key_prefix  TEXT,
+                action            TEXT    NOT NULL,
+                target_key_prefix TEXT,
+                role_name         TEXT,
+                timestamp         TEXT    NOT NULL,
+                success           INTEGER NOT NULL DEFAULT 1
+            )
+            """
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_tenant_role_audit_tenant_ts "
+            "ON tenant_role_audit (tenant_id, timestamp)"
+        )
 
         if "security_audit_log" in tables:
             _sqlite_add_column_if_missing(

@@ -9480,3 +9480,40 @@ The rewritten dynamic INSERT was missing `is_current = 1` from the params dict. 
 - `ruff check` + `ruff format`: PASS.
 - `tests/rag/test_docx_ingestion.py` + `tests/security/test_docx_ingestion_security.py`: 48 passed.
 - `make fg-fast`: PASS — all CI gates green.
+
+---
+
+### 2026-05-14 — PR 57 Enterprise Intra-Tenant RBAC
+
+**Branch:** `pr-57-rbac`
+
+**Task identifier:** PR 57 — Enterprise Intra-Tenant RBAC
+
+**Area:** Authentication; authorization; API key management; audit trail; route-level access control.
+
+**Files changed:**
+- `api/tenant_rbac.py` (NEW) — role store: `BUILTIN_ROLES`, `_ROLE_SCOPES`, `_ROLE_IMPLIES`, `assign_role`, `revoke_role`, `get_key_role`, `list_role_assignments`, `get_role_audit_log`, `require_role()` FastAPI dependency factory
+- `api/tenant_rbac_router.py` (NEW) — FastAPI router: `GET /rbac/roles`, `GET /rbac/assignments`, `POST /rbac/assignments`, `DELETE /rbac/assignments/{key_prefix}`, `GET /rbac/audit`
+- `migrations/postgres/0047_tenant_rbac.sql` (NEW) — adds `api_keys.role TEXT` (idempotent), creates `tenant_role_audit` (append-only, with PostgreSQL rules preventing UPDATE/DELETE)
+- `api/db.py` (MODIFIED) — SQLite auto-migrate: `role TEXT` column on `api_keys`, `tenant_role_audit` table in `_ensure_api_keys_sqlite` and `_auto_migrate_sqlite`
+- `api/main.py` (MODIFIED) — registers `tenant_rbac_router` in both `include_router` blocks
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md` (MODIFIED) — contract authority SHA256 updated to match regenerated `contracts/core/openapi.json`
+- `tests/test_tenant_rbac.py` (NEW) — 37 functional tests across 6 classes
+- `tests/security/test_rbac_security.py` (NEW) — 19 security tests across 6 classes
+
+**Architecture decisions:**
+
+**Role hierarchy:** `tenant_admin` ⊇ `governance_admin` ⊇ {`analyst`, `auditor`} ⊇ `read_only`. `analyst` and `auditor` are sibling roles (neither implies the other). `_ROLE_IMPLIES` encodes the transitive closure explicitly.
+
+**Deny-by-default:** `require_role()` with no role or an unknown role always returns 403. An empty `allowed_roles` set in `require_role()` also always returns 403. Whitespace-only role name strings are stripped and dropped (empty set → always deny).
+
+**Role assignment identity primitive:** Roles are assigned to API keys (the auth identity primitive). The lookup uses `WHERE prefix = :prefix AND tenant_id = :tenant_id` which is correct for single-key-per-tenant test scenarios. Multi-key-per-tenant production use would need key_lookup as the discriminator (tracked for future PR).
+
+**Audit immutability (SQLite):** `tenant_role_audit` uses `UNIQUE` on `event_id` and UUID4 event IDs. SQLite does not support triggers-on-rules natively, so immutability is enforced at the application layer (no UPDATE/DELETE paths exist in `_append_role_audit`). PostgreSQL uses declarative rules (`ON UPDATE/DELETE DO INSTEAD NOTHING`).
+
+**No core auth modification:** `require_role()` reads `request.state.auth.key_prefix` and `request.state.auth.tenant_id` from the existing `AuthResult` object set by `AuthGateMiddleware`. No changes to `AuthResult`, `AuthGateMiddleware`, or `auth_scopes/`.
+
+**Validation results:**
+- `ruff check` + `ruff format`: PASS.
+- `tests/test_tenant_rbac.py` + `tests/security/test_rbac_security.py`: 56 passed.
+- `make fg-fast`: PASS — all CI gates green.

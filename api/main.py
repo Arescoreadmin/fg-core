@@ -70,6 +70,7 @@ from api.rag_corpus_console import router as rag_corpus_console_router
 from api.rag_corpus_ingestion import router as rag_corpus_ingestion_router
 from api.reports_engine import router as reports_engine_router
 from api.stripe_webhooks import router as stripe_webhooks_router
+from api.tenant_rbac_router import router as tenant_rbac_router
 from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
 from api.middleware.exception_shield import FGExceptionShieldMiddleware
@@ -577,6 +578,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(rag_retrieval_policy_router)
     app.include_router(rag_corpus_console_router)
     app.include_router(rag_corpus_ingestion_router)
+    app.include_router(tenant_rbac_router)
     app.include_router(stripe_webhooks_router)
     app.include_router(connectors_control_plane_router)
     app.include_router(control_plane_router)
@@ -873,6 +875,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(rag_retrieval_policy_router)
     app.include_router(rag_corpus_console_router)
     app.include_router(rag_corpus_ingestion_router)
+    app.include_router(tenant_rbac_router)
     app.include_router(stripe_webhooks_router)
     app.include_router(connectors_control_plane_router)
     app.include_router(control_plane_router)

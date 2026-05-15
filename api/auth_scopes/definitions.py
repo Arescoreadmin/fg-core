@@ -9,7 +9,7 @@ DEFAULT_TTL_SECONDS = 24 * 3600
 class AuthResult:
     """Result of API key verification with details for proper status codes."""
 
-    __slots__ = ("valid", "reason", "key_prefix", "tenant_id", "scopes")
+    __slots__ = ("valid", "reason", "key_prefix", "tenant_id", "scopes", "key_db_id")
 
     def __init__(
         self,
@@ -18,12 +18,14 @@ class AuthResult:
         key_prefix: Optional[str] = None,
         tenant_id: Optional[str] = None,
         scopes: Optional[Set[str]] = None,
+        key_db_id: Optional[int] = None,
     ):
         self.valid = valid
         self.reason = reason
         self.key_prefix = key_prefix
         self.tenant_id = tenant_id
         self.scopes = scopes or set()
+        self.key_db_id = key_db_id
 
     @property
     def is_missing_key(self) -> bool:

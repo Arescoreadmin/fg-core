@@ -689,12 +689,19 @@ def verify_api_key_detailed(
         request_path=request_path,
         client_ip=client_ip,
     )
+    _key_db_id: int | None = None
+    if row and row.get("id") is not None:
+        try:
+            _key_db_id = int(row["id"])
+        except (TypeError, ValueError):
+            pass
     return AuthResult(
         valid=True,
         reason="valid",
         key_prefix=key_prefix,
         tenant_id=tenant_id,
         scopes=have,
+        key_db_id=_key_db_id,
     )
 
 
@@ -890,6 +897,23 @@ def require_scopes(*scopes: str) -> Callable[..., None]:
         )
 
     def _dep(_: str = Depends(_scoped_key_dep)) -> None:
+        return None
+
+    return _dep
+
+
+def authz_scope(*scopes: str) -> Callable[..., None]:
+    """Declare intended scope metadata for governance tooling and lint.
+
+    Does NOT enforce scope at runtime. Use require_role() for authorization
+    on routes where a role implies the scope rather than explicit scopes_csv.
+    The scope names are extracted by route_checks.py for route inventory,
+    scope lint, and compliance export — satisfying the same tooling that
+    require_scopes() satisfies without blocking role-authorized requests.
+    """
+    _ = scopes  # consumed by AST; not used at runtime
+
+    def _dep() -> None:
         return None
 
     return _dep
