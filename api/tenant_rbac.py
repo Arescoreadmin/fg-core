@@ -188,14 +188,30 @@ def _table_columns(conn: Session, table: str) -> set[str]:
         return set()
 
 
-def get_key_role(conn: Session, *, tenant_id: str, key_prefix: str) -> Optional[str]:
-    """Return the role assigned to an API key, or None."""
+def get_key_role(conn: Session, *, tenant_id: str, key_id: int) -> Optional[str]:
+    """Return the role assigned to an API key by its DB id, or None."""
+    cols = _table_columns(conn, "api_keys")
+    if "role" not in cols:
+        return None
+    row = conn.execute(
+        text("SELECT role FROM api_keys WHERE id = :id AND tenant_id = :tenant_id"),
+        {"id": key_id, "tenant_id": tenant_id},
+    ).fetchone()
+    if row is None:
+        return None
+    return str(row[0]) if row[0] else None
+
+
+def _get_key_role_by_prefix(
+    conn: Session, *, tenant_id: str, key_prefix: str
+) -> Optional[str]:
+    """Fallback: look up role by prefix+tenant (used only when key_db_id unavailable)."""
     cols = _table_columns(conn, "api_keys")
     if "role" not in cols:
         return None
     row = conn.execute(
         text(
-            "SELECT role FROM api_keys WHERE prefix = :prefix AND tenant_id = :tenant_id"
+            "SELECT role FROM api_keys WHERE prefix = :prefix AND tenant_id = :tenant_id LIMIT 1"
         ),
         {"prefix": key_prefix, "tenant_id": tenant_id},
     ).fetchone()
@@ -209,11 +225,12 @@ def assign_role(
     *,
     tenant_id: str,
     actor_key_prefix: str,
-    target_key_prefix: str,
+    target_key_id: int,
     role_name: str,
 ) -> dict[str, Any]:
     """Assign a built-in role to an API key within a tenant.
 
+    Uses api_keys.id as the unambiguous assignment target.
     Raises ValueError for invalid tenant ownership or role names.
     Appends an immutable audit record.
     """
@@ -224,24 +241,25 @@ def assign_role(
             f"Unknown role: {role_name!r}. Valid roles: {sorted(VALID_ROLE_NAMES)}"
         )
 
-    # Verify target key belongs to this tenant.
+    # Verify target key belongs to this tenant — use id for unambiguous lookup.
     target_row = conn.execute(
-        text("SELECT prefix FROM api_keys WHERE prefix = :p AND tenant_id = :t"),
-        {"p": target_key_prefix, "t": tenant_id},
+        text("SELECT id, name FROM api_keys WHERE id = :id AND tenant_id = :t"),
+        {"id": target_key_id, "t": tenant_id},
     ).fetchone()
     if target_row is None:
         raise ValueError(
-            f"key_prefix={target_key_prefix!r} not found for tenant_id={tenant_id!r}"
+            f"key_id={target_key_id!r} not found for tenant_id={tenant_id!r}"
         )
+    display_name = target_row[1] if target_row[1] else None
 
     # Update role column (guarded by _table_columns).
     cols = _table_columns(conn, "api_keys")
     if "role" in cols:
         conn.execute(
             text(
-                "UPDATE api_keys SET role = :role WHERE prefix = :prefix AND tenant_id = :tenant_id"
+                "UPDATE api_keys SET role = :role WHERE id = :id AND tenant_id = :tenant_id"
             ),
-            {"role": role_name, "prefix": target_key_prefix, "tenant_id": tenant_id},
+            {"role": role_name, "id": target_key_id, "tenant_id": tenant_id},
         )
 
     now = _utc_now_iso()
@@ -252,7 +270,7 @@ def assign_role(
         tenant_id=tenant_id,
         actor_key_prefix=actor_key_prefix,
         action="assign_role",
-        target_key_prefix=target_key_prefix,
+        target_key_id=str(target_key_id),
         role_name=role_name,
         timestamp=now,
         success=1,
@@ -265,13 +283,14 @@ def assign_role(
             "event": "rbac.role_assigned",
             "tenant_id": tenant_id,
             "actor_key_prefix": actor_key_prefix,
-            "target_key_prefix": target_key_prefix,
+            "target_key_id": target_key_id,
             "role_name": role_name,
         },
     )
     return {
         "tenant_id": tenant_id,
-        "key_prefix": target_key_prefix,
+        "key_id": target_key_id,
+        "display_name": display_name,
         "role": role_name,
         "assigned_by": actor_key_prefix,
         "assigned_at": now,
@@ -284,28 +303,29 @@ def revoke_role(
     *,
     tenant_id: str,
     actor_key_prefix: str,
-    target_key_prefix: str,
+    target_key_id: int,
 ) -> dict[str, Any]:
     """Remove the role from an API key within a tenant."""
     if not tenant_id or not str(tenant_id).strip():
         raise ValueError("tenant_id must not be blank")
 
     target_row = conn.execute(
-        text("SELECT prefix FROM api_keys WHERE prefix = :p AND tenant_id = :t"),
-        {"p": target_key_prefix, "t": tenant_id},
+        text("SELECT id, name FROM api_keys WHERE id = :id AND tenant_id = :t"),
+        {"id": target_key_id, "t": tenant_id},
     ).fetchone()
     if target_row is None:
         raise ValueError(
-            f"key_prefix={target_key_prefix!r} not found for tenant_id={tenant_id!r}"
+            f"key_id={target_key_id!r} not found for tenant_id={tenant_id!r}"
         )
+    display_name = target_row[1] if target_row[1] else None
 
     cols = _table_columns(conn, "api_keys")
     if "role" in cols:
         conn.execute(
             text(
-                "UPDATE api_keys SET role = NULL WHERE prefix = :prefix AND tenant_id = :tenant_id"
+                "UPDATE api_keys SET role = NULL WHERE id = :id AND tenant_id = :tenant_id"
             ),
-            {"prefix": target_key_prefix, "tenant_id": tenant_id},
+            {"id": target_key_id, "tenant_id": tenant_id},
         )
 
     now = _utc_now_iso()
@@ -316,7 +336,7 @@ def revoke_role(
         tenant_id=tenant_id,
         actor_key_prefix=actor_key_prefix,
         action="revoke_role",
-        target_key_prefix=target_key_prefix,
+        target_key_id=str(target_key_id),
         role_name=None,
         timestamp=now,
         success=1,
@@ -329,12 +349,13 @@ def revoke_role(
             "event": "rbac.role_revoked",
             "tenant_id": tenant_id,
             "actor_key_prefix": actor_key_prefix,
-            "target_key_prefix": target_key_prefix,
+            "target_key_id": target_key_id,
         },
     )
     return {
         "tenant_id": tenant_id,
-        "key_prefix": target_key_prefix,
+        "key_id": target_key_id,
+        "display_name": display_name,
         "role": None,
         "revoked_by": actor_key_prefix,
         "revoked_at": now,
@@ -358,9 +379,9 @@ def list_role_assignments(
     rows = (
         conn.execute(
             text(
-                "SELECT prefix, name, role, scopes_csv FROM api_keys "
+                "SELECT id, name, role, scopes_csv FROM api_keys "
                 "WHERE tenant_id = :tenant_id AND role IS NOT NULL AND enabled = 1 "
-                "ORDER BY prefix "
+                "ORDER BY id "
                 "LIMIT :limit OFFSET :offset"
             ),
             {"tenant_id": tenant_id, "limit": limit, "offset": offset},
@@ -370,8 +391,8 @@ def list_role_assignments(
     )
     return [
         {
-            "key_prefix": str(r["prefix"]),
-            "name": r.get("name"),
+            "key_id": int(r["id"]),
+            "display_name": r.get("name"),
             "role": str(r["role"]),
             "scopes": str(r.get("scopes_csv") or "").split(",")
             if r.get("scopes_csv")
@@ -414,7 +435,8 @@ def get_role_audit_log(
             "event_id": str(r["event_id"]),
             "actor_key_prefix": r.get("actor_key_prefix"),
             "action": str(r["action"]),
-            "target_key_prefix": r.get("target_key_prefix"),
+            # target_key_prefix column stores the string repr of target_key_id
+            "target_key_id": r.get("target_key_prefix"),
             "role_name": r.get("role_name"),
             "timestamp": str(r["timestamp"]),
             "success": bool(r.get("success", 1)),
@@ -430,12 +452,16 @@ def _append_role_audit(
     tenant_id: str,
     actor_key_prefix: str,
     action: str,
-    target_key_prefix: str,
+    target_key_id: str,
     role_name: Optional[str],
     timestamp: str,
     success: int,
 ) -> None:
-    """Append an immutable audit event. Never updates or deletes existing rows."""
+    """Append an immutable audit event. Never updates or deletes existing rows.
+
+    target_key_id (string repr of api_keys.id) is stored in the target_key_prefix
+    column for backward-compatible schema compatibility.
+    """
     cols = _table_columns(conn, "tenant_role_audit")
     if not cols:
         return
@@ -452,7 +478,7 @@ def _append_role_audit(
             "tenant_id": tenant_id,
             "actor_key_prefix": actor_key_prefix,
             "action": action,
-            "target_key_prefix": target_key_prefix,
+            "target_key_prefix": target_key_id,
             "role_name": role_name,
             "timestamp": timestamp,
             "success": success,
@@ -466,15 +492,25 @@ def _append_role_audit(
 
 
 def _get_auth_role(request: Request, conn: Session) -> Optional[str]:
-    """Resolve the RBAC role for the authenticated key from the DB."""
+    """Resolve the RBAC role for the authenticated key from the DB.
+
+    Uses key_db_id (api_keys.id) when available for unambiguous lookup.
+    Falls back to prefix-based lookup for backward compatibility with
+    old-format keys or test mocks that don't carry key_db_id.
+    """
     auth = getattr(getattr(request, "state", None), "auth", None)
     if auth is None:
         return None
-    key_prefix = getattr(auth, "key_prefix", None)
     tenant_id = getattr(auth, "tenant_id", None)
-    if not key_prefix or not tenant_id:
+    if not tenant_id:
         return None
-    return get_key_role(conn, tenant_id=tenant_id, key_prefix=key_prefix)
+    key_db_id = getattr(auth, "key_db_id", None)
+    if key_db_id is not None:
+        return get_key_role(conn, tenant_id=tenant_id, key_id=int(key_db_id))
+    key_prefix = getattr(auth, "key_prefix", None)
+    if not key_prefix:
+        return None
+    return _get_key_role_by_prefix(conn, tenant_id=tenant_id, key_prefix=key_prefix)
 
 
 def require_role(*allowed_roles: str):

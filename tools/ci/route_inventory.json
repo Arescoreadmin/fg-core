@@ -3689,89 +3689,73 @@
     },
     {
       "dependency_categories": [
-        "auth",
         "db",
         "tenant"
       ],
       "file": "api/tenant_rbac_router.py",
       "method": "GET",
       "path": "/rbac/assignments",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
-      "scoped": true,
-      "scopes": [
-        "keys:read"
-      ],
+      "plane": "rbac",
+      "plane_id": "rbac",
+      "scoped": false,
+      "scopes": [],
       "source": "runtime-ast",
       "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth",
         "db",
         "tenant"
       ],
       "file": "api/tenant_rbac_router.py",
       "method": "POST",
       "path": "/rbac/assignments",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
-      "scoped": true,
-      "scopes": [
-        "keys:write"
-      ],
+      "plane": "rbac",
+      "plane_id": "rbac",
+      "scoped": false,
+      "scopes": [],
       "source": "runtime-ast",
       "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth",
         "db",
         "tenant"
       ],
       "file": "api/tenant_rbac_router.py",
       "method": "DELETE",
-      "path": "/rbac/assignments/{key_prefix}",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
-      "scoped": true,
-      "scopes": [
-        "keys:write"
-      ],
+      "path": "/rbac/assignments/{key_id}",
+      "plane": "rbac",
+      "plane_id": "rbac",
+      "scoped": false,
+      "scopes": [],
       "source": "runtime-ast",
       "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth",
         "db",
         "tenant"
       ],
       "file": "api/tenant_rbac_router.py",
       "method": "GET",
       "path": "/rbac/audit",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
-      "scoped": true,
-      "scopes": [
-        "audit:read"
-      ],
+      "plane": "rbac",
+      "plane_id": "rbac",
+      "scoped": false,
+      "scopes": [],
       "source": "runtime-ast",
       "tenant_bound": true
     },
     {
-      "dependency_categories": [
-        "auth"
-      ],
+      "dependency_categories": [],
       "file": "api/tenant_rbac_router.py",
       "method": "GET",
       "path": "/rbac/roles",
-      "plane": "unmapped",
-      "plane_id": "unmapped",
-      "scoped": true,
-      "scopes": [
-        "keys:read"
-      ],
+      "plane": "rbac",
+      "plane_id": "rbac",
+      "scoped": false,
+      "scopes": [],
       "source": "runtime-ast",
       "tenant_bound": false
     },
@@ -4774,7 +4758,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-05-15T00:50:19.101699+00:00",
+  "generated_at": "2026-05-15T09:43:28.982723+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

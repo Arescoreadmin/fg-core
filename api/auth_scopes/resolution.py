@@ -689,12 +689,19 @@ def verify_api_key_detailed(
         request_path=request_path,
         client_ip=client_ip,
     )
+    _key_db_id: int | None = None
+    if row and row.get("id") is not None:
+        try:
+            _key_db_id = int(row["id"])
+        except (TypeError, ValueError):
+            pass
     return AuthResult(
         valid=True,
         reason="valid",
         key_prefix=key_prefix,
         tenant_id=tenant_id,
         scopes=have,
+        key_db_id=_key_db_id,
     )
 
 

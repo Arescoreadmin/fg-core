@@ -24,12 +24,18 @@
       "plane": "data",
       "suggested_fix": "Add SOC gate mapping entry for plane.",
       "type": "missing_soc_gate_reference"
+    },
+    {
+      "details": "plane id not referenced in SOC gate artifact",
+      "plane": "rbac",
+      "suggested_fix": "Add SOC gate mapping entry for plane.",
+      "type": "missing_soc_gate_reference"
     }
   ],
   "governance": {
-    "contract_count": 177,
+    "contract_count": 182,
     "contract_only": [],
-    "runtime_count": 280,
+    "runtime_count": 285,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -134,7 +140,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "aeb52884364a1a80f3eef91d6f821e6db92f394d4f01e0ab094959128c7ed604",
+  "governance_fingerprint": "8d61072ec5024ced0aa17b60e9d7f23f43a6e23ee48ce6a81fe6284c3bace238",
   "planes": [
     {
       "compat": {
@@ -239,6 +245,18 @@
         "/audit",
         "/evidence",
         "/forensics"
+      ]
+    },
+    {
+      "compat": {
+        "deprecation_notice": "platform inventory is derived from canonical governance artifacts. Legacy PlaneDef internals (mount_flag/evidence/required_route_invariants) are ignored even if present in snapshots."
+      },
+      "plane_id": "rbac",
+      "required_make_targets": [
+        "security-regression-gates"
+      ],
+      "route_prefixes": [
+        "/rbac"
       ]
     },
     {
@@ -507,6 +525,13 @@
       "POST /evidence/bundles",
       "POST /evidence/runs/register",
       "POST /evidence/verify"
+    ],
+    "rbac": [
+      "DELETE /rbac/assignments/{key_id}",
+      "GET /rbac/assignments",
+      "GET /rbac/audit",
+      "GET /rbac/roles",
+      "POST /rbac/assignments"
     ],
     "security": [
       "DELETE /keys/{prefix}",

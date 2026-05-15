@@ -50,8 +50,9 @@ def db(tmp_path, monkeypatch):
         reset_engine_cache()
 
 
-def _insert_key(conn, *, prefix: str, tenant_id: str) -> None:
-    conn.execute(
+def _insert_key(conn, *, prefix: str, tenant_id: str) -> int:
+    """Insert a minimal api_keys row and return its integer primary key."""
+    result = conn.execute(
         text(
             "INSERT INTO api_keys (name, prefix, key_hash, scopes_csv, tenant_id, enabled) "
             "VALUES (:name, :prefix, :key_hash, 'keys:read', :tenant_id, 1)"
@@ -64,6 +65,7 @@ def _insert_key(conn, *, prefix: str, tenant_id: str) -> None:
         },
     )
     conn.commit()
+    return result.lastrowid
 
 
 # ---------------------------------------------------------------------------
@@ -73,37 +75,36 @@ def _insert_key(conn, *, prefix: str, tenant_id: str) -> None:
 
 class TestCrossTenantIsolation:
     def test_role_not_visible_across_tenants(self, db):
-        _insert_key(db, prefix="kIsoA", tenant_id="tenant-iso-a")
+        id_a = _insert_key(db, prefix="kIsoA", tenant_id="tenant-iso-a")
         _insert_key(db, prefix="kIsoB", tenant_id="tenant-iso-b")
         assign_role(
             db,
             tenant_id="tenant-iso-a",
             actor_key_prefix="actor",
-            target_key_prefix="kIsoA",
+            target_key_id=id_a,
             role_name="analyst",
         )
-
         # tenant-iso-b cannot see the role assigned to tenant-iso-a's key
-        assert get_key_role(db, tenant_id="tenant-iso-b", key_prefix="kIsoA") is None
+        assert get_key_role(db, tenant_id="tenant-iso-b", key_id=id_a) is None
 
     def test_assign_to_key_in_other_tenant_raises(self, db):
-        _insert_key(db, prefix="kOther", tenant_id="tenant-other")
+        key_id = _insert_key(db, prefix="kOther", tenant_id="tenant-other")
         with pytest.raises(ValueError, match="not found"):
             assign_role(
                 db,
                 tenant_id="tenant-attacker",
                 actor_key_prefix="evil-key",
-                target_key_prefix="kOther",
+                target_key_id=key_id,
                 role_name="tenant_admin",
             )
 
     def test_revoke_from_key_in_other_tenant_raises(self, db):
-        _insert_key(db, prefix="kVictim", tenant_id="tenant-victim")
+        key_id = _insert_key(db, prefix="kVictim", tenant_id="tenant-victim")
         assign_role(
             db,
             tenant_id="tenant-victim",
             actor_key_prefix="actor",
-            target_key_prefix="kVictim",
+            target_key_id=key_id,
             role_name="analyst",
         )
 
@@ -112,56 +113,56 @@ class TestCrossTenantIsolation:
                 db,
                 tenant_id="tenant-attacker",
                 actor_key_prefix="evil-key",
-                target_key_prefix="kVictim",
+                target_key_id=key_id,
             )
 
     def test_list_assignments_scoped_to_tenant(self, db):
-        _insert_key(db, prefix="kListA", tenant_id="tenant-list-a")
-        _insert_key(db, prefix="kListB", tenant_id="tenant-list-b")
+        id_a = _insert_key(db, prefix="kListA", tenant_id="tenant-list-a")
+        id_b = _insert_key(db, prefix="kListB", tenant_id="tenant-list-b")
         assign_role(
             db,
             tenant_id="tenant-list-a",
             actor_key_prefix="actor",
-            target_key_prefix="kListA",
+            target_key_id=id_a,
             role_name="analyst",
         )
         assign_role(
             db,
             tenant_id="tenant-list-b",
             actor_key_prefix="actor",
-            target_key_prefix="kListB",
+            target_key_id=id_b,
             role_name="auditor",
         )
 
         for_a = list_role_assignments(db, tenant_id="tenant-list-a")
         for_b = list_role_assignments(db, tenant_id="tenant-list-b")
 
-        assert all(row["key_prefix"] == "kListA" for row in for_a)
-        assert all(row["key_prefix"] == "kListB" for row in for_b)
+        assert all(row["key_id"] == id_a for row in for_a)
+        assert all(row["key_id"] == id_b for row in for_b)
 
     def test_audit_log_scoped_to_tenant(self, db):
-        _insert_key(db, prefix="kAudA", tenant_id="tenant-aud-a")
-        _insert_key(db, prefix="kAudB", tenant_id="tenant-aud-b")
+        id_a = _insert_key(db, prefix="kAudA", tenant_id="tenant-aud-a")
+        id_b = _insert_key(db, prefix="kAudB", tenant_id="tenant-aud-b")
         assign_role(
             db,
             tenant_id="tenant-aud-a",
             actor_key_prefix="actor",
-            target_key_prefix="kAudA",
+            target_key_id=id_a,
             role_name="analyst",
         )
         assign_role(
             db,
             tenant_id="tenant-aud-b",
             actor_key_prefix="actor",
-            target_key_prefix="kAudB",
+            target_key_id=id_b,
             role_name="auditor",
         )
 
         log_a = get_role_audit_log(db, tenant_id="tenant-aud-a")
         log_b = get_role_audit_log(db, tenant_id="tenant-aud-b")
 
-        assert all("kAudB" not in str(e) for e in log_a)
-        assert all("kAudA" not in str(e) for e in log_b)
+        assert all(e["target_key_id"] != str(id_b) for e in log_a)
+        assert all(e["target_key_id"] != str(id_a) for e in log_b)
 
 
 # ---------------------------------------------------------------------------
@@ -171,35 +172,35 @@ class TestCrossTenantIsolation:
 
 class TestUnknownRoleRejection:
     def test_empty_string_role_rejected(self, db):
-        _insert_key(db, prefix="kBadRole1", tenant_id="tenant-r")
+        key_id = _insert_key(db, prefix="kBadRole1", tenant_id="tenant-r")
         with pytest.raises(ValueError):
             assign_role(
                 db,
                 tenant_id="tenant-r",
                 actor_key_prefix="a",
-                target_key_prefix="kBadRole1",
+                target_key_id=key_id,
                 role_name="",
             )
 
     def test_sql_injection_role_rejected(self, db):
-        _insert_key(db, prefix="kBadRole2", tenant_id="tenant-r")
+        key_id = _insert_key(db, prefix="kBadRole2", tenant_id="tenant-r")
         with pytest.raises(ValueError):
             assign_role(
                 db,
                 tenant_id="tenant-r",
                 actor_key_prefix="a",
-                target_key_prefix="kBadRole2",
+                target_key_id=key_id,
                 role_name="analyst'; DROP TABLE api_keys;--",
             )
 
     def test_superuser_role_rejected(self, db):
-        _insert_key(db, prefix="kBadRole3", tenant_id="tenant-r")
+        key_id = _insert_key(db, prefix="kBadRole3", tenant_id="tenant-r")
         with pytest.raises(ValueError):
             assign_role(
                 db,
                 tenant_id="tenant-r",
                 actor_key_prefix="a",
-                target_key_prefix="kBadRole3",
+                target_key_id=key_id,
                 role_name="superuser",
             )
 
@@ -216,13 +217,13 @@ class TestBlankTenantGuard:
                 db,
                 tenant_id="",
                 actor_key_prefix="a",
-                target_key_prefix="k",
+                target_key_id=1,
                 role_name="analyst",
             )
 
     def test_revoke_blank_tenant_raises(self, db):
         with pytest.raises((ValueError, Exception)):
-            revoke_role(db, tenant_id="  ", actor_key_prefix="a", target_key_prefix="k")
+            revoke_role(db, tenant_id="  ", actor_key_prefix="a", target_key_id=1)
 
     def test_list_blank_tenant_raises(self, db):
         with pytest.raises((ValueError, Exception)):
@@ -240,43 +241,43 @@ class TestBlankTenantGuard:
 
 class TestAuditIntegrity:
     def test_audit_records_actor_correctly(self, db):
-        _insert_key(db, prefix="kActor", tenant_id="tenant-audit")
+        key_id = _insert_key(db, prefix="kActor", tenant_id="tenant-audit")
         assign_role(
             db,
             tenant_id="tenant-audit",
             actor_key_prefix="known-actor-prefix",
-            target_key_prefix="kActor",
+            target_key_id=key_id,
             role_name="analyst",
         )
         log = get_role_audit_log(db, tenant_id="tenant-audit")
         assert any(e["actor_key_prefix"] == "known-actor-prefix" for e in log)
 
     def test_audit_records_role_name(self, db):
-        _insert_key(db, prefix="kRoleName", tenant_id="tenant-audit")
+        key_id = _insert_key(db, prefix="kRoleName", tenant_id="tenant-audit")
         assign_role(
             db,
             tenant_id="tenant-audit",
             actor_key_prefix="actor",
-            target_key_prefix="kRoleName",
+            target_key_id=key_id,
             role_name="governance_admin",
         )
         log = get_role_audit_log(db, tenant_id="tenant-audit")
         assert any(e["role_name"] == "governance_admin" for e in log)
 
     def test_revoke_audit_records_none_role(self, db):
-        _insert_key(db, prefix="kRoleNone", tenant_id="tenant-audit")
+        key_id = _insert_key(db, prefix="kRoleNone", tenant_id="tenant-audit")
         assign_role(
             db,
             tenant_id="tenant-audit",
             actor_key_prefix="actor",
-            target_key_prefix="kRoleNone",
+            target_key_id=key_id,
             role_name="analyst",
         )
         revoke_role(
             db,
             tenant_id="tenant-audit",
             actor_key_prefix="actor",
-            target_key_prefix="kRoleNone",
+            target_key_id=key_id,
         )
         log = get_role_audit_log(db, tenant_id="tenant-audit")
         revoke_events = [e for e in log if e["action"] == "revoke_role"]
@@ -286,12 +287,12 @@ class TestAuditIntegrity:
     def test_audit_event_ids_are_uuids(self, db):
         import re
 
-        _insert_key(db, prefix="kUUID", tenant_id="tenant-uuid")
+        key_id = _insert_key(db, prefix="kUUID", tenant_id="tenant-uuid")
         assign_role(
             db,
             tenant_id="tenant-uuid",
             actor_key_prefix="actor",
-            target_key_prefix="kUUID",
+            target_key_id=key_id,
             role_name="read_only",
         )
         log = get_role_audit_log(db, tenant_id="tenant-uuid")
@@ -308,13 +309,13 @@ class TestAuditIntegrity:
 
 class TestErrorMessageSafety:
     def test_wrong_tenant_error_does_not_leak_target_key_hash(self, db):
-        _insert_key(db, prefix="kSecret", tenant_id="tenant-real")
+        key_id = _insert_key(db, prefix="kSecret", tenant_id="tenant-real")
         try:
             assign_role(
                 db,
                 tenant_id="tenant-evil",
                 actor_key_prefix="a",
-                target_key_prefix="kSecret",
+                target_key_id=key_id,
                 role_name="analyst",
             )
         except ValueError as exc:
@@ -322,13 +323,13 @@ class TestErrorMessageSafety:
             assert "h_kSecret" not in msg, "key_hash must not appear in error messages"
 
     def test_unknown_role_error_does_not_include_db_details(self, db):
-        _insert_key(db, prefix="kSafe", tenant_id="tenant-safe")
+        key_id = _insert_key(db, prefix="kSafe", tenant_id="tenant-safe")
         try:
             assign_role(
                 db,
                 tenant_id="tenant-safe",
                 actor_key_prefix="a",
-                target_key_prefix="kSafe",
+                target_key_id=key_id,
                 role_name="__evil__",
             )
         except ValueError as exc:
@@ -349,13 +350,16 @@ class TestRequireRoleDenyByDefault:
     def test_empty_allowed_roles_set_denies_all(self, db):
         """Calling require_role() with no arguments should always raise 403."""
         from types import SimpleNamespace
+
         from fastapi import HTTPException, Request
 
-        _insert_key(db, prefix="kEmpty", tenant_id="tenant-a")
+        key_id = _insert_key(db, prefix="kEmpty", tenant_id="tenant-a")
         dep = require_role()  # no roles → empty set
         scope = {"type": "http", "method": "GET", "path": "/test", "headers": []}
         req = Request(scope)
-        req.state.auth = SimpleNamespace(key_prefix="kEmpty", tenant_id="tenant-a")
+        req.state.auth = SimpleNamespace(
+            key_prefix="kEmpty", tenant_id="tenant-a", key_db_id=key_id
+        )
         req.state.tenant_id = "tenant-a"
         req.state.tenant_is_key_bound = True
         with pytest.raises(HTTPException) as exc_info:
@@ -365,15 +369,16 @@ class TestRequireRoleDenyByDefault:
     def test_whitespace_role_names_ignored(self, db):
         """Whitespace-only role names in require_role are silently dropped (empty set)."""
         from types import SimpleNamespace
+
         from fastapi import HTTPException, Request
 
-        _insert_key(db, prefix="kWS", tenant_id="tenant-a")
-        # assign a valid role so auth passes
+        key_id = _insert_key(db, prefix="kWS", tenant_id="tenant-a")
+        # assign a valid role so auth passes role lookup, but needed set is empty → 403
         assign_role(
             db,
             tenant_id="tenant-a",
             actor_key_prefix="actor",
-            target_key_prefix="kWS",
+            target_key_id=key_id,
             role_name="tenant_admin",
         )
         dep = require_role(
@@ -381,7 +386,9 @@ class TestRequireRoleDenyByDefault:
         )  # whitespace only → empty needed set → always 403
         scope = {"type": "http", "method": "GET", "path": "/test", "headers": []}
         req = Request(scope)
-        req.state.auth = SimpleNamespace(key_prefix="kWS", tenant_id="tenant-a")
+        req.state.auth = SimpleNamespace(
+            key_prefix="kWS", tenant_id="tenant-a", key_db_id=key_id
+        )
         req.state.tenant_id = "tenant-a"
         req.state.tenant_is_key_bound = True
         with pytest.raises(HTTPException) as exc_info:

@@ -107,9 +107,9 @@
     "control": 129,
     "data": 42,
     "evidence": 23,
+    "rbac": 5,
     "security": 6,
-    "ui": 47,
-    "unmapped": 5
+    "ui": 47
   },
   "removed": [],
   "runtime_count": 285,

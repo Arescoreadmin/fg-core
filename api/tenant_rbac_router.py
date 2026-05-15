@@ -2,11 +2,13 @@
 api/tenant_rbac_router.py — RBAC management endpoints for FrostGate (PR 57).
 
 Routes:
-  GET  /rbac/roles            — list built-in roles and scope bundles (keys:read)
-  GET  /rbac/assignments      — list role assignments for tenant (keys:read + governance_admin)
-  POST /rbac/assignments      — assign role to key (keys:write + tenant_admin)
-  DELETE /rbac/assignments/{key_prefix} — revoke role (keys:write + tenant_admin)
-  GET  /rbac/audit            — immutable audit log (audit:read + auditor)
+  GET  /rbac/roles            — list built-in roles and scope bundles (read_only+)
+  GET  /rbac/assignments      — list role assignments for tenant (governance_admin+)
+  POST /rbac/assignments      — assign role to key by id (tenant_admin only)
+  DELETE /rbac/assignments/{key_id} — revoke role (tenant_admin only)
+  GET  /rbac/audit            — immutable audit log (auditor+)
+
+Authorization: require_role is the sole gate on all routes; require_scopes is not used.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from api.auth_scopes import require_bound_tenant, require_scopes
+from api.auth_scopes import require_bound_tenant
 from api.deps import get_db
 from api.tenant_rbac import (
     BUILTIN_ROLES,
@@ -49,7 +51,7 @@ def _actor_key_prefix(request: Request) -> str:
 
 
 class AssignRoleRequest(BaseModel):
-    key_prefix: str = Field(..., min_length=4, max_length=64)
+    key_id: int = Field(..., gt=0)
     role: str = Field(..., min_length=1, max_length=64)
 
 
@@ -66,7 +68,7 @@ class RoleDetail(BaseModel):
 @router.get(
     "/roles",
     summary="List available built-in roles and their scope bundles",
-    dependencies=[Depends(require_scopes("keys:read"))],
+    dependencies=[Depends(require_role("read_only"))],
 )
 def list_roles() -> list[RoleDetail]:
     return [
@@ -78,10 +80,7 @@ def list_roles() -> list[RoleDetail]:
 @router.get(
     "/assignments",
     summary="List API keys with assigned roles for this tenant",
-    dependencies=[
-        Depends(require_scopes("keys:read")),
-        Depends(require_role("governance_admin")),
-    ],
+    dependencies=[Depends(require_role("governance_admin"))],
 )
 def get_assignments(
     request: Request,
@@ -96,10 +95,7 @@ def get_assignments(
 @router.post(
     "/assignments",
     summary="Assign a role to an API key (tenant_admin only)",
-    dependencies=[
-        Depends(require_scopes("keys:write")),
-        Depends(require_role("tenant_admin")),
-    ],
+    dependencies=[Depends(require_role("tenant_admin"))],
     status_code=201,
 )
 def assign_role_endpoint(
@@ -114,7 +110,7 @@ def assign_role_endpoint(
             conn,
             tenant_id=tenant_id,
             actor_key_prefix=actor,
-            target_key_prefix=body.key_prefix,
+            target_key_id=body.key_id,
             role_name=body.role,
         )
     except ValueError as exc:
@@ -122,15 +118,12 @@ def assign_role_endpoint(
 
 
 @router.delete(
-    "/assignments/{key_prefix}",
+    "/assignments/{key_id}",
     summary="Revoke the role from an API key (tenant_admin only)",
-    dependencies=[
-        Depends(require_scopes("keys:write")),
-        Depends(require_role("tenant_admin")),
-    ],
+    dependencies=[Depends(require_role("tenant_admin"))],
 )
 def revoke_role_endpoint(
-    key_prefix: str,
+    key_id: int,
     request: Request,
     conn: Session = Depends(get_db),
 ) -> dict[str, Any]:
@@ -141,7 +134,7 @@ def revoke_role_endpoint(
             conn,
             tenant_id=tenant_id,
             actor_key_prefix=actor,
-            target_key_prefix=key_prefix,
+            target_key_id=key_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -150,10 +143,7 @@ def revoke_role_endpoint(
 @router.get(
     "/audit",
     summary="Return immutable role change audit log for this tenant",
-    dependencies=[
-        Depends(require_scopes("audit:read")),
-        Depends(require_role("auditor")),
-    ],
+    dependencies=[Depends(require_role("auditor"))],
 )
 def get_audit_log(
     request: Request,

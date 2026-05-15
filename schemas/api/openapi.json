@@ -594,11 +594,10 @@
       },
       "AssignRoleRequest": {
         "properties": {
-          "key_prefix": {
-            "maxLength": 64,
-            "minLength": 4,
-            "title": "Key Prefix",
-            "type": "string"
+          "key_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Key Id",
+            "type": "integer"
           },
           "role": {
             "maxLength": 64,
@@ -608,7 +607,7 @@
           }
         },
         "required": [
-          "key_prefix",
+          "key_id",
           "role"
         ],
         "title": "AssignRoleRequest",
@@ -16619,22 +16618,6 @@
               "title": "Offset",
               "type": "integer"
             }
-          },
-          {
-            "in": "header",
-            "name": "X-API-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
           }
         ],
         "responses": {
@@ -16670,24 +16653,6 @@
       },
       "post": {
         "operationId": "assign_role_endpoint_rbac_assignments_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "X-API-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -16727,33 +16692,17 @@
         ]
       }
     },
-    "/rbac/assignments/{key_prefix}": {
+    "/rbac/assignments/{key_id}": {
       "delete": {
-        "operationId": "revoke_role_endpoint_rbac_assignments__key_prefix__delete",
+        "operationId": "revoke_role_endpoint_rbac_assignments__key_id__delete",
         "parameters": [
           {
             "in": "path",
-            "name": "key_prefix",
+            "name": "key_id",
             "required": true,
             "schema": {
-              "title": "Key Prefix",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-API-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
+              "title": "Key Id",
+              "type": "integer"
             }
           }
         ],
@@ -16762,7 +16711,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "title": "Response Revoke Role Endpoint Rbac Assignments  Key Prefix  Delete",
+                  "title": "Response Revoke Role Endpoint Rbac Assignments  Key Id  Delete",
                   "type": "object"
                 }
               }
@@ -16812,22 +16761,6 @@
               "title": "Offset",
               "type": "integer"
             }
-          },
-          {
-            "in": "header",
-            "name": "X-API-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
           }
         ],
         "responses": {
@@ -16865,24 +16798,6 @@
     "/rbac/roles": {
       "get": {
         "operationId": "list_roles_rbac_roles_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "X-API-Key",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "content": {
@@ -16897,16 +16812,6 @@
               }
             },
             "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
           }
         },
         "summary": "List available built-in roles and their scope bundles",

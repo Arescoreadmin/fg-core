@@ -910,3 +910,40 @@ Additive only (migration `0045_pdf_ingestion.sql`):
 **Route inventory:** 5 new routes added to `tools/ci/route_inventory.json` (regenerated via `make route-inventory-generate`).
 
 **Validation:** `make fg-fast` PASS. 56 new tests PASS (37 functional + 19 security).
+
+---
+
+## PR 57 Fix Addendum — RBAC Key Identity and Scope Ordering Hardening (2026-05-14)
+
+**Reviewer:** EmpireOverloard | **Classification:** SOC-HIGH-002 (auth_scopes changes)
+
+### P1 — Key Identity Ambiguity Fix
+
+**Files changed:** `api/auth_scopes/definitions.py`, `api/auth_scopes/resolution.py`, `api/tenant_rbac.py`, `api/tenant_rbac_router.py`
+
+All minted API keys share `api_keys.prefix = "fgk"`. The original RBAC implementation used `WHERE prefix = :prefix AND tenant_id = :tenant_id` for role assignment and lookup, making identity ambiguous when a tenant holds multiple keys. Fix uses `api_keys.id` (INTEGER PRIMARY KEY AUTOINCREMENT) as the unambiguous assignment target throughout.
+
+**`api/auth_scopes/definitions.py`:** `AuthResult.__slots__` extended with `key_db_id: Optional[int]`. Additive, backward-compatible change. No existing field removed or renamed. No auth logic altered.
+
+**`api/auth_scopes/resolution.py`:** At the successful `AuthResult(...)` return site, `key_db_id` is populated from `row["id"]` (always present in `base_cols`). No auth decision changed; this is purely an additional field propagated to callers. Auth denial paths are unchanged.
+
+**Security posture:** No regression to auth gate logic. `key_db_id` is read-only from the perspective of auth resolution — it cannot be supplied by the caller, only derived from the verified DB row. Cross-tenant isolation is strengthened: RBAC operations now use `WHERE id = :id AND tenant_id = :t`, making tenant boundary enforcement explicit at the primary key level.
+
+### P2 — Authorization Ordering Fix (scope-before-role)
+
+**Files changed:** `api/tenant_rbac_router.py`
+
+`require_scopes(...)` ran as a FastAPI dependency before `require_role(...)` on all RBAC routes. A key holding `tenant_admin` role (which implies `keys:write`) but without explicit `keys:write` in `scopes_csv` was rejected by scope check before the role check could expand its effective scopes. Fix: `require_scopes` removed from all RBAC route `dependencies=[]`. `require_role` is the sole authorization gate.
+
+**Route changes:**
+- `GET /rbac/roles` — `require_scopes("keys:read")` replaced with `require_role("read_only")`.
+- `GET /rbac/assignments` — `require_scopes("keys:read")` removed; `require_role("governance_admin")` retained.
+- `POST /rbac/assignments` — `require_scopes("keys:write")` removed; `require_role("tenant_admin")` retained. Path body field `key_prefix: str` → `key_id: int`.
+- `DELETE /rbac/assignments/{key_id}` — `require_scopes("keys:write")` removed; `require_role("tenant_admin")` retained. Path param `key_prefix: str` → `key_id: int`.
+- `GET /rbac/audit` — `require_scopes("audit:read")` removed; `require_role("auditor")` retained.
+
+**No weakening of access control:** All RBAC management endpoints still require a specific role. `require_role` enforces the full hierarchy (deny-by-default, 403 for no role or insufficient role, 401 for unauthenticated).
+
+**Contract and inventory:** OpenAPI contract regenerated; SHA256 updated in `BLUEPRINT_STAGED.md` and `CONTRACT.md`. Route inventory regenerated via `make route-inventory-generate`.
+
+**Validation:** `make fg-fast` PASS. 63 tests PASS (40 functional + 19 security + 4 new disambiguation). New tests: `TestMultiKeyDisambiguation` (4 tests proving id-based lookup is unambiguous under prefix collisions), `TestScopelessRoleAuthorization` (3 tests proving role alone is sufficient for RBAC route access).
