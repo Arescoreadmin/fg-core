@@ -913,3 +913,747 @@ def test_list_deployments_pagination(api_client):
     body = resp.json()
     assert len(body["deployments"]) <= 3
     assert body["limit"] == 3
+
+
+# ===========================================================================
+# PR 80 Hardening — new tests for items 1–10
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# 1. Approval Integrity Hardening
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.smoke
+def test_approval_integrity_fields_stored(store, db):
+    """approval_granted_at, approval_reason, approval_policy_version are persisted."""
+    env = store.create_environment(
+        db,
+        env_type=EnvironmentType.PRODUCTION,
+        region="us-east-1",
+        compliance_classification=ComplianceClassification.STANDARD,
+        created_by="op",
+    )
+    dep = store.create_deployment(
+        db,
+        env_id=env.env_id,
+        version_ref="v1.0.0",
+        strategy=DeploymentStrategy.ROLLING,
+        initiated_by="op",
+    )
+    assert dep.approval_required is True
+
+    updated = store.record_approval(
+        db,
+        deployment_id=dep.deployment_id,
+        approved=True,
+        actor="approver-1",
+        approval_reason="reviewed by security team",
+        approval_policy_version="policy-v2.3",
+    )
+    assert updated.approval_granted_by == "approver-1"
+    assert updated.approval_granted_at is not None
+    assert updated.approval_reason == "reviewed by security team"
+    assert updated.approval_policy_version == "policy-v2.3"
+
+
+@pytest.mark.smoke
+def test_approval_denial_stores_reason(store, db):
+    env = store.create_environment(
+        db,
+        env_type=EnvironmentType.PRODUCTION,
+        region="us-east-1",
+        compliance_classification=ComplianceClassification.STANDARD,
+        created_by="op",
+    )
+    dep = store.create_deployment(
+        db,
+        env_id=env.env_id,
+        version_ref="v1.0.0",
+        strategy=DeploymentStrategy.ROLLING,
+        initiated_by="op",
+    )
+    updated = store.record_approval(
+        db,
+        deployment_id=dep.deployment_id,
+        approved=False,
+        actor="auditor",
+        approval_reason="failed compliance review",
+        approval_policy_version="policy-v2.3",
+    )
+    assert updated.approval_granted_by is None
+    assert updated.approval_reason == "failed compliance review"
+    assert updated.approval_policy_version == "policy-v2.3"
+
+
+# ---------------------------------------------------------------------------
+# 2. Immutable Deployment Spec Snapshot
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.smoke
+def test_spec_snapshot_stored_and_retrieved(store, db):
+    from services.deployment.models import DeploymentSpec
+
+    env = store.create_environment(
+        db,
+        env_type=EnvironmentType.DEV,
+        region="us-east-1",
+        compliance_classification=ComplianceClassification.STANDARD,
+        created_by="op",
+    )
+    spec = DeploymentSpec(
+        image_digest="a" * 64,
+        commit_sha="b" * 40,
+        contract_hash="c" * 64,
+        topology_hash="d" * 64,
+        policy_bundle_version="bundle-v1.2",
+        migration_fingerprint="mig-abc123",
+    )
+    dep = store.create_deployment(
+        db,
+        env_id=env.env_id,
+        version_ref="v2.0.0",
+        strategy=DeploymentStrategy.ROLLING,
+        initiated_by="op",
+        spec=spec,
+    )
+    assert dep.spec.image_digest == "a" * 64
+    assert dep.spec.commit_sha == "b" * 40
+    assert dep.spec.contract_hash == "c" * 64
+    assert dep.spec.topology_hash == "d" * 64
+    assert dep.spec.policy_bundle_version == "bundle-v1.2"
+    assert dep.spec.migration_fingerprint == "mig-abc123"
+
+
+@pytest.mark.smoke
+def test_spec_persists_through_state_transition(store, db):
+    from services.deployment.models import DeploymentSpec
+
+    env = store.create_environment(
+        db,
+        env_type=EnvironmentType.DEV,
+        region="us-east-1",
+        compliance_classification=ComplianceClassification.STANDARD,
+        created_by="op",
+    )
+    spec = DeploymentSpec(commit_sha="e" * 40)
+    dep = store.create_deployment(
+        db,
+        env_id=env.env_id,
+        version_ref="v1.0.0",
+        strategy=DeploymentStrategy.ROLLING,
+        initiated_by="op",
+        spec=spec,
+    )
+    updated = store.transition_state(
+        db,
+        deployment_id=dep.deployment_id,
+        to_state=DeploymentState.VALIDATING,
+        actor="ci",
+    )
+    assert updated.spec.commit_sha == "e" * 40
+
+
+# ---------------------------------------------------------------------------
+# 3. Event hash chaining (tamper-evident audit trail)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.smoke
+def test_events_have_hash_chain(store, db):
+    env = store.create_environment(
+        db,
+        env_type=EnvironmentType.DEV,
+        region="us-east-1",
+        compliance_classification=ComplianceClassification.STANDARD,
+        created_by="op",
+    )
+    dep = store.create_deployment(
+        db,
+        env_id=env.env_id,
+        version_ref="v1.0.0",
+        strategy=DeploymentStrategy.ROLLING,
+        initiated_by="op",
+    )
+    store.transition_state(
+        db,
+        deployment_id=dep.deployment_id,
+        to_state=DeploymentState.VALIDATING,
+        actor="ci",
+    )
+    events = store.list_events(db, deployment_id=dep.deployment_id)
+    assert len(events) >= 2
+    # First event has no previous hash
+    assert events[0].event_hash is not None
+    assert events[0].previous_event_hash is None
+    # Second event chains to first
+    assert events[1].previous_event_hash == events[0].event_hash
+
+
+@pytest.mark.smoke
+def test_event_hashes_are_distinct(store, db):
+    env = store.create_environment(
+        db,
+        env_type=EnvironmentType.DEV,
+        region="us-east-1",
+        compliance_classification=ComplianceClassification.STANDARD,
+        created_by="op",
+    )
+    dep = store.create_deployment(
+        db,
+        env_id=env.env_id,
+        version_ref="v1.0.0",
+        strategy=DeploymentStrategy.ROLLING,
+        initiated_by="op",
+    )
+    store.transition_state(
+        db,
+        deployment_id=dep.deployment_id,
+        to_state=DeploymentState.VALIDATING,
+        actor="ci",
+    )
+    events = store.list_events(db, deployment_id=dep.deployment_id)
+    hashes = [e.event_hash for e in events if e.event_hash]
+    assert len(hashes) == len(set(hashes)), "all event hashes must be unique"
+
+
+# ---------------------------------------------------------------------------
+# 4. Concurrency protection (optimistic locking)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.smoke
+def test_concurrent_modification_guard_fires_on_zero_rowcount(store, db):
+    """ConcurrentModificationError fires when the ORM update returns 0 rows.
+
+    SQLite's single-connection "read your own writes" makes it impossible to
+    simulate a true concurrent race in a unit test. We patch Query.update to
+    return 0 — the exact condition that occurs in production when two workers
+    race on the same deployment and one commits first.
+    """
+    from unittest.mock import patch
+
+    import sqlalchemy.orm.query as q_mod
+
+    from services.deployment.store import ConcurrentModificationError
+
+    env = store.create_environment(
+        db,
+        env_type=EnvironmentType.DEV,
+        region="us-east-1",
+        compliance_classification=ComplianceClassification.STANDARD,
+        created_by="op",
+    )
+    dep = store.create_deployment(
+        db,
+        env_id=env.env_id,
+        version_ref="v1.0.0",
+        strategy=DeploymentStrategy.ROLLING,
+        initiated_by="op",
+    )
+
+    original_update = q_mod.Query.update
+    intercepted: list[bool] = []
+
+    def _zero_on_first(self, values, synchronize_session="evaluate"):
+        if not intercepted and isinstance(values, dict) and "state_version" in values:
+            intercepted.append(True)
+            return 0
+        return original_update(self, values, synchronize_session=synchronize_session)
+
+    with patch.object(q_mod.Query, "update", _zero_on_first):
+        with pytest.raises(ConcurrentModificationError):
+            store.transition_state(
+                db,
+                deployment_id=dep.deployment_id,
+                to_state=DeploymentState.VALIDATING,
+                actor="stale-worker",
+            )
+
+
+@pytest.mark.smoke
+def test_state_version_increments_on_each_transition(store, db):
+    env = store.create_environment(
+        db,
+        env_type=EnvironmentType.DEV,
+        region="us-east-1",
+        compliance_classification=ComplianceClassification.STANDARD,
+        created_by="op",
+    )
+    dep = store.create_deployment(
+        db,
+        env_id=env.env_id,
+        version_ref="v1.0.0",
+        strategy=DeploymentStrategy.ROLLING,
+        initiated_by="op",
+    )
+    assert dep.state_version == 0
+    v1 = store.transition_state(
+        db,
+        deployment_id=dep.deployment_id,
+        to_state=DeploymentState.VALIDATING,
+        actor="ci",
+    )
+    assert v1.state_version == 1
+    v2 = store.transition_state(
+        db,
+        deployment_id=dep.deployment_id,
+        to_state=DeploymentState.DEPLOYING,
+        actor="ci",
+    )
+    assert v2.state_version == 2
+
+
+# ---------------------------------------------------------------------------
+# 5. Strategy governance
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.smoke
+def test_direct_strategy_forbidden_in_production(store, db):
+    from services.deployment.store import StrategyGovernanceViolation
+
+    env = store.create_environment(
+        db,
+        env_type=EnvironmentType.PRODUCTION,
+        region="us-east-1",
+        compliance_classification=ComplianceClassification.STANDARD,
+        created_by="op",
+    )
+    with pytest.raises(StrategyGovernanceViolation):
+        store.create_deployment(
+            db,
+            env_id=env.env_id,
+            version_ref="v1.0.0",
+            strategy=DeploymentStrategy.DIRECT,
+            initiated_by="op",
+        )
+
+
+@pytest.mark.smoke
+def test_direct_strategy_forbidden_for_hipaa(store, db):
+    from services.deployment.store import StrategyGovernanceViolation
+
+    env = store.create_environment(
+        db,
+        env_type=EnvironmentType.DEV,
+        region="us-east-1",
+        compliance_classification=ComplianceClassification.HIPAA,
+        created_by="op",
+    )
+    with pytest.raises(StrategyGovernanceViolation):
+        store.create_deployment(
+            db,
+            env_id=env.env_id,
+            version_ref="v1.0.0",
+            strategy=DeploymentStrategy.DIRECT,
+            initiated_by="op",
+        )
+
+
+@pytest.mark.smoke
+def test_rolling_strategy_allowed_everywhere(store, db):
+    for env_type in (
+        EnvironmentType.DEV,
+        EnvironmentType.STAGING,
+        EnvironmentType.PRODUCTION,
+    ):
+        env = store.create_environment(
+            db,
+            env_type=env_type,
+            region="us-east-1",
+            compliance_classification=ComplianceClassification.STANDARD,
+            created_by="op",
+        )
+        dep = store.create_deployment(
+            db,
+            env_id=env.env_id,
+            version_ref="v1.0.0",
+            strategy=DeploymentStrategy.ROLLING,
+            initiated_by="op",
+        )
+        assert dep.strategy == DeploymentStrategy.ROLLING
+
+
+@pytest.mark.smoke
+def test_fedramp_forbids_canary_strategy(store, db):
+    from services.deployment.store import StrategyGovernanceViolation
+
+    env = store.create_environment(
+        db,
+        env_type=EnvironmentType.DEV,
+        region="us-gov-west-1",
+        compliance_classification=ComplianceClassification.FEDRAMP,
+        created_by="op",
+    )
+    with pytest.raises(StrategyGovernanceViolation):
+        store.create_deployment(
+            db,
+            env_id=env.env_id,
+            version_ref="v1.0.0",
+            strategy=DeploymentStrategy.CANARY,
+            initiated_by="op",
+        )
+
+
+# ---------------------------------------------------------------------------
+# 6. Health probe retention (expires_at TTL)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.smoke
+def test_health_record_expires_at_stored(store, db):
+    from datetime import timezone
+
+    env = store.create_environment(
+        db,
+        env_type=EnvironmentType.DEV,
+        region="us-east-1",
+        compliance_classification=ComplianceClassification.STANDARD,
+        created_by="op",
+    )
+    dep = store.create_deployment(
+        db,
+        env_id=env.env_id,
+        version_ref="v1.0.0",
+        strategy=DeploymentStrategy.ROLLING,
+        initiated_by="op",
+    )
+    from datetime import datetime, timedelta
+
+    expiry = datetime.now(timezone.utc) + timedelta(days=30)
+    record = store.record_health(
+        db,
+        deployment_id=dep.deployment_id,
+        readiness_result=HealthResult.PASS,
+        liveness_result=HealthResult.PASS,
+        smoke_test_result=HealthResult.SKIP,
+        validation_result=HealthResult.SKIP,
+        checked_by="probe-agent",
+        expires_at=expiry,
+    )
+    assert record.expires_at is not None
+    assert record.expires_at.year == expiry.year
+
+
+# ---------------------------------------------------------------------------
+# 7. Classification enforcement
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.smoke
+def test_classification_policies_cover_all_classifications(store, db):
+    from services.deployment.models import (
+        CLASSIFICATION_POLICIES,
+        ComplianceClassification,
+    )
+
+    for classification in ComplianceClassification:
+        assert classification in CLASSIFICATION_POLICIES, (
+            f"{classification} missing from CLASSIFICATION_POLICIES"
+        )
+
+
+@pytest.mark.smoke
+def test_fedramp_policy_requires_approval_depth_2():
+    from services.deployment.models import (
+        CLASSIFICATION_POLICIES,
+        ComplianceClassification,
+    )
+
+    policy = CLASSIFICATION_POLICIES[ComplianceClassification.FEDRAMP]
+    assert policy.required_approval_depth >= 2
+    assert policy.export_restricted is True
+    assert policy.telemetry_restricted is True
+
+
+@pytest.mark.smoke
+def test_standard_policy_has_no_restricted_strategies():
+    from services.deployment.models import (
+        CLASSIFICATION_POLICIES,
+        ComplianceClassification,
+    )
+
+    policy = CLASSIFICATION_POLICIES[ComplianceClassification.STANDARD]
+    assert len(policy.restricted_strategies) == 0
+    assert policy.export_restricted is False
+
+
+# ---------------------------------------------------------------------------
+# 8. Rollback safety constraints
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.smoke
+def test_rollback_safety_blocked_for_failed_target(store, db):
+    from services.deployment.store import RollbackSafetyViolation
+
+    env = store.create_environment(
+        db,
+        env_type=EnvironmentType.DEV,
+        region="us-east-1",
+        compliance_classification=ComplianceClassification.STANDARD,
+        created_by="op",
+    )
+    # Original deployment goes to failed state.
+    dep_orig = store.create_deployment(
+        db,
+        env_id=env.env_id,
+        version_ref="v1.0.0",
+        strategy=DeploymentStrategy.ROLLING,
+        initiated_by="op",
+    )
+    store.transition_state(
+        db,
+        deployment_id=dep_orig.deployment_id,
+        to_state=DeploymentState.VALIDATING,
+        actor="ci",
+    )
+    store.transition_state(
+        db,
+        deployment_id=dep_orig.deployment_id,
+        to_state=DeploymentState.FAILED,
+        actor="ci",
+    )
+
+    # New deployment tries to "rollback" to the failed one.
+    dep_new = store.create_deployment(
+        db,
+        env_id=env.env_id,
+        version_ref="v2.0.0",
+        strategy=DeploymentStrategy.ROLLING,
+        initiated_by="op",
+        rollback_from_id=dep_orig.deployment_id,
+    )
+    store.transition_state(
+        db,
+        deployment_id=dep_new.deployment_id,
+        to_state=DeploymentState.VALIDATING,
+        actor="ci",
+    )
+    store.transition_state(
+        db,
+        deployment_id=dep_new.deployment_id,
+        to_state=DeploymentState.DEPLOYING,
+        actor="ci",
+    )
+    store.transition_state(
+        db,
+        deployment_id=dep_new.deployment_id,
+        to_state=DeploymentState.HEALTHY,
+        actor="ci",
+    )
+
+    with pytest.raises(RollbackSafetyViolation):
+        store.transition_state(
+            db,
+            deployment_id=dep_new.deployment_id,
+            to_state=DeploymentState.ROLLED_BACK,
+            actor="ci",
+        )
+
+
+# ---------------------------------------------------------------------------
+# 9. Deployment SLO metrics
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.smoke
+def test_metrics_module_importable():
+    from services.deployment import metrics as deploy_metrics
+
+    assert hasattr(deploy_metrics, "DEPLOYMENT_TRANSITIONS_TOTAL")
+    assert hasattr(deploy_metrics, "DEPLOYMENT_FAILURES_TOTAL")
+    assert hasattr(deploy_metrics, "ROLLBACK_TOTAL")
+    assert hasattr(deploy_metrics, "APPROVAL_DECISIONS_TOTAL")
+    assert hasattr(deploy_metrics, "DEPLOYMENT_DURATION_SECONDS")
+    assert hasattr(deploy_metrics, "APPROVAL_WAIT_DURATION_SECONDS")
+    assert hasattr(deploy_metrics, "HEALTH_PROBE_RESULTS_TOTAL")
+
+
+# ---------------------------------------------------------------------------
+# 10. Dry-run / validation mode
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.smoke
+def test_dry_run_allowed_transition(api_client):
+    env_resp = api_client.post(
+        "/control-plane/deployments/environments",
+        json={"env_type": "dev", "region": "us-east-1"},
+    )
+    env_id = env_resp.json()["env_id"]
+    dep_resp = api_client.post(
+        "/control-plane/deployments",
+        json={"env_id": env_id, "version_ref": "v1.0.0"},
+    )
+    dep_id = dep_resp.json()["deployment_id"]
+
+    resp = api_client.post(
+        f"/control-plane/deployments/{dep_id}/transition?dry_run=true",
+        json={"to_state": "validating"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["dry_run"] is True
+    assert body["allowed"] is True
+    assert body["blocked"] is False
+    assert body["from_state"] == "pending"
+    assert body["to_state"] == "validating"
+    # No side effects: deployment state must still be pending.
+    get_resp = api_client.get(f"/control-plane/deployments/{dep_id}")
+    assert get_resp.json()["state"] == "pending"
+
+
+@pytest.mark.smoke
+def test_dry_run_blocked_invalid_transition(api_client):
+    env_resp = api_client.post(
+        "/control-plane/deployments/environments",
+        json={"env_type": "dev", "region": "us-east-1"},
+    )
+    env_id = env_resp.json()["env_id"]
+    dep_resp = api_client.post(
+        "/control-plane/deployments",
+        json={"env_id": env_id, "version_ref": "v1.0.0"},
+    )
+    dep_id = dep_resp.json()["deployment_id"]
+
+    resp = api_client.post(
+        f"/control-plane/deployments/{dep_id}/transition?dry_run=true",
+        json={"to_state": "healthy"},  # pending → healthy is invalid
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["dry_run"] is True
+    assert body["allowed"] is False
+    assert body["blocked"] is True
+    assert len(body["block_reasons"]) > 0
+
+
+@pytest.mark.smoke
+def test_dry_run_detects_missing_approval(api_client):
+    # Production env requires approval before deploying.
+    env_resp = api_client.post(
+        "/control-plane/deployments/environments",
+        json={"env_type": "production", "region": "us-east-1"},
+    )
+    env_id = env_resp.json()["env_id"]
+    dep_resp = api_client.post(
+        "/control-plane/deployments",
+        json={"env_id": env_id, "version_ref": "v1.0.0"},
+    )
+    dep_id = dep_resp.json()["deployment_id"]
+
+    # Advance to validating (no approval needed yet).
+    api_client.post(
+        f"/control-plane/deployments/{dep_id}/transition",
+        json={"to_state": "validating"},
+    )
+
+    # Dry-run the deploying transition without approval.
+    resp = api_client.post(
+        f"/control-plane/deployments/{dep_id}/transition?dry_run=true",
+        json={"to_state": "deploying"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["approval_required"] is True
+    assert body["missing_approval_granted_by"] is True
+    assert body["blocked"] is True
+
+
+@pytest.mark.smoke
+def test_approval_api_exposes_integrity_fields(api_client):
+    env_resp = api_client.post(
+        "/control-plane/deployments/environments",
+        json={"env_type": "production", "region": "us-east-1"},
+    )
+    env_id = env_resp.json()["env_id"]
+    dep_resp = api_client.post(
+        "/control-plane/deployments",
+        json={"env_id": env_id, "version_ref": "v1.0.0"},
+    )
+    dep_id = dep_resp.json()["deployment_id"]
+
+    resp = api_client.post(
+        f"/control-plane/deployments/{dep_id}/approval",
+        json={
+            "approved": True,
+            "approval_reason": "compliant with policy",
+            "approval_policy_version": "p-v3.1",
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["approval_granted_at"] is not None
+    assert body["approval_reason"] == "compliant with policy"
+    assert body["approval_policy_version"] == "p-v3.1"
+
+
+@pytest.mark.smoke
+def test_spec_snapshot_in_create_deployment_api(api_client):
+    env_resp = api_client.post(
+        "/control-plane/deployments/environments",
+        json={"env_type": "dev", "region": "us-east-1"},
+    )
+    env_id = env_resp.json()["env_id"]
+    resp = api_client.post(
+        "/control-plane/deployments",
+        json={
+            "env_id": env_id,
+            "version_ref": "v1.0.0",
+            "spec": {
+                "commit_sha": "a" * 40,
+                "policy_bundle_version": "bundle-v1.0",
+            },
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["spec"]["commit_sha"] == "a" * 40
+    assert body["spec"]["policy_bundle_version"] == "bundle-v1.0"
+
+
+@pytest.mark.smoke
+def test_event_hashes_exposed_in_history_api(api_client):
+    env_resp = api_client.post(
+        "/control-plane/deployments/environments",
+        json={"env_type": "dev", "region": "us-east-1"},
+    )
+    env_id = env_resp.json()["env_id"]
+    dep_resp = api_client.post(
+        "/control-plane/deployments",
+        json={"env_id": env_id, "version_ref": "v1.0.0"},
+    )
+    dep_id = dep_resp.json()["deployment_id"]
+
+    api_client.post(
+        f"/control-plane/deployments/{dep_id}/transition",
+        json={"to_state": "validating"},
+    )
+
+    resp = api_client.get(f"/control-plane/deployments/{dep_id}/history")
+    assert resp.status_code == 200
+    events = resp.json()["events"]
+    assert len(events) >= 2
+    for evt in events:
+        assert "event_hash" in evt
+    # Second event chains to first.
+    assert events[1]["previous_event_hash"] == events[0]["event_hash"]
+
+
+@pytest.mark.smoke
+def test_strategy_governance_violation_returns_422(api_client):
+    env_resp = api_client.post(
+        "/control-plane/deployments/environments",
+        json={"env_type": "production", "region": "us-east-1"},
+    )
+    env_id = env_resp.json()["env_id"]
+    resp = api_client.post(
+        "/control-plane/deployments",
+        json={"env_id": env_id, "version_ref": "v1.0.0", "strategy": "direct"},
+    )
+    assert resp.status_code == 422
+    assert "DEPLOY-API-009" in str(resp.json())

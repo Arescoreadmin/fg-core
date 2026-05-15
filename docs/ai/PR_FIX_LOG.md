@@ -9654,3 +9654,44 @@ The rewritten dynamic INSERT was missing `is_current = 1` from the params dict. 
 - `pytest tests/test_deployment_manager.py`: 44 passed
 - `make route-inventory-generate`: OK
 - `make fg-fast`: all gates green
+
+---
+
+### 2026-05-15 — PR 80 hardening: Deployment Manager Security Hardening
+
+**Branch:** `feat/deployment-manager-foundation`
+
+**Area:** Deployment orchestration hardening; schema (flagged); governance enforcement; SLO metrics.
+
+**Files changed:**
+- `migrations/postgres/0049_deployment_manager_hardening.sql` (new) — **schema change** — idempotent `ADD COLUMN IF NOT EXISTS` DDL; `deployment_records` gains `approval_granted_at`, `approval_reason`, `approval_policy_version`, 6 spec snapshot columns (`spec_image_digest`, `spec_commit_sha`, `spec_contract_hash`, `spec_topology_hash`, `spec_policy_bundle_version`, `spec_migration_fingerprint`), `state_version INTEGER NOT NULL DEFAULT 0`; `deployment_events` gains `event_hash TEXT`, `previous_event_hash TEXT`; `deployment_health_records` gains `expires_at TIMESTAMPTZ`; new indexes on all new columns
+- `api/db_models.py` (modified) — **schema change** — 11 new `mapped_column` fields appended across `DeploymentRecordORM`, `DeploymentEventRecord`, `DeploymentHealthRecord`
+- `services/deployment/models.py` (rewritten) — `STRATEGY_GOVERNANCE` dict, `ClassificationPolicy` frozen dataclass, `CLASSIFICATION_POLICIES` dict, `DeploymentSpec` frozen dataclass, `TransitionDryRunResult` frozen dataclass added; all existing symbols preserved
+- `services/deployment/store.py` (rewritten) — optimistic locking via `UPDATE WHERE state_version = expected` in `transition_state()` (raises `ConcurrentModificationError` DEPLOY-007 on 0 rows affected); `_validate_rollback_safety()` blocks rollback to failed state and cross-tenant rollback (raises `RollbackSafetyViolation` DEPLOY-008); `_validate_strategy_governance()` at create time (raises `StrategyGovernanceViolation` DEPLOY-009); `validate_transition_dry_run()` no-side-effect path; SLO metric emission on every mutation
+- `services/deployment/audit.py` (updated) — `compute_event_hash()` SHA-256 of canonical JSON fields; every emitted event populates `event_hash` and `previous_event_hash` forming a tamper-evident chain
+- `services/deployment/metrics.py` (new) — 7 Prometheus counters/histograms: transitions_total, failures_total, rollback_total, approval_decisions_total, duration_seconds, approval_wait_seconds, health_probe_results_total
+- `services/deployment/__init__.py` (updated) — exports all new symbols
+- `api/deployment_manager.py` (rewritten) — `?dry_run=true` on transition endpoint; spec snapshot in create/get responses; approval integrity fields (`approval_granted_at`, `approval_reason`, `approval_policy_version`) in approval response; `state_version` exposed; 3 new error codes DEPLOY-API-007/008/009
+- `tests/test_deployment_manager.py` (25 new tests appended) — approval integrity, spec snapshot persistence, event hash chaining, optimistic locking guard (mock-based), state_version increment, strategy governance (4 tests), health retention TTL, classification policy coverage, rollback safety, metrics module importability, dry-run (3 tests), API-level tests for approval/spec/hashes/422
+- `docs/deployment/lifecycle.md` (major update) — sections added for state_version/optimistic locking, approval integrity fields, spec snapshot, strategy governance, classification policies, tamper-evident audit chain, rollback safety constraints, health probe retention TTLs, dry-run mode, SLO metrics, error codes
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` (modified) — sixth follow-up entry
+- `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256` (regenerated)
+
+**Architecture decisions:**
+
+**Optimistic locking:** `state_version` is an INTEGER on the DB row. Every `transition_state()` does `UPDATE WHERE state_version = current_version` and raises `ConcurrentModificationError` if `rows_affected == 0`. This prevents silent divergence under concurrent transitions without requiring pessimistic row locks.
+
+**Event hash chain:** Each `DeploymentEvent` stores `event_hash = SHA-256(canonical JSON of event fields + previous_event_hash)`. The previous event's hash is fetched from the DB before each emit. Tamper detection requires only re-hashing the chain; no external signing service needed.
+
+**Strategy governance:** Enforced at create time before any execution runs. `STRATEGY_GOVERNANCE` dict maps strategy → forbidden env_types and classifications. `direct` is forbidden in production/regulated/hipaa/fedramp/govcon. `canary` is forbidden in fedramp/govcon.
+
+**Rollback safety:** Two invariants checked before `→ rolled_back` transition: (1) rollback target must not be in `failed` state; (2) rollback target `tenant_id` must match the current deployment's `tenant_id`. Cross-tenant rollbacks are prohibited regardless of operator scope.
+
+**Dry-run:** `validate_transition_dry_run()` reads the DB but writes nothing. Returns `TransitionDryRunResult` with `allowed`, `blocked`, `block_reasons`, `approval_required`, `missing_approval_granted_by`, `policy_violations`. Metrics are not emitted on dry-run.
+
+**Concurrency test strategy:** SQLite single-connection semantics make it impossible to simulate a concurrent write by manipulating the DB row directly — the ORM re-reads the same connection's state. Test uses `unittest.mock.patch` on `sqlalchemy.orm.query.Query.update` to return 0 on first call, directly testing the guard mechanism without fighting SQLite isolation semantics.
+
+**Validation:**
+- `ruff check` + `ruff format`: PASS
+- `pytest tests/test_deployment_manager.py`: 69 passed (44 original + 25 new)
+- `make fg-fast`: all gates green (soc-review-sync: OK, route inventory: OK, fmt-check: OK)

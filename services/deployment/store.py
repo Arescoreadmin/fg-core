@@ -23,6 +23,7 @@ from api.db_models import (
     DeploymentHealthRecord as DeploymentHealthORM,
     DeploymentRecordORM,
 )
+from services.deployment.audit import compute_event_hash, emit_deployment_event
 from services.deployment.models import (
     ComplianceClassification,
     DeploymentEnvironment,
@@ -30,14 +31,17 @@ from services.deployment.models import (
     DeploymentEventType,
     DeploymentHealthRecord,
     DeploymentRecord,
+    DeploymentSpec,
     DeploymentState,
     DeploymentStrategy,
     EnvironmentLifecycleState,
     EnvironmentType,
     HealthResult,
+    TransitionDryRunResult,
+    validate_classification_policy,
+    validate_strategy_for_env,
     validate_transition,
 )
-from services.deployment.audit import emit_deployment_event
 
 log = logging.getLogger("frostgate.deployment.store")
 
@@ -88,6 +92,24 @@ class ApprovalRequired(DeploymentStoreError):
         )
 
 
+class ConcurrentModificationError(DeploymentStoreError):
+    def __init__(self, deployment_id: str) -> None:
+        super().__init__(
+            "DEPLOY-007",
+            f"Deployment {deployment_id} was modified concurrently — retry the operation",
+        )
+
+
+class RollbackSafetyViolation(DeploymentStoreError):
+    def __init__(self, reason: str) -> None:
+        super().__init__("DEPLOY-008", f"Rollback safety violation: {reason}")
+
+
+class StrategyGovernanceViolation(DeploymentStoreError):
+    def __init__(self, reason: str) -> None:
+        super().__init__("DEPLOY-009", f"Strategy governance violation: {reason}")
+
+
 # ---------------------------------------------------------------------------
 # Internal conversion helpers
 # ---------------------------------------------------------------------------
@@ -128,6 +150,15 @@ def _deployment_orm_to_domain(row: DeploymentRecordORM) -> DeploymentRecord:
         except (ValueError, TypeError):
             metadata = {}
 
+    spec = DeploymentSpec(
+        image_digest=getattr(row, "spec_image_digest", None),
+        commit_sha=getattr(row, "spec_commit_sha", None),
+        contract_hash=getattr(row, "spec_contract_hash", None),
+        topology_hash=getattr(row, "spec_topology_hash", None),
+        policy_bundle_version=getattr(row, "spec_policy_bundle_version", None),
+        migration_fingerprint=getattr(row, "spec_migration_fingerprint", None),
+    )
+
     return DeploymentRecord(
         deployment_id=row.deployment_id,
         env_id=row.env_id,
@@ -143,6 +174,11 @@ def _deployment_orm_to_domain(row: DeploymentRecordORM) -> DeploymentRecord:
         rollback_reason=row.rollback_reason,
         approval_required=bool(row.approval_required),
         approval_granted_by=row.approval_granted_by,
+        approval_granted_at=getattr(row, "approval_granted_at", None),
+        approval_reason=getattr(row, "approval_reason", None),
+        approval_policy_version=getattr(row, "approval_policy_version", None),
+        spec=spec,
+        state_version=getattr(row, "state_version", 0) or 0,
         deployment_metadata=metadata,
     )
 
@@ -168,6 +204,8 @@ def _event_orm_to_domain(row: DeploymentEventRecord) -> DeploymentEvent:
         from_state=DeploymentState(row.from_state) if row.from_state else None,
         to_state=DeploymentState(row.to_state) if row.to_state else None,
         details=details,
+        event_hash=getattr(row, "event_hash", None),
+        previous_event_hash=getattr(row, "previous_event_hash", None),
     )
 
 
@@ -184,7 +222,21 @@ def _health_orm_to_domain(row: DeploymentHealthORM) -> DeploymentHealthRecord:
         checked_at=row.checked_at,
         tenant_id=row.tenant_id,
         rollback_trigger_reason=row.rollback_trigger_reason,
+        expires_at=getattr(row, "expires_at", None),
     )
+
+
+def _get_previous_event_hash(db: Session, deployment_id: str) -> Optional[str]:
+    """Return the event_hash of the most recent event for this deployment."""
+    row = (
+        db.query(DeploymentEventRecord)
+        .filter(DeploymentEventRecord.deployment_id == deployment_id)
+        .order_by(DeploymentEventRecord.timestamp.desc())
+        .first()
+    )
+    if row is None:
+        return None
+    return getattr(row, "event_hash", None)
 
 
 # ---------------------------------------------------------------------------
@@ -308,6 +360,7 @@ class DeploymentStore:
         artifact_hash: Optional[str] = None,
         rollback_from_id: Optional[str] = None,
         rollback_reason: Optional[str] = None,
+        spec: Optional[DeploymentSpec] = None,
         deployment_metadata: Optional[dict] = None,
         trace_id: Optional[str] = None,
     ) -> DeploymentRecord:
@@ -316,12 +369,22 @@ class DeploymentStore:
         # Verify env exists and is accessible.
         env = self.get_environment(db, env_id=env_id, tenant_id=tenant_id)
 
+        # Strategy governance: validate strategy is permitted for this env.
+        try:
+            validate_strategy_for_env(
+                strategy, env.env_type, env.compliance_classification
+            )
+            validate_classification_policy(strategy, env.compliance_classification)
+        except ValueError as exc:
+            raise StrategyGovernanceViolation(str(exc)) from exc
+
         deployment_id = str(uuid.uuid4())
         now = _utcnow()
         now_iso = now.isoformat()
 
         approval_required = env.requires_approval()
         meta_json = _json.dumps(deployment_metadata or {}, sort_keys=True)
+        resolved_spec = spec or DeploymentSpec()
 
         row = DeploymentRecordORM(
             deployment_id=deployment_id,
@@ -337,6 +400,16 @@ class DeploymentStore:
             rollback_reason=rollback_reason,
             approval_required=1 if approval_required else 0,
             approval_granted_by=None,
+            approval_granted_at=None,
+            approval_reason=None,
+            approval_policy_version=None,
+            spec_image_digest=resolved_spec.image_digest,
+            spec_commit_sha=resolved_spec.commit_sha,
+            spec_contract_hash=resolved_spec.contract_hash,
+            spec_topology_hash=resolved_spec.topology_hash,
+            spec_policy_bundle_version=resolved_spec.policy_bundle_version,
+            spec_migration_fingerprint=resolved_spec.migration_fingerprint,
+            state_version=0,
             deployment_metadata_json=meta_json,
         )
         db.add(row)
@@ -358,6 +431,10 @@ class DeploymentStore:
                 "strategy": strategy.value,
                 "artifact_hash": artifact_hash or "",
                 "rollback_from_id": rollback_from_id or "",
+                "spec_commit_sha": resolved_spec.commit_sha or "",
+                "spec_contract_hash": resolved_spec.contract_hash or "",
+                "spec_topology_hash": resolved_spec.topology_hash or "",
+                "spec_policy_bundle_version": resolved_spec.policy_bundle_version or "",
             },
             trace_id=trace_id,
         )
@@ -447,17 +524,44 @@ class DeploymentStore:
             if not row.approval_granted_by:
                 raise ApprovalRequired(deployment_id)
 
+        # Rollback safety checks.
+        if to_state == DeploymentState.ROLLED_BACK:
+            self._validate_rollback_safety(db, row, tenant_id=tenant_id)
+
         now = _utcnow()
         now_iso = now.isoformat()
-        row.state = to_state.value
+
+        # Capture version before update for optimistic locking.
+        current_version = getattr(row, "state_version", 0) or 0
+        new_version = current_version + 1
+
+        updates: dict = {
+            "state": to_state.value,
+            "state_version": new_version,
+        }
         if to_state in (
             DeploymentState.HEALTHY,
             DeploymentState.FAILED,
             DeploymentState.ROLLED_BACK,
         ):
-            row.completed_at = now
-        db.flush()
+            updates["completed_at"] = now
 
+        # Optimistic locking: only update if state_version hasn't changed.
+        rows_affected = (
+            db.query(DeploymentRecordORM)
+            .filter(
+                DeploymentRecordORM.deployment_id == deployment_id,
+                DeploymentRecordORM.state_version == current_version,
+            )
+            .update(updates, synchronize_session="evaluate")
+        )
+        if rows_affected == 0:
+            raise ConcurrentModificationError(deployment_id)
+
+        db.flush()
+        db.refresh(row)
+
+        # Emit transition event.
         self._emit_event(
             db,
             deployment_id=deployment_id,
@@ -473,7 +577,73 @@ class DeploymentStore:
             trace_id=trace_id,
         )
 
+        # Emit SLO metrics.
+        self._emit_transition_metrics(row, from_state, to_state)
+
         return _deployment_orm_to_domain(row)
+
+    def validate_transition_dry_run(
+        self,
+        db: Session,
+        *,
+        deployment_id: str,
+        to_state: DeploymentState,
+        tenant_id: Optional[str] = None,
+    ) -> TransitionDryRunResult:
+        """Validate a state transition without executing it (no side effects)."""
+        q = db.query(DeploymentRecordORM).filter(
+            DeploymentRecordORM.deployment_id == deployment_id
+        )
+        if tenant_id is not None:
+            q = q.filter(
+                (DeploymentRecordORM.tenant_id == tenant_id)
+                | (DeploymentRecordORM.tenant_id.is_(None))
+            )
+        row = q.first()
+        if row is None:
+            raise DeploymentNotFound(deployment_id)
+
+        from_state = DeploymentState(row.state)
+        policy_violations: list[str] = []
+        block_reasons: list[str] = []
+        allowed = True
+
+        try:
+            validate_transition(from_state, to_state)
+        except ValueError as exc:
+            allowed = False
+            block_reasons.append(str(exc))
+
+        approval_required = bool(row.approval_required)
+        missing_approval = (
+            to_state == DeploymentState.DEPLOYING
+            and approval_required
+            and not row.approval_granted_by
+        )
+        if missing_approval:
+            block_reasons.append(
+                f"Approval required for deployment {deployment_id} before transitioning to deploying"
+            )
+
+        # Check rollback safety without executing.
+        if to_state == DeploymentState.ROLLED_BACK and allowed:
+            try:
+                self._validate_rollback_safety(db, row, tenant_id=tenant_id)
+            except RollbackSafetyViolation as exc:
+                block_reasons.append(str(exc))
+
+        blocked = not allowed or missing_approval or bool(block_reasons)
+
+        return TransitionDryRunResult(
+            allowed=allowed,
+            from_state=from_state,
+            to_state=to_state,
+            approval_required=approval_required,
+            missing_approval_granted_by=missing_approval,
+            policy_violations=policy_violations,
+            blocked=blocked,
+            block_reasons=block_reasons,
+        )
 
     def record_approval(
         self,
@@ -482,6 +652,8 @@ class DeploymentStore:
         deployment_id: str,
         approved: bool,
         actor: str,
+        approval_reason: Optional[str] = None,
+        approval_policy_version: Optional[str] = None,
         tenant_id: Optional[str] = None,
         trace_id: Optional[str] = None,
     ) -> DeploymentRecord:
@@ -502,6 +674,13 @@ class DeploymentStore:
 
         if approved:
             row.approval_granted_by = actor
+            row.approval_granted_at = now
+            row.approval_reason = approval_reason
+            row.approval_policy_version = approval_policy_version
+        else:
+            # Denied: record the reason but do NOT set approval_granted_by.
+            row.approval_reason = approval_reason
+            row.approval_policy_version = approval_policy_version
         db.flush()
 
         event_type = (
@@ -518,9 +697,33 @@ class DeploymentStore:
             actor=actor,
             timestamp=now,
             now_iso=now_iso,
-            details={"approval_granted_by": actor if approved else ""},
+            details={
+                "approval_granted_by": actor if approved else "",
+                "approval_reason": approval_reason or "",
+                "approval_policy_version": approval_policy_version or "",
+            },
             trace_id=trace_id,
         )
+
+        # Emit approval metrics.
+        try:
+            from services.deployment.metrics import APPROVAL_DECISIONS_TOTAL
+
+            APPROVAL_DECISIONS_TOTAL.labels(
+                decision="granted" if approved else "denied"
+            ).inc()
+            if approved and row.initiated_at:
+                from services.deployment.metrics import APPROVAL_WAIT_DURATION_SECONDS
+
+                wait_seconds = (
+                    now - row.initiated_at.replace(tzinfo=timezone.utc)
+                ).total_seconds()
+                APPROVAL_WAIT_DURATION_SECONDS.labels(decision="granted").observe(
+                    wait_seconds
+                )
+        except Exception:
+            pass
+
         return _deployment_orm_to_domain(row)
 
     # --- Events ---
@@ -562,6 +765,7 @@ class DeploymentStore:
         checked_by: str,
         tenant_id: Optional[str] = None,
         rollback_trigger_reason: Optional[str] = None,
+        expires_at: Optional[datetime] = None,
         trace_id: Optional[str] = None,
     ) -> DeploymentHealthRecord:
         row_d = db.query(DeploymentRecordORM).filter(
@@ -592,6 +796,7 @@ class DeploymentStore:
             checked_at=now,
             tenant_id=dep_row.tenant_id,
             rollback_trigger_reason=rollback_trigger_reason,
+            expires_at=expires_at,
         )
         db.add(health_row)
         db.flush()
@@ -614,6 +819,20 @@ class DeploymentStore:
             },
             trace_id=trace_id,
         )
+
+        # Emit health probe metrics.
+        try:
+            from services.deployment.metrics import HEALTH_PROBE_RESULTS_TOTAL
+
+            for probe, result in (
+                ("readiness", readiness_result.value),
+                ("liveness", liveness_result.value),
+                ("smoke_test", smoke_test_result.value),
+                ("validation", validation_result.value),
+            ):
+                HEALTH_PROBE_RESULTS_TOTAL.labels(probe=probe, result=result).inc()
+        except Exception:
+            pass
 
         return _health_orm_to_domain(health_row)
 
@@ -679,6 +898,96 @@ class DeploymentStore:
 
     # --- Internal ---
 
+    def _validate_rollback_safety(
+        self,
+        db: Session,
+        row: DeploymentRecordORM,
+        *,
+        tenant_id: Optional[str],
+    ) -> None:
+        """Raise RollbackSafetyViolation if rolling back is unsafe."""
+        rollback_from_id = row.rollback_from_id
+        if rollback_from_id is None:
+            return
+
+        # Fetch the target of the rollback without applying tenant filter —
+        # we need to check the raw record to enforce boundary.
+        target = (
+            db.query(DeploymentRecordORM)
+            .filter(DeploymentRecordORM.deployment_id == rollback_from_id)
+            .first()
+        )
+        if target is None:
+            raise RollbackSafetyViolation(
+                f"rollback_from_id {rollback_from_id!r} does not exist"
+            )
+
+        # Cannot rollback to a failed deployment.
+        if target.state == DeploymentState.FAILED.value:
+            raise RollbackSafetyViolation(
+                f"Cannot rollback to deployment {rollback_from_id!r} in failed state"
+            )
+
+        # Cannot rollback across tenant boundaries.
+        source_tenant = row.tenant_id
+        target_tenant = target.tenant_id
+        if source_tenant != target_tenant:
+            raise RollbackSafetyViolation("Cannot rollback across tenant boundaries")
+
+    def _emit_transition_metrics(
+        self,
+        row: DeploymentRecordORM,
+        from_state: DeploymentState,
+        to_state: DeploymentState,
+    ) -> None:
+        try:
+            from services.deployment.metrics import (
+                DEPLOYMENT_DURATION_SECONDS,
+                DEPLOYMENT_FAILURES_TOTAL,
+                DEPLOYMENT_TRANSITIONS_TOTAL,
+                ROLLBACK_TOTAL,
+            )
+
+            strategy = row.strategy or "unknown"
+
+            DEPLOYMENT_TRANSITIONS_TOTAL.labels(
+                strategy=strategy,
+                env_type="unknown",
+                from_state=from_state.value,
+                to_state=to_state.value,
+            ).inc()
+
+            if to_state == DeploymentState.FAILED:
+                DEPLOYMENT_FAILURES_TOTAL.labels(
+                    strategy=strategy,
+                    env_type="unknown",
+                    compliance_classification="unknown",
+                ).inc()
+
+            if to_state == DeploymentState.ROLLED_BACK:
+                ROLLBACK_TOTAL.labels(strategy=strategy, env_type="unknown").inc()
+
+            # Emit duration for terminal + healthy states.
+            if (
+                to_state
+                in (
+                    DeploymentState.HEALTHY,
+                    DeploymentState.FAILED,
+                    DeploymentState.ROLLED_BACK,
+                )
+                and row.initiated_at
+            ):
+                duration = (
+                    _utcnow() - row.initiated_at.replace(tzinfo=timezone.utc)
+                ).total_seconds()
+                DEPLOYMENT_DURATION_SECONDS.labels(
+                    strategy=strategy,
+                    env_type="unknown",
+                    terminal_state=to_state.value,
+                ).observe(duration)
+        except Exception:
+            pass
+
     def _emit_event(
         self,
         db: Session,
@@ -700,6 +1009,19 @@ class DeploymentStore:
         event_id = str(uuid.uuid4())
         details_json = _json.dumps(details or {}, sort_keys=True)
 
+        # Build tamper-evident hash chain.
+        previous_hash = _get_previous_event_hash(db, deployment_id)
+        event_hash = compute_event_hash(
+            event_id=event_id,
+            deployment_id=deployment_id,
+            event_type=event_type.value,
+            actor=actor,
+            timestamp_iso=now_iso,
+            from_state=from_state.value if from_state else None,
+            to_state=to_state.value if to_state else None,
+            previous_event_hash=previous_hash,
+        )
+
         event_row = DeploymentEventRecord(
             event_id=event_id,
             deployment_id=deployment_id,
@@ -711,6 +1033,8 @@ class DeploymentStore:
             from_state=from_state.value if from_state else None,
             to_state=to_state.value if to_state else None,
             details_json=details_json,
+            event_hash=event_hash,
+            previous_event_hash=previous_hash,
         )
         db.add(event_row)
         db.flush()
@@ -726,5 +1050,7 @@ class DeploymentStore:
             from_state=from_state,
             to_state=to_state,
             details=details,
+            event_hash=event_hash,
+            previous_event_hash=previous_hash,
             trace_id=trace_id,
         )

@@ -32,6 +32,7 @@ from api.deps import auth_ctx_db_session
 from api.error_contracts import api_error
 from services.deployment import (
     ComplianceClassification,
+    DeploymentSpec,
     DeploymentState,
     DeploymentStore,
     DeploymentStrategy,
@@ -41,10 +42,13 @@ from services.deployment import (
 )
 from services.deployment.store import (
     ApprovalRequired,
+    ConcurrentModificationError,
     DeploymentNotFound,
     DeploymentStoreError,
     EnvironmentNotFound,
     InvalidStateTransition,
+    RollbackSafetyViolation,
+    StrategyGovernanceViolation,
 )
 
 log = logging.getLogger("frostgate.deployment")
@@ -62,6 +66,9 @@ ERR_INVALID_TRANSITION = "DEPLOY-API-003"
 ERR_APPROVAL_REQUIRED = "DEPLOY-API-004"
 ERR_INVALID_INPUT = "DEPLOY-API-005"
 ERR_FORBIDDEN = "DEPLOY-API-006"
+ERR_CONCURRENT_MODIFICATION = "DEPLOY-API-007"
+ERR_ROLLBACK_SAFETY = "DEPLOY-API-008"
+ERR_STRATEGY_GOVERNANCE = "DEPLOY-API-009"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -104,6 +111,19 @@ def _handle_store_error(exc: DeploymentStoreError) -> HTTPException:
         return HTTPException(
             status_code=403, detail=api_error(ERR_APPROVAL_REQUIRED, exc.message)
         )
+    if isinstance(exc, ConcurrentModificationError):
+        return HTTPException(
+            status_code=409,
+            detail=api_error(ERR_CONCURRENT_MODIFICATION, exc.message),
+        )
+    if isinstance(exc, RollbackSafetyViolation):
+        return HTTPException(
+            status_code=422, detail=api_error(ERR_ROLLBACK_SAFETY, exc.message)
+        )
+    if isinstance(exc, StrategyGovernanceViolation):
+        return HTTPException(
+            status_code=422, detail=api_error(ERR_STRATEGY_GOVERNANCE, exc.message)
+        )
     return HTTPException(
         status_code=500, detail=api_error("DEPLOY-API-500", "Internal deployment error")
     )
@@ -117,6 +137,7 @@ _VERSION_REF_MAX = 256
 _REGION_MAX = 128
 _REASON_MAX = 512
 _POLICY_KEYS_MAX = 20
+_HASH_PATTERN = r"^[0-9a-fA-F]{64}$|^$"
 
 
 class CreateEnvironmentRequest(BaseModel):
@@ -139,6 +160,50 @@ class CreateEnvironmentRequest(BaseModel):
         return v
 
 
+class DeploymentSpecRequest(BaseModel):
+    """Immutable spec snapshot captured at deployment creation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    image_digest: Optional[str] = Field(
+        default=None, max_length=128, pattern=_HASH_PATTERN
+    )
+    commit_sha: Optional[str] = Field(
+        default=None, max_length=64, pattern=r"^[0-9a-fA-F]{40}$|^[0-9a-fA-F]{64}$|^$"
+    )
+    contract_hash: Optional[str] = Field(
+        default=None, max_length=128, pattern=_HASH_PATTERN
+    )
+    topology_hash: Optional[str] = Field(
+        default=None, max_length=128, pattern=_HASH_PATTERN
+    )
+    policy_bundle_version: Optional[str] = Field(default=None, max_length=64)
+    migration_fingerprint: Optional[str] = Field(default=None, max_length=128)
+
+    @field_validator(
+        "image_digest",
+        "commit_sha",
+        "contract_hash",
+        "topology_hash",
+        "policy_bundle_version",
+        "migration_fingerprint",
+        mode="before",
+    )
+    @classmethod
+    def _empty_to_none(cls, v: Any) -> Any:
+        return None if v == "" else v
+
+    def to_domain(self) -> DeploymentSpec:
+        return DeploymentSpec(
+            image_digest=self.image_digest,
+            commit_sha=self.commit_sha,
+            contract_hash=self.contract_hash,
+            topology_hash=self.topology_hash,
+            policy_bundle_version=self.policy_bundle_version,
+            migration_fingerprint=self.migration_fingerprint,
+        )
+
+
 class CreateDeploymentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -148,19 +213,18 @@ class CreateDeploymentRequest(BaseModel):
     artifact_hash: Optional[str] = Field(
         default=None,
         max_length=128,
-        pattern=r"^[0-9a-fA-F]{64}$|^$",
-        description="SHA-256 hex digest of the deployment artifact. Empty string or omit if not yet resolved.",
+        pattern=_HASH_PATTERN,
+        description="SHA-256 hex digest of the deployment artifact.",
     )
     rollback_from_id: Optional[str] = Field(default=None, max_length=64)
     rollback_reason: Optional[str] = Field(default=None, max_length=_REASON_MAX)
+    spec: DeploymentSpecRequest = Field(default_factory=DeploymentSpecRequest)
     deployment_metadata: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("artifact_hash", mode="before")
     @classmethod
     def _empty_to_none(cls, v: Any) -> Any:
-        if v == "":
-            return None
-        return v
+        return None if v == "" else v
 
     @field_validator("deployment_metadata")
     @classmethod
@@ -194,12 +258,18 @@ class RecordHealthRequest(BaseModel):
     smoke_test_result: HealthResult = HealthResult.UNKNOWN
     validation_result: HealthResult = HealthResult.UNKNOWN
     rollback_trigger_reason: Optional[str] = Field(default=None, max_length=_REASON_MAX)
+    expires_at: Optional[str] = Field(
+        default=None,
+        description="ISO 8601 datetime for retention expiry. Records past this timestamp may be archived.",
+    )
 
 
 class ApprovalRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     approved: bool
+    approval_reason: Optional[str] = Field(default=None, max_length=_REASON_MAX)
+    approval_policy_version: Optional[str] = Field(default=None, max_length=64)
 
 
 # ---------------------------------------------------------------------------
@@ -327,6 +397,40 @@ def get_environment(
 # ---------------------------------------------------------------------------
 
 
+def _deployment_response(d: Any) -> dict[str, Any]:
+    """Shared serialization for deployment records. No secrets exposed."""
+    return {
+        "deployment_id": d.deployment_id,
+        "env_id": d.env_id,
+        "version_ref": d.version_ref,
+        "strategy": d.strategy.value,
+        "state": d.state.value,
+        "state_version": d.state_version,
+        "initiated_by": d.initiated_by,
+        "initiated_at": d.initiated_at.isoformat(),
+        "completed_at": d.completed_at.isoformat() if d.completed_at else None,
+        "tenant_id": d.tenant_id,
+        "artifact_hash": d.artifact_hash,
+        "approval_required": d.approval_required,
+        "approval_granted_by": d.approval_granted_by,
+        "approval_granted_at": (
+            d.approval_granted_at.isoformat() if d.approval_granted_at else None
+        ),
+        "approval_reason": d.approval_reason,
+        "approval_policy_version": d.approval_policy_version,
+        "rollback_from_id": d.rollback_from_id,
+        "rollback_reason": d.rollback_reason,
+        "spec": {
+            "image_digest": d.spec.image_digest,
+            "commit_sha": d.spec.commit_sha,
+            "contract_hash": d.spec.contract_hash,
+            "topology_hash": d.spec.topology_hash,
+            "policy_bundle_version": d.spec.policy_bundle_version,
+            "migration_fingerprint": d.spec.migration_fingerprint,
+        },
+    }
+
+
 @router.get(
     "/control-plane/deployments",
     dependencies=[Depends(require_scopes("control-plane:read"))],
@@ -349,24 +453,7 @@ def list_deployments(
         offset=offset,
     )
     return {
-        "deployments": [
-            {
-                "deployment_id": d.deployment_id,
-                "env_id": d.env_id,
-                "version_ref": d.version_ref,
-                "strategy": d.strategy.value,
-                "state": d.state.value,
-                "initiated_by": d.initiated_by,
-                "initiated_at": d.initiated_at.isoformat(),
-                "completed_at": d.completed_at.isoformat() if d.completed_at else None,
-                "tenant_id": d.tenant_id,
-                "artifact_hash": d.artifact_hash,
-                "approval_required": d.approval_required,
-                "approval_granted_by": d.approval_granted_by,
-                "rollback_from_id": d.rollback_from_id,
-            }
-            for d in deployments
-        ],
+        "deployments": [_deployment_response(d) for d in deployments],
         "limit": limit,
         "offset": offset,
     }
@@ -397,6 +484,7 @@ def create_deployment(
             artifact_hash=body.artifact_hash,
             rollback_from_id=body.rollback_from_id,
             rollback_reason=body.rollback_reason,
+            spec=body.spec.to_domain(),
             deployment_metadata=body.deployment_metadata,
             trace_id=trace_id,
         )
@@ -405,19 +493,7 @@ def create_deployment(
         db.rollback()
         raise _handle_store_error(exc) from exc
 
-    return {
-        "deployment_id": dep.deployment_id,
-        "env_id": dep.env_id,
-        "version_ref": dep.version_ref,
-        "strategy": dep.strategy.value,
-        "state": dep.state.value,
-        "initiated_by": dep.initiated_by,
-        "initiated_at": dep.initiated_at.isoformat(),
-        "tenant_id": dep.tenant_id,
-        "artifact_hash": dep.artifact_hash,
-        "approval_required": dep.approval_required,
-        "rollback_from_id": dep.rollback_from_id,
-    }
+    return _deployment_response(dep)
 
 
 @router.get(
@@ -439,23 +515,9 @@ def get_deployment(
             status_code=404, detail=api_error(ERR_DEPLOY_NOT_FOUND, exc.message)
         ) from exc
 
-    return {
-        "deployment_id": dep.deployment_id,
-        "env_id": dep.env_id,
-        "version_ref": dep.version_ref,
-        "strategy": dep.strategy.value,
-        "state": dep.state.value,
-        "initiated_by": dep.initiated_by,
-        "initiated_at": dep.initiated_at.isoformat(),
-        "completed_at": dep.completed_at.isoformat() if dep.completed_at else None,
-        "tenant_id": dep.tenant_id,
-        "artifact_hash": dep.artifact_hash,
-        "approval_required": dep.approval_required,
-        "approval_granted_by": dep.approval_granted_by,
-        "rollback_from_id": dep.rollback_from_id,
-        "rollback_reason": dep.rollback_reason,
-        "deployment_metadata": dep.deployment_metadata,
-    }
+    result = _deployment_response(dep)
+    result["deployment_metadata"] = dep.deployment_metadata
+    return result
 
 
 @router.post(
@@ -466,11 +528,37 @@ def transition_deployment_state(
     request: Request,
     deployment_id: str,
     body: TransitionStateRequest,
+    dry_run: bool = Query(default=False),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
     tenant_id = _tenant_from_request(request)
     actor = _actor_from_request(request)
     trace_id = _trace_id_from_request(request)
+
+    if dry_run:
+        try:
+            result = _store.validate_transition_dry_run(
+                db,
+                deployment_id=deployment_id,
+                to_state=body.to_state,
+                tenant_id=tenant_id,
+            )
+        except DeploymentNotFound as exc:
+            raise HTTPException(
+                status_code=404, detail=api_error(ERR_DEPLOY_NOT_FOUND, exc.message)
+            ) from exc
+        return {
+            "dry_run": True,
+            "deployment_id": deployment_id,
+            "from_state": result.from_state.value,
+            "to_state": result.to_state.value,
+            "allowed": result.allowed,
+            "blocked": result.blocked,
+            "block_reasons": result.block_reasons,
+            "approval_required": result.approval_required,
+            "missing_approval_granted_by": result.missing_approval_granted_by,
+            "policy_violations": result.policy_violations,
+        }
 
     try:
         dep = _store.transition_state(
@@ -488,8 +576,10 @@ def transition_deployment_state(
         raise _handle_store_error(exc) from exc
 
     return {
+        "dry_run": False,
         "deployment_id": dep.deployment_id,
         "state": dep.state.value,
+        "state_version": dep.state_version,
         "completed_at": dep.completed_at.isoformat() if dep.completed_at else None,
     }
 
@@ -514,6 +604,8 @@ def record_deployment_approval(
             deployment_id=deployment_id,
             approved=body.approved,
             actor=actor,
+            approval_reason=body.approval_reason,
+            approval_policy_version=body.approval_policy_version,
             tenant_id=tenant_id,
             trace_id=trace_id,
         )
@@ -526,6 +618,11 @@ def record_deployment_approval(
         "deployment_id": dep.deployment_id,
         "approval_required": dep.approval_required,
         "approval_granted_by": dep.approval_granted_by,
+        "approval_granted_at": (
+            dep.approval_granted_at.isoformat() if dep.approval_granted_at else None
+        ),
+        "approval_reason": dep.approval_reason,
+        "approval_policy_version": dep.approval_policy_version,
     }
 
 
@@ -570,6 +667,8 @@ def get_deployment_history(
                 "from_state": e.from_state.value if e.from_state else None,
                 "to_state": e.to_state.value if e.to_state else None,
                 "details": e.details,
+                "event_hash": e.event_hash,
+                "previous_event_hash": e.previous_event_hash,
             }
             for e in events
         ],
@@ -594,9 +693,23 @@ def record_deployment_health(
     body: RecordHealthRequest,
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
+    from datetime import datetime
+
     tenant_id = _tenant_from_request(request)
     actor = _actor_from_request(request)
     trace_id = _trace_id_from_request(request)
+
+    expires_at: Optional[datetime] = None
+    if body.expires_at:
+        try:
+            expires_at = datetime.fromisoformat(body.expires_at)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=api_error(
+                    ERR_INVALID_INPUT, f"Invalid expires_at format: {exc}"
+                ),
+            ) from exc
 
     try:
         record = _store.record_health(
@@ -609,6 +722,7 @@ def record_deployment_health(
             checked_by=actor,
             tenant_id=tenant_id,
             rollback_trigger_reason=body.rollback_trigger_reason,
+            expires_at=expires_at,
             trace_id=trace_id,
         )
         db.commit()
@@ -626,6 +740,7 @@ def record_deployment_health(
         "checked_by": record.checked_by,
         "checked_at": record.checked_at.isoformat(),
         "rollback_trigger_reason": record.rollback_trigger_reason,
+        "expires_at": record.expires_at.isoformat() if record.expires_at else None,
     }
 
 
@@ -666,6 +781,7 @@ def get_deployment_health(
                 "checked_by": r.checked_by,
                 "checked_at": r.checked_at.isoformat(),
                 "rollback_trigger_reason": r.rollback_trigger_reason,
+                "expires_at": r.expires_at.isoformat() if r.expires_at else None,
             }
             for r in records
         ],
@@ -709,6 +825,11 @@ def get_rollback_lineage(
                 "completed_at": d.completed_at.isoformat() if d.completed_at else None,
                 "rollback_from_id": d.rollback_from_id,
                 "rollback_reason": d.rollback_reason,
+                "spec": {
+                    "commit_sha": d.spec.commit_sha,
+                    "contract_hash": d.spec.contract_hash,
+                    "image_digest": d.spec.image_digest,
+                },
             }
             for d in chain
         ],

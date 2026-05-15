@@ -2414,14 +2414,10 @@ class DeploymentEnvironmentRecord(Base):
     )
 
     id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    env_id: Mapped[Any] = mapped_column(
-        Text, nullable=False, unique=True, index=True
-    )
+    env_id: Mapped[Any] = mapped_column(Text, nullable=False, unique=True, index=True)
     env_type: Mapped[Any] = mapped_column(Text, nullable=False)
     region: Mapped[Any] = mapped_column(Text, nullable=False)
-    lifecycle_state: Mapped[Any] = mapped_column(
-        Text, nullable=False, default="active"
-    )
+    lifecycle_state: Mapped[Any] = mapped_column(Text, nullable=False, default="active")
     compliance_classification: Mapped[Any] = mapped_column(
         Text, nullable=False, default="standard"
     )
@@ -2468,10 +2464,20 @@ class DeploymentRecordORM(Base):
     artifact_hash: Mapped[Any] = mapped_column(Text, nullable=True)
     rollback_from_id: Mapped[Any] = mapped_column(Text, nullable=True)
     rollback_reason: Mapped[Any] = mapped_column(Text, nullable=True)
-    approval_required: Mapped[Any] = mapped_column(
-        Integer, nullable=False, default=0
-    )
+    approval_required: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
     approval_granted_by: Mapped[Any] = mapped_column(Text, nullable=True)
+    approval_granted_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    approval_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    approval_policy_version: Mapped[Any] = mapped_column(Text, nullable=True)
+    spec_image_digest: Mapped[Any] = mapped_column(Text, nullable=True)
+    spec_commit_sha: Mapped[Any] = mapped_column(Text, nullable=True)
+    spec_contract_hash: Mapped[Any] = mapped_column(Text, nullable=True)
+    spec_topology_hash: Mapped[Any] = mapped_column(Text, nullable=True)
+    spec_policy_bundle_version: Mapped[Any] = mapped_column(Text, nullable=True)
+    spec_migration_fingerprint: Mapped[Any] = mapped_column(Text, nullable=True)
+    state_version: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
     deployment_metadata_json: Mapped[Any] = mapped_column(Text, nullable=True)
 
 
@@ -2491,9 +2497,7 @@ class DeploymentEventRecord(Base):
     )
 
     id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    event_id: Mapped[Any] = mapped_column(
-        Text, nullable=False, unique=True, index=True
-    )
+    event_id: Mapped[Any] = mapped_column(Text, nullable=False, unique=True, index=True)
     deployment_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
     env_id: Mapped[Any] = mapped_column(Text, nullable=False)
     tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
@@ -2505,6 +2509,8 @@ class DeploymentEventRecord(Base):
     from_state: Mapped[Any] = mapped_column(Text, nullable=True)
     to_state: Mapped[Any] = mapped_column(Text, nullable=True)
     details_json: Mapped[Any] = mapped_column(Text, nullable=True)
+    event_hash: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    previous_event_hash: Mapped[Any] = mapped_column(Text, nullable=True)
 
 
 class DeploymentHealthRecord(Base):
@@ -2544,3 +2550,4 @@ class DeploymentHealthRecord(Base):
         DateTime(timezone=True), nullable=False, default=utcnow
     )
     rollback_trigger_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)

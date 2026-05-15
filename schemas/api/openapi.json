@@ -541,6 +541,30 @@
       "ApprovalRequest": {
         "additionalProperties": false,
         "properties": {
+          "approval_policy_version": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Policy Version"
+          },
+          "approval_reason": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Reason"
+          },
           "approved": {
             "title": "Approved",
             "type": "boolean"
@@ -1216,7 +1240,7 @@
                 "type": "null"
               }
             ],
-            "description": "SHA-256 hex digest of the deployment artifact. Empty string or omit if not yet resolved.",
+            "description": "SHA-256 hex digest of the deployment artifact.",
             "title": "Artifact Hash"
           },
           "deployment_metadata": {
@@ -1252,6 +1276,9 @@
               }
             ],
             "title": "Rollback Reason"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/DeploymentSpecRequest"
           },
           "strategy": {
             "$ref": "#/components/schemas/DeploymentStrategy",
@@ -1832,6 +1859,90 @@
           "reason"
         ],
         "title": "DelegationRevokeRequest",
+        "type": "object"
+      },
+      "DeploymentSpecRequest": {
+        "additionalProperties": false,
+        "description": "Immutable spec snapshot captured at deployment creation.",
+        "properties": {
+          "commit_sha": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "pattern": "^[0-9a-fA-F]{40}$|^[0-9a-fA-F]{64}$|^$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit Sha"
+          },
+          "contract_hash": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "pattern": "^[0-9a-fA-F]{64}$|^$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Hash"
+          },
+          "image_digest": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "pattern": "^[0-9a-fA-F]{64}$|^$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Digest"
+          },
+          "migration_fingerprint": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Migration Fingerprint"
+          },
+          "policy_bundle_version": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Bundle Version"
+          },
+          "topology_hash": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "pattern": "^[0-9a-fA-F]{64}$|^$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topology Hash"
+          }
+        },
+        "title": "DeploymentSpecRequest",
         "type": "object"
       },
       "DeploymentState": {
@@ -4315,6 +4426,18 @@
       "RecordHealthRequest": {
         "additionalProperties": false,
         "properties": {
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ISO 8601 datetime for retention expiry. Records past this timestamp may be archived.",
+            "title": "Expires At"
+          },
           "liveness_result": {
             "$ref": "#/components/schemas/HealthResult"
           },
@@ -10397,6 +10520,16 @@
             "schema": {
               "title": "Deployment Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "dry_run",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Dry Run",
+              "type": "boolean"
             }
           },
           {
