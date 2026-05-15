@@ -9438,3 +9438,45 @@ The rewritten dynamic INSERT was missing `is_current = 1` from the params dict. 
 **Validation results:**
 - `ruff check api/db.py api/rag_corpus_store.py`: PASS.
 - `tests/rag/test_pdf_ingestion.py`: PASS — 19 passed.
+
+## PR 56 — Enterprise DOCX Ingestion Pipeline (2026-05-14)
+
+**Branch:** pr-56-docx-ingestion
+**New files:**
+- `api/rag/docx_extractor.py` — enterprise DOCX security validation and paragraph-aware extraction
+- `migrations/postgres/0046_docx_ingestion.sql` — extends ingestion_status constraint for `docx_validating`
+- `tests/rag/test_docx_ingestion.py` — 30 extraction and ingestion tests
+- `tests/security/test_docx_ingestion_security.py` — 18 security invariant tests
+
+**Modified files:**
+- `api/rag_corpus_store.py` — `ingest_docx_document()` following the same pattern as `ingest_pdf_document()`
+- `api/rag_corpus_ingestion.py` — DOCX routing (`_ingest_docx`), `_DOCX_CONTENT_TYPE`, `_docx_quarantine_reason`, quarantine labels
+- `requirements.txt` — `python-docx>=1.1.0`
+
+**Architecture decisions:**
+
+**Reuse `source_page` for paragraph position** — Rather than add a new `source_paragraph` column (which would require a migration and store_chunks changes), we store the 1-based paragraph number in the existing `source_page` column. DOCX chunk metadata carries the semantic `source_paragraph` key for citation rendering. This follows the "smallest diff wins" rule.
+
+**Security stack (all pre-parse):**
+1. ZIP magic bytes (`PK\x03\x04`) checked before opening the archive.
+2. Total uncompressed size checked for zip bomb guard.
+3. VBA binary members (`word/vbaProject.bin`) detected in the ZIP namelist.
+4. Macro-enabled content types detected in `[Content_Types].xml`.
+5. All four checks fire before python-docx is imported or called.
+
+**10 stable error codes:** `DOCX_E001`–`DOCX_E010` (no overlap with PDF `PDF_E001`–`PDF_E010`).
+
+**Env limits (all overridable for air-gapped deployment):**
+- `FG_DOCX_MAX_PARAGRAPHS` = 10000
+- `FG_DOCX_MAX_PARAGRAPH_TEXT_BYTES` = 100000
+- `FG_DOCX_MAX_UNCOMPRESSED_BYTES` = 200000000
+- `FG_RAG_MAX_DOCX_UPLOAD_BYTES` = 50000000
+
+**Future-ready hooks in chunk metadata:** `table_extraction_ready`, `tracked_changes_ready`, `comments_extraction_ready`, `embedded_image_ocr_ready`, `legal_segmentation_ready`, `async_worker_ready`.
+
+**Test fix:** `_make_raw_docx([])` evaluates `[] or ["Hello, world!"]` as truthy → uses default text. Empty-extract test uses `_make_raw_docx(["   ", "  "])` (whitespace-only paragraphs that normalize to empty strings).
+
+**Validation results:**
+- `ruff check` + `ruff format`: PASS.
+- `tests/rag/test_docx_ingestion.py` + `tests/security/test_docx_ingestion_security.py`: 48 passed.
+- `make fg-fast`: PASS — all CI gates green.

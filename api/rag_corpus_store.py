@@ -1335,6 +1335,288 @@ def ingest_pdf_document(
     }
 
 
+def ingest_docx_document(
+    conn: Session,
+    *,
+    tenant_id: str,
+    corpus_id: str,
+    title: str,
+    source: str,
+    docx_result: "Any",
+    metadata: Optional[dict[str, Any]] = None,
+    max_chars: int = 1000,
+) -> dict[str, Any]:
+    """Ingest a validated DOCX extraction result as a versioned, paragraph-aware document.
+
+    docx_result must be a DOCXExtractionResult from api.rag.docx_extractor.
+    The source_hash is taken from the DOCX bytes hash (not the extracted text)
+    to ensure stable deduplication on the original file.
+
+    Chunk metadata includes source_paragraph (1-based), heading_level,
+    section_heading, and extraction_version for provenance and citation rendering.
+
+    Security invariants:
+    - tenant_id sourced from trusted execution context only (not request body).
+    - Duplicate detection uses the DOCX source hash.
+    - Empty-extract DOCX (no paragraph text) are quarantined cleanly.
+    - Raw DOCX content never appears in error messages or logs.
+    """
+    from api.rag.docx_extractor import DOCXExtractionResult, build_docx_chunk_payloads
+
+    tid = _require_tenant(tenant_id)
+    checked_title = _require_nonempty(title, "title")
+    checked_source = _require_nonempty(source, "source")
+    now = _utc_now_iso()
+
+    if not isinstance(docx_result, DOCXExtractionResult):
+        return _quarantine_document(
+            conn,
+            tenant_id=tid,
+            corpus_id=corpus_id,
+            title=checked_title,
+            source=checked_source,
+            source_hash=None,
+            reason=QUARANTINE_UNSUPPORTED_TYPE,
+            detail="docx_result must be a DOCXExtractionResult",
+            metadata=metadata,
+            now=now,
+        )
+
+    source_hash = docx_result.source_hash  # SHA-256 of raw DOCX bytes
+    normalized_source_hash = source_hash
+
+    if not docx_result.has_text:
+        return _quarantine_document(
+            conn,
+            tenant_id=tid,
+            corpus_id=corpus_id,
+            title=checked_title,
+            source=checked_source,
+            source_hash=source_hash,
+            reason=QUARANTINE_EMPTY_DOCUMENT,
+            detail="DOCX extraction produced no text; may be empty or image-only",
+            metadata=metadata,
+            now=now,
+        )
+
+    corpus_row = get_corpus(conn, tid, corpus_id)
+    if corpus_row is None:
+        raise ValueError(f"corpus_id={corpus_id!r} not found for tenant_id={tid!r}")
+
+    duplicate = _find_current_indexed_by_hash(
+        conn, tenant_id=tid, corpus_id=corpus_id, source_hash=source_hash
+    )
+    if duplicate is not None:
+        _audit_ingestion(
+            "duplicate_detected",
+            tenant_id=tid,
+            corpus_id=corpus_id,
+            document_id=str(duplicate["document_id"]),
+            version_id=str(duplicate["version_id"]),
+            ingestion_status=INGESTION_DUPLICATE,
+            reason_code=INGESTION_DUPLICATE,
+        )
+        return {
+            "tenant_id": tid,
+            "corpus_id": corpus_id,
+            "document_id": duplicate["document_id"],
+            "version_id": duplicate["version_id"],
+            "ingestion_status": INGESTION_DUPLICATE,
+            "duplicate_of_document_id": duplicate["document_id"],
+            "source_hash": source_hash,
+            "chunk_count": int(duplicate.get("chunk_count") or 0),
+            "active_version": True,
+            "created_at": duplicate["created_at"],
+            "indexed_at": duplicate.get("indexed_at"),
+        }
+
+    version_number = _next_version_number(
+        conn, tenant_id=tid, corpus_id=corpus_id, source=checked_source
+    )
+    document_id = _new_id("doc")
+    version_id = deterministic_version_id(
+        tenant_id=tid,
+        corpus_id=corpus_id,
+        source_hash=source_hash,
+        version_number=version_number,
+    )
+    meta = dict(metadata or {})
+    meta.update(
+        {
+            "source_hash": source_hash,
+            "normalized_source_hash": normalized_source_hash,
+            "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "paragraph_count": docx_result.paragraph_count,
+            "extraction_version": docx_result.extraction_version,
+            "future_hooks": {
+                "table_extraction_ready": True,
+                "tracked_changes_ready": True,
+                "comments_extraction_ready": True,
+                "embedded_image_ocr_ready": True,
+                "legal_segmentation_ready": True,
+                "async_worker_ready": True,
+                "evidence_graph_ready": True,
+                "rag_evaluation_ready": True,
+            },
+        }
+    )
+    meta_str = _encode_metadata(meta)
+
+    conn.execute(
+        text(
+            """
+            UPDATE rag_documents
+            SET is_current = 0,
+                ingestion_status = :superseded,
+                superseded_at = :now,
+                superseded_by_version_id = :version_id,
+                updated_at = :now
+            WHERE tenant_id = :tenant_id
+              AND corpus_id = :corpus_id
+              AND source = :source
+              AND COALESCE(is_current, 1) = 1
+            """
+        ),
+        {
+            "superseded": INGESTION_SUPERSEDED,
+            "now": now,
+            "version_id": version_id,
+            "tenant_id": tid,
+            "corpus_id": corpus_id,
+            "source": checked_source,
+        },
+    )
+    conn.execute(
+        text(
+            """
+            UPDATE rag_chunks
+            SET is_active = 0
+            WHERE tenant_id = :tenant_id
+              AND corpus_id = :corpus_id
+              AND document_id IN (
+                  SELECT document_id FROM rag_documents
+                  WHERE tenant_id = :tenant_id AND corpus_id = :corpus_id
+                    AND source = :source AND ingestion_status = :superseded
+              )
+            """
+        ),
+        {
+            "tenant_id": tid,
+            "corpus_id": corpus_id,
+            "source": checked_source,
+            "superseded": INGESTION_SUPERSEDED,
+        },
+    )
+    _DOCX_CONTENT_TYPE = (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    doc_insert_params: dict[str, Any] = {
+        "document_id": document_id,
+        "corpus_id": corpus_id,
+        "tenant_id": tid,
+        "title": checked_title,
+        "source": checked_source,
+        "metadata": meta_str,
+        "created_at": now,
+        "updated_at": now,
+        "version_id": version_id,
+        "source_hash": source_hash,
+        "normalized_source_hash": normalized_source_hash,
+        "version_number": version_number,
+        "is_current": 1,
+        "ingestion_status": INGESTION_CHUNKING,
+        "indexed_at": None,
+    }
+    doc_cols = _table_columns(conn, "rag_documents")
+    if "content_type" in doc_cols:
+        doc_insert_params["content_type"] = _DOCX_CONTENT_TYPE
+    col_names = ", ".join(doc_insert_params)
+    col_placeholders = ", ".join(f":{k}" for k in doc_insert_params)
+    conn.execute(
+        text(f"INSERT INTO rag_documents ({col_names}) VALUES ({col_placeholders})"),
+        doc_insert_params,
+    )
+
+    try:
+        chunk_payloads = build_docx_chunk_payloads(
+            tenant_id=tid,
+            document_id=document_id,
+            version_id=version_id,
+            source_hash=source_hash,
+            docx_result=docx_result,
+            max_chars=max_chars,
+        )
+        if not chunk_payloads:
+            raise ValueError("DOCX paragraph-aware chunking produced no chunks")
+
+        persisted_chunks = store_chunks(
+            conn,
+            tenant_id=tid,
+            document_id=document_id,
+            corpus_id=corpus_id,
+            chunks=chunk_payloads,
+        )
+        conn.execute(
+            text(
+                """
+                UPDATE rag_documents
+                SET ingestion_status = :indexed,
+                    indexed_at = :now,
+                    updated_at = :now
+                WHERE tenant_id = :tenant_id AND document_id = :document_id
+                """
+            ),
+            {
+                "indexed": INGESTION_INDEXED,
+                "now": now,
+                "tenant_id": tid,
+                "document_id": document_id,
+            },
+        )
+        conn.commit()
+    except Exception as exc:
+        conn.rollback()
+        return _quarantine_document(
+            conn,
+            tenant_id=tid,
+            corpus_id=corpus_id,
+            title=checked_title,
+            source=checked_source,
+            source_hash=source_hash,
+            reason=QUARANTINE_CHUNKING_FAILED,
+            detail=_safe_error(exc),
+            metadata=metadata,
+            now=now,
+        )
+
+    _audit_ingestion(
+        "docx_indexing_completed",
+        tenant_id=tid,
+        corpus_id=corpus_id,
+        document_id=document_id,
+        version_id=version_id,
+        ingestion_status=INGESTION_INDEXED,
+        reason_code=INGESTION_INDEXED,
+    )
+    return {
+        "tenant_id": tid,
+        "corpus_id": corpus_id,
+        "document_id": document_id,
+        "version_id": version_id,
+        "source_hash": source_hash,
+        "normalized_source_hash": normalized_source_hash,
+        "version_number": version_number,
+        "ingestion_status": INGESTION_INDEXED,
+        "content_type": _DOCX_CONTENT_TYPE,
+        "paragraph_count": docx_result.paragraph_count,
+        "extraction_version": docx_result.extraction_version,
+        "created_at": now,
+        "indexed_at": now,
+        "chunk_count": len(persisted_chunks),
+        "active_version": True,
+    }
+
+
 def reindex_document_version(
     conn: Session,
     *,

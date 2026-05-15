@@ -35,6 +35,18 @@ from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_bound_tenant, require_scopes, verify_api_key
 from api.deps import tenant_db_required
+from api.rag.docx_extractor import (
+    DOCX_ERR_EMPTY_EXTRACT,
+    DOCX_ERR_EMBEDDED_VBA,
+    DOCX_ERR_MACRO_ENABLED,
+    DOCX_ERR_MALFORMED,
+    DOCX_ERR_INVALID_MAGIC,
+    DOCX_ERR_TOO_MANY_PARAGRAPHS,
+    DOCX_ERR_OVERSIZED_PARAGRAPH,
+    DOCX_ERR_LIBRARY_MISSING,
+    DOCXExtractionError,
+    extract_docx_paragraphs,
+)
 from api.rag.pdf_extractor import (
     PDF_ERR_EMPTY_EXTRACT,
     PDF_ERR_ENCRYPTED,
@@ -65,6 +77,7 @@ from api.rag_corpus_store import (
     get_corpus,
     get_document,
     ingest_document_version,
+    ingest_docx_document,
     ingest_pdf_document,
     _table_columns,
 )
@@ -73,16 +86,21 @@ log = logging.getLogger("frostgate.rag_corpus_ingestion")
 
 _MAX_UPLOAD_BYTES = int(os.getenv("FG_RAG_MAX_UPLOAD_BYTES", str(1_000_000)))
 _MAX_PDF_UPLOAD_BYTES = int(os.getenv("FG_RAG_MAX_PDF_UPLOAD_BYTES", str(50_000_000)))
+_MAX_DOCX_UPLOAD_BYTES = int(os.getenv("FG_RAG_MAX_DOCX_UPLOAD_BYTES", str(50_000_000)))
 _MAX_TITLE_LEN = 512
 _MAX_CORPUS_ID_LEN = 256
 _SAFE_SOURCE_HASH_PREFIX_LEN = 12
 _SUPPORTED_CONTENT_TYPES = frozenset({"text/plain", "text/markdown"})
 _PDF_CONTENT_TYPE = "application/pdf"
+_DOCX_CONTENT_TYPE = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+)
 _EXT_TO_CONTENT_TYPE: dict[str, str] = {
     ".txt": "text/plain",
     ".md": "text/markdown",
     ".markdown": "text/markdown",
     ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
 _KNOWN_INGESTION_STATUSES = frozenset(
     {
@@ -115,6 +133,14 @@ _QUARANTINE_REASON_LABELS: dict[str, str] = {
     "pdf_empty_extract": "PDF extraction produced no text (scanned/image-only)",
     "pdf_extraction_failed": "PDF extraction failed",
     "pdf_invalid_magic": "File does not appear to be a valid PDF",
+    "docx_macro_enabled": "DOCX is a macro-enabled format",
+    "docx_embedded_vba": "DOCX contains embedded VBA code",
+    "docx_malformed": "DOCX archive is malformed or corrupted",
+    "docx_too_many_paragraphs": "DOCX exceeds paragraph limit",
+    "docx_oversized_paragraph": "DOCX paragraph content exceeds size limit",
+    "docx_empty_extract": "DOCX extraction produced no text",
+    "docx_extraction_failed": "DOCX extraction failed",
+    "docx_invalid_magic": "File does not appear to be a valid DOCX",
     "unknown": "Unknown quarantine reason",
 }
 _ALLOWED_UPLOAD_SORT_DIRS = frozenset({"asc", "desc"})
@@ -164,6 +190,20 @@ def _pdf_quarantine_reason(error_code: str) -> str:
         PDF_ERR_LIBRARY_MISSING: "pdf_extraction_failed",
     }
     return _MAP.get(error_code, "pdf_extraction_failed")
+
+
+def _docx_quarantine_reason(error_code: str) -> str:
+    _MAP = {
+        DOCX_ERR_MACRO_ENABLED: "docx_macro_enabled",
+        DOCX_ERR_EMBEDDED_VBA: "docx_embedded_vba",
+        DOCX_ERR_MALFORMED: "docx_malformed",
+        DOCX_ERR_TOO_MANY_PARAGRAPHS: "docx_too_many_paragraphs",
+        DOCX_ERR_OVERSIZED_PARAGRAPH: "docx_oversized_paragraph",
+        DOCX_ERR_EMPTY_EXTRACT: "docx_empty_extract",
+        DOCX_ERR_INVALID_MAGIC: "docx_invalid_magic",
+        DOCX_ERR_LIBRARY_MISSING: "docx_extraction_failed",
+    }
+    return _MAP.get(error_code, "docx_extraction_failed")
 
 
 def _quarantine_label(reason: Optional[str]) -> str:
@@ -316,12 +356,13 @@ async def upload_document(
 
     content_type = _detect_content_type(filename, file.content_type)
 
-    # PDF uploads have a separate (larger) size cap.
-    effective_max = (
-        _MAX_PDF_UPLOAD_BYTES
-        if content_type == _PDF_CONTENT_TYPE
-        else _MAX_UPLOAD_BYTES
-    )
+    # PDF and DOCX uploads have a separate (larger) size cap.
+    if content_type == _PDF_CONTENT_TYPE:
+        effective_max = _MAX_PDF_UPLOAD_BYTES
+    elif content_type == _DOCX_CONTENT_TYPE:
+        effective_max = _MAX_DOCX_UPLOAD_BYTES
+    else:
+        effective_max = _MAX_UPLOAD_BYTES
     raw_bytes = await file.read(effective_max + 1)
     if len(raw_bytes) > effective_max:
         log.warning(
@@ -359,6 +400,18 @@ async def upload_document(
     # --- PDF ingestion path ---
     if content_type == _PDF_CONTENT_TYPE:
         return await _ingest_pdf(
+            db=db,
+            tenant_id=tenant_id,
+            corpus_id=corpus_id,
+            doc_title=doc_title,
+            filename=filename,
+            raw_bytes=raw_bytes,
+            request_id=request_id,
+        )
+
+    # --- DOCX ingestion path ---
+    if content_type == _DOCX_CONTENT_TYPE:
+        return await _ingest_docx(
             db=db,
             tenant_id=tenant_id,
             corpus_id=corpus_id,
@@ -636,6 +689,168 @@ async def _ingest_pdf(
             "scanned_pdf": None,
             "table_extraction": None,
             "image_extraction": None,
+            "async_worker": None,
+        },
+    }
+
+
+async def _ingest_docx(
+    *,
+    db: Session,
+    tenant_id: str,
+    corpus_id: str,
+    doc_title: str,
+    filename: str,
+    raw_bytes: bytes,
+    request_id: Optional[str],
+) -> dict[str, Any]:
+    """Handle DOCX upload: validate, extract, and ingest with paragraph-aware chunking."""
+    import time
+
+    t0 = time.monotonic()
+
+    try:
+        docx_result = extract_docx_paragraphs(raw_bytes)
+    except DOCXExtractionError as exc:
+        quarantine_reason = _docx_quarantine_reason(exc.error_code)
+        log.warning(
+            "rag_corpus_ingestion.docx_rejected",
+            extra={
+                "event": "ingestion.docx_rejected",
+                "tenant_id": tenant_id,
+                "corpus_id": corpus_id,
+                "error_code": exc.error_code,
+                "quarantine_reason": quarantine_reason,
+                "request_id": request_id,
+            },
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "DOCX_REJECTED",
+                "error_code": exc.error_code,
+                "quarantine_reason": quarantine_reason,
+                "quarantine_reason_label": _quarantine_label(quarantine_reason),
+                "message": exc.message,
+            },
+        )
+
+    extraction_ms = int((time.monotonic() - t0) * 1000)
+
+    log.info(
+        "rag_corpus_ingestion.docx_extracted",
+        extra={
+            "event": "ingestion.docx_extracted",
+            "tenant_id": tenant_id,
+            "corpus_id": corpus_id,
+            "paragraph_count": docx_result.paragraph_count,
+            "has_text": docx_result.has_text,
+            "extraction_version": docx_result.extraction_version,
+            "extraction_ms": extraction_ms,
+            "request_id": request_id,
+        },
+    )
+
+    try:
+        result = ingest_docx_document(
+            db,
+            tenant_id=tenant_id,
+            corpus_id=corpus_id,
+            title=doc_title,
+            source=filename,
+            docx_result=docx_result,
+        )
+    except ValueError as exc:
+        log.warning(
+            "rag_corpus_ingestion.docx_ingest_error",
+            extra={
+                "event": "ingestion.docx_ingest_error",
+                "tenant_id": tenant_id,
+                "corpus_id": corpus_id,
+                "request_id": request_id,
+            },
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "DOCX_INGEST_ERROR", "message": str(exc)},
+        ) from exc
+
+    ingestion_status = str(result.get("ingestion_status") or INGESTION_INDEXED)
+    document_id = str(result.get("document_id", ""))
+    version_id = str(result.get("version_id") or "")
+    total_ms = int((time.monotonic() - t0) * 1000)
+
+    log.info(
+        "rag_corpus_ingestion.docx_upload_complete",
+        extra={
+            "event": "ingestion.docx_upload_complete",
+            "tenant_id": tenant_id,
+            "corpus_id": corpus_id,
+            "document_id": document_id,
+            "ingestion_status": ingestion_status,
+            "paragraph_count": docx_result.paragraph_count,
+            "chunk_count": result.get("chunk_count", 0),
+            "extraction_ms": extraction_ms,
+            "total_ms": total_ms,
+            "request_id": request_id,
+        },
+    )
+
+    chunk_summary = (
+        _document_chunk_summary(db, tenant_id=tenant_id, document_id=document_id)
+        if document_id
+        else {"active_chunk_count": 0, "total_chunk_count": 0}
+    )
+    embedding_summary = (
+        _document_embedding_summary(db, tenant_id=tenant_id, document_id=document_id)
+        if document_id
+        else {}
+    )
+    is_duplicate = ingestion_status == INGESTION_DUPLICATE
+    is_quarantined = ingestion_status == INGESTION_QUARANTINED
+
+    return {
+        "document_id": document_id,
+        "corpus_id": corpus_id,
+        "title": doc_title,
+        "source": filename,
+        "content_type": _DOCX_CONTENT_TYPE,
+        "ingestion_status": ingestion_status,
+        "ingestion_status_label": _ingestion_status_label(ingestion_status),
+        "is_current": bool(result.get("is_current", True)),
+        "version_id": version_id,
+        "version_number": int(result.get("version_number") or 1),
+        "source_hash_prefix": _safe_source_hash_prefix(
+            str(result.get("source_hash") or "")
+        ),
+        "paragraph_count": docx_result.paragraph_count,
+        "extraction_version": docx_result.extraction_version,
+        "extraction_ms": extraction_ms,
+        "active_chunk_count": chunk_summary["active_chunk_count"],
+        "total_chunk_count": chunk_summary["total_chunk_count"],
+        "embedding_state_summary": embedding_summary,
+        "is_duplicate": is_duplicate,
+        "duplicate_of_document_id": result.get("duplicate_of_document_id")
+        if is_duplicate
+        else None,
+        "is_quarantined": is_quarantined,
+        "quarantine_reason": result.get("quarantine_reason")
+        if is_quarantined
+        else None,
+        "quarantine_reason_label": _quarantine_label(result.get("quarantine_reason"))
+        if is_quarantined
+        else None,
+        "failure_reason": result.get("failure_reason"),
+        "indexed_at": result.get("indexed_at"),
+        "created_at": result.get("created_at"),
+        "audit_safe": True,
+        "future_hooks": {
+            "retry_available": False,
+            "table_extraction": None,
+            "tracked_changes": None,
+            "comments_extraction": None,
+            "embedded_image_ocr": None,
+            "legal_segmentation": None,
             "async_worker": None,
         },
     }
