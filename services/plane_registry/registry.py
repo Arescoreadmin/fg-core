@@ -80,6 +80,14 @@ PLANE_REGISTRY: list[PlaneDef] = [
             ex("GET", "/health/detailed", "public", "Detailed health probe endpoint."),
             ex("GET", "/status", "public", "Legacy status endpoint."),
             ex("GET", "/v1/status", "public", "Legacy v1 status endpoint."),
+            ex(
+                "GET",
+                "/metrics",
+                "allowed_internal",
+                "Prometheus scrape endpoint. Internal infrastructure only — "
+                "no auth, no tenant data, no customer PII. "
+                "Must not be exposed on the public customer-facing ingress.",
+            ),
         ),
         global_routes=(
             ex(

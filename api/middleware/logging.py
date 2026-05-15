@@ -52,8 +52,6 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                     method=request.method, status_class=status_class
                 ).observe(time.time() - start)
                 if status_code >= 500:
-                    HTTP_5XX_TOTAL.labels(
-                        method=request.method, path=request.url.path
-                    ).inc()
+                    HTTP_5XX_TOTAL.labels(method=request.method).inc()
             except Exception:
                 pass

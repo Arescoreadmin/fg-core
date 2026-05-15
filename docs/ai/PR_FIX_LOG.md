@@ -6,6 +6,49 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-15 — Enterprise Observability and Alerting Infrastructure
+
+**Branch:** `feat/observability-enterprise`
+
+**Task identifier:** Enterprise Observability — distributed tracing, centralized metrics, structured log enrichment, alerting hooks, operational dashboards.
+
+**Area:** Observability; alerting; structured logging; Prometheus metrics; OpenTelemetry tracing.
+
+**Files changed:**
+- `api/observability/` (new package) — `tracing.py`, `metrics.py`, `log_context.py`, `alerts.py`, `__init__.py`
+- `api/middleware/otel_tracing.py` (new) — W3C TraceContext ASGI middleware
+- `api/middleware/logging.py` (modified) — adds trace_id/span_id/tenant_id to per-request log; records HTTP duration and 5xx metrics
+- `api/logging_config.py` (modified) — wires `TraceContextFilter`, `RequestContextFilter`, `SecretRedactionFilter`
+- `api/metrics.py` (modified) — re-exports all enterprise metrics for backward compatibility
+- `api/main.py` (modified) — adds `OTelTracingMiddleware`, `/metrics` endpoint gated by `FG_METRICS_ENABLED`
+- `services/plane_registry/registry.py` (modified) — explicitly classifies `/metrics` as `allowed_internal`
+- `deploy/prometheus/alerts.yml` (new) — 8 alert groups covering provider, retrieval, ingestion, audit, provenance, infrastructure
+- `deploy/grafana/dashboards/` (new) — 3 Grafana JSON dashboards: system health, provider health, pipelines
+- `docs/observability/log_schema.md` (new) — structured log field schema for SOC 2 / audit evidence
+- `docs/observability/runbooks/` (new) — 8 runbook files, one per alert condition
+- `tests/test_observability.py` (new) — 57+ tests covering metrics, tracing, cardinality guards, secret redaction, OTel failure safety, metric/alert/dashboard contract validation
+- `tools/ci/check_route_inventory.py`, `tools/ci/route_inventory.json` (modified) — `/metrics` added to allowed_internal allowlist and inventory
+- `requirements.txt` (modified) — adds `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-exporter-otlp-proto-http`
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` (modified) — SOC-HIGH-002 entry for new middleware and route inventory changes
+
+**Fixes / hardening applied in follow-up review:**
+- `HTTP_5XX_TOTAL` had `path` label (UUID cardinality risk) — removed; `method`-only label retained
+- `FG_OTEL_ENABLED`, `FG_METRICS_ENABLED`, `FG_OTEL_SAMPLE_RATIO` env flags added for safe defaults
+- `SecretRedactionFilter` added to strip authorization, api_key, bearer_token, provider_payload, raw_prompt, raw_chunk from all log records before sink
+- `/metrics` explicitly classified as `allowed_internal` in plane_registry (not exposed on customer ingress)
+- Alert runbook URLs changed from external HTTPS to local repo paths in `docs/observability/runbooks/`
+- Cardinality guard tests, secret redaction tests, OTel failure safety tests, metric name contract test, alert-to-metric validation, dashboard-to-metric validation added
+
+**Validation results:**
+- `ruff check` + `ruff format`: PASS
+- `pytest tests/test_observability.py`: 57 passed
+- `make fg-fast`: PASS — all CI gates green
+- `make fg-contract`: PASS
+- `docker compose config`: PASS
+- `pip check`: No broken requirements
+
+---
+
 ### 2026-05-14 — PR 55 Enterprise PDF Ingestion Pipeline
 
 **Branch:** `pr-55-pdf-ingestion`

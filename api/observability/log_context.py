@@ -1,15 +1,20 @@
 """Structured log context management for FrostGate.
 
-Two mechanisms:
+Three mechanisms:
   1. TraceContextFilter  — reads the active OTel span and injects
      trace_id / span_id into every log record automatically.
   2. RequestContextFilter — reads per-request fields (tenant_id, request_id,
      provider_id, policy_version, retrieval_mode) from contextvars and injects
      them into every log record.
+  3. SecretRedactionFilter — removes fields whose names match known sensitive
+     patterns (authorization, api_key, bearer_token, provider_payload, etc.)
+     before they can reach the log sink. Defense-in-depth against accidental
+     credential logging.
 
 Usage in configure_logging():
     handler.addFilter(TraceContextFilter())
     handler.addFilter(RequestContextFilter())
+    handler.addFilter(SecretRedactionFilter())
 
 Usage in request handlers / middleware:
     set_log_context(tenant_id="acme", provider_id="openai")
@@ -96,4 +101,49 @@ class RequestContextFilter(logging.Filter):
             val = var.get()
             if not hasattr(record, key):
                 setattr(record, key, val)
+        return True
+
+
+# Fields whose presence in a log record is a security violation. The filter
+# deletes them and substitutes a "[REDACTED]" placeholder so the field name
+# remains visible in the log structure (alerting on accidental credential
+# logging) without the value leaking.
+_SECRET_FIELD_FRAGMENTS: frozenset[str] = frozenset(
+    {
+        "authorization",
+        "bearer",
+        "api_key",
+        "apikey",
+        "api-key",
+        "token",
+        "password",
+        "secret",
+        "credential",
+        "private_key",
+        "signing_key",
+        "provider_payload",
+        "raw_prompt",
+        "raw_chunk",
+        "x_api_key",
+    }
+)
+
+
+def _is_secret_field(name: str) -> bool:
+    n = name.lower().replace("-", "_").replace(" ", "_")
+    return any(frag in n for frag in _SECRET_FIELD_FRAGMENTS)
+
+
+class SecretRedactionFilter(logging.Filter):
+    """Strip sensitive field values from log records before they reach the sink.
+
+    Fields whose names contain known secret patterns are replaced with the
+    literal string "[REDACTED]". The field NAME is preserved so engineers
+    can detect accidental credential logging in log search.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        for key in list(vars(record).keys()):
+            if _is_secret_field(key):
+                setattr(record, key, "[REDACTED]")
         return True

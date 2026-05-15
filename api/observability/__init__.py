@@ -30,6 +30,7 @@ from api.observability.log_context import (
     get_log_context,
     TraceContextFilter,
     RequestContextFilter,
+    SecretRedactionFilter,
 )
 
 __all__ = [
@@ -58,4 +59,5 @@ __all__ = [
     "get_log_context",
     "TraceContextFilter",
     "RequestContextFilter",
+    "SecretRedactionFilter",
 ]

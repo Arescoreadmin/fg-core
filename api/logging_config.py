@@ -103,10 +103,12 @@ def configure_logging(service: str = "fg-core") -> None:
         from api.observability.log_context import (
             TraceContextFilter,
             RequestContextFilter,
+            SecretRedactionFilter,
         )
 
         handler.addFilter(TraceContextFilter())
         handler.addFilter(RequestContextFilter())
+        handler.addFilter(SecretRedactionFilter())
     except Exception:
         pass  # observability package unavailable in minimal test environments
 

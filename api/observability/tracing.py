@@ -43,10 +43,23 @@ _log = logging.getLogger("frostgate.observability")
 _TRACER_PROVIDER: Optional[TracerProvider] = None
 
 
+def is_tracing_enabled() -> bool:
+    """Return True unless FG_OTEL_ENABLED is explicitly set to a falsy value."""
+    val = os.getenv("FG_OTEL_ENABLED", "1").strip().lower()
+    return val not in {"0", "false", "no", "off"}
+
+
 def setup_tracing(service_name: str = "frostgate-core") -> None:
-    """Initialize the global TracerProvider. Idempotent — safe to call multiple times."""
+    """Initialize the global TracerProvider. Idempotent — safe to call multiple times.
+
+    Skipped entirely when FG_OTEL_ENABLED=0 (noop spans, zero overhead).
+    """
     global _TRACER_PROVIDER
     if _TRACER_PROVIDER is not None:
+        return
+
+    if not is_tracing_enabled():
+        _log.info("otel_tracing_disabled FG_OTEL_ENABLED=0")
         return
 
     resource = Resource.create(
@@ -57,7 +70,11 @@ def setup_tracing(service_name: str = "frostgate-core") -> None:
         }
     )
 
-    sample_rate = float(os.getenv("FG_OTEL_SAMPLE_RATE", "1.0"))
+    # FG_OTEL_SAMPLE_RATIO is canonical; FG_OTEL_SAMPLE_RATE is the legacy alias.
+    raw_ratio = (
+        os.getenv("FG_OTEL_SAMPLE_RATIO") or os.getenv("FG_OTEL_SAMPLE_RATE") or "1.0"
+    )
+    sample_rate = float(raw_ratio)
     sampler = ParentBased(TraceIdRatioBased(sample_rate))
 
     provider = TracerProvider(resource=resource, sampler=sampler)

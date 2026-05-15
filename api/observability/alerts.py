@@ -52,56 +52,56 @@ ALERT_PROVIDER_FAILURE = AlertCondition(
     name="FrostgateProviderFailureHigh",
     severity=AlertSeverity.CRITICAL,
     description="Provider failure rate exceeded threshold",
-    runbook="https://docs.frostgate.io/runbooks/provider-failure",
+    runbook="docs/observability/runbooks/provider_failure.md",
 )
 
 ALERT_RETRIEVAL_DEGRADATION = AlertCondition(
     name="FrostgateRetrievalLatencyHigh",
     severity=AlertSeverity.WARNING,
     description="Retrieval p99 latency exceeded 2s",
-    runbook="https://docs.frostgate.io/runbooks/retrieval-degradation",
+    runbook="docs/observability/runbooks/retrieval_degradation.md",
 )
 
 ALERT_INGESTION_FAILURE = AlertCondition(
     name="FrostgateIngestionFailureHigh",
     severity=AlertSeverity.CRITICAL,
     description="Ingestion failure rate exceeded threshold",
-    runbook="https://docs.frostgate.io/runbooks/ingestion-failure",
+    runbook="docs/observability/runbooks/ingestion_failure.md",
 )
 
 ALERT_AUDIT_PIPELINE_FAILURE = AlertCondition(
     name="FrostgateAuditPipelineFailure",
     severity=AlertSeverity.CRITICAL,
     description="Audit pipeline failure detected",
-    runbook="https://docs.frostgate.io/runbooks/audit-pipeline",
+    runbook="docs/observability/runbooks/audit_pipeline.md",
 )
 
 ALERT_DB_CONNECTIVITY = AlertCondition(
     name="FrostgateDBConnectivityFailure",
     severity=AlertSeverity.CRITICAL,
     description="Database connectivity failure detected",
-    runbook="https://docs.frostgate.io/runbooks/db-connectivity",
+    runbook="docs/observability/runbooks/db_connectivity.md",
 )
 
 ALERT_5XX_RATE_HIGH = AlertCondition(
     name="FrostgateHttp5xxRateHigh",
     severity=AlertSeverity.WARNING,
     description="HTTP 5xx rate exceeded 5% over 5 minutes",
-    runbook="https://docs.frostgate.io/runbooks/5xx-rate",
+    runbook="docs/observability/runbooks/5xx_rate.md",
 )
 
 ALERT_LATENCY_ABNORMAL = AlertCondition(
     name="FrostgateRequestLatencyAbnormal",
     severity=AlertSeverity.WARNING,
     description="p99 request latency exceeded 5s",
-    runbook="https://docs.frostgate.io/runbooks/latency-abnormal",
+    runbook="docs/observability/runbooks/latency_abnormal.md",
 )
 
 ALERT_PROVENANCE_FAILURE_SPIKE = AlertCondition(
     name="FrostgateProvenanceFailureSpike",
     severity=AlertSeverity.CRITICAL,
     description="Provenance validation failure rate spike detected",
-    runbook="https://docs.frostgate.io/runbooks/provenance-failures",
+    runbook="docs/observability/runbooks/provenance_failures.md",
 )
 
 ALL_ALERTS = [

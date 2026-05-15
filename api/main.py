@@ -612,15 +612,17 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     if admin_router is not None and _should_mount_admin_routes():
         app.include_router(admin_router)
 
-    @app.get("/metrics", include_in_schema=False)
-    async def metrics_endpoint():  # type: ignore[return]
-        from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-        from fastapi.responses import PlainTextResponse
+    if _env_bool("FG_METRICS_ENABLED", default=True):
 
-        return PlainTextResponse(
-            content=generate_latest().decode("utf-8"),
-            media_type=CONTENT_TYPE_LATEST,
-        )
+        @app.get("/metrics", include_in_schema=False)
+        async def metrics_endpoint():  # type: ignore[return]
+            from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+            from fastapi.responses import PlainTextResponse
+
+            return PlainTextResponse(
+                content=generate_latest().decode("utf-8"),
+                media_type=CONTENT_TYPE_LATEST,
+            )
 
     @app.get("/health")
     async def health(request: Request) -> dict[str, Any]:

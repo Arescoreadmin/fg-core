@@ -418,7 +418,9 @@ def test_all_alert_conditions_have_runbooks():
     from api.observability.alerts import ALL_ALERTS
 
     for alert in ALL_ALERTS:
-        assert alert.runbook.startswith("https://"), f"missing runbook: {alert.name}"
+        assert alert.runbook and (
+            alert.runbook.startswith("docs/") or alert.runbook.startswith("https://")
+        ), f"missing or invalid runbook for {alert.name!r}: {alert.runbook!r}"
 
 
 @pytest.mark.smoke
@@ -456,3 +458,562 @@ def test_required_alert_names_present():
     }
     missing = required - names
     assert not missing, f"missing alert definitions: {missing}"
+
+
+@pytest.mark.smoke
+def test_all_runbook_files_exist():
+    """Every alert condition's runbook path must resolve to an existing file in the repo."""
+    from pathlib import Path
+    from api.observability.alerts import ALL_ALERTS
+
+    repo_root = Path(__file__).parent.parent
+    for alert in ALL_ALERTS:
+        runbook_path = repo_root / alert.runbook
+        assert runbook_path.exists(), (
+            f"Alert '{alert.name}' runbook not found: {alert.runbook}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Cardinality guard tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.smoke
+def test_http_5xx_metric_has_no_path_label():
+    """HTTP_5XX_TOTAL must not include 'path' label — UUID paths would explode cardinality."""
+    from api.observability.metrics import HTTP_5XX_TOTAL
+
+    label_names = list(HTTP_5XX_TOTAL._labelnames)
+    assert "path" not in label_names, (
+        f"HTTP_5XX_TOTAL has 'path' label — cardinality risk: {label_names}"
+    )
+    assert "request_id" not in label_names
+    assert "document_id" not in label_names
+
+
+@pytest.mark.smoke
+def test_provider_latency_metric_has_bounded_labels():
+    """PROVIDER_LATENCY must only carry bounded label dimensions."""
+    from api.observability.metrics import PROVIDER_LATENCY
+
+    label_names = set(PROVIDER_LATENCY._labelnames)
+    forbidden = {"request_id", "document_id", "source_hash", "error_message"}
+    violations = label_names & forbidden
+    assert not violations, f"PROVIDER_LATENCY has high-cardinality labels: {violations}"
+
+
+@pytest.mark.smoke
+def test_retrieval_latency_metric_has_bounded_labels():
+    from api.observability.metrics import RETRIEVAL_LATENCY
+
+    label_names = set(RETRIEVAL_LATENCY._labelnames)
+    forbidden = {"request_id", "document_id", "source_hash", "tenant_id"}
+    violations = label_names & forbidden
+    assert not violations, (
+        f"RETRIEVAL_LATENCY has high-cardinality labels: {violations}"
+    )
+
+
+@pytest.mark.smoke
+def test_http_request_duration_has_no_path_label():
+    """HTTP_REQUEST_DURATION uses status_class (bounded) not raw status code or path."""
+    from api.observability.metrics import HTTP_REQUEST_DURATION
+
+    label_names = set(HTTP_REQUEST_DURATION._labelnames)
+    assert "path" not in label_names, "path label → UUID cardinality explosion"
+    assert "request_id" not in label_names
+    assert "status_code" not in label_names  # use status_class (2xx, 4xx, 5xx) instead
+
+
+@pytest.mark.smoke
+def test_no_metric_has_request_id_label():
+    """Confirm no registered frostgate metric uses request_id as a label."""
+    from prometheus_client import REGISTRY
+
+    import api.observability.metrics  # noqa: F401
+
+    for metric in REGISTRY.collect():
+        if not metric.name.startswith("frostgate_"):
+            continue
+        for sample in metric.samples:
+            assert "request_id" not in sample.labels, (
+                f"request_id found in labels of {metric.name}"
+            )
+        # Also check the labelnames on the metric family
+        labelnames = getattr(metric, "labelnames", ()) or ()
+        assert "request_id" not in labelnames, (
+            f"request_id is a labelname on {metric.name}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# /metrics is not a public customer API
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.smoke
+def test_metrics_is_not_in_openapi_schema():
+    """/metrics must be excluded from the OpenAPI schema (include_in_schema=False)."""
+    from api.main import build_app
+
+    import warnings
+
+    app = build_app(auth_enabled=False)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
+        openapi = app.openapi()
+    paths = openapi.get("paths", {})
+    assert "/metrics" not in paths, (
+        "/metrics must not appear in customer-facing OpenAPI schema"
+    )
+
+
+@pytest.mark.smoke
+def test_metrics_disabled_by_env_flag(monkeypatch):
+    """FG_METRICS_ENABLED=0 must suppress the /metrics endpoint."""
+    monkeypatch.setenv("FG_METRICS_ENABLED", "0")
+    from api.main import build_app
+    from fastapi.testclient import TestClient
+
+    app = build_app(auth_enabled=False)
+    client = TestClient(app, raise_server_exceptions=False)
+    resp = client.get("/metrics")
+    assert resp.status_code == 404, (
+        f"Expected 404 when metrics disabled, got {resp.status_code}"
+    )
+
+
+@pytest.mark.smoke
+def test_plane_registry_classifies_metrics_as_allowed_internal():
+    """The plane registry must explicitly classify /metrics as allowed_internal."""
+    from services.plane_registry.registry import PLANE_REGISTRY
+
+    for plane in PLANE_REGISTRY:
+        for route in plane.public_routes:
+            if route.path == "/metrics":
+                assert route.class_name == "allowed_internal", (
+                    f"/metrics is classified as '{route.class_name}', expected 'allowed_internal'"
+                )
+                return
+    # Not finding it at all is also a failure
+    pytest.fail(
+        "/metrics not found in any plane's public_routes — must be explicitly classified"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Secret redaction
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.smoke
+def test_secret_redaction_filter_strips_authorization():
+    from api.observability.log_context import SecretRedactionFilter
+
+    flt = SecretRedactionFilter()
+    record = logging.LogRecord(
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="oops",
+        args=(),
+        exc_info=None,
+    )
+    record.authorization = "Bearer super-secret-token"  # type: ignore[attr-defined]
+    flt.filter(record)
+    assert getattr(record, "authorization") == "[REDACTED]"
+
+
+@pytest.mark.smoke
+def test_secret_redaction_filter_strips_api_key():
+    from api.observability.log_context import SecretRedactionFilter
+
+    flt = SecretRedactionFilter()
+    record = logging.LogRecord(
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="oops",
+        args=(),
+        exc_info=None,
+    )
+    record.api_key = "sk-1234567890"  # type: ignore[attr-defined]
+    flt.filter(record)
+    assert getattr(record, "api_key") == "[REDACTED]"
+
+
+@pytest.mark.smoke
+def test_secret_redaction_filter_strips_bearer_token():
+    from api.observability.log_context import SecretRedactionFilter
+
+    flt = SecretRedactionFilter()
+    record = logging.LogRecord(
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="oops",
+        args=(),
+        exc_info=None,
+    )
+    record.bearer_token = "xyz"  # type: ignore[attr-defined]
+    flt.filter(record)
+    assert getattr(record, "bearer_token") == "[REDACTED]"
+
+
+@pytest.mark.smoke
+def test_secret_redaction_filter_strips_provider_payload():
+    from api.observability.log_context import SecretRedactionFilter
+
+    flt = SecretRedactionFilter()
+    record = logging.LogRecord(
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="oops",
+        args=(),
+        exc_info=None,
+    )
+    record.provider_payload = '{"model": "gpt-4", "messages": [...]}'  # type: ignore[attr-defined]
+    record.raw_prompt = "sensitive prompt text"  # type: ignore[attr-defined]
+    record.raw_chunk = "document chunk content"  # type: ignore[attr-defined]
+    flt.filter(record)
+    assert getattr(record, "provider_payload") == "[REDACTED]"
+    assert getattr(record, "raw_prompt") == "[REDACTED]"
+    assert getattr(record, "raw_chunk") == "[REDACTED]"
+
+
+@pytest.mark.smoke
+def test_secret_redaction_preserves_safe_fields():
+    """Non-sensitive fields must NOT be redacted."""
+    from api.observability.log_context import SecretRedactionFilter
+
+    flt = SecretRedactionFilter()
+    record = logging.LogRecord(
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="hi",
+        args=(),
+        exc_info=None,
+    )
+    record.tenant_id = "acme"  # type: ignore[attr-defined]
+    record.request_id = "req-123"  # type: ignore[attr-defined]
+    record.trace_id = "abc" * 10  # type: ignore[attr-defined]
+    record.duration_ms = 42.1  # type: ignore[attr-defined]
+    flt.filter(record)
+    assert getattr(record, "tenant_id") == "acme"
+    assert getattr(record, "request_id") == "req-123"
+    assert getattr(record, "duration_ms") == 42.1
+
+
+@pytest.mark.smoke
+def test_secret_redaction_in_json_output():
+    """End-to-end: sensitive fields injected via extra= must not appear as values in JSON output."""
+    import json as _json
+    from api.logging_config import _JsonFormatter
+    from api.observability.log_context import SecretRedactionFilter
+
+    handler = logging.StreamHandler()
+    handler.setFormatter(_JsonFormatter(service="test"))
+    handler.addFilter(SecretRedactionFilter())
+
+    record = logging.LogRecord(
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="request",
+        args=(),
+        exc_info=None,
+    )
+    # Simulate accidental extra= fields with sensitive names
+    record.authorization = "Bearer evil"  # type: ignore[attr-defined]
+    record.api_key = "sk-danger"  # type: ignore[attr-defined]
+    record.tenant_id = "acme"  # type: ignore[attr-defined]
+
+    # Apply filter then format
+    handler.filter(record)
+    output = handler.formatter.format(record)  # type: ignore[union-attr]
+    parsed = _json.loads(output)
+
+    assert parsed.get("authorization") == "[REDACTED]", "authorization must be redacted"
+    assert parsed.get("api_key") == "[REDACTED]", "api_key must be redacted"
+    assert "Bearer evil" not in output, "raw token value must not appear in log output"
+    assert "sk-danger" not in output, "raw api_key value must not appear in log output"
+    assert parsed.get("tenant_id") == "acme", "safe field must survive redaction"
+
+
+# ---------------------------------------------------------------------------
+# OTel failure safety
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.smoke
+def test_otel_disabled_requests_still_succeed():
+    """When FG_OTEL_ENABLED=0, the OTelTracingMiddleware must be a transparent noop."""
+    import api.observability.tracing as tracing_mod
+
+    # Reset global state for isolation
+    original = tracing_mod._TRACER_PROVIDER
+    tracing_mod._TRACER_PROVIDER = None
+
+    try:
+        os.environ["FG_OTEL_ENABLED"] = "0"
+        tracing_mod.setup_tracing("test-disabled")
+        # TracerProvider must remain None when disabled
+        assert tracing_mod._TRACER_PROVIDER is None
+
+        client = _build_client()
+        resp = client.get("/health")
+        assert resp.status_code == 200, "request must succeed even with OTel disabled"
+    finally:
+        os.environ.pop("FG_OTEL_ENABLED", None)
+        tracing_mod._TRACER_PROVIDER = original
+
+
+@pytest.mark.smoke
+def test_otel_span_exception_does_not_break_request():
+    """An exception thrown inside a pipeline span must propagate but not corrupt the response."""
+    from api.observability.tracing import setup_tracing, span_ingestion
+
+    setup_tracing("test-exc")
+    with pytest.raises(ValueError, match="boom"):
+        with span_ingestion(tenant_id="t1", doc_type="pdf"):
+            raise ValueError("boom")
+    # If we reach here without a secondary exception the span error handling is safe
+
+
+@pytest.mark.smoke
+def test_broken_otlp_exporter_does_not_crash_startup():
+    """BatchSpanProcessor swallows export failures — startup must succeed even with a bad endpoint."""
+    import api.observability.tracing as tracing_mod
+
+    original = tracing_mod._TRACER_PROVIDER
+    tracing_mod._TRACER_PROVIDER = None
+    original_endpoint = os.environ.get("FG_OTEL_ENDPOINT")
+
+    try:
+        # Point to a definitely-unreachable endpoint
+        os.environ["FG_OTEL_ENDPOINT"] = "http://localhost:19999/v1/traces"
+        os.environ["FG_OTEL_ENABLED"] = "1"
+        # Must not raise even though the endpoint is unreachable
+        tracing_mod.setup_tracing("test-broken-otlp")
+        assert tracing_mod._TRACER_PROVIDER is not None
+    finally:
+        os.environ.pop("FG_OTEL_ENABLED", None)
+        if original_endpoint is None:
+            os.environ.pop("FG_OTEL_ENDPOINT", None)
+        else:
+            os.environ["FG_OTEL_ENDPOINT"] = original_endpoint
+        tracing_mod._TRACER_PROVIDER = original
+
+
+# ---------------------------------------------------------------------------
+# Metric name contract (stable registry)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.smoke
+def test_metric_name_contract():
+    """Canonical metric names must not drift. Any rename requires updating this test explicitly."""
+    import api.observability.metrics as m
+
+    # prometheus_client stores Counter._name without the _total suffix it appends
+    # at scrape time.  Histograms and Gauges are unchanged.
+    expected_names = {
+        "frostgate_provider_latency_seconds",
+        "frostgate_provider_requests",
+        "frostgate_provider_failures",
+        "frostgate_retrieval_latency_seconds",
+        "frostgate_retrieval_requests",
+        "frostgate_ingestion_requests",
+        "frostgate_ingestion_latency_seconds",
+        "frostgate_audit_export",
+        "frostgate_audit_export_latency_seconds",
+        "frostgate_audit_pipeline_failures",
+        "frostgate_provenance_validation",
+        "frostgate_db_errors",
+        "frostgate_db_connectivity_failures",
+        "frostgate_http_5xx",
+        "frostgate_http_request_duration_seconds",
+    }
+    actual = {
+        m.PROVIDER_LATENCY._name,
+        m.PROVIDER_REQUESTS._name,
+        m.PROVIDER_FAILURES._name,
+        m.RETRIEVAL_LATENCY._name,
+        m.RETRIEVAL_REQUESTS._name,
+        m.INGESTION_REQUESTS._name,
+        m.INGESTION_LATENCY._name,
+        m.AUDIT_EXPORT_TOTAL._name,
+        m.AUDIT_EXPORT_LATENCY._name,
+        m.AUDIT_PIPELINE_FAILURES._name,
+        m.PROVENANCE_VALIDATION_TOTAL._name,
+        m.DB_ERRORS_TOTAL._name,
+        m.DB_CONNECTIVITY_FAILURES._name,
+        m.HTTP_5XX_TOTAL._name,
+        m.HTTP_REQUEST_DURATION._name,
+    }
+    assert actual == expected_names, (
+        f"Metric name drift detected.\n"
+        f"  Added: {actual - expected_names}\n"
+        f"  Removed: {expected_names - actual}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Alert-to-metric validation
+# ---------------------------------------------------------------------------
+
+_ALERT_METRIC_DEPS: dict[str, list[str]] = {
+    "FrostgateProviderFailureHigh": [
+        "frostgate_provider_failures_total",
+        "frostgate_provider_requests_total",
+    ],
+    "FrostgateRetrievalLatencyHigh": ["frostgate_retrieval_latency_seconds"],
+    "FrostgateRetrievalFailureHigh": ["frostgate_retrieval_requests_total"],
+    "FrostgateIngestionFailureHigh": ["frostgate_ingestion_requests_total"],
+    "FrostgateAuditPipelineFailure": ["frostgate_audit_pipeline_failures_total"],
+    "FrostgateAuditExportFailureHigh": ["frostgate_audit_export_total"],
+    "FrostgateDBConnectivityFailure": ["frostgate_db_connectivity_failures_total"],
+    "FrostgateHttp5xxRateHigh": [
+        "frostgate_http_5xx_total",
+        "frostgate_http_request_duration_seconds",
+    ],
+    "FrostgateRequestLatencyAbnormal": ["frostgate_http_request_duration_seconds"],
+    "FrostgateProvenanceFailureSpike": ["frostgate_provenance_validation_total"],
+}
+
+
+@pytest.mark.smoke
+def test_alert_rules_reference_registered_metrics():
+    """Every alert defined in _ALERT_METRIC_DEPS must reference metrics that exist in the registry."""
+    import api.observability.metrics  # noqa: F401
+    from prometheus_client import REGISTRY
+
+    # REGISTRY.collect() returns base names; Counters strip _total internally.
+    # Expand the set with _total variants so alert refs using _total still match.
+    registered_base = {m.name for m in REGISTRY.collect()}
+    registered = registered_base | {n + "_total" for n in registered_base}
+
+    for alert_name, metric_names in _ALERT_METRIC_DEPS.items():
+        for metric_name in metric_names:
+            assert metric_name in registered, (
+                f"Alert '{alert_name}' references '{metric_name}' "
+                f"but that metric is not registered in the Prometheus registry"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Dashboard-to-metric validation
+# ---------------------------------------------------------------------------
+
+
+def _extract_dashboard_metric_refs(dashboard_json: dict) -> set[str]:
+    """Extract all frostgate_* metric names referenced in Grafana panel expressions."""
+    import re
+
+    refs: set[str] = set()
+    pattern = re.compile(r"\b(frostgate_[a-z_]+)\b")
+
+    def _walk(obj):
+        if isinstance(obj, dict):
+            for v in obj.values():
+                _walk(v)
+        elif isinstance(obj, list):
+            for item in obj:
+                _walk(item)
+        elif isinstance(obj, str):
+            for match in pattern.findall(obj):
+                refs.add(match)
+
+    _walk(dashboard_json)
+    return refs
+
+
+_PROM_SUFFIXES = ("_total", "_bucket", "_count", "_sum", "_created")
+
+
+def _strip_prom_suffix(name: str) -> str:
+    for suffix in _PROM_SUFFIXES:
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
+
+@pytest.mark.smoke
+def test_dashboard_queries_reference_registered_metrics():
+    """Every frostgate_* metric referenced in Grafana dashboards must exist in the registry."""
+    import json as _json
+    from pathlib import Path
+    import api.observability.metrics  # noqa: F401
+    from prometheus_client import REGISTRY
+
+    # REGISTRY.collect() returns base names (Counters strip _total).
+    # Dashboard exprs use suffixed forms (_total, _bucket, _count, etc.).
+    # Normalize both sides to base names before comparing.
+    registered = {m.name for m in REGISTRY.collect()}
+    dashboard_dir = Path(__file__).parent.parent / "deploy" / "grafana" / "dashboards"
+    assert dashboard_dir.exists(), "deploy/grafana/dashboards directory must exist"
+
+    violations: list[str] = []
+    for dash_file in sorted(dashboard_dir.glob("*.json")):
+        dashboard = _json.loads(dash_file.read_text())
+        refs = _extract_dashboard_metric_refs(dashboard)
+        for ref in sorted(refs):
+            if _strip_prom_suffix(ref) not in registered:
+                violations.append(
+                    f"{dash_file.name}: references unregistered metric '{ref}'"
+                )
+
+    assert not violations, "Dashboard metric drift:\n" + "\n".join(violations)
+
+
+# ---------------------------------------------------------------------------
+# Sampling config
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.smoke
+def test_otel_sample_ratio_env_var():
+    """FG_OTEL_SAMPLE_RATIO must be respected as the canonical sampling config."""
+    import api.observability.tracing as tracing_mod
+
+    original = tracing_mod._TRACER_PROVIDER
+    tracing_mod._TRACER_PROVIDER = None
+
+    try:
+        os.environ["FG_OTEL_SAMPLE_RATIO"] = "0.5"
+        os.environ["FG_OTEL_ENABLED"] = "1"
+        tracing_mod.setup_tracing("test-sampling")
+        # Must not raise; provider created with 0.5 sample rate
+        assert tracing_mod._TRACER_PROVIDER is not None
+    finally:
+        os.environ.pop("FG_OTEL_SAMPLE_RATIO", None)
+        os.environ.pop("FG_OTEL_ENABLED", None)
+        tracing_mod._TRACER_PROVIDER = original
+
+
+@pytest.mark.smoke
+def test_otel_sample_rate_legacy_alias_works():
+    """FG_OTEL_SAMPLE_RATE (legacy) must still be accepted."""
+    import api.observability.tracing as tracing_mod
+
+    original = tracing_mod._TRACER_PROVIDER
+    tracing_mod._TRACER_PROVIDER = None
+
+    try:
+        os.environ["FG_OTEL_SAMPLE_RATE"] = "0.1"
+        os.environ["FG_OTEL_ENABLED"] = "1"
+        tracing_mod.setup_tracing("test-legacy-alias")
+        assert tracing_mod._TRACER_PROVIDER is not None
+    finally:
+        os.environ.pop("FG_OTEL_SAMPLE_RATE", None)
+        os.environ.pop("FG_OTEL_ENABLED", None)
+        tracing_mod._TRACER_PROVIDER = original

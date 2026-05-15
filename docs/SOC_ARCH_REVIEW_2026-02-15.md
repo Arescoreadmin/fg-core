@@ -15,7 +15,9 @@
 - `/metrics` endpoint exposes only Prometheus counter/histogram text. No tenant data. No credentials. Classified as `allowed_internal` in route inventory.
 - `RequestContextFilter` and `TraceContextFilter` read from Python contextvars and the OTel span context — both are write-once per request, isolated by async context.
 
-**No auth logic change. No schema change. No contract change. 28 observability tests pass.**
+**No auth logic change. No schema change. No contract change. 51 observability tests pass.**
+
+**Follow-up (same PR):** cardinality guard tests, secret redaction tests, OTel failure-safety tests, metric-name contract test, alert-to-metric and dashboard-to-metric validation tests, and structured log schema doc (`docs/observability/log_schema.md`) added. No additional middleware or auth changes beyond what is described above.
 
 ---
 

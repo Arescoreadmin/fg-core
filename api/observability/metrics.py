@@ -142,7 +142,9 @@ PROVENANCE_FAILURE_SPIKE = Gauge(
 HTTP_5XX_TOTAL = Counter(
     "frostgate_http_5xx_total",
     "Total HTTP 5xx responses",
-    ["method", "path"],
+    ["method"],
+    # NOTE: path is intentionally excluded — paths containing UUIDs/IDs would
+    # produce unbounded label cardinality and a denial-of-wallet billing event.
 )
 
 HTTP_REQUEST_DURATION = Histogram(
