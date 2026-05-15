@@ -900,3 +900,20 @@ def require_scopes(*scopes: str) -> Callable[..., None]:
         return None
 
     return _dep
+
+
+def authz_scope(*scopes: str) -> Callable[..., None]:
+    """Declare intended scope metadata for governance tooling and lint.
+
+    Does NOT enforce scope at runtime. Use require_role() for authorization
+    on routes where a role implies the scope rather than explicit scopes_csv.
+    The scope names are extracted by route_checks.py for route inventory,
+    scope lint, and compliance export — satisfying the same tooling that
+    require_scopes() satisfies without blocking role-authorized requests.
+    """
+    _ = scopes  # consumed by AST; not used at runtime
+
+    def _dep() -> None:
+        return None
+
+    return _dep

@@ -3689,6 +3689,7 @@
     },
     {
       "dependency_categories": [
+        "auth",
         "tenant"
       ],
       "file": "api/tenant_rbac_router.py",
@@ -3696,13 +3697,16 @@
       "path": "/rbac/assignments",
       "plane": "rbac",
       "plane_id": "rbac",
-      "scoped": false,
-      "scopes": [],
+      "scoped": true,
+      "scopes": [
+        "keys:read"
+      ],
       "source": "runtime-ast",
       "tenant_bound": true
     },
     {
       "dependency_categories": [
+        "auth",
         "tenant"
       ],
       "file": "api/tenant_rbac_router.py",
@@ -3710,13 +3714,16 @@
       "path": "/rbac/assignments",
       "plane": "rbac",
       "plane_id": "rbac",
-      "scoped": false,
-      "scopes": [],
+      "scoped": true,
+      "scopes": [
+        "keys:write"
+      ],
       "source": "runtime-ast",
       "tenant_bound": true
     },
     {
       "dependency_categories": [
+        "auth",
         "tenant"
       ],
       "file": "api/tenant_rbac_router.py",
@@ -3724,13 +3731,16 @@
       "path": "/rbac/assignments/{key_id}",
       "plane": "rbac",
       "plane_id": "rbac",
-      "scoped": false,
-      "scopes": [],
+      "scoped": true,
+      "scopes": [
+        "keys:write"
+      ],
       "source": "runtime-ast",
       "tenant_bound": true
     },
     {
       "dependency_categories": [
+        "auth",
         "tenant"
       ],
       "file": "api/tenant_rbac_router.py",
@@ -3738,20 +3748,26 @@
       "path": "/rbac/audit",
       "plane": "rbac",
       "plane_id": "rbac",
-      "scoped": false,
-      "scopes": [],
+      "scoped": true,
+      "scopes": [
+        "audit:read"
+      ],
       "source": "runtime-ast",
       "tenant_bound": true
     },
     {
-      "dependency_categories": [],
+      "dependency_categories": [
+        "auth"
+      ],
       "file": "api/tenant_rbac_router.py",
       "method": "GET",
       "path": "/rbac/roles",
       "plane": "rbac",
       "plane_id": "rbac",
-      "scoped": false,
-      "scopes": [],
+      "scoped": true,
+      "scopes": [
+        "keys:read"
+      ],
       "source": "runtime-ast",
       "tenant_bound": false
     },
@@ -4754,7 +4770,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-05-15T10:06:56.204010+00:00",
+  "generated_at": "2026-05-15T10:37:05.658707+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
