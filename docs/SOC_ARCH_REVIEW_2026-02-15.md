@@ -1021,3 +1021,33 @@ All minted API keys share `api_keys.prefix = "fgk"`. The original RBAC implement
 **Route inventory:** regenerated via `make route-inventory-generate`. RBAC routes now show `scoped: true` and correct `scopes` lists. No contract change (authz_scope is a no-arg callable — no OpenAPI header params added).
 
 **Validation:** `check_route_scopes.py` OK. `make fg-fast` PASS.
+
+---
+
+## Eighth Follow-up (PR 81 — Tenant Provisioning Foundation) — 2026-05-15
+
+**Reviewer:** EmpireOverloard | **Classification:** SOC-HIGH-002 (tools/ci changes from route inventory regeneration)
+
+**Schema change (flagged):** Migration `0050_tenant_provisioning.sql` adds three tables: `provisioning_organizations`, `provisioning_workflows`, `provisioning_audit_events`. All idempotent DDL (`CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`). No foreign keys to existing tables. Append-only rules on `provisioning_audit_events` match the pattern in migration 0048.
+
+**ORM additions:** Three new ORM classes appended to `api/db_models.py`: `ProvisioningOrganizationRecord`, `ProvisioningWorkflowRecord`, `ProvisioningAuditEventRecord`. No changes to existing ORM classes.
+
+**New subsystem:** `services/provisioning/` package — `models.py` (pure Python domain models, state machines, activation precondition gate), `store.py` (SQLAlchemy persistence, optimistic locking, SHA-256 audit hash chain), `audit.py` (structured SIEM-compatible audit emission). No mutable module-level state. Stateless store receives Session at call time.
+
+**New API router:** `api/provisioning_manager.py` — 14 routes under `/control-plane/provisioning/`. All read routes protected by `control-plane:read`; all write routes protected by `control-plane:admin`. `_tenant_from_auth(request)` resolves tenant from auth context only (never from request body). `extra="forbid"` on all Pydantic models. No secrets or internal topology in responses.
+
+**Router registration:** `api/main.py` — `provisioning_router` added to both `build_app` and `build_contract_app` after `deployment_manager_router`.
+
+**No new auth logic.** No changes to middleware, auth middleware, or credentials handling.
+
+**No sensitive data exposed.** `_org_response()` and `_workflow_response()` serializers omit metadata, credentials, and topology fields.
+
+**ComplianceClassification deduplication:** `services.provisioning.models` re-exports `ComplianceClassification` from `services.deployment.models` (identical enum values) to prevent non-deterministic OpenAPI schema key naming (`services__deployment__models__` vs `services__provisioning__models__`). Contract determinism restored.
+
+**Tools/CI changes:** `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`, `tools/ci/plane_registry_snapshot.json` — regenerated via `make route-inventory-generate`. 14 new provisioning routes added, all `tenant_bound: true`, `scoped: true`, `dependency_categories: [auth, rate, tenant]`.
+
+**Contract update:** `contracts/core/openapi.json` regenerated to include provisioning request/response schemas. `BLUEPRINT_STAGED.md` and `CONTRACT.md` authority markers updated.
+
+**Tests:** 51 tests in `tests/test_provisioning_manager.py` — all pass. Covers state machine, workflow lifecycle, activation gate, suspension, env assignment, tenant isolation, audit hash chain, concurrency (optimistic locking), API surface (14 routes), serialization safety, invalid input rejection.
+
+**Validation:** `make fg-fast` PASS. 51 provisioning tests PASS.

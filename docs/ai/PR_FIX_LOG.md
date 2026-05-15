@@ -9724,3 +9724,55 @@ The rewritten dynamic INSERT was missing `is_current = 1` from the params dict. 
 - `python tools/ci/check_plane_registry.py`: OK
 - `pytest -q tests/test_deployment_manager.py`: 75 passed
 - `make fg-fast`: All checks passed
+
+---
+
+### 2026-05-15 — PR 81: Enterprise Tenant Provisioning & Organization Onboarding Foundation
+
+**Branch:** `feat/tenant-provisioning-foundation`
+
+**Area:** New provisioning subsystem; new API router (14 routes); migration; ORM additions. No changes to existing subsystems.
+
+**What was built:**
+
+- `migrations/postgres/0050_tenant_provisioning.sql` — three new tables (`provisioning_organizations`, `provisioning_workflows`, `provisioning_audit_events`) with idempotent DDL and Postgres append-only rules on audit events.
+- `api/db_models.py` — three ORM classes appended (`ProvisioningOrganizationRecord`, `ProvisioningWorkflowRecord`, `ProvisioningAuditEventRecord`).
+- `services/provisioning/__init__.py` — package init exporting all public symbols.
+- `services/provisioning/models.py` — pure Python domain models: enums (`OrgLifecycleStatus`, `OnboardingState`, `WorkflowState`, `DeploymentTier`, `OrgEventType`, `FailureCategory`), state machines (`VALID_ORG_TRANSITIONS`, `VALID_WORKFLOW_TRANSITIONS`), frozen dataclasses, `check_activation_preconditions()`. Re-exports `ComplianceClassification` from `services.deployment.models` to avoid OpenAPI schema duplication.
+- `services/provisioning/audit.py` — SHA-256 hash chain audit emission, SIEM-structured logging.
+- `services/provisioning/store.py` — `ProvisioningStore` with 14 methods covering org CRUD, workflow lifecycle (start/complete/fail/retry), activation gate, suspension, env assignment, audit event listing. Optimistic locking on all state mutations.
+- `api/provisioning_manager.py` — 14-route FastAPI router under `/control-plane/provisioning/`. All routes scoped (`control-plane:read` / `control-plane:admin`). `_tenant_from_auth(request)` resolves tenant from auth context. `extra="forbid"` on all Pydantic request models. Safe serializers (`_org_response`, `_workflow_response`).
+- `api/main.py` — `provisioning_router` registered in `build_app` and `build_contract_app`.
+- `tests/test_provisioning_manager.py` — 51 tests.
+- `docs/provisioning/lifecycle.md` — operator reference.
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` — eighth follow-up entry.
+
+**Key design note — ComplianceClassification deduplication:** Both `services.deployment.models` and `services.provisioning.models` define a `ComplianceClassification` enum with identical values. FastAPI generates OpenAPI schema components keyed by the Python module path, making the component name non-deterministic when both are imported. Resolution: `services/provisioning/models.py` re-exports the deployment enum directly rather than defining its own, ensuring a single deterministic component key in the OpenAPI spec.
+
+**Files changed:**
+- `migrations/postgres/0050_tenant_provisioning.sql` (new)
+- `api/db_models.py` (appended 3 ORM classes)
+- `services/provisioning/__init__.py` (new)
+- `services/provisioning/models.py` (new)
+- `services/provisioning/audit.py` (new)
+- `services/provisioning/store.py` (new)
+- `api/provisioning_manager.py` (new)
+- `api/main.py` (provisioning_router registered in 2 functions)
+- `tests/test_provisioning_manager.py` (new)
+- `contracts/core/openapi.json` (regenerated)
+- `BLUEPRINT_STAGED.md` (authority SHA updated)
+- `CONTRACT.md` (authority SHA updated)
+- `tools/ci/route_inventory.json` (regenerated)
+- `tools/ci/route_inventory_summary.json` (regenerated)
+- `tools/ci/topology.sha256` (regenerated)
+- `tools/ci/plane_registry_snapshot.json` (regenerated)
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` (eighth follow-up)
+- `docs/ai/PR_FIX_LOG.md` (this entry)
+
+**Validation:**
+- `ruff check` + `ruff format --check`: PASS
+- `pytest -q tests/test_provisioning_manager.py`: 51 passed
+- `python tools/ci/check_plane_registry.py`: OK
+- `make route-inventory-generate`: OK
+- `make fg-contract`: PASS
+- `make fg-fast`: All checks passed

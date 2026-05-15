@@ -2248,6 +2248,258 @@
         "rate",
         "tenant"
       ],
+      "file": "api/provisioning_manager.py",
+      "method": "GET",
+      "path": "/control-plane/provisioning/organizations",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/provisioning_manager.py",
+      "method": "POST",
+      "path": "/control-plane/provisioning/organizations",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:admin"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/provisioning_manager.py",
+      "method": "GET",
+      "path": "/control-plane/provisioning/organizations/{org_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/provisioning_manager.py",
+      "method": "POST",
+      "path": "/control-plane/provisioning/organizations/{org_id}/activate",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:admin"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/provisioning_manager.py",
+      "method": "POST",
+      "path": "/control-plane/provisioning/organizations/{org_id}/environment",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:admin"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/provisioning_manager.py",
+      "method": "GET",
+      "path": "/control-plane/provisioning/organizations/{org_id}/history",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/provisioning_manager.py",
+      "method": "GET",
+      "path": "/control-plane/provisioning/organizations/{org_id}/onboarding",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/provisioning_manager.py",
+      "method": "POST",
+      "path": "/control-plane/provisioning/organizations/{org_id}/provision",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:admin"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/provisioning_manager.py",
+      "method": "POST",
+      "path": "/control-plane/provisioning/organizations/{org_id}/suspend",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:admin"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/provisioning_manager.py",
+      "method": "GET",
+      "path": "/control-plane/provisioning/workflows",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/provisioning_manager.py",
+      "method": "GET",
+      "path": "/control-plane/provisioning/workflows/{provisioning_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/provisioning_manager.py",
+      "method": "POST",
+      "path": "/control-plane/provisioning/workflows/{provisioning_id}/complete",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:admin"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/provisioning_manager.py",
+      "method": "POST",
+      "path": "/control-plane/provisioning/workflows/{provisioning_id}/fail",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:admin"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
+      "file": "api/provisioning_manager.py",
+      "method": "POST",
+      "path": "/control-plane/provisioning/workflows/{provisioning_id}/retry",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "control-plane:admin"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "rate",
+        "tenant"
+      ],
       "file": "api/control_plane_v2.py",
       "method": "GET",
       "path": "/control-plane/v2/ai/namespace",
@@ -4998,7 +5250,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-05-15T19:52:15.644351+00:00",
+  "generated_at": "2026-05-15T21:31:33.865374+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
