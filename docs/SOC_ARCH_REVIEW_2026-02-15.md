@@ -23,6 +23,8 @@
 
 **Third follow-up (dynamic telemetry policy):** `api/middleware/otel_tracing.py` (modified) — `_attach_request_attributes` now routes all span attributes through `get_policy().filter_span_attributes()` before calling `span.set_attribute()`. In regulated/strict mode this silently drops any attribute not in `APPROVED_SPAN_ATTRIBUTES`. No new routes. No auth logic change. `api/observability/telemetry_policy.py` (new) — read-only policy module; no middleware, no auth, no routes. `api/observability/tracing.py` (modified) — OTLP exporter construction gated on `policy.allows_external_otlp()`; no behavioral change when policy allows OTLP. 20 new tests pass.
 
+**Fourth follow-up (plane registry fix for /metrics):** `services/plane_registry/registry.py` (modified) — `/metrics` added to `route_prefixes` of the `control` plane so `match_plane("/metrics")` resolves correctly; previously it existed only in `public_routes` with `class_name="allowed_internal"` but was absent from the prefix list, causing `unexpected-route gap: GET /metrics` in `control-plane-check`. `tools/ci/check_plane_registry.py` (modified) — added `"allowed_internal"` to the scope-check bypass list alongside `"public"`, `"bootstrap"`, `"auth_exempt"`, `"docs"`. Semantically correct: `allowed_internal` routes are infrastructure endpoints that require no auth scope (same governance intent as `auth_exempt`, different network-boundary semantics). Route inventory regenerated (`tools/ci/route_inventory.json`) — `/metrics` now maps to `plane_id: control`. No auth logic change. No route visibility change. 5 new tests added; all gates pass.
+
 ---
 
 ## 2026-03-01T21:24:06Z — SOC-HIGH-002 — Route inventory artifact updated

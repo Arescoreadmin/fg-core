@@ -6,6 +6,28 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-15 — Plane Registry Fix: GET /metrics unexpected-route gap
+
+**Branch:** `feat/observability-enterprise`
+
+**Area:** Route governance; CI.
+
+**Root cause:** `/metrics` was present in `public_routes` with `class_name="allowed_internal"` but absent from `route_prefixes` of the `control` plane. `match_plane("/metrics")` returned `[]`, triggering `unexpected-route gap: GET /metrics` in `control-plane-check`.
+
+**Files changed:**
+- `services/plane_registry/registry.py` (modified) — added `"/metrics"` to `control` plane `route_prefixes`
+- `tools/ci/check_plane_registry.py` (modified) — added `"allowed_internal"` to scope-check bypass list (**CI config change — explicitly called out**); semantically equivalent to `auth_exempt` (infrastructure endpoints need no scope)
+- `tools/ci/route_inventory.json` (regenerated) — `/metrics` now maps to `plane_id: control`
+- `tests/test_observability.py` (modified) — 5 new /metrics governance tests
+
+**Validation:**
+- `python tools/ci/check_plane_registry.py`: OK
+- `make control-plane-check`: OK
+- `make fg-contract`: all pass
+- `pytest tests/test_observability.py -k metrics`: 19 passed
+
+---
+
 ### 2026-05-15 — Dynamic Telemetry Policy Engine
 
 **Branch:** `feat/observability-enterprise`

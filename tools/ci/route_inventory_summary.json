@@ -21,6 +21,7 @@
     "GET /control/testing/health",
     "GET /control/testing/runs",
     "GET /control/testing/runs/{run_id}",
+    "GET /metrics",
     "GET /ui/ai",
     "GET /ui/ai/experience",
     "GET /ui/ai/usage",
@@ -104,13 +105,12 @@
     "agent": 14,
     "ai": 5,
     "connector": 14,
-    "control": 129,
+    "control": 130,
     "data": 42,
     "evidence": 23,
     "rbac": 5,
     "security": 6,
-    "ui": 47,
-    "unmapped": 1
+    "ui": 47
   },
   "removed": [],
   "runtime_count": 286,
@@ -212,7 +212,5 @@
     "PUT /admin/tenants/{tenant_id}/quota",
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
-  "unauthorized_runtime_only": [
-    "GET /metrics"
-  ]
+  "unauthorized_runtime_only": []
 }

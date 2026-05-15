@@ -602,6 +602,70 @@ def test_plane_registry_classifies_metrics_as_allowed_internal():
     )
 
 
+@pytest.mark.smoke
+def test_plane_registry_match_plane_resolves_metrics_to_control():
+    """match_plane('/metrics') must return ['control'], not empty (causes unexpected-route gap)."""
+    from tools.ci.plane_registry_checks import match_plane
+
+    result = match_plane("/metrics")
+    assert result == ["control"], (
+        f"match_plane('/metrics') returned {result!r}; "
+        "expected ['control'] — /metrics must be in control plane route_prefixes"
+    )
+
+
+@pytest.mark.smoke
+def test_metrics_route_inventory_classifies_as_internal():
+    """/metrics must appear in ALLOWED_INTERNAL_PREFIXES so route-inventory-audit accepts it."""
+    from tools.ci.check_route_inventory import ALLOWED_INTERNAL_PREFIXES
+
+    assert any(
+        "/metrics".startswith(p) or "/metrics" == p.rstrip("/")
+        for p in ALLOWED_INTERNAL_PREFIXES
+    ), f"/metrics not covered by ALLOWED_INTERNAL_PREFIXES: {ALLOWED_INTERNAL_PREFIXES}"
+
+
+@pytest.mark.smoke
+def test_metrics_not_in_customer_contract_openapi():
+    """GET /metrics must not appear in the committed customer-facing contract OpenAPI."""
+    import json
+    from pathlib import Path
+
+    contract_path = Path("contracts/core/openapi.json")
+    if not contract_path.exists():
+        pytest.skip("contract openapi.json not present — skipping")
+    doc = json.loads(contract_path.read_text())
+    paths = doc.get("paths", {})
+    assert "/metrics" not in paths, (
+        "/metrics must never appear in the customer-facing API contract"
+    )
+
+
+@pytest.mark.smoke
+def test_metrics_endpoint_exposes_no_sensitive_labels():
+    """/metrics scrape output must not contain tenant_id, request_id, auth tokens, or secret fields."""
+    import re
+
+    client = _build_client()
+    body = client.get("/metrics").text
+
+    forbidden_patterns = [
+        r"\btenant_id\s*=",
+        r"\brequest_id\s*=",
+        r"\bdocument_id\s*=",
+        r"\bsource_hash\s*=",
+        r"\bauthorization\s*=",
+        r"\bapi_key\s*=",
+        r"\bbearer\s*=",
+        r"\bpassword\s*=",
+        r"\bsecret\s*=",
+    ]
+    violations = [p for p in forbidden_patterns if re.search(p, body, re.IGNORECASE)]
+    assert not violations, (
+        f"/metrics output contains sensitive label patterns: {violations}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Secret redaction
 # ---------------------------------------------------------------------------
