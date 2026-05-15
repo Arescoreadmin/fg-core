@@ -3401,6 +3401,18 @@
     },
     {
       "dependency_categories": [],
+      "file": "api/main.py",
+      "method": "GET",
+      "path": "/metrics",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": false,
+      "scopes": [],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [],
       "file": "api/mission_envelope.py",
       "method": "GET",
       "path": "/missions",
@@ -4770,7 +4782,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-05-15T10:37:05.658707+00:00",
+  "generated_at": "2026-05-15T17:08:57.314947+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

@@ -175,6 +175,7 @@ def main() -> int:
             and "public" not in exception_classes
             and "bootstrap" not in exception_classes
             and "auth_exempt" not in exception_classes
+            and "allowed_internal" not in exception_classes
             and "docs" not in exception_classes
         ):
             failures.append(f"{method} {path} plane={plane_id} missing scoped auth")

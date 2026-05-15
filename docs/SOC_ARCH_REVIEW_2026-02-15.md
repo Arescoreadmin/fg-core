@@ -1,3 +1,32 @@
+## 2026-05-15 — SOC-HIGH-002 — Enterprise observability middleware and route inventory
+
+**Reviewer:** EmpireOverloard | **Classification:** SOC-HIGH-002 (api/middleware changes)
+
+**Files changed:**
+- `api/middleware/otel_tracing.py` (new) — raw ASGI middleware that extracts W3C TraceContext from inbound headers, creates a server-side OTel span wrapping the full request lifecycle, and writes trace_id/span_id into `request.state`. No auth logic. Reads only standard HTTP headers (traceparent, tracestate); writes no cookies or credentials.
+- `api/middleware/logging.py` (minor) — adds `trace_id`, `span_id`, and `tenant_id` to the per-request structured log entry (all read from `request.state`). No behavioral change to request handling; logging only.
+- `api/observability/` (new package) — Prometheus metrics registry, OTel tracing setup, log context filters, alert condition definitions.
+- `api/main.py` (minor) — adds `OTelTracingMiddleware` as the outermost user middleware and a `/metrics` Prometheus scrape endpoint (unauthenticated, internal-only).
+- `tools/ci/check_route_inventory.py` (minor) — added `/metrics` to `ALLOWED_INTERNAL_PREFIXES`. The `/metrics` path is the standard Prometheus scrape endpoint; it exposes only counters/histograms, contains no tenant data, and is classified as internal-only.
+- `tools/ci/route_inventory.json` — regenerated via `make route-inventory-generate` to include `GET /metrics`.
+
+**Security posture:**
+- `OTelTracingMiddleware` performs no authentication or authorization. It passively reads trace propagation headers and emits OTel spans to a configurable backend (disabled by default; activated only when `FG_OTEL_ENDPOINT` is set).
+- `/metrics` endpoint exposes only Prometheus counter/histogram text. No tenant data. No credentials. Classified as `allowed_internal` in route inventory.
+- `RequestContextFilter` and `TraceContextFilter` read from Python contextvars and the OTel span context — both are write-once per request, isolated by async context.
+
+**No auth logic change. No schema change. No contract change. 51 observability tests pass.**
+
+**Follow-up (same PR):** cardinality guard tests, secret redaction tests, OTel failure-safety tests, metric-name contract test, alert-to-metric and dashboard-to-metric validation tests, and structured log schema doc (`docs/observability/log_schema.md`) added. No additional middleware or auth changes beyond what is described above.
+
+**Second follow-up (observability hardening):** `tools/ci/check_safe_telemetry.py` (new) — AST-based static analysis gate that prevents future contributors from accidentally emitting sensitive field names (`raw_prompt`, `api_key`, `provider_payload`, `authorization`, `bearer_*token`, `password`, `secret`, etc.) as metric labels, OTel span attributes, or structured log `extra=` keys. Added to `fg-fast` as `safe-telemetry-check`. No auth logic change. No schema change. No route change. 13 new tests pass. Gate is additive-only: it blocks additions of forbidden fields, does not modify existing behavior.
+
+**Third follow-up (dynamic telemetry policy):** `api/middleware/otel_tracing.py` (modified) — `_attach_request_attributes` now routes all span attributes through `get_policy().filter_span_attributes()` before calling `span.set_attribute()`. In regulated/strict mode this silently drops any attribute not in `APPROVED_SPAN_ATTRIBUTES`. No new routes. No auth logic change. `api/observability/telemetry_policy.py` (new) — read-only policy module; no middleware, no auth, no routes. `api/observability/tracing.py` (modified) — OTLP exporter construction gated on `policy.allows_external_otlp()`; no behavioral change when policy allows OTLP. 20 new tests pass.
+
+**Fourth follow-up (plane registry fix for /metrics):** `services/plane_registry/registry.py` (modified) — `/metrics` added to `route_prefixes` of the `control` plane so `match_plane("/metrics")` resolves correctly; previously it existed only in `public_routes` with `class_name="allowed_internal"` but was absent from the prefix list, causing `unexpected-route gap: GET /metrics` in `control-plane-check`. `tools/ci/check_plane_registry.py` (modified) — added `"allowed_internal"` to the scope-check bypass list alongside `"public"`, `"bootstrap"`, `"auth_exempt"`, `"docs"`. Semantically correct: `allowed_internal` routes are infrastructure endpoints that require no auth scope (same governance intent as `auth_exempt`, different network-boundary semantics). Route inventory regenerated (`tools/ci/route_inventory.json`) — `/metrics` now maps to `plane_id: control`. No auth logic change. No route visibility change. 5 new tests added; all gates pass.
+
+---
+
 ## 2026-03-01T21:24:06Z — SOC-HIGH-002 — Route inventory artifact updated
 
 **Issue:** `tools/ci/route_inventory.json` changed and is classified as a critical SOC-tracked artifact.

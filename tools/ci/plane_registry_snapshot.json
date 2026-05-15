@@ -526,6 +526,14 @@
           "method": "GET",
           "path": "/v1/status",
           "permanent": true
+        },
+        {
+          "class_name": "allowed_internal",
+          "expires_at": "",
+          "justification": "Prometheus scrape endpoint. Internal infrastructure only — no auth, no tenant data, no customer PII. Must not be exposed on the public customer-facing ingress.",
+          "method": "GET",
+          "path": "/metrics",
+          "permanent": true
         }
       ],
       "required_ci_gates": [
@@ -561,7 +569,8 @@
         "/_debug",
         "/_legacy",
         "/dev",
-        "/rag"
+        "/rag",
+        "/metrics"
       ]
     },
     {
@@ -1020,7 +1029,7 @@
       ]
     }
   ],
-  "generated_at": "2026-05-15T10:37:05.661429+00:00",
+  "generated_at": "2026-05-15T17:08:57.318240+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

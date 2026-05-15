@@ -1,0 +1,73 @@
+"""FrostGate enterprise observability: tracing, metrics, log context, and policy."""
+
+from api.observability.telemetry_policy import (
+    TelemetryPolicy,
+    get_policy,
+    reload_policy,
+    APPROVED_SPAN_ATTRIBUTES,
+)
+from api.observability.tracing import (
+    setup_tracing,
+    get_tracer,
+    current_trace_id,
+    current_span_id,
+    span_ingestion,
+    span_retrieval,
+    span_provider_routing,
+    span_provenance_validation,
+    span_audit_export,
+)
+from api.observability.metrics import (
+    PROVIDER_REQUESTS,
+    PROVIDER_LATENCY,
+    RETRIEVAL_REQUESTS,
+    RETRIEVAL_LATENCY,
+    INGESTION_REQUESTS,
+    INGESTION_LATENCY,
+    AUDIT_EXPORT_TOTAL,
+    AUDIT_EXPORT_LATENCY,
+    PROVENANCE_VALIDATION_TOTAL,
+    DB_ERRORS_TOTAL,
+    HTTP_5XX_TOTAL,
+)
+from api.observability.log_context import (
+    set_log_context,
+    clear_log_context,
+    get_log_context,
+    TraceContextFilter,
+    RequestContextFilter,
+    SecretRedactionFilter,
+)
+
+__all__ = [
+    "TelemetryPolicy",
+    "get_policy",
+    "reload_policy",
+    "APPROVED_SPAN_ATTRIBUTES",
+    "setup_tracing",
+    "get_tracer",
+    "current_trace_id",
+    "current_span_id",
+    "span_ingestion",
+    "span_retrieval",
+    "span_provider_routing",
+    "span_provenance_validation",
+    "span_audit_export",
+    "PROVIDER_REQUESTS",
+    "PROVIDER_LATENCY",
+    "RETRIEVAL_REQUESTS",
+    "RETRIEVAL_LATENCY",
+    "INGESTION_REQUESTS",
+    "INGESTION_LATENCY",
+    "AUDIT_EXPORT_TOTAL",
+    "AUDIT_EXPORT_LATENCY",
+    "PROVENANCE_VALIDATION_TOTAL",
+    "DB_ERRORS_TOTAL",
+    "HTTP_5XX_TOTAL",
+    "set_log_context",
+    "clear_log_context",
+    "get_log_context",
+    "TraceContextFilter",
+    "RequestContextFilter",
+    "SecretRedactionFilter",
+]

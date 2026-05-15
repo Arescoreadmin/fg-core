@@ -75,6 +75,7 @@ from api.middleware.auth_gate import AuthGateConfig, AuthGateMiddleware
 from api.middleware.dos_guard import DoSGuardConfig, DoSGuardMiddleware
 from api.middleware.exception_shield import FGExceptionShieldMiddleware
 from api.middleware.logging import RequestLoggingMiddleware
+from api.middleware.otel_tracing import OTelTracingMiddleware
 from api.middleware.request_validation import (
     RequestValidationConfig,
     RequestValidationMiddleware,
@@ -282,6 +283,10 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
             if is_production or is_strict_env_required():
                 raise
 
+        from api.observability.tracing import setup_tracing
+
+        setup_tracing(service_name=app.state.service)
+
         self_heal_watchdog = SelfHealWatchdog()
         self_heal_watchdog.start()
         app.state.self_heal_watchdog = self_heal_watchdog
@@ -442,6 +447,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
         config=RequestValidationConfig.from_env(),
     )
     _add_middleware(app, ResilienceGuardMiddleware)
+    _add_middleware(app, OTelTracingMiddleware)
 
     app.state.auth_enabled = bool(resolved_auth_enabled)
     app.state.service = os.getenv("FG_SERVICE", "frostgate-core")
@@ -605,6 +611,18 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     admin_router = getattr(spine_modules, "admin_router", None)
     if admin_router is not None and _should_mount_admin_routes():
         app.include_router(admin_router)
+
+    if _env_bool("FG_METRICS_ENABLED", default=True):
+
+        @app.get("/metrics", include_in_schema=False)
+        async def metrics_endpoint():  # type: ignore[return]
+            from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+            from fastapi.responses import PlainTextResponse
+
+            return PlainTextResponse(
+                content=generate_latest().decode("utf-8"),
+                media_type=CONTENT_TYPE_LATEST,
+            )
 
     @app.get("/health")
     async def health(request: Request) -> dict[str, Any]:

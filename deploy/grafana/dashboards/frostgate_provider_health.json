@@ -1,0 +1,77 @@
+{
+  "__requires": [{"type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0"}],
+  "annotations": {"list": []},
+  "description": "FrostGate provider health: per-provider failure rates, latency, and routing",
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 100,
+      "title": "Provider Overview",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "thresholds": {"steps": [{"color": "green"}, {"color": "yellow", "value": 0.05}, {"color": "red", "value": 0.10}]}}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 1},
+      "id": 1,
+      "options": {"tooltip": {"mode": "multi"}},
+      "title": "Provider Failure Rate by Provider",
+      "type": "timeseries",
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum by (provider_id) (rate(frostgate_provider_failures_total[5m])) / (sum by (provider_id) (rate(frostgate_provider_requests_total[5m])) + 0.001)", "legendFormat": "{{ provider_id }}"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 1},
+      "id": 2,
+      "options": {"tooltip": {"mode": "multi"}},
+      "title": "Provider p99 Latency by Provider",
+      "type": "timeseries",
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "histogram_quantile(0.99, sum by (provider_id, le) (rate(frostgate_provider_latency_seconds_bucket[5m])))", "legendFormat": "{{ provider_id }} p99"},
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "histogram_quantile(0.50, sum by (provider_id, le) (rate(frostgate_provider_latency_seconds_bucket[5m])))", "legendFormat": "{{ provider_id }} p50"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 9},
+      "id": 3,
+      "title": "Provider Request Rate",
+      "type": "timeseries",
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum by (provider_id, status) (rate(frostgate_provider_requests_total[5m]))", "legendFormat": "{{ provider_id }} / {{ status }}"}
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 9},
+      "id": 4,
+      "title": "Provider Failure Types",
+      "type": "timeseries",
+      "targets": [
+        {"datasource": {"type": "prometheus", "uid": "${datasource}"}, "expr": "sum by (provider_id, failure_type) (rate(frostgate_provider_failures_total[5m]))", "legendFormat": "{{ provider_id }} / {{ failure_type }}"}
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["frostgate", "providers"],
+  "templating": {
+    "list": [
+      {"current": {}, "hide": 0, "includeAll": false, "name": "datasource", "options": [], "query": "prometheus", "refresh": 1, "type": "datasource"},
+      {"current": {"text": "All", "value": "$__all"}, "datasource": {"type": "prometheus", "uid": "${datasource}"}, "definition": "label_values(frostgate_provider_requests_total, provider_id)", "hide": 0, "includeAll": true, "multi": true, "name": "provider", "query": "label_values(frostgate_provider_requests_total, provider_id)", "refresh": 2, "type": "query"}
+    ]
+  },
+  "time": {"from": "now-3h", "to": "now"},
+  "timezone": "browser",
+  "title": "FrostGate — Provider Health",
+  "uid": "fg-provider-health",
+  "version": 1
+}
