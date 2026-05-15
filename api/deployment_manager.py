@@ -75,7 +75,7 @@ ERR_STRATEGY_GOVERNANCE = "DEPLOY-API-009"
 # ---------------------------------------------------------------------------
 
 
-def _tenant_from_request(request: Request) -> Optional[str]:
+def _tenant_from_auth(request: Request) -> Optional[str]:
     """Resolve tenant_id from auth context. Never from request body."""
     auth = getattr(getattr(request, "state", None), "auth", None)
     return getattr(getattr(request, "state", None), "tenant_id", None) or getattr(
@@ -289,7 +289,7 @@ def list_environments(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
-    tenant_id = _tenant_from_request(request)
+    tenant_id = _tenant_from_auth(request)
     envs = _store.list_environments(
         db,
         tenant_id=tenant_id,
@@ -328,7 +328,7 @@ def create_environment(
     body: CreateEnvironmentRequest,
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
-    tenant_id = _tenant_from_request(request)
+    tenant_id = _tenant_from_auth(request)
     actor = _actor_from_request(request)
     trace_id = _trace_id_from_request(request)
 
@@ -370,7 +370,7 @@ def get_environment(
     env_id: str,
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
-    tenant_id = _tenant_from_request(request)
+    tenant_id = _tenant_from_auth(request)
     try:
         env = _store.get_environment(db, env_id=env_id, tenant_id=tenant_id)
     except EnvironmentNotFound as exc:
@@ -443,7 +443,7 @@ def list_deployments(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
-    tenant_id = _tenant_from_request(request)
+    tenant_id = _tenant_from_auth(request)
     deployments = _store.list_deployments(
         db,
         tenant_id=tenant_id,
@@ -469,7 +469,7 @@ def create_deployment(
     body: CreateDeploymentRequest,
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
-    tenant_id = _tenant_from_request(request)
+    tenant_id = _tenant_from_auth(request)
     actor = _actor_from_request(request)
     trace_id = _trace_id_from_request(request)
 
@@ -505,7 +505,7 @@ def get_deployment(
     deployment_id: str,
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
-    tenant_id = _tenant_from_request(request)
+    tenant_id = _tenant_from_auth(request)
     try:
         dep = _store.get_deployment(
             db, deployment_id=deployment_id, tenant_id=tenant_id
@@ -531,7 +531,7 @@ def transition_deployment_state(
     dry_run: bool = Query(default=False),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
-    tenant_id = _tenant_from_request(request)
+    tenant_id = _tenant_from_auth(request)
     actor = _actor_from_request(request)
     trace_id = _trace_id_from_request(request)
 
@@ -594,7 +594,7 @@ def record_deployment_approval(
     body: ApprovalRequest,
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
-    tenant_id = _tenant_from_request(request)
+    tenant_id = _tenant_from_auth(request)
     actor = _actor_from_request(request)
     trace_id = _trace_id_from_request(request)
 
@@ -642,7 +642,7 @@ def get_deployment_history(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
-    tenant_id = _tenant_from_request(request)
+    tenant_id = _tenant_from_auth(request)
     try:
         events = _store.list_events(
             db,
@@ -695,7 +695,7 @@ def record_deployment_health(
 ) -> dict[str, Any]:
     from datetime import datetime
 
-    tenant_id = _tenant_from_request(request)
+    tenant_id = _tenant_from_auth(request)
     actor = _actor_from_request(request)
     trace_id = _trace_id_from_request(request)
 
@@ -755,7 +755,7 @@ def get_deployment_health(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
-    tenant_id = _tenant_from_request(request)
+    tenant_id = _tenant_from_auth(request)
     try:
         records = _store.list_health_records(
             db,
@@ -804,7 +804,7 @@ def get_rollback_lineage(
     deployment_id: str,
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
-    tenant_id = _tenant_from_request(request)
+    tenant_id = _tenant_from_auth(request)
     try:
         chain = _store.get_rollback_lineage(
             db, deployment_id=deployment_id, tenant_id=tenant_id

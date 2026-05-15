@@ -677,33 +677,92 @@ class DeploymentStore:
             row.approval_granted_at = now
             row.approval_reason = approval_reason
             row.approval_policy_version = approval_policy_version
+            db.flush()
+
+            self._emit_event(
+                db,
+                deployment_id=deployment_id,
+                env_id=row.env_id,
+                tenant_id=row.tenant_id,
+                event_type=DeploymentEventType.APPROVAL_GRANTED,
+                actor=actor,
+                timestamp=now,
+                now_iso=now_iso,
+                details={
+                    "approval_granted_by": actor,
+                    "approval_reason": approval_reason or "",
+                    "approval_policy_version": approval_policy_version or "",
+                },
+                trace_id=trace_id,
+            )
         else:
-            # Denied: record the reason but do NOT set approval_granted_by.
+            # Denied: record reason, do NOT set approval_granted_by, then
+            # terminally block by transitioning to FAILED so no subsequent
+            # transition to deploying can succeed.
             row.approval_reason = approval_reason
             row.approval_policy_version = approval_policy_version
-        db.flush()
+            db.flush()
 
-        event_type = (
-            DeploymentEventType.APPROVAL_GRANTED
-            if approved
-            else DeploymentEventType.APPROVAL_DENIED
-        )
-        self._emit_event(
-            db,
-            deployment_id=deployment_id,
-            env_id=row.env_id,
-            tenant_id=row.tenant_id,
-            event_type=event_type,
-            actor=actor,
-            timestamp=now,
-            now_iso=now_iso,
-            details={
-                "approval_granted_by": actor if approved else "",
-                "approval_reason": approval_reason or "",
-                "approval_policy_version": approval_policy_version or "",
-            },
-            trace_id=trace_id,
-        )
+            # Emit denial event before state mutation so hash chain is ordered:
+            # approval_denied → state_transition(→ failed).
+            self._emit_event(
+                db,
+                deployment_id=deployment_id,
+                env_id=row.env_id,
+                tenant_id=row.tenant_id,
+                event_type=DeploymentEventType.APPROVAL_DENIED,
+                actor=actor,
+                timestamp=now,
+                now_iso=now_iso,
+                details={
+                    "approval_granted_by": "",
+                    "approval_reason": approval_reason or "",
+                    "approval_policy_version": approval_policy_version or "",
+                },
+                trace_id=trace_id,
+            )
+
+            # Terminally block if approval is required and not already terminal.
+            from_state_val = DeploymentState(row.state)
+            if row.approval_required and from_state_val not in (
+                DeploymentState.FAILED,
+                DeploymentState.ROLLED_BACK,
+            ):
+                current_version = getattr(row, "state_version", 0) or 0
+                rows_affected = (
+                    db.query(DeploymentRecordORM)
+                    .filter(
+                        DeploymentRecordORM.deployment_id == deployment_id,
+                        DeploymentRecordORM.state_version == current_version,
+                    )
+                    .update(
+                        {
+                            "state": DeploymentState.FAILED.value,
+                            "state_version": current_version + 1,
+                            "completed_at": now,
+                        },
+                        synchronize_session="evaluate",
+                    )
+                )
+                if rows_affected == 0:
+                    raise ConcurrentModificationError(deployment_id)
+                db.flush()
+                db.refresh(row)
+
+                self._emit_event(
+                    db,
+                    deployment_id=deployment_id,
+                    env_id=row.env_id,
+                    tenant_id=row.tenant_id,
+                    event_type=DeploymentEventType.STATE_TRANSITION,
+                    actor=actor,
+                    timestamp=now,
+                    now_iso=now_iso,
+                    from_state=from_state_val,
+                    to_state=DeploymentState.FAILED,
+                    details={"reason": "approval_denied"},
+                    trace_id=trace_id,
+                )
 
         # Emit approval metrics.
         try:
@@ -870,12 +929,21 @@ class DeploymentStore:
     ) -> list[DeploymentRecord]:
         """Return the rollback chain starting from deployment_id.
 
+        The initial lookup for deployment_id always propagates DeploymentNotFound —
+        a missing root deployment is always a caller error (→ 404 at the API layer).
+        Missing ancestors encountered during traversal stop the chain cleanly.
+
         Follows rollback_from_id links up to max_depth hops. Terminates when
-        a record has no rollback_from_id or max_depth is reached (cycle guard).
+        a record has no rollback_from_id, max_depth is reached, or a cycle is detected.
         """
-        chain: list[DeploymentRecord] = []
-        seen: set[str] = set()
-        current_id: Optional[str] = deployment_id
+        # First lookup must propagate — missing initial deployment is always 404.
+        first = self.get_deployment(
+            db, deployment_id=deployment_id, tenant_id=tenant_id
+        )
+
+        chain: list[DeploymentRecord] = [first]
+        seen: set[str] = {deployment_id}
+        current_id: Optional[str] = first.rollback_from_id
 
         while current_id and len(chain) < max_depth:
             if current_id in seen:
@@ -890,6 +958,7 @@ class DeploymentStore:
                     db, deployment_id=current_id, tenant_id=tenant_id
                 )
             except DeploymentNotFound:
+                # Missing ancestor stops traversal; initial deployment was valid.
                 break
             chain.append(record)
             current_id = record.rollback_from_id

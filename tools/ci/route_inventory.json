@@ -1849,7 +1849,8 @@
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/deployment_manager.py",
       "method": "GET",
@@ -1861,12 +1862,13 @@
         "control-plane:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/deployment_manager.py",
       "method": "POST",
@@ -1878,12 +1880,13 @@
         "control-plane:admin"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/deployment_manager.py",
       "method": "GET",
@@ -1895,12 +1898,13 @@
         "control-plane:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/deployment_manager.py",
       "method": "POST",
@@ -1912,12 +1916,13 @@
         "control-plane:admin"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/deployment_manager.py",
       "method": "GET",
@@ -1929,12 +1934,13 @@
         "control-plane:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/deployment_manager.py",
       "method": "GET",
@@ -1946,12 +1952,13 @@
         "control-plane:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/deployment_manager.py",
       "method": "POST",
@@ -1963,12 +1970,13 @@
         "control-plane:admin"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/deployment_manager.py",
       "method": "GET",
@@ -1980,12 +1988,13 @@
         "control-plane:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/deployment_manager.py",
       "method": "POST",
@@ -1997,12 +2006,13 @@
         "control-plane:admin"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/deployment_manager.py",
       "method": "GET",
@@ -2014,12 +2024,13 @@
         "control-plane:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/deployment_manager.py",
       "method": "GET",
@@ -2031,12 +2042,13 @@
         "control-plane:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
         "auth",
-        "rate"
+        "rate",
+        "tenant"
       ],
       "file": "api/deployment_manager.py",
       "method": "POST",
@@ -2048,7 +2060,7 @@
         "control-plane:admin"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
@@ -4986,7 +4998,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-05-15T18:43:24.236144+00:00",
+  "generated_at": "2026-05-15T19:52:15.644351+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

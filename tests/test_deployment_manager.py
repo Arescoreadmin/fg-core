@@ -974,6 +974,7 @@ def test_approval_denial_stores_reason(store, db):
         strategy=DeploymentStrategy.ROLLING,
         initiated_by="op",
     )
+    assert dep.approval_required is True
     updated = store.record_approval(
         db,
         deployment_id=dep.deployment_id,
@@ -982,9 +983,155 @@ def test_approval_denial_stores_reason(store, db):
         approval_reason="failed compliance review",
         approval_policy_version="policy-v2.3",
     )
+    # reason/version stored, granted_by never set
     assert updated.approval_granted_by is None
     assert updated.approval_reason == "failed compliance review"
     assert updated.approval_policy_version == "policy-v2.3"
+    # approval-required deployment transitions to FAILED on denial
+    assert updated.state == DeploymentState.FAILED
+    assert updated.completed_at is not None
+
+
+def test_approval_denial_increments_state_version(store, db):
+    env = store.create_environment(
+        db,
+        env_type=EnvironmentType.PRODUCTION,
+        region="us-east-1",
+        compliance_classification=ComplianceClassification.STANDARD,
+        created_by="op",
+    )
+    dep = store.create_deployment(
+        db,
+        env_id=env.env_id,
+        version_ref="v1.0.0",
+        strategy=DeploymentStrategy.ROLLING,
+        initiated_by="op",
+    )
+    initial_version = dep.state_version
+    updated = store.record_approval(
+        db,
+        deployment_id=dep.deployment_id,
+        approved=False,
+        actor="auditor",
+    )
+    assert updated.state_version == initial_version + 1
+
+
+def test_denied_deployment_cannot_transition_to_deploying(store, db):
+    env = store.create_environment(
+        db,
+        env_type=EnvironmentType.PRODUCTION,
+        region="us-east-1",
+        compliance_classification=ComplianceClassification.STANDARD,
+        created_by="op",
+    )
+    dep = store.create_deployment(
+        db,
+        env_id=env.env_id,
+        version_ref="v1.0.0",
+        strategy=DeploymentStrategy.ROLLING,
+        initiated_by="op",
+    )
+    store.record_approval(
+        db,
+        deployment_id=dep.deployment_id,
+        approved=False,
+        actor="auditor",
+        approval_reason="denied",
+    )
+    db.commit()
+    # Deployment is now FAILED — any further transition must raise.
+    with pytest.raises(Exception):
+        store.transition_state(
+            db,
+            deployment_id=dep.deployment_id,
+            to_state=DeploymentState.DEPLOYING,
+            actor="op",
+        )
+
+
+def test_approval_denial_emits_denial_and_transition_events(store, db):
+    env = store.create_environment(
+        db,
+        env_type=EnvironmentType.PRODUCTION,
+        region="us-east-1",
+        compliance_classification=ComplianceClassification.STANDARD,
+        created_by="op",
+    )
+    dep = store.create_deployment(
+        db,
+        env_id=env.env_id,
+        version_ref="v1.0.0",
+        strategy=DeploymentStrategy.ROLLING,
+        initiated_by="op",
+    )
+    store.record_approval(
+        db,
+        deployment_id=dep.deployment_id,
+        approved=False,
+        actor="auditor",
+        approval_reason="denied",
+    )
+    db.commit()
+    events = store.list_events(db, deployment_id=dep.deployment_id)
+    event_types = [e.event_type.value for e in events]
+    assert "approval_denied" in event_types
+    assert "state_transition" in event_types
+    # state_transition event records the failed terminal state
+    transition_ev = next(
+        e
+        for e in events
+        if e.event_type.value == "state_transition"
+        and e.to_state
+        and e.to_state.value == "failed"
+    )
+    assert transition_ev.from_state is not None
+
+
+def test_rollback_lineage_missing_initial_raises_not_found(store, db):
+    with pytest.raises(Exception) as exc_info:
+        store.get_rollback_lineage(db, deployment_id="does-not-exist")
+    assert "does-not-exist" in str(exc_info.value)
+
+
+def test_rollback_lineage_missing_initial_returns_404_api(api_client):
+    resp = api_client.get("/control-plane/deployments/does-not-exist/rollback-lineage")
+    assert resp.status_code == 404
+    assert resp.json()["detail"]["code"] == "DEPLOY-API-001"
+
+
+def test_rollback_lineage_missing_ancestor_returns_partial(store, db):
+    """Valid initial deployment with a dangling rollback_from_id stops cleanly."""
+    env = store.create_environment(
+        db,
+        env_type=EnvironmentType.DEV,
+        region="us-east-1",
+        compliance_classification=ComplianceClassification.STANDARD,
+        created_by="op",
+    )
+    dep = store.create_deployment(
+        db,
+        env_id=env.env_id,
+        version_ref="v1.0.0",
+        strategy=DeploymentStrategy.ROLLING,
+        initiated_by="op",
+        rollback_from_id="nonexistent-ancestor",
+    )
+    db.commit()
+    # The store enforces rollback_from_id exists, so patch it directly.
+    from api.db_models import DeploymentRecordORM
+
+    db.query(DeploymentRecordORM).filter(
+        DeploymentRecordORM.deployment_id == dep.deployment_id
+    ).update(
+        {"rollback_from_id": "nonexistent-ancestor"}, synchronize_session="evaluate"
+    )
+    db.commit()
+
+    lineage = store.get_rollback_lineage(db, deployment_id=dep.deployment_id)
+    # Initial deployment is in chain; missing ancestor stops traversal.
+    assert len(lineage) == 1
+    assert lineage[0].deployment_id == dep.deployment_id
 
 
 # ---------------------------------------------------------------------------
