@@ -876,3 +876,37 @@ Additive only (migration `0045_pdf_ingestion.sql`):
 **No new schema columns** — 0046 migration only extends the `ingestion_status` constraint and relies on `source_page`, `extraction_version`, and `content_type` already added by 0045.
 
 **Validation:** `make fg-fast` PASS. 48 new tests PASS.
+
+## PR 57 Addendum — Intra-Tenant RBAC (2026-05-14)
+
+**Scope:** Role-based access control layered on top of existing scope-based auth. Roles assigned to API keys (the identity primitive). No changes to core auth middleware, AuthResult, or scope resolution.
+
+**New surface:**
+- `GET /rbac/roles` — read-only; requires `keys:read` scope.
+- `GET /rbac/assignments` — requires `keys:read` scope + `governance_admin` role.
+- `POST /rbac/assignments` — requires `keys:write` scope + `tenant_admin` role.
+- `DELETE /rbac/assignments/{key_prefix}` — requires `keys:write` scope + `tenant_admin` role.
+- `GET /rbac/audit` — requires `audit:read` scope + `auditor` role.
+
+**Role hierarchy (deny-by-default):**
+- `tenant_admin` ⊇ `governance_admin` ⊇ {`analyst`, `auditor`} ⊇ `read_only`.
+- No role or unknown role → `require_role()` raises HTTP 403 (RBAC_INSUFFICIENT_ROLE).
+- 401 returned only when `request.state.auth` is not set (unauthenticated).
+
+**Cross-tenant isolation:**
+- All DB lookups include `tenant_id` predicate. Key assignment scoped to owning tenant; assignment to a key in a different tenant raises `ValueError` (→ HTTP 422).
+
+**Audit trail:**
+- `tenant_role_audit` table: append-only, UUID4 event IDs, immutable at application layer.
+- PostgreSQL: declarative rules prevent UPDATE/DELETE on `tenant_role_audit`.
+- SQLite (dev/test): UNIQUE constraint on `event_id` prevents duplicates.
+
+**Schema changes:**
+- `api_keys.role TEXT` (nullable) — idempotent ALTER TABLE in 0047 and SQLite auto-migrate.
+- `tenant_role_audit` table — created via 0047 migration and `_ensure_api_keys_sqlite` / `_auto_migrate_sqlite`.
+
+**No changes to:** `api/auth_scopes/`, `AuthResult`, `AuthGateMiddleware`, `api/middleware/`, or any CI/deployment configuration.
+
+**Route inventory:** 5 new routes added to `tools/ci/route_inventory.json` (regenerated via `make route-inventory-generate`).
+
+**Validation:** `make fg-fast` PASS. 56 new tests PASS (37 functional + 19 security).

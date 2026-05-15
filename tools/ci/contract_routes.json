@@ -1004,6 +1004,36 @@
     },
     {
       "method": "GET",
+      "path": "/rbac/assignments",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/rbac/assignments",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "DELETE",
+      "path": "/rbac/assignments/{key_prefix}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/rbac/audit",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/rbac/roles",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/rings/isolation",
       "scopes": [],
       "source": "contract"
@@ -1063,7 +1093,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-13T23:58:42.356923+00:00",
+  "generated_at": "2026-05-15T00:50:19.106085+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
