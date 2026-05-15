@@ -193,6 +193,7 @@ def _wf_orm_to_domain(row: ProvisioningWorkflowRecord) -> ProvisioningWorkflow:
         workflow_state=WorkflowState(row.workflow_state),
         current_step=row.current_step,
         idempotency_key=row.idempotency_key,
+        parent_provisioning_id=getattr(row, "parent_provisioning_id", None),
         env_target=row.env_target,
         retry_count=row.retry_count,
         max_retries=row.max_retries,
@@ -261,15 +262,17 @@ class ProvisioningStore:
         idempotency_key: Optional[str] = None,
         metadata: Optional[dict] = None,
     ) -> ProvisioningOrganization:
-        # Idempotency: return existing record deterministically.
+        # Idempotency: scoped to (tenant_id, idempotency_key) — prevents cross-tenant
+        # key collisions from returning another tenant's record.
         if idempotency_key is not None:
-            existing = (
-                db.query(ProvisioningOrganizationRecord)
-                .filter(
-                    ProvisioningOrganizationRecord.idempotency_key == idempotency_key
-                )
-                .first()
+            q = db.query(ProvisioningOrganizationRecord).filter(
+                ProvisioningOrganizationRecord.idempotency_key == idempotency_key
             )
+            if tenant_id is not None:
+                q = q.filter(ProvisioningOrganizationRecord.tenant_id == tenant_id)
+            else:
+                q = q.filter(ProvisioningOrganizationRecord.tenant_id.is_(None))
+            existing = q.first()
             if existing is not None:
                 return _org_orm_to_domain(existing)
 
@@ -461,13 +464,16 @@ class ProvisioningStore:
         idempotency_key: Optional[str] = None,
         metadata: Optional[dict] = None,
     ) -> ProvisioningWorkflow:
-        # Idempotency: return existing workflow deterministically.
+        # Idempotency: scoped to (tenant_id, idempotency_key).
         if idempotency_key is not None:
-            existing = (
-                db.query(ProvisioningWorkflowRecord)
-                .filter(ProvisioningWorkflowRecord.idempotency_key == idempotency_key)
-                .first()
+            q = db.query(ProvisioningWorkflowRecord).filter(
+                ProvisioningWorkflowRecord.idempotency_key == idempotency_key
             )
+            if tenant_id is not None:
+                q = q.filter(ProvisioningWorkflowRecord.tenant_id == tenant_id)
+            else:
+                q = q.filter(ProvisioningWorkflowRecord.tenant_id.is_(None))
+            existing = q.first()
             if existing is not None:
                 return _wf_orm_to_domain(existing)
 
@@ -732,13 +738,16 @@ class ProvisioningStore:
         tenant_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
     ) -> ProvisioningWorkflow:
-        # Idempotency check.
+        # Idempotency: scoped to (tenant_id, idempotency_key).
         if idempotency_key is not None:
-            existing = (
-                db.query(ProvisioningWorkflowRecord)
-                .filter(ProvisioningWorkflowRecord.idempotency_key == idempotency_key)
-                .first()
+            q = db.query(ProvisioningWorkflowRecord).filter(
+                ProvisioningWorkflowRecord.idempotency_key == idempotency_key
             )
+            if tenant_id is not None:
+                q = q.filter(ProvisioningWorkflowRecord.tenant_id == tenant_id)
+            else:
+                q = q.filter(ProvisioningWorkflowRecord.tenant_id.is_(None))
+            existing = q.first()
             if existing is not None:
                 return _wf_orm_to_domain(existing)
 
@@ -759,6 +768,7 @@ class ProvisioningStore:
             .first()
         )
         prev_retry_count = 0
+        prev_provisioning_id = None
         if prev_wf_row is not None:
             if prev_wf_row.workflow_state == WorkflowState.RUNNING.value:
                 raise WorkflowTransitionError(
@@ -766,6 +776,7 @@ class ProvisioningStore:
                     "Cannot retry: a workflow is already running",
                 )
             prev_retry_count = (getattr(prev_wf_row, "retry_count", 0) or 0) + 1
+            prev_provisioning_id = prev_wf_row.provisioning_id
 
         provisioning_id = str(uuid.uuid4())
         now = _utcnow()
@@ -777,6 +788,7 @@ class ProvisioningStore:
             tenant_id=org.tenant_id,
             workflow_state=WorkflowState.RUNNING.value,
             idempotency_key=idempotency_key,
+            parent_provisioning_id=prev_provisioning_id,
             env_target=env_target,
             retry_count=prev_retry_count,
             max_retries=3,
@@ -837,6 +849,10 @@ class ProvisioningStore:
         tenant_id: Optional[str] = None,
     ) -> ProvisioningOrganization:
         org = self.get_organization(db, org_id=org_id, tenant_id=tenant_id)
+
+        # Idempotent: if already active, return current state without re-emitting.
+        if org.lifecycle_status == OrgLifecycleStatus.ACTIVE:
+            return org
 
         # Fetch latest completed workflow if available.
         latest_wf_row = (

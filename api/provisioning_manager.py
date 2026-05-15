@@ -249,6 +249,7 @@ def _workflow_response(wf: Any) -> dict[str, Any]:
         "failure_reason": wf.failure_reason,
         "failure_category": wf.failure_category.value if wf.failure_category else None,
         "state_version": wf.state_version,
+        "parent_provisioning_id": wf.parent_provisioning_id,
         "initiated_by": wf.initiated_by,
         "started_at": wf.started_at.isoformat(),
         "completed_at": wf.completed_at.isoformat() if wf.completed_at else None,

@@ -115,7 +115,11 @@ Both `create_organization` and `start_provisioning_workflow` accept an optional 
 - No new audit event is emitted.
 - The HTTP response is identical to the original.
 
-Idempotency keys are stored as unique constraints. Concurrent duplicate requests will serialize — the second receives the result of the first.
+**Idempotency keys are tenant-scoped.** The lookup filters by `(tenant_id, idempotency_key)` — keys are only de-duplicated within the same tenant context. Two tenants may use the same idempotency key string without collision. Platform-level records (`tenant_id = null`) have a separate global idempotency namespace.
+
+`activate_organization` is also idempotent: if the org is already in `active` state, the call returns the current state immediately without re-emitting an audit event or mutating the record.
+
+Concurrent duplicate requests will serialize — the second receives the result of the first.
 
 ---
 
@@ -124,9 +128,11 @@ Idempotency keys are stored as unique constraints. Concurrent duplicate requests
 Retrying a failed provisioning workflow does **not** mutate the failed workflow record. Instead:
 
 1. The failed org is validated to be in `failed` state.
-2. A new `ProvisioningWorkflow` record is created with `retry_count = prev_retry_count + 1`.
+2. A new `ProvisioningWorkflow` record is created with `retry_count = prev_retry_count + 1` and `parent_provisioning_id` pointing to the most recent failed workflow.
 3. The org transitions back to `provisioning`.
 4. A `provisioning_started` audit event is emitted with the retry count in `details`.
+
+`parent_provisioning_id` is the direct parent in the retry chain. To traverse the full lineage, walk `parent_provisioning_id` links from the current workflow back to the original attempt. The chain terminates when `parent_provisioning_id` is `null`.
 
 This design preserves full history of all attempts and supports lineage auditing.
 
@@ -190,6 +196,38 @@ Event types:
 | `PROV-API-007` | 409 | Concurrent modification (optimistic lock failure) |
 | `PROV-API-008` | 409 | Duplicate slug |
 | `PROV-API-009` | 409 | Duplicate idempotency key |
+
+---
+
+## Compensation and Rollback Boundaries
+
+This subsystem is **fail-safe, not compensating**. When a provisioning step fails, the system stops and marks the org `failed`; it does not attempt to undo side effects that may have occurred before the failure point (e.g., DNS records created, environment capacity reserved).
+
+This is intentional for MVP governance infrastructure. Compensation is the responsibility of the operator based on the audit trail:
+
+1. Inspect `GET /organizations/{id}/history` to identify what succeeded.
+2. Manually undo external side effects (e.g., release reserved env capacity).
+3. Call `POST /organizations/{id}/provision` to start a fresh retry workflow.
+
+**Out of scope for this release:** saga-style compensation transactions, partial rollback of env assignment, or automated deprovision-on-failure. When these are introduced, the `VALID_ORG_TRANSITIONS` FSM and `_emit_event` hook provide the correct extension points.
+
+---
+
+## Future Extensions
+
+The following capabilities are explicitly **out of scope** in this release but are acknowledged as required for enterprise-grade lifecycle management:
+
+| Capability | Extension point |
+|-----------|----------------|
+| Environment capacity governance (saturation, quotas, regulated occupancy) | `assign_environment` + new `ProvisioningEnvironmentRecord` table |
+| Dry-run / eligibility pre-check before provisioning | New `GET /organizations/{id}/activation-eligibility` endpoint calling `check_activation_preconditions` read-only |
+| Async orchestration (step-by-step, external scheduler) | `current_step` + `orchestration_metadata_json` fields already reserved |
+| Event sequence counter for strict ordering guarantees | `event_sequence INTEGER` column on `provisioning_audit_events` |
+| Tenant offboarding / retention hold / legal preservation | New `offboarding_state` column + `legal_hold_at` timestamp; `archived` is the current terminal state |
+| GDPR right-to-erasure / tenant purge governance | Purge policy table; `archived` orgs eligible only after retention period |
+| Prometheus metrics | Same pattern as `services.deployment.metrics` — add counters at store layer |
+
+The `archived` state is currently terminal with no additional semantics. It **must not** be treated as a purge trigger — data retention and deletion will be governed by a future policy layer.
 
 ---
 

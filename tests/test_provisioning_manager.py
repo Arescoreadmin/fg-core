@@ -1043,3 +1043,202 @@ def test_missing_required_fields_rejected(api_client):
         json={"org_name": "Missing Slug Test"},
     )
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# 12. Idempotency tenant isolation (1A fix)
+# ---------------------------------------------------------------------------
+
+
+def test_org_idempotency_key_is_tenant_scoped(store, db):
+    """Tenant A's idempotency key must not be returned to tenant B."""
+    store.create_organization(
+        db,
+        org_name="Tenant A Org",
+        slug="tenant-a-org-idem",
+        compliance_classification=ComplianceClassification.STANDARD,
+        deployment_tier=DeploymentTier.SHARED,
+        created_by="op",
+        tenant_id="tenant-a",
+        idempotency_key="shared-key-xyz",
+    )
+    db.commit()
+
+    # Tenant B uses the same idempotency key — must get a new record, not tenant A's.
+    org_b = store.create_organization(
+        db,
+        org_name="Tenant B Org",
+        slug="tenant-b-org-idem",
+        compliance_classification=ComplianceClassification.STANDARD,
+        deployment_tier=DeploymentTier.SHARED,
+        created_by="op",
+        tenant_id="tenant-b",
+        idempotency_key="shared-key-xyz",
+    )
+    db.commit()
+
+    assert org_b.org_name == "Tenant B Org"
+    assert org_b.tenant_id == "tenant-b"
+
+
+def test_workflow_idempotency_key_is_tenant_scoped(store, db):
+    """Workflow idempotency lookup must not cross tenant boundaries."""
+    org_a = store.create_organization(
+        db,
+        org_name="WF Idem Tenant A",
+        slug="wf-idem-tenant-a",
+        compliance_classification=ComplianceClassification.STANDARD,
+        deployment_tier=DeploymentTier.SHARED,
+        created_by="op",
+        tenant_id="tenant-a",
+    )
+    db.commit()
+
+    org_b = store.create_organization(
+        db,
+        org_name="WF Idem Tenant B",
+        slug="wf-idem-tenant-b",
+        compliance_classification=ComplianceClassification.STANDARD,
+        deployment_tier=DeploymentTier.SHARED,
+        created_by="op",
+        tenant_id="tenant-b",
+    )
+    db.commit()
+
+    wf_a = store.start_provisioning_workflow(
+        db,
+        org_id=org_a.organization_id,
+        initiated_by="op",
+        tenant_id="tenant-a",
+        idempotency_key="wf-shared-key",
+    )
+    db.commit()
+
+    # Tenant B uses the same key — must create a new workflow for org_b.
+    wf_b = store.start_provisioning_workflow(
+        db,
+        org_id=org_b.organization_id,
+        initiated_by="op",
+        tenant_id="tenant-b",
+        idempotency_key="wf-shared-key",
+    )
+    db.commit()
+
+    assert wf_a.provisioning_id != wf_b.provisioning_id
+    assert wf_b.organization_id == org_b.organization_id
+
+
+# ---------------------------------------------------------------------------
+# 13. Idempotent activation (1B fix)
+# ---------------------------------------------------------------------------
+
+
+def test_activate_already_active_org_is_idempotent(store, db):
+    """Activating an already-active org must return current state, not 422."""
+    org, _ = _make_activated_org(store, db, slug_suffix="-idem-act")
+
+    # Second activation call must succeed and return the same org unchanged.
+    org2 = store.activate_organization(db, org_id=org.organization_id, actor="op")
+    assert org2.lifecycle_status == OrgLifecycleStatus.ACTIVE
+    assert org2.organization_id == org.organization_id
+
+
+def test_activate_already_active_returns_200_via_api(api_client):
+    """API must return 200 (not 422) when activating an already-active org."""
+    # Create org and run through full provisioning workflow.
+    resp = api_client.post(
+        "/control-plane/provisioning/organizations",
+        json={"org_name": "Idem Act API Org", "slug": "idem-act-api-org"},
+    )
+    assert resp.status_code == 201
+    org_id = resp.json()["organization_id"]
+
+    api_client.post(
+        f"/control-plane/provisioning/organizations/{org_id}/provision", json={}
+    )
+
+    wf_resp = api_client.get("/control-plane/provisioning/workflows")
+    wf_id = next(
+        w["provisioning_id"]
+        for w in wf_resp.json()["workflows"]
+        if w["organization_id"] == org_id
+    )
+
+    api_client.post(f"/control-plane/provisioning/workflows/{wf_id}/complete", json={})
+    api_client.post(f"/control-plane/provisioning/organizations/{org_id}/activate")
+
+    # Second activation — must be 200, not 422.
+    resp2 = api_client.post(
+        f"/control-plane/provisioning/organizations/{org_id}/activate"
+    )
+    assert resp2.status_code == 200
+    assert resp2.json()["lifecycle_status"] == "active"
+
+
+# ---------------------------------------------------------------------------
+# 14. Retry lineage — parent_provisioning_id (fix #4)
+# ---------------------------------------------------------------------------
+
+
+def test_retry_workflow_sets_parent_provisioning_id(store, db):
+    """A retry workflow must record the failed workflow's ID as its parent."""
+    org = store.create_organization(
+        db,
+        org_name="Retry Lineage Org",
+        slug="retry-lineage-org",
+        compliance_classification=ComplianceClassification.STANDARD,
+        deployment_tier=DeploymentTier.SHARED,
+        created_by="op",
+    )
+    db.commit()
+
+    wf = store.start_provisioning_workflow(
+        db, org_id=org.organization_id, initiated_by="op"
+    )
+    db.commit()
+
+    store.fail_provisioning_workflow(
+        db,
+        provisioning_id=wf.provisioning_id,
+        actor="op",
+        failure_reason="infra timeout",
+    )
+    db.commit()
+
+    retry_wf = store.retry_provisioning_workflow(
+        db, org_id=org.organization_id, initiated_by="op"
+    )
+    db.commit()
+
+    assert retry_wf.parent_provisioning_id == wf.provisioning_id
+
+
+def test_retry_lineage_exposed_in_workflow_response(api_client):
+    """parent_provisioning_id must appear in the workflow API response."""
+    resp = api_client.post(
+        "/control-plane/provisioning/organizations",
+        json={"org_name": "Lineage API Org", "slug": "lineage-api-org"},
+    )
+    org_id = resp.json()["organization_id"]
+
+    api_client.post(
+        f"/control-plane/provisioning/organizations/{org_id}/provision", json={}
+    )
+
+    wf_list = api_client.get("/control-plane/provisioning/workflows").json()[
+        "workflows"
+    ]
+    first_wf_id = next(
+        w["provisioning_id"] for w in wf_list if w["organization_id"] == org_id
+    )
+
+    api_client.post(
+        f"/control-plane/provisioning/workflows/{first_wf_id}/fail",
+        json={"failure_reason": "test failure"},
+    )
+
+    retry_resp = api_client.post(
+        f"/control-plane/provisioning/workflows/{first_wf_id}/retry", json={}
+    )
+    assert retry_resp.status_code == 201
+    assert retry_resp.json()["parent_provisioning_id"] == first_wf_id

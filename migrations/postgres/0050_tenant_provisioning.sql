@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS provisioning_organizations (
     onboarding_state         TEXT         NOT NULL DEFAULT 'not_started',
     env_assignment_id        TEXT,
     region                   TEXT,
-    idempotency_key          TEXT         UNIQUE,
+    idempotency_key          TEXT,
     metadata_json            TEXT         NOT NULL DEFAULT '{}',
     created_by               TEXT         NOT NULL,
     created_at               TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
@@ -58,6 +58,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_prov_org_slug
 CREATE INDEX IF NOT EXISTS ix_prov_org_tenant
     ON provisioning_organizations (tenant_id);
 
+-- Tenant-scoped idempotency: (tenant_id, idempotency_key) unique within a tenant;
+-- platform-level orgs (tenant_id IS NULL) share a separate namespace.
+CREATE UNIQUE INDEX IF NOT EXISTS ix_prov_org_idem_tenant
+    ON provisioning_organizations (tenant_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL AND tenant_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ix_prov_org_idem_platform
+    ON provisioning_organizations (idempotency_key)
+    WHERE idempotency_key IS NOT NULL AND tenant_id IS NULL;
+
 CREATE INDEX IF NOT EXISTS ix_prov_org_lifecycle
     ON provisioning_organizations (lifecycle_status);
 
@@ -72,7 +82,8 @@ CREATE TABLE IF NOT EXISTS provisioning_workflows (
     tenant_id                    TEXT,
     workflow_state               TEXT         NOT NULL DEFAULT 'pending',
     current_step                 TEXT,
-    idempotency_key              TEXT         UNIQUE,
+    idempotency_key              TEXT,
+    parent_provisioning_id       TEXT,
     env_target                   TEXT,
     retry_count                  INTEGER      NOT NULL DEFAULT 0,
     max_retries                  INTEGER      NOT NULL DEFAULT 3,
@@ -105,6 +116,19 @@ CREATE INDEX IF NOT EXISTS ix_prov_wf_tenant
 
 CREATE INDEX IF NOT EXISTS ix_prov_wf_state
     ON provisioning_workflows (workflow_state);
+
+CREATE INDEX IF NOT EXISTS ix_prov_wf_parent
+    ON provisioning_workflows (parent_provisioning_id)
+    WHERE parent_provisioning_id IS NOT NULL;
+
+-- Tenant-scoped workflow idempotency: same semantics as org idempotency above.
+CREATE UNIQUE INDEX IF NOT EXISTS ix_prov_wf_idem_tenant
+    ON provisioning_workflows (tenant_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL AND tenant_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ix_prov_wf_idem_platform
+    ON provisioning_workflows (idempotency_key)
+    WHERE idempotency_key IS NOT NULL AND tenant_id IS NULL;
 
 -- ─── Provisioning Audit Events ────────────────────────────────────────────────
 

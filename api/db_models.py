@@ -2592,7 +2592,7 @@ class ProvisioningOrganizationRecord(Base):
     )
     env_assignment_id: Mapped[Any] = mapped_column(Text, nullable=True)
     region: Mapped[Any] = mapped_column(Text, nullable=True)
-    idempotency_key: Mapped[Any] = mapped_column(Text, nullable=True, unique=True)
+    idempotency_key: Mapped[Any] = mapped_column(Text, nullable=True)
     metadata_json: Mapped[Any] = mapped_column(Text, nullable=False, default="{}")
     created_by: Mapped[Any] = mapped_column(Text, nullable=False)
     created_at: Mapped[Any] = mapped_column(
@@ -2629,7 +2629,8 @@ class ProvisioningWorkflowRecord(Base):
     tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
     workflow_state: Mapped[Any] = mapped_column(Text, nullable=False, default="pending")
     current_step: Mapped[Any] = mapped_column(Text, nullable=True)
-    idempotency_key: Mapped[Any] = mapped_column(Text, nullable=True, unique=True)
+    idempotency_key: Mapped[Any] = mapped_column(Text, nullable=True)
+    parent_provisioning_id: Mapped[Any] = mapped_column(Text, nullable=True)
     env_target: Mapped[Any] = mapped_column(Text, nullable=True)
     retry_count: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
     max_retries: Mapped[Any] = mapped_column(Integer, nullable=False, default=3)

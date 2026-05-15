@@ -187,6 +187,7 @@ class ProvisioningWorkflow:
     tenant_id: Optional[str] = None
     current_step: Optional[str] = None
     idempotency_key: Optional[str] = None
+    parent_provisioning_id: Optional[str] = None
     env_target: Optional[str] = None
     retry_count: int = 0
     max_retries: int = 3
