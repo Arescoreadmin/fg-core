@@ -190,14 +190,14 @@ PLANE_REGISTRY: list[PlaneDef] = [
             require_any_scope=False,
             tenant_binding_required=True,
         ),
-        global_routes=[
+        global_routes=(
             ex(
                 "GET",
                 "/rbac/roles",
                 "global_admin",
                 "RBAC role catalog is tenant-invariant static metadata; role auth enforced by require_role.",
             ),
-        ],
+        ),
     ),
     PlaneDef(
         plane_id="data",

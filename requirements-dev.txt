@@ -19,3 +19,4 @@ types-jsonschema
 types-requests
 types-PyYAML
 types-jsonschema
+pypdf>=6.10.2
