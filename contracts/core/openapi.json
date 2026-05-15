@@ -630,6 +630,22 @@
         "title": "ArtifactMeta",
         "type": "object"
       },
+      "AssignEnvironmentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "env_assignment_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Env Assignment Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "env_assignment_id"
+        ],
+        "title": "AssignEnvironmentRequest",
+        "type": "object"
+      },
       "AssignRoleRequest": {
         "properties": {
           "key_id": {
@@ -996,6 +1012,17 @@
           "idempotency_key"
         ],
         "title": "CommandRequest",
+        "type": "object"
+      },
+      "CompleteWorkflowRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "validation_results": {
+            "title": "Validation Results",
+            "type": "object"
+          }
+        },
+        "title": "CompleteWorkflowRequest",
         "type": "object"
       },
       "ComplianceCPEvidenceIngestRequest": {
@@ -1428,6 +1455,66 @@
           "expires_at"
         ],
         "title": "CreateKeyResponse",
+        "type": "object"
+      },
+      "CreateOrgRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "compliance_classification": {
+            "$ref": "#/components/schemas/ComplianceClassification",
+            "default": "standard"
+          },
+          "deployment_tier": {
+            "$ref": "#/components/schemas/DeploymentTier",
+            "default": "shared"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
+          "metadata": {
+            "title": "Metadata",
+            "type": "object"
+          },
+          "org_name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Org Name",
+            "type": "string"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
+          "slug": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9\\-]{0,126}[a-z0-9]$|^[a-z0-9]$",
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "org_name",
+          "slug"
+        ],
+        "title": "CreateOrgRequest",
         "type": "object"
       },
       "CreditNoteCreateRequest": {
@@ -1966,6 +2053,15 @@
           "direct"
         ],
         "title": "DeploymentStrategy",
+        "type": "string"
+      },
+      "DeploymentTier": {
+        "enum": [
+          "shared",
+          "dedicated",
+          "regulated_dedicated"
+        ],
+        "title": "DeploymentTier",
         "type": "string"
       },
       "DeviceActivityProofRequest": {
@@ -2649,6 +2745,39 @@
         ],
         "title": "ExceptionRequestCreate",
         "type": "object"
+      },
+      "FailWorkflowRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "failure_category": {
+            "$ref": "#/components/schemas/FailureCategory",
+            "default": "terminal"
+          },
+          "failure_reason": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Failure Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "failure_reason"
+        ],
+        "title": "FailWorkflowRequest",
+        "type": "object"
+      },
+      "FailureCategory": {
+        "enum": [
+          "retryable",
+          "terminal",
+          "validation",
+          "orchestration_interrupted",
+          "env_incompatible",
+          "approval_failure",
+          "compliance_failure"
+        ],
+        "title": "FailureCategory",
+        "type": "string"
       },
       "FeedItem": {
         "properties": {
@@ -3930,6 +4059,18 @@
         "title": "OrgCreateResponse",
         "type": "object"
       },
+      "OrgLifecycleStatus": {
+        "enum": [
+          "pending",
+          "provisioning",
+          "active",
+          "suspended",
+          "archived",
+          "failed"
+        ],
+        "title": "OrgLifecycleStatus",
+        "type": "string"
+      },
       "PlaybookTriggerRequest": {
         "additionalProperties": false,
         "properties": {
@@ -4733,6 +4874,37 @@
         "title": "RetrievalPolicyRequest",
         "type": "object"
       },
+      "RetryWorkflowRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "env_target": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Env Target"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          }
+        },
+        "title": "RetryWorkflowRequest",
+        "type": "object"
+      },
       "RevokeKeyRequest": {
         "description": "Request to revoke an API key.",
         "properties": {
@@ -4972,6 +5144,41 @@
         "title": "SaveResponsesRequest",
         "type": "object"
       },
+      "StartProvisioningRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "env_target": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Env Target"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
+          "metadata": {
+            "title": "Metadata",
+            "type": "object"
+          }
+        },
+        "title": "StartProvisioningRequest",
+        "type": "object"
+      },
       "StatsResponse": {
         "properties": {
           "avg_latency_ms_24h": {
@@ -5113,6 +5320,25 @@
           "headline"
         ],
         "title": "StatsSummaryResponse",
+        "type": "object"
+      },
+      "SuspendOrgRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "SuspendOrgRequest",
         "type": "object"
       },
       "TelemetryInput": {
@@ -11266,6 +11492,975 @@
         "summary": "Get dependency health probes for a module",
         "tags": [
           "control-plane"
+        ]
+      }
+    },
+    "/control-plane/provisioning/organizations": {
+      "get": {
+        "operationId": "list_organizations_control_plane_provisioning_organizations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lifecycle_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/OrgLifecycleStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lifecycle Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Organizations Control Plane Provisioning Organizations Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Organizations",
+        "tags": [
+          "provisioning"
+        ]
+      },
+      "post": {
+        "operationId": "create_organization_control_plane_provisioning_organizations_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrgRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Create Organization Control Plane Provisioning Organizations Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Organization",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/control-plane/provisioning/organizations/{org_id}": {
+      "get": {
+        "operationId": "get_organization_control_plane_provisioning_organizations__org_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Organization Control Plane Provisioning Organizations  Org Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Organization",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/control-plane/provisioning/organizations/{org_id}/activate": {
+      "post": {
+        "operationId": "activate_organization_control_plane_provisioning_organizations__org_id__activate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Activate Organization Control Plane Provisioning Organizations  Org Id  Activate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate Organization",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/control-plane/provisioning/organizations/{org_id}/environment": {
+      "post": {
+        "operationId": "assign_environment_control_plane_provisioning_organizations__org_id__environment_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignEnvironmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Assign Environment Control Plane Provisioning Organizations  Org Id  Environment Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign Environment",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/control-plane/provisioning/organizations/{org_id}/history": {
+      "get": {
+        "operationId": "get_org_history_control_plane_provisioning_organizations__org_id__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Org History Control Plane Provisioning Organizations  Org Id  History Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Org History",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/control-plane/provisioning/organizations/{org_id}/onboarding": {
+      "get": {
+        "operationId": "get_onboarding_state_control_plane_provisioning_organizations__org_id__onboarding_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Onboarding State Control Plane Provisioning Organizations  Org Id  Onboarding Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Onboarding State",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/control-plane/provisioning/organizations/{org_id}/provision": {
+      "post": {
+        "operationId": "start_provisioning_workflow_control_plane_provisioning_organizations__org_id__provision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartProvisioningRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Start Provisioning Workflow Control Plane Provisioning Organizations  Org Id  Provision Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Provisioning Workflow",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/control-plane/provisioning/organizations/{org_id}/suspend": {
+      "post": {
+        "operationId": "suspend_organization_control_plane_provisioning_organizations__org_id__suspend_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuspendOrgRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Suspend Organization Control Plane Provisioning Organizations  Org Id  Suspend Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Suspend Organization",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/control-plane/provisioning/workflows": {
+      "get": {
+        "operationId": "list_workflows_control_plane_provisioning_workflows_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "org_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Org Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Workflows Control Plane Provisioning Workflows Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Workflows",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/control-plane/provisioning/workflows/{provisioning_id}": {
+      "get": {
+        "operationId": "get_workflow_control_plane_provisioning_workflows__provisioning_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provisioning_id",
+            "required": true,
+            "schema": {
+              "title": "Provisioning Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Workflow Control Plane Provisioning Workflows  Provisioning Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Workflow",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/control-plane/provisioning/workflows/{provisioning_id}/complete": {
+      "post": {
+        "operationId": "complete_workflow_control_plane_provisioning_workflows__provisioning_id__complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provisioning_id",
+            "required": true,
+            "schema": {
+              "title": "Provisioning Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteWorkflowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Complete Workflow Control Plane Provisioning Workflows  Provisioning Id  Complete Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete Workflow",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/control-plane/provisioning/workflows/{provisioning_id}/fail": {
+      "post": {
+        "operationId": "fail_workflow_control_plane_provisioning_workflows__provisioning_id__fail_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provisioning_id",
+            "required": true,
+            "schema": {
+              "title": "Provisioning Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FailWorkflowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Fail Workflow Control Plane Provisioning Workflows  Provisioning Id  Fail Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fail Workflow",
+        "tags": [
+          "provisioning"
+        ]
+      }
+    },
+    "/control-plane/provisioning/workflows/{provisioning_id}/retry": {
+      "post": {
+        "operationId": "retry_workflow_control_plane_provisioning_workflows__provisioning_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provisioning_id",
+            "required": true,
+            "schema": {
+              "title": "Provisioning Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryWorkflowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Retry Workflow Control Plane Provisioning Workflows  Provisioning Id  Retry Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Workflow",
+        "tags": [
+          "provisioning"
         ]
       }
     },

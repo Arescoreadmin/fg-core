@@ -2551,3 +2551,137 @@ class DeploymentHealthRecord(Base):
     )
     rollback_trigger_reason: Mapped[Any] = mapped_column(Text, nullable=True)
     expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+# ---------------------------------------------------------------------------
+# Provisioning subsystem ORM models (PR 81)
+# ---------------------------------------------------------------------------
+
+
+class ProvisioningOrganizationRecord(Base):
+    """Mutable organization lifecycle record.
+
+    lifecycle_status is the canonical state; transitions are validated against
+    VALID_ORG_TRANSITIONS before writing. Every mutation must produce a
+    corresponding ProvisioningAuditEventRecord.
+    """
+
+    __tablename__ = "provisioning_organizations"
+    __table_args__ = (
+        Index("ix_prov_orm_org_tenant", "tenant_id"),
+        Index("ix_prov_orm_org_lifecycle", "lifecycle_status"),
+        Index("ix_prov_orm_org_state_version", "state_version"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    organization_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    org_name: Mapped[Any] = mapped_column(Text, nullable=False)
+    slug: Mapped[Any] = mapped_column(Text, nullable=False, unique=True, index=True)
+    lifecycle_status: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="pending"
+    )
+    compliance_classification: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="standard"
+    )
+    deployment_tier: Mapped[Any] = mapped_column(Text, nullable=False, default="shared")
+    onboarding_state: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="not_started"
+    )
+    env_assignment_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    region: Mapped[Any] = mapped_column(Text, nullable=True)
+    idempotency_key: Mapped[Any] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[Any] = mapped_column(Text, nullable=False, default="{}")
+    created_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    activated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    suspended_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    state_version: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+
+
+class ProvisioningWorkflowRecord(Base):
+    """Provisioning workflow run for an organization.
+
+    Each provisioning attempt creates a new workflow record. Retries
+    create fresh records with an incremented retry_count.
+    """
+
+    __tablename__ = "provisioning_workflows"
+    __table_args__ = (
+        Index("ix_prov_orm_wf_org", "organization_id"),
+        Index("ix_prov_orm_wf_tenant", "tenant_id"),
+        Index("ix_prov_orm_wf_state", "workflow_state"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    provisioning_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    organization_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    workflow_state: Mapped[Any] = mapped_column(Text, nullable=False, default="pending")
+    current_step: Mapped[Any] = mapped_column(Text, nullable=True)
+    idempotency_key: Mapped[Any] = mapped_column(Text, nullable=True)
+    parent_provisioning_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    env_target: Mapped[Any] = mapped_column(Text, nullable=True)
+    retry_count: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    max_retries: Mapped[Any] = mapped_column(Integer, nullable=False, default=3)
+    failure_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    failure_category: Mapped[Any] = mapped_column(Text, nullable=True)
+    validation_results_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    orchestration_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    initiated_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    started_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    completed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    state_version: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+
+
+class ProvisioningAuditEventRecord(Base):
+    """Append-only audit event for provisioning lifecycle changes.
+
+    Rows are never updated or deleted (enforced at DB level via rules in
+    the Postgres migration). Every provisioning mutation must write an event
+    before returning to the caller.
+    """
+
+    __tablename__ = "provisioning_audit_events"
+    __table_args__ = (
+        Index("ix_prov_audit_orm_org_ts", "organization_id", "timestamp"),
+        Index("ix_prov_audit_orm_prov_ts", "provisioning_id", "timestamp"),
+        Index("ix_prov_audit_orm_tenant_ts", "tenant_id", "timestamp"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[Any] = mapped_column(Text, nullable=False, unique=True, index=True)
+    organization_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    provisioning_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    env_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    event_type: Mapped[Any] = mapped_column(Text, nullable=False)
+    actor: Mapped[Any] = mapped_column(Text, nullable=False)
+    outcome: Mapped[Any] = mapped_column(Text, nullable=False, default="success")
+    workflow_state: Mapped[Any] = mapped_column(Text, nullable=True)
+    failure_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    details_json: Mapped[Any] = mapped_column(Text, nullable=True)
+    event_hash: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    previous_event_hash: Mapped[Any] = mapped_column(Text, nullable=True)
+    timestamp: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
