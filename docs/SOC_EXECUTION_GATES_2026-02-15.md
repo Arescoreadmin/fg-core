@@ -3118,3 +3118,37 @@ All `control-plane:admin` scoped. All tenant-bound for assessment surfaces. Fram
 - No raw evidence content, key material, or credentials stored or returned. Evidence references store metadata and integrity hashes only.
 - Snapshot version incremented on FINALIZED transition — pins framework state at finalization for reconstruction.
 - Schema additions are additive: 11 new ORM tables, no changes to existing tables.
+
+---
+
+## PR 84 — AI Readiness Assessment Engine Foundation — 2026-05-16
+
+### Summary
+
+Implements the deterministic AI Readiness Assessment Scoring Engine: pure Python, no I/O, no LLMs, no randomness. Adds `services/readiness/scoring/` package (`models.py`, `engine.py`, `__init__.py`) and a `GET /control-plane/readiness/assessments/{assessment_id}/score` route. The engine loads pre-persisted data from the store and returns a frozen `ScoreOutput` — no data is mutated, score is not persisted.
+
+### Routes added
+
+1 new route: `GET /control-plane/readiness/assessments/{assessment_id}/score` — `control-plane:read` scoped, tenant-bound.
+
+### Gate results
+
+- `python tools/ci/check_soc_review_sync.py`: soc-review-sync: OK (after SOC doc update)
+- `make contracts-core-gen`: contracts regenerated with 1 new score route
+- `make route-inventory-generate`: score route added to route_inventory.json
+- `make route-inventory-audit`: route inventory OK
+- `.venv/bin/pytest tests/test_readiness_score_engine.py`: 37 passed
+- `.venv/bin/pytest tests/test_readiness_manager.py tests/test_readiness_score_engine.py`: 107 passed
+- `ruff check . && ruff format --check .`: all checks passed
+- `mypy services/readiness/ api/readiness_manager.py`: no errors
+
+### Compliance posture
+
+- Scoring engine is stateless and read-only: no writes, no side effects, no audit events emitted.
+- Tenant isolation validated inside engine: all results and evidence must match `assessment.tenant_id` — `TenantIsolationViolation` raised on mismatch.
+- Framework consistency validated: control `framework_id` and `ScoringContract.framework_id` must match assessment framework.
+- Score route resolves `tenant_id` from auth context only — returns 403 if absent.
+- `ScoringError` subclasses surface as 422 (bad input), not 500.
+- No secrets, credentials, infrastructure topology, or raw evidence in `ScoreOutput`.
+- Score version field (`score_version="1.0.0"`) enables future deterministic reconstruction.
+- No schema changes: no new ORM tables, no migration required.

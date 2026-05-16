@@ -37,6 +37,14 @@ from services.readiness import (
     FrameworkStatus,
     ReadinessStore,
 )
+from services.readiness.scoring import (
+    FrameworkMismatchError as ScoringFrameworkMismatchError,
+    ReadinessScoreEngine,
+    ScoringContractMismatchError,
+    ScoringError,
+    ScoringInput,
+    TenantIsolationViolation as ScoringTenantIsolationViolation,
+)
 from services.readiness.store import (
     AssessmentImmutableError,
     AssessmentNotFound,
@@ -81,6 +89,7 @@ ERR_CONCURRENT_MODIFICATION = "READY-API-013"
 ERR_INVALID_INPUT = "READY-API-014"
 ERR_FRAMEWORK_VERSION_NOT_FOUND = "READY-API-015"
 ERR_FRAMEWORK_NOT_ACTIVE = "READY-API-016"
+ERR_SCORING_ENGINE_ERROR = "READY-API-017"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -619,6 +628,182 @@ class ScoringContractResponse(BaseModel):
             created_by=sc.created_by,
             created_at=sc.created_at.isoformat(),
         )
+
+
+# ---------------------------------------------------------------------------
+# Score response models
+# ---------------------------------------------------------------------------
+
+
+class ControlScoreResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    control_id: str
+    control_identifier: str
+    domain_id: str
+    outcome: str
+    raw_score: float
+    weight: float
+    is_evaluated: bool
+    is_applicable: bool
+    evidence_count: int
+
+
+class DomainScoreResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    domain_id: str
+    domain_name: str
+    raw_score: float
+    normalized_score: float
+    weight: float
+    completion_percentage: float
+    missing_control_count: int
+    incomplete_control_count: int
+    failed_control_count: int
+    risk_classification: str
+    threshold_failed: bool
+
+
+class ThresholdFailureResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    threshold_type: str
+    threshold_name: str
+    required_value: float
+    actual_value: float
+    message: str
+
+
+class RemediationFactorResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    factor_type: str
+    description: str
+    severity: str
+
+
+class ScoreOutputResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    assessment_id: str
+    tenant_id: str
+    framework_id: str
+    framework_version_tag: str
+    overall_score: float
+    normalized_score: float
+    domain_scores: dict[str, DomainScoreResponse]
+    control_scores: dict[str, ControlScoreResponse]
+    maturity_tier: Optional[str]
+    maturity_tier_id: Optional[str]
+    risk_classification: str
+    remediation_priority: str
+    remediation_factors: list[RemediationFactorResponse]
+    missing_controls: list[str]
+    incomplete_controls: list[str]
+    failed_controls: list[str]
+    not_applicable_controls: list[str]
+    threshold_failures: list[ThresholdFailureResponse]
+    scoring_warnings: list[str]
+    completion_state: str
+    completion_percentage: float
+    is_complete: bool
+    computed_at: str
+    score_version: str
+    scoring_contract_id: Optional[str]
+    scoring_contract_version: Optional[str]
+
+    @classmethod
+    def from_domain(cls, out: Any) -> "ScoreOutputResponse":
+        return cls(
+            assessment_id=out.assessment_id,
+            tenant_id=out.tenant_id,
+            framework_id=out.framework_id,
+            framework_version_tag=out.framework_version_tag,
+            overall_score=out.overall_score,
+            normalized_score=out.normalized_score,
+            domain_scores={
+                did: DomainScoreResponse(
+                    domain_id=ds.domain_id,
+                    domain_name=ds.domain_name,
+                    raw_score=ds.raw_score,
+                    normalized_score=ds.normalized_score,
+                    weight=ds.weight,
+                    completion_percentage=ds.completion_percentage,
+                    missing_control_count=ds.missing_control_count,
+                    incomplete_control_count=ds.incomplete_control_count,
+                    failed_control_count=ds.failed_control_count,
+                    risk_classification=ds.risk_classification.value,
+                    threshold_failed=ds.threshold_failed,
+                )
+                for did, ds in out.domain_scores.items()
+            },
+            control_scores={
+                cid: ControlScoreResponse(
+                    control_id=cs.control_id,
+                    control_identifier=cs.control_identifier,
+                    domain_id=cs.domain_id,
+                    outcome=cs.outcome.value,
+                    raw_score=cs.raw_score,
+                    weight=cs.weight,
+                    is_evaluated=cs.is_evaluated,
+                    is_applicable=cs.is_applicable,
+                    evidence_count=cs.evidence_count,
+                )
+                for cid, cs in out.control_scores.items()
+            },
+            maturity_tier=out.maturity_tier,
+            maturity_tier_id=out.maturity_tier_id,
+            risk_classification=out.risk_classification.value,
+            remediation_priority=out.remediation_priority.value,
+            remediation_factors=[
+                RemediationFactorResponse(
+                    factor_type=f.factor_type,
+                    description=f.description,
+                    severity=f.severity,
+                )
+                for f in out.remediation_factors
+            ],
+            missing_controls=list(out.missing_controls),
+            incomplete_controls=list(out.incomplete_controls),
+            failed_controls=list(out.failed_controls),
+            not_applicable_controls=list(out.not_applicable_controls),
+            threshold_failures=[
+                ThresholdFailureResponse(
+                    threshold_type=tf.threshold_type,
+                    threshold_name=tf.threshold_name,
+                    required_value=tf.required_value,
+                    actual_value=tf.actual_value,
+                    message=tf.message,
+                )
+                for tf in out.threshold_failures
+            ],
+            scoring_warnings=list(out.scoring_warnings),
+            completion_state=out.completion_state.value,
+            completion_percentage=out.completion_percentage,
+            is_complete=out.is_complete,
+            computed_at=out.computed_at.isoformat(),
+            score_version=out.score_version,
+            scoring_contract_id=out.scoring_contract_id,
+            scoring_contract_version=out.scoring_contract_version,
+        )
+
+
+_score_engine = ReadinessScoreEngine()
+_SCORE_PAGE = 200  # store clamps at _MAX_PAGE=200; page until exhausted
+
+
+def _fetch_all(fn, **kwargs) -> list:  # type: ignore[type-arg]
+    """Page through a capped store list method until exhausted."""
+    items: list = []
+    offset = 0
+    while True:
+        page = fn(**kwargs, limit=_SCORE_PAGE, offset=offset)
+        items.extend(page)
+        if len(page) < _SCORE_PAGE:
+            break
+        offset += _SCORE_PAGE
+    return items
 
 
 # ---------------------------------------------------------------------------
@@ -1375,3 +1560,104 @@ def list_scoring_contracts(
         return [ScoringContractResponse.from_domain(sc) for sc in contracts]
     except ReadinessStoreError as exc:
         raise _handle_store_error(exc)
+
+
+# ---------------------------------------------------------------------------
+# Score route
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/control-plane/readiness/assessments/{assessment_id}/score",
+    tags=["readiness"],
+    dependencies=[Depends(require_scopes("control-plane:read"))],
+)
+def score_assessment(
+    assessment_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> ScoreOutputResponse:
+    """Compute a deterministic readiness score for an assessment.
+
+    Loads all framework, domain, control, maturity, result, and evidence data
+    from the store, scores deterministically, and returns a frozen ScoreOutput.
+    No data is mutated. Score is not persisted — call again for a fresh score.
+    """
+    tenant_id = _tenant_from_auth(request)
+    if not tenant_id:
+        raise HTTPException(
+            status_code=403,
+            detail=api_error(
+                "READY-API-403", "Assessments require tenant auth context"
+            ),
+        )
+    try:
+        assessment = _store.get_assessment(
+            db, assessment_id=assessment_id, tenant_id=tenant_id
+        )
+    except ReadinessStoreError as exc:
+        raise _handle_store_error(exc)
+
+    try:
+        framework = _store.get_framework(db, framework_id=assessment.framework_id)
+        domains = _fetch_all(
+            _store.list_domains, db=db, framework_id=assessment.framework_id
+        )
+        controls = _fetch_all(
+            _store.list_controls, db=db, framework_id=assessment.framework_id
+        )
+        maturity_tiers = _fetch_all(
+            _store.list_maturity_tiers, db=db, framework_id=assessment.framework_id
+        )
+        results = _fetch_all(
+            _store.list_assessment_results,
+            db=db,
+            assessment_id=assessment_id,
+            tenant_id=tenant_id,
+        )
+        evidence_refs = _fetch_all(
+            _store.list_evidence_references,
+            db=db,
+            assessment_id=assessment_id,
+            tenant_id=tenant_id,
+        )
+        scoring_contract = None
+        if assessment.scoring_contract_id:
+            try:
+                scoring_contract = _store.get_scoring_contract(
+                    db,
+                    contract_id=assessment.scoring_contract_id,
+                    tenant_id=tenant_id,
+                )
+            except ScoringContractNotFound:
+                pass  # missing contract → score without one, engine will warn
+
+        inp = ScoringInput(
+            assessment=assessment,
+            framework=framework,
+            controls=tuple(controls),
+            domains=tuple(domains),
+            maturity_tiers=tuple(maturity_tiers),
+            results=tuple(results),
+            evidence_refs=tuple(evidence_refs),
+            scoring_contract=scoring_contract,
+        )
+        out = _score_engine.score(inp)
+        return ScoreOutputResponse.from_domain(out)
+
+    except ReadinessStoreError as exc:
+        raise _handle_store_error(exc)
+    except (
+        ScoringTenantIsolationViolation,
+        ScoringFrameworkMismatchError,
+        ScoringContractMismatchError,
+    ) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(ERR_SCORING_ENGINE_ERROR, str(exc)),
+        )
+    except ScoringError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(ERR_SCORING_ENGINE_ERROR, str(exc)),
+        )
