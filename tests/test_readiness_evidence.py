@@ -32,6 +32,7 @@ from services.readiness.evidence import (
     REASON_PROVENANCE_SOURCE_MISSING,
     REASON_PROVENANCE_SOURCE_TENANT_MISMATCH,
     REASON_PROVENANCE_TENANT_MISMATCH,
+    REASON_STATE_ARCHIVED,
     REASON_STATE_EXPIRED,
     REASON_STATE_INVALIDATED,
     REASON_STATE_SUPERSEDED,
@@ -718,6 +719,27 @@ def test_lifecycle_expired_is_not_eligible():
     )
     assert result.is_valid is False
     assert REASON_STATE_EXPIRED in result.failure_reasons
+
+
+def test_lifecycle_archived_is_not_eligible():
+    result = validate_evidence_lifecycle(
+        evidence_id=_EVIDENCE_ID,
+        tenant_id=_TENANT,
+        lifecycle_state=EvidenceLifecycleState.ARCHIVED,
+        validation_id="v-1",
+    )
+    assert result.is_valid is False
+    assert REASON_STATE_ARCHIVED in result.failure_reasons
+
+
+def test_lifecycle_validation_type_is_lifecycle():
+    result = validate_evidence_lifecycle(
+        evidence_id=_EVIDENCE_ID,
+        tenant_id=_TENANT,
+        lifecycle_state=EvidenceLifecycleState.ACTIVE,
+        validation_id="v-1",
+    )
+    assert result.validation_type == EvidenceValidationType.LIFECYCLE
 
 
 # ---------------------------------------------------------------------------

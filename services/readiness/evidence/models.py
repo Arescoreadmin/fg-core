@@ -142,6 +142,7 @@ class EvidenceValidationType(str, Enum):
     SCHEMA = "schema"
     TENANT_ISOLATION = "tenant_isolation"
     LINKAGE = "linkage"
+    LIFECYCLE = "lifecycle"
 
 
 # ---------------------------------------------------------------------------

@@ -47,6 +47,7 @@ REASON_PROVENANCE_SOURCE_TENANT_MISMATCH = "EVIDENCE_PROVENANCE_SOURCE_TENANT_MI
 REASON_STATE_INVALIDATED = "EVIDENCE_STATE_INVALIDATED"
 REASON_STATE_SUPERSEDED = "EVIDENCE_STATE_SUPERSEDED"
 REASON_STATE_EXPIRED = "EVIDENCE_STATE_EXPIRED"
+REASON_STATE_ARCHIVED = "EVIDENCE_STATE_ARCHIVED"
 REASON_LINKAGE_EMPTY = "EVIDENCE_LINKAGE_EMPTY"
 REASON_LINKAGE_TENANT_MISMATCH = "EVIDENCE_LINKAGE_TENANT_MISMATCH"
 
@@ -214,12 +215,14 @@ def validate_evidence_lifecycle(
         reasons.append(REASON_STATE_SUPERSEDED)
     elif lifecycle_state == EvidenceLifecycleState.EXPIRED:
         reasons.append(REASON_STATE_EXPIRED)
+    elif lifecycle_state == EvidenceLifecycleState.ARCHIVED:
+        reasons.append(REASON_STATE_ARCHIVED)
 
     return EvidenceValidationRecord(
         validation_id=validation_id,
         evidence_id=evidence_id,
         tenant_id=tenant_id,
-        validation_type=EvidenceValidationType.LINKAGE,
+        validation_type=EvidenceValidationType.LIFECYCLE,
         is_valid=not reasons,
         failure_reasons=tuple(reasons),
         validated_at=datetime.now(tz=timezone.utc),
