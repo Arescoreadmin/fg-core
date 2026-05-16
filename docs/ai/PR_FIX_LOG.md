@@ -9833,3 +9833,65 @@ The rewritten dynamic INSERT was missing `is_current = 1` from the params dict. 
 - `make fg-fast`: All checks passed
 - `docker compose config`: OK
 - `bash codex_gates.sh`: ruff PASS, mypy PASS (ops_governance), pre-existing provisioning/store.py mypy errors unchanged from main baseline
+
+## PR 83 — AI Readiness Core Domain Model & Evidence Contract Foundation (2026-05-16)
+
+**Branch:** `feat/ai-readiness-core-domain-model`
+
+**Summary:** Introduces the canonical AI readiness schema and contracts layer: Framework, FrameworkVersion, Domain, Control, ControlReference, MaturityTier, Assessment, AssessmentResult, EvidenceReference, and ScoringContract. Deterministic state machines, SHA-256 tamper-evident audit hash chains, optimistic locking via `state_version`, and strict tenant isolation. 23 FastAPI routes under `/control-plane/readiness/`. 70 pytest tests.
+
+**Scope:**
+- `services/readiness/models.py` — Pure Python domain models. Enums, frozen dataclasses, state machine dicts (`VALID_FRAMEWORK_TRANSITIONS`, `VALID_ASSESSMENT_TRANSITIONS`), immutability sets, guard functions.
+- `services/readiness/audit.py` — SHA-256 hash chain per `(resource_type, resource_id)`. Ordering by `(timestamp DESC, id DESC)` for determinism under same-second collisions. `_SAFE_DETAIL_KEYS` allowlist.
+- `services/readiness/store.py` — Stateless `ReadinessStore`. Exception hierarchy READY-001 through READY-017. Framework structure frozen at ACTIVE. Assessments require ACTIVE framework (`FrameworkNotActiveError` READY-017). Assessment immutable at FINALIZED/ARCHIVED. Optimistic locking on frameworks and assessments. `IMMUTABLE_FRAMEWORK_STATUSES` imported from models (was missing; added in post-review fix).
+- `services/readiness/__init__.py` — Package exports.
+- `api/readiness_manager.py` — 23-route FastAPI router. GETs use `control-plane:read`, mutations use `control-plane:admin`. `_tenant_from_auth()` — tenant from auth context only. `extra="forbid"` on all request models.
+- `api/main.py` — `readiness_router` registered in both `build_app()` and `build_contract_app()` (omission from `build_contract_app` was root cause of initial route-inventory-audit hard fail).
+- `api/db_models.py` — 11 new ORM classes appended (no changes to existing tables).
+- `tests/test_readiness_manager.py` — 70 tests (smoke, security, contract markers).
+- `contracts/core/openapi.json`, `schemas/api/openapi.json` (regenerated)
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md` (authority SHA updated)
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/contract_routes.json` (regenerated)
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` (PR 83 gate results appended)
+
+**Post-review fixes (pre-push):**
+- `create_framework_version`: missing immutability gate — added `IMMUTABLE_FRAMEWORK_STATUSES` check.
+- `create_scoring_contract`: same missing gate — fixed identically.
+- `create_assessment`: no framework status check — added `FrameworkNotActiveError` (READY-017); assessments now require ACTIVE frameworks only.
+- Hash chain ordering: `timestamp.desc()` only was non-deterministic on same-second events — added `.id.desc()` tiebreaker.
+- `IMMUTABLE_FRAMEWORK_STATUSES` was not imported in `store.py` — added to models import.
+- `_make_assessment` test helper updated to auto-activate DRAFT frameworks before creating assessment. All tests using `_make_framework` + `create_assessment` updated accordingly.
+- 4 new tests added: `test_version_creation_blocked_on_active_framework`, `test_scoring_contract_creation_blocked_on_active_framework`, `test_assessment_requires_active_framework`, `test_assessment_blocked_on_deprecated_framework`.
+
+**Files changed:**
+- `services/readiness/__init__.py` (new)
+- `services/readiness/models.py` (new)
+- `services/readiness/audit.py` (new)
+- `services/readiness/store.py` (new)
+- `api/readiness_manager.py` (new)
+- `api/db_models.py` (appended 11 ORM classes)
+- `api/main.py` (readiness_router registered in 2 functions)
+- `tests/test_readiness_manager.py` (new, 70 tests)
+- `contracts/core/openapi.json` (regenerated)
+- `schemas/api/openapi.json` (regenerated)
+- `BLUEPRINT_STAGED.md` (authority SHA updated)
+- `CONTRACT.md` (authority SHA updated)
+- `tools/ci/route_inventory.json` (regenerated)
+- `tools/ci/route_inventory_summary.json` (regenerated)
+- `tools/ci/topology.sha256` (regenerated)
+- `tools/ci/plane_registry_snapshot.json` (regenerated)
+- `tools/ci/contract_routes.json` (regenerated)
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` (PR 83 entry)
+- `docs/ai/PR_FIX_LOG.md` (this entry)
+
+**Validation:**
+- `ruff check` + `ruff format --check`: PASS
+- `mypy services/readiness/ api/readiness_manager.py`: Success, no issues found
+- `mypy` (946 source files): Success, no issues found
+- `pytest tests/test_readiness_manager.py`: 70 passed
+- `make fg-contract`: PASS
+- `make fg-fast`: All checks passed
+- `make route-inventory-audit`: OK
+- `make soc-review-sync`: OK
+- `docker compose config`: OK
+- `bash codex_gates.sh`: All gates passed
