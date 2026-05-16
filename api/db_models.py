@@ -2705,10 +2705,7 @@ class OpsEnvironmentRecord(Base):
         Index("ix_ops_env_state", "lifecycle_state"),
     )
 
-    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    environment_id: Mapped[Any] = mapped_column(
-        Text, nullable=False, unique=True, index=True
-    )
+    environment_id: Mapped[Any] = mapped_column(Text, primary_key=True)
     tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
     env_name: Mapped[Any] = mapped_column(Text, nullable=False)
     slug: Mapped[Any] = mapped_column(Text, nullable=False, unique=True, index=True)
@@ -2758,10 +2755,7 @@ class OpsSecretGovernanceRecord(Base):
         Index("ix_ops_secret_rotation", "rotation_state"),
     )
 
-    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    secret_governance_id: Mapped[Any] = mapped_column(
-        Text, nullable=False, unique=True, index=True
-    )
+    secret_governance_id: Mapped[Any] = mapped_column(Text, primary_key=True)
     tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
     environment_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
     secret_name: Mapped[Any] = mapped_column(Text, nullable=False)
@@ -2807,10 +2801,7 @@ class OpsKeyRotationScheduleRecord(Base):
         Index("ix_ops_rotation_scheduled_at", "scheduled_at"),
     )
 
-    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    rotation_id: Mapped[Any] = mapped_column(
-        Text, nullable=False, unique=True, index=True
-    )
+    rotation_id: Mapped[Any] = mapped_column(Text, primary_key=True)
     secret_governance_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
     tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
     rotation_state: Mapped[Any] = mapped_column(
@@ -2848,10 +2839,7 @@ class OpsRetentionPolicyRecord(Base):
         Index("ix_ops_retention_legal_hold", "legal_hold"),
     )
 
-    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    retention_policy_id: Mapped[Any] = mapped_column(
-        Text, nullable=False, unique=True, index=True
-    )
+    retention_policy_id: Mapped[Any] = mapped_column(Text, primary_key=True)
     tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
     environment_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
     policy_name: Mapped[Any] = mapped_column(Text, nullable=False)
@@ -2896,10 +2884,7 @@ class OpsExportRequestRecord(Base):
         Index("ix_ops_export_requested_by", "requested_by"),
     )
 
-    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    export_id: Mapped[Any] = mapped_column(
-        Text, nullable=False, unique=True, index=True
-    )
+    export_id: Mapped[Any] = mapped_column(Text, primary_key=True)
     tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
     environment_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
     export_state: Mapped[Any] = mapped_column(Text, nullable=False, default="pending")
@@ -2943,10 +2928,7 @@ class OpsBackupRecord(Base):
         Index("ix_ops_backup_state", "backup_state"),
     )
 
-    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    backup_id: Mapped[Any] = mapped_column(
-        Text, nullable=False, unique=True, index=True
-    )
+    backup_id: Mapped[Any] = mapped_column(Text, primary_key=True)
     tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
     environment_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
     backup_scope: Mapped[Any] = mapped_column(Text, nullable=False, default="full")
@@ -2983,10 +2965,7 @@ class OpsRestoreRecord(Base):
         Index("ix_ops_restore_state", "restore_state"),
     )
 
-    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    restore_id: Mapped[Any] = mapped_column(
-        Text, nullable=False, unique=True, index=True
-    )
+    restore_id: Mapped[Any] = mapped_column(Text, primary_key=True)
     tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
     source_backup_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
     target_environment_id: Mapped[Any] = mapped_column(Text, nullable=True)
@@ -3025,10 +3004,7 @@ class OpsRecoveryRecord(Base):
         Index("ix_ops_recovery_drill", "drill_mode"),
     )
 
-    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    recovery_id: Mapped[Any] = mapped_column(
-        Text, nullable=False, unique=True, index=True
-    )
+    recovery_id: Mapped[Any] = mapped_column(Text, primary_key=True)
     tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
     environment_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
     recovery_state: Mapped[Any] = mapped_column(
@@ -3073,8 +3049,7 @@ class OpsGovernanceAuditEventRecord(Base):
         Index("ix_ops_audit_env_ts", "environment_id", "timestamp"),
     )
 
-    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    event_id: Mapped[Any] = mapped_column(Text, nullable=False, unique=True, index=True)
+    event_id: Mapped[Any] = mapped_column(Text, primary_key=True)
     tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
     environment_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
     resource_type: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
