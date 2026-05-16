@@ -667,6 +667,18 @@
         "title": "AssignRoleRequest",
         "type": "object"
       },
+      "BackupScope": {
+        "enum": [
+          "full",
+          "incremental",
+          "differential",
+          "snapshot",
+          "audit_trail",
+          "config_only"
+        ],
+        "title": "BackupScope",
+        "type": "string"
+      },
       "BillingRunCreateRequest": {
         "properties": {
           "contract_hash": {
@@ -1325,32 +1337,53 @@
         "title": "CreateDeploymentRequest",
         "type": "object"
       },
-      "CreateEnvironmentRequest": {
+      "CreateExportRequest": {
         "additionalProperties": false,
         "properties": {
-          "compliance_classification": {
-            "$ref": "#/components/schemas/ComplianceClassification",
+          "environment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment Id"
+          },
+          "export_classification": {
+            "$ref": "#/components/schemas/ExportClassification",
             "default": "standard"
           },
-          "deployment_policy": {
-            "title": "Deployment Policy",
-            "type": "object"
+          "export_purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Export Purpose"
           },
-          "env_type": {
-            "$ref": "#/components/schemas/EnvironmentType"
+          "export_scope": {
+            "$ref": "#/components/schemas/ExportScope",
+            "default": "tenant"
           },
-          "region": {
-            "maxLength": 128,
-            "minLength": 1,
-            "title": "Region",
-            "type": "string"
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
           }
         },
-        "required": [
-          "env_type",
-          "region"
-        ],
-        "title": "CreateEnvironmentRequest",
+        "title": "CreateExportRequest",
         "type": "object"
       },
       "CreateKeyRequest": {
@@ -1515,6 +1548,85 @@
           "slug"
         ],
         "title": "CreateOrgRequest",
+        "type": "object"
+      },
+      "CreateRetentionPolicyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "archive_after_days": {
+            "anyOf": [
+              {
+                "maximum": 36500.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive After Days"
+          },
+          "compliance_policy_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compliance Policy Ref"
+          },
+          "environment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment Id"
+          },
+          "export_restricted": {
+            "default": false,
+            "title": "Export Restricted",
+            "type": "boolean"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
+          "policy_name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Policy Name",
+            "type": "string"
+          },
+          "retention_classification": {
+            "$ref": "#/components/schemas/RetentionClassification",
+            "default": "standard"
+          },
+          "retention_days": {
+            "maximum": 36500.0,
+            "minimum": 1.0,
+            "title": "Retention Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "policy_name",
+          "retention_days"
+        ],
+        "title": "CreateRetentionPolicyRequest",
         "type": "object"
       },
       "CreditNoteCreateRequest": {
@@ -2412,27 +2524,6 @@
         "title": "EnrollmentTokenCreateResponse",
         "type": "object"
       },
-      "EnvironmentLifecycleState": {
-        "enum": [
-          "active",
-          "maintenance",
-          "decommissioned"
-        ],
-        "title": "EnvironmentLifecycleState",
-        "type": "string"
-      },
-      "EnvironmentType": {
-        "enum": [
-          "local",
-          "dev",
-          "staging",
-          "production",
-          "tenant-dedicated",
-          "regulated"
-        ],
-        "title": "EnvironmentType",
-        "type": "string"
-      },
       "EvidenceAnchorCreate": {
         "additionalProperties": false,
         "properties": {
@@ -2745,6 +2836,43 @@
         ],
         "title": "ExceptionRequestCreate",
         "type": "object"
+      },
+      "ExportClassification": {
+        "enum": [
+          "standard",
+          "restricted",
+          "regulated",
+          "legal",
+          "forensic"
+        ],
+        "title": "ExportClassification",
+        "type": "string"
+      },
+      "ExportScope": {
+        "enum": [
+          "tenant",
+          "environment",
+          "audit",
+          "compliance",
+          "legal",
+          "forensic",
+          "portability",
+          "offboarding"
+        ],
+        "title": "ExportScope",
+        "type": "string"
+      },
+      "ExportState": {
+        "enum": [
+          "requested",
+          "validating",
+          "approved",
+          "rejected",
+          "expired",
+          "completed"
+        ],
+        "title": "ExportState",
+        "type": "string"
       },
       "FailWorkflowRequest": {
         "additionalProperties": false,
@@ -3450,6 +3578,145 @@
         "title": "IngestResponse",
         "type": "object"
       },
+      "InitiateBackupRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "backup_classification": {
+            "$ref": "#/components/schemas/ComplianceClassification",
+            "default": "standard"
+          },
+          "backup_scope": {
+            "$ref": "#/components/schemas/BackupScope",
+            "default": "full"
+          },
+          "environment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment Id"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "retention_policy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Policy Id"
+          }
+        },
+        "title": "InitiateBackupRequest",
+        "type": "object"
+      },
+      "InitiateRecoveryRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "drill_mode": {
+            "default": false,
+            "title": "Drill Mode",
+            "type": "boolean"
+          },
+          "environment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment Id"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "recovery_trigger": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery Trigger"
+          },
+          "recovery_type": {
+            "$ref": "#/components/schemas/RecoveryType"
+          }
+        },
+        "required": [
+          "recovery_type"
+        ],
+        "title": "InitiateRecoveryRequest",
+        "type": "object"
+      },
+      "InitiateRestoreRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "point_in_time_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Point In Time Ref"
+          },
+          "restore_scope": {
+            "$ref": "#/components/schemas/RestoreScope",
+            "default": "full"
+          },
+          "source_backup_id": {
+            "title": "Source Backup Id",
+            "type": "string"
+          },
+          "target_environment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Environment Id"
+          }
+        },
+        "required": [
+          "source_backup_id"
+        ],
+        "title": "InitiateRestoreRequest",
+        "type": "object"
+      },
       "InvoiceCreateRequest": {
         "properties": {
           "config_hash": {
@@ -3561,6 +3828,32 @@
           "match"
         ],
         "title": "InvoiceReproduceResponse",
+        "type": "object"
+      },
+      "IsolationLevel": {
+        "enum": [
+          "standard",
+          "network_isolated",
+          "process_isolated",
+          "hardware_isolated"
+        ],
+        "title": "IsolationLevel",
+        "type": "string"
+      },
+      "IssueValidationTokenRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "validation_token": {
+            "maxLength": 512,
+            "minLength": 8,
+            "title": "Validation Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "validation_token"
+        ],
+        "title": "IssueValidationTokenRequest",
         "type": "object"
       },
       "KeyInfo": {
@@ -4613,6 +4906,182 @@
         "title": "RecordHealthRequest",
         "type": "object"
       },
+      "RecordRotationOutcomeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/RotationOutcome"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "RecordRotationOutcomeRequest",
+        "type": "object"
+      },
+      "RecoveryReadiness": {
+        "enum": [
+          "unknown",
+          "not_ready",
+          "partial",
+          "ready",
+          "validated"
+        ],
+        "title": "RecoveryReadiness",
+        "type": "string"
+      },
+      "RecoveryState": {
+        "enum": [
+          "initiated",
+          "validating",
+          "validated",
+          "in_progress",
+          "completed",
+          "failed",
+          "abandoned"
+        ],
+        "title": "RecoveryState",
+        "type": "string"
+      },
+      "RecoveryType": {
+        "enum": [
+          "standard",
+          "disaster_recovery",
+          "failover",
+          "drill",
+          "quarantine_exit",
+          "staged"
+        ],
+        "title": "RecoveryType",
+        "type": "string"
+      },
+      "RegisterSecretGovernanceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "environment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment Id"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "external_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Provider"
+          },
+          "external_reference_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Reference Id"
+          },
+          "governance_policy": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance Policy"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
+          "owner_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Scope"
+          },
+          "rotation_policy_days": {
+            "anyOf": [
+              {
+                "maximum": 3650.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rotation Policy Days"
+          },
+          "secret_classification": {
+            "$ref": "#/components/schemas/SecretClassification",
+            "default": "standard"
+          },
+          "secret_name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Secret Name",
+            "type": "string"
+          },
+          "secret_type": {
+            "$ref": "#/components/schemas/SecretType",
+            "default": "api_key"
+          }
+        },
+        "required": [
+          "secret_name"
+        ],
+        "title": "RegisterSecretGovernanceRequest",
+        "type": "object"
+      },
       "ReproduceRequest": {
         "properties": {
           "session_id": {
@@ -4801,6 +5270,51 @@
         ],
         "title": "RequirementUpdateAvailableRequest",
         "type": "object"
+      },
+      "ResidencyClassification": {
+        "enum": [
+          "unrestricted",
+          "regional",
+          "sovereign",
+          "air_gapped"
+        ],
+        "title": "ResidencyClassification",
+        "type": "string"
+      },
+      "RestoreScope": {
+        "enum": [
+          "full",
+          "partial",
+          "audit_trail",
+          "config_only",
+          "point_in_time"
+        ],
+        "title": "RestoreScope",
+        "type": "string"
+      },
+      "RetentionClassification": {
+        "enum": [
+          "standard",
+          "extended",
+          "regulated",
+          "hipaa",
+          "fedramp",
+          "legal"
+        ],
+        "title": "RetentionClassification",
+        "type": "string"
+      },
+      "RetentionState": {
+        "enum": [
+          "active",
+          "scheduled_for_archive",
+          "archived",
+          "scheduled_for_deletion",
+          "deletion_blocked",
+          "legal_hold"
+        ],
+        "title": "RetentionState",
+        "type": "string"
       },
       "RetrievalPolicyRequest": {
         "properties": {
@@ -5131,6 +5645,16 @@
         "title": "RotateKeyResponse",
         "type": "object"
       },
+      "RotationOutcome": {
+        "enum": [
+          "success",
+          "failure",
+          "skipped",
+          "overridden"
+        ],
+        "title": "RotationOutcome",
+        "type": "string"
+      },
       "SaveResponsesRequest": {
         "properties": {
           "responses": {
@@ -5142,6 +5666,129 @@
           "responses"
         ],
         "title": "SaveResponsesRequest",
+        "type": "object"
+      },
+      "ScheduleRotationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "compliance_override": {
+            "default": false,
+            "title": "Compliance Override",
+            "type": "boolean"
+          },
+          "emergency_rotation": {
+            "default": false,
+            "title": "Emergency Rotation",
+            "type": "boolean"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "override_approved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Override Approved By"
+          },
+          "override_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Override Reason"
+          },
+          "scheduled_at": {
+            "format": "date-time",
+            "title": "Scheduled At",
+            "type": "string"
+          },
+          "waiver_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waiver Reference"
+          }
+        },
+        "required": [
+          "scheduled_at"
+        ],
+        "title": "ScheduleRotationRequest",
+        "type": "object"
+      },
+      "SecretClassification": {
+        "enum": [
+          "standard",
+          "restricted",
+          "critical",
+          "regulated",
+          "hipaa",
+          "fedramp"
+        ],
+        "title": "SecretClassification",
+        "type": "string"
+      },
+      "SecretLifecycleState": {
+        "enum": [
+          "active",
+          "pending_rotation",
+          "expired",
+          "revoked",
+          "compromised",
+          "archived"
+        ],
+        "title": "SecretLifecycleState",
+        "type": "string"
+      },
+      "SecretType": {
+        "enum": [
+          "generic",
+          "api_key",
+          "tls_cert",
+          "db_credential",
+          "oauth_token",
+          "signing_key",
+          "encryption_key",
+          "hmac_key"
+        ],
+        "title": "SecretType",
+        "type": "string"
+      },
+      "SetLegalHoldRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "SetLegalHoldRequest",
         "type": "object"
       },
       "StartProvisioningRequest": {
@@ -5649,6 +6296,136 @@
         "title": "TopItem",
         "type": "object"
       },
+      "TransitionEnvironmentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "recovery_readiness": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecoveryReadiness"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to_state": {
+            "$ref": "#/components/schemas/services__ops_governance__models__EnvironmentLifecycleState"
+          },
+          "validation_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validation Token"
+          }
+        },
+        "required": [
+          "to_state"
+        ],
+        "title": "TransitionEnvironmentRequest",
+        "type": "object"
+      },
+      "TransitionExportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Reason"
+          },
+          "rejection_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejection Reason"
+          },
+          "to_state": {
+            "$ref": "#/components/schemas/ExportState"
+          }
+        },
+        "required": [
+          "to_state"
+        ],
+        "title": "TransitionExportRequest",
+        "type": "object"
+      },
+      "TransitionRecoveryRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "to_state": {
+            "$ref": "#/components/schemas/RecoveryState"
+          }
+        },
+        "required": [
+          "to_state"
+        ],
+        "title": "TransitionRecoveryRequest",
+        "type": "object"
+      },
+      "TransitionRetentionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "override_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Override Reason"
+          },
+          "to_state": {
+            "$ref": "#/components/schemas/RetentionState"
+          }
+        },
+        "required": [
+          "to_state"
+        ],
+        "title": "TransitionRetentionRequest",
+        "type": "object"
+      },
+      "TransitionSecretRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "to_state": {
+            "$ref": "#/components/schemas/SecretLifecycleState"
+          }
+        },
+        "required": [
+          "to_state"
+        ],
+        "title": "TransitionSecretRequest",
+        "type": "object"
+      },
       "TransitionStateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5764,6 +6541,152 @@
         },
         "title": "VersionFloorResponse",
         "type": "object"
+      },
+      "api__deployment_manager__CreateEnvironmentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "compliance_classification": {
+            "$ref": "#/components/schemas/ComplianceClassification",
+            "default": "standard"
+          },
+          "deployment_policy": {
+            "title": "Deployment Policy",
+            "type": "object"
+          },
+          "env_type": {
+            "$ref": "#/components/schemas/services__deployment__models__EnvironmentType"
+          },
+          "region": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Region",
+            "type": "string"
+          }
+        },
+        "required": [
+          "env_type",
+          "region"
+        ],
+        "title": "CreateEnvironmentRequest",
+        "type": "object"
+      },
+      "api__ops_governance_manager__CreateEnvironmentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "compliance_classification": {
+            "$ref": "#/components/schemas/ComplianceClassification",
+            "default": "standard"
+          },
+          "env_name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Env Name",
+            "type": "string"
+          },
+          "env_type": {
+            "$ref": "#/components/schemas/services__ops_governance__models__EnvironmentType",
+            "default": "shared"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
+          "isolation_level": {
+            "$ref": "#/components/schemas/IsolationLevel",
+            "default": "standard"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
+          "residency_classification": {
+            "$ref": "#/components/schemas/ResidencyClassification",
+            "default": "unrestricted"
+          },
+          "slug": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[a-z0-9-]+$",
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "env_name",
+          "slug"
+        ],
+        "title": "CreateEnvironmentRequest",
+        "type": "object"
+      },
+      "services__deployment__models__EnvironmentLifecycleState": {
+        "enum": [
+          "active",
+          "maintenance",
+          "decommissioned"
+        ],
+        "title": "EnvironmentLifecycleState",
+        "type": "string"
+      },
+      "services__deployment__models__EnvironmentType": {
+        "enum": [
+          "local",
+          "dev",
+          "staging",
+          "production",
+          "tenant-dedicated",
+          "regulated"
+        ],
+        "title": "EnvironmentType",
+        "type": "string"
+      },
+      "services__ops_governance__models__EnvironmentLifecycleState": {
+        "enum": [
+          "provisioning",
+          "active",
+          "maintenance",
+          "restricted",
+          "archived",
+          "failed_recovery"
+        ],
+        "title": "EnvironmentLifecycleState",
+        "type": "string"
+      },
+      "services__ops_governance__models__EnvironmentType": {
+        "enum": [
+          "shared",
+          "dedicated",
+          "regulated_dedicated",
+          "sovereign",
+          "dr_standby"
+        ],
+        "title": "EnvironmentType",
+        "type": "string"
       }
     }
   },
@@ -10106,7 +11029,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/EnvironmentType"
+                  "$ref": "#/components/schemas/services__deployment__models__EnvironmentType"
                 },
                 {
                   "type": "null"
@@ -10122,7 +11045,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/EnvironmentLifecycleState"
+                  "$ref": "#/components/schemas/services__deployment__models__EnvironmentLifecycleState"
                 },
                 {
                   "type": "null"
@@ -10223,7 +11146,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateEnvironmentRequest"
+                "$ref": "#/components/schemas/api__deployment_manager__CreateEnvironmentRequest"
               }
             }
           },
@@ -11492,6 +12415,2199 @@
         "summary": "Get dependency health probes for a module",
         "tags": [
           "control-plane"
+        ]
+      }
+    },
+    "/control-plane/ops/backups": {
+      "get": {
+        "operationId": "list_backup_records_control_plane_ops_backups_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "environment_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Environment Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Backup Records Control Plane Ops Backups Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Backup Records",
+        "tags": [
+          "ops_governance"
+        ]
+      },
+      "post": {
+        "operationId": "initiate_backup_control_plane_ops_backups_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitiateBackupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Initiate Backup Control Plane Ops Backups Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Initiate Backup",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/backups/{backup_id}": {
+      "get": {
+        "operationId": "get_backup_record_control_plane_ops_backups__backup_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "backup_id",
+            "required": true,
+            "schema": {
+              "title": "Backup Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Backup Record Control Plane Ops Backups  Backup Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Backup Record",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/environments": {
+      "get": {
+        "operationId": "list_environments_control_plane_ops_environments_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lifecycle_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/services__ops_governance__models__EnvironmentLifecycleState"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lifecycle State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Environments Control Plane Ops Environments Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Environments",
+        "tags": [
+          "ops_governance"
+        ]
+      },
+      "post": {
+        "operationId": "create_environment_control_plane_ops_environments_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api__ops_governance_manager__CreateEnvironmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Create Environment Control Plane Ops Environments Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Environment",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/environments/{env_id}": {
+      "get": {
+        "operationId": "get_environment_control_plane_ops_environments__env_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "env_id",
+            "required": true,
+            "schema": {
+              "title": "Env Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Environment Control Plane Ops Environments  Env Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Environment",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/environments/{env_id}/history": {
+      "get": {
+        "operationId": "get_environment_history_control_plane_ops_environments__env_id__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "env_id",
+            "required": true,
+            "schema": {
+              "title": "Env Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Environment History Control Plane Ops Environments  Env Id  History Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Environment History",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/environments/{env_id}/transition": {
+      "post": {
+        "operationId": "transition_environment_control_plane_ops_environments__env_id__transition_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "env_id",
+            "required": true,
+            "schema": {
+              "title": "Env Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionEnvironmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Transition Environment Control Plane Ops Environments  Env Id  Transition Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transition Environment",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/environments/{env_id}/validation-token": {
+      "post": {
+        "operationId": "issue_environment_validation_token_control_plane_ops_environments__env_id__validation_token_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "env_id",
+            "required": true,
+            "schema": {
+              "title": "Env Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueValidationTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Issue Environment Validation Token Control Plane Ops Environments  Env Id  Validation Token Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Issue Environment Validation Token",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/exports": {
+      "get": {
+        "operationId": "list_export_requests_control_plane_ops_exports_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "environment_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Environment Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "export_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ExportState"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Export State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Export Requests Control Plane Ops Exports Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Export Requests",
+        "tags": [
+          "ops_governance"
+        ]
+      },
+      "post": {
+        "operationId": "create_export_request_control_plane_ops_exports_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Create Export Request Control Plane Ops Exports Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Export Request",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/exports/{export_id}": {
+      "get": {
+        "operationId": "get_export_request_control_plane_ops_exports__export_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "export_id",
+            "required": true,
+            "schema": {
+              "title": "Export Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Export Request Control Plane Ops Exports  Export Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Export Request",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/exports/{export_id}/transition": {
+      "post": {
+        "operationId": "transition_export_request_control_plane_ops_exports__export_id__transition_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "export_id",
+            "required": true,
+            "schema": {
+              "title": "Export Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Transition Export Request Control Plane Ops Exports  Export Id  Transition Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transition Export Request",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/recoveries": {
+      "get": {
+        "operationId": "list_recovery_records_control_plane_ops_recoveries_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "environment_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Environment Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "recovery_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/RecoveryState"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recovery State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Recovery Records Control Plane Ops Recoveries Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Recovery Records",
+        "tags": [
+          "ops_governance"
+        ]
+      },
+      "post": {
+        "operationId": "initiate_recovery_control_plane_ops_recoveries_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitiateRecoveryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Initiate Recovery Control Plane Ops Recoveries Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Initiate Recovery",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/recoveries/{recovery_id}": {
+      "get": {
+        "operationId": "get_recovery_record_control_plane_ops_recoveries__recovery_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recovery_id",
+            "required": true,
+            "schema": {
+              "title": "Recovery Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Recovery Record Control Plane Ops Recoveries  Recovery Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Recovery Record",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/recoveries/{recovery_id}/transition": {
+      "post": {
+        "operationId": "transition_recovery_control_plane_ops_recoveries__recovery_id__transition_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recovery_id",
+            "required": true,
+            "schema": {
+              "title": "Recovery Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionRecoveryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Transition Recovery Control Plane Ops Recoveries  Recovery Id  Transition Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transition Recovery",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/restores": {
+      "get": {
+        "operationId": "list_restore_records_control_plane_ops_restores_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Restore Records Control Plane Ops Restores Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Restore Records",
+        "tags": [
+          "ops_governance"
+        ]
+      },
+      "post": {
+        "operationId": "initiate_restore_control_plane_ops_restores_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitiateRestoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Initiate Restore Control Plane Ops Restores Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Initiate Restore",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/restores/{restore_id}": {
+      "get": {
+        "operationId": "get_restore_record_control_plane_ops_restores__restore_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "restore_id",
+            "required": true,
+            "schema": {
+              "title": "Restore Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Restore Record Control Plane Ops Restores  Restore Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Restore Record",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/retention-policies": {
+      "get": {
+        "operationId": "list_retention_policies_control_plane_ops_retention_policies_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "environment_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Environment Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "retention_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/RetentionState"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Retention State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Retention Policies Control Plane Ops Retention Policies Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Retention Policies",
+        "tags": [
+          "ops_governance"
+        ]
+      },
+      "post": {
+        "operationId": "create_retention_policy_control_plane_ops_retention_policies_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRetentionPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Create Retention Policy Control Plane Ops Retention Policies Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Retention Policy",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/retention-policies/{policy_id}": {
+      "get": {
+        "operationId": "get_retention_policy_control_plane_ops_retention_policies__policy_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "policy_id",
+            "required": true,
+            "schema": {
+              "title": "Policy Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Retention Policy Control Plane Ops Retention Policies  Policy Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Retention Policy",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/retention-policies/{policy_id}/legal-hold": {
+      "post": {
+        "operationId": "set_legal_hold_control_plane_ops_retention_policies__policy_id__legal_hold_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "policy_id",
+            "required": true,
+            "schema": {
+              "title": "Policy Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetLegalHoldRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Set Legal Hold Control Plane Ops Retention Policies  Policy Id  Legal Hold Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Legal Hold",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/retention-policies/{policy_id}/transition": {
+      "post": {
+        "operationId": "transition_retention_policy_control_plane_ops_retention_policies__policy_id__transition_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "policy_id",
+            "required": true,
+            "schema": {
+              "title": "Policy Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionRetentionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Transition Retention Policy Control Plane Ops Retention Policies  Policy Id  Transition Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transition Retention Policy",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/rotations/{rotation_id}/outcome": {
+      "post": {
+        "operationId": "record_rotation_outcome_control_plane_ops_rotations__rotation_id__outcome_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rotation_id",
+            "required": true,
+            "schema": {
+              "title": "Rotation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordRotationOutcomeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Record Rotation Outcome Control Plane Ops Rotations  Rotation Id  Outcome Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Rotation Outcome",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/secrets": {
+      "get": {
+        "operationId": "list_secret_governance_control_plane_ops_secrets_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "environment_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Environment Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lifecycle_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SecretLifecycleState"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lifecycle State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Secret Governance Control Plane Ops Secrets Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Secret Governance",
+        "tags": [
+          "ops_governance"
+        ]
+      },
+      "post": {
+        "operationId": "register_secret_governance_control_plane_ops_secrets_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterSecretGovernanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Register Secret Governance Control Plane Ops Secrets Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register Secret Governance",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/secrets/{secret_id}": {
+      "get": {
+        "operationId": "get_secret_governance_control_plane_ops_secrets__secret_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "secret_id",
+            "required": true,
+            "schema": {
+              "title": "Secret Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Secret Governance Control Plane Ops Secrets  Secret Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Secret Governance",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/secrets/{secret_id}/rotations": {
+      "post": {
+        "operationId": "schedule_key_rotation_control_plane_ops_secrets__secret_id__rotations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "secret_id",
+            "required": true,
+            "schema": {
+              "title": "Secret Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleRotationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Schedule Key Rotation Control Plane Ops Secrets  Secret Id  Rotations Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Schedule Key Rotation",
+        "tags": [
+          "ops_governance"
+        ]
+      }
+    },
+    "/control-plane/ops/secrets/{secret_id}/transition": {
+      "post": {
+        "operationId": "transition_secret_state_control_plane_ops_secrets__secret_id__transition_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "secret_id",
+            "required": true,
+            "schema": {
+              "title": "Secret Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionSecretRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Transition Secret State Control Plane Ops Secrets  Secret Id  Transition Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transition Secret State",
+        "tags": [
+          "ops_governance"
         ]
       }
     },

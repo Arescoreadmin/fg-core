@@ -3059,3 +3059,28 @@ All `ui:read` scoped. All tenant-bound. All `allowed_internal`. All under `not _
 - No provider credentials, API keys, or raw topology exposed.
 - Evaluation foundation exposes structural run metadata only. No fabricated scores, no raw prompts/completions.
 - All surfaces are export-safe and audit-lineage compatible.
+
+---
+
+## PR 82 — Operational Governance Foundation — 2026-05-15
+
+### Summary
+
+Adds environment lifecycle governance, secret governance metadata (no raw secrets), key rotation scheduling, retention policy with legal hold enforcement, export request FSM, backup/restore record creation, and recovery governance with drill mode tracking.
+
+### Gate results
+
+- `python tools/ci/check_soc_review_sync.py`: soc-review-sync: OK (after SOC doc update)
+- `make route-inventory-generate`: 31 new routes added to route_inventory.json
+- `make fg-fast`: All checks passed
+- `.venv/bin/pytest tests/test_ops_governance_manager.py`: 66 passed
+
+### Compliance posture
+
+- No raw secrets, key material, or credentials stored or returned anywhere. `ops_secret_governance` stores governance metadata only.
+- `_SAFE_DETAIL_KEYS` allowlist prevents audit log pollution.
+- `LegalHoldViolation` guard enforced at store layer — deletion-path transitions blocked when `legal_hold=True`.
+- `ValidationTokenRequired` gate enforced for `failed_recovery → active` environment transitions. Token consumed on use.
+- All response serializers use explicit field allowlists.
+- `tenant_id` resolved from auth context only — never from request body.
+- Schema additions are additive and idempotent — no changes to existing tables.

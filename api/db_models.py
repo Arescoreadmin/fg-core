@@ -2685,3 +2685,409 @@ class ProvisioningAuditEventRecord(Base):
     timestamp: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
+
+
+# ---------------------------------------------------------------------------
+# Operational Governance ORM models
+# ---------------------------------------------------------------------------
+
+
+class OpsEnvironmentRecord(Base):
+    """Governance metadata for a managed deployment environment.
+
+    SECURITY: No infrastructure topology, credentials, or secrets stored here.
+    """
+
+    __tablename__ = "ops_environments"
+    __table_args__ = (
+        Index("ix_ops_env_tenant", "tenant_id"),
+        Index("ix_ops_env_slug", "slug"),
+        Index("ix_ops_env_state", "lifecycle_state"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    environment_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    env_name: Mapped[Any] = mapped_column(Text, nullable=False)
+    slug: Mapped[Any] = mapped_column(Text, nullable=False, unique=True, index=True)
+    lifecycle_state: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="provisioning"
+    )
+    env_type: Mapped[Any] = mapped_column(Text, nullable=False, default="shared")
+    compliance_classification: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="standard"
+    )
+    isolation_level: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="standard"
+    )
+    residency_classification: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="unrestricted"
+    )
+    recovery_readiness: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="unknown"
+    )
+    region: Mapped[Any] = mapped_column(Text, nullable=True)
+    validation_token: Mapped[Any] = mapped_column(Text, nullable=True)
+    idempotency_key: Mapped[Any] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[Any] = mapped_column(Text, nullable=False, default="{}")
+    created_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    archived_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    state_version: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+
+
+class OpsSecretGovernanceRecord(Base):
+    """Governance metadata for a managed secret.
+
+    SECURITY: No raw secret values, credentials, or key material ever stored.
+    Only metadata about the secret's lifecycle and classification.
+    """
+
+    __tablename__ = "ops_secret_governance"
+    __table_args__ = (
+        Index("ix_ops_secret_tenant", "tenant_id"),
+        Index("ix_ops_secret_env", "environment_id"),
+        Index("ix_ops_secret_state", "lifecycle_state"),
+        Index("ix_ops_secret_rotation", "rotation_state"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    secret_governance_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    environment_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    secret_name: Mapped[Any] = mapped_column(Text, nullable=False)
+    secret_classification: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="standard"
+    )
+    secret_type: Mapped[Any] = mapped_column(Text, nullable=False, default="api_key")
+    lifecycle_state: Mapped[Any] = mapped_column(Text, nullable=False, default="active")
+    external_provider: Mapped[Any] = mapped_column(Text, nullable=True)
+    external_reference_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    owner_scope: Mapped[Any] = mapped_column(Text, nullable=True)
+    rotation_state: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="not_scheduled"
+    )
+    rotation_policy_days: Mapped[Any] = mapped_column(Integer, nullable=True)
+    last_rotated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_rotation_due_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    governance_policy_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    idempotency_key: Mapped[Any] = mapped_column(Text, nullable=True)
+    created_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    state_version: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+
+
+class OpsKeyRotationScheduleRecord(Base):
+    """Key rotation schedule for a managed secret."""
+
+    __tablename__ = "ops_key_rotation_schedules"
+    __table_args__ = (
+        Index("ix_ops_rotation_secret", "secret_governance_id"),
+        Index("ix_ops_rotation_tenant", "tenant_id"),
+        Index("ix_ops_rotation_state", "rotation_state"),
+        Index("ix_ops_rotation_scheduled_at", "scheduled_at"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    rotation_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    secret_governance_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    rotation_state: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="scheduled"
+    )
+    scheduled_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=False)
+    initiated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    failure_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    compliance_override: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    override_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    override_approved_by: Mapped[Any] = mapped_column(Text, nullable=True)
+    emergency_rotation: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    waiver_reference: Mapped[Any] = mapped_column(Text, nullable=True)
+    initiated_by: Mapped[Any] = mapped_column(Text, nullable=True)
+    outcome: Mapped[Any] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[Any] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    state_version: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+
+
+class OpsRetentionPolicyRecord(Base):
+    """Data retention policy for a managed environment or tenant."""
+
+    __tablename__ = "ops_retention_policies"
+    __table_args__ = (
+        Index("ix_ops_retention_tenant", "tenant_id"),
+        Index("ix_ops_retention_env", "environment_id"),
+        Index("ix_ops_retention_state", "retention_state"),
+        Index("ix_ops_retention_legal_hold", "legal_hold"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    retention_policy_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    environment_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    policy_name: Mapped[Any] = mapped_column(Text, nullable=False)
+    retention_classification: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="standard"
+    )
+    retention_state: Mapped[Any] = mapped_column(Text, nullable=False, default="active")
+    retention_days: Mapped[Any] = mapped_column(Integer, nullable=False)
+    archive_after_days: Mapped[Any] = mapped_column(Integer, nullable=True)
+    deletion_scheduled_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    archived_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    legal_hold: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    legal_hold_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    legal_hold_set_by: Mapped[Any] = mapped_column(Text, nullable=True)
+    legal_hold_set_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    export_restricted: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    compliance_policy_ref: Mapped[Any] = mapped_column(Text, nullable=True)
+    override_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    idempotency_key: Mapped[Any] = mapped_column(Text, nullable=True)
+    created_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    state_version: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+
+
+class OpsExportRequestRecord(Base):
+    """Export request for tenant or environment data."""
+
+    __tablename__ = "ops_export_requests"
+    __table_args__ = (
+        Index("ix_ops_export_tenant", "tenant_id"),
+        Index("ix_ops_export_env", "environment_id"),
+        Index("ix_ops_export_state", "export_state"),
+        Index("ix_ops_export_requested_by", "requested_by"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    export_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    environment_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    export_state: Mapped[Any] = mapped_column(Text, nullable=False, default="pending")
+    export_scope: Mapped[Any] = mapped_column(Text, nullable=False, default="tenant")
+    export_classification: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="standard"
+    )
+    export_purpose: Mapped[Any] = mapped_column(Text, nullable=True)
+    requested_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    approved_by: Mapped[Any] = mapped_column(Text, nullable=True)
+    rejected_by: Mapped[Any] = mapped_column(Text, nullable=True)
+    approval_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    rejection_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    legal_hold_validated: Mapped[Any] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    residency_validated: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    retention_validated: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    export_restriction_flags: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    idempotency_key: Mapped[Any] = mapped_column(Text, nullable=True)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    state_version: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+
+
+class OpsBackupRecord(Base):
+    """Backup record — governance metadata only, no backup data or paths."""
+
+    __tablename__ = "ops_backup_records"
+    __table_args__ = (
+        Index("ix_ops_backup_tenant", "tenant_id"),
+        Index("ix_ops_backup_env", "environment_id"),
+        Index("ix_ops_backup_state", "backup_state"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    backup_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    environment_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    backup_scope: Mapped[Any] = mapped_column(Text, nullable=False, default="full")
+    backup_classification: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="standard"
+    )
+    backup_state: Mapped[Any] = mapped_column(Text, nullable=False, default="initiated")
+    backup_reference: Mapped[Any] = mapped_column(Text, nullable=True)
+    retention_policy_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    backup_size_bytes: Mapped[Any] = mapped_column(Integer, nullable=True)
+    checksum_ref: Mapped[Any] = mapped_column(Text, nullable=True)
+    initiated_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    started_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    failure_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[Any] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    state_version: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+
+
+class OpsRestoreRecord(Base):
+    """Restore operation record — governance metadata only."""
+
+    __tablename__ = "ops_restore_records"
+    __table_args__ = (
+        Index("ix_ops_restore_tenant", "tenant_id"),
+        Index("ix_ops_restore_backup", "source_backup_id"),
+        Index("ix_ops_restore_state", "restore_state"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    restore_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    source_backup_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    target_environment_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    restore_state: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="initiated"
+    )
+    restore_scope: Mapped[Any] = mapped_column(Text, nullable=False, default="full")
+    point_in_time_ref: Mapped[Any] = mapped_column(Text, nullable=True)
+    validation_state: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="pending"
+    )
+    validation_token: Mapped[Any] = mapped_column(Text, nullable=True)
+    initiated_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    started_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    failure_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    recovery_lineage_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[Any] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    state_version: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+
+
+class OpsRecoveryRecord(Base):
+    """Recovery operation record — governance metadata and drill tracking."""
+
+    __tablename__ = "ops_recovery_records"
+    __table_args__ = (
+        Index("ix_ops_recovery_tenant", "tenant_id"),
+        Index("ix_ops_recovery_env", "environment_id"),
+        Index("ix_ops_recovery_state", "recovery_state"),
+        Index("ix_ops_recovery_drill", "drill_mode"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    recovery_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    environment_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    recovery_state: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="initiated"
+    )
+    recovery_type: Mapped[Any] = mapped_column(Text, nullable=False)
+    recovery_trigger: Mapped[Any] = mapped_column(Text, nullable=True)
+    validation_state: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="pending"
+    )
+    readiness_classification: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="unknown"
+    )
+    initiated_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    started_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    validated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    failure_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    failure_count: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    drill_mode: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    metadata_json: Mapped[Any] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    state_version: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+
+
+class OpsGovernanceAuditEventRecord(Base):
+    """Append-only audit event for ops governance lifecycle changes.
+
+    Rows are never updated or deleted (enforced at DB level in the migration).
+    Hash-chained per resource_id for tamper evidence.
+    """
+
+    __tablename__ = "ops_governance_audit_events"
+    __table_args__ = (
+        Index("ix_ops_audit_tenant_ts", "tenant_id", "timestamp"),
+        Index("ix_ops_audit_resource", "resource_type", "resource_id"),
+        Index("ix_ops_audit_env_ts", "environment_id", "timestamp"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[Any] = mapped_column(Text, nullable=False, unique=True, index=True)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    environment_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    resource_type: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    resource_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    event_type: Mapped[Any] = mapped_column(Text, nullable=False)
+    actor: Mapped[Any] = mapped_column(Text, nullable=False)
+    outcome: Mapped[Any] = mapped_column(Text, nullable=False, default="success")
+    policy_state: Mapped[Any] = mapped_column(Text, nullable=True)
+    operational_context: Mapped[Any] = mapped_column(Text, nullable=True)
+    failure_reason: Mapped[Any] = mapped_column(Text, nullable=True)
+    details_json: Mapped[Any] = mapped_column(Text, nullable=True)
+    event_hash: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    previous_event_hash: Mapped[Any] = mapped_column(Text, nullable=True)
+    timestamp: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
