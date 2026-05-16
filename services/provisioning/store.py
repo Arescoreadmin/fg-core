@@ -14,7 +14,7 @@ import json as _json
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from sqlalchemy.orm import Session
 
@@ -429,7 +429,10 @@ class ProvisioningStore:
                 ProvisioningOrganizationRecord.organization_id == org_id,
                 ProvisioningOrganizationRecord.state_version == current_version,
             )
-            .update(updates, synchronize_session="evaluate")
+            .update(
+                cast(dict[Any, Any], updates),
+                synchronize_session="evaluate",
+            )
         )
         if rows_affected == 0:
             raise ConcurrentModificationError(org_id)
@@ -637,6 +640,10 @@ class ProvisioningStore:
             .filter(ProvisioningWorkflowRecord.provisioning_id == provisioning_id)
             .first()
         )
+
+        if wf_row is None:
+            raise WorkflowNotFound(provisioning_id)
+
         return _wf_orm_to_domain(wf_row)
 
     def fail_provisioning_workflow(
@@ -726,6 +733,10 @@ class ProvisioningStore:
             .filter(ProvisioningWorkflowRecord.provisioning_id == provisioning_id)
             .first()
         )
+
+        if wf_row is None:
+            raise WorkflowNotFound(provisioning_id)
+
         return _wf_orm_to_domain(wf_row)
 
     def retry_provisioning_workflow(
