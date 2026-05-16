@@ -9776,3 +9776,60 @@ The rewritten dynamic INSERT was missing `is_current = 1` from the params dict. 
 - `make route-inventory-generate`: OK
 - `make fg-contract`: PASS
 - `make fg-fast`: All checks passed
+
+## PR 82 — Enterprise Operational Governance Foundation (2026-05-15)
+
+**Branch:** `feat/ops-governance-foundation`
+
+**Summary:** Adds the full operational governance control-plane layer: 9-table Postgres schema, domain models with FSM validation, hash-chained audit log, stateless store with optimistic locking and legal-hold/validation-token gates, 31 FastAPI routes under `/control-plane/ops/`, and 66 pytest tests.
+
+**Scope:**
+- `migrations/postgres/0051_ops_governance.sql` — 9 new tables (`ops_environments`, `ops_secret_governance`, `ops_key_rotation_schedules`, `ops_retention_policies`, `ops_export_requests`, `ops_backup_records`, `ops_restore_records`, `ops_recovery_records`, `ops_governance_audit_events`). Audit table enforced append-only via Postgres `NO UPDATE / NO DELETE` rules. All tables have `state_version` for optimistic locking.
+- `api/db_models.py` — 9 new ORM classes appended.
+- `services/ops_governance/__init__.py` — package init exporting all public symbols.
+- `services/ops_governance/models.py` — 21 enums, 6 FSM transition maps, frozen dataclasses, FSM validation functions.
+- `services/ops_governance/audit.py` — SHA-256 hash-chained audit emission. `_SAFE_DETAIL_KEYS` allowlist prevents secrets/topology from entering audit log.
+- `services/ops_governance/store.py` — `OpsGovernanceStore` with full CRUD + state transition for 8 domains. Optimistic locking, `LegalHoldViolation`, `ValidationTokenRequired` gate.
+- `api/ops_governance_manager.py` — 31-route FastAPI router. Tenant ID from auth context only. `extra="forbid"` on all request models. Explicit field allowlists in all response serializers.
+- `api/main.py` — router registered in `build_app` and `build_contract_app`.
+- `tests/test_ops_governance_manager.py` — 66 tests.
+- `contracts/core/openapi.json`, `schemas/api/openapi.json` (regenerated)
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md` (authority SHA updated)
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/contract_routes.json` (regenerated)
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md`, `docs/SOC_EXECUTION_GATES_2026-02-15.md` (ninth follow-up entries)
+
+**Follow-up fix (codex gate run):**
+- `services/ops_governance/store.py` reformatted by `ruff format` (codex_gates.sh uses `--check`; `make fmt` had not caught this file in the prior pass).
+- Added `# type: ignore[arg-type]` to 4 `Query.update()` call sites (lines 670, 1293, 1537, 1904) — same SQLAlchemy type-stub gap as pre-existing `services/provisioning/store.py:432`. Provisioning store errors are pre-existing on main and out of scope for this PR.
+
+**Files changed:**
+- `migrations/postgres/0051_ops_governance.sql` (new)
+- `api/db_models.py` (appended 9 ORM classes)
+- `services/ops_governance/__init__.py` (new)
+- `services/ops_governance/models.py` (new)
+- `services/ops_governance/audit.py` (new)
+- `services/ops_governance/store.py` (new, follow-up: formatted + 4 type ignores)
+- `api/ops_governance_manager.py` (new)
+- `api/main.py` (ops_governance_router registered in 2 functions)
+- `tests/test_ops_governance_manager.py` (new)
+- `contracts/core/openapi.json` (regenerated)
+- `schemas/api/openapi.json` (regenerated)
+- `BLUEPRINT_STAGED.md` (authority SHA updated)
+- `CONTRACT.md` (authority SHA updated)
+- `tools/ci/route_inventory.json` (regenerated)
+- `tools/ci/route_inventory_summary.json` (regenerated)
+- `tools/ci/topology.sha256` (regenerated)
+- `tools/ci/plane_registry_snapshot.json` (regenerated)
+- `tools/ci/contract_routes.json` (regenerated)
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md` (ninth follow-up)
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` (PR 82 gate results)
+- `docs/ai/PR_FIX_LOG.md` (this entry)
+
+**Validation:**
+- `ruff check` + `ruff format --check`: PASS
+- `pytest -q tests/test_ops_governance_manager.py`: 66 passed
+- `pytest -q tests -k "ops_governance or retention or recovery or legal_hold or secret"`: 216 passed
+- `make fg-contract`: PASS
+- `make fg-fast`: All checks passed
+- `docker compose config`: OK
+- `bash codex_gates.sh`: ruff PASS, mypy PASS (ops_governance), pre-existing provisioning/store.py mypy errors unchanged from main baseline

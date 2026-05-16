@@ -200,7 +200,9 @@ def _env_orm_to_domain(row: OpsEnvironmentRecord) -> OpsEnvironment:
         slug=row.slug,
         lifecycle_state=EnvironmentLifecycleState(row.lifecycle_state),
         env_type=EnvironmentType(row.env_type),
-        compliance_classification=ComplianceClassification(row.compliance_classification),
+        compliance_classification=ComplianceClassification(
+            row.compliance_classification
+        ),
         isolation_level=IsolationLevel(row.isolation_level),
         residency_classification=ResidencyClassification(row.residency_classification),
         recovery_readiness=RecoveryReadiness(row.recovery_readiness),
@@ -248,7 +250,9 @@ def _secret_orm_to_domain(row: OpsSecretGovernanceRecord) -> OpsSecretGovernance
     )
 
 
-def _rotation_orm_to_domain(row: OpsKeyRotationScheduleRecord) -> OpsKeyRotationSchedule:
+def _rotation_orm_to_domain(
+    row: OpsKeyRotationScheduleRecord,
+) -> OpsKeyRotationSchedule:
     meta: dict = {}
     if row.metadata_json:
         try:
@@ -472,9 +476,7 @@ def _idem_filter(q: Any, model: Any, tenant_id: Optional[str], key: str) -> Any:
 
 def _tenant_filter(q: Any, model: Any, tenant_id: Optional[str]) -> Any:
     if tenant_id is not None:
-        q = q.filter(
-            (model.tenant_id == tenant_id) | (model.tenant_id.is_(None))
-        )
+        q = q.filter((model.tenant_id == tenant_id) | (model.tenant_id.is_(None)))
     return q
 
 
@@ -512,7 +514,10 @@ class OpsGovernanceStore:
     ) -> OpsEnvironment:
         if idempotency_key is not None:
             existing = _idem_filter(
-                db.query(OpsEnvironmentRecord), OpsEnvironmentRecord, tenant_id, idempotency_key
+                db.query(OpsEnvironmentRecord),
+                OpsEnvironmentRecord,
+                tenant_id,
+                idempotency_key,
             ).first()
             if existing is not None:
                 return _env_orm_to_domain(existing)
@@ -625,7 +630,9 @@ class OpsGovernanceStore:
         try:
             validate_env_transition(from_state, to_state)
         except ValueError as exc:
-            raise InvalidStateTransition(from_state.value, to_state.value, "environment") from exc
+            raise InvalidStateTransition(
+                from_state.value, to_state.value, "environment"
+            ) from exc
 
         # failed_recovery -> active requires validation token.
         if (
@@ -648,7 +655,10 @@ class OpsGovernanceStore:
             updates["archived_at"] = now
         if recovery_readiness is not None:
             updates["recovery_readiness"] = recovery_readiness.value
-        if to_state == EnvironmentLifecycleState.ACTIVE and from_state == EnvironmentLifecycleState.FAILED_RECOVERY:
+        if (
+            to_state == EnvironmentLifecycleState.ACTIVE
+            and from_state == EnvironmentLifecycleState.FAILED_RECOVERY
+        ):
             updates["validation_token"] = None  # consumed
 
         rows_affected = (
@@ -657,7 +667,7 @@ class OpsGovernanceStore:
                 OpsEnvironmentRecord.environment_id == env_id,
                 OpsEnvironmentRecord.state_version == current_version,
             )
-            .update(updates, synchronize_session="evaluate")
+            .update(updates, synchronize_session="evaluate")  # type: ignore[arg-type]
         )
         if rows_affected == 0:
             raise ConcurrentModificationError(env_id)
@@ -708,14 +718,22 @@ class OpsGovernanceStore:
                 OpsEnvironmentRecord.state_version == current_version,
             )
             .update(
-                {"validation_token": validation_token, "state_version": current_version + 1, "updated_at": now},
+                {
+                    "validation_token": validation_token,
+                    "state_version": current_version + 1,
+                    "updated_at": now,
+                },
                 synchronize_session="evaluate",
             )
         )
         if rows_affected == 0:
             raise ConcurrentModificationError(env_id)
         db.flush()
-        row = db.query(OpsEnvironmentRecord).filter(OpsEnvironmentRecord.environment_id == env_id).first()
+        row = (
+            db.query(OpsEnvironmentRecord)
+            .filter(OpsEnvironmentRecord.environment_id == env_id)
+            .first()
+        )
         self._emit(
             db,
             resource_type="environment",
@@ -865,7 +883,9 @@ class OpsGovernanceStore:
         if environment_id is not None:
             q = q.filter(OpsSecretGovernanceRecord.environment_id == environment_id)
         if lifecycle_state is not None:
-            q = q.filter(OpsSecretGovernanceRecord.lifecycle_state == lifecycle_state.value)
+            q = q.filter(
+                OpsSecretGovernanceRecord.lifecycle_state == lifecycle_state.value
+            )
         rows = (
             q.order_by(OpsSecretGovernanceRecord.created_at.desc())
             .offset(offset)
@@ -883,12 +903,16 @@ class OpsGovernanceStore:
         actor: str,
         tenant_id: Optional[str] = None,
     ) -> OpsSecretGovernance:
-        secret = self.get_secret_governance(db, secret_id=secret_id, tenant_id=tenant_id)
+        secret = self.get_secret_governance(
+            db, secret_id=secret_id, tenant_id=tenant_id
+        )
         from_state = secret.lifecycle_state
         try:
             validate_secret_transition(from_state, to_state)
         except ValueError as exc:
-            raise InvalidStateTransition(from_state.value, to_state.value, "secret") from exc
+            raise InvalidStateTransition(
+                from_state.value, to_state.value, "secret"
+            ) from exc
 
         now = _utcnow()
         current_version = secret.state_version
@@ -899,7 +923,11 @@ class OpsGovernanceStore:
                 OpsSecretGovernanceRecord.state_version == current_version,
             )
             .update(
-                {"lifecycle_state": to_state.value, "state_version": current_version + 1, "updated_at": now},
+                {
+                    "lifecycle_state": to_state.value,
+                    "state_version": current_version + 1,
+                    "updated_at": now,
+                },
                 synchronize_session="evaluate",
             )
         )
@@ -940,11 +968,17 @@ class OpsGovernanceStore:
         waiver_reference: Optional[str] = None,
         metadata: Optional[dict] = None,
     ) -> OpsKeyRotationSchedule:
-        secret = self.get_secret_governance(db, secret_id=secret_id, tenant_id=tenant_id)
+        secret = self.get_secret_governance(
+            db, secret_id=secret_id, tenant_id=tenant_id
+        )
         rotation_id = str(uuid.uuid4())
         now = _utcnow()
         now_iso = now.isoformat()
-        state = RotationScheduleState.EMERGENCY if emergency_rotation else RotationScheduleState.SCHEDULED
+        state = (
+            RotationScheduleState.EMERGENCY
+            if emergency_rotation
+            else RotationScheduleState.SCHEDULED
+        )
         row = OpsKeyRotationScheduleRecord(
             rotation_id=rotation_id,
             secret_governance_id=secret_id,
@@ -964,7 +998,11 @@ class OpsGovernanceStore:
         db.add(row)
         # Advance secret rotation_state.
         now2 = _utcnow()
-        new_rotation_state = SecretRotationState.EMERGENCY if emergency_rotation else SecretRotationState.SCHEDULED
+        new_rotation_state = (
+            SecretRotationState.EMERGENCY
+            if emergency_rotation
+            else SecretRotationState.SCHEDULED
+        )
         db.query(OpsSecretGovernanceRecord).filter(
             OpsSecretGovernanceRecord.secret_governance_id == secret_id
         ).update(
@@ -986,7 +1024,10 @@ class OpsGovernanceStore:
             outcome="success",
             tenant_id=secret.tenant_id,
             now_iso=now_iso,
-            details={"rotation_state": state.value, "secret_type": secret.secret_type.value},
+            details={
+                "rotation_state": state.value,
+                "secret_type": secret.secret_type.value,
+            },
         )
         return _rotation_orm_to_domain(row)
 
@@ -1043,7 +1084,8 @@ class OpsGovernanceStore:
         # Update parent secret rotation metadata.
         if outcome == RotationOutcome.SUCCESS:
             db.query(OpsSecretGovernanceRecord).filter(
-                OpsSecretGovernanceRecord.secret_governance_id == row.secret_governance_id
+                OpsSecretGovernanceRecord.secret_governance_id
+                == row.secret_governance_id
             ).update(
                 {
                     "rotation_state": SecretRotationState.COMPLETED.value,
@@ -1054,7 +1096,8 @@ class OpsGovernanceStore:
             )
         else:
             db.query(OpsSecretGovernanceRecord).filter(
-                OpsSecretGovernanceRecord.secret_governance_id == row.secret_governance_id
+                OpsSecretGovernanceRecord.secret_governance_id
+                == row.secret_governance_id
             ).update(
                 {"rotation_state": SecretRotationState.FAILED.value, "updated_at": now},
                 synchronize_session="evaluate",
@@ -1076,7 +1119,11 @@ class OpsGovernanceStore:
             now_iso=now.isoformat(),
             details={"rotation_state": new_state.value},
         )
-        return _rotation_orm_to_domain(updated) if updated else _rotation_orm_to_domain(row)
+        return (
+            _rotation_orm_to_domain(updated)
+            if updated
+            else _rotation_orm_to_domain(row)
+        )
 
     # -----------------------------------------------------------------------
     # Retention policies
@@ -1182,7 +1229,9 @@ class OpsGovernanceStore:
         if environment_id is not None:
             q = q.filter(OpsRetentionPolicyRecord.environment_id == environment_id)
         if retention_state is not None:
-            q = q.filter(OpsRetentionPolicyRecord.retention_state == retention_state.value)
+            q = q.filter(
+                OpsRetentionPolicyRecord.retention_state == retention_state.value
+            )
         rows = (
             q.order_by(OpsRetentionPolicyRecord.created_at.desc())
             .offset(offset)
@@ -1215,7 +1264,9 @@ class OpsGovernanceStore:
         try:
             validate_retention_transition(from_state, to_state)
         except ValueError as exc:
-            raise InvalidStateTransition(from_state.value, to_state.value, "retention") from exc
+            raise InvalidStateTransition(
+                from_state.value, to_state.value, "retention"
+            ) from exc
 
         now = _utcnow()
         current_version = policy.state_version
@@ -1239,7 +1290,7 @@ class OpsGovernanceStore:
                 OpsRetentionPolicyRecord.retention_policy_id == policy_id,
                 OpsRetentionPolicyRecord.state_version == current_version,
             )
-            .update(updates, synchronize_session="evaluate")
+            .update(updates, synchronize_session="evaluate")  # type: ignore[arg-type]
         )
         if rows_affected == 0:
             raise ConcurrentModificationError(policy_id)
@@ -1312,7 +1363,10 @@ class OpsGovernanceStore:
             tenant_id=policy.tenant_id,
             environment_id=policy.environment_id,
             now_iso=now.isoformat(),
-            details={"retention_state": RetentionState.LEGAL_HOLD.value, "legal_hold": True},
+            details={
+                "retention_state": RetentionState.LEGAL_HOLD.value,
+                "legal_hold": True,
+            },
         )
         return _retention_orm_to_domain(row) if row else policy
 
@@ -1448,7 +1502,9 @@ class OpsGovernanceStore:
         try:
             validate_export_transition(from_state, to_state)
         except ValueError as exc:
-            raise InvalidStateTransition(from_state.value, to_state.value, "export") from exc
+            raise InvalidStateTransition(
+                from_state.value, to_state.value, "export"
+            ) from exc
 
         now = _utcnow()
         current_version = export.state_version
@@ -1478,7 +1534,7 @@ class OpsGovernanceStore:
                 OpsExportRequestRecord.export_id == export_id,
                 OpsExportRequestRecord.state_version == current_version,
             )
-            .update(updates, synchronize_session="evaluate")
+            .update(updates, synchronize_session="evaluate")  # type: ignore[arg-type]
         )
         if rows_affected == 0:
             raise ConcurrentModificationError(export_id)
@@ -1498,7 +1554,11 @@ class OpsGovernanceStore:
             tenant_id=export.tenant_id,
             environment_id=export.environment_id,
             now_iso=now.isoformat(),
-            details={"from_state": from_state.value, "to_state": to_state.value, "export_scope": export.export_scope.value},
+            details={
+                "from_state": from_state.value,
+                "to_state": to_state.value,
+                "export_scope": export.export_scope.value,
+            },
         )
         return _export_orm_to_domain(row) if row else export
 
@@ -1554,7 +1614,11 @@ class OpsGovernanceStore:
             tenant_id=tenant_id,
             environment_id=environment_id,
             now_iso=now.isoformat(),
-            details={"backup_scope": backup_scope.value, "backup_state": BackupState.INITIATED.value, "backup_classification": backup_classification.value},
+            details={
+                "backup_scope": backup_scope.value,
+                "backup_state": BackupState.INITIATED.value,
+                "backup_classification": backup_classification.value,
+            },
         )
         return _backup_orm_to_domain(row)
 
@@ -1590,10 +1654,7 @@ class OpsGovernanceStore:
         if environment_id is not None:
             q = q.filter(OpsBackupORM.environment_id == environment_id)
         rows = (
-            q.order_by(OpsBackupORM.started_at.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
+            q.order_by(OpsBackupORM.started_at.desc()).offset(offset).limit(limit).all()
         )
         return [_backup_orm_to_domain(r) for r in rows]
 
@@ -1645,7 +1706,10 @@ class OpsGovernanceStore:
             outcome="success",
             tenant_id=tenant_id,
             now_iso=now.isoformat(),
-            details={"restore_state": RestoreState.INITIATED.value, "restore_scope": restore_scope.value},
+            details={
+                "restore_state": RestoreState.INITIATED.value,
+                "restore_scope": restore_scope.value,
+            },
         )
         return _restore_orm_to_domain(row)
 
@@ -1735,7 +1799,11 @@ class OpsGovernanceStore:
             tenant_id=tenant_id,
             environment_id=environment_id,
             now_iso=now.isoformat(),
-            details={"recovery_state": RecoveryState.INITIATED.value, "recovery_type": recovery_type.value, "drill_mode": drill_mode},
+            details={
+                "recovery_state": RecoveryState.INITIATED.value,
+                "recovery_type": recovery_type.value,
+                "drill_mode": drill_mode,
+            },
         )
         return _recovery_orm_to_domain(row)
 
@@ -1793,12 +1861,16 @@ class OpsGovernanceStore:
         readiness_classification: Optional[RecoveryReadiness] = None,
         failure_reason: Optional[str] = None,
     ) -> OpsRecoveryRecord:
-        record = self.get_recovery_record(db, recovery_id=recovery_id, tenant_id=tenant_id)
+        record = self.get_recovery_record(
+            db, recovery_id=recovery_id, tenant_id=tenant_id
+        )
         from_state = record.recovery_state
         try:
             validate_recovery_transition(from_state, to_state)
         except ValueError as exc:
-            raise InvalidStateTransition(from_state.value, to_state.value, "recovery") from exc
+            raise InvalidStateTransition(
+                from_state.value, to_state.value, "recovery"
+            ) from exc
 
         now = _utcnow()
         current_version = record.state_version
@@ -1809,7 +1881,11 @@ class OpsGovernanceStore:
         }
         if to_state == RecoveryState.VALIDATED:
             updates["validated_at"] = now
-        if to_state in (RecoveryState.COMPLETED, RecoveryState.FAILED, RecoveryState.ABANDONED):
+        if to_state in (
+            RecoveryState.COMPLETED,
+            RecoveryState.FAILED,
+            RecoveryState.ABANDONED,
+        ):
             updates["completed_at"] = now
         if to_state == RecoveryState.FAILED:
             updates["failure_count"] = (record.failure_count or 0) + 1
@@ -1825,7 +1901,7 @@ class OpsGovernanceStore:
                 OpsRecoveryORM.recovery_id == recovery_id,
                 OpsRecoveryORM.state_version == current_version,
             )
-            .update(updates, synchronize_session="evaluate")
+            .update(updates, synchronize_session="evaluate")  # type: ignore[arg-type]
         )
         if rows_affected == 0:
             raise ConcurrentModificationError(recovery_id)
@@ -1845,7 +1921,11 @@ class OpsGovernanceStore:
             tenant_id=record.tenant_id,
             environment_id=record.environment_id,
             now_iso=now.isoformat(),
-            details={"from_state": from_state.value, "to_state": to_state.value, "recovery_type": record.recovery_type.value},
+            details={
+                "from_state": from_state.value,
+                "to_state": to_state.value,
+                "recovery_type": record.recovery_type.value,
+            },
         )
         return _recovery_orm_to_domain(row) if row else record
 
