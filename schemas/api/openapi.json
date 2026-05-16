@@ -630,6 +630,260 @@
         "title": "ArtifactMeta",
         "type": "object"
       },
+      "AssessmentOutcome": {
+        "enum": [
+          "not_evaluated",
+          "compliant",
+          "partially_compliant",
+          "non_compliant",
+          "not_applicable"
+        ],
+        "title": "AssessmentOutcome",
+        "type": "string"
+      },
+      "AssessmentResponse": {
+        "properties": {
+          "activated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activated At"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "assessment_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Description"
+          },
+          "assessment_id": {
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "assessment_metadata": {
+            "title": "Assessment Metadata",
+            "type": "object"
+          },
+          "assessment_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Name"
+          },
+          "assessment_status": {
+            "title": "Assessment Status",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "finalized_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finalized At"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "framework_version_tag": {
+            "title": "Framework Version Tag",
+            "type": "string"
+          },
+          "scoring_contract_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scoring Contract Id"
+          },
+          "snapshot_version": {
+            "title": "Snapshot Version",
+            "type": "integer"
+          },
+          "state_version": {
+            "title": "State Version",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assessment_id",
+          "tenant_id",
+          "framework_id",
+          "framework_version_tag",
+          "assessment_status",
+          "snapshot_version",
+          "assessment_name",
+          "assessment_description",
+          "assessment_metadata",
+          "scoring_contract_id",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "activated_at",
+          "finalized_at",
+          "archived_at",
+          "state_version"
+        ],
+        "title": "AssessmentResponse",
+        "type": "object"
+      },
+      "AssessmentResultResponse": {
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "assessment_id": {
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "evaluation_metadata": {
+            "title": "Evaluation Metadata",
+            "type": "object"
+          },
+          "evidence_reference_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Reference Ids",
+            "type": "array"
+          },
+          "maturity_tier_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maturity Tier Id"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "result_id": {
+            "title": "Result Id",
+            "type": "string"
+          },
+          "scoring_metadata": {
+            "title": "Scoring Metadata",
+            "type": "object"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result_id",
+          "assessment_id",
+          "control_id",
+          "maturity_tier_id",
+          "outcome",
+          "actor",
+          "timestamp",
+          "tenant_id",
+          "evaluation_metadata",
+          "scoring_metadata",
+          "evidence_reference_ids",
+          "notes"
+        ],
+        "title": "AssessmentResultResponse",
+        "type": "object"
+      },
+      "AssessmentStatus": {
+        "enum": [
+          "draft",
+          "active",
+          "finalized",
+          "archived"
+        ],
+        "title": "AssessmentStatus",
+        "type": "string"
+      },
+      "AssessmentTransitionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "to_status": {
+            "$ref": "#/components/schemas/AssessmentStatus"
+          }
+        },
+        "required": [
+          "to_status"
+        ],
+        "title": "AssessmentTransitionRequest",
+        "type": "object"
+      },
       "AssignEnvironmentRequest": {
         "additionalProperties": false,
         "properties": {
@@ -665,6 +919,67 @@
           "role"
         ],
         "title": "AssignRoleRequest",
+        "type": "object"
+      },
+      "AttachEvidenceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "control_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Control Ids",
+            "type": "array"
+          },
+          "evidence_classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Classification"
+          },
+          "evidence_integrity_metadata": {
+            "title": "Evidence Integrity Metadata",
+            "type": "object"
+          },
+          "evidence_ownership_metadata": {
+            "title": "Evidence Ownership Metadata",
+            "type": "object"
+          },
+          "evidence_source_metadata": {
+            "title": "Evidence Source Metadata",
+            "type": "object"
+          },
+          "evidence_title": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Evidence Title",
+            "type": "string"
+          },
+          "evidence_type": {
+            "$ref": "#/components/schemas/EvidenceType"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "required": [
+          "evidence_type",
+          "evidence_title"
+        ],
+        "title": "AttachEvidenceRequest",
         "type": "object"
       },
       "BackupScope": {
@@ -1169,6 +1484,91 @@
         "title": "ConnectorIngestRequest",
         "type": "object"
       },
+      "ControlResponse": {
+        "properties": {
+          "applicability_metadata": {
+            "title": "Applicability Metadata",
+            "type": "object"
+          },
+          "control_description": {
+            "title": "Control Description",
+            "type": "string"
+          },
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "control_identifier": {
+            "title": "Control Identifier",
+            "type": "string"
+          },
+          "control_metadata": {
+            "title": "Control Metadata",
+            "type": "object"
+          },
+          "control_name": {
+            "title": "Control Name",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "domain_id": {
+            "title": "Domain Id",
+            "type": "string"
+          },
+          "evidence_requirements": {
+            "title": "Evidence Requirements",
+            "type": "object"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "maturity_mapping_metadata": {
+            "title": "Maturity Mapping Metadata",
+            "type": "object"
+          },
+          "scoring_compatibility_metadata": {
+            "title": "Scoring Compatibility Metadata",
+            "type": "object"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          }
+        },
+        "required": [
+          "control_id",
+          "framework_id",
+          "domain_id",
+          "control_identifier",
+          "control_name",
+          "control_description",
+          "tenant_id",
+          "control_metadata",
+          "applicability_metadata",
+          "evidence_requirements",
+          "maturity_mapping_metadata",
+          "scoring_compatibility_metadata",
+          "created_by",
+          "created_at"
+        ],
+        "title": "ControlResponse",
+        "type": "object"
+      },
       "CoverageChangeRequest": {
         "properties": {
           "action": {
@@ -1265,6 +1665,122 @@
         "title": "CoverageChangeRequest",
         "type": "object"
       },
+      "CreateAssessmentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Description"
+          },
+          "assessment_metadata": {
+            "title": "Assessment Metadata",
+            "type": "object"
+          },
+          "assessment_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Name"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "framework_version_tag": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Framework Version Tag",
+            "type": "string"
+          },
+          "scoring_contract_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scoring Contract Id"
+          }
+        },
+        "required": [
+          "framework_id",
+          "framework_version_tag"
+        ],
+        "title": "CreateAssessmentRequest",
+        "type": "object"
+      },
+      "CreateControlRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "applicability_metadata": {
+            "title": "Applicability Metadata",
+            "type": "object"
+          },
+          "control_description": {
+            "default": "",
+            "title": "Control Description",
+            "type": "string"
+          },
+          "control_identifier": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Control Identifier",
+            "type": "string"
+          },
+          "control_metadata": {
+            "title": "Control Metadata",
+            "type": "object"
+          },
+          "control_name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Control Name",
+            "type": "string"
+          },
+          "domain_id": {
+            "title": "Domain Id",
+            "type": "string"
+          },
+          "evidence_requirements": {
+            "title": "Evidence Requirements",
+            "type": "object"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "maturity_mapping_metadata": {
+            "title": "Maturity Mapping Metadata",
+            "type": "object"
+          },
+          "scoring_compatibility_metadata": {
+            "title": "Scoring Compatibility Metadata",
+            "type": "object"
+          }
+        },
+        "required": [
+          "framework_id",
+          "domain_id",
+          "control_identifier",
+          "control_name"
+        ],
+        "title": "CreateControlRequest",
+        "type": "object"
+      },
       "CreateDeploymentRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1337,6 +1853,64 @@
         "title": "CreateDeploymentRequest",
         "type": "object"
       },
+      "CreateDomainRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "domain_description": {
+            "default": "",
+            "title": "Domain Description",
+            "type": "string"
+          },
+          "domain_metadata": {
+            "title": "Domain Metadata",
+            "type": "object"
+          },
+          "domain_name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Domain Name",
+            "type": "string"
+          },
+          "domain_order": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Domain Order",
+            "type": "integer"
+          },
+          "domain_parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain Parent Id"
+          },
+          "domain_slug": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Domain Slug",
+            "type": "string"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "maturity_applicability": {
+            "title": "Maturity Applicability",
+            "type": "object"
+          }
+        },
+        "required": [
+          "framework_id",
+          "domain_name",
+          "domain_slug"
+        ],
+        "title": "CreateDomainRequest",
+        "type": "object"
+      },
       "CreateExportRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1384,6 +1958,86 @@
           }
         },
         "title": "CreateExportRequest",
+        "type": "object"
+      },
+      "CreateFrameworkRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "compatibility_metadata": {
+            "title": "Compatibility Metadata",
+            "type": "object"
+          },
+          "framework_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework Description"
+          },
+          "framework_metadata": {
+            "title": "Framework Metadata",
+            "type": "object"
+          },
+          "framework_name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Framework Name",
+            "type": "string"
+          },
+          "framework_slug": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Framework Slug",
+            "type": "string"
+          },
+          "framework_version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Framework Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "framework_name",
+          "framework_slug",
+          "framework_version"
+        ],
+        "title": "CreateFrameworkRequest",
+        "type": "object"
+      },
+      "CreateFrameworkVersionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "compatibility_metadata": {
+            "title": "Compatibility Metadata",
+            "type": "object"
+          },
+          "schema_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema Hash"
+          },
+          "version_tag": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Version Tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version_tag"
+        ],
+        "title": "CreateFrameworkVersionRequest",
         "type": "object"
       },
       "CreateKeyRequest": {
@@ -1488,6 +2142,60 @@
           "expires_at"
         ],
         "title": "CreateKeyResponse",
+        "type": "object"
+      },
+      "CreateMaturityTierRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "readiness_classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readiness Classification"
+          },
+          "tier_criteria": {
+            "default": "",
+            "title": "Tier Criteria",
+            "type": "string"
+          },
+          "tier_identifier": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Tier Identifier",
+            "type": "string"
+          },
+          "tier_metadata": {
+            "title": "Tier Metadata",
+            "type": "object"
+          },
+          "tier_name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Tier Name",
+            "type": "string"
+          },
+          "tier_order": {
+            "minimum": 0.0,
+            "title": "Tier Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "framework_id",
+          "tier_identifier",
+          "tier_name",
+          "tier_order"
+        ],
+        "title": "CreateMaturityTierRequest",
         "type": "object"
       },
       "CreateOrgRequest": {
@@ -1627,6 +2335,43 @@
           "retention_days"
         ],
         "title": "CreateRetentionPolicyRequest",
+        "type": "object"
+      },
+      "CreateScoringContractRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "compatibility_metadata": {
+            "title": "Compatibility Metadata",
+            "type": "object"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "normalization_metadata": {
+            "title": "Normalization Metadata",
+            "type": "object"
+          },
+          "scoring_metadata": {
+            "title": "Scoring Metadata",
+            "type": "object"
+          },
+          "scoring_schema_version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Scoring Schema Version",
+            "type": "string"
+          },
+          "weighting_metadata": {
+            "title": "Weighting Metadata",
+            "type": "object"
+          }
+        },
+        "required": [
+          "framework_id",
+          "scoring_schema_version"
+        ],
+        "title": "CreateScoringContractRequest",
         "type": "object"
       },
       "CreditNoteCreateRequest": {
@@ -2464,6 +3209,88 @@
         "title": "DisputeResolveRequest",
         "type": "object"
       },
+      "DomainResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "domain_description": {
+            "title": "Domain Description",
+            "type": "string"
+          },
+          "domain_id": {
+            "title": "Domain Id",
+            "type": "string"
+          },
+          "domain_metadata": {
+            "title": "Domain Metadata",
+            "type": "object"
+          },
+          "domain_name": {
+            "title": "Domain Name",
+            "type": "string"
+          },
+          "domain_order": {
+            "title": "Domain Order",
+            "type": "integer"
+          },
+          "domain_parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain Parent Id"
+          },
+          "domain_slug": {
+            "title": "Domain Slug",
+            "type": "string"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "maturity_applicability": {
+            "title": "Maturity Applicability",
+            "type": "object"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          }
+        },
+        "required": [
+          "domain_id",
+          "framework_id",
+          "domain_name",
+          "domain_slug",
+          "domain_description",
+          "domain_order",
+          "tenant_id",
+          "domain_metadata",
+          "maturity_applicability",
+          "domain_parent_id",
+          "created_by",
+          "created_at"
+        ],
+        "title": "DomainResponse",
+        "type": "object"
+      },
       "EnrollmentTokenCreateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2629,6 +3456,86 @@
         "title": "EvidenceBundleCreateResponse",
         "type": "object"
       },
+      "EvidenceReferenceResponse": {
+        "properties": {
+          "assessment_id": {
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "control_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Control Ids",
+            "type": "array"
+          },
+          "evidence_classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Classification"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "evidence_source_metadata": {
+            "title": "Evidence Source Metadata",
+            "type": "object"
+          },
+          "evidence_title": {
+            "title": "Evidence Title",
+            "type": "string"
+          },
+          "evidence_type": {
+            "title": "Evidence Type",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "submitted_at": {
+            "title": "Submitted At",
+            "type": "string"
+          },
+          "submitted_by": {
+            "title": "Submitted By",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "assessment_id",
+          "evidence_type",
+          "evidence_title",
+          "submitted_by",
+          "submitted_at",
+          "tenant_id",
+          "evidence_source_metadata",
+          "evidence_classification",
+          "control_ids",
+          "notes"
+        ],
+        "title": "EvidenceReferenceResponse",
+        "type": "object"
+      },
       "EvidenceRunRegisterRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2682,6 +3589,21 @@
         ],
         "title": "EvidenceRunRegisterRequest",
         "type": "object"
+      },
+      "EvidenceType": {
+        "enum": [
+          "document",
+          "attestation",
+          "automated_scan",
+          "interview",
+          "observation",
+          "policy",
+          "log_record",
+          "external_certification",
+          "other"
+        ],
+        "title": "EvidenceType",
+        "type": "string"
       },
       "EvidenceVerifyRequest": {
         "properties": {
@@ -3236,6 +4158,219 @@
           "findings"
         ],
         "title": "FindingCreateRequest",
+        "type": "object"
+      },
+      "FrameworkResponse": {
+        "properties": {
+          "activated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activated At"
+          },
+          "compatibility_metadata": {
+            "title": "Compatibility Metadata",
+            "type": "object"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "deprecated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deprecated At"
+          },
+          "framework_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework Description"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "framework_metadata": {
+            "title": "Framework Metadata",
+            "type": "object"
+          },
+          "framework_name": {
+            "title": "Framework Name",
+            "type": "string"
+          },
+          "framework_slug": {
+            "title": "Framework Slug",
+            "type": "string"
+          },
+          "framework_status": {
+            "title": "Framework Status",
+            "type": "string"
+          },
+          "framework_version": {
+            "title": "Framework Version",
+            "type": "string"
+          },
+          "retired_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired At"
+          },
+          "state_version": {
+            "title": "State Version",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "framework_id",
+          "framework_name",
+          "framework_slug",
+          "framework_version",
+          "framework_status",
+          "framework_description",
+          "tenant_id",
+          "framework_metadata",
+          "compatibility_metadata",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "activated_at",
+          "deprecated_at",
+          "retired_at",
+          "state_version"
+        ],
+        "title": "FrameworkResponse",
+        "type": "object"
+      },
+      "FrameworkStatus": {
+        "enum": [
+          "draft",
+          "active",
+          "deprecated",
+          "retired"
+        ],
+        "title": "FrameworkStatus",
+        "type": "string"
+      },
+      "FrameworkTransitionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "to_status": {
+            "$ref": "#/components/schemas/FrameworkStatus"
+          }
+        },
+        "required": [
+          "to_status"
+        ],
+        "title": "FrameworkTransitionRequest",
+        "type": "object"
+      },
+      "FrameworkVersionResponse": {
+        "properties": {
+          "compatibility_metadata": {
+            "title": "Compatibility Metadata",
+            "type": "object"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "deprecation_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deprecation Note"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "schema_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema Hash"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "string"
+          },
+          "version_status": {
+            "title": "Version Status",
+            "type": "string"
+          },
+          "version_tag": {
+            "title": "Version Tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version_id",
+          "framework_id",
+          "version_tag",
+          "version_status",
+          "schema_hash",
+          "created_by",
+          "created_at",
+          "compatibility_metadata",
+          "deprecation_note"
+        ],
+        "title": "FrameworkVersionResponse",
         "type": "object"
       },
       "GenerateReportRequest": {
@@ -4006,6 +5141,83 @@
           "hash"
         ],
         "title": "LogAnchorRequest",
+        "type": "object"
+      },
+      "MaturityTierResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "readiness_classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readiness Classification"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "tier_criteria": {
+            "title": "Tier Criteria",
+            "type": "string"
+          },
+          "tier_id": {
+            "title": "Tier Id",
+            "type": "string"
+          },
+          "tier_identifier": {
+            "title": "Tier Identifier",
+            "type": "string"
+          },
+          "tier_metadata": {
+            "title": "Tier Metadata",
+            "type": "object"
+          },
+          "tier_name": {
+            "title": "Tier Name",
+            "type": "string"
+          },
+          "tier_order": {
+            "title": "Tier Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tier_id",
+          "framework_id",
+          "tier_identifier",
+          "tier_name",
+          "tier_order",
+          "tier_criteria",
+          "tenant_id",
+          "tier_metadata",
+          "readiness_classification",
+          "created_by",
+          "created_at"
+        ],
+        "title": "MaturityTierResponse",
         "type": "object"
       },
       "MissionEnvelope": {
@@ -4855,6 +6067,61 @@
           "ok"
         ],
         "title": "ReceiptRequest",
+        "type": "object"
+      },
+      "RecordAssessmentResultRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "evaluation_metadata": {
+            "title": "Evaluation Metadata",
+            "type": "object"
+          },
+          "evidence_reference_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Reference Ids",
+            "type": "array"
+          },
+          "maturity_tier_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maturity Tier Id"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/AssessmentOutcome"
+          },
+          "scoring_metadata": {
+            "title": "Scoring Metadata",
+            "type": "object"
+          }
+        },
+        "required": [
+          "control_id",
+          "outcome"
+        ],
+        "title": "RecordAssessmentResultRequest",
         "type": "object"
       },
       "RecordHealthRequest": {
@@ -5735,6 +7002,76 @@
           "scheduled_at"
         ],
         "title": "ScheduleRotationRequest",
+        "type": "object"
+      },
+      "ScoringContractResponse": {
+        "properties": {
+          "compatibility_metadata": {
+            "title": "Compatibility Metadata",
+            "type": "object"
+          },
+          "contract_id": {
+            "title": "Contract Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "normalization_metadata": {
+            "title": "Normalization Metadata",
+            "type": "object"
+          },
+          "scoring_metadata": {
+            "title": "Scoring Metadata",
+            "type": "object"
+          },
+          "scoring_schema_version": {
+            "title": "Scoring Schema Version",
+            "type": "string"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "weighting_metadata": {
+            "title": "Weighting Metadata",
+            "type": "object"
+          }
+        },
+        "required": [
+          "contract_id",
+          "framework_id",
+          "scoring_schema_version",
+          "tenant_id",
+          "normalization_metadata",
+          "weighting_metadata",
+          "compatibility_metadata",
+          "scoring_metadata",
+          "is_active",
+          "created_by",
+          "created_at"
+        ],
+        "title": "ScoringContractResponse",
         "type": "object"
       },
       "SecretClassification": {
@@ -15577,6 +16914,1698 @@
         "summary": "Retry Workflow",
         "tags": [
           "provisioning"
+        ]
+      }
+    },
+    "/control-plane/readiness/assessments": {
+      "get": {
+        "operationId": "list_assessments_control_plane_readiness_assessments_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "framework_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Framework Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AssessmentResponse"
+                  },
+                  "title": "Response List Assessments Control Plane Readiness Assessments Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Assessments",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      },
+      "post": {
+        "operationId": "create_assessment_control_plane_readiness_assessments_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAssessmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssessmentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Assessment",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/assessments/{assessment_id}": {
+      "get": {
+        "operationId": "get_assessment_control_plane_readiness_assessments__assessment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssessmentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Assessment",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/assessments/{assessment_id}/evidence": {
+      "get": {
+        "operationId": "list_evidence_control_plane_readiness_assessments__assessment_id__evidence_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EvidenceReferenceResponse"
+                  },
+                  "title": "Response List Evidence Control Plane Readiness Assessments  Assessment Id  Evidence Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Evidence",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      },
+      "post": {
+        "operationId": "attach_evidence_control_plane_readiness_assessments__assessment_id__evidence_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachEvidenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceReferenceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Attach Evidence",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/assessments/{assessment_id}/results": {
+      "get": {
+        "operationId": "list_assessment_results_control_plane_readiness_assessments__assessment_id__results_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AssessmentResultResponse"
+                  },
+                  "title": "Response List Assessment Results Control Plane Readiness Assessments  Assessment Id  Results Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Assessment Results",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      },
+      "post": {
+        "operationId": "record_assessment_result_control_plane_readiness_assessments__assessment_id__results_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordAssessmentResultRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssessmentResultResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Assessment Result",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/assessments/{assessment_id}/transition": {
+      "post": {
+        "operationId": "transition_assessment_control_plane_readiness_assessments__assessment_id__transition_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssessmentTransitionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssessmentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transition Assessment",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/controls": {
+      "post": {
+        "operationId": "create_control_control_plane_readiness_controls_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateControlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Control",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/domains": {
+      "post": {
+        "operationId": "create_domain_control_plane_readiness_domains_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDomainRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Domain",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/frameworks": {
+      "get": {
+        "operationId": "list_frameworks_control_plane_readiness_frameworks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FrameworkResponse"
+                  },
+                  "title": "Response List Frameworks Control Plane Readiness Frameworks Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Frameworks",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      },
+      "post": {
+        "operationId": "create_framework_control_plane_readiness_frameworks_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFrameworkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameworkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Framework",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/frameworks/{framework_id}": {
+      "get": {
+        "operationId": "get_framework_control_plane_readiness_frameworks__framework_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "framework_id",
+            "required": true,
+            "schema": {
+              "title": "Framework Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameworkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Framework",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/frameworks/{framework_id}/controls": {
+      "get": {
+        "operationId": "list_controls_control_plane_readiness_frameworks__framework_id__controls_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "framework_id",
+            "required": true,
+            "schema": {
+              "title": "Framework Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "domain_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Domain Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ControlResponse"
+                  },
+                  "title": "Response List Controls Control Plane Readiness Frameworks  Framework Id  Controls Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Controls",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/frameworks/{framework_id}/domains": {
+      "get": {
+        "operationId": "list_domains_control_plane_readiness_frameworks__framework_id__domains_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "framework_id",
+            "required": true,
+            "schema": {
+              "title": "Framework Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DomainResponse"
+                  },
+                  "title": "Response List Domains Control Plane Readiness Frameworks  Framework Id  Domains Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Domains",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/frameworks/{framework_id}/maturity-tiers": {
+      "get": {
+        "operationId": "list_maturity_tiers_control_plane_readiness_frameworks__framework_id__maturity_tiers_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "framework_id",
+            "required": true,
+            "schema": {
+              "title": "Framework Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MaturityTierResponse"
+                  },
+                  "title": "Response List Maturity Tiers Control Plane Readiness Frameworks  Framework Id  Maturity Tiers Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Maturity Tiers",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/frameworks/{framework_id}/scoring-contracts": {
+      "get": {
+        "operationId": "list_scoring_contracts_control_plane_readiness_frameworks__framework_id__scoring_contracts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "framework_id",
+            "required": true,
+            "schema": {
+              "title": "Framework Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ScoringContractResponse"
+                  },
+                  "title": "Response List Scoring Contracts Control Plane Readiness Frameworks  Framework Id  Scoring Contracts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Scoring Contracts",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/frameworks/{framework_id}/transition": {
+      "post": {
+        "operationId": "transition_framework_control_plane_readiness_frameworks__framework_id__transition_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "framework_id",
+            "required": true,
+            "schema": {
+              "title": "Framework Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FrameworkTransitionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameworkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transition Framework",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/frameworks/{framework_id}/versions": {
+      "get": {
+        "operationId": "list_framework_versions_control_plane_readiness_frameworks__framework_id__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "framework_id",
+            "required": true,
+            "schema": {
+              "title": "Framework Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FrameworkVersionResponse"
+                  },
+                  "title": "Response List Framework Versions Control Plane Readiness Frameworks  Framework Id  Versions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Framework Versions",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      },
+      "post": {
+        "operationId": "create_framework_version_control_plane_readiness_frameworks__framework_id__versions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "framework_id",
+            "required": true,
+            "schema": {
+              "title": "Framework Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFrameworkVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameworkVersionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Framework Version",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/maturity-tiers": {
+      "post": {
+        "operationId": "create_maturity_tier_control_plane_readiness_maturity_tiers_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMaturityTierRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaturityTierResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Maturity Tier",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/scoring-contracts": {
+      "post": {
+        "operationId": "create_scoring_contract_control_plane_readiness_scoring_contracts_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateScoringContractRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoringContractResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Scoring Contract",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/scoring-contracts/{contract_id}": {
+      "get": {
+        "operationId": "get_scoring_contract_control_plane_readiness_scoring_contracts__contract_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contract_id",
+            "required": true,
+            "schema": {
+              "title": "Contract Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoringContractResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Scoring Contract",
+        "tags": [
+          "readiness",
+          "readiness"
         ]
       }
     },

@@ -3066,3 +3066,430 @@ class OpsGovernanceAuditEventRecord(Base):
     timestamp: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
+
+
+# ---------------------------------------------------------------------------
+# Readiness ORM models
+# ---------------------------------------------------------------------------
+
+
+class ReadinessFrameworkRecord(Base):
+    """Immutable-once-activated readiness framework definition.
+
+    framework_status gates mutations: domains/controls/tiers can only be
+    added while status=draft. Once activated the structural definition is
+    frozen and historical assessments remain reconstructable.
+    """
+
+    __tablename__ = "readiness_frameworks"
+    __table_args__ = (
+        Index("ix_ready_fw_slug", "framework_slug"),
+        Index("ix_ready_fw_status", "framework_status"),
+        Index("ix_ready_fw_tenant", "tenant_id"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    framework_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    framework_name: Mapped[Any] = mapped_column(Text, nullable=False)
+    framework_slug: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    framework_version: Mapped[Any] = mapped_column(Text, nullable=False)
+    framework_status: Mapped[Any] = mapped_column(Text, nullable=False, default="draft")
+    framework_description: Mapped[Any] = mapped_column(Text, nullable=True)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    framework_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    compatibility_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    deprecation_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    created_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    activated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    deprecated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    retired_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    state_version: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+
+
+class ReadinessFrameworkVersionRecord(Base):
+    """Framework version snapshot metadata.
+
+    Enables parallel versions and frozen historical assessment reconstruction.
+    """
+
+    __tablename__ = "readiness_framework_versions"
+    __table_args__ = (
+        Index("ix_ready_fwv_framework", "framework_id"),
+        Index("ix_ready_fwv_tag", "framework_id", "version_tag"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    version_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    framework_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    version_tag: Mapped[Any] = mapped_column(Text, nullable=False)
+    version_status: Mapped[Any] = mapped_column(Text, nullable=False, default="active")
+    schema_hash: Mapped[Any] = mapped_column(Text, nullable=True)
+    created_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    compatibility_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    deprecation_note: Mapped[Any] = mapped_column(Text, nullable=True)
+
+
+class ReadinessDomainRecord(Base):
+    """Readiness domain within a framework.
+
+    domain_order controls display ordering. domain_parent_id is a forward-
+    compatible hook for future hierarchical domain support.
+    """
+
+    __tablename__ = "readiness_domains"
+    __table_args__ = (
+        Index("ix_ready_dom_framework", "framework_id"),
+        Index("ix_ready_dom_tenant", "tenant_id"),
+        Index("ix_ready_dom_order", "framework_id", "domain_order"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    domain_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    framework_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    domain_name: Mapped[Any] = mapped_column(Text, nullable=False)
+    domain_slug: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    domain_description: Mapped[Any] = mapped_column(Text, nullable=False, default="")
+    domain_order: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    domain_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    maturity_applicability_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    domain_parent_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    created_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class ReadinessControlRecord(Base):
+    """Readiness control within a domain.
+
+    Controls are framework-version aware and immutable once the parent framework
+    is activated. Evidence requirements and maturity/scoring metadata are
+    declarative contracts — no logic lives here.
+    """
+
+    __tablename__ = "readiness_controls"
+    __table_args__ = (
+        Index("ix_ready_ctrl_framework", "framework_id"),
+        Index("ix_ready_ctrl_domain", "domain_id"),
+        Index("ix_ready_ctrl_tenant", "tenant_id"),
+        Index("ix_ready_ctrl_identifier", "framework_id", "control_identifier"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    control_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    framework_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    domain_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    control_identifier: Mapped[Any] = mapped_column(Text, nullable=False)
+    control_name: Mapped[Any] = mapped_column(Text, nullable=False)
+    control_description: Mapped[Any] = mapped_column(Text, nullable=False, default="")
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    control_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    applicability_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    evidence_requirements_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    maturity_mapping_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    scoring_compatibility_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    created_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class ReadinessControlReferenceRecord(Base):
+    """Cross-framework control mapping (future cross-framework translation)."""
+
+    __tablename__ = "readiness_control_references"
+    __table_args__ = (
+        Index("ix_ready_cref_source", "source_control_id"),
+        Index("ix_ready_cref_target", "target_control_id"),
+        Index("ix_ready_cref_frameworks", "source_framework_id", "target_framework_id"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    reference_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    source_control_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    source_framework_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    target_control_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    target_framework_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    mapping_type: Mapped[Any] = mapped_column(Text, nullable=False)
+    mapping_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    created_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class ReadinessMaturityTierRecord(Base):
+    """Maturity tier definition within a framework.
+
+    tier_order ascending = lower maturity. Immutable once framework activates.
+    """
+
+    __tablename__ = "readiness_maturity_tiers"
+    __table_args__ = (
+        Index("ix_ready_tier_framework", "framework_id"),
+        Index("ix_ready_tier_order", "framework_id", "tier_order"),
+        Index("ix_ready_tier_tenant", "tenant_id"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tier_id: Mapped[Any] = mapped_column(Text, nullable=False, unique=True, index=True)
+    framework_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    tier_identifier: Mapped[Any] = mapped_column(Text, nullable=False)
+    tier_name: Mapped[Any] = mapped_column(Text, nullable=False)
+    tier_order: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    tier_criteria: Mapped[Any] = mapped_column(Text, nullable=False, default="")
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    tier_metadata_json: Mapped[Any] = mapped_column(Text, nullable=False, default="{}")
+    readiness_classification: Mapped[Any] = mapped_column(Text, nullable=True)
+    created_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class ReadinessAssessmentRecord(Base):
+    """Tenant-scoped readiness assessment record.
+
+    Once finalized, assessment is immutable — results and evidence references
+    are frozen. snapshot_version pins the framework state for deterministic
+    historical reconstruction. state_version is the optimistic-lock counter.
+    """
+
+    __tablename__ = "readiness_assessments"
+    __table_args__ = (
+        Index("ix_ready_assess_tenant", "tenant_id"),
+        Index("ix_ready_assess_framework", "framework_id"),
+        Index("ix_ready_assess_status", "assessment_status"),
+        Index("ix_ready_assess_tenant_fw", "tenant_id", "framework_id"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    assessment_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    framework_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    framework_version_tag: Mapped[Any] = mapped_column(Text, nullable=False)
+    assessment_status: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="draft"
+    )
+    snapshot_version: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+    assessment_name: Mapped[Any] = mapped_column(Text, nullable=True)
+    assessment_description: Mapped[Any] = mapped_column(Text, nullable=True)
+    assessment_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    actor_metadata_json: Mapped[Any] = mapped_column(Text, nullable=False, default="{}")
+    scoring_contract_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    created_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    activated_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    finalized_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    state_version: Mapped[Any] = mapped_column(Integer, nullable=False, default=0)
+
+
+class ReadinessAssessmentResultRecord(Base):
+    """Per-control result within an assessment.
+
+    Append-only within a non-finalized assessment. Frozen after finalization.
+    No scoring logic — scoring_metadata is a declarative contract field.
+    """
+
+    __tablename__ = "readiness_assessment_results"
+    __table_args__ = (
+        Index("ix_ready_result_assessment", "assessment_id"),
+        Index("ix_ready_result_control", "control_id"),
+        Index("ix_ready_result_tenant", "tenant_id"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    result_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    assessment_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    control_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    maturity_tier_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    outcome: Mapped[Any] = mapped_column(Text, nullable=False, default="not_evaluated")
+    actor: Mapped[Any] = mapped_column(Text, nullable=False)
+    timestamp: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    evaluation_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    scoring_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    evidence_reference_ids_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="[]"
+    )
+    notes: Mapped[Any] = mapped_column(Text, nullable=True)
+
+
+class ReadinessEvidenceReferenceRecord(Base):
+    """Evidence reference contract record.
+
+    Schema only — no evidence ingestion, extraction, or automation.
+    evidence_integrity_metadata_json holds hash/checksum contract fields
+    for future tamper-evidence verification.
+    """
+
+    __tablename__ = "readiness_evidence_references"
+    __table_args__ = (
+        Index("ix_ready_evref_assessment", "assessment_id"),
+        Index("ix_ready_evref_tenant", "tenant_id"),
+        Index("ix_ready_evref_type", "evidence_type"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    evidence_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    assessment_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    evidence_type: Mapped[Any] = mapped_column(Text, nullable=False)
+    evidence_title: Mapped[Any] = mapped_column(Text, nullable=False)
+    submitted_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    submitted_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    evidence_source_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    evidence_ownership_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    evidence_integrity_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    evidence_classification: Mapped[Any] = mapped_column(Text, nullable=True)
+    effective_date: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    expiration_date: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    control_ids_json: Mapped[Any] = mapped_column(Text, nullable=False, default="[]")
+    notes: Mapped[Any] = mapped_column(Text, nullable=True)
+
+
+class ReadinessScoringContractRecord(Base):
+    """Scoring schema contract for a framework.
+
+    Declares scoring architecture without implementing calculation logic.
+    Scoring engines (future) must validate against this contract.
+    """
+
+    __tablename__ = "readiness_scoring_contracts"
+    __table_args__ = (
+        Index("ix_ready_sc_framework", "framework_id"),
+        Index("ix_ready_sc_tenant", "tenant_id"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    contract_id: Mapped[Any] = mapped_column(
+        Text, nullable=False, unique=True, index=True
+    )
+    framework_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    scoring_schema_version: Mapped[Any] = mapped_column(Text, nullable=False)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    normalization_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    weighting_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    compatibility_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    scoring_metadata_json: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
+    is_active: Mapped[Any] = mapped_column(Boolean, nullable=False, default=True)
+    created_by: Mapped[Any] = mapped_column(Text, nullable=False)
+    created_at: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class ReadinessAuditEventRecord(Base):
+    """Append-only audit event for readiness lifecycle changes.
+
+    Rows are never updated or deleted. Every readiness mutation must write
+    an event before returning. Hash-chained per (resource_type, resource_id)
+    for tamper-evidence.
+    """
+
+    __tablename__ = "readiness_audit_events"
+    __table_args__ = (
+        Index("ix_ready_audit_resource", "resource_type", "resource_id"),
+        Index("ix_ready_audit_tenant_ts", "tenant_id", "timestamp"),
+        Index("ix_ready_audit_assessment", "assessment_id"),
+        Index("ix_ready_audit_framework", "framework_id"),
+    )
+
+    id: Mapped[Any] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[Any] = mapped_column(Text, nullable=False, unique=True, index=True)
+    resource_type: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    resource_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    framework_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    assessment_id: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    event_type: Mapped[Any] = mapped_column(Text, nullable=False)
+    actor: Mapped[Any] = mapped_column(Text, nullable=False)
+    outcome: Mapped[Any] = mapped_column(Text, nullable=False, default="success")
+    details_json: Mapped[Any] = mapped_column(Text, nullable=True)
+    event_hash: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    previous_event_hash: Mapped[Any] = mapped_column(Text, nullable=True)
+    timestamp: Mapped[Any] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
