@@ -34,6 +34,7 @@ from api.config_control import router as config_control_router
 from api.connectors_control_plane import router as connectors_control_plane_router
 from api.control_plane import router as control_plane_router
 from api.deployment_manager import router as deployment_manager_router
+from api.ops_governance_manager import router as ops_governance_router
 from api.provisioning_manager import router as provisioning_router
 from api.control_plane_v2 import router as control_plane_v2_router
 from api.control_tower_snapshot import router as control_tower_snapshot_router
@@ -591,6 +592,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(connectors_control_plane_router)
     app.include_router(deployment_manager_router)
     app.include_router(provisioning_router)
+    app.include_router(ops_governance_router)
     app.include_router(control_plane_router)
     app.include_router(control_plane_v2_router)
     app.include_router(control_tower_snapshot_router)
@@ -902,6 +904,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(connectors_control_plane_router)
     app.include_router(deployment_manager_router)
     app.include_router(provisioning_router)
+    app.include_router(ops_governance_router)
     app.include_router(control_plane_router)
     app.include_router(control_plane_v2_router)
     app.include_router(control_tower_snapshot_router)

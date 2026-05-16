@@ -16,7 +16,9 @@ from typing import Any, Optional
 # ComplianceClassification is shared with the deployment subsystem (identical values).
 # Re-exported here so provisioning code can import from one place, but the Python
 # object is the same — guaranteeing a single OpenAPI schema component reference.
-from services.deployment.models import ComplianceClassification as ComplianceClassification  # noqa: F401, PLC0414
+from services.deployment.models import (
+    ComplianceClassification as ComplianceClassification,
+)  # noqa: F401, PLC0414
 
 
 # ---------------------------------------------------------------------------

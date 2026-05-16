@@ -1051,3 +1051,37 @@ All minted API keys share `api_keys.prefix = "fgk"`. The original RBAC implement
 **Tests:** 51 tests in `tests/test_provisioning_manager.py` — all pass. Covers state machine, workflow lifecycle, activation gate, suspension, env assignment, tenant isolation, audit hash chain, concurrency (optimistic locking), API surface (14 routes), serialization safety, invalid input rejection.
 
 **Validation:** `make fg-fast` PASS. 51 provisioning tests PASS.
+
+---
+
+## Ninth Follow-up (PR 82 — Operational Governance Foundation) — 2026-05-15
+
+**Reviewer:** EmpireOverloard | **Classification:** SOC-HIGH-002 (tools/ci changes from route inventory regeneration)
+
+**Schema change (flagged):** Migration `0051_ops_governance.sql` adds nine tables: `ops_environments`, `ops_secret_governance`, `ops_key_rotation_schedules`, `ops_retention_policies`, `ops_export_requests`, `ops_backup_records`, `ops_restore_records`, `ops_recovery_records`, `ops_governance_audit_events`. All idempotent DDL (`CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`). No foreign keys to existing tables. Append-only rules on `ops_governance_audit_events` match the pattern in migrations 0048 and 0050. During implementation, `updated_at` was added to `ops_backup_records`, `ops_restore_records`, and `ops_recovery_records` to match store update operations.
+
+**ORM additions:** Nine new ORM classes appended to `api/db_models.py`: `OpsEnvironmentRecord`, `OpsSecretGovernanceRecord`, `OpsKeyRotationScheduleRecord`, `OpsRetentionPolicyRecord`, `OpsExportRequestRecord`, `OpsBackupRecord`, `OpsRestoreRecord`, `OpsRecoveryRecord`, `OpsGovernanceAuditEventRecord`. No changes to existing ORM classes.
+
+**New subsystem:** `services/ops_governance/` package — `models.py` (pure Python domain models, 7 state machines with FSM enforcement, frozen dataclasses for all 9 domain types), `store.py` (SQLAlchemy persistence, optimistic locking via state_version, SHA-256 hash-chained audit trail, `LegalHoldViolation` and `ValidationTokenRequired` gates), `audit.py` (structured SIEM-compatible audit emission with `_SAFE_DETAIL_KEYS` allowlist). No mutable module-level state.
+
+**Security invariants:**
+- Raw secrets NEVER stored anywhere. `ops_secret_governance` stores only governance metadata (classification, type, lifecycle, rotation schedule). No raw values, key material, or credentials.
+- `_SAFE_DETAIL_KEYS` allowlist in `audit.py` ensures no secrets leak into audit log details.
+- `LegalHoldViolation` blocks deletion-path transitions on policies with `legal_hold=True`.
+- `ValidationTokenRequired` gates `failed_recovery → active` environment transitions — token must match stored value and is consumed on use.
+- All response serializers use explicit field allowlists — no `**dict(obj)` patterns.
+- `tenant_id` always resolved from auth context, never from request body.
+
+**New API router:** `api/ops_governance_manager.py` — 31 routes under `/control-plane/ops/`. All read routes protected by `control-plane:read`; all write routes protected by `control-plane:admin`. `extra="forbid"` on all Pydantic models.
+
+**Router registration:** `api/main.py` — `ops_governance_router` added to both `build_app` and `build_contract_app` after `provisioning_router`.
+
+**No new auth logic.** No changes to middleware, auth middleware, or credentials handling.
+
+**Tools/CI changes:** `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/contract_routes.json` — regenerated. 31 new ops governance routes added, all `tenant_bound: true`, `scoped: true`.
+
+**Contract update:** `contracts/core/openapi.json` regenerated. `BLUEPRINT_STAGED.md` and `CONTRACT.md` authority markers updated to `807ebeeb628a5a1b1177ad0ae127be04193f5ea1d5e7418afbc90924165dad58`.
+
+**Tests:** 66 tests in `tests/test_ops_governance_manager.py` — all pass. Covers state machine for all 7 domains, environment lifecycle (including validation token gate), secret governance (no values ever stored/returned), key rotation scheduling and outcome, legal hold enforcement, export FSM, backup/restore record creation, recovery FSM, tenant isolation, audit hash chain integrity, optimistic locking, idempotency tenant scoping, serialization safety, API surface (31 routes), invalid input rejection.
+
+**Validation:** `make fg-fast` PASS. 66 ops governance tests PASS.
