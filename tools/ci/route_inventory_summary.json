@@ -99,13 +99,13 @@
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
   "changed": [],
-  "contract_count": 239,
+  "contract_count": 262,
   "contract_only": [],
   "plane_coverage": {
     "agent": 14,
     "ai": 5,
     "connector": 14,
-    "control": 187,
+    "control": 210,
     "data": 42,
     "evidence": 23,
     "rbac": 5,
@@ -113,7 +113,7 @@
     "ui": 47
   },
   "removed": [],
-  "runtime_count": 343,
+  "runtime_count": 366,
   "runtime_only": [
     "GET /_debug/routes",
     "GET /admin/agent/devices",

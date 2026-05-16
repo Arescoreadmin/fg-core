@@ -3084,3 +3084,37 @@ Adds environment lifecycle governance, secret governance metadata (no raw secret
 - All response serializers use explicit field allowlists.
 - `tenant_id` resolved from auth context only — never from request body.
 - Schema additions are additive and idempotent — no changes to existing tables.
+
+---
+
+## PR 83 — AI Readiness Core Domain Model & Evidence Contract Foundation — 2026-05-16
+
+### Summary
+
+Adds the canonical AI readiness schema and contracts layer: Framework, FrameworkVersion, Domain, Control, ControlReference, MaturityTier, Assessment, AssessmentResult, EvidenceReference, and ScoringContract domain models. Introduces deterministic state machines (framework and assessment lifecycle), tamper-evident SHA-256 audit hash chains, and optimistic locking via `state_version`. No scoring engine, reporting, UI analytics, or evidence automation.
+
+### Routes added
+
+AI Readiness (23 routes under `/control-plane/readiness/`): framework CRUD + lifecycle transition, domain/control/maturity-tier/version/scoring-contract creation, assessment CRUD + lifecycle transition, assessment results and evidence reference management.
+
+All `control-plane:admin` scoped. All tenant-bound for assessment surfaces. Framework surfaces are platform-level (tenant_id=None) readable by any authenticated operator. All under the `control` plane.
+
+### Gate results
+
+- `python tools/ci/check_soc_review_sync.py`: soc-review-sync: OK (after SOC doc update)
+- `make contracts-core-gen`: contracts regenerated with 23 new readiness routes
+- `make route-inventory-generate`: 23 new routes added to route_inventory.json
+- `make route-inventory-audit`: route inventory OK
+- `.venv/bin/pytest tests/test_readiness_manager.py`: 66 passed
+
+### Compliance posture
+
+- Framework immutability enforced at store layer: domain/control/tier mutations blocked once framework reaches ACTIVE, DEPRECATED, or RETIRED status.
+- Assessment immutability enforced at store layer: mutations blocked at FINALIZED and ARCHIVED statuses. `assert_assessment_mutable()` called on every write path.
+- Optimistic locking via `state_version` integer counter: concurrent modifications raise `ConcurrentModificationError`.
+- SHA-256 hash chain chained per `(resource_type, resource_id)` pair. Previous event hash embedded in every audit event for tamper-evidence.
+- `_SAFE_DETAIL_KEYS` allowlist in `emit_readiness_event()` prevents audit log pollution.
+- `tenant_id` resolved from auth context only — never from request body. Assessment operations requiring tenant context return 403 if absent.
+- No raw evidence content, key material, or credentials stored or returned. Evidence references store metadata and integrity hashes only.
+- Snapshot version incremented on FINALIZED transition — pins framework state at finalization for reconstruction.
+- Schema additions are additive: 11 new ORM tables, no changes to existing tables.
