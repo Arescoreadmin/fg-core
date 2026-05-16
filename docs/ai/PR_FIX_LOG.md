@@ -9895,3 +9895,49 @@ The rewritten dynamic INSERT was missing `is_current = 1` from the params dict. 
 - `make soc-review-sync`: OK
 - `docker compose config`: OK
 - `bash codex_gates.sh`: All gates passed
+
+---
+
+## PR 84 — AI Readiness Assessment Engine Foundation
+
+**Date:** 2026-05-16
+**Branch:** feat/ai-readiness-assessment-engine
+**PR:** #340
+
+**What changed and why:**
+Implements the deterministic `ReadinessScoreEngine`: pure Python, no I/O, no LLMs, no randomness. Engine takes pre-loaded `ScoringInput` and returns frozen `ScoreOutput`. Adds `GET /control-plane/readiness/assessments/{assessment_id}/score` (`control-plane:read`). No data is mutated or persisted by scoring.
+
+**Key design decisions:**
+- Engine validates tenant isolation internally — `TenantIsolationViolation` raised if any result or evidence ref has a mismatched `tenant_id`.
+- Framework consistency validated: control `framework_id` and `ScoringContract.framework_id` must both match `assessment.framework_id`.
+- `ScoringError` subclasses surface as 422 (bad input), not 500 — these are caller logic errors.
+- Score route guards `tenant_id` with 403 if absent from auth context, matching the existing assessment route pattern.
+- `_score_engine = ReadinessScoreEngine()` is a module-level singleton — stateless and thread-safe.
+- Most-recent result wins per control: results sorted by `timestamp`; engine picks the latest for each `control_id`.
+
+**Files changed:**
+- `services/readiness/scoring/__init__.py` (new)
+- `services/readiness/scoring/models.py` (new — `ScoringInput`, `ScoreOutput`, `ControlScore`, `DomainScore`, `ThresholdFailure`, `RemediationFactor`, enums)
+- `services/readiness/scoring/engine.py` (new — `ReadinessScoreEngine`, exception hierarchy)
+- `api/readiness_manager.py` (score response models + `GET .../score` route + error code READY-API-017)
+- `tests/test_readiness_score_engine.py` (new, 37 tests — pure Python, no DB)
+- `contracts/core/openapi.json` (regenerated)
+- `schemas/api/openapi.json` (regenerated)
+- `BLUEPRINT_STAGED.md` (authority SHA updated)
+- `CONTRACT.md` (authority SHA updated)
+- `tools/ci/route_inventory.json` (regenerated)
+- `tools/ci/route_inventory_summary.json` (regenerated)
+- `tools/ci/topology.sha256` (regenerated)
+- `tools/ci/plane_registry_snapshot.json` (regenerated)
+- `tools/ci/contract_routes.json` (regenerated)
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` (PR 84 entry)
+- `docs/ai/PR_FIX_LOG.md` (this entry)
+
+**Validation:**
+- `ruff check` + `ruff format --check`: PASS
+- `mypy services/readiness/ api/readiness_manager.py`: 0 errors
+- `pytest tests/test_readiness_score_engine.py`: 37 passed
+- `pytest tests/test_readiness_manager.py tests/test_readiness_score_engine.py`: 107 passed
+- `make fg-fast`: exit code 0
+- `make route-inventory-audit`: OK
+- `make soc-review-sync`: OK
