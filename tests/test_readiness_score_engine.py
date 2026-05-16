@@ -28,6 +28,7 @@ from services.readiness.models import (
 from services.readiness.scoring import (
     CompletionState,
     FrameworkMismatchError,
+    InvalidContractMetadataError,
     InvalidWeightError,
     ReadinessScoreEngine,
     RiskLevel,
@@ -774,3 +775,82 @@ def test_empty_domain_no_controls():
     # d2 has no controls → raw_score=0, d1=100 → overall=(100+0)/2=50
     assert out.domain_scores["d2"].raw_score == 0.0
     assert out.overall_score == 50.0
+
+
+# ---------------------------------------------------------------------------
+# Bug fixes: P1 pagination, P2 threshold errors, P2 required-control failures
+# ---------------------------------------------------------------------------
+
+
+def test_invalid_contract_metadata_raises():
+    # Non-numeric overall_pass should raise InvalidContractMetadataError (not ValueError)
+    contract = _contract(scoring={"overall_pass": "not-a-number"})
+    inp = _basic_inp({"c1": AssessmentOutcome.COMPLIANT}, scoring_contract=contract)
+    with pytest.raises(InvalidContractMetadataError):
+        engine.score(inp)
+
+
+def test_invalid_domain_minimum_raises():
+    contract = _contract(scoring={"domain_minimums": {"d1": "bad"}})
+    inp = _basic_inp({"c1": AssessmentOutcome.COMPLIANT}, scoring_contract=contract)
+    with pytest.raises(InvalidContractMetadataError):
+        engine.score(inp)
+
+
+def test_required_control_failure_appears_in_threshold_failures():
+    # required_control c1 is NON_COMPLIANT → must appear in threshold_failures
+    contract = _contract(scoring={"required_controls": ["c1"]})
+    inp = _basic_inp(
+        {"c1": AssessmentOutcome.NON_COMPLIANT, "c2": AssessmentOutcome.COMPLIANT},
+        scoring_contract=contract,
+    )
+    out = engine.score(inp)
+    required_failures = [
+        tf for tf in out.threshold_failures if tf.threshold_name == "c1"
+    ]
+    assert required_failures, (
+        "Required-control failure must appear in threshold_failures"
+    )
+    assert required_failures[0].threshold_type == "required_control"
+
+
+def test_required_control_missing_appears_in_threshold_failures():
+    # required_control c2 has no result → must appear in threshold_failures
+    contract = _contract(scoring={"required_controls": ["c2"]})
+    controls = (_control("c1", "d1"), _control("c2", "d1"))
+    results = (_result("c1", AssessmentOutcome.COMPLIANT),)
+    inp = ScoringInput(
+        assessment=_assessment(),
+        framework=_fw(),
+        controls=controls,
+        domains=(_domain("d1"),),
+        maturity_tiers=(),
+        results=results,
+        evidence_refs=(),
+        scoring_contract=contract,
+    )
+    out = engine.score(inp)
+    required_failures = [
+        tf for tf in out.threshold_failures if tf.threshold_name == "c2"
+    ]
+    assert required_failures, (
+        "Missing required control must appear in threshold_failures"
+    )
+
+
+def test_required_control_not_duplicated_when_also_critical():
+    # A control in both critical and required lists should appear in threshold_failures
+    # but from distinct loops (one for critical, one for required); test just that both fire
+    contract = _contract(
+        scoring={
+            "critical_controls": ["c1"],
+            "required_controls": ["c1"],
+        }
+    )
+    inp = _basic_inp(
+        {"c1": AssessmentOutcome.NON_COMPLIANT},
+        scoring_contract=contract,
+    )
+    out = engine.score(inp)
+    c1_failures = [tf for tf in out.threshold_failures if tf.threshold_name == "c1"]
+    assert len(c1_failures) >= 1

@@ -67,6 +67,10 @@ class FrameworkMismatchError(ScoringError):
     """Results reference controls that do not belong to the loaded framework."""
 
 
+class InvalidContractMetadataError(ScoringError):
+    """A threshold or metadata value in the ScoringContract is non-numeric or invalid."""
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -358,6 +362,30 @@ class ReadinessScoreEngine:
                         message=f"Critical control {cs.control_identifier!r} is NON_COMPLIANT",
                     )
                 )
+        for cid in required_control_ids:
+            cs = control_scores.get(cid)
+            if cs is None:
+                continue
+            if (
+                cs.outcome
+                in (
+                    AssessmentOutcome.NON_COMPLIANT,
+                    AssessmentOutcome.NOT_EVALUATED,
+                )
+                or cid in missing_controls
+            ):
+                threshold_failures.append(
+                    ThresholdFailure(
+                        threshold_type="required_control",
+                        threshold_name=cid,
+                        required_value=100.0,
+                        actual_value=cs.raw_score,
+                        message=(
+                            f"Required control {cs.control_identifier!r} is "
+                            f"{cs.outcome.value.upper()}"
+                        ),
+                    )
+                )
 
         # --- Risk and remediation classification ---
         no_controls = n_applicable == 0
@@ -509,18 +537,24 @@ class ReadinessScoreEngine:
         if not isinstance(raw, dict):
             return {}
         thresholds: dict = {}
-        if "overall_pass" in raw:
-            thresholds["overall_pass"] = float(raw["overall_pass"])
-        if "domain_minimums" in raw and isinstance(raw["domain_minimums"], dict):
-            thresholds["domain_minimums"] = {
-                k: float(v) for k, v in raw["domain_minimums"].items()
-            }
-        if "maturity_thresholds" in raw and isinstance(
-            raw["maturity_thresholds"], dict
-        ):
-            thresholds["maturity_thresholds"] = {
-                k: float(v) for k, v in raw["maturity_thresholds"].items()
-            }
+        try:
+            if "overall_pass" in raw:
+                thresholds["overall_pass"] = float(raw["overall_pass"])
+            if "domain_minimums" in raw and isinstance(raw["domain_minimums"], dict):
+                thresholds["domain_minimums"] = {
+                    k: float(v) for k, v in raw["domain_minimums"].items()
+                }
+            if "maturity_thresholds" in raw and isinstance(
+                raw["maturity_thresholds"], dict
+            ):
+                thresholds["maturity_thresholds"] = {
+                    k: float(v) for k, v in raw["maturity_thresholds"].items()
+                }
+        except (TypeError, ValueError) as exc:
+            raise InvalidContractMetadataError(
+                f"ScoringContract {inp.scoring_contract.contract_id!r} contains "
+                f"a non-numeric threshold value: {exc}"
+            ) from exc
         return thresholds
 
     def _parse_required(self, inp: ScoringInput) -> tuple[set[str], set[str]]:

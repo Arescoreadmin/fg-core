@@ -790,6 +790,20 @@ class ScoreOutputResponse(BaseModel):
 
 
 _score_engine = ReadinessScoreEngine()
+_SCORE_PAGE = 200  # store clamps at _MAX_PAGE=200; page until exhausted
+
+
+def _fetch_all(fn, **kwargs) -> list:  # type: ignore[type-arg]
+    """Page through a capped store list method until exhausted."""
+    items: list = []
+    offset = 0
+    while True:
+        page = fn(**kwargs, limit=_SCORE_PAGE, offset=offset)
+        items.extend(page)
+        if len(page) < _SCORE_PAGE:
+            break
+        offset += _SCORE_PAGE
+    return items
 
 
 # ---------------------------------------------------------------------------
@@ -1586,20 +1600,26 @@ def score_assessment(
 
     try:
         framework = _store.get_framework(db, framework_id=assessment.framework_id)
-        domains = _store.list_domains(
-            db, framework_id=assessment.framework_id, limit=200, offset=0
+        domains = _fetch_all(
+            _store.list_domains, db=db, framework_id=assessment.framework_id
         )
-        controls = _store.list_controls(
-            db, framework_id=assessment.framework_id, limit=200, offset=0
+        controls = _fetch_all(
+            _store.list_controls, db=db, framework_id=assessment.framework_id
         )
-        maturity_tiers = _store.list_maturity_tiers(
-            db, framework_id=assessment.framework_id, limit=200, offset=0
+        maturity_tiers = _fetch_all(
+            _store.list_maturity_tiers, db=db, framework_id=assessment.framework_id
         )
-        results = _store.list_assessment_results(
-            db, assessment_id=assessment_id, tenant_id=tenant_id, limit=200, offset=0
+        results = _fetch_all(
+            _store.list_assessment_results,
+            db=db,
+            assessment_id=assessment_id,
+            tenant_id=tenant_id,
         )
-        evidence_refs = _store.list_evidence_references(
-            db, assessment_id=assessment_id, tenant_id=tenant_id, limit=200, offset=0
+        evidence_refs = _fetch_all(
+            _store.list_evidence_references,
+            db=db,
+            assessment_id=assessment_id,
+            tenant_id=tenant_id,
         )
         scoring_contract = None
         if assessment.scoring_contract_id:

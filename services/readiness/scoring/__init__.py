@@ -2,6 +2,7 @@
 
 from services.readiness.scoring.engine import (
     FrameworkMismatchError,
+    InvalidContractMetadataError,
     InvalidWeightError,
     ReadinessScoreEngine,
     ScoringContractMismatchError,
@@ -25,6 +26,7 @@ __all__ = [
     "ControlScore",
     "DomainScore",
     "FrameworkMismatchError",
+    "InvalidContractMetadataError",
     "InvalidWeightError",
     "ReadinessScoreEngine",
     "RemediationFactor",
