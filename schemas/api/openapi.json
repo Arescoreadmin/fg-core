@@ -1569,6 +1569,59 @@
         "title": "ControlResponse",
         "type": "object"
       },
+      "ControlScoreResponse": {
+        "properties": {
+          "control_id": {
+            "title": "Control Id",
+            "type": "string"
+          },
+          "control_identifier": {
+            "title": "Control Identifier",
+            "type": "string"
+          },
+          "domain_id": {
+            "title": "Domain Id",
+            "type": "string"
+          },
+          "evidence_count": {
+            "title": "Evidence Count",
+            "type": "integer"
+          },
+          "is_applicable": {
+            "title": "Is Applicable",
+            "type": "boolean"
+          },
+          "is_evaluated": {
+            "title": "Is Evaluated",
+            "type": "boolean"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "raw_score": {
+            "title": "Raw Score",
+            "type": "number"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "control_id",
+          "control_identifier",
+          "domain_id",
+          "outcome",
+          "raw_score",
+          "weight",
+          "is_evaluated",
+          "is_applicable",
+          "evidence_count"
+        ],
+        "title": "ControlScoreResponse",
+        "type": "object"
+      },
       "CoverageChangeRequest": {
         "properties": {
           "action": {
@@ -3289,6 +3342,69 @@
           "created_at"
         ],
         "title": "DomainResponse",
+        "type": "object"
+      },
+      "DomainScoreResponse": {
+        "properties": {
+          "completion_percentage": {
+            "title": "Completion Percentage",
+            "type": "number"
+          },
+          "domain_id": {
+            "title": "Domain Id",
+            "type": "string"
+          },
+          "domain_name": {
+            "title": "Domain Name",
+            "type": "string"
+          },
+          "failed_control_count": {
+            "title": "Failed Control Count",
+            "type": "integer"
+          },
+          "incomplete_control_count": {
+            "title": "Incomplete Control Count",
+            "type": "integer"
+          },
+          "missing_control_count": {
+            "title": "Missing Control Count",
+            "type": "integer"
+          },
+          "normalized_score": {
+            "title": "Normalized Score",
+            "type": "number"
+          },
+          "raw_score": {
+            "title": "Raw Score",
+            "type": "number"
+          },
+          "risk_classification": {
+            "title": "Risk Classification",
+            "type": "string"
+          },
+          "threshold_failed": {
+            "title": "Threshold Failed",
+            "type": "boolean"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "domain_id",
+          "domain_name",
+          "raw_score",
+          "normalized_score",
+          "weight",
+          "completion_percentage",
+          "missing_control_count",
+          "incomplete_control_count",
+          "failed_control_count",
+          "risk_classification",
+          "threshold_failed"
+        ],
+        "title": "DomainScoreResponse",
         "type": "object"
       },
       "EnrollmentTokenCreateRequest": {
@@ -6349,6 +6465,29 @@
         "title": "RegisterSecretGovernanceRequest",
         "type": "object"
       },
+      "RemediationFactorResponse": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "factor_type": {
+            "title": "Factor Type",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "factor_type",
+          "description",
+          "severity"
+        ],
+        "title": "RemediationFactorResponse",
+        "type": "object"
+      },
       "ReproduceRequest": {
         "properties": {
           "session_id": {
@@ -7004,6 +7143,199 @@
         "title": "ScheduleRotationRequest",
         "type": "object"
       },
+      "ScoreOutputResponse": {
+        "properties": {
+          "assessment_id": {
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "completion_percentage": {
+            "title": "Completion Percentage",
+            "type": "number"
+          },
+          "completion_state": {
+            "title": "Completion State",
+            "type": "string"
+          },
+          "computed_at": {
+            "title": "Computed At",
+            "type": "string"
+          },
+          "control_scores": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ControlScoreResponse"
+            },
+            "title": "Control Scores",
+            "type": "object"
+          },
+          "domain_scores": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DomainScoreResponse"
+            },
+            "title": "Domain Scores",
+            "type": "object"
+          },
+          "failed_controls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Failed Controls",
+            "type": "array"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "framework_version_tag": {
+            "title": "Framework Version Tag",
+            "type": "string"
+          },
+          "incomplete_controls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Incomplete Controls",
+            "type": "array"
+          },
+          "is_complete": {
+            "title": "Is Complete",
+            "type": "boolean"
+          },
+          "maturity_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maturity Tier"
+          },
+          "maturity_tier_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maturity Tier Id"
+          },
+          "missing_controls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Controls",
+            "type": "array"
+          },
+          "normalized_score": {
+            "title": "Normalized Score",
+            "type": "number"
+          },
+          "not_applicable_controls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Not Applicable Controls",
+            "type": "array"
+          },
+          "overall_score": {
+            "title": "Overall Score",
+            "type": "number"
+          },
+          "remediation_factors": {
+            "items": {
+              "$ref": "#/components/schemas/RemediationFactorResponse"
+            },
+            "title": "Remediation Factors",
+            "type": "array"
+          },
+          "remediation_priority": {
+            "title": "Remediation Priority",
+            "type": "string"
+          },
+          "risk_classification": {
+            "title": "Risk Classification",
+            "type": "string"
+          },
+          "score_version": {
+            "title": "Score Version",
+            "type": "string"
+          },
+          "scoring_contract_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scoring Contract Id"
+          },
+          "scoring_contract_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scoring Contract Version"
+          },
+          "scoring_warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scoring Warnings",
+            "type": "array"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "threshold_failures": {
+            "items": {
+              "$ref": "#/components/schemas/ThresholdFailureResponse"
+            },
+            "title": "Threshold Failures",
+            "type": "array"
+          }
+        },
+        "required": [
+          "assessment_id",
+          "tenant_id",
+          "framework_id",
+          "framework_version_tag",
+          "overall_score",
+          "normalized_score",
+          "domain_scores",
+          "control_scores",
+          "maturity_tier",
+          "maturity_tier_id",
+          "risk_classification",
+          "remediation_priority",
+          "remediation_factors",
+          "missing_controls",
+          "incomplete_controls",
+          "failed_controls",
+          "not_applicable_controls",
+          "threshold_failures",
+          "scoring_warnings",
+          "completion_state",
+          "completion_percentage",
+          "is_complete",
+          "computed_at",
+          "score_version",
+          "scoring_contract_id",
+          "scoring_contract_version"
+        ],
+        "title": "ScoreOutputResponse",
+        "type": "object"
+      },
       "ScoringContractResponse": {
         "properties": {
           "compatibility_metadata": {
@@ -7533,6 +7865,39 @@
           }
         },
         "title": "ThreatCounts",
+        "type": "object"
+      },
+      "ThresholdFailureResponse": {
+        "properties": {
+          "actual_value": {
+            "title": "Actual Value",
+            "type": "number"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "required_value": {
+            "title": "Required Value",
+            "type": "number"
+          },
+          "threshold_name": {
+            "title": "Threshold Name",
+            "type": "string"
+          },
+          "threshold_type": {
+            "title": "Threshold Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "threshold_type",
+          "threshold_name",
+          "required_value",
+          "actual_value",
+          "message"
+        ],
+        "title": "ThresholdFailureResponse",
         "type": "object"
       },
       "TieD": {
@@ -17443,6 +17808,66 @@
           }
         },
         "summary": "Record Assessment Result",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/assessments/{assessment_id}/score": {
+      "get": {
+        "description": "Compute a deterministic readiness score for an assessment.\n\nLoads all framework, domain, control, maturity, result, and evidence data\nfrom the store, scores deterministically, and returns a frozen ScoreOutput.\nNo data is mutated. Score is not persisted \u2014 call again for a fresh score.",
+        "operationId": "score_assessment_control_plane_readiness_assessments__assessment_id__score_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreOutputResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Score Assessment",
         "tags": [
           "readiness",
           "readiness"

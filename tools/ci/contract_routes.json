@@ -847,6 +847,12 @@
       "source": "contract"
     },
     {
+      "method": "GET",
+      "path": "/control-plane/readiness/assessments/{assessment_id}/score",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "POST",
       "path": "/control-plane/readiness/assessments/{assessment_id}/transition",
       "scopes": [],
@@ -1573,7 +1579,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-16T13:20:50.891329+00:00",
+  "generated_at": "2026-05-16T18:45:09.298016+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
