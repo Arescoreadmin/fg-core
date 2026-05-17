@@ -16,6 +16,15 @@ Framework isolation contract:
   - Mappings are relational metadata only. Framework definitions remain
     authoritative within their own framework boundaries.
 
+Namespace isolation contract:
+  - Frameworks frequently reuse control identifiers across different specifications
+    (e.g. "AC-1", "GV-2", "PR.3" appear in multiple frameworks with distinct
+    meanings). Control identity is ALWAYS the combination of (control_id,
+    framework_id). Bare control_id lookups are prohibited by design.
+  - FrameworkNamespace provides an explicit namespace layer for future
+    enforcement — a control's canonical identity is
+    (namespace_prefix, control_id, framework_version).
+
 Metadata field immutability contract:
   - All *_metadata dict fields are wrapped in MappingProxyType on construction.
   - A defensive copy is taken of the caller's dict at construction time.
@@ -25,6 +34,8 @@ History immutability contract:
   - Mapping history is append-only. Supersession creates a new record; it does
     not mutate prior mapping version records.
   - Historical mappings remain reconstructable even after framework evolution.
+  - Supersession lineage: supersedes_relationship_id on MappingRelationship
+    carries the explicit lineage pointer for replay and audit reconstruction.
 
 Provenance contract:
   - Every MappingRelationship and ControlInheritance carries a MappingProvenance.
@@ -32,10 +43,26 @@ Provenance contract:
   - Governance approval and attestation metadata are extension hooks for future
     regulatory review and signed mapping workflows.
 
+Confidence and authority contract:
+  - mapping_confidence (0.0–1.0) declares how certain the mapping author is
+    about the relationship. Validation rejects values outside [0.0, 1.0].
+  - mapping_authority_level classifies the trustworthiness of the mapping source.
+    Audits and regulator exports SHOULD filter on authority level.
+  - mapping_review_status tracks the governance lifecycle of the mapping claim.
+
 Tenant isolation contract:
   - scope=PLATFORM mappings have tenant_id=None and are globally readable.
   - scope=TENANT mappings have a non-None tenant_id and are isolated.
   - Validation enforces scope-tenant consistency.
+
+Mapping integrity contract:
+  - MappingHashRecord carries a deterministic SHA-256 hash of stable relationship
+    content, enabling replay verification and future signed mapping support.
+  - inputs_canonical is the exact JSON string that was hashed — preserved for
+    independent forensic replay without rerunning the relationship construction.
+  - Excluded from hash: created_at (timestamp), tenant_id, mapping_status,
+    mapping_review_status, mapping_metadata (extension dict), jurisdiction,
+    control_scope, supersedes_relationship_id, namespace IDs.
 """
 
 from __future__ import annotations
@@ -151,6 +178,56 @@ class MappingGapType(str, Enum):
     UNSUPPORTED_FRAMEWORK = "unsupported_framework"
 
 
+class MappingAuthorityLevel(str, Enum):
+    """Trustworthiness classification of the mapping source.
+
+    CANONICAL:           Authoritative mapping from the framework body (e.g. NIST, ISO).
+    REGULATOR_REVIEWED:  Reviewed and approved by a regulatory body.
+    INTERNAL:            Produced by the platform or an internal governance team.
+    CUSTOMER_DEFINED:    Produced by a customer tenant for their own context.
+    PROVISIONAL:         Preliminary; not yet through full governance review.
+    DEPRECATED:          Authority level no longer in use for new mappings.
+    """
+
+    CANONICAL = "canonical"
+    REGULATOR_REVIEWED = "regulator_reviewed"
+    INTERNAL = "internal"
+    CUSTOMER_DEFINED = "customer_defined"
+    PROVISIONAL = "provisional"
+    DEPRECATED = "deprecated"
+
+
+class MappingReviewStatus(str, Enum):
+    """Governance lifecycle status of a mapping claim.
+
+    PENDING:    Not yet submitted for review.
+    IN_REVIEW:  Under active governance review.
+    APPROVED:   Review passed; mapping is governance-approved.
+    REJECTED:   Review failed; mapping must be revised before resubmission.
+    SUPERSEDED: Mapping has been replaced by a newer reviewed version.
+    """
+
+    PENDING = "pending"
+    IN_REVIEW = "in_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    SUPERSEDED = "superseded"
+
+
+class MappingGranularity(str, Enum):
+    """Granularity level of the mapping relationship.
+
+    Describes what governance unit each side of the relationship represents.
+    """
+
+    CONTROL_TO_CONTROL = "control_to_control"
+    CONTROL_TO_SUBCONTROL = "control_to_subcontrol"
+    SUBCONTROL_TO_CONTROL = "subcontrol_to_control"
+    DOMAIN_TO_DOMAIN = "domain_to_domain"
+    POLICY_TO_CONTROL = "policy_to_control"
+    CONTROL_TO_POLICY = "control_to_policy"
+
+
 # ---------------------------------------------------------------------------
 # Provenance and compatibility metadata
 # ---------------------------------------------------------------------------
@@ -228,6 +305,81 @@ class MappingCompatibilityRecord:
         )
 
 
+@dataclass(frozen=True)
+class JurisdictionApplicability:
+    """Jurisdiction scope declaration for a mapping relationship.
+
+    jurisdiction_ids: Explicit jurisdiction codes (e.g. "EU", "US-CA", "UK").
+    regional_restrictions: Regions where the mapping does NOT apply.
+    sovereign_applicability: Sovereign or national contexts where it applies.
+    sector_applicability: Industry sectors (e.g. "healthcare", "financial").
+    jurisdiction_metadata: Extension hook for regulatory overlay details.
+    """
+
+    jurisdiction_ids: tuple[str, ...]
+    regional_restrictions: tuple[str, ...]
+    sovereign_applicability: tuple[str, ...]
+    sector_applicability: tuple[str, ...]
+    jurisdiction_metadata: Mapping[str, Any] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        meta = self.jurisdiction_metadata
+        object.__setattr__(
+            self,
+            "jurisdiction_metadata",
+            MappingProxyType(dict(meta) if meta is not None else {}),
+        )
+
+
+@dataclass(frozen=True)
+class MappingControlScope:
+    """Scope dimension declaration for a mapping relationship.
+
+    Each field describes an applicability boundary of the mapping.
+    """
+
+    control_scope: str
+    organizational_scope: str
+    operational_scope: str
+    technical_scope: str
+    scope_metadata: Mapping[str, Any] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        meta = self.scope_metadata
+        object.__setattr__(
+            self,
+            "scope_metadata",
+            MappingProxyType(dict(meta) if meta is not None else {}),
+        )
+
+
+@dataclass(frozen=True)
+class FrameworkNamespace:
+    """Explicit namespace record for a framework's control identifier space.
+
+    Provides an additional isolation layer for frameworks that reuse control
+    identifier strings across different specifications.
+
+    namespace_prefix: Short prefix for this namespace (e.g. "NIST-AI:", "ISO-42:").
+    namespace_version: Version of this namespace declaration.
+    namespace_metadata: Extension hook for namespace governance details.
+    """
+
+    namespace_id: str
+    framework_id: str
+    namespace_prefix: str
+    namespace_version: str
+    namespace_metadata: Mapping[str, Any] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        meta = self.namespace_metadata
+        object.__setattr__(
+            self,
+            "namespace_metadata",
+            MappingProxyType(dict(meta) if meta is not None else {}),
+        )
+
+
 # ---------------------------------------------------------------------------
 # Core mapping types
 # ---------------------------------------------------------------------------
@@ -267,6 +419,15 @@ class MappingRelationship:
     created_at: datetime
     tenant_id: Optional[str]
     mapping_metadata: Mapping[str, Any] = None  # type: ignore[assignment]
+    mapping_confidence: float = 1.0
+    mapping_authority_level: MappingAuthorityLevel = MappingAuthorityLevel.INTERNAL
+    mapping_review_status: MappingReviewStatus = MappingReviewStatus.PENDING
+    mapping_granularity: MappingGranularity = MappingGranularity.CONTROL_TO_CONTROL
+    jurisdiction: Optional[JurisdictionApplicability] = None
+    control_scope: Optional[MappingControlScope] = None
+    supersedes_relationship_id: Optional[str] = None
+    source_namespace_id: Optional[str] = None
+    target_namespace_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         meta = self.mapping_metadata
@@ -420,6 +581,26 @@ class MappingValidationRecord:
     failure_reasons: tuple[str, ...]
     validated_at: datetime
     validator_version: str
+
+
+@dataclass(frozen=True)
+class MappingHashRecord:
+    """Deterministic SHA-256 integrity record for a mapping relationship.
+
+    relationship_id: ID of the relationship this hash covers.
+    algorithm: Hash algorithm used (always "sha256" for current records).
+    hash_value: Hex-encoded SHA-256 digest of inputs_canonical.
+    inputs_canonical: Exact JSON string hashed — preserved for forensic replay.
+    computed_at: Timestamp when the hash was computed.
+    is_replay_safe: True if inputs_canonical is complete for independent replay.
+    """
+
+    relationship_id: str
+    algorithm: str
+    hash_value: str
+    inputs_canonical: str
+    computed_at: datetime
+    is_replay_safe: bool
 
 
 @dataclass(frozen=True)

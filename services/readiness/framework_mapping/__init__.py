@@ -12,6 +12,11 @@ from .crosswalk import (
     find_many_to_one_mappings,
     find_one_to_many_mappings,
 )
+from .hashing import (
+    compute_mapping_hash,
+    replay_mapping_hash,
+    verify_mapping_hash,
+)
 from .models import (
     FRAMEWORK_SLUG_FROSTGATE,
     FRAMEWORK_SLUG_HIPAA_AI,
@@ -22,12 +27,19 @@ from .models import (
     CrosswalkEntry,
     FrameworkMapping,
     FrameworkMappingVersion,
+    FrameworkNamespace,
+    JurisdictionApplicability,
+    MappingAuthorityLevel,
     MappingCompatibilityRecord,
+    MappingControlScope,
     MappingGapRecord,
     MappingGapType,
+    MappingGranularity,
+    MappingHashRecord,
     MappingProvenance,
     MappingRelationship,
     MappingRelationshipType,
+    MappingReviewStatus,
     MappingScope,
     MappingStatus,
     MappingValidationRecord,
@@ -35,9 +47,12 @@ from .models import (
 )
 from .validation import (
     _VALIDATOR_VERSION,
+    REASON_COMPATIBILITY_INCOMPATIBLE,
+    REASON_COMPATIBILITY_VERSION_MISMATCH,
     REASON_CYCLIC_INHERITANCE,
     REASON_DUPLICATE_RELATIONSHIP,
     REASON_FRAMEWORK_ID_MISMATCH,
+    REASON_INVALID_CONFIDENCE_VALUE,
     REASON_MISSING_MAPPING_RATIONALE,
     REASON_MISSING_SOURCE_AUTHORITY,
     REASON_SCOPE_TENANT_MISMATCH,
@@ -63,9 +78,16 @@ __all__ = [
     "MappingScope",
     "MappingValidationType",
     "MappingGapType",
+    "MappingAuthorityLevel",
+    "MappingReviewStatus",
+    "MappingGranularity",
     # Provenance and compatibility
     "MappingProvenance",
     "MappingCompatibilityRecord",
+    # Jurisdiction, scope, and namespace types
+    "JurisdictionApplicability",
+    "MappingControlScope",
+    "FrameworkNamespace",
     # Core mapping types
     "MappingRelationship",
     "ControlInheritance",
@@ -73,6 +95,7 @@ __all__ = [
     "FrameworkMapping",
     # Output types
     "MappingValidationRecord",
+    "MappingHashRecord",
     "MappingGapRecord",
     "CrosswalkEntry",
     # Validation functions
@@ -89,12 +112,19 @@ __all__ = [
     "find_control_mappings",
     "find_one_to_many_mappings",
     "find_many_to_one_mappings",
+    # Hashing functions
+    "compute_mapping_hash",
+    "replay_mapping_hash",
+    "verify_mapping_hash",
     # Reason codes
     "REASON_SELF_MAPPING",
     "REASON_TENANT_ISOLATION_VIOLATION",
     "REASON_MISSING_SOURCE_AUTHORITY",
     "REASON_MISSING_MAPPING_RATIONALE",
     "REASON_FRAMEWORK_ID_MISMATCH",
+    "REASON_COMPATIBILITY_VERSION_MISMATCH",
+    "REASON_COMPATIBILITY_INCOMPATIBLE",
+    "REASON_INVALID_CONFIDENCE_VALUE",
     "REASON_SELF_INHERITANCE",
     "REASON_DUPLICATE_RELATIONSHIP",
     "REASON_SCOPE_TENANT_MISMATCH",

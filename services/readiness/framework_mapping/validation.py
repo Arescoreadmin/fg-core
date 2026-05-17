@@ -13,10 +13,11 @@ Reason code contract:
 
 Validation coverage:
   - MappingRelationship: self-mapping, tenant isolation, provenance completeness,
-    framework-compatibility consistency.
+    framework-compatibility consistency, version pin consistency, compatibility
+    flag check, mapping_confidence range.
   - ControlInheritance: self-inheritance, tenant isolation, provenance completeness.
   - FrameworkMapping: duplicate detection, framework ID consistency,
-    scope-tenant consistency, cyclic inheritance detection.
+    scope-tenant consistency (both directions), cyclic inheritance detection.
   - FrameworkMappingVersion: version tag format, self-supersession.
   - Cyclic inheritance: DFS-based cycle detection in the inheritance graph.
   - Mapping gaps: unmapped controls, orphaned relationships,
@@ -64,6 +65,11 @@ REASON_CYCLIC_INHERITANCE = "MAPPING_CYCLIC_INHERITANCE"
 # Mapping version validation
 REASON_VERSION_TAG_EMPTY = "MAPPING_VERSION_TAG_EMPTY"
 REASON_SELF_SUPERSESSION = "MAPPING_SELF_SUPERSESSION"
+
+# Confidence and compatibility validation
+REASON_INVALID_CONFIDENCE_VALUE = "MAPPING_INVALID_CONFIDENCE_VALUE"
+REASON_COMPATIBILITY_VERSION_MISMATCH = "MAPPING_COMPATIBILITY_VERSION_MISMATCH"
+REASON_COMPATIBILITY_INCOMPATIBLE = "MAPPING_COMPATIBILITY_INCOMPATIBLE"
 
 
 # ---------------------------------------------------------------------------
@@ -127,8 +133,12 @@ def validate_mapping_relationship(
     - Self-mapping: source and target are the same control in the same framework.
     - Tenant isolation: relationship.tenant_id must match required_tenant_id if given.
     - Provenance completeness: source_authority and mapping_rationale must be non-empty.
-    - Framework-compatibility consistency: relationship framework IDs must match
+    - Framework-compatibility ID consistency: relationship framework IDs must match
       the compatibility record's framework IDs.
+    - Compatibility version pin consistency: relationship framework version tags must
+      match the compatibility record's pinned version tags.
+    - Compatibility flag: compatibility.is_compatible must be True.
+    - Confidence range: mapping_confidence must be in [0.0, 1.0].
 
     Note: source_control_id == target_control_id across different frameworks is NOT
     a self-mapping (cross-framework control with identical ID is valid).
@@ -157,6 +167,20 @@ def validate_mapping_relationship(
         != relationship.compatibility.target_framework_id
     ):
         reasons.append(REASON_FRAMEWORK_ID_MISMATCH)
+
+    if (
+        relationship.source_framework_version
+        != relationship.compatibility.source_version_tag
+        or relationship.target_framework_version
+        != relationship.compatibility.target_version_tag
+    ):
+        reasons.append(REASON_COMPATIBILITY_VERSION_MISMATCH)
+
+    if not relationship.compatibility.is_compatible:
+        reasons.append(REASON_COMPATIBILITY_INCOMPATIBLE)
+
+    if not (0.0 <= relationship.mapping_confidence <= 1.0):
+        reasons.append(REASON_INVALID_CONFIDENCE_VALUE)
 
     return MappingValidationRecord(
         validation_id=validation_id,
@@ -248,6 +272,9 @@ def validate_framework_mapping(
     if (
         framework_mapping.scope == MappingScope.TENANT
         and framework_mapping.tenant_id is None
+    ) or (
+        framework_mapping.scope == MappingScope.PLATFORM
+        and framework_mapping.tenant_id is not None
     ):
         reasons.append(REASON_SCOPE_TENANT_MISMATCH)
 

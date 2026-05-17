@@ -33,9 +33,12 @@ from services.readiness.framework_mapping import (
     FRAMEWORK_SLUG_ISO_42001,
     FRAMEWORK_SLUG_NIST_AI_RMF,
     FRAMEWORK_SLUG_SOC2_AI,
+    REASON_COMPATIBILITY_INCOMPATIBLE,
+    REASON_COMPATIBILITY_VERSION_MISMATCH,
     REASON_CYCLIC_INHERITANCE,
     REASON_DUPLICATE_RELATIONSHIP,
     REASON_FRAMEWORK_ID_MISMATCH,
+    REASON_INVALID_CONFIDENCE_VALUE,
     REASON_MISSING_MAPPING_RATIONALE,
     REASON_MISSING_SOURCE_AUTHORITY,
     REASON_SCOPE_TENANT_MISMATCH,
@@ -48,16 +51,24 @@ from services.readiness.framework_mapping import (
     CrosswalkEntry,
     FrameworkMapping,
     FrameworkMappingVersion,
+    FrameworkNamespace,
+    JurisdictionApplicability,
+    MappingAuthorityLevel,
     MappingCompatibilityRecord,
+    MappingControlScope,
     MappingGapType,
+    MappingGranularity,
+    MappingHashRecord,
     MappingProvenance,
     MappingRelationship,
     MappingRelationshipType,
+    MappingReviewStatus,
     MappingScope,
     MappingStatus,
     MappingValidationType,
     _VALIDATOR_VERSION,
     build_crosswalk,
+    compute_mapping_hash,
     detect_cyclic_inheritance,
     detect_missing_inheritance_targets,
     detect_orphaned_relationships,
@@ -65,10 +76,12 @@ from services.readiness.framework_mapping import (
     find_control_mappings,
     find_many_to_one_mappings,
     find_one_to_many_mappings,
+    replay_mapping_hash,
     validate_control_inheritance,
     validate_framework_mapping,
     validate_mapping_relationship,
     validate_mapping_version,
+    verify_mapping_hash,
 )
 
 # ---------------------------------------------------------------------------
@@ -1363,3 +1376,493 @@ def test_mapping_version_tag_is_semver_string() -> None:
     parts = _VALIDATOR_VERSION.split(".")
     assert len(parts) == 3
     assert all(p.isdigit() for p in parts)
+
+
+# ---------------------------------------------------------------------------
+# Addition 1 — Mapping Confidence / Authority Tier enum stability
+# ---------------------------------------------------------------------------
+
+
+def test_mapping_authority_level_values_stable() -> None:
+    assert MappingAuthorityLevel.CANONICAL.value == "canonical"
+    assert MappingAuthorityLevel.REGULATOR_REVIEWED.value == "regulator_reviewed"
+    assert MappingAuthorityLevel.INTERNAL.value == "internal"
+    assert MappingAuthorityLevel.CUSTOMER_DEFINED.value == "customer_defined"
+    assert MappingAuthorityLevel.PROVISIONAL.value == "provisional"
+    assert MappingAuthorityLevel.DEPRECATED.value == "deprecated"
+
+
+def test_mapping_review_status_values_stable() -> None:
+    assert MappingReviewStatus.PENDING.value == "pending"
+    assert MappingReviewStatus.IN_REVIEW.value == "in_review"
+    assert MappingReviewStatus.APPROVED.value == "approved"
+    assert MappingReviewStatus.REJECTED.value == "rejected"
+    assert MappingReviewStatus.SUPERSEDED.value == "superseded"
+
+
+def test_relationship_default_confidence_is_one() -> None:
+    rel = _make_relationship()
+    assert rel.mapping_confidence == 1.0
+
+
+def test_relationship_default_authority_level_is_internal() -> None:
+    rel = _make_relationship()
+    assert rel.mapping_authority_level == MappingAuthorityLevel.INTERNAL
+
+
+def test_relationship_default_review_status_is_pending() -> None:
+    rel = _make_relationship()
+    assert rel.mapping_review_status == MappingReviewStatus.PENDING
+
+
+def test_confidence_out_of_range_fails_validation() -> None:
+    rel = MappingRelationship(
+        relationship_id="r1",
+        source_control_id=_CTRL_A,
+        source_framework_id=_FW_NIST,
+        source_framework_version=_V1,
+        target_control_id=_CTRL_B,
+        target_framework_id=_FW_ISO,
+        target_framework_version=_V1,
+        relationship_type=MappingRelationshipType.EQUIVALENT,
+        mapping_status=MappingStatus.ACTIVE,
+        provenance=_make_provenance(),
+        compatibility=_make_compatibility(),
+        is_bidirectional=False,
+        created_by="actor",
+        created_at=_NOW,
+        tenant_id=None,
+        mapping_confidence=1.5,
+    )
+    record = validate_mapping_relationship(
+        rel, validation_id="v-001", validated_at=_NOW
+    )
+    assert record.is_valid is False
+    assert REASON_INVALID_CONFIDENCE_VALUE in record.failure_reasons
+
+
+def test_confidence_zero_is_valid() -> None:
+    rel = MappingRelationship(
+        relationship_id="r1",
+        source_control_id=_CTRL_A,
+        source_framework_id=_FW_NIST,
+        source_framework_version=_V1,
+        target_control_id=_CTRL_B,
+        target_framework_id=_FW_ISO,
+        target_framework_version=_V1,
+        relationship_type=MappingRelationshipType.EQUIVALENT,
+        mapping_status=MappingStatus.ACTIVE,
+        provenance=_make_provenance(),
+        compatibility=_make_compatibility(),
+        is_bidirectional=False,
+        created_by="actor",
+        created_at=_NOW,
+        tenant_id=None,
+        mapping_confidence=0.0,
+    )
+    record = validate_mapping_relationship(
+        rel, validation_id="v-001", validated_at=_NOW
+    )
+    assert REASON_INVALID_CONFIDENCE_VALUE not in record.failure_reasons
+
+
+def test_negative_confidence_fails_validation() -> None:
+    rel = MappingRelationship(
+        relationship_id="r1",
+        source_control_id=_CTRL_A,
+        source_framework_id=_FW_NIST,
+        source_framework_version=_V1,
+        target_control_id=_CTRL_B,
+        target_framework_id=_FW_ISO,
+        target_framework_version=_V1,
+        relationship_type=MappingRelationshipType.EQUIVALENT,
+        mapping_status=MappingStatus.ACTIVE,
+        provenance=_make_provenance(),
+        compatibility=_make_compatibility(),
+        is_bidirectional=False,
+        created_by="actor",
+        created_at=_NOW,
+        tenant_id=None,
+        mapping_confidence=-0.1,
+    )
+    record = validate_mapping_relationship(
+        rel, validation_id="v-001", validated_at=_NOW
+    )
+    assert REASON_INVALID_CONFIDENCE_VALUE in record.failure_reasons
+
+
+# ---------------------------------------------------------------------------
+# Addition 2 — Jurisdiction Metadata
+# ---------------------------------------------------------------------------
+
+
+def test_jurisdiction_applicability_is_frozen() -> None:
+    j = JurisdictionApplicability(
+        jurisdiction_ids=("EU", "US-CA"),
+        regional_restrictions=(),
+        sovereign_applicability=("EU",),
+        sector_applicability=("healthcare",),
+    )
+    with pytest.raises(Exception):
+        j.jurisdiction_ids = ("UK",)  # type: ignore[misc]
+
+
+def test_jurisdiction_metadata_is_read_only() -> None:
+    j = JurisdictionApplicability(
+        jurisdiction_ids=(),
+        regional_restrictions=(),
+        sovereign_applicability=(),
+        sector_applicability=(),
+        jurisdiction_metadata={"key": "val"},
+    )
+    with pytest.raises(TypeError):
+        j.jurisdiction_metadata["key"] = "mutated"  # type: ignore[index]
+
+
+def test_relationship_accepts_jurisdiction() -> None:
+    j = JurisdictionApplicability(
+        jurisdiction_ids=("EU",),
+        regional_restrictions=(),
+        sovereign_applicability=(),
+        sector_applicability=(),
+    )
+    rel = MappingRelationship(
+        relationship_id="r1",
+        source_control_id=_CTRL_A,
+        source_framework_id=_FW_NIST,
+        source_framework_version=_V1,
+        target_control_id=_CTRL_B,
+        target_framework_id=_FW_ISO,
+        target_framework_version=_V1,
+        relationship_type=MappingRelationshipType.EQUIVALENT,
+        mapping_status=MappingStatus.ACTIVE,
+        provenance=_make_provenance(),
+        compatibility=_make_compatibility(),
+        is_bidirectional=False,
+        created_by="actor",
+        created_at=_NOW,
+        tenant_id=None,
+        jurisdiction=j,
+    )
+    assert rel.jurisdiction is not None
+    assert "EU" in rel.jurisdiction.jurisdiction_ids
+
+
+# ---------------------------------------------------------------------------
+# Addition 3 — Mapping Scope Metadata
+# ---------------------------------------------------------------------------
+
+
+def test_mapping_control_scope_is_frozen() -> None:
+    s = MappingControlScope(
+        control_scope="full",
+        organizational_scope="enterprise",
+        operational_scope="production",
+        technical_scope="cloud",
+    )
+    with pytest.raises(Exception):
+        s.control_scope = "partial"  # type: ignore[misc]
+
+
+def test_mapping_control_scope_metadata_is_read_only() -> None:
+    s = MappingControlScope(
+        control_scope="full",
+        organizational_scope="enterprise",
+        operational_scope="production",
+        technical_scope="cloud",
+        scope_metadata={"detail": "x"},
+    )
+    with pytest.raises(TypeError):
+        s.scope_metadata["detail"] = "mutated"  # type: ignore[index]
+
+
+def test_relationship_accepts_control_scope() -> None:
+    s = MappingControlScope(
+        control_scope="full",
+        organizational_scope="enterprise",
+        operational_scope="production",
+        technical_scope="cloud",
+    )
+    rel = MappingRelationship(
+        relationship_id="r1",
+        source_control_id=_CTRL_A,
+        source_framework_id=_FW_NIST,
+        source_framework_version=_V1,
+        target_control_id=_CTRL_B,
+        target_framework_id=_FW_ISO,
+        target_framework_version=_V1,
+        relationship_type=MappingRelationshipType.EQUIVALENT,
+        mapping_status=MappingStatus.ACTIVE,
+        provenance=_make_provenance(),
+        compatibility=_make_compatibility(),
+        is_bidirectional=False,
+        created_by="actor",
+        created_at=_NOW,
+        tenant_id=None,
+        control_scope=s,
+    )
+    assert rel.control_scope is not None
+    assert rel.control_scope.control_scope == "full"
+
+
+# ---------------------------------------------------------------------------
+# Addition 4 — Supersession Semantics
+# ---------------------------------------------------------------------------
+
+
+def test_supersedes_relationship_id_defaults_to_none() -> None:
+    rel = _make_relationship()
+    assert rel.supersedes_relationship_id is None
+
+
+def test_supersedes_relationship_id_can_be_set() -> None:
+    rel = MappingRelationship(
+        relationship_id="r2",
+        source_control_id=_CTRL_A,
+        source_framework_id=_FW_NIST,
+        source_framework_version=_V1,
+        target_control_id=_CTRL_B,
+        target_framework_id=_FW_ISO,
+        target_framework_version=_V1,
+        relationship_type=MappingRelationshipType.EQUIVALENT,
+        mapping_status=MappingStatus.ACTIVE,
+        provenance=_make_provenance(),
+        compatibility=_make_compatibility(),
+        is_bidirectional=False,
+        created_by="actor",
+        created_at=_NOW,
+        tenant_id=None,
+        supersedes_relationship_id="r1",
+    )
+    assert rel.supersedes_relationship_id == "r1"
+
+
+# ---------------------------------------------------------------------------
+# Addition 5 — Mapping Integrity / Hashing
+# ---------------------------------------------------------------------------
+
+
+def test_compute_mapping_hash_returns_hash_record() -> None:
+    rel = _make_relationship()
+    record = compute_mapping_hash(rel, computed_at=_NOW)
+    assert isinstance(record, MappingHashRecord)
+    assert record.relationship_id == rel.relationship_id
+    assert record.algorithm == "sha256"
+    assert len(record.hash_value) == 64
+    assert record.is_replay_safe is True
+
+
+def test_compute_mapping_hash_is_deterministic() -> None:
+    rel = _make_relationship()
+    h1 = compute_mapping_hash(rel, computed_at=_NOW)
+    h2 = compute_mapping_hash(rel, computed_at=_NOW)
+    assert h1.hash_value == h2.hash_value
+
+
+def test_hash_changes_when_stable_field_changes() -> None:
+    rel_a = _make_relationship(relationship_id="r1", source_control_id=_CTRL_A)
+    rel_b = _make_relationship(relationship_id="r1", source_control_id=_CTRL_B)
+    h_a = compute_mapping_hash(rel_a, computed_at=_NOW)
+    h_b = compute_mapping_hash(rel_b, computed_at=_NOW)
+    assert h_a.hash_value != h_b.hash_value
+
+
+def test_hash_stable_across_different_created_at() -> None:
+    """created_at is excluded from hash — different timestamps must produce same hash."""
+    from datetime import timedelta
+
+    rel = _make_relationship()
+    later_rel = MappingRelationship(
+        relationship_id=rel.relationship_id,
+        source_control_id=rel.source_control_id,
+        source_framework_id=rel.source_framework_id,
+        source_framework_version=rel.source_framework_version,
+        target_control_id=rel.target_control_id,
+        target_framework_id=rel.target_framework_id,
+        target_framework_version=rel.target_framework_version,
+        relationship_type=rel.relationship_type,
+        mapping_status=rel.mapping_status,
+        provenance=rel.provenance,
+        compatibility=rel.compatibility,
+        is_bidirectional=rel.is_bidirectional,
+        created_by=rel.created_by,
+        created_at=_NOW + timedelta(hours=1),
+        tenant_id=rel.tenant_id,
+    )
+    h1 = compute_mapping_hash(rel, computed_at=_NOW)
+    h2 = compute_mapping_hash(later_rel, computed_at=_NOW)
+    assert h1.hash_value == h2.hash_value
+
+
+def test_replay_mapping_hash_matches_original() -> None:
+    rel = _make_relationship()
+    record = compute_mapping_hash(rel, computed_at=_NOW)
+    replayed = replay_mapping_hash(record.inputs_canonical)
+    assert replayed == record.hash_value
+
+
+def test_verify_mapping_hash_returns_true_for_valid() -> None:
+    rel = _make_relationship()
+    record = compute_mapping_hash(rel, computed_at=_NOW)
+    assert verify_mapping_hash(rel, record) is True
+
+
+def test_verify_mapping_hash_returns_false_for_tampered() -> None:
+    rel_a = _make_relationship(relationship_id="r1", source_control_id=_CTRL_A)
+    rel_b = _make_relationship(relationship_id="r1", source_control_id=_CTRL_B)
+    record = compute_mapping_hash(rel_a, computed_at=_NOW)
+    assert verify_mapping_hash(rel_b, record) is False
+
+
+# ---------------------------------------------------------------------------
+# Addition 6 — Framework Namespace Isolation
+# ---------------------------------------------------------------------------
+
+
+def test_framework_namespace_is_frozen() -> None:
+    ns = FrameworkNamespace(
+        namespace_id="ns-001",
+        framework_id=_FW_NIST,
+        namespace_prefix="NIST-AI:",
+        namespace_version="1.0",
+    )
+    with pytest.raises(Exception):
+        ns.namespace_prefix = "mutated"  # type: ignore[misc]
+
+
+def test_framework_namespace_metadata_is_read_only() -> None:
+    ns = FrameworkNamespace(
+        namespace_id="ns-001",
+        framework_id=_FW_NIST,
+        namespace_prefix="NIST-AI:",
+        namespace_version="1.0",
+        namespace_metadata={"key": "val"},
+    )
+    with pytest.raises(TypeError):
+        ns.namespace_metadata["key"] = "mutated"  # type: ignore[index]
+
+
+def test_relationship_namespace_ids_default_to_none() -> None:
+    rel = _make_relationship()
+    assert rel.source_namespace_id is None
+    assert rel.target_namespace_id is None
+
+
+def test_relationship_accepts_namespace_ids() -> None:
+    rel = MappingRelationship(
+        relationship_id="r1",
+        source_control_id=_CTRL_A,
+        source_framework_id=_FW_NIST,
+        source_framework_version=_V1,
+        target_control_id=_CTRL_B,
+        target_framework_id=_FW_ISO,
+        target_framework_version=_V1,
+        relationship_type=MappingRelationshipType.EQUIVALENT,
+        mapping_status=MappingStatus.ACTIVE,
+        provenance=_make_provenance(),
+        compatibility=_make_compatibility(),
+        is_bidirectional=False,
+        created_by="actor",
+        created_at=_NOW,
+        tenant_id=None,
+        source_namespace_id="ns-nist",
+        target_namespace_id="ns-iso",
+    )
+    assert rel.source_namespace_id == "ns-nist"
+    assert rel.target_namespace_id == "ns-iso"
+
+
+# ---------------------------------------------------------------------------
+# Addition 7 — Mapping Granularity Metadata
+# ---------------------------------------------------------------------------
+
+
+def test_mapping_granularity_values_stable() -> None:
+    assert MappingGranularity.CONTROL_TO_CONTROL.value == "control_to_control"
+    assert MappingGranularity.CONTROL_TO_SUBCONTROL.value == "control_to_subcontrol"
+    assert MappingGranularity.SUBCONTROL_TO_CONTROL.value == "subcontrol_to_control"
+    assert MappingGranularity.DOMAIN_TO_DOMAIN.value == "domain_to_domain"
+    assert MappingGranularity.POLICY_TO_CONTROL.value == "policy_to_control"
+    assert MappingGranularity.CONTROL_TO_POLICY.value == "control_to_policy"
+
+
+def test_relationship_default_granularity_is_control_to_control() -> None:
+    rel = _make_relationship()
+    assert rel.mapping_granularity == MappingGranularity.CONTROL_TO_CONTROL
+
+
+def test_relationship_accepts_non_default_granularity() -> None:
+    rel = MappingRelationship(
+        relationship_id="r1",
+        source_control_id=_CTRL_A,
+        source_framework_id=_FW_NIST,
+        source_framework_version=_V1,
+        target_control_id=_CTRL_B,
+        target_framework_id=_FW_ISO,
+        target_framework_version=_V1,
+        relationship_type=MappingRelationshipType.EQUIVALENT,
+        mapping_status=MappingStatus.ACTIVE,
+        provenance=_make_provenance(),
+        compatibility=_make_compatibility(),
+        is_bidirectional=False,
+        created_by="actor",
+        created_at=_NOW,
+        tenant_id=None,
+        mapping_granularity=MappingGranularity.DOMAIN_TO_DOMAIN,
+    )
+    assert rel.mapping_granularity == MappingGranularity.DOMAIN_TO_DOMAIN
+
+
+# ---------------------------------------------------------------------------
+# Validation bug fixes — compatibility version pins and platform scope
+# ---------------------------------------------------------------------------
+
+
+def test_compatibility_version_mismatch_fails_validation() -> None:
+    """Compatibility record pinned to version 2.0 but relationship is on version 1.0."""
+    wrong_compat = MappingCompatibilityRecord(
+        source_framework_id=_FW_NIST,
+        source_version_tag="2.0",  # mismatches source_framework_version=_V1
+        target_framework_id=_FW_ISO,
+        target_version_tag=_V1,
+        is_compatible=True,
+        compatibility_notes="Wrong version",
+    )
+    rel = _make_relationship(compatibility=wrong_compat)
+    record = validate_mapping_relationship(
+        rel, validation_id="v-001", validated_at=_NOW
+    )
+    assert record.is_valid is False
+    assert REASON_COMPATIBILITY_VERSION_MISMATCH in record.failure_reasons
+
+
+def test_compatibility_version_match_passes() -> None:
+    rel = _make_relationship()  # versions align by default
+    record = validate_mapping_relationship(
+        rel, validation_id="v-001", validated_at=_NOW
+    )
+    assert REASON_COMPATIBILITY_VERSION_MISMATCH not in record.failure_reasons
+
+
+def test_is_compatible_false_fails_validation() -> None:
+    incompatible_compat = _make_compatibility(is_compatible=False)
+    rel = _make_relationship(compatibility=incompatible_compat)
+    record = validate_mapping_relationship(
+        rel, validation_id="v-001", validated_at=_NOW
+    )
+    assert record.is_valid is False
+    assert REASON_COMPATIBILITY_INCOMPATIBLE in record.failure_reasons
+
+
+def test_platform_scope_with_tenant_id_fails_validation() -> None:
+    """PLATFORM scope must have tenant_id=None — non-None tenant_id breaks isolation."""
+    fm = _make_framework_mapping(scope=MappingScope.PLATFORM, tenant_id=_TENANT)
+    record = validate_framework_mapping(fm, validation_id="v-001", validated_at=_NOW)
+    assert record.is_valid is False
+    assert REASON_SCOPE_TENANT_MISMATCH in record.failure_reasons
+
+
+def test_platform_scope_with_none_tenant_id_passes() -> None:
+    fm = _make_framework_mapping(scope=MappingScope.PLATFORM, tenant_id=None)
+    record = validate_framework_mapping(fm, validation_id="v-001", validated_at=_NOW)
+    assert REASON_SCOPE_TENANT_MISMATCH not in record.failure_reasons
