@@ -9944,6 +9944,34 @@ Implements the deterministic `ReadinessScoreEngine`: pure Python, no I/O, no LLM
 
 ---
 
+### 2026-05-16 — PR 86: fg-fast Runtime Budget Recovery & Test Infrastructure Hardening
+
+**Branch:** `feat/fg-fast-runtime-budget-recovery`
+
+**Area:** Test infrastructure; DB init performance; CI runtime budget.
+
+**Root cause:** `Base.metadata.create_all()` on 99 ORM tables against a file-based SQLite database took ~14 seconds per call due to SQLite's default `PRAGMA synchronous=FULL` mode, which calls `fsync()` after every transaction. With ~47 `api_client` tests across `test_readiness_manager.py`, `test_provisioning_manager.py`, and `test_deployment_manager.py`, each creating a fresh DB, this produced ~700 seconds of pure disk-sync overhead.
+
+**Fix:** Register a `@sa_event.listens_for(engine, "connect")` listener in `get_engine()` that applies `PRAGMA synchronous=OFF` when `FG_ENV=test`. This is gated strictly to test mode — production and dev engines are untouched. `PRAGMA synchronous=OFF` eliminates per-table fsync, dropping `create_all()` from ~14s to ~50ms (280x).
+
+**Files changed:**
+- `api/db.py` (modified) — added `_register_test_sqlite_pragmas()` helper and FG_ENV=test guard in `get_engine()` (**INFRA CHANGE — explicitly called out**); also imports `sqlalchemy.event as sa_event`
+- `tests/test_sqlite_test_pragmas.py` (new) — 6 tests: pragma applied in test mode, pragma NOT applied in dev/prod, init_db budget guard (<5s), schema completeness, deterministic schema between two fresh init_db calls
+
+**Measured improvement:**
+- Before: `init_db()` per test = ~14.9s; 47 api_client tests × 14.9s = ~700s overhead
+- After: `init_db()` per test = ~0.2s; 47 api_client tests × 0.2s = ~9s overhead
+- `test_readiness_manager.py` + `test_provisioning_manager.py` + `test_deployment_manager.py`: 202 tests in 46.63s
+
+**Validation:**
+- `ruff check` + `ruff format --check`: PASS
+- `mypy api/db.py`: 0 errors
+- `pytest tests/test_sqlite_test_pragmas.py`: 6 passed in 1.84s
+- `pytest tests/test_readiness_manager.py tests/test_provisioning_manager.py tests/test_deployment_manager.py`: 202 passed in 46.63s
+- `bash codex_gates.sh`: All gates passed
+
+---
+
 ### 2026-05-16 — PR 85: Enterprise Evidence Contract & Provenance Governance Layer
 
 **Branch:** `feat/enterprise-evidence-contract-provenance`

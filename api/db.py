@@ -9,7 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event as sa_event, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -100,6 +100,31 @@ def reset_engine_cache() -> None:
     _SessionLocal = None
 
 
+def _register_test_sqlite_pragmas(engine: Engine) -> None:
+    """Register a connect-time listener that applies test-only SQLite write pragmas.
+
+    SAFETY CONTRACT:
+    - Called ONLY when FG_ENV=test and dialect=sqlite.
+    - PRAGMA synchronous=OFF disables fsync on writes — safe for ephemeral test
+      databases, NEVER acceptable in production (data loss on crash/power failure).
+    - This listener is idempotent: the engine is module-level cached, so the
+      listener fires once per connection and is a no-op on reused pool connections.
+    - No production code path calls this function; the FG_ENV guard is checked by
+      get_engine() before calling here, not inside, so the guard is always enforced.
+
+    Why synchronous=OFF matters for tests: SQLite's default FULL sync mode calls
+    fsync() after every transaction, serializing 99 tables × one fsync each =
+    ~14s per init_db() call. With synchronous=OFF the kernel buffer handles writes
+    without fsync, dropping create_all() from ~14s to ~50ms.
+    """
+
+    @sa_event.listens_for(engine, "connect")
+    def _set_test_pragmas(dbapi_conn, _connection_record):
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA synchronous=OFF")
+        cur.close()
+
+
 def get_engine(*, sqlite_path: Optional[str] = None) -> Engine:
     global _ENGINE, _SessionLocal
     if _ENGINE is not None:
@@ -113,6 +138,9 @@ def get_engine(*, sqlite_path: Optional[str] = None) -> Engine:
 
     if url.startswith("sqlite"):
         logger.info("sqlite_db=%s", url.split("///", 1)[-1])
+        env = (os.getenv("FG_ENV") or "").strip().lower()
+        if env == "test":
+            _register_test_sqlite_pragmas(_ENGINE)
     else:
         logger.info("db_url=%s", url.split("@", 1)[-1] if "@" in url else url)
 
