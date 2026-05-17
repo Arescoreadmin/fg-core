@@ -6,6 +6,37 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-16 — PR 87: Runtime Evidence Collection & Governance Signal Extraction Layer
+
+**Branch:** `feat/runtime-evidence-collection-governance`
+
+**Area:** Readiness; governance evidence; audit.
+
+**Root cause:** No implementation — new feature layer for extracting normalized governance signals from existing runtime systems into immutable, privacy-safe, deterministic evidence snapshots for SOC audit readiness.
+
+**Files changed:**
+- `services/readiness/runtime_evidence/models.py` (new) — 6 enums, 8 frozen signal summaries, `GovernanceSignalBody` union, `RuntimeGovernanceSignal`, `RuntimeEvidenceSnapshot`
+- `services/readiness/runtime_evidence/extractors.py` (new) — 8 typed extraction functions + `make_unavailable_signal` + `make_error_signal`
+- `services/readiness/runtime_evidence/snapshot.py` (new) — `build_runtime_evidence_snapshot()`, `compute_snapshot_hash()` with deterministic SHA-256 over stable signal content
+- `services/readiness/runtime_evidence/__init__.py` (new) — full package public API surface
+- `tests/test_runtime_evidence.py` (new) — 54 tests covering immutability, privacy contracts, hash determinism, ordering independence, replay safety
+
+**Design invariants:**
+- All types are pure Python frozen dataclasses — no I/O, no side effects, no randomness
+- Timestamps (`extracted_at`, `last_verified_at`, `created_at`) excluded from canonical hash
+- Session identifiers (`signal_id`, `extraction_id`, `snapshot_id`, `assessment_id`) excluded from canonical hash
+- Signals sorted by `(signal_type.value, governance_source)` for deterministic ordering
+- `phi_type_count: int` preserves PHI privacy — type names never stored
+- `inputs_canonical` preserved for independent forensic replay
+
+**Validation:**
+- `pytest tests/test_runtime_evidence.py`: 54 passed
+- `ruff check` + `ruff format --check`: all passed
+- `mypy`: no issues in 5 source files
+- `bash codex_gates.sh`: All gates passed
+
+---
+
 ### 2026-05-15 — Plane Registry Fix: GET /metrics unexpected-route gap
 
 **Branch:** `feat/observability-enterprise`
