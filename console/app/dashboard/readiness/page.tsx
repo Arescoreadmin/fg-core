@@ -44,6 +44,14 @@ export default function ReadinessPage() {
     setError(null);
   }, []);
 
+  // P2: clear stale dashboard data when the framework changes so operators
+  // never see a prior assessment's scores under a newly-selected framework.
+  const handleFrameworkChange = useCallback((_frameworkId: string) => {
+    setSelectedAssessmentId(null);
+    setData(null);
+    setError(null);
+  }, []);
+
   useEffect(() => {
     if (!selectedAssessmentId) return;
     let cancelled = false;
@@ -70,8 +78,15 @@ export default function ReadinessPage() {
     <div className="flex flex-col">
       <TopBar title="Readiness" subtitle="Compliance readiness assessment and gap analysis" />
       <div className="flex flex-col gap-4 p-6">
+        {/*
+          Gap 3 seam: cross-framework comparison mode.
+          FrameworkSelector will grow a multi-select / "Compare" toggle here.
+          onFrameworkChange gives the page a stable clear-data hook regardless of
+          how the selector evolves internally.
+        */}
         <FrameworkSelector
           onAssessmentSelect={handleAssessmentSelect}
+          onFrameworkChange={handleFrameworkChange}
           selectedFrameworkId={selectedFrameworkId}
           selectedAssessmentId={selectedAssessmentId}
         />
@@ -96,6 +111,13 @@ export default function ReadinessPage() {
           <div className="flex flex-col gap-4" aria-label="readiness-dashboard">
             <ReadinessOverview score={data.score} />
 
+            {/*
+              Gap 1 seam: temporal trend visualization.
+              A ScoreHistoryChart / posture-trend-panel component slots here once
+              getScoreHistory() is wired to the backend history endpoint.
+              aria-label="posture-trend-panel" reserved for future DOM assertions.
+            */}
+
             <div className="grid gap-4 lg:grid-cols-2">
               <EvidenceCompleteness score={data.score} />
               <GovernanceDrift
@@ -107,13 +129,33 @@ export default function ReadinessPage() {
             <DomainHeatmap domainScores={data.score.domain_scores} />
 
             <div className="grid gap-4 lg:grid-cols-2">
+              {/*
+                Gap 2 seam: "Why This Matters" operational impact layer.
+                HighRiskGaps will accept an optional operationalImpacts prop once
+                GapAnalysisResult grows the operational_impacts field.
+                aria-label="operational-impact-panel" reserved.
+              */}
               <HighRiskGaps gaps={data.gap.gaps} blockers={data.gap.readiness_blockers} />
               <RemediationQueue recommendations={data.gap.remediation_recommendations} />
             </div>
 
             <EvidenceBasisPanel controlScores={data.score.control_scores} />
 
+            {/*
+              Gap 5 seam: runtime governance correlation.
+              A RuntimeCorrelationPanel slots here, fed by getRuntimeCorrelation(),
+              connecting live retrieval drift and provenance failures to this posture.
+              aria-label="runtime-correlation-panel" reserved.
+            */}
+
             <div className="grid gap-4 lg:grid-cols-2">
+              {/*
+                Gap 4 seam: reviewer workflow context.
+                SnapshotContext will grow a ReviewerContext section once
+                getReviewerContext() is wired — signoff state, approval lineage,
+                governance acknowledgment for regulated industries.
+                aria-label="reviewer-workflow-panel" reserved.
+              */}
               <SnapshotContext contract={data.gap.replay_contract} assessment={data.assessment} />
               <EvidenceLineage freshnessRecords={data.gap.evidence_freshness_records} />
             </div>

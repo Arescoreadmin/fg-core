@@ -58,12 +58,9 @@ export interface Framework {
   updated_at: string;
 }
 
-export interface FrameworkListResponse {
-  items: Framework[];
-  limit: number;
-  offset: number;
-  total: number;
-}
+// All list endpoints return bare JSON arrays (list[...] in FastAPI),
+// not paginated wrappers — see api/readiness_manager.py.
+export type FrameworkListResponse = Framework[];
 
 // ---------------------------------------------------------------------------
 // Assessment types
@@ -86,12 +83,7 @@ export interface Assessment {
   archived_at: string | null;
 }
 
-export interface AssessmentListResponse {
-  items: Assessment[];
-  limit: number;
-  offset: number;
-  total: number;
-}
+export type AssessmentListResponse = Assessment[];
 
 // ---------------------------------------------------------------------------
 // Score output types (mirrors ScoreOutputResponse from api/readiness_manager.py)
@@ -312,8 +304,8 @@ export interface GapAnalysisResult {
 export async function listFrameworks(
   limit = 50,
   offset = 0,
-): Promise<SafeResult<FrameworkListResponse>> {
-  return safeGet<FrameworkListResponse>(
+): Promise<SafeResult<Framework[]>> {
+  return safeGet<Framework[]>(
     `${BFF}/control-plane/readiness/frameworks?limit=${limit}&offset=${offset}`,
   );
 }
@@ -326,10 +318,10 @@ export async function listAssessments(
   frameworkId?: string,
   limit = 50,
   offset = 0,
-): Promise<SafeResult<AssessmentListResponse>> {
+): Promise<SafeResult<Assessment[]>> {
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   if (frameworkId) params.set('framework_id', frameworkId);
-  return safeGet<AssessmentListResponse>(
+  return safeGet<Assessment[]>(
     `${BFF}/control-plane/readiness/assessments?${params}`,
   );
 }
@@ -358,8 +350,102 @@ export async function listDomains(
   frameworkId: string,
   limit = 200,
   offset = 0,
-): Promise<SafeResult<{ items: unknown[]; total: number }>> {
+): Promise<SafeResult<unknown[]>> {
   return safeGet(
     `${BFF}/control-plane/readiness/frameworks/${frameworkId}/domains?limit=${limit}&offset=${offset}`,
   );
 }
+
+// ---------------------------------------------------------------------------
+// Future seams — type stubs only, no API routes wired yet.
+// These define the shape of future surfaces without implementation.
+// ---------------------------------------------------------------------------
+
+// Gap 1 — Temporal trend visibility
+// Historical posture tracking: score movement, remediation progress, regression alerts.
+// Wire to a future GET /control-plane/readiness/assessments/{id}/score-history endpoint.
+// DOM seam: aria-label="posture-trend-panel" reserved in readiness page.
+export interface ScoreHistoryEntry {
+  computed_at: string;
+  overall_score: number;
+  normalized_score: number;
+  risk_classification: string;
+  completion_percentage: number;
+  maturity_tier: string | null;
+}
+// export async function getScoreHistory(assessmentId: string): Promise<SafeResult<ScoreHistoryEntry[]>>
+
+// Gap 2 — "Why This Matters" operational impact layer
+// Structured rationale for operators, executives, and audit teams — not AI prose.
+// Wire to future governance consequence fields on the gap analysis response.
+export interface OperationalImpact {
+  impact_id: string;
+  gap_id: string;
+  impact_domain: string; // e.g. 'availability' | 'confidentiality' | 'regulatory'
+  consequence: string;
+  regulatory_references: string[];
+  audit_relevance: string;
+}
+// Surfaced as: GapAnalysisResult.operational_impacts (future field on existing type)
+
+// Gap 3 — Cross-framework comparison and crosswalk visualization
+// assess-once → map-many: overlapping controls, inherited mappings, framework conflicts.
+// Wire to future GET /control-plane/readiness/crosswalk?framework_ids=... endpoint.
+export interface CrosswalkControlMapping {
+  source_framework_id: string;
+  target_framework_id: string;
+  source_control_id: string;
+  target_control_id: string;
+  mapping_type: string; // 'equivalent' | 'partial' | 'parent' | 'child'
+  inherited: boolean;
+}
+export interface FrameworkCrosswalk {
+  crosswalk_id: string;
+  framework_ids: string[];
+  mappings: CrosswalkControlMapping[];
+  conflict_control_ids: string[];
+  coverage_percentage: number;
+}
+// export async function getFrameworkCrosswalk(frameworkIds: string[]): Promise<SafeResult<FrameworkCrosswalk>>
+
+// Gap 4 — Reviewer workflow context
+// Signoff state, approval lineage, governance acknowledgment for regulated industries.
+// Wire to future GET /control-plane/readiness/assessments/{id}/reviewer-context endpoint.
+// DOM seam: aria-label="reviewer-workflow-panel" reserved in SnapshotContext / readiness page.
+export interface ReviewerAssignment {
+  reviewer_id: string;
+  reviewer_role: string;
+  assigned_at: string;
+  signed_off: boolean;
+  signed_off_at: string | null;
+  signoff_notes: string | null;
+}
+export interface ReviewerContext {
+  assessment_id: string;
+  workflow_state: string; // 'pending_review' | 'in_review' | 'approved' | 'rejected' | 'escalated'
+  reviewers: ReviewerAssignment[];
+  approval_lineage: string[];
+  governance_acknowledged: boolean;
+  acknowledged_at: string | null;
+}
+// export async function getReviewerContext(assessmentId: string): Promise<SafeResult<ReviewerContext>>
+
+// Gap 5 — Runtime governance correlation
+// Connect live runtime drift (retrieval degradation, provenance failures, grounding failures)
+// into readiness posture. Wire to existing runtime telemetry endpoints.
+export interface RuntimeCorrelationFactor {
+  factor_type: string; // 'retrieval_degradation' | 'provenance_failure' | 'grounding_failure' | 'policy_drift'
+  severity: string;
+  correlated_control_ids: string[];
+  event_count: number;
+  first_observed: string;
+  last_observed: string;
+  readiness_impact_estimate: number;
+}
+export interface RuntimeCorrelationSummary {
+  assessment_id: string;
+  correlated_at: string;
+  factors: RuntimeCorrelationFactor[];
+  aggregate_readiness_delta: number;
+}
+// export async function getRuntimeCorrelation(assessmentId: string): Promise<SafeResult<RuntimeCorrelationSummary>>

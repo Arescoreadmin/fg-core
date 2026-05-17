@@ -17,12 +17,11 @@ import {
   type Framework,
   type Assessment,
   type SafeResult,
-  type FrameworkListResponse,
-  type AssessmentListResponse,
 } from '@/lib/readinessApi';
 
 interface FrameworkSelectorProps {
   onAssessmentSelect: (frameworkId: string, assessmentId: string) => void;
+  onFrameworkChange?: (frameworkId: string) => void;
   selectedFrameworkId: string | null;
   selectedAssessmentId: string | null;
 }
@@ -55,11 +54,12 @@ function assessmentStatusLabel(status: string): string {
 
 export function FrameworkSelector({
   onAssessmentSelect,
+  onFrameworkChange,
   selectedFrameworkId,
   selectedAssessmentId,
 }: FrameworkSelectorProps) {
-  const [frameworksResult, setFrameworksResult] = useState<SafeResult<FrameworkListResponse> | null>(null);
-  const [assessmentsResult, setAssessmentsResult] = useState<SafeResult<AssessmentListResponse> | null>(null);
+  const [frameworksResult, setFrameworksResult] = useState<SafeResult<Framework[]> | null>(null);
+  const [assessmentsResult, setAssessmentsResult] = useState<SafeResult<Assessment[]> | null>(null);
   const [loadingFrameworks, setLoadingFrameworks] = useState(true);
   const [loadingAssessments, setLoadingAssessments] = useState(false);
   const [localFrameworkId, setLocalFrameworkId] = useState<string>(selectedFrameworkId ?? '');
@@ -101,8 +101,10 @@ export function FrameworkSelector({
   }, [localFrameworkId]);
 
   function handleFrameworkChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    setLocalFrameworkId(e.target.value);
+    const id = e.target.value;
+    setLocalFrameworkId(id);
     setLocalAssessmentId('');
+    onFrameworkChange?.(id);
   }
 
   function handleAssessmentChange(e: React.ChangeEvent<HTMLSelectElement>) {
@@ -113,10 +115,8 @@ export function FrameworkSelector({
     }
   }
 
-  const frameworks =
-    frameworksResult?.ok ? frameworksResult.data.items : [];
-  const assessments =
-    assessmentsResult?.ok ? assessmentsResult.data.items : [];
+  const frameworks = frameworksResult?.ok ? frameworksResult.data : [];
+  const assessments = assessmentsResult?.ok ? assessmentsResult.data : [];
 
   const selectedFramework = frameworks.find((f) => f.framework_id === localFrameworkId);
   const selectedAssessment = assessments.find((a) => a.assessment_id === localAssessmentId);

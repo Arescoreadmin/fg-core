@@ -91,19 +91,27 @@ test('readinessApi exports SafeResult type', () => {
   assert.match(api, /ok: false/);
 });
 
-test('readinessApi exports Framework and FrameworkListResponse', () => {
+test('readinessApi exports Framework type (list endpoints return bare arrays)', () => {
   const api = read(API);
   assert.match(api, /Framework\b/);
-  assert.match(api, /FrameworkListResponse/);
   assert.match(api, /framework_id/);
   assert.match(api, /framework_status/);
+  // FrameworkListResponse is a type alias for Framework[], not a paginated wrapper
+  assert.match(api, /FrameworkListResponse = Framework\[\]/);
 });
 
-test('readinessApi exports Assessment and AssessmentListResponse', () => {
+test('readinessApi exports Assessment type (list endpoints return bare arrays)', () => {
   const api = read(API);
   assert.match(api, /Assessment\b/);
-  assert.match(api, /AssessmentListResponse/);
+  assert.match(api, /AssessmentListResponse = Assessment\[\]/);
   assert.match(api, /assessment_status/);
+});
+
+test('readinessApi list functions return SafeResult of arrays, not wrapper objects', () => {
+  const api = read(API);
+  // listFrameworks returns Framework[], not FrameworkListResponse with .items
+  assert.match(api, /SafeResult<Framework\[\]>/);
+  assert.match(api, /SafeResult<Assessment\[\]>/);
 });
 
 test('readinessApi exports ScoreOutput with all score fields', () => {
@@ -653,6 +661,81 @@ test('risk badges use text labels not just color class names', () => {
   assert.match(overview, /Badge/);
   // Text is derived via charAt/slice or riskVariant — not color-only
   assert.match(overview, /charAt\(0\)\.toUpperCase\(\)|riskVariant/);
+});
+
+// ─── P2: stale data cleared on framework switch ────────────────────────────────
+
+test('FrameworkSelector accepts onFrameworkChange optional prop', () => {
+  const c = read(COMPONENTS.FrameworkSelector);
+  assert.match(c, /onFrameworkChange/);
+  assert.match(c, /onFrameworkChange\?\./);
+});
+
+test('page wires onFrameworkChange to clear stale dashboard data', () => {
+  const page = read(PAGE);
+  assert.match(page, /onFrameworkChange/);
+  assert.match(page, /handleFrameworkChange/);
+  // Clearing stale data: assessment ID and data reset on framework switch
+  assert.match(page, /setSelectedAssessmentId\(null\)/);
+  assert.match(page, /setData\(null\)/);
+});
+
+// ─── Architectural seams (Gaps 1–5) ──────────────────────────────────────────
+
+test('Gap 1 seam: ScoreHistoryEntry type stub present in readinessApi', () => {
+  const api = read(API);
+  assert.match(api, /ScoreHistoryEntry/);
+  assert.match(api, /posture-trend-panel/);
+});
+
+test('Gap 1 seam: posture-trend-panel slot comment present in page', () => {
+  const page = read(PAGE);
+  assert.match(page, /posture-trend-panel/);
+});
+
+test('Gap 2 seam: OperationalImpact type stub present in readinessApi', () => {
+  const api = read(API);
+  assert.match(api, /OperationalImpact/);
+  assert.match(api, /operational.impact/i);
+});
+
+test('Gap 2 seam: operational-impact-panel slot comment present in page', () => {
+  const page = read(PAGE);
+  assert.match(page, /operational-impact-panel/);
+});
+
+test('Gap 3 seam: CrosswalkControlMapping and FrameworkCrosswalk type stubs present', () => {
+  const api = read(API);
+  assert.match(api, /CrosswalkControlMapping/);
+  assert.match(api, /FrameworkCrosswalk/);
+});
+
+test('Gap 3 seam: page comment references cross-framework comparison', () => {
+  const page = read(PAGE);
+  assert.match(page, /cross-framework|crosswalk/i);
+});
+
+test('Gap 4 seam: ReviewerContext and ReviewerAssignment type stubs present', () => {
+  const api = read(API);
+  assert.match(api, /ReviewerContext/);
+  assert.match(api, /ReviewerAssignment/);
+  assert.match(api, /reviewer-workflow/);
+});
+
+test('Gap 4 seam: reviewer-workflow-panel slot comment present in page', () => {
+  const page = read(PAGE);
+  assert.match(page, /reviewer-workflow-panel/);
+});
+
+test('Gap 5 seam: RuntimeCorrelationSummary type stub present in readinessApi', () => {
+  const api = read(API);
+  assert.match(api, /RuntimeCorrelationSummary/);
+  assert.match(api, /RuntimeCorrelationFactor/);
+});
+
+test('Gap 5 seam: runtime-correlation-panel slot comment present in page', () => {
+  const page = read(PAGE);
+  assert.match(page, /runtime-correlation-panel/);
 });
 
 // ─── Regression: existing routes unmodified ───────────────────────────────────
