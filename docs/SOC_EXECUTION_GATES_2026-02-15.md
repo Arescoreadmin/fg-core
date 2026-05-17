@@ -1,3 +1,27 @@
+## 2026-05-17 — PR 88: Enterprise Framework Mapping & Crosswalk Governance Engine
+
+**Classification:** New feature — pure Python service layer. No infra, no schema migration, no CI, no auth, no API routes.
+
+**SOC review:**
+- All types are frozen dataclasses — immutable after construction; no I/O, no mutations
+- No hardcoded framework semantics — frameworks identified by ID strings, not enum
+- Mapping history is immutable: supersession creates a new record, never mutates prior records
+- Bidirectionality is explicit (is_bidirectional field) — never silently inferred
+- All metadata dicts are MappingProxyType — read-only after construction with defensive copy
+- Tenant isolation enforced in validation: cross-tenant relationship/inheritance rejected deterministically
+- Platform-level mappings (scope=PLATFORM) require tenant_id=None; tenant-scoped require non-None
+- DFS cyclic inheritance detection prevents unsound inheritance graphs
+- Orphan detection prevents relationships referencing non-existent controls/frameworks
+- No scoring logic, no AI-generated mappings, no recommendation systems
+
+**Validation:**
+- 86 pytest tests: all passed
+- mypy: no issues in 5 source files
+- ruff lint + format: all passed
+- `bash codex_gates.sh`: All gates passed
+
+---
+
 ## 2026-05-16 — PR 87: Runtime Evidence Collection & Governance Signal Extraction Layer
 
 **Classification:** New feature — pure Python read-only extraction layer. No infra, no schema, no CI, no auth changes.
