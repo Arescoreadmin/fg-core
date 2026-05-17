@@ -6,6 +6,39 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-17 — PR 88: Enterprise Framework Mapping & Crosswalk Governance Engine
+
+**Branch:** `feat/framework-mapping-crosswalk-governance`
+
+**Area:** Readiness; framework governance; audit crosswalk.
+
+**Root cause:** No implementation — new feature layer for deterministic governance mapping between regulatory frameworks (NIST AI RMF, ISO 42001, SOC2 AI, HIPAA AI, FrostGate internal).
+
+**Files changed:**
+- `services/readiness/framework_mapping/models.py` (new) — 5 enums, 9 frozen dataclasses: MappingProvenance, MappingCompatibilityRecord, MappingRelationship, ControlInheritance, FrameworkMappingVersion, FrameworkMapping, MappingValidationRecord, MappingGapRecord, CrosswalkEntry
+- `services/readiness/framework_mapping/validation.py` (new) — 4 validation functions + 3 gap detection functions + DFS cyclic inheritance detection; 11 stable reason codes
+- `services/readiness/framework_mapping/crosswalk.py` (new) — crosswalk builder + one-to-many/many-to-one mapping detection + `find_control_mappings`
+- `services/readiness/framework_mapping/__init__.py` (new) — full public API surface
+- `tests/test_framework_mapping.py` (new) — 86 tests
+
+**Design invariants:**
+- Framework identity via string IDs only — no hardcoded framework semantics
+- Well-known slug constants are informational only (not enforced)
+- All metadata dicts are MappingProxyType (frozen) with defensive copy on construction
+- Mapping history is immutable — supersession creates new records, never mutates prior
+- Bidirectionality is explicit (is_bidirectional field) — never inferred
+- Relationship semantics are explicit (9 distinct MappingRelationshipType values)
+- All functions are pure Python: no I/O, no side effects, no randomness
+- Additive: new frameworks integrate via new MappingRelationship records only
+
+**Validation:**
+- `pytest tests/test_framework_mapping.py`: 86 passed
+- `mypy`: no issues in 5 source files
+- `ruff check` + `ruff format --check`: all passed
+- `bash codex_gates.sh`: All gates passed
+
+---
+
 ### 2026-05-16 — PR 87: Runtime Evidence Collection & Governance Signal Extraction Layer
 
 **Branch:** `feat/runtime-evidence-collection-governance`
