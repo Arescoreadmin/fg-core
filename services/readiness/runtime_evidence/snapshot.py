@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Dict, Optional, Type
 
@@ -54,6 +55,8 @@ def _summary_to_canonical(summary: GovernanceSignalBody) -> dict[str, Any]:
             continue
         if hasattr(field_val, "value"):
             result[field_name] = field_val.value
+        elif isinstance(field_val, Mapping):
+            result[field_name] = dict(field_val)
         else:
             result[field_name] = field_val
     return result
@@ -81,12 +84,19 @@ def compute_snapshot_hash(
     Returns (snapshot_hash, inputs_canonical) where inputs_canonical is the
     exact JSON string that was hashed — preserved for forensic replay.
 
-    Signals are sorted by (signal_type.value, governance_source) before
-    serialization to ensure deterministic ordering regardless of input order.
+    Signals are sorted by (signal_type.value, governance_source, canonical_json)
+    before serialization to ensure deterministic ordering regardless of input
+    order. The canonical_json tie-breaker handles the case where multiple signals
+    share the same type and source (e.g. two provider-governance signals from the
+    same source for different provider_ids).
     """
     sorted_signals = sorted(
         signals,
-        key=lambda s: (s.signal_type.value, s.governance_source),
+        key=lambda s: (
+            s.signal_type.value,
+            s.governance_source,
+            json.dumps(_signal_to_canonical(s), sort_keys=True, separators=(",", ":")),
+        ),
     )
 
     canonical_obj: dict[str, Any] = {

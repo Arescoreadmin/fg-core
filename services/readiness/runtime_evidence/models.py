@@ -30,9 +30,11 @@ Future extension hooks (not implemented):
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from types import MappingProxyType
 from typing import Any, Optional, Union
 
 
@@ -149,11 +151,15 @@ class RetrievalSignalSummary:
     grounded_context_required: bool
     reason_code: str
     lexical_fallback_used: bool
-    summary_metadata: dict[str, Any] = None  # type: ignore[assignment]
+    summary_metadata: Mapping[str, Any] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
-        if self.summary_metadata is None:
-            object.__setattr__(self, "summary_metadata", {})
+        meta = self.summary_metadata
+        object.__setattr__(
+            self,
+            "summary_metadata",
+            MappingProxyType(dict(meta) if meta is not None else {}),
+        )
 
 
 @dataclass(frozen=True)
@@ -219,11 +225,15 @@ class PolicySignalSummary:
     validation_state: ValidationState
     replay_ready: bool
     policy_version: Optional[str]
-    policy_metadata: dict[str, Any] = None  # type: ignore[assignment]
+    policy_metadata: Mapping[str, Any] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
-        if self.policy_metadata is None:
-            object.__setattr__(self, "policy_metadata", {})
+        meta = self.policy_metadata
+        object.__setattr__(
+            self,
+            "policy_metadata",
+            MappingProxyType(dict(meta) if meta is not None else {}),
+        )
 
 
 @dataclass(frozen=True)
@@ -253,11 +263,15 @@ class OperationalGovernanceSignalSummary:
     secret_governance_active: bool
     retention_policy_active: bool
     export_controls_active: bool
-    ops_metadata: dict[str, Any] = None  # type: ignore[assignment]
+    ops_metadata: Mapping[str, Any] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
-        if self.ops_metadata is None:
-            object.__setattr__(self, "ops_metadata", {})
+        meta = self.ops_metadata
+        object.__setattr__(
+            self,
+            "ops_metadata",
+            MappingProxyType(dict(meta) if meta is not None else {}),
+        )
 
 
 # Union type for all signal body types — exhaustive by design.
@@ -305,11 +319,15 @@ class RuntimeGovernanceSignal:
     governance_source: str
     signal_summary: GovernanceSignalBody
     extractor_version: str
-    signal_metadata: dict[str, Any] = None  # type: ignore[assignment]
+    signal_metadata: Mapping[str, Any] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
-        if self.signal_metadata is None:
-            object.__setattr__(self, "signal_metadata", {})
+        meta = self.signal_metadata
+        object.__setattr__(
+            self,
+            "signal_metadata",
+            MappingProxyType(dict(meta) if meta is not None else {}),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -344,8 +362,12 @@ class RuntimeEvidenceSnapshot:
     inputs_canonical: str
     created_at: datetime
     assessment_id: Optional[str] = None
-    snapshot_metadata: dict[str, Any] = None  # type: ignore[assignment]
+    snapshot_metadata: Mapping[str, Any] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
-        if self.snapshot_metadata is None:
-            object.__setattr__(self, "snapshot_metadata", {})
+        meta = self.snapshot_metadata
+        object.__setattr__(
+            self,
+            "snapshot_metadata",
+            MappingProxyType(dict(meta) if meta is not None else {}),
+        )

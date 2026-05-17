@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timezone
+from typing import Any
 
 import pytest
 
@@ -1006,6 +1007,145 @@ def test_snapshot_metadata_defaults_to_empty_dict() -> None:
         created_at=_NOW,
     )
     assert snap.snapshot_metadata == {}
+
+
+# ---------------------------------------------------------------------------
+# Bug regression: metadata dicts are read-only (MappingProxyType) — Bug 2
+# ---------------------------------------------------------------------------
+
+
+def test_retrieval_summary_metadata_is_read_only() -> None:
+    sig = extract_retrieval_signal(
+        signal_id=_SIGNAL_ID,
+        tenant_id=_TENANT,
+        extraction_id=_EXTRACTION_ID,
+        extracted_at=_NOW,
+        governance_source="services.retrieval",
+        retrieval_enabled=True,
+        enforcement_state=EnforcementState.ENABLED,
+        effective_strategy="dense",
+        corpus_count=10,
+        grounded_context_required=True,
+        reason_code="OK",
+        lexical_fallback_used=False,
+    )
+    s = sig.signal_summary
+    assert isinstance(s, RetrievalSignalSummary)
+    with pytest.raises(TypeError):
+        s.summary_metadata["injected"] = "bad"  # type: ignore[index]
+
+
+def test_policy_metadata_is_read_only() -> None:
+    sig = extract_policy_signal(
+        signal_id=_SIGNAL_ID,
+        tenant_id=_TENANT,
+        extraction_id=_EXTRACTION_ID,
+        extracted_at=_NOW,
+        governance_source="services.policy_engine",
+        enforcement_enabled=True,
+        validation_state=ValidationState.VALID,
+        replay_ready=True,
+        policy_version="1.0",
+    )
+    s = sig.signal_summary
+    assert isinstance(s, PolicySignalSummary)
+    with pytest.raises(TypeError):
+        s.policy_metadata["injected"] = "bad"  # type: ignore[index]
+
+
+def test_ops_metadata_is_read_only() -> None:
+    sig = extract_operational_governance_signal(
+        signal_id=_SIGNAL_ID,
+        tenant_id=_TENANT,
+        extraction_id=_EXTRACTION_ID,
+        extracted_at=_NOW,
+        governance_source="services.ops_governance",
+        environment_state="production",
+        secret_governance_active=True,
+        retention_policy_active=True,
+        export_controls_active=True,
+    )
+    s = sig.signal_summary
+    assert isinstance(s, OperationalGovernanceSignalSummary)
+    with pytest.raises(TypeError):
+        s.ops_metadata["injected"] = "bad"  # type: ignore[index]
+
+
+def test_signal_metadata_is_read_only() -> None:
+    sig = _make_provenance_signal()
+    with pytest.raises(TypeError):
+        sig.signal_metadata["injected"] = "bad"  # type: ignore[index]
+
+
+def test_metadata_dict_mutation_after_construction_does_not_affect_stored_content() -> (
+    None
+):
+    """Caller mutating their dict after passing it to the constructor must not
+    affect the stored summary_metadata (defensive copy on construction)."""
+    caller_meta: dict[str, Any] = {"key": "original"}
+    summary = RetrievalSignalSummary(
+        retrieval_enabled=True,
+        enforcement_state=EnforcementState.ENABLED,
+        effective_strategy="dense",
+        corpus_count=10,
+        grounded_context_required=True,
+        reason_code="OK",
+        lexical_fallback_used=False,
+        summary_metadata=caller_meta,
+    )
+    caller_meta["key"] = "mutated"
+    assert summary.summary_metadata["key"] == "original"
+
+
+# ---------------------------------------------------------------------------
+# Bug regression: sort tie-breaker for same type + same source — Bug 1
+# ---------------------------------------------------------------------------
+
+
+def test_snapshot_hash_stable_for_same_type_same_source_different_summaries() -> None:
+    """Two provider-governance signals from the same source with different
+    provider_ids must hash identically regardless of insertion order."""
+    sig_a = extract_provider_governance_signal(
+        signal_id="sig-prov-a",
+        tenant_id=_TENANT,
+        extraction_id=_EXTRACTION_ID,
+        extracted_at=_NOW,
+        governance_source="services.provider_baa",
+        provider_id="provider-openai",
+        governance_state=ProviderGovernanceState.APPROVED,
+        phi_detected=False,
+        phi_type_count=0,
+        baa_enforced=True,
+        enforcement_action="ALLOW",
+        reason_code="OK",
+    )
+    sig_b = extract_provider_governance_signal(
+        signal_id="sig-prov-b",
+        tenant_id=_TENANT,
+        extraction_id=_EXTRACTION_ID,
+        extracted_at=_NOW,
+        governance_source="services.provider_baa",
+        provider_id="provider-anthropic",
+        governance_state=ProviderGovernanceState.APPROVED,
+        phi_detected=False,
+        phi_type_count=0,
+        baa_enforced=True,
+        enforcement_action="ALLOW",
+        reason_code="OK",
+    )
+    snap_ab = build_runtime_evidence_snapshot(
+        snapshot_id="snap-ab",
+        tenant_id=_TENANT,
+        signals=(sig_a, sig_b),
+        created_at=_NOW,
+    )
+    snap_ba = build_runtime_evidence_snapshot(
+        snapshot_id="snap-ba",
+        tenant_id=_TENANT,
+        signals=(sig_b, sig_a),
+        created_at=_NOW,
+    )
+    assert snap_ab.snapshot_hash == snap_ba.snapshot_hash
 
 
 # ---------------------------------------------------------------------------
