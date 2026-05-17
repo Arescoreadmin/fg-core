@@ -69,10 +69,13 @@ test('index.ts exports deriveTrustLevel and buildProvenanceExportSummary', () =>
   assert.match(idx, /deriveCitationsFromProvenance/);
 });
 
-test('provenance page imports and uses ProvenanceValidationPanel', () => {
+test('provenance page is the evidence explorer (graduated in PR 92)', () => {
+  // ProvenanceValidationPanel is used in the AI workspace per-citation context;
+  // the provenance page is now the full evidence investigation console (PR 92).
   const page = read(PROVENANCE_PAGE);
-  assert.match(page, /ProvenanceValidationPanel/);
-  assert.match(page, /from.*@\/components\/governance/);
+  assert.match(page, /EvidenceTimeline/);
+  assert.match(page, /AuditChainPanel/);
+  assert.match(page, /'use client'/);
 });
 
 // ─── Component signature ──────────────────────────────────────────────────────
@@ -666,20 +669,21 @@ test('provenance validation panel truncates long IDs safely', () => {
 
 // ─── Provenance page integration ─────────────────────────────────────────────
 
-test('provenance page renders ProvenanceValidationPanel', () => {
+test('provenance page is the evidence investigation console (PR 92)', () => {
+  // Graduated in PR 92: provenance page is now a full evidence explorer.
+  // ProvenanceValidationPanel remains available for AI workspace per-citation use.
   const page = read(PROVENANCE_PAGE);
-  assert.match(page, /ProvenanceValidationPanel/);
-  assert.match(page, /provenance=\{null\}/);
   assert.match(page, /provenance-page/);
-  assert.match(page, /provenance-validation-card/);
+  assert.match(page, /EvidenceTimeline/);
+  assert.match(page, /ProvenanceStatusPanel/);
+  assert.match(page, /AuditChainPanel/);
 });
 
-test('provenance page renders capability overview', () => {
+test('provenance page evidence explorer has investigation filters and audit chain', () => {
   const page = read(PROVENANCE_PAGE);
-  assert.match(page, /provenance-capability-list/);
-  assert.match(page, /Citation validation state/);
-  assert.match(page, /rejection reason/);
-  assert.match(page, /Export-safe summary/);
+  assert.match(page, /InvestigationFilters/);
+  assert.match(page, /LinkedControlsPanel/);
+  assert.match(page, /ChainOfCustodyPanel/);
 });
 
 // ─── Existing tests smoke checks ──────────────────────────────────────────────

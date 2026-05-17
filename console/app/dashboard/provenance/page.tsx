@@ -1,12 +1,77 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { TopBar } from '@/components/layout/TopBar';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { ProvenanceValidationPanel } from '@/components/governance';
+import {
+  type EvidenceReference,
+  type EvidenceFilterState,
+  DEFAULT_FILTERS,
+  listEvidence,
+  applyEvidenceFilters,
+  collectFilterOptions,
+} from '@/lib/evidenceApi';
+import {
+  AuditChainPanel,
+  ChainOfCustodyPanel,
+  EvidenceDetailPanel,
+  EvidenceTimeline,
+  InvestigationFilters,
+  LinkedControlsPanel,
+  ProvenanceStatusPanel,
+  SnapshotReplayPanel,
+} from '@/components/evidence';
+
+const DEFAULT_ASSESSMENT_ID = process.env.NEXT_PUBLIC_DEFAULT_ASSESSMENT_ID ?? '';
 
 export default function ProvenancePage() {
+  const [allItems, setAllItems] = useState<EvidenceReference[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [filters, setFilters] = useState<EvidenceFilterState>(DEFAULT_FILTERS);
+  const [assessmentId] = useState<string>(DEFAULT_ASSESSMENT_ID);
+
+  useEffect(() => {
+    if (!assessmentId) return;
+    let cancelled = false;
+    setLoading(true);
+    setFetchError(null);
+
+    listEvidence(assessmentId, 200, 0).then((result) => {
+      if (cancelled) return;
+      if (!result.ok) {
+        setFetchError(result.error);
+      } else {
+        setAllItems(result.data);
+      }
+      setLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [assessmentId]);
+
+  const { evidenceTypes, classifications } = useMemo(
+    () => collectFilterOptions(allItems),
+    [allItems],
+  );
+
+  const filtered = useMemo(() => applyEvidenceFilters(allItems, filters), [allItems, filters]);
+
+  const selectedEvidence = useMemo(
+    () => filtered.find((e) => e.evidence_id === selectedId) ?? null,
+    [filtered, selectedId],
+  );
+
+  const handleSelect = useCallback((id: string) => {
+    setSelectedId(id);
+  }, []);
+
   return (
     <div className="flex flex-col" aria-label="provenance-page">
-      <TopBar title="Provenance" subtitle="Source attribution and citation validation" />
+      <TopBar title="Evidence Explorer" subtitle="Provenance investigation and audit chain review" />
       <div className="space-y-4 p-6">
 
         {/* Page header */}
@@ -14,79 +79,86 @@ export default function ProvenancePage() {
           <ShieldCheck className="h-5 w-5 text-primary" aria-hidden="true" />
           <div>
             <h1 className="text-sm font-semibold text-foreground">
-              Provenance Validation
+              Enterprise Evidence Investigation Console
             </h1>
-            <p className="text-xs text-muted">
-              Operator-readable proof that answer citations are valid, rejected, or unavailable.
+            <p className="text-xs text-muted-foreground">
+              Operator-grade provenance investigation, audit chain review, and chain-of-custody
+              readiness. All trust decisions are server-authoritative.
             </p>
           </div>
         </div>
 
-        {/* Provenance validation panel */}
-        <Card aria-label="provenance-validation-card">
-          <CardHeader className="pb-2">
-            <h2 className="text-xs font-semibold text-foreground">
-              Citation Validation Status
-            </h2>
-            <p className="text-[10px] text-muted">
-              Use the AI Workspace to generate a response. Per-response provenance validation
-              results appear in that view. This route provides a dedicated provenance explorer.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <ProvenanceValidationPanel provenance={null} />
-          </CardContent>
-        </Card>
+        {/* Error state */}
+        {fetchError && (
+          <div
+            className="rounded border border-risk-critical/30 bg-risk-critical/10 px-4 py-3 text-xs text-risk-critical"
+            aria-label="evidence-fetch-error"
+          >
+            {fetchError === 'Network error — core unreachable'
+              ? 'Evidence API is unreachable. Check backend connectivity.'
+              : fetchError}
+          </div>
+        )}
 
-        {/* Module status — preserved for shell contract */}
-        <Card>
-          <CardContent className="pt-6">
-            <div
-              className="flex flex-col items-center gap-3 py-6 text-center"
-              aria-label="module-not-configured"
-            >
-              <ShieldCheck className="h-8 w-8 text-muted/40" aria-hidden="true" />
-              <p className="text-sm font-medium text-foreground">
-                Provenance explorer not yet configured
-              </p>
-              <p className="max-w-sm text-xs text-muted">
-                Full provenance history and per-session citation audit explorer workflows
-                are not yet configured for this deployment. The validation panel above
-                reflects real-time results from AI Workspace queries.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Loading state */}
+        {loading && (
+          <div
+            className="text-xs text-muted-foreground"
+            aria-label="evidence-loading"
+          >
+            Loading evidence…
+          </div>
+        )}
 
-        {/* Capability overview */}
-        <Card aria-label="provenance-capability-overview">
-          <CardContent className="pt-4">
-            <h2 className="mb-3 text-xs font-semibold text-foreground">
-              Provenance Validation Capabilities
-            </h2>
-            <ul
-              className="space-y-2 text-xs text-muted"
-              aria-label="provenance-capability-list"
-            >
-              {[
-                'Citation validation state: valid, invalid, rejected, unavailable, no-context',
-                'Per-citation rejection reason with machine-readable reason code',
-                'Retrieved vs prompt-included vs cited chunk distinction',
-                'Provenance trust status derived from validation result',
-                'Export-safe summary: no raw vectors, no prompts, no secrets',
-                'Conservative legal/compliance wording — no implied approval',
-              ].map(item => (
-                <li key={item} className="flex items-start gap-1.5">
-                  <span
-                    className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/40"
-                    aria-hidden="true"
-                  />
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+        {/* Filters */}
+        {!loading && !fetchError && assessmentId && (
+          <InvestigationFilters
+            filters={filters}
+            onChange={setFilters}
+            evidenceTypes={evidenceTypes}
+            classifications={classifications}
+            totalCount={allItems.length}
+            filteredCount={filtered.length}
+          />
+        )}
+
+        {/* No assessment configured */}
+        {!assessmentId && (
+          <div
+            className="rounded border border-border bg-surface-2 px-4 py-6 text-center text-xs text-muted-foreground"
+            aria-label="evidence-no-assessment"
+          >
+            No assessment configured. Set NEXT_PUBLIC_DEFAULT_ASSESSMENT_ID to load evidence.
+          </div>
+        )}
+
+        {/* Audit chain — always visible, fetches independently */}
+        <AuditChainPanel />
+
+        {/* Main investigation layout */}
+        <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+          {/* Left: timeline */}
+          <EvidenceTimeline
+            items={filtered}
+            selectedId={selectedId}
+            onSelect={handleSelect}
+          />
+
+          {/* Right: detail panels */}
+          <div className="space-y-4">
+            <EvidenceDetailPanel evidence={selectedEvidence} />
+            <ProvenanceStatusPanel evidence={selectedEvidence} />
+            <LinkedControlsPanel evidence={selectedEvidence} />
+            <ChainOfCustodyPanel evidence={selectedEvidence} />
+            <SnapshotReplayPanel evidence={selectedEvidence} assessmentId={assessmentId || null} />
+          </div>
+        </div>
+
+        {/* Legal review seam — Gap B */}
+        {/* aria-label="legal-review-panel" reserved */}
+
+        {/* Signed evidence seam — Gap C */}
+        {/* aria-label="signed-evidence-panel" reserved */}
 
       </div>
     </div>

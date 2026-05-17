@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 263,
+    "contract_count": 267,
     "contract_only": [],
-    "runtime_count": 367,
+    "runtime_count": 371,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -141,7 +141,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "8d6b6dfc0aa9b7531bd34861ad10253166a3f24f5ae80cbdc64255ce5c1bdb98",
+  "governance_fingerprint": "3833d0d33095f4527f96867f6ce6e4f5c1d7052adeb6f295a62901a219280006",
   "planes": [
     {
       "compat": {
@@ -398,8 +398,11 @@
       "GET /control-plane/readiness/assessments",
       "GET /control-plane/readiness/assessments/{assessment_id}",
       "GET /control-plane/readiness/assessments/{assessment_id}/evidence",
+      "GET /control-plane/readiness/assessments/{assessment_id}/gap-analysis",
       "GET /control-plane/readiness/assessments/{assessment_id}/results",
       "GET /control-plane/readiness/assessments/{assessment_id}/score",
+      "GET /control-plane/readiness/controls/{control_id}",
+      "GET /control-plane/readiness/domains/{domain_id}",
       "GET /control-plane/readiness/frameworks",
       "GET /control-plane/readiness/frameworks/{framework_id}",
       "GET /control-plane/readiness/frameworks/{framework_id}/controls",
@@ -407,6 +410,7 @@
       "GET /control-plane/readiness/frameworks/{framework_id}/maturity-tiers",
       "GET /control-plane/readiness/frameworks/{framework_id}/scoring-contracts",
       "GET /control-plane/readiness/frameworks/{framework_id}/versions",
+      "GET /control-plane/readiness/maturity-tiers/{tier_id}",
       "GET /control-plane/readiness/scoring-contracts/{contract_id}",
       "GET /control-plane/v2/ai/namespace",
       "GET /control-plane/v2/commands",
