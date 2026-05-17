@@ -3379,3 +3379,20 @@ None. All changes are behavioral hardening of existing PR 90 endpoints.
 - Replay caching: `result_id` determinism makes caching feasible; caching boundary not yet implemented.
 - Governance-admin / regulator-review gap analysis: requires explicit future design; intentionally blocked at platform-key guard.
 - Maturity-tier overlay isolation test: covered by store-layer tests; no dedicated API-layer test for tier overlays.
+
+---
+
+## 2026-05-17 — Route Inventory Regeneration (PR 90 routes)
+
+**Trigger:** `make route-inventory-generate` required after PR 90 added 4 new GET endpoints.
+
+### Routes added to inventory
+
+- `GET /control-plane/readiness/assessments/{assessment_id}/gap-analysis` (`api/readiness_gap_analysis_manager.py`)
+- `GET /control-plane/readiness/controls/{control_id}` (`api/readiness_manager.py`)
+- `GET /control-plane/readiness/domains/{domain_id}` (`api/readiness_manager.py`)
+- `GET /control-plane/readiness/maturity-tiers/{tier_id}` (`api/readiness_manager.py`)
+
+### Compliance posture
+
+All 4 routes are read-only (`GET`), gated behind `control-plane:read` scope, and tenant-isolated. No new write paths, no schema changes, no new auth surfaces. The route inventory, plane registry snapshot, contract routes, and topology hash have been regenerated to reflect current state. `make fg-contract` passes with no stale artifacts.
