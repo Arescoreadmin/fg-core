@@ -3290,3 +3290,109 @@ None. This PR adds a pure Python contract layer only — no new API endpoints.
 - All failure reason codes are stable string constants — tests may assert specific codes without brittleness.
 - No secrets, credentials, raw document bodies, OCR text, embeddings, signed URLs, or internal storage paths in any model.
 - No schema changes: no new ORM tables, no migration required.
+
+---
+
+## 2026-05-17 — PR 90: Enterprise Readiness Control Plane API & Contract Surface
+
+**Branch:** `feat/readiness-control-plane-api`
+
+### Summary
+
+Implements the Enterprise Readiness Control Plane API & Contract Surface: a fully tenant-isolated, export-safe, deterministic gap analysis API endpoint plus GET endpoints for domains, controls, and maturity tiers. No new ORM tables or migrations. Pydantic response models all use `extra="ignore"` and omit `tenant_id`, raw evidence bodies, `inputs_canonical`, and internal topology. Gap analysis is pure computation: result is not persisted.
+
+### Routes added
+
+- `GET /control-plane/readiness/assessments/{assessment_id}/gap-analysis` — requires `control-plane:read`, tenant context required (403 without tenant); runs ReadinessScoreEngine → GapAnalysisEngine on demand
+- `GET /control-plane/readiness/domains/{domain_id}` — requires `control-plane:read`
+- `GET /control-plane/readiness/controls/{control_id}` — requires `control-plane:read`
+- `GET /control-plane/readiness/maturity-tiers/{tier_id}` — requires `control-plane:read`
+
+### Gate results
+
+- `ruff check` + `ruff format --check`: all checks passed
+- `mypy api/readiness_gap_analysis_manager.py api/readiness_manager.py tests/test_readiness_gap_analysis_manager.py --ignore-missing-imports`: no errors
+- `pytest tests/test_readiness_gap_analysis_manager.py`: 24 passed
+- `pytest -x -q` (full suite): 4773 passed, 29 skipped
+
+### Compliance posture
+
+- Tenant isolation enforced at every layer: `tenant_id` always taken from `request.state.auth.tenant_id`; platform-scoped keys (no tenant) receive 403; cross-tenant assessments return 404.
+- Export-safe responses: `inputs_canonical`, `tenant_id`, raw evidence bodies, stack traces, ORM internals, and internal topology are never included in any response model.
+- Gap analysis is pure computation: no new DB writes; result ID carries `uuid4` entropy; `inputs_canonical` is replay-internal only.
+- SHA-256 integrity hashing is deterministic over stable fields; hash inputs exclude timestamps and mutable metadata.
+- Error codes are stable string constants (`READY-GAP-001..004`, `READY-API-XXX`) — test assertions bind to codes, not messages.
+- All mutations (framework lifecycle, domain/control/tier creation) remain gated behind `control-plane:admin` scope — new routes add only read paths.
+- No schema changes: no new ORM tables, no migration required.
+- Framework immutability contract respected in tests: domains/controls are created on DRAFT frameworks before activation.
+
+---
+
+## 2026-05-17 — PR 90 Addendum: Tenant-Safe Readiness API & Deterministic Gap Replay Hardening
+
+**Branch:** `feat/readiness-control-plane-api`
+
+### Summary
+
+Hardens the PR 90 gap analysis API against ten categories of enterprise security and governance gaps. Primary fixes: tenant_id now passed to all framework metadata reads (prevents cross-tenant overlay leakage), gap result IDs are now deterministic (SHA-256 over stable governance inputs, enabling forensic replay), pagination is bounded by `_MAX_FETCH_PAGES=100`, and contract authority markers are regenerated and current.
+
+### Routes changed
+
+None. All changes are behavioral hardening of existing PR 90 endpoints.
+
+### Gate results
+
+- `ruff check` + `ruff format --check`: all checks passed
+- `mypy api/readiness_gap_analysis_manager.py api/readiness_manager.py tests/test_readiness_gap_analysis_manager.py --ignore-missing-imports`: 0 errors
+- `pytest tests/test_readiness_gap_analysis_manager.py`: 31 passed (7 new tests)
+- `make fg-contract`: PASS (authority markers refreshed; no OpenAPI schema drift from behavioral changes)
+
+### Compliance posture
+
+**Tenant isolation (Fix 2):**
+- `get_framework`, `list_domains`, `list_controls`, `list_maturity_tiers` now all receive `tenant_id=tenant_id` from auth context.
+- Store semantics: `tenant_id=T` filter returns `(tenant_id=T OR tenant_id=NULL)` — platform records (tenant_id=NULL) remain visible to all tenants; tenant-specific overlays from other tenants are excluded.
+- Regression test: `test_cross_tenant_overlay_isolation` — shared platform framework, alpha/beta overlays, verifies beta IDs cannot appear in alpha's gap result.
+
+**Deterministic artifact identity (Fix 3):**
+- `result_id` derives from `SHA-256(assessment_id + framework_id + framework_version_tag + score_version + scoring_contract_version)`. No random entropy, no timestamps, no request correlation IDs.
+- Same inputs always produce the same `result_id` — enables forensic replay and result deduplication.
+- `tenant_id` is never encoded in `result_id`.
+
+**Pagination safety (Fix 7):**
+- `_MAX_FETCH_PAGES = 100` hard cap prevents unbounded iteration against pathological stores.
+- `_fetch_all` uses `for _ in range(_MAX_FETCH_PAGES)` — terminates on empty page or cap, whichever comes first.
+
+**Response model convention (Fix 4):**
+- Response models retain `extra="ignore"` per repo-wide convention (request models use `extra="forbid"`).
+- The `from_domain()` explicit field enumeration is the fail-closed mechanism: no unexpected domain field can reach the serialization layer.
+- No `inputs_canonical`, no `tenant_id`, no raw evidence, no stack traces in any response.
+
+**Platform-scope boundary (Fix 8):**
+- Platform-scoped keys intentionally rejected at the tenant guard (403). Documented in code: future governance-admin / regulator-review / multi-tenant export roles require explicit design and must not fall through into tenant-scoped paths.
+
+**Contract authority (Fix 1):**
+- `make contract-authority-refresh` run; `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `contracts/core/openapi.json`, `schemas/api/openapi.json` updated with current SHA-256 authority marker.
+- `make fg-contract` passes with no stale artifacts.
+
+**Known deferred items (documented, not overclaimed):**
+- Replay caching: `result_id` determinism makes caching feasible; caching boundary not yet implemented.
+- Governance-admin / regulator-review gap analysis: requires explicit future design; intentionally blocked at platform-key guard.
+- Maturity-tier overlay isolation test: covered by store-layer tests; no dedicated API-layer test for tier overlays.
+
+---
+
+## 2026-05-17 — Route Inventory Regeneration (PR 90 routes)
+
+**Trigger:** `make route-inventory-generate` required after PR 90 added 4 new GET endpoints.
+
+### Routes added to inventory
+
+- `GET /control-plane/readiness/assessments/{assessment_id}/gap-analysis` (`api/readiness_gap_analysis_manager.py`)
+- `GET /control-plane/readiness/controls/{control_id}` (`api/readiness_manager.py`)
+- `GET /control-plane/readiness/domains/{domain_id}` (`api/readiness_manager.py`)
+- `GET /control-plane/readiness/maturity-tiers/{tier_id}` (`api/readiness_manager.py`)
+
+### Compliance posture
+
+All 4 routes are read-only (`GET`), gated behind `control-plane:read` scope, and tenant-isolated. No new write paths, no schema changes, no new auth surfaces. The route inventory, plane registry snapshot, contract routes, and topology hash have been regenerated to reflect current state. `make fg-contract` passes with no stale artifacts.

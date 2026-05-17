@@ -37,6 +37,7 @@ from api.deployment_manager import router as deployment_manager_router
 from api.ops_governance_manager import router as ops_governance_router
 from api.provisioning_manager import router as provisioning_router
 from api.readiness_manager import router as readiness_router
+from api.readiness_gap_analysis_manager import router as readiness_gap_analysis_router
 from api.control_plane_v2 import router as control_plane_v2_router
 from api.control_tower_snapshot import router as control_tower_snapshot_router
 from api.decisions import router as decisions_router
@@ -595,6 +596,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(provisioning_router)
     app.include_router(ops_governance_router)
     app.include_router(readiness_router)
+    app.include_router(readiness_gap_analysis_router)
     app.include_router(control_plane_router)
     app.include_router(control_plane_v2_router)
     app.include_router(control_tower_snapshot_router)
@@ -908,6 +910,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(provisioning_router)
     app.include_router(ops_governance_router)
     app.include_router(readiness_router)
+    app.include_router(readiness_gap_analysis_router)
     app.include_router(control_plane_router)
     app.include_router(control_plane_v2_router)
     app.include_router(control_tower_snapshot_router)

@@ -1341,6 +1341,47 @@
         "title": "CommandRequest",
         "type": "object"
       },
+      "CompensatingControlResponse": {
+        "properties": {
+          "approved_at": {
+            "title": "Approved At",
+            "type": "string"
+          },
+          "approved_by": {
+            "title": "Approved By",
+            "type": "string"
+          },
+          "compensating_id": {
+            "title": "Compensating Id",
+            "type": "string"
+          },
+          "framework_applicability": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Framework Applicability",
+            "type": "array"
+          },
+          "gap_id": {
+            "title": "Gap Id",
+            "type": "string"
+          },
+          "mitigation_rationale": {
+            "title": "Mitigation Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "compensating_id",
+          "gap_id",
+          "mitigation_rationale",
+          "framework_applicability",
+          "approved_by",
+          "approved_at"
+        ],
+        "title": "CompensatingControlResponse",
+        "type": "object"
+      },
       "CompleteWorkflowRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2858,6 +2899,40 @@
         "title": "DelegationRevokeRequest",
         "type": "object"
       },
+      "DependencyChainResponse": {
+        "properties": {
+          "chain_id": {
+            "title": "Chain Id",
+            "type": "string"
+          },
+          "cycle_gap_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Cycle Gap Ids",
+            "type": "array"
+          },
+          "has_cycle": {
+            "title": "Has Cycle",
+            "type": "boolean"
+          },
+          "ordered_gap_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ordered Gap Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "chain_id",
+          "ordered_gap_ids",
+          "has_cycle",
+          "cycle_gap_ids"
+        ],
+        "title": "DependencyChainResponse",
+        "type": "object"
+      },
       "DeploymentSpecRequest": {
         "additionalProperties": false,
         "description": "Immutable spec snapshot captured at deployment creation.",
@@ -3570,6 +3645,78 @@
           "created_at"
         ],
         "title": "EvidenceBundleCreateResponse",
+        "type": "object"
+      },
+      "EvidenceFreshnessRecordResponse": {
+        "properties": {
+          "control_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Control Id"
+          },
+          "evaluated_at": {
+            "title": "Evaluated At",
+            "type": "string"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "framework_version": {
+            "title": "Framework Version",
+            "type": "string"
+          },
+          "freshness_id": {
+            "title": "Freshness Id",
+            "type": "string"
+          },
+          "freshness_window_days": {
+            "title": "Freshness Window Days",
+            "type": "integer"
+          },
+          "is_stale": {
+            "title": "Is Stale",
+            "type": "boolean"
+          },
+          "staleness_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Staleness Days"
+          },
+          "submitted_at": {
+            "title": "Submitted At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "freshness_id",
+          "evidence_id",
+          "control_id",
+          "framework_id",
+          "framework_version",
+          "submitted_at",
+          "freshness_window_days",
+          "is_stale",
+          "staleness_days",
+          "evaluated_at"
+        ],
+        "title": "EvidenceFreshnessRecordResponse",
         "type": "object"
       },
       "EvidenceReferenceResponse": {
@@ -4489,6 +4636,259 @@
         "title": "FrameworkVersionResponse",
         "type": "object"
       },
+      "GapAnalysisResultResponse": {
+        "properties": {
+          "analysis_version": {
+            "title": "Analysis Version",
+            "type": "string"
+          },
+          "analyzed_at": {
+            "title": "Analyzed At",
+            "type": "string"
+          },
+          "assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Id"
+          },
+          "compensating_controls": {
+            "items": {
+              "$ref": "#/components/schemas/CompensatingControlResponse"
+            },
+            "title": "Compensating Controls",
+            "type": "array"
+          },
+          "dependency_chains": {
+            "items": {
+              "$ref": "#/components/schemas/DependencyChainResponse"
+            },
+            "title": "Dependency Chains",
+            "type": "array"
+          },
+          "evidence_freshness_records": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceFreshnessRecordResponse"
+            },
+            "title": "Evidence Freshness Records",
+            "type": "array"
+          },
+          "evidence_snapshot_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Snapshot Version"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "framework_version": {
+            "title": "Framework Version",
+            "type": "string"
+          },
+          "gaps": {
+            "items": {
+              "$ref": "#/components/schemas/ReadinessGapResponse"
+            },
+            "title": "Gaps",
+            "type": "array"
+          },
+          "governance_overrides": {
+            "items": {
+              "$ref": "#/components/schemas/GovernanceOverrideResponse"
+            },
+            "title": "Governance Overrides",
+            "type": "array"
+          },
+          "impact_estimates": {
+            "items": {
+              "$ref": "#/components/schemas/ReadinessImpactEstimateResponse"
+            },
+            "title": "Impact Estimates",
+            "type": "array"
+          },
+          "mapping_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping Version"
+          },
+          "maturity_blockers": {
+            "items": {
+              "$ref": "#/components/schemas/MaturityBlockerResponse"
+            },
+            "title": "Maturity Blockers",
+            "type": "array"
+          },
+          "maturity_model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maturity Model Version"
+          },
+          "policy_exceptions": {
+            "items": {
+              "$ref": "#/components/schemas/PolicyExceptionResponse"
+            },
+            "title": "Policy Exceptions",
+            "type": "array"
+          },
+          "readiness_blockers": {
+            "items": {
+              "$ref": "#/components/schemas/ReadinessBlockerResponse"
+            },
+            "title": "Readiness Blockers",
+            "type": "array"
+          },
+          "remediation_recommendations": {
+            "items": {
+              "$ref": "#/components/schemas/RemediationRecommendationResponse"
+            },
+            "title": "Remediation Recommendations",
+            "type": "array"
+          },
+          "replay_contract": {
+            "$ref": "#/components/schemas/GapReplayContractResponse"
+          },
+          "result_id": {
+            "title": "Result Id",
+            "type": "string"
+          },
+          "scoring_contract_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scoring Contract Version"
+          }
+        },
+        "required": [
+          "result_id",
+          "assessment_id",
+          "framework_id",
+          "framework_version",
+          "analysis_version",
+          "analyzed_at",
+          "gaps",
+          "readiness_blockers",
+          "maturity_blockers",
+          "dependency_chains",
+          "remediation_recommendations",
+          "impact_estimates",
+          "policy_exceptions",
+          "compensating_controls",
+          "governance_overrides",
+          "evidence_freshness_records",
+          "replay_contract",
+          "scoring_contract_version",
+          "maturity_model_version",
+          "mapping_version",
+          "evidence_snapshot_version"
+        ],
+        "title": "GapAnalysisResultResponse",
+        "type": "object"
+      },
+      "GapReplayContractResponse": {
+        "properties": {
+          "analysis_version": {
+            "title": "Analysis Version",
+            "type": "string"
+          },
+          "contract_id": {
+            "title": "Contract Id",
+            "type": "string"
+          },
+          "evidence_snapshot_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Snapshot Version"
+          },
+          "framework_version": {
+            "title": "Framework Version",
+            "type": "string"
+          },
+          "mapping_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping Version"
+          },
+          "maturity_model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maturity Model Version"
+          },
+          "result_id": {
+            "title": "Result Id",
+            "type": "string"
+          },
+          "scoring_contract_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scoring Contract Version"
+          }
+        },
+        "required": [
+          "contract_id",
+          "result_id",
+          "framework_version",
+          "analysis_version",
+          "scoring_contract_version",
+          "maturity_model_version",
+          "mapping_version",
+          "evidence_snapshot_version"
+        ],
+        "title": "GapReplayContractResponse",
+        "type": "object"
+      },
       "GenerateReportRequest": {
         "properties": {
           "assessment_id": {
@@ -4523,6 +4923,54 @@
           "status"
         ],
         "title": "GenerateReportResponse",
+        "type": "object"
+      },
+      "GovernanceOverrideResponse": {
+        "properties": {
+          "approved_at": {
+            "title": "Approved At",
+            "type": "string"
+          },
+          "gap_id": {
+            "title": "Gap Id",
+            "type": "string"
+          },
+          "original_value": {
+            "title": "Original Value",
+            "type": "string"
+          },
+          "overridden_value": {
+            "title": "Overridden Value",
+            "type": "string"
+          },
+          "override_authority": {
+            "title": "Override Authority",
+            "type": "string"
+          },
+          "override_id": {
+            "title": "Override Id",
+            "type": "string"
+          },
+          "override_rationale": {
+            "title": "Override Rationale",
+            "type": "string"
+          },
+          "override_type": {
+            "title": "Override Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "override_id",
+          "gap_id",
+          "override_type",
+          "original_value",
+          "overridden_value",
+          "override_authority",
+          "override_rationale",
+          "approved_at"
+        ],
+        "title": "GovernanceOverrideResponse",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -5259,6 +5707,42 @@
         "title": "LogAnchorRequest",
         "type": "object"
       },
+      "MaturityBlockerResponse": {
+        "properties": {
+          "affected_control_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Control Ids",
+            "type": "array"
+          },
+          "blocker_id": {
+            "title": "Blocker Id",
+            "type": "string"
+          },
+          "blocker_rationale": {
+            "title": "Blocker Rationale",
+            "type": "string"
+          },
+          "gap_id": {
+            "title": "Gap Id",
+            "type": "string"
+          },
+          "maturity_tier_id": {
+            "title": "Maturity Tier Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "blocker_id",
+          "gap_id",
+          "maturity_tier_id",
+          "blocker_rationale",
+          "affected_control_ids"
+        ],
+        "title": "MaturityBlockerResponse",
+        "type": "object"
+      },
       "MaturityTierResponse": {
         "properties": {
           "created_at": {
@@ -5936,6 +6420,67 @@
         "title": "PolicyDecision",
         "type": "object"
       },
+      "PolicyExceptionResponse": {
+        "properties": {
+          "affected_control_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Control Ids",
+            "type": "array"
+          },
+          "affected_framework_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Framework Ids",
+            "type": "array"
+          },
+          "approval_rationale": {
+            "title": "Approval Rationale",
+            "type": "string"
+          },
+          "approved_at": {
+            "title": "Approved At",
+            "type": "string"
+          },
+          "exception_authority": {
+            "title": "Exception Authority",
+            "type": "string"
+          },
+          "exception_id": {
+            "title": "Exception Id",
+            "type": "string"
+          },
+          "exception_type": {
+            "title": "Exception Type",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          }
+        },
+        "required": [
+          "exception_id",
+          "exception_type",
+          "exception_authority",
+          "approval_rationale",
+          "affected_control_ids",
+          "affected_framework_ids",
+          "approved_at",
+          "expires_at"
+        ],
+        "title": "PolicyExceptionResponse",
+        "type": "object"
+      },
       "PolicyPinRequest": {
         "additionalProperties": false,
         "properties": {
@@ -6119,6 +6664,202 @@
           }
         },
         "title": "ROEPolicy",
+        "type": "object"
+      },
+      "ReadinessBlockerResponse": {
+        "properties": {
+          "affected_control_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Control Ids",
+            "type": "array"
+          },
+          "affected_framework_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Framework Ids",
+            "type": "array"
+          },
+          "blocker_id": {
+            "title": "Blocker Id",
+            "type": "string"
+          },
+          "blocker_rationale": {
+            "title": "Blocker Rationale",
+            "type": "string"
+          },
+          "gap_id": {
+            "title": "Gap Id",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "blocker_id",
+          "gap_id",
+          "blocker_rationale",
+          "severity",
+          "affected_framework_ids",
+          "affected_control_ids"
+        ],
+        "title": "ReadinessBlockerResponse",
+        "type": "object"
+      },
+      "ReadinessGapResponse": {
+        "properties": {
+          "affected_control_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Control Ids",
+            "type": "array"
+          },
+          "affected_framework_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Framework Ids",
+            "type": "array"
+          },
+          "control_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Control Id"
+          },
+          "detected_at": {
+            "title": "Detected At",
+            "type": "string"
+          },
+          "domain_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain Id"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "framework_id": {
+            "title": "Framework Id",
+            "type": "string"
+          },
+          "framework_version": {
+            "title": "Framework Version",
+            "type": "string"
+          },
+          "gap_classification": {
+            "title": "Gap Classification",
+            "type": "string"
+          },
+          "gap_id": {
+            "title": "Gap Id",
+            "type": "string"
+          },
+          "gap_rationale": {
+            "title": "Gap Rationale",
+            "type": "string"
+          },
+          "gap_severity": {
+            "title": "Gap Severity",
+            "type": "string"
+          },
+          "is_blocker": {
+            "title": "Is Blocker",
+            "type": "boolean"
+          },
+          "is_maturity_blocker": {
+            "title": "Is Maturity Blocker",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "gap_id",
+          "gap_classification",
+          "gap_severity",
+          "framework_id",
+          "framework_version",
+          "gap_rationale",
+          "detected_at",
+          "is_blocker",
+          "is_maturity_blocker",
+          "affected_control_ids",
+          "affected_framework_ids",
+          "evidence_ids",
+          "control_id",
+          "domain_id"
+        ],
+        "title": "ReadinessGapResponse",
+        "type": "object"
+      },
+      "ReadinessImpactEstimateResponse": {
+        "properties": {
+          "domain_impact": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Domain Impact",
+            "type": "object"
+          },
+          "estimate_id": {
+            "title": "Estimate Id",
+            "type": "string"
+          },
+          "estimation_rationale": {
+            "title": "Estimation Rationale",
+            "type": "string"
+          },
+          "framework_impact": {
+            "title": "Framework Impact",
+            "type": "number"
+          },
+          "gap_id": {
+            "title": "Gap Id",
+            "type": "string"
+          },
+          "governance_coverage_impact": {
+            "title": "Governance Coverage Impact",
+            "type": "number"
+          },
+          "maturity_impact": {
+            "title": "Maturity Impact",
+            "type": "number"
+          },
+          "remediation_impact": {
+            "title": "Remediation Impact",
+            "type": "number"
+          }
+        },
+        "required": [
+          "estimate_id",
+          "gap_id",
+          "maturity_impact",
+          "framework_impact",
+          "remediation_impact",
+          "governance_coverage_impact",
+          "domain_impact",
+          "estimation_rationale"
+        ],
+        "title": "ReadinessImpactEstimateResponse",
         "type": "object"
       },
       "ReceiptRequest": {
@@ -6486,6 +7227,97 @@
           "severity"
         ],
         "title": "RemediationFactorResponse",
+        "type": "object"
+      },
+      "RemediationRecommendationResponse": {
+        "properties": {
+          "affected_control_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Control Ids",
+            "type": "array"
+          },
+          "affected_domain_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Domain Ids",
+            "type": "array"
+          },
+          "affected_framework_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Framework Ids",
+            "type": "array"
+          },
+          "blocker_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocker Ids",
+            "type": "array"
+          },
+          "compensating_control_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Compensating Control Ids",
+            "type": "array"
+          },
+          "dependency_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dependency Ids",
+            "type": "array"
+          },
+          "estimated_readiness_impact": {
+            "title": "Estimated Readiness Impact",
+            "type": "number"
+          },
+          "gap_id": {
+            "title": "Gap Id",
+            "type": "string"
+          },
+          "governance_rationale": {
+            "title": "Governance Rationale",
+            "type": "string"
+          },
+          "maturity_implications": {
+            "title": "Maturity Implications",
+            "type": "string"
+          },
+          "recommendation_id": {
+            "title": "Recommendation Id",
+            "type": "string"
+          },
+          "remediation_classification": {
+            "title": "Remediation Classification",
+            "type": "string"
+          },
+          "remediation_rationale": {
+            "title": "Remediation Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "recommendation_id",
+          "gap_id",
+          "remediation_classification",
+          "remediation_rationale",
+          "affected_control_ids",
+          "affected_domain_ids",
+          "affected_framework_ids",
+          "estimated_readiness_impact",
+          "maturity_implications",
+          "governance_rationale",
+          "dependency_ids",
+          "blocker_ids",
+          "compensating_control_ids"
+        ],
+        "title": "RemediationRecommendationResponse",
         "type": "object"
       },
       "ReproduceRequest": {
@@ -17661,6 +18493,66 @@
         ]
       }
     },
+    "/control-plane/readiness/assessments/{assessment_id}/gap-analysis": {
+      "get": {
+        "description": "Compute deterministic readiness gap analysis for an assessment.\n\nLoads all framework, domain, control, maturity, result, and evidence data\nfrom the store, computes a Readiness score, then runs the GapAnalysisEngine\nand returns a frozen GapAnalysisResult. No data is mutated. Results are\nnot persisted \u2014 call again for a fresh analysis reflecting current state.\n\ntenant_id is always resolved from auth context. The analysis is scoped to\nthe authenticated tenant and will not expose cross-tenant information.",
+        "operationId": "get_gap_analysis_control_plane_readiness_assessments__assessment_id__gap_analysis_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GapAnalysisResultResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Gap Analysis",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
     "/control-plane/readiness/assessments/{assessment_id}/results": {
       "get": {
         "operationId": "list_assessment_results_control_plane_readiness_assessments__assessment_id__results_get",
@@ -18003,6 +18895,65 @@
         ]
       }
     },
+    "/control-plane/readiness/controls/{control_id}": {
+      "get": {
+        "operationId": "get_control_control_plane_readiness_controls__control_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "control_id",
+            "required": true,
+            "schema": {
+              "title": "Control Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Control",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
     "/control-plane/readiness/domains": {
       "post": {
         "operationId": "create_domain_control_plane_readiness_domains_post",
@@ -18057,6 +19008,65 @@
           }
         },
         "summary": "Create Domain",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/domains/{domain_id}": {
+      "get": {
+        "operationId": "get_domain_control_plane_readiness_domains__domain_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "domain_id",
+            "required": true,
+            "schema": {
+              "title": "Domain Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Domain",
         "tags": [
           "readiness",
           "readiness"
@@ -18909,6 +19919,65 @@
           }
         },
         "summary": "Create Maturity Tier",
+        "tags": [
+          "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/maturity-tiers/{tier_id}": {
+      "get": {
+        "operationId": "get_maturity_tier_control_plane_readiness_maturity_tiers__tier_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tier_id",
+            "required": true,
+            "schema": {
+              "title": "Tier Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaturityTierResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Maturity Tier",
         "tags": [
           "readiness",
           "readiness"

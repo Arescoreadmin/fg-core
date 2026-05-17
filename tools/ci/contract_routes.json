@@ -836,6 +836,12 @@
     },
     {
       "method": "GET",
+      "path": "/control-plane/readiness/assessments/{assessment_id}/gap-analysis",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/control-plane/readiness/assessments/{assessment_id}/results",
       "scopes": [],
       "source": "contract"
@@ -865,8 +871,20 @@
       "source": "contract"
     },
     {
+      "method": "GET",
+      "path": "/control-plane/readiness/controls/{control_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "POST",
       "path": "/control-plane/readiness/domains",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/domains/{domain_id}",
       "scopes": [],
       "source": "contract"
     },
@@ -933,6 +951,12 @@
     {
       "method": "POST",
       "path": "/control-plane/readiness/maturity-tiers",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/maturity-tiers/{tier_id}",
       "scopes": [],
       "source": "contract"
     },
@@ -1579,7 +1603,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-16T18:45:09.298016+00:00",
+  "generated_at": "2026-05-17T20:53:22.308987+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

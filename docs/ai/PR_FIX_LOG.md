@@ -10089,3 +10089,62 @@ Implements the deterministic `ReadinessScoreEngine`: pure Python, no I/O, no LLM
 - `mypy`: 0 errors (955 source files)
 - `pytest tests/test_readiness_evidence.py`: 54 passed
 - `bash codex_gates.sh`: All gates passed
+
+---
+
+### 2026-05-17 — PR 90: Enterprise Readiness Control Plane API & Contract Surface
+
+**Branch:** `feat/readiness-control-plane-api`
+
+**Area:** Readiness API; gap analysis control-plane endpoint; GET endpoints for domain/control/maturity-tier.
+
+**Files changed:**
+- `api/readiness_gap_analysis_manager.py` (new) — full gap analysis API module; Pydantic response models (`extra="ignore"`, no `tenant_id`, no raw metadata); `GET /control-plane/readiness/assessments/{assessment_id}/gap-analysis` route requiring `control-plane:read` scope; runs `ReadinessScoreEngine.score()` → `GapAnalysisEngine.analyze()` on demand per request; maps all exceptions to stable HTTP codes (`READY-GAP-001..004`)
+- `api/readiness_manager.py` (modified) — added `GET /control-plane/readiness/domains/{domain_id}`, `GET /control-plane/readiness/controls/{control_id}`, `GET /control-plane/readiness/maturity-tiers/{tier_id}` endpoints
+- `api/main.py` (modified) — wired `readiness_gap_analysis_router` into both `build_app()` and `build_contract_app()`
+- `tests/test_readiness_gap_analysis_manager.py` (new) — 24 tests covering tenant isolation, cross-tenant isolation, 404, successful computation, export safety, stable ordering, individual GET CRUD, auth enforcement, and red-team probes
+
+**Validation:**
+- `ruff check` + `ruff format --check`: PASS
+- `mypy api/readiness_gap_analysis_manager.py api/readiness_manager.py tests/test_readiness_gap_analysis_manager.py --ignore-missing-imports`: 0 errors
+- `pytest tests/test_readiness_gap_analysis_manager.py`: 24 passed
+- `pytest -x -q` (full suite): 4773 passed, 29 skipped
+
+---
+
+### 2026-05-17 — PR 90 Addendum: Tenant-Safe Readiness API & Deterministic Gap Replay Hardening
+
+**Branch:** `feat/readiness-control-plane-api`
+
+**Area:** Readiness gap analysis API hardening; contract authority; tenant isolation; deterministic IDs; pagination safety.
+
+**Files changed:**
+- `api/readiness_gap_analysis_manager.py` (modified) — 9 targeted fixes:
+  - **Fix 1**: Regenerated contract authority markers via `make contract-authority-refresh` (`BLUEPRINT_STAGED.md`, `CONTRACT.md`, `contracts/core/openapi.json`, `schemas/api/openapi.json` updated)
+  - **Fix 2**: All framework metadata loads now pass `tenant_id=tenant_id` (`get_framework`, `list_domains`, `list_controls`, `list_maturity_tiers`). Without this, tenant-specific overlays from other tenants entered gap analysis inputs. Store semantics: `tenant_id=T` returns `(tenant_id=T OR tenant_id=NULL)` so platform records remain visible.
+  - **Fix 3**: Replaced `uuid4`-based result IDs with `_derive_result_id()` — deterministic SHA-256 hash over `(assessment_id, framework_id, framework_version_tag, score_version, scoring_contract_version)`. Same inputs always produce same `result_id` for forensic replay.
+  - **Fix 4**: Response models retain `extra="ignore"` per repo convention (requests use `extra="forbid"`). The `from_domain()` explicit field enumeration is the fail-closed mechanism — no unexpected domain fields can appear in responses.
+  - **Fix 5**: Snapshot consistency validated by engine (PR 89 fixes: `assessment_id` + `framework_version_tag` cross-validated in `GapAnalysisEngine._validate()`). `replay_contract` is export-safe and present in all responses.
+  - **Fix 6**: Error paths already use stable envelopes; added platform-scope boundary comment documenting intentional 403 for platform keys.
+  - **Fix 7**: Added `_MAX_FETCH_PAGES = 100` constant; `_fetch_all` changed from `while True` to `for _ in range(_MAX_FETCH_PAGES)` — bounded pagination, never runs forever.
+  - **Fix 8**: Added inline comment documenting that platform-scoped gap analysis is intentionally disabled; future governance-admin / regulator-review roles require explicit design.
+  - **Fix 9**: All responses are already BFF-safe (no service tokens, no auth headers, no tenant-routing controls, no internal topology).
+- `tests/test_readiness_gap_analysis_manager.py` (modified) — 7 new tests:
+  - `test_cross_tenant_overlay_isolation` — shared platform framework; alpha/beta overlays; beta IDs must not appear in alpha's gap result (regression for Fix 2)
+  - `test_platform_client_gap_analysis_rejected` — platform key → 403, no resource existence disclosure
+  - `test_result_id_is_deterministic` — repeated calls → same `result_id`
+  - `test_result_id_differs_for_different_assessment` — different assessment → different `result_id`
+  - `test_result_id_does_not_contain_tenant_id` — `result_id` must not encode `tenant_id`
+  - `test_fetch_all_stops_on_empty_page` — pagination terminates on empty page
+  - `test_fetch_all_respects_max_page_cap` — pagination stops at `_MAX_FETCH_PAGES`
+
+**Known deferred items:**
+- Future replay caching: `result_id` determinism makes snapshot caching possible; caching boundary is not yet implemented (future work)
+- Shared platform framework maturity-tier overlay isolation: covered by store-layer `tenant_id` filter; no API-layer test yet for tier overlays (low-risk given store test coverage)
+- Governance-admin / regulator-review roles for platform-scoped gap analysis: explicitly deferred with documented comment
+
+**Validation:**
+- `ruff check` + `ruff format --check`: PASS
+- `mypy api/readiness_gap_analysis_manager.py api/readiness_manager.py tests/test_readiness_gap_analysis_manager.py --ignore-missing-imports`: 0 errors
+- `pytest tests/test_readiness_gap_analysis_manager.py`: 31 passed (7 new tests added)
+- `make fg-contract`: PASS (contract authority refreshed; no schema drift)
