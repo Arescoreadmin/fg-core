@@ -396,6 +396,13 @@ class GapAnalysisEngine:
                 f" match assessment tenant_id {tenant_id!r}."
             )
 
+        # Score output must reference the same assessment
+        if inp.score_output.assessment_id != inp.assessment.assessment_id:
+            raise GapAnalysisInputError(
+                f"ScoreOutput assessment_id {inp.score_output.assessment_id!r} does not"
+                f" match assessment_id {inp.assessment.assessment_id!r}."
+            )
+
         # Framework consistency
         framework_id = inp.framework.framework_id
         if inp.score_output.framework_id != framework_id:
@@ -403,6 +410,21 @@ class GapAnalysisEngine:
                 f"ScoreOutput framework_id {inp.score_output.framework_id!r} does"
                 f" not match declared framework_id {framework_id!r}."
             )
+
+        # Score output framework version must match declared framework version
+        if inp.score_output.framework_version_tag != inp.framework.framework_version:
+            raise GapAnalysisFrameworkMismatchError(
+                f"ScoreOutput framework_version_tag {inp.score_output.framework_version_tag!r}"
+                f" does not match framework_version {inp.framework.framework_version!r}."
+            )
+
+        # Tenant isolation: governance overrides with a non-None tenant_id must match
+        for override in inp.governance_overrides:
+            if override.tenant_id is not None and override.tenant_id != tenant_id:
+                raise GapAnalysisTenantIsolationError(
+                    f"GovernanceOverride {override.override_id!r} has tenant_id"
+                    f" {override.tenant_id!r} but assessment tenant is {tenant_id!r}."
+                )
 
         # Freshness window must be positive
         if inp.default_freshness_window_days <= 0:

@@ -387,6 +387,11 @@ def detect_threshold_gaps(
     maturity_gate failures → FAILED_MATURITY_GATE gap (HIGH, is_maturity_blocker).
     overall_pass / domain_minimum failures → FAILED_READINESS_THRESHOLD gap (HIGH).
     """
+    # Map domain_name → domain_id so domain_minimum failures resolve to IDs not display names
+    domain_id_by_name: dict[str, str] = {
+        ds.domain_name: ds.domain_id for ds in domain_scores
+    }
+
     gaps: list[ReadinessGap] = []
     for failure in threshold_failures:
         if failure.threshold_type == "required_control":
@@ -432,7 +437,7 @@ def detect_threshold_gaps(
         else:
             # overall_pass or domain_minimum
             affected_domain = (
-                failure.threshold_name
+                domain_id_by_name.get(failure.threshold_name)
                 if failure.threshold_type == "domain_minimum"
                 else None
             )

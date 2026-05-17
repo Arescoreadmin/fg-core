@@ -44,6 +44,7 @@ from services.readiness.gap_analysis import (
     GapAnalysisEngine,
     GapAnalysisFrameworkMismatchError,
     GapAnalysisInput,
+    GapAnalysisInputError,
     GapAnalysisTenantIsolationError,
     GapClassification,
     GapDependency,
@@ -1458,6 +1459,57 @@ def test_engine_rejects_mismatched_score_output_tenant() -> None:
         _run_engine(inp)
 
 
+def test_engine_rejects_governance_override_with_wrong_tenant() -> None:
+    override = GovernanceOverride(
+        override_id="ov-001",
+        gap_id="some-gap",
+        override_type=OverrideType.SEVERITY,
+        original_value="HIGH",
+        overridden_value="LOW",
+        override_authority="CISO",
+        override_rationale="Downgrade",
+        approved_at=_NOW,
+        tenant_id=_OTHER_TENANT,
+    )
+    inp = _make_gap_analysis_input(governance_overrides=(override,))
+    with pytest.raises(GapAnalysisTenantIsolationError):
+        _run_engine(inp)
+
+
+def test_engine_rejects_score_output_with_wrong_assessment_id() -> None:
+    from services.readiness.scoring.models import ScoreOutput
+
+    so = ScoreOutput(
+        assessment_id="different-assessment",
+        tenant_id=_TENANT,
+        framework_id=_FW_ID,
+        framework_version_tag=_FW_VER,
+        overall_score=100.0,
+        normalized_score=1.0,
+        domain_scores={},
+        control_scores={},
+        maturity_tier=None,
+        maturity_tier_id=None,
+        risk_classification=RiskLevel.MINIMAL,
+        remediation_priority=RemediationPriority.NOT_REQUIRED,
+        remediation_factors=(),
+        missing_controls=(),
+        incomplete_controls=(),
+        failed_controls=(),
+        not_applicable_controls=(),
+        threshold_failures=(),
+        scoring_warnings=(),
+        completion_state=CompletionState.COMPLETE,
+        completion_percentage=100.0,
+        is_complete=True,
+        computed_at=_NOW,
+        score_version="1.0.0",
+    )
+    inp = _make_gap_analysis_input(score_output=so)
+    with pytest.raises(GapAnalysisInputError):
+        _run_engine(inp)
+
+
 # ---------------------------------------------------------------------------
 # Framework isolation (engine validation)
 # ---------------------------------------------------------------------------
@@ -1469,6 +1521,40 @@ def test_engine_rejects_score_output_with_wrong_framework() -> None:
         tenant_id=_TENANT,
         framework_id="different-framework",
         framework_version_tag=_FW_VER,
+        overall_score=100.0,
+        normalized_score=1.0,
+        domain_scores={},
+        control_scores={},
+        maturity_tier=None,
+        maturity_tier_id=None,
+        risk_classification=RiskLevel.MINIMAL,
+        remediation_priority=RemediationPriority.NOT_REQUIRED,
+        remediation_factors=(),
+        missing_controls=(),
+        incomplete_controls=(),
+        failed_controls=(),
+        not_applicable_controls=(),
+        threshold_failures=(),
+        scoring_warnings=(),
+        completion_state=CompletionState.COMPLETE,
+        completion_percentage=100.0,
+        is_complete=True,
+        computed_at=_NOW,
+        score_version="1.0.0",
+    )
+    inp = _make_gap_analysis_input(score_output=so)
+    with pytest.raises(GapAnalysisFrameworkMismatchError):
+        _run_engine(inp)
+
+
+def test_engine_rejects_score_output_with_wrong_framework_version() -> None:
+    from services.readiness.scoring.models import ScoreOutput
+
+    so = ScoreOutput(
+        assessment_id="assess-001",
+        tenant_id=_TENANT,
+        framework_id=_FW_ID,
+        framework_version_tag="9.9.9",
         overall_score=100.0,
         normalized_score=1.0,
         domain_scores={},
