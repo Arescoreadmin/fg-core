@@ -1,3 +1,25 @@
+## 2026-05-16 — PR 87: Runtime Evidence Collection & Governance Signal Extraction Layer
+
+**Classification:** New feature — pure Python read-only extraction layer. No infra, no schema, no CI, no auth changes.
+
+**SOC review:**
+- All types are frozen dataclasses — immutable after construction, no I/O, no side effects
+- Extraction functions accept primitive typed parameters — fully decoupled from provider internals
+- No PHI, raw prompts, vectors, embeddings, or provider credentials in any output type
+- `phi_type_count: int` instead of `phi_types` — PHI category names never stored
+- Snapshot hash excludes timestamps and session identifiers — deterministic across extraction runs
+- `inputs_canonical` preserved for independent forensic replay without rerunning extraction
+- Signals scoped to `tenant_id` — no cross-tenant leakage in summary types
+- `make_unavailable_signal` / `make_error_signal` are fail-closed — UNAVAILABLE/ERROR status, no partial state
+
+**Validation:**
+- 54 pytest tests: all passed
+- mypy: no issues in 5 source files
+- ruff lint + format: all passed
+- `bash codex_gates.sh`: All gates passed
+
+---
+
 ## 2026-05-07 — PR 12: RAG Stub Removal Inventory
 
 Reviewed critical files:
