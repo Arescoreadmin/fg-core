@@ -47,6 +47,13 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   // Retrieval evaluation foundation — tenant-scoped, ui:read gated (PR 53)
   { prefix: 'ui/evaluation/runs', methods: new Set(['GET', 'HEAD']) },
   { prefix: 'ui/evaluation/quality', methods: new Set(['GET', 'HEAD']) },
+  // Readiness control-plane — tenant-scoped, control-plane:read gated (PR 91)
+  // Read-only surface: no write paths exposed through the dashboard BFF.
+  { prefix: 'control-plane/readiness/frameworks', methods: new Set(['GET', 'HEAD']) },
+  { prefix: 'control-plane/readiness/assessments', methods: new Set(['GET', 'HEAD']) },
+  { prefix: 'control-plane/readiness/domains', methods: new Set(['GET', 'HEAD']) },
+  { prefix: 'control-plane/readiness/controls', methods: new Set(['GET', 'HEAD']) },
+  { prefix: 'control-plane/readiness/maturity-tiers', methods: new Set(['GET', 'HEAD']) },
 ];
 
 function getRequestId(request: NextRequest): string {
