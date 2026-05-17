@@ -628,3 +628,213 @@ def test_gap_analysis_no_internal_topology(tenant_client):
     assert "localhost" not in body_str
     assert "/home/" not in body_str
     assert "sqlite:///" not in body_str
+
+
+# ---------------------------------------------------------------------------
+# PR 90 Addendum — Fix 2: Tenant-scoped framework metadata
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def shared_db_clients(tmp_path, monkeypatch):
+    """Platform, alpha, and beta clients all pointing at the same SQLite DB.
+
+    Used to test cross-tenant overlay isolation where multiple tenants have
+    overlays on a shared platform framework.
+    """
+    from api.auth_scopes import mint_key
+    from api.db import reset_engine_cache
+    from api.main import build_app
+
+    db_path = tmp_path / "shared_overlay_test.db"
+    monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+    reset_engine_cache()
+
+    app = build_app(auth_enabled=True)
+    platform_key = mint_key("control-plane:read", "control-plane:admin")
+    alpha_key = mint_key(
+        "control-plane:read", "control-plane:admin", tenant_id="tenant-alpha"
+    )
+    beta_key = mint_key(
+        "control-plane:read", "control-plane:admin", tenant_id="tenant-beta"
+    )
+
+    platform = TestClient(
+        app, raise_server_exceptions=False, headers={"X-API-Key": platform_key}
+    )
+    alpha = TestClient(
+        app, raise_server_exceptions=False, headers={"X-API-Key": alpha_key}
+    )
+    beta = TestClient(
+        app, raise_server_exceptions=False, headers={"X-API-Key": beta_key}
+    )
+    return platform, alpha, beta
+
+
+@pytest.mark.contract
+def test_cross_tenant_overlay_isolation(shared_db_clients):
+    """tenant-beta's controls/domains must not appear in tenant-alpha's gap result.
+
+    Regression for Fix 2: framework metadata loads must pass tenant_id so that
+    overlays from other tenants are filtered out at the store layer.
+    """
+    platform_client, alpha_client, beta_client = shared_db_clients
+
+    # Platform framework: both tenants can add overlays
+    fw_id = _create_draft_framework(platform_client, slug="fw-overlay-shared")
+
+    # Alpha adds its own domain+control overlay
+    dom_alpha = _create_domain(alpha_client, fw_id, slug="dom-overlay-alpha")
+    _create_control(alpha_client, fw_id, dom_alpha, identifier="OVR-A")
+
+    # Beta adds its own domain+control overlay (different tenant)
+    dom_beta = _create_domain(beta_client, fw_id, slug="dom-overlay-beta")
+    ctrl_beta = _create_control(beta_client, fw_id, dom_beta, identifier="OVR-B")
+
+    # Platform activates the shared framework
+    _activate_framework(platform_client, fw_id)
+
+    # Alpha creates an assessment and runs gap analysis
+    assessment_id = _create_assessment(alpha_client, fw_id)
+    resp = alpha_client.get(
+        f"/control-plane/readiness/assessments/{assessment_id}/gap-analysis"
+    )
+    assert resp.status_code == 200
+    body_str = str(resp.json())
+
+    # Beta's domain and control IDs must NOT appear in alpha's result
+    assert ctrl_beta not in body_str, (
+        "Beta control ID must not leak into alpha gap result"
+    )
+    assert dom_beta not in body_str, (
+        "Beta domain ID must not leak into alpha gap result"
+    )
+
+    # Alpha's own control may appear (it's in the framework for alpha)
+    # (no assertion on ctrl_alpha presence — it may or may not be in gap depending on engine)
+
+
+@pytest.mark.contract
+def test_platform_client_gap_analysis_rejected(shared_db_clients):
+    """Platform-scoped key (no tenant) must be rejected with 403 for gap analysis."""
+    platform_client, alpha_client, _ = shared_db_clients
+
+    fw_id = _create_active_framework(alpha_client, slug="fw-plat-rej")
+    assessment_id = _create_assessment(alpha_client, fw_id)
+
+    # Platform key (no tenant_id) must not access gap analysis
+    resp = platform_client.get(
+        f"/control-plane/readiness/assessments/{assessment_id}/gap-analysis"
+    )
+    assert resp.status_code == 403
+    body = resp.json()
+    assert "detail" in body
+    # Must not reveal whether the assessment exists
+    assert assessment_id not in str(body)
+
+
+# ---------------------------------------------------------------------------
+# PR 90 Addendum — Fix 3: Deterministic result IDs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+def test_result_id_is_deterministic(tenant_client):
+    """Repeated gap analysis calls for the same assessment must return the same result_id."""
+    fw_id = _create_active_framework(tenant_client, slug="fw-gap-det-id")
+    assessment_id = _create_assessment(tenant_client, fw_id)
+
+    resp1 = tenant_client.get(
+        f"/control-plane/readiness/assessments/{assessment_id}/gap-analysis"
+    )
+    resp2 = tenant_client.get(
+        f"/control-plane/readiness/assessments/{assessment_id}/gap-analysis"
+    )
+    assert resp1.status_code == 200
+    assert resp2.status_code == 200
+    assert resp1.json()["result_id"] == resp2.json()["result_id"], (
+        "result_id must be deterministic: same inputs → same ID"
+    )
+
+
+@pytest.mark.contract
+def test_result_id_differs_for_different_assessment(tenant_client):
+    """Different assessments must produce different result_ids."""
+    fw_id = _create_active_framework(tenant_client, slug="fw-gap-det-diff")
+
+    assessment_id_1 = _create_assessment(tenant_client, fw_id)
+    assessment_id_2 = _create_assessment(tenant_client, fw_id)
+
+    resp1 = tenant_client.get(
+        f"/control-plane/readiness/assessments/{assessment_id_1}/gap-analysis"
+    )
+    resp2 = tenant_client.get(
+        f"/control-plane/readiness/assessments/{assessment_id_2}/gap-analysis"
+    )
+    assert resp1.status_code == 200
+    assert resp2.status_code == 200
+    assert resp1.json()["result_id"] != resp2.json()["result_id"], (
+        "Different assessments must produce different result_ids"
+    )
+
+
+@pytest.mark.contract
+def test_result_id_does_not_contain_tenant_id(tenant_client):
+    """result_id must not encode or expose the tenant_id."""
+    fw_id = _create_active_framework(tenant_client, slug="fw-gap-det-tid")
+    assessment_id = _create_assessment(tenant_client, fw_id)
+
+    resp = tenant_client.get(
+        f"/control-plane/readiness/assessments/{assessment_id}/gap-analysis"
+    )
+    assert resp.status_code == 200
+    result_id = resp.json()["result_id"]
+    assert "tenant-alpha" not in result_id, "result_id must not encode tenant_id"
+    assert result_id.startswith("gap::"), "result_id must use gap:: prefix"
+
+
+# ---------------------------------------------------------------------------
+# PR 90 Addendum — Fix 7: Pagination safety (_fetch_all)
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_all_stops_on_empty_page():
+    """_fetch_all must terminate when it receives an empty page."""
+    from api.readiness_gap_analysis_manager import _SCORE_PAGE, _fetch_all
+
+    calls: list[int] = []
+
+    def mock_fn(**kwargs):  # type: ignore[return]
+        offset = kwargs.get("offset", 0)
+        limit = kwargs.get("limit", _SCORE_PAGE)
+        calls.append(offset)
+        if offset == 0:
+            return ["item"] * limit  # full first page
+        return []  # empty second page
+
+    result = _fetch_all(mock_fn)
+    assert len(result) == _SCORE_PAGE
+    assert calls == [0, _SCORE_PAGE], "Must stop after receiving empty page"
+
+
+def test_fetch_all_respects_max_page_cap():
+    """_fetch_all must stop after _MAX_FETCH_PAGES even if store never sends empty page."""
+    from api.readiness_gap_analysis_manager import (
+        _MAX_FETCH_PAGES,
+        _SCORE_PAGE,
+        _fetch_all,
+    )
+
+    calls: list[int] = []
+
+    def infinite_fn(**kwargs):  # type: ignore[return]
+        offset = kwargs.get("offset", 0)
+        limit = kwargs.get("limit", _SCORE_PAGE)
+        calls.append(offset)
+        return ["item"] * limit  # always full — simulates a store that never stops
+
+    result = _fetch_all(infinite_fn)
+    assert len(calls) == _MAX_FETCH_PAGES, "Must stop at max page cap"
+    assert len(result) == _MAX_FETCH_PAGES * _SCORE_PAGE

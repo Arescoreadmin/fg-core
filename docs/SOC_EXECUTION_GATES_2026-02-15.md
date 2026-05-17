@@ -3325,3 +3325,57 @@ Implements the Enterprise Readiness Control Plane API & Contract Surface: a full
 - All mutations (framework lifecycle, domain/control/tier creation) remain gated behind `control-plane:admin` scope — new routes add only read paths.
 - No schema changes: no new ORM tables, no migration required.
 - Framework immutability contract respected in tests: domains/controls are created on DRAFT frameworks before activation.
+
+---
+
+## 2026-05-17 — PR 90 Addendum: Tenant-Safe Readiness API & Deterministic Gap Replay Hardening
+
+**Branch:** `feat/readiness-control-plane-api`
+
+### Summary
+
+Hardens the PR 90 gap analysis API against ten categories of enterprise security and governance gaps. Primary fixes: tenant_id now passed to all framework metadata reads (prevents cross-tenant overlay leakage), gap result IDs are now deterministic (SHA-256 over stable governance inputs, enabling forensic replay), pagination is bounded by `_MAX_FETCH_PAGES=100`, and contract authority markers are regenerated and current.
+
+### Routes changed
+
+None. All changes are behavioral hardening of existing PR 90 endpoints.
+
+### Gate results
+
+- `ruff check` + `ruff format --check`: all checks passed
+- `mypy api/readiness_gap_analysis_manager.py api/readiness_manager.py tests/test_readiness_gap_analysis_manager.py --ignore-missing-imports`: 0 errors
+- `pytest tests/test_readiness_gap_analysis_manager.py`: 31 passed (7 new tests)
+- `make fg-contract`: PASS (authority markers refreshed; no OpenAPI schema drift from behavioral changes)
+
+### Compliance posture
+
+**Tenant isolation (Fix 2):**
+- `get_framework`, `list_domains`, `list_controls`, `list_maturity_tiers` now all receive `tenant_id=tenant_id` from auth context.
+- Store semantics: `tenant_id=T` filter returns `(tenant_id=T OR tenant_id=NULL)` — platform records (tenant_id=NULL) remain visible to all tenants; tenant-specific overlays from other tenants are excluded.
+- Regression test: `test_cross_tenant_overlay_isolation` — shared platform framework, alpha/beta overlays, verifies beta IDs cannot appear in alpha's gap result.
+
+**Deterministic artifact identity (Fix 3):**
+- `result_id` derives from `SHA-256(assessment_id + framework_id + framework_version_tag + score_version + scoring_contract_version)`. No random entropy, no timestamps, no request correlation IDs.
+- Same inputs always produce the same `result_id` — enables forensic replay and result deduplication.
+- `tenant_id` is never encoded in `result_id`.
+
+**Pagination safety (Fix 7):**
+- `_MAX_FETCH_PAGES = 100` hard cap prevents unbounded iteration against pathological stores.
+- `_fetch_all` uses `for _ in range(_MAX_FETCH_PAGES)` — terminates on empty page or cap, whichever comes first.
+
+**Response model convention (Fix 4):**
+- Response models retain `extra="ignore"` per repo-wide convention (request models use `extra="forbid"`).
+- The `from_domain()` explicit field enumeration is the fail-closed mechanism: no unexpected domain field can reach the serialization layer.
+- No `inputs_canonical`, no `tenant_id`, no raw evidence, no stack traces in any response.
+
+**Platform-scope boundary (Fix 8):**
+- Platform-scoped keys intentionally rejected at the tenant guard (403). Documented in code: future governance-admin / regulator-review / multi-tenant export roles require explicit design and must not fall through into tenant-scoped paths.
+
+**Contract authority (Fix 1):**
+- `make contract-authority-refresh` run; `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `contracts/core/openapi.json`, `schemas/api/openapi.json` updated with current SHA-256 authority marker.
+- `make fg-contract` passes with no stale artifacts.
+
+**Known deferred items (documented, not overclaimed):**
+- Replay caching: `result_id` determinism makes caching feasible; caching boundary not yet implemented.
+- Governance-admin / regulator-review gap analysis: requires explicit future design; intentionally blocked at platform-key guard.
+- Maturity-tier overlay isolation test: covered by store-layer tests; no dedicated API-layer test for tier overlays.

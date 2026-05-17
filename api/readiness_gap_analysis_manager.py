@@ -24,8 +24,9 @@ Security invariants:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
-import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -81,6 +82,7 @@ _score_engine = ReadinessScoreEngine()
 _gap_engine = GapAnalysisEngine()
 
 _SCORE_PAGE = 200
+_MAX_FETCH_PAGES = 100  # hard cap: prevents unbounded pagination on pathological stores
 
 # ---------------------------------------------------------------------------
 # Error codes
@@ -108,13 +110,38 @@ def _tenant_from_auth(request: Request) -> Optional[str]:
 def _fetch_all(fn, **kwargs) -> list:  # type: ignore[type-arg]
     items: list = []
     offset = 0
-    while True:
+    for _ in range(_MAX_FETCH_PAGES):
         page = fn(**kwargs, limit=_SCORE_PAGE, offset=offset)
         items.extend(page)
         if len(page) < _SCORE_PAGE:
             break
         offset += _SCORE_PAGE
     return items
+
+
+def _derive_result_id(
+    assessment_id: str,
+    framework_id: str,
+    framework_version_tag: str,
+    score_version: str,
+    scoring_contract_version: Optional[str],
+) -> str:
+    """Deterministic artifact identity for gap analysis results.
+
+    Derived from stable, immutable governance inputs only. Never uses
+    random entropy, request-time UUIDs, timestamps, or correlation IDs.
+    Same inputs always produce the same result_id for forensic replay.
+    """
+    parts = {
+        "assessment_id": assessment_id,
+        "framework_id": framework_id,
+        "framework_version_tag": framework_version_tag,
+        "score_version": score_version,
+        "scoring_contract_version": scoring_contract_version,
+    }
+    canonical = json.dumps(parts, sort_keys=True, separators=(",", ":"))
+    h = hashlib.sha256(canonical.encode()).hexdigest()[:24]
+    return f"gap::{assessment_id}::{h}"
 
 
 # ---------------------------------------------------------------------------
@@ -523,6 +550,9 @@ def get_gap_analysis(
     """
     tenant_id = _tenant_from_auth(request)
     if not tenant_id:
+        # Platform-scoped keys (no tenant_id) are intentionally rejected here.
+        # Cross-tenant / regulator-review / governance-admin gap analysis requires
+        # an explicit future design and MUST NOT fall through into tenant-scoped paths.
         raise HTTPException(
             status_code=403,
             detail=api_error(
@@ -547,17 +577,33 @@ def get_gap_analysis(
             status_code=500, detail=api_error("READY-API-500", exc.message)
         )
 
-    # Load all supporting data for scoring and gap analysis
+    # Load all supporting data for scoring and gap analysis.
+    # tenant_id is passed to ALL framework metadata reads so that tenant-specific
+    # overlays (domains/controls/tiers) are correctly scoped. Without tenant_id,
+    # list_* returns ALL tenant overlays for the framework, enabling cross-tenant leakage.
+    # Store semantics: tenant_id filter returns (tenant_id=T OR tenant_id=NULL), so
+    # platform records (tenant_id=NULL) remain visible to all tenants.
     try:
-        framework = _store.get_framework(db, framework_id=assessment.framework_id)
+        framework = _store.get_framework(
+            db, framework_id=assessment.framework_id, tenant_id=tenant_id
+        )
         domains = _fetch_all(
-            _store.list_domains, db=db, framework_id=assessment.framework_id
+            _store.list_domains,
+            db=db,
+            framework_id=assessment.framework_id,
+            tenant_id=tenant_id,
         )
         controls = _fetch_all(
-            _store.list_controls, db=db, framework_id=assessment.framework_id
+            _store.list_controls,
+            db=db,
+            framework_id=assessment.framework_id,
+            tenant_id=tenant_id,
         )
         maturity_tiers = _fetch_all(
-            _store.list_maturity_tiers, db=db, framework_id=assessment.framework_id
+            _store.list_maturity_tiers,
+            db=db,
+            framework_id=assessment.framework_id,
+            tenant_id=tenant_id,
         )
         results = _fetch_all(
             _store.list_assessment_results,
@@ -618,8 +664,16 @@ def get_gap_analysis(
         critical_control_ids = frozenset(sc_meta.get("critical_controls", []))
         required_control_ids = frozenset(sc_meta.get("required_controls", []))
 
-    # Run gap analysis
-    result_id = f"gap::{assessment_id}::{uuid.uuid4().hex[:12]}"
+    # Run gap analysis.
+    # result_id is deterministic: derived from stable governance inputs only.
+    # Same assessment + framework + scoring contract → same result_id, enabling replay.
+    result_id = _derive_result_id(
+        assessment_id=assessment_id,
+        framework_id=assessment.framework_id,
+        framework_version_tag=score_output.framework_version_tag,
+        score_version=score_output.score_version,
+        scoring_contract_version=score_output.scoring_contract_version,
+    )
     analyzed_at = datetime.now(tz=timezone.utc)
     try:
         gap_inp = GapAnalysisInput(
