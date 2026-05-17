@@ -10089,3 +10089,23 @@ Implements the deterministic `ReadinessScoreEngine`: pure Python, no I/O, no LLM
 - `mypy`: 0 errors (955 source files)
 - `pytest tests/test_readiness_evidence.py`: 54 passed
 - `bash codex_gates.sh`: All gates passed
+
+---
+
+### 2026-05-17 — PR 90: Enterprise Readiness Control Plane API & Contract Surface
+
+**Branch:** `feat/readiness-control-plane-api`
+
+**Area:** Readiness API; gap analysis control-plane endpoint; GET endpoints for domain/control/maturity-tier.
+
+**Files changed:**
+- `api/readiness_gap_analysis_manager.py` (new) — full gap analysis API module; Pydantic response models (`extra="ignore"`, no `tenant_id`, no raw metadata); `GET /control-plane/readiness/assessments/{assessment_id}/gap-analysis` route requiring `control-plane:read` scope; runs `ReadinessScoreEngine.score()` → `GapAnalysisEngine.analyze()` on demand per request; maps all exceptions to stable HTTP codes (`READY-GAP-001..004`)
+- `api/readiness_manager.py` (modified) — added `GET /control-plane/readiness/domains/{domain_id}`, `GET /control-plane/readiness/controls/{control_id}`, `GET /control-plane/readiness/maturity-tiers/{tier_id}` endpoints
+- `api/main.py` (modified) — wired `readiness_gap_analysis_router` into both `build_app()` and `build_contract_app()`
+- `tests/test_readiness_gap_analysis_manager.py` (new) — 24 tests covering tenant isolation, cross-tenant isolation, 404, successful computation, export safety, stable ordering, individual GET CRUD, auth enforcement, and red-team probes
+
+**Validation:**
+- `ruff check` + `ruff format --check`: PASS
+- `mypy api/readiness_gap_analysis_manager.py api/readiness_manager.py tests/test_readiness_gap_analysis_manager.py --ignore-missing-imports`: 0 errors
+- `pytest tests/test_readiness_gap_analysis_manager.py`: 24 passed
+- `pytest -x -q` (full suite): 4773 passed, 29 skipped

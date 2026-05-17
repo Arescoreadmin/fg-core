@@ -3290,3 +3290,38 @@ None. This PR adds a pure Python contract layer only — no new API endpoints.
 - All failure reason codes are stable string constants — tests may assert specific codes without brittleness.
 - No secrets, credentials, raw document bodies, OCR text, embeddings, signed URLs, or internal storage paths in any model.
 - No schema changes: no new ORM tables, no migration required.
+
+---
+
+## 2026-05-17 — PR 90: Enterprise Readiness Control Plane API & Contract Surface
+
+**Branch:** `feat/readiness-control-plane-api`
+
+### Summary
+
+Implements the Enterprise Readiness Control Plane API & Contract Surface: a fully tenant-isolated, export-safe, deterministic gap analysis API endpoint plus GET endpoints for domains, controls, and maturity tiers. No new ORM tables or migrations. Pydantic response models all use `extra="ignore"` and omit `tenant_id`, raw evidence bodies, `inputs_canonical`, and internal topology. Gap analysis is pure computation: result is not persisted.
+
+### Routes added
+
+- `GET /control-plane/readiness/assessments/{assessment_id}/gap-analysis` — requires `control-plane:read`, tenant context required (403 without tenant); runs ReadinessScoreEngine → GapAnalysisEngine on demand
+- `GET /control-plane/readiness/domains/{domain_id}` — requires `control-plane:read`
+- `GET /control-plane/readiness/controls/{control_id}` — requires `control-plane:read`
+- `GET /control-plane/readiness/maturity-tiers/{tier_id}` — requires `control-plane:read`
+
+### Gate results
+
+- `ruff check` + `ruff format --check`: all checks passed
+- `mypy api/readiness_gap_analysis_manager.py api/readiness_manager.py tests/test_readiness_gap_analysis_manager.py --ignore-missing-imports`: no errors
+- `pytest tests/test_readiness_gap_analysis_manager.py`: 24 passed
+- `pytest -x -q` (full suite): 4773 passed, 29 skipped
+
+### Compliance posture
+
+- Tenant isolation enforced at every layer: `tenant_id` always taken from `request.state.auth.tenant_id`; platform-scoped keys (no tenant) receive 403; cross-tenant assessments return 404.
+- Export-safe responses: `inputs_canonical`, `tenant_id`, raw evidence bodies, stack traces, ORM internals, and internal topology are never included in any response model.
+- Gap analysis is pure computation: no new DB writes; result ID carries `uuid4` entropy; `inputs_canonical` is replay-internal only.
+- SHA-256 integrity hashing is deterministic over stable fields; hash inputs exclude timestamps and mutable metadata.
+- Error codes are stable string constants (`READY-GAP-001..004`, `READY-API-XXX`) — test assertions bind to codes, not messages.
+- All mutations (framework lifecycle, domain/control/tier creation) remain gated behind `control-plane:admin` scope — new routes add only read paths.
+- No schema changes: no new ORM tables, no migration required.
+- Framework immutability contract respected in tests: domains/controls are created on DRAFT frameworks before activation.
