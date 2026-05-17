@@ -3155,6 +3155,39 @@ Implements the deterministic AI Readiness Assessment Scoring Engine: pure Python
 
 ---
 
+## 2026-05-16 — PR 86: fg-fast Runtime Budget Recovery & Test Infrastructure Hardening
+
+**Branch:** `feat/fg-fast-runtime-budget-recovery`
+
+### Summary
+
+Recovers fg-fast CI runtime budget by eliminating per-test SQLite fsync overhead. Root cause: SQLite's default `synchronous=FULL` mode calls fsync() after every write transaction. With 99 ORM tables being created per `api_client` test fixture, each `init_db()` call spent ~14 seconds in fsync. With ~47 such tests across the three manager test files, total overhead was ~700 seconds — exceeding the 300s fg-fast budget.
+
+Fix: `PRAGMA synchronous=OFF` applied via SQLAlchemy connect-time event listener, gated exclusively to `FG_ENV=test`. Production and dev environments are not affected.
+
+### Routes added
+
+None. This PR touches test infrastructure and `api/db.py` only. No new API routes.
+
+### Gate results
+
+- `bash codex_gates.sh`: All gates passed
+- `ruff check` + `ruff format --check`: all checks passed
+- `mypy api/db.py`: no errors
+- `pytest tests/test_sqlite_test_pragmas.py`: 6 passed in 1.84s
+- `pytest tests/test_readiness_manager.py tests/test_provisioning_manager.py tests/test_deployment_manager.py`: 202 passed in 46.63s
+
+### Compliance posture
+
+- **INFRA CHANGE: `api/db.py` modified.** Explicitly called out per governance contract.
+- `PRAGMA synchronous=OFF` is applied ONLY when `FG_ENV=test`. The guard is enforced in `get_engine()` by checking `os.getenv("FG_ENV")` before calling `_register_test_sqlite_pragmas()`. The helper has a contract comment documenting the safety restriction.
+- Production engines: unaffected. The connect-time listener is never registered when `FG_ENV != "test"`.
+- No schema changes: no new ORM tables, no migration required.
+- Test correctness: 6 dedicated tests verify pragma application, production safety, budget compliance, schema completeness, and deterministic schema reproduction.
+- The optimization is replay-safe: synchronous=OFF affects write durability, not read correctness or data integrity within a transaction. All tests run to completion and assertions hold.
+
+---
+
 ## 2026-05-16 — PR 85: Enterprise Evidence Contract & Provenance Governance Layer
 
 **Branch:** `feat/enterprise-evidence-contract-provenance`
