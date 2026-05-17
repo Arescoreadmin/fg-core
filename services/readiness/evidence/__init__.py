@@ -1,0 +1,101 @@
+"""FrostGate Enterprise Evidence Contract & Provenance Governance Layer.
+
+Deterministic, immutable, tenant-safe evidence governance contracts.
+No I/O. No ingestion automation. No OCR. No document AI.
+"""
+
+from services.readiness.evidence.hashing import (
+    compute_evidence_hash,
+    replay_hash_from_canonical,
+    verify_evidence_hash,
+)
+from services.readiness.evidence.models import (
+    IMMUTABLE_EVIDENCE_STATES,
+    VALID_EVIDENCE_TRANSITIONS,
+    EvidenceCategory,
+    EvidenceClassificationLevel,
+    EvidenceCollectionMethod,
+    EvidenceHashRecord,
+    EvidenceIntegrityRecord,
+    EvidenceLifecycleState,
+    EvidenceLink,
+    EvidenceLinkType,
+    EvidenceProvenance,
+    EvidenceSource,
+    EvidenceValidationRecord,
+    EvidenceValidationType,
+    validate_evidence_lifecycle_transition,
+)
+from services.readiness.evidence.validation import (
+    REASON_CLASSIFICATION_INVALID,
+    REASON_CLASSIFICATION_MISSING,
+    REASON_HASH_ALGORITHM_UNSUPPORTED,
+    REASON_HASH_MISMATCH,
+    REASON_HASH_MISSING,
+    REASON_LINKAGE_EMPTY,
+    REASON_LINKAGE_TENANT_MISMATCH,
+    REASON_PROVENANCE_EVIDENCE_ID_MISMATCH,
+    REASON_PROVENANCE_SOURCE_MISSING,
+    REASON_PROVENANCE_SOURCE_TENANT_MISMATCH,
+    REASON_PROVENANCE_TENANT_MISMATCH,
+    REASON_STATE_ARCHIVED,
+    REASON_STATE_EXPIRED,
+    REASON_STATE_INVALIDATED,
+    REASON_STATE_SUPERSEDED,
+    REASON_TENANT_MISMATCH,
+    REASON_TENANT_MISSING,
+    validate_evidence_classification,
+    validate_evidence_integrity,
+    validate_evidence_lifecycle,
+    validate_evidence_linkage,
+    validate_evidence_provenance,
+    validate_tenant_isolation,
+)
+
+__all__ = [
+    # models
+    "EvidenceCategory",
+    "EvidenceClassificationLevel",
+    "EvidenceCollectionMethod",
+    "EvidenceHashRecord",
+    "EvidenceIntegrityRecord",
+    "EvidenceLifecycleState",
+    "EvidenceLink",
+    "EvidenceLinkType",
+    "EvidenceProvenance",
+    "EvidenceSource",
+    "EvidenceValidationRecord",
+    "EvidenceValidationType",
+    "IMMUTABLE_EVIDENCE_STATES",
+    "VALID_EVIDENCE_TRANSITIONS",
+    "validate_evidence_lifecycle_transition",
+    # hashing
+    "compute_evidence_hash",
+    "replay_hash_from_canonical",
+    "verify_evidence_hash",
+    # validation
+    "validate_evidence_classification",
+    "validate_evidence_integrity",
+    "validate_evidence_lifecycle",
+    "validate_evidence_linkage",
+    "validate_evidence_provenance",
+    "validate_tenant_isolation",
+    # reason codes
+    "REASON_CLASSIFICATION_INVALID",
+    "REASON_CLASSIFICATION_MISSING",
+    "REASON_HASH_ALGORITHM_UNSUPPORTED",
+    "REASON_HASH_MISMATCH",
+    "REASON_HASH_MISSING",
+    "REASON_LINKAGE_EMPTY",
+    "REASON_LINKAGE_TENANT_MISMATCH",
+    "REASON_PROVENANCE_EVIDENCE_ID_MISMATCH",
+    "REASON_PROVENANCE_SOURCE_MISSING",
+    "REASON_PROVENANCE_SOURCE_TENANT_MISMATCH",
+    "REASON_PROVENANCE_TENANT_MISMATCH",
+    "REASON_STATE_ARCHIVED",
+    "REASON_STATE_EXPIRED",
+    "REASON_STATE_INVALIDATED",
+    "REASON_STATE_SUPERSEDED",
+    "REASON_TENANT_MISMATCH",
+    "REASON_TENANT_MISSING",
+]

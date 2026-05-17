@@ -9941,3 +9941,24 @@ Implements the deterministic `ReadinessScoreEngine`: pure Python, no I/O, no LLM
 - `make fg-fast`: exit code 0
 - `make route-inventory-audit`: OK
 - `make soc-review-sync`: OK
+
+---
+
+### 2026-05-16 — PR 85: Enterprise Evidence Contract & Provenance Governance Layer
+
+**Branch:** `feat/enterprise-evidence-contract-provenance`
+
+**Area:** Evidence governance; provenance; hashing; validation contracts.
+
+**Files changed:**
+- `services/readiness/evidence/__init__.py` (new) — full public surface export for evidence governance package
+- `services/readiness/evidence/models.py` (new) — 6 enums, lifecycle state machine with terminal states, 6 frozen dataclasses (EvidenceSource, EvidenceProvenance, EvidenceHashRecord, EvidenceIntegrityRecord, EvidenceLink, EvidenceValidationRecord)
+- `services/readiness/evidence/hashing.py` (new) — deterministic SHA-256 hash computation; replay-safe via inputs_canonical; timestamps excluded from hash inputs
+- `services/readiness/evidence/validation.py` (new) — 6 fail-closed validation functions with 15 stable reason codes (testable); tenant isolation, integrity, classification, provenance, lifecycle, and linkage validators
+- `tests/test_readiness_evidence.py` (new) — 54 unit tests covering hash determinism, ordering stability, replay safety, frozen immutability, lifecycle state machine, and all validation paths
+
+**Validation:**
+- `ruff check` + `ruff format --check`: PASS
+- `mypy`: 0 errors (955 source files)
+- `pytest tests/test_readiness_evidence.py`: 54 passed
+- `bash codex_gates.sh`: All gates passed

@@ -3152,3 +3152,36 @@ Implements the deterministic AI Readiness Assessment Scoring Engine: pure Python
 - No secrets, credentials, infrastructure topology, or raw evidence in `ScoreOutput`.
 - Score version field (`score_version="1.0.0"`) enables future deterministic reconstruction.
 - No schema changes: no new ORM tables, no migration required.
+
+---
+
+## 2026-05-16 — PR 85: Enterprise Evidence Contract & Provenance Governance Layer
+
+**Branch:** `feat/enterprise-evidence-contract-provenance`
+
+### Summary
+
+Implements the Enterprise Evidence Contract & Provenance Governance Layer: pure Python frozen dataclasses, deterministic SHA-256 hashing, and fail-closed validation functions. No routes, no migrations, no SQLAlchemy, no I/O. Adds `services/readiness/evidence/` package (`__init__.py`, `models.py`, `hashing.py`, `validation.py`) and `tests/test_readiness_evidence.py`. The layer provides typed, structured governance contracts for evidence provenance, classification, integrity, and linkage.
+
+### Routes added
+
+None. This PR adds a pure Python contract layer only — no new API endpoints.
+
+### Gate results
+
+- `bash codex_gates.sh`: All gates passed
+- `ruff check` + `ruff format --check`: all checks passed
+- `mypy`: no errors (955 source files)
+- `pytest tests/test_readiness_evidence.py`: 54 passed
+
+### Compliance posture
+
+- All models are frozen dataclasses: mutations raise `FrozenInstanceError` — no evidence record can be silently mutated after construction.
+- Hash inputs are explicitly enumerated in `EvidenceHashRecord.inputs_description` — timestamps and mutable metadata are excluded; inputs_canonical ships with every hash for independent forensic replay.
+- Tenant isolation enforced at every validation boundary: cross-tenant evidence access fails closed (`EVIDENCE_TENANT_MISMATCH`).
+- Lifecycle state machine has terminal states: INVALIDATED is irrevocable; ARCHIVED is semi-terminal with no forward transitions.
+- Classification validation is default-deny: unknown classification values always fail (`EVIDENCE_CLASSIFICATION_INVALID`).
+- Provenance validation checks source tenant consistency — source.tenant_id must match evidence tenant_id.
+- All failure reason codes are stable string constants — tests may assert specific codes without brittleness.
+- No secrets, credentials, raw document bodies, OCR text, embeddings, signed URLs, or internal storage paths in any model.
+- No schema changes: no new ORM tables, no migration required.
