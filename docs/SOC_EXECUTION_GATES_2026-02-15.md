@@ -1,3 +1,29 @@
+## 2026-05-17 — PR 89: Enterprise Gap Analysis & Remediation Prioritization Engine
+
+**Classification:** New feature — pure Python service layer. No infra, no schema migration, no CI, no auth, no API routes.
+
+**SOC review:**
+- All types are frozen dataclasses — immutable after construction; no I/O, no mutations
+- Engine is stateless and thread-safe — no shared mutable state between requests
+- Consumes `ScoreOutput` rather than re-deriving scores — no scoring logic duplication
+- Tenant isolation enforced pre-analysis: cross-tenant results/evidence/score output raises `GapAnalysisTenantIsolationError` before any gap detection runs
+- Framework isolation enforced pre-analysis: cross-framework `ScoreOutput` raises `GapAnalysisFrameworkMismatchError`
+- `GovernanceOverride` applies effective severity for ordering without mutating original gap records
+- `CompensatingControl` reduces estimated impact by 50% but does NOT suppress gap lineage or records
+- `PolicyException` annotates recommendations but does NOT suppress gaps
+- Integrity hash (SHA-256) excludes volatile fields: `analyzed_at`, `tenant_id`, metadata extension dicts, overrides, exceptions, compensating controls
+- `inputs_canonical` preserved for independent forensic replay without rerunning analysis
+- Replay contract carries all version pins for forensic reproducibility: `scoring_contract_version`, `maturity_model_version`, `mapping_version`, `evidence_snapshot_version`
+- DFS cycle detection (WHITE/GRAY/BLACK) prevents unsound dependency graphs
+- `_ANALYSIS_VERSION = "1.0.0"` pinned for schema evolution detection
+
+**Validation:**
+- 81 pytest tests: all passed
+- mypy: no issues in 7 source files
+- ruff lint + format: all passed
+
+---
+
 ## 2026-05-17 — PR 88: Enterprise Framework Mapping & Crosswalk Governance Engine
 
 **Classification:** New feature — pure Python service layer. No infra, no schema migration, no CI, no auth, no API routes.

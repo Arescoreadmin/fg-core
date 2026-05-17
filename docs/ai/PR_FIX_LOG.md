@@ -6,6 +6,41 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-17 — PR 89: Enterprise Gap Analysis & Remediation Prioritization Engine
+
+**Branch:** `feat/gap-analysis-remediation-prioritization`
+
+**Area:** Readiness; gap analysis; remediation governance; audit.
+
+**Root cause:** No implementation — new deterministic gap analysis layer that consumes `ScoreOutput` from the existing `ReadinessScoreEngine` and produces a fully frozen `GapAnalysisResult` covering gap detection, prioritization, impact estimation, dependency chains, blockers, remediation recommendations, and replay-safe integrity hashing.
+
+**Files changed:**
+- `services/readiness/gap_analysis/models.py` (new) — 5 enums, 14 frozen dataclasses: `ReadinessGap`, `EvidenceFreshnessRecord`, `GapDependency`, `DependencyChain`, `ReadinessBlocker`, `MaturityBlocker`, `ReadinessImpactEstimate`, `RemediationRecommendation`, `PolicyException`, `CompensatingControl`, `GovernanceOverride`, `RemediationIntegrityRecord`, `GapReplayContract`, `GapAnalysisResult`
+- `services/readiness/gap_analysis/detection.py` (new) — 12 detection/builder functions; DFS cycle detection (WHITE/GRAY/BLACK); Kahn's topological sort for dependency chains
+- `services/readiness/gap_analysis/prioritization.py` (new) — `prioritize_gaps` with governance override support; `estimate_readiness_impact`; `build_remediation_recommendations`
+- `services/readiness/gap_analysis/hashing.py` (new) — SHA-256 integrity hashing; `compute_gap_analysis_hash`, `replay_gap_analysis_hash`, `verify_gap_analysis_hash`
+- `services/readiness/gap_analysis/engine.py` (new) — `GapAnalysisEngine.analyze()` 12-step pipeline; `GapAnalysisInput`; fail-closed tenant/framework validation
+- `services/readiness/gap_analysis/__init__.py` (new) — full public API surface
+- `tests/test_gap_analysis.py` (new) — 81 tests
+
+**Design invariants:**
+- Engine is stateless and thread-safe; all configuration via `GapAnalysisInput`
+- Consumes `ScoreOutput` rather than re-deriving scores — no scoring logic duplication
+- Deterministic ordering: `(-severity_rank, -classification_rank, gap_id)` stable sort key
+- `GovernanceOverride` adjusts effective ordering without mutating original gap records
+- `CompensatingControl` reduces impact by 50% but does NOT suppress gap lineage
+- `PolicyException` annotates recommendations but does NOT suppress gaps
+- Hash excludes volatile fields: `analyzed_at`, `tenant_id`, all metadata/extension dicts
+- Fail-closed validation: tenant isolation and framework consistency checked before any analysis
+- `_ANALYSIS_VERSION = "1.0.0"` pinned for schema evolution detection
+
+**Validation:**
+- `pytest tests/test_gap_analysis.py`: 81 passed
+- `mypy`: no issues in 7 source files
+- `ruff check` + `ruff format`: all passed
+
+---
+
 ### 2026-05-17 — PR 88: Enterprise Framework Mapping & Crosswalk Governance Engine
 
 **Branch:** `feat/framework-mapping-crosswalk-governance`
