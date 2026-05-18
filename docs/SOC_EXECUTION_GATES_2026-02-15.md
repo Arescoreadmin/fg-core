@@ -3561,3 +3561,25 @@ Route inventory regenerated to reflect POST scope change (`control-plane:read` �
 
 **Compliance posture:**
 Route inventory now correctly reflects tenant isolation for all governance report endpoints. 398 tests pass, 2 skipped. `make fg-fast` passes with no gate failures.
+
+---
+
+## 2026-05-18 — PR 99: Unified Governance Timeline Infrastructure (Foundation)
+
+**Classification:** New API surface + new DB table.  No changes to existing tables or auth paths.
+
+**SOC review:**
+- `GET /governance/timeline` — new tenant-scoped paginated list endpoint for governance timeline events.  Auth: `ingest:assessment` scope.  Tenant resolved from auth context via `_resolve_caller_tenant`; no tenant param from query string.  Returns `TimelinePageResponse` with cursor pagination.  No PII/PHI in response.
+- `GET /governance/timeline/{event_id}` — new tenant-scoped single-event lookup.  Fails closed with 404 on tenant mismatch or missing event.  Same auth scope.
+- Both routes registered in both `create_app()` call paths in `api/main.py`.
+- `tools/ci/route_inventory.json` regenerated — both routes show `tenant_bound: true`.
+- `migrations/postgres/0056_governance_timeline.sql` — new table `governance_timeline_events` with `ENABLE ROW LEVEL SECURITY` + `FORCE ROW LEVEL SECURITY` + tenant isolation policy using `current_setting('app.tenant_id', true)`.  Append-only: no UPDATE or DELETE from application code.  Idempotent inserts (IntegrityError caught silently).
+- `event_id` derived deterministically from SHA-256(tenant_id + source_type + source_id + event_type + occurred_at)[:16] — cross-tenant collision structurally impossible.
+- `display` field present in response shape as `null` placeholder; populated in PR 103.
+- No adapters wired yet (PR 100); timeline is empty until emit paths are connected.
+
+**DB schema changes:**
+1 new table `governance_timeline_events` with 12 columns, 4 indexes, RLS enabled + forced.  No existing tables modified.
+
+**Compliance posture:**
+Both new routes are tenant-bound and scope-gated.  Route inventory, plane registry snapshot, contract routes, and topology hash regenerated.  26 new timeline tests pass.  `make fg-fast` passes with no gate failures.

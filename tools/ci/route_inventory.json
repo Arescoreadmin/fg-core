@@ -4824,6 +4824,40 @@
       "tenant_bound": true
     },
     {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_timeline_manager.py",
+      "method": "GET",
+      "path": "/governance/timeline",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "ingest:assessment"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_timeline_manager.py",
+      "method": "GET",
+      "path": "/governance/timeline/{event_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "ingest:assessment"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
       "dependency_categories": [],
       "file": "api/main.py",
       "method": "GET",
@@ -6676,7 +6710,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-05-18T21:14:25.363837+00:00",
+  "generated_at": "2026-05-18T22:28:25.162082+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
