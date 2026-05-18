@@ -479,6 +479,7 @@ class TestReportJobTenantIsolation:
                 report_id="r-iso-1",
                 request=fake_request,
                 db=fake_db,
+                x_assessment_id=None,
             )
         assert exc_info.value.status_code == 404
 
@@ -505,6 +506,7 @@ class TestReportJobTenantIsolation:
             report_id="r-iso-2",
             request=fake_request,
             db=fake_db,
+            x_assessment_id=None,
         )
         assert result["id"] == "r-iso-2"
 
@@ -519,16 +521,16 @@ class TestReportJobTenantIsolation:
         fake_db = MagicMock()
         fake_db.query.return_value.filter.return_value.filter.return_value.first.return_value = None
 
-        # state has no auth attribute — unbound caller.
+        # state has no auth attribute — unbound caller, no header supplied.
         fake_request = MagicMock()
         fake_request.state = MagicMock(spec=[])
-        fake_request.headers.get = MagicMock(return_value=None)
 
         with pytest.raises(HTTPException) as exc_info:
             engine_mod.get_report(
                 report_id="r-iso-3",
                 request=fake_request,
                 db=fake_db,
+                x_assessment_id=None,
             )
         assert exc_info.value.status_code == 404
 

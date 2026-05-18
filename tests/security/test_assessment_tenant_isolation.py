@@ -4,7 +4,8 @@ tests/security/test_assessment_tenant_isolation.py
 Wrong-tenant denial coverage for the assessment/report commercial workflow.
 
 Invariants verified:
-  1. Tenant-A cannot read, mutate, submit, or generate reports for Tenant-B assessments.
+  1. Tenant-A cannot read, mutate, checkout, submit, or generate reports for
+     Tenant-B assessments.
   2. Pre-tenant lead records (lead:<assessment_id>) are not accessible by any
      tenant-bound caller unless that tenant matches.
   3. Tenant-bound callers cannot enumerate or access pre-tenant lead records.
@@ -17,9 +18,10 @@ Invariants verified:
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from typing import Any
+from unittest.mock import patch as mpatch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from api.auth_scopes import mint_key
@@ -48,26 +50,65 @@ def _create_assessment(client: TestClient, key: str) -> tuple[str, str]:
     return data["assessment_id"], data["org_id"]
 
 
-def _save_and_submit(client: TestClient, key: str, assessment_id: str, *, assessment_token: str | None = None) -> None:
-    """Save responses and attempt submit. Skips the test if the question bank is absent."""
-    headers: dict[str, str] = {"X-API-Key": key}
-    if assessment_token:
-        headers["X-Assessment-Id"] = assessment_token
-
+def _save_responses(client: TestClient, key: str, assessment_id: str) -> None:
+    """Autosave one response so the assessment is in_progress."""
     resp = client.patch(
         f"/ingest/assessment/{assessment_id}/responses",
-        headers=headers,
+        headers={"X-API-Key": key},
         json={"responses": {"q1": True}},
     )
     assert resp.status_code == 200, resp.text
 
-    resp = client.post(
-        f"/ingest/assessment/{assessment_id}/submit",
-        headers=headers,
-    )
-    if resp.status_code == 503:
-        pytest.skip("question bank not seeded — run database seeds")
-    assert resp.status_code == 200, resp.text
+
+def _force_scored(assessment_id: str) -> None:
+    """Directly write 'scored' status into the test DB — no question bank needed.
+
+    This bypasses the submit endpoint entirely so report-related security tests
+    always run regardless of whether database seeds are present.
+    """
+    from api.db import get_sessionmaker
+    from api.db_models import AssessmentRecord
+
+    SessionLocal = get_sessionmaker()
+    with SessionLocal() as db:
+        rec = db.query(AssessmentRecord).filter(
+            AssessmentRecord.id == assessment_id
+        ).first()
+        if rec:
+            rec.status = "scored"
+            rec.overall_score = 72.5
+            rec.risk_band = "medium"
+            rec.scores = {
+                "data_governance": 70.0,
+                "security_posture": 75.0,
+                "ai_maturity": 65.0,
+                "infra_readiness": 80.0,
+                "compliance_awareness": 68.0,
+                "automation_potential": 72.0,
+            }
+            rec.submitted_at = datetime.now(timezone.utc)
+            rec.scored_at = datetime.now(timezone.utc)
+            db.commit()
+
+
+def _prepare_scored_assessment(client: TestClient, key: str) -> str:
+    """Create an assessment, save a response, force it to scored. Returns assessment_id."""
+    assessment_id, _ = _create_assessment(client, key)
+    _save_responses(client, key, assessment_id)
+    _force_scored(assessment_id)
+    return assessment_id
+
+
+def _enqueue_report(client: TestClient, key: str, assessment_id: str) -> str:
+    """Enqueue report generation (background task mocked). Returns report_id."""
+    with mpatch("api.reports_engine._generate_report_sync"):
+        gen = client.post(
+            "/ingest/assessment/reports/generate",
+            headers={"X-API-Key": key},
+            json={"assessment_id": assessment_id, "prompt_type": "executive"},
+        )
+    assert gen.status_code == 202, gen.text
+    return gen.json()["report_id"]
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +191,7 @@ def test_wrong_tenant_cannot_submit_assessment(build_app):
     assert resp.status_code == 404
 
 
-def test_wrong_tenant_cannot_generate_report(build_app):
+def test_wrong_tenant_cannot_checkout_assessment(build_app):
     app = build_app(auth_enabled=True)
     client = TestClient(app)
 
@@ -158,7 +199,22 @@ def test_wrong_tenant_cannot_generate_report(build_app):
     key_b = mint_key("ingest:assessment", tenant_id="tenant-b")
 
     assessment_id, _ = _create_assessment(client, key_a)
-    _save_and_submit(client, key_a, assessment_id)
+
+    resp = client.post(
+        f"/ingest/assessment/{assessment_id}/checkout",
+        headers={"X-API-Key": key_b},
+    )
+    assert resp.status_code == 404
+
+
+def test_wrong_tenant_cannot_generate_report(build_app):
+    app = build_app(auth_enabled=True)
+    client = TestClient(app)
+
+    key_a = mint_key("ingest:assessment", tenant_id="tenant-a")
+    key_b = mint_key("ingest:assessment", tenant_id="tenant-b")
+
+    assessment_id = _prepare_scored_assessment(client, key_a)
 
     resp = client.post(
         "/ingest/assessment/reports/generate",
@@ -176,22 +232,9 @@ def test_wrong_tenant_cannot_poll_report(build_app):
     key_a = mint_key("ingest:assessment", tenant_id="tenant-a")
     key_b = mint_key("ingest:assessment", tenant_id="tenant-b")
 
-    assessment_id, _ = _create_assessment(client, key_a)
-    _save_and_submit(client, key_a, assessment_id)
+    assessment_id = _prepare_scored_assessment(client, key_a)
+    report_id = _enqueue_report(client, key_a, assessment_id)
 
-    # Enqueue with owner — report is created in DB even if generation is async.
-    from unittest.mock import patch as mpatch
-
-    with mpatch("api.reports_engine._generate_report_sync"):
-        gen = client.post(
-            "/ingest/assessment/reports/generate",
-            headers={"X-API-Key": key_a},
-            json={"assessment_id": assessment_id, "prompt_type": "executive"},
-        )
-    assert gen.status_code == 202
-    report_id = gen.json()["report_id"]
-
-    # Tenant-B attempts to poll by report_id.
     resp = client.get(
         f"/ingest/assessment/reports/{report_id}",
         headers={"X-API-Key": key_b},
@@ -206,19 +249,8 @@ def test_wrong_tenant_cannot_download_report(build_app):
     key_a = mint_key("ingest:assessment", tenant_id="tenant-a")
     key_b = mint_key("ingest:assessment", tenant_id="tenant-b")
 
-    assessment_id, _ = _create_assessment(client, key_a)
-    _save_and_submit(client, key_a, assessment_id)
-
-    from unittest.mock import patch as mpatch
-
-    with mpatch("api.reports_engine._generate_report_sync"):
-        gen = client.post(
-            "/ingest/assessment/reports/generate",
-            headers={"X-API-Key": key_a},
-            json={"assessment_id": assessment_id, "prompt_type": "executive"},
-        )
-    assert gen.status_code == 202
-    report_id = gen.json()["report_id"]
+    assessment_id = _prepare_scored_assessment(client, key_a)
+    report_id = _enqueue_report(client, key_a, assessment_id)
 
     resp = client.get(
         f"/ingest/assessment/reports/{report_id}/download",
@@ -272,19 +304,8 @@ def test_pretenant_report_poll_requires_assessment_id_header(build_app):
     client = TestClient(app)
 
     unbound_key = mint_key("ingest:assessment")
-    assessment_id, _ = _create_assessment(client, unbound_key)
-    _save_and_submit(client, unbound_key, assessment_id)
-
-    from unittest.mock import patch as mpatch
-
-    with mpatch("api.reports_engine._generate_report_sync"):
-        gen = client.post(
-            "/ingest/assessment/reports/generate",
-            headers={"X-API-Key": unbound_key, "X-Assessment-Id": assessment_id},
-            json={"assessment_id": assessment_id, "prompt_type": "executive"},
-        )
-    assert gen.status_code == 202
-    report_id = gen.json()["report_id"]
+    assessment_id = _prepare_scored_assessment(client, unbound_key)
+    report_id = _enqueue_report(client, unbound_key, assessment_id)
 
     # No ownership header → fail closed.
     resp = client.get(
@@ -300,19 +321,8 @@ def test_pretenant_report_poll_wrong_assessment_id_fails(build_app):
     client = TestClient(app)
 
     unbound_key = mint_key("ingest:assessment")
-    assessment_id, _ = _create_assessment(client, unbound_key)
-    _save_and_submit(client, unbound_key, assessment_id)
-
-    from unittest.mock import patch as mpatch
-
-    with mpatch("api.reports_engine._generate_report_sync"):
-        gen = client.post(
-            "/ingest/assessment/reports/generate",
-            headers={"X-API-Key": unbound_key, "X-Assessment-Id": assessment_id},
-            json={"assessment_id": assessment_id, "prompt_type": "executive"},
-        )
-    assert gen.status_code == 202
-    report_id = gen.json()["report_id"]
+    assessment_id = _prepare_scored_assessment(client, unbound_key)
+    report_id = _enqueue_report(client, unbound_key, assessment_id)
 
     wrong_id = str(uuid.uuid4())
     resp = client.get(
@@ -328,19 +338,8 @@ def test_pretenant_report_poll_correct_assessment_id_succeeds(build_app):
     client = TestClient(app)
 
     unbound_key = mint_key("ingest:assessment")
-    assessment_id, _ = _create_assessment(client, unbound_key)
-    _save_and_submit(client, unbound_key, assessment_id)
-
-    from unittest.mock import patch as mpatch
-
-    with mpatch("api.reports_engine._generate_report_sync"):
-        gen = client.post(
-            "/ingest/assessment/reports/generate",
-            headers={"X-API-Key": unbound_key, "X-Assessment-Id": assessment_id},
-            json={"assessment_id": assessment_id, "prompt_type": "executive"},
-        )
-    assert gen.status_code == 202
-    report_id = gen.json()["report_id"]
+    assessment_id = _prepare_scored_assessment(client, unbound_key)
+    report_id = _enqueue_report(client, unbound_key, assessment_id)
 
     resp = client.get(
         f"/ingest/assessment/reports/{report_id}",
@@ -386,19 +385,8 @@ def test_report_tenant_inherits_from_assessment(build_app):
     key_a = mint_key("ingest:assessment", tenant_id="tenant-a")
     key_b = mint_key("ingest:assessment", tenant_id="tenant-b")
 
-    assessment_id, _ = _create_assessment(client, key_a)
-    _save_and_submit(client, key_a, assessment_id)
-
-    from unittest.mock import patch as mpatch
-
-    with mpatch("api.reports_engine._generate_report_sync"):
-        gen = client.post(
-            "/ingest/assessment/reports/generate",
-            headers={"X-API-Key": key_a},
-            json={"assessment_id": assessment_id, "prompt_type": "executive"},
-        )
-    assert gen.status_code == 202
-    report_id = gen.json()["report_id"]
+    assessment_id = _prepare_scored_assessment(client, key_a)
+    report_id = _enqueue_report(client, key_a, assessment_id)
 
     # Tenant-A can poll it.
     resp_a = client.get(
