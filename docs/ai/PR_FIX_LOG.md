@@ -6,6 +6,27 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-18 — PR 97: Enterprise Tenant Isolation & Assessment Boundary Hardening
+
+**Branch:** `feat/simulation-governance-extensions-pr96`
+
+**Area:** Multi-tenant security; assessment/report API; database defaults.
+
+**Root cause:** Assessment and report routes performed ID-only DB lookups (no tenant predicate), the `tenant_id` column defaulted to `'public'` enabling a shared pre-tenant namespace, and anonymous callers had no isolation between assessments.
+
+**Files changed:**
+- `api/assessments.py` — `_resolve_caller_tenant` helper; `_get_assessment_or_404` gains tenant predicate (fail-closed to `lead:<id>` for unbound callers); `create_org` uses `lead:<assessment_id>` instead of `public`; all 5 route handlers updated
+- `api/reports_engine.py` — `generate_report`, `get_report`, `download_report` all gain tenant predicates; `get_report`/`download_report` accept `X-Assessment-Id` header (FastAPI `Header` dependency, auto-documented in OpenAPI) for unbound callers
+- `api/db_models.py` — removed `default="public"` from `OrgProfile.tenant_id`, `AssessmentRecord.tenant_id`, `ReportRecord.tenant_id`
+- `migrations/postgres/0054_assessment_tenant_hardening.sql` (new) — backfill `public` → `lead:<id>` in all three tables; `ALTER COLUMN tenant_id DROP DEFAULT` on all three; composite indexes
+- `tests/security/test_assessment_tenant_isolation.py` (new) — 15 tenant isolation tests covering wrong-tenant denial, pre-tenant lead isolation, checkout denial, fail-closed non-existent IDs, and report ownership lineage
+- `tests/test_report_jobs.py` — updated mock patterns for chained `.filter().filter()` and `x_assessment_id=None` on direct function calls
+- `tests/test_report_hardening.py` — minor fix: removed unused variable, updated auth mock pattern
+
+**Verification:** All 15 new security tests pass; 0 skips; 922 total tests pass.
+
+---
+
 ### 2026-05-18 — PR 96: Simulation Governance Extensions
 
 **Branch:** `feat/simulation-governance-extensions-pr96`

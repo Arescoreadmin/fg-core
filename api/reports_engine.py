@@ -24,10 +24,11 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from api.assessments import _resolve_caller_tenant
 from api.auth_scopes.resolution import require_scopes
 from api.db import get_sessionmaker
 from api.db_models import AssessmentRecord, OrgProfile, PromptVersion, ReportRecord
@@ -545,11 +546,17 @@ def generate_report(
             detail="prompt_type must be one of: executive, technical, compliance",
         )
 
-    assessment = (
-        db.query(AssessmentRecord)
-        .filter(AssessmentRecord.id == body.assessment_id)
-        .first()
+    caller_tenant = _resolve_caller_tenant(request)
+    assessment_q = db.query(AssessmentRecord).filter(
+        AssessmentRecord.id == body.assessment_id
     )
+    if caller_tenant:
+        assessment_q = assessment_q.filter(AssessmentRecord.tenant_id == caller_tenant)
+    else:
+        assessment_q = assessment_q.filter(
+            AssessmentRecord.tenant_id == f"lead:{body.assessment_id}"
+        )
+    assessment = assessment_q.first()
     if assessment is None:
         raise HTTPException(status_code=404, detail="Assessment not found")
     if assessment.status not in ("scored", "submitted"):
@@ -594,17 +601,35 @@ def generate_report(
 
 
 @router.get("/reports/{report_id}")
-def get_report(report_id: str, request: Request, db: Session = Depends(_get_db)):
+def get_report(
+    report_id: str,
+    request: Request,
+    db: Session = Depends(_get_db),
+    x_assessment_id: str | None = Header(
+        default=None,
+        alias="X-Assessment-Id",
+        description=(
+            "Required for pre-tenant (unbound) callers. "
+            "Must match the assessment_id that owns this report. "
+            "Not required for tenant-bound API keys."
+        ),
+    ),
+):
     """Poll report status and retrieve content when complete."""
-    report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
+    caller_tenant = _resolve_caller_tenant(request)
+    # Tenant isolation: fail-closed. Wrong-tenant and missing-tenant both 404
+    # to avoid enumeration. Pre-tenant callers must supply X-Assessment-Id to
+    # prove lead-namespace ownership; tenant-bound callers use strict predicate.
+    q = db.query(ReportRecord).filter(ReportRecord.id == report_id)
+    if caller_tenant:
+        q = q.filter(ReportRecord.tenant_id == caller_tenant)
+    else:
+        assessment_token = (x_assessment_id or "").strip()
+        if not assessment_token:
+            raise HTTPException(status_code=404, detail="Report not found")
+        q = q.filter(ReportRecord.tenant_id == f"lead:{assessment_token}")
+    report = q.first()
     if report is None:
-        raise HTTPException(status_code=404, detail="Report not found")
-
-    # Tenant isolation: wrong tenant gets 404 (not 403) to avoid enumeration.
-    caller_tenant: str | None = getattr(
-        getattr(request, "state", None), "tenant_id", None
-    )
-    if caller_tenant and report.tenant_id and caller_tenant != report.tenant_id:
         raise HTTPException(status_code=404, detail="Report not found")
 
     overall_score: float | None = None
@@ -634,13 +659,35 @@ def get_report(report_id: str, request: Request, db: Session = Depends(_get_db))
 
 
 @router.get("/reports/{report_id}/download")
-def download_report(report_id: str, db: Session = Depends(_get_db)):
+def download_report(
+    report_id: str,
+    request: Request,
+    db: Session = Depends(_get_db),
+    x_assessment_id: str | None = Header(
+        default=None,
+        alias="X-Assessment-Id",
+        description=(
+            "Required for pre-tenant (unbound) callers. "
+            "Must match the assessment_id that owns this report. "
+            "Not required for tenant-bound API keys."
+        ),
+    ),
+):
     """
     Return a download URL for the PDF version of the report.
     PDF generation via MinIO/S3 is a Stage 2 feature.
     For now, return a data URL hint so the frontend can render a fallback.
     """
-    report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
+    caller_tenant = _resolve_caller_tenant(request)
+    q = db.query(ReportRecord).filter(ReportRecord.id == report_id)
+    if caller_tenant:
+        q = q.filter(ReportRecord.tenant_id == caller_tenant)
+    else:
+        assessment_token = (x_assessment_id or "").strip()
+        if not assessment_token:
+            raise HTTPException(status_code=404, detail="Report not found")
+        q = q.filter(ReportRecord.tenant_id == f"lead:{assessment_token}")
+    report = q.first()
     if report is None:
         raise HTTPException(status_code=404, detail="Report not found")
     if report.status != "complete":

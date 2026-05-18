@@ -652,12 +652,14 @@ class TestReportTenantIsolationUnderConcurrency:
         from fastapi import HTTPException
         import api.reports_engine as engine_mod
 
-        report = _make_report_record("r-iso-h1", tenant_id="tenant-A")
         fake_db = MagicMock()
-        fake_db.query.return_value.filter.return_value.first.return_value = report
+        # Wrong-tenant query returns nothing (tenant predicate filters it out).
+        fake_db.query.return_value.filter.return_value.filter.return_value.first.return_value = None
 
+        fake_auth = MagicMock()
+        fake_auth.tenant_id = "tenant-B"
         fake_request = MagicMock()
-        fake_request.state.tenant_id = "tenant-B"
+        fake_request.state.auth = fake_auth
 
         with pytest.raises(HTTPException) as exc_info:
             engine_mod.get_report(

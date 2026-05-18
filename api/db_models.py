@@ -1795,9 +1795,7 @@ class OrgProfile(Base):
     org_id: Mapped[Any] = mapped_column(
         Text, nullable=False, unique=True, default=lambda: str(uuid.uuid4())
     )
-    tenant_id: Mapped[Any] = mapped_column(
-        Text, nullable=False, default="public", index=True
-    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
     org_name: Mapped[Any] = mapped_column(Text, nullable=False)
     industry: Mapped[Any] = mapped_column(Text, nullable=False, default="other")
     employee_count: Mapped[Any] = mapped_column(Text, nullable=False, default="")
@@ -1843,9 +1841,7 @@ class AssessmentRecord(Base):
     id: Mapped[Any] = mapped_column(
         Text, primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    tenant_id: Mapped[Any] = mapped_column(
-        Text, nullable=False, default="public", index=True
-    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
     org_profile_id: Mapped[Any] = mapped_column(
         Integer, ForeignKey("org_profiles.id", ondelete="SET NULL"), nullable=True
     )
@@ -1897,9 +1893,7 @@ class ReportRecord(Base):
     id: Mapped[Any] = mapped_column(
         Text, primary_key=True, default=lambda: str(uuid.uuid4())
     )
-    tenant_id: Mapped[Any] = mapped_column(
-        Text, nullable=False, default="public", index=True
-    )
+    tenant_id: Mapped[Any] = mapped_column(Text, nullable=False, index=True)
     assessment_id: Mapped[Any] = mapped_column(
         Text, ForeignKey("assessments.id", ondelete="SET NULL"), nullable=True
     )
