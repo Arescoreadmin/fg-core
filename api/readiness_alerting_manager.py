@@ -822,6 +822,29 @@ def suppress_alert(
         )
 
     now_iso = _now_iso()
+
+    # Validate and apply the FSM transition BEFORE writing any records.
+    # If the alert is in a terminal or non-suppressible state (e.g. RESOLVED,
+    # ESCALATED), reject with 422 rather than persisting a misleading suppression
+    # row and then silently swallowing the InvalidAlertTransition.
+    try:
+        transition = apply_transition(
+            alert=alert,
+            from_state=alert.lifecycle_state,
+            to_state=AlertLifecycleState.SUPPRESSED,
+            actor=body.actor,
+            reason=body.reason,
+            timestamp_iso=now_iso,
+        )
+    except InvalidAlertTransition as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "INVALID_ALERT_TRANSITION",
+                f"Cannot suppress alert in state {alert.lifecycle_state.value}: {exc}",
+            ),
+        )
+
     suppression = create_suppression(
         alert_instance_id=alert_instance_id,
         tenant_id=tenant_id,
@@ -833,28 +856,13 @@ def suppress_alert(
     )
 
     _alerting_store.record_suppression(db, suppression=suppression)
-
-    # Transition alert to SUPPRESSED state.
-    try:
-        transition = apply_transition(
-            alert=alert,
-            from_state=alert.lifecycle_state,
-            to_state=AlertLifecycleState.SUPPRESSED,
-            actor=body.actor,
-            reason=body.reason,
-            timestamp_iso=now_iso,
-        )
-        _alerting_store.update_alert_lifecycle_state(
-            db,
-            alert_instance_id=alert_instance_id,
-            tenant_id=tenant_id,
-            new_state=AlertLifecycleState.SUPPRESSED.value,
-        )
-        _alerting_store.record_lifecycle_transition(db, transition=transition)
-    except InvalidAlertTransition:
-        # Alert may already be suppressed or in a state that doesn't allow suppression.
-        # Suppression record is still valid; lifecycle state update is best-effort.
-        pass
+    _alerting_store.update_alert_lifecycle_state(
+        db,
+        alert_instance_id=alert_instance_id,
+        tenant_id=tenant_id,
+        new_state=AlertLifecycleState.SUPPRESSED.value,
+    )
+    _alerting_store.record_lifecycle_transition(db, transition=transition)
 
     db.commit()
 

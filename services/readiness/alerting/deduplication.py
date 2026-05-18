@@ -67,6 +67,18 @@ def deduplicate_alerts(
     total_before = len(alerts)
     now_iso = _now_iso()
 
+    # CRITICAL and BLOCKING alerts are NEVER collapsed by deduplication — they all
+    # pass through unconditionally. Only lower-severity alerts go through the
+    # grouping path. This prevents a CRITICAL occurrence from being hidden whenever
+    # a duplicate fingerprint is present in the same batch.
+    never_suppress_alerts: list[AlertInstance] = []
+    deduplicable_alerts: list[AlertInstance] = []
+    for alert in alerts:
+        if alert.severity in _NEVER_SUPPRESS_SEVERITIES:
+            never_suppress_alerts.append(alert)
+        else:
+            deduplicable_alerts.append(alert)
+
     # Group by dedup key: (alert_fingerprint, tenant_id)
     # Track: best_alert, occurrence_count, suppressed_count, first_seen, last_seen
     groups: dict[
@@ -74,7 +86,7 @@ def deduplicate_alerts(
         dict,
     ] = {}
 
-    for alert in alerts:
+    for alert in deduplicable_alerts:
         key = (alert.alert_fingerprint, alert.tenant_id)
         if key not in groups:
             groups[key] = {
@@ -87,14 +99,10 @@ def deduplicate_alerts(
         else:
             grp = groups[key]
             grp["occurrence_count"] += 1
-            # Update last_seen
             grp["last_seen_iso"] = alert.generated_at_iso
 
-            # Check burst ceiling — CRITICAL/BLOCKING are never burst-suppressed
-            if (
-                grp["occurrence_count"] > burst_ceiling
-                and alert.severity not in _NEVER_SUPPRESS_SEVERITIES
-            ):
+            # Check burst ceiling
+            if grp["occurrence_count"] > burst_ceiling:
                 grp["suppressed_count"] += 1
                 continue
 
@@ -105,7 +113,7 @@ def deduplicate_alerts(
                 grp["best"] = alert
 
     # Build output lists
-    output_alerts: list[AlertInstance] = []
+    output_alerts: list[AlertInstance] = list(never_suppress_alerts)
     dedup_records: list[AlertDeduplicationRecord] = []
 
     for (fingerprint, tenant_id), grp in groups.items():
