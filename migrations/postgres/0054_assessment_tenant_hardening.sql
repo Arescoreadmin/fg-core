@@ -15,10 +15,11 @@
 -- in the application today.
 --
 -- Rollback:
---   UPDATE assessments   SET tenant_id = 'public' WHERE tenant_id LIKE 'lead:%';
---   UPDATE org_profiles  SET tenant_id = 'public' WHERE tenant_id LIKE 'lead:%';
---   UPDATE reports       SET tenant_id = 'public' WHERE tenant_id LIKE 'lead:%';
+--   UPDATE assessments   SET tenant_id = 'public' WHERE tenant_id LIKE 'lead:%%';
+--   UPDATE org_profiles  SET tenant_id = 'public' WHERE tenant_id LIKE 'lead:%%';
+--   UPDATE reports       SET tenant_id = 'public' WHERE tenant_id LIKE 'lead:%%';
 --   (Rollback restores the insecure state — perform only in dev/test environments.)
+--   Note: %% is the psycopg3 escape for a literal % character.
 
 BEGIN;
 
