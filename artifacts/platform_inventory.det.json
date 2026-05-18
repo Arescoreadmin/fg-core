@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 277,
+    "contract_count": 280,
     "contract_only": [],
-    "runtime_count": 381,
+    "runtime_count": 386,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -54,6 +54,8 @@
       "GET /admin/tenants/{tenant_id}",
       "GET /admin/tenants/{tenant_id}/usage",
       "GET /admin/usage/all",
+      "GET /control-plane/readiness/simulation/runs/{run_id}/events",
+      "GET /control-plane/readiness/simulation/runs/{run_id}/replay",
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
@@ -141,7 +143,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "030da7a1e1082bf9ad31460fb33b1de79eeb0bca9c10b943bff4b30eadc4d729",
+  "governance_fingerprint": "8e2479688b3e6d45cd927edd59464f1e929b9a034876806b012347d10856fd23",
   "planes": [
     {
       "compat": {
@@ -418,6 +420,10 @@
       "GET /control-plane/readiness/monitoring/runs",
       "GET /control-plane/readiness/monitoring/runs/{run_id}",
       "GET /control-plane/readiness/scoring-contracts/{contract_id}",
+      "GET /control-plane/readiness/simulation/runs",
+      "GET /control-plane/readiness/simulation/runs/{run_id}",
+      "GET /control-plane/readiness/simulation/runs/{run_id}/events",
+      "GET /control-plane/readiness/simulation/runs/{run_id}/replay",
       "GET /control-plane/v2/ai/namespace",
       "GET /control-plane/v2/commands",
       "GET /control-plane/v2/commands/{command_id}/receipts",
@@ -529,6 +535,7 @@
       "POST /control-plane/readiness/maturity-tiers",
       "POST /control-plane/readiness/monitoring/run",
       "POST /control-plane/readiness/scoring-contracts",
+      "POST /control-plane/readiness/simulation/runs",
       "POST /control-plane/v2/commands",
       "POST /control-plane/v2/commands/{command_id}/cancel",
       "POST /control-plane/v2/commands/{command_id}/receipt",

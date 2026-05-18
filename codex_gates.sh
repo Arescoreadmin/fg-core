@@ -47,10 +47,13 @@ python -m pip check
 
 echo "==> Gates: basic secret scan (cheap tripwire)"
 # Prevent accidental key commits. Extend patterns over time.
-# Excluded: codex_gates.sh itself (self-referential pattern string).
-# Excluded: services/ai_plane_extension/policy_engine.py (re.compile deny-list patterns, not secrets).
+# Excluded:
+# - codex_gates.sh itself, because it contains the detection patterns.
+# - .claude/worktrees/**, because Claude/Codex scratch worktrees can contain detector regexes and stale generated code.
+# - services/ai_plane_extension/policy_engine.py, because it contains re.compile deny-list patterns, not secrets.
 rg -n --hidden --no-ignore-vcs \
   --glob '!codex_gates.sh' \
+  --glob '!.claude/worktrees/**' \
   --glob '!services/ai_plane_extension/policy_engine.py' \
   "(OPENAI_API_KEY|AWS_SECRET_ACCESS_KEY|BEGIN( RSA)? PRIVATE KEY|xox[baprs]-|-----BEGIN PRIVATE KEY-----)" \
   . && { echo "ERROR: possible secret detected (see matches above)"; exit 1; } || true

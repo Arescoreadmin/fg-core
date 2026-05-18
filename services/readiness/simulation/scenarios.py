@@ -29,7 +29,6 @@ Parameter parsing:
 
 from __future__ import annotations
 
-from typing import Optional
 
 from .identity import derive_diff_id, derive_impact_id, derive_warning_id
 from .models import (
@@ -289,8 +288,6 @@ def evaluate_provider_change(
     p = _params_to_dict(params)
     provider_id = p.get("provider_id", "")
     new_status = p.get("new_status", "")
-    new_gov_class = p.get("new_governance_classification", "")
-    new_region = p.get("new_region", "")
 
     if not provider_id or not new_status:
         uncertainty = SimulationUncertainty.UNSUPPORTED_BOUNDARY
@@ -2002,7 +1999,7 @@ def evaluate_operational_governance_change(
         blast = _blast_radius(
             2,
             SimulationSeverity.MODERATE,
-            f"Operational governance permissive; 2 controls at risk.",
+            "Operational governance permissive; 2 controls at risk.",
             uncertainty,
         )
         return readiness, risk, compliance, [], [], [], blast
@@ -2010,7 +2007,7 @@ def evaluate_operational_governance_change(
     else:
         uncertainty = SimulationUncertainty.CONFIRMED
         readiness = _unchanged_readiness(
-            uncertainty, f"Operational governance strict with 0 failures."
+            uncertainty, "Operational governance strict with 0 failures."
         )
         risk = _risk_projection(0.0, SimulationRiskDirection.UNCHANGED, (), uncertainty)
         compliance = _compliance_projection(

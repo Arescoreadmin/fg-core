@@ -12,7 +12,6 @@ All functions are pure Python: no I/O, no side effects.
 from __future__ import annotations
 
 import hashlib
-from typing import Optional
 
 from .models import (
     SimulationClassification,
