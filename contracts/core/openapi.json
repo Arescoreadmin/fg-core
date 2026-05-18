@@ -26671,6 +26671,24 @@
             }
           },
           {
+            "description": "Required for pre-tenant (unbound) callers. Must match the assessment_id that owns this report. Not required for tenant-bound API keys.",
+            "in": "header",
+            "name": "X-Assessment-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Required for pre-tenant (unbound) callers. Must match the assessment_id that owns this report. Not required for tenant-bound API keys.",
+              "title": "X-Assessment-Id"
+            }
+          },
+          {
             "in": "header",
             "name": "X-API-Key",
             "required": false,
@@ -26725,6 +26743,24 @@
             "schema": {
               "title": "Report Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Required for pre-tenant (unbound) callers. Must match the assessment_id that owns this report. Not required for tenant-bound API keys.",
+            "in": "header",
+            "name": "X-Assessment-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Required for pre-tenant (unbound) callers. Must match the assessment_id that owns this report. Not required for tenant-bound API keys.",
+              "title": "X-Assessment-Id"
             }
           },
           {
