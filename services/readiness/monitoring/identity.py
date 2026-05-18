@@ -43,6 +43,13 @@ def derive_monitoring_run_id(
 
     Two evaluations with identical inputs produce the same run_id — enabling
     idempotent scheduling: submitting the same run twice is safe.
+
+    # distributed_lock_seam: run_id is the natural distributed lock key. Under HA,
+    # Kubernetes, or multi-region deployments, a distributed lock (Redis SETNX, DynamoDB
+    # conditional write, or etcd lease) acquired on run_id before execution prevents
+    # duplicate concurrent evaluations. The winner proceeds; all others resolve via the
+    # idempotent GET-by-run_id path. Leader election semantics and multi-worker arbitration
+    # plug in at this boundary without changing the identity contract.
     """
     payload = json.dumps(
         {

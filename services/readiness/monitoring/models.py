@@ -155,6 +155,11 @@ class MonitoringEvaluationContext:
     # sovereignty_seam: residency_region: Optional[str] = None  — for residency-aware
     # monitoring, prohibited-region detection, and export boundary governance (EU, govcon).
     # Add as a typed field when sovereign deployment policy enforcement is introduced.
+    # region_enforcement_seam: sovereign AI governance, EU residency enforcement, gov-region
+    # routing governance, and export boundary detection extend from residency_region. The
+    # evaluator layer gains a ProhibitedRegionEvaluator that emits BLOCKING drift events when
+    # provider routing or data residency violates the tenant's declared sovereignty policy.
+    # This becomes commercially critical for EU enterprise deployments and govcon contracts.
 
 
 # ---------------------------------------------------------------------------

@@ -67,6 +67,12 @@ def snapshot_to_json(snapshot: DriftSnapshot) -> str:
     # to sign. A detached signature record (key_id, algorithm, signature_b64)
     # stored alongside snapshot_json enables regulator/auditor/legal attestation
     # without modifying the snapshot payload itself.
+    # signed_export_seam: signed governance exports unlock regulator-grade, govcon-grade,
+    # and external-auditor-grade verification chains. The canonical JSON is already
+    # deterministic and immutable; adding a detached Ed25519 or ECDSA-P256 signature
+    # over the SHA-256 of the canonical bytes produces a self-verifying governance artifact.
+    # A verification endpoint (POST /control-plane/readiness/monitoring/verify) would accept
+    # {snapshot_json, signature_b64, key_id} and return pass/fail without re-running evaluation.
     return json.dumps(serialize_snapshot(snapshot), sort_keys=True)
 
 

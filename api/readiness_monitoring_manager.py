@@ -87,11 +87,14 @@ def _now_iso() -> str:
 
 
 def _window_iso(hours_back: int) -> tuple[str, str]:
-    now = datetime.now(timezone.utc)
     from datetime import timedelta
 
-    start = now - timedelta(hours=hours_back)
-    return start.isoformat(), now.isoformat()
+    now = datetime.now(timezone.utc)
+    # Bucket end to the hour boundary so retries within the same hour derive an
+    # identical run_id and hit the idempotency path rather than creating duplicates.
+    bucketed_end = now.replace(minute=0, second=0, microsecond=0)
+    start = bucketed_end - timedelta(hours=hours_back)
+    return start.isoformat(), bucketed_end.isoformat()
 
 
 def _stale_days(submitted_at_iso: str, now_iso: str) -> Optional[float]:
@@ -294,10 +297,11 @@ def _build_evidence_inputs(
     inputs = []
     for ref in refs:
         staleness = _stale_days(ref.submitted_at.isoformat(), now_iso)
-        # Extract validation_status and integrity_verified from safe metadata
-        meta = ref.evidence_source_metadata or {}
-        validation_status = str(meta.get("validation_status", "unknown"))
-        integrity_verified_raw = meta.get("integrity_verified")
+        # integrity details live in evidence_integrity_metadata (submitted via
+        # AttachEvidenceRequest.evidence_integrity_metadata), not source metadata.
+        integrity_meta = ref.evidence_integrity_metadata or {}
+        validation_status = str(integrity_meta.get("validation_status", "unknown"))
+        integrity_verified_raw = integrity_meta.get("integrity_verified")
         if integrity_verified_raw is None:
             integrity_verified = None
         else:
@@ -363,10 +367,17 @@ def _build_framework_inputs(
     not_evaluated = total - evaluated
     completion = evaluated / total if total > 0 else 0.0
 
-    # Missing required controls: controls with no result or NON_COMPLIANT result.
-    # For now, identify controls with NON_COMPLIANT outcome.
-    missing_required = tuple(
+    # Missing required controls: controls with no result row at all (unevaluated)
+    # plus controls with a NON_COMPLIANT result. Unevaluated controls are not safe
+    # to treat as passing — they must appear in missing_required_control_ids so
+    # evaluate_framework_compliance() can emit MISSING_REQUIRED_CONTROL drift events.
+    evaluated_ids = {r.control_id for r in results}
+    all_control_ids = {c.control_id for c in controls}
+    non_compliant_ids = {
         r.control_id for r in results if r.outcome == AssessmentOutcome.NON_COMPLIANT
+    }
+    missing_required = tuple(
+        sorted(non_compliant_ids | (all_control_ids - evaluated_ids))
     )[:50]
 
     return (
@@ -656,3 +667,10 @@ def get_monitoring_run(
 # Real-time drift feed (SSE or WebSocket) for live operational surfaces, operator triage
 # flows, and escalation UX. The event shape is already defined by DriftEventResponse;
 # streaming requires only a push mechanism, not new governance contracts.
+
+# monitoring_ux_seam: operational buyer UX layer goes here. The backend now produces
+# complete, immutable, export-safe governance records; the missing convergence layer is
+# the operator experience: live drift feeds, governance timelines, alert triage queues,
+# escalation workflows, incident investigation views, and replay visualization. All data
+# needed to power these surfaces is already present in DriftSnapshot and MonitoringRunRecord.
+# This is the next convergence challenge: backend maturity has outrun operator experience.

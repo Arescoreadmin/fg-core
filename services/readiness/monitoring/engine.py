@@ -223,6 +223,12 @@ class MonitoringEngine:
         # is the canonical event set for this run; a correlation engine would query prior runs
         # by (tenant_id, assessment_id) and annotate events with recurrence counts and trend
         # direction before the snapshot is assembled.
+        # longitudinal_intelligence_seam: drift recurrence scoring, governance decay curves,
+        # chronic provider instability detection, retrieval degradation trends, readiness
+        # volatility analysis, governance MTTR computation, and health scoring all extend from
+        # this boundary. The full run history by (tenant_id, assessment_id) is the input;
+        # the output is an annotated event set and a governance health score attached to the
+        # snapshot before persistence.
 
         critical_or_blocking = sum(
             1

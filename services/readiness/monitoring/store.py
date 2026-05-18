@@ -93,6 +93,11 @@ class MonitoringRunStore:
         # siem_seam: Splunk/Sentinel/Chronicle/Elastic dispatch here. DriftSnapshot JSON is
         # already export-safe and canonically serialized — no transformation required before
         # forwarding to a SIEM event bus.
+        # event_streaming_seam: NATS/Kafka/Pulsar/SNS/SQS publish here. Each DriftEvent in the
+        # snapshot becomes an independent governance domain event on the bus. Topics partition by
+        # (tenant_id, drift_type) for consumer fan-out. The streaming bus enables operational
+        # governance to become fully event-driven: downstream consumers include alert routers,
+        # escalation queues, audit aggregators, and longitudinal intelligence pipelines.
         return self._to_domain(row)
 
     def get_run(
