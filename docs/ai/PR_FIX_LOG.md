@@ -10266,3 +10266,85 @@ Implements the deterministic `ReadinessScoreEngine`: pure Python, no I/O, no LLM
 - `ruff check` + `ruff format`: all passed
 - `make fg-fast`: all gates passed (363 passed, 2 skipped in full suite)
 - `bash codex_gates.sh`: all gates passed
+
+---
+
+### 2026-05-18 — PR 95: Enterprise Governance Simulation, Readiness Impact Projection & Autonomous Systems Governance Modeling Engine
+
+**Branch:** `feat/governance-simulation-projection-engine`
+
+**Area:** Readiness; governance simulation; impact projection; autonomous-systems governance readiness.
+
+**Root cause:** No implementation — new deterministic governance simulation layer that accepts a `SimulationInput` (scenario_type + scenario_parameters) and produces an immutable `SimulationProjection` covering projected readiness scores, risk changes, compliance impact, blast radius, diff records, warnings, and capability governance projections; side-effect free and replay-safe.
+
+**Files changed:**
+- `services/readiness/simulation/models.py` (new) — 4 enums, 14 frozen dataclasses: `SimulationConstraint`, `SimulationWarning`, `SimulationInput`, `SimulationReadinessProjection`, `SimulationRiskProjection`, `SimulationComplianceProjection`, `SimulationImpactRecord`, `SimulationDiffRecord`, `SimulationBlastRadius`, `SimulationCapabilityProjection`, `SimulationGovernanceTrajectory`, `SimulationProjection`, `SimulationRunRecord`
+- `services/readiness/simulation/identity.py` (new) — `derive_simulation_id` (SHA-256[:32]), `derive_simulation_snapshot_id`, `derive_impact_id`, `derive_diff_id`, `derive_warning_id`
+- `services/readiness/simulation/scenarios.py` (new) — 8 deterministic scenario evaluators covering all `SimulationScenarioType` values; pure functions, no I/O; exception → `UNSUPPORTED_BOUNDARY` uncertainty
+- `services/readiness/simulation/engine.py` (new) — `SimulationEngine.simulate()` fail-closed orchestrator; exception → explicit `DEGRADED_VISIBILITY` projection; all version pins in `replay_contract_metadata`
+- `services/readiness/simulation/serialization.py` (new) — `projection_to_json` with `sort_keys=True`; `signed_attestation_seam` and `sovereignty_simulation_seam` comments; no secrets/vectors/PHI
+- `services/readiness/simulation/store.py` (new) — write-once `SimulationRunStore`; tenant isolation on all reads; `longitudinal_simulation_seam` comment
+- `services/readiness/simulation/__init__.py` (new) — full public API surface
+- `api/db_models_simulation.py` (new) — `SimulationRunModel(Base)`, table `readiness_simulation_runs`, 2 composite indexes
+- `api/db.py` (modified — infrastructure) — `importlib.import_module("api.db_models_simulation")` added
+- `api/main.py` (modified — infrastructure) — `readiness_simulation_router` registered in `build_app()` and `build_contract_app()`
+- `api/readiness_simulation_manager.py` (new) — 3 endpoints; `_sim_engine` instance (not `_engine`); `longitudinal_simulation_seam`, `sovereignty_simulation_seam`, `autonomous_systems_seam` comments
+- `tests/test_readiness_simulation.py` (new) — 71 tests across 15 classes
+
+**Design invariants:**
+- Side-effect free: scenario evaluators are pure functions; no DB, HTTP, or I/O
+- Deterministic: identical `SimulationInput` → identical `SimulationProjection`
+- Uncertainty-explicit: `SimulationUncertainty` never collapses to optimistic on unknown/unverifiable state
+- Fail-closed: engine exception → `DEGRADED_VISIBILITY` projection, never silent success
+- Write-once persistence: no UPDATE paths in store
+- `projection_json` never in API responses — stored internally, deserialized dict exposed
+
+**Seam comments placed:**
+- `longitudinal_simulation_seam` (engine.py, store.py, manager)
+- `sovereignty_simulation_seam` (serialization.py, manager)
+- `autonomous_systems_seam` (manager)
+- `signed_attestation_seam` (serialization.py)
+- `capability_governance_seam` (engine.py)
+- `multi_agent_governance_seam` (engine.py)
+
+**Validation:**
+- `pytest tests/test_readiness_simulation.py`: 71 passed
+- `mypy`: 0 errors
+- `ruff check` + `ruff format`: all passed
+- `make fg-fast`: 382 passed, 2 skipped — all gates passed
+- `bash codex_gates.sh`: all gates passed
+
+---
+
+### 2026-05-18 — PR 95 design fixes: scope, migration, actor attribution, hash integrity, param validation, concurrent dedup
+
+**Branch:** feat/readiness-simulation-pr95
+
+**Area:** `api/readiness_simulation_manager.py`, `api/db_models_simulation.py`, `services/readiness/simulation/models.py`, `services/readiness/simulation/store.py`, `migrations/postgres/0052_readiness_simulation_runs.sql`, `tests/test_readiness_simulation.py`
+
+**Root cause (6 issues):**
+1. POST route scoped `control-plane:read` — should be `control-plane:write` since simulations create stored records
+2. No Postgres migration file for the simulation table; Postgres deployments use `assert_migrations_applied()` not ORM `create_all()`
+3. No actor attribution — no record of who called the endpoint for audit/replay lineage
+4. No hash integrity fields — no regulator-grade replay evidence chain
+5. Parameter validation absent — unbounded key/value sizes accepted
+6. Concurrent duplicate insert on idempotent POST — two concurrent identical POSTs could both miss the pre-read and hit a PK constraint on `flush()`, returning 500 instead of the stored result
+
+**Files changed:**
+- `api/readiness_simulation_manager.py`: scope `control-plane:read` → `control-plane:write`; added `_extract_actor()`, `_compute_hashes()`, `IntegrityError` rollback+re-read path, parameter validation (20 keys, 128 key len, 256 value len)
+- `api/db_models_simulation.py`: 8 new columns (actor attribution + hash integrity)
+- `services/readiness/simulation/models.py`: 8 new `SimulationRunRecord` fields
+- `services/readiness/simulation/store.py`: `create_run()` signature + `_to_domain()` backward-compatible getattr
+- `migrations/postgres/0052_readiness_simulation_runs.sql`: full DDL + 3 indexes + RLS + tenant isolation policy; renamed from erroneous `0006_*` to avoid duplicate version collision
+- `tests/test_readiness_simulation.py`: 4 new param validation tests + `read_only_tenant_client` fixture; 75 tests total
+
+**Design invariants:**
+- Actor attribution from auth context only — never request body
+- CRITICAL/BLOCKING hash integrity fields default to `""` for backward compat
+- `IntegrityError` → rollback → re-read ensures idempotent 201 on concurrent duplicates
+- Migration numbered `0052` (highest in sequence); `0006` number was already taken
+
+**Validation:**
+- `pytest tests/test_readiness_simulation.py`: 75 passed
+- `ruff format`: 0 changes needed
+- `make fg-fast`: 386 passed, 2 skipped — all gates passed

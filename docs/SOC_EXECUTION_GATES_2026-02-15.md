@@ -3439,3 +3439,60 @@ No existing tables modified. Schema change called out explicitly per repo rules.
 ### Compliance posture
 
 Route inventory, plane registry snapshot, contract routes, and topology hash regenerated to reflect 7 new endpoints. All write endpoints are gated behind `control-plane:write` scope. Tenant isolation tested via `TestTenantIsolation` (12 tests). 79 total tests pass. `make fg-fast` passes with no gate failures.
+
+---
+
+## 2026-05-18 — PR 95: Enterprise Governance Simulation, Readiness Impact Projection & Autonomous Systems Governance Modeling Engine
+
+**Classification:** New feature — pure Python service layer + 3 new API routes + 1 new DB table. Infrastructure changes called out.
+
+**SOC review:**
+- All simulation types are frozen dataclasses — immutable after construction; no I/O, no mutations
+- `SimulationEngine.simulate()` is stateless and deterministic — identical inputs → identical `SimulationProjection`
+- Simulations are side-effect free: no live governance state is read or mutated; all computation is from `SimulationInput` parameters alone
+- Scenario evaluators are pure functions — no DB, HTTP, or file I/O; exception → explicit `DEGRADED_VISIBILITY` projection
+- Tenant isolation enforced on all store reads; cross-tenant access raises `SimulationRunTenantIsolationError` → 404 (no disclosure)
+- `projection_json` stored internally in DB; never exposed in API responses — API returns deserialized export-safe dict only
+- No secrets, vectors, embeddings, prompts, PHI, or internal topology in any serialized output field
+- Deterministic SHA-256 IDs: `derive_simulation_id` ([:32]) and `derive_simulation_snapshot_id` ([:32]); replay-equivalent inputs → replay-equivalent IDs
+- `SimulationUncertainty` states are explicit — unknown/unverifiable projections never collapse into optimistic results
+- CRITICAL/BLOCKING warnings for unsafe relaxations (capability expansion, provenance disablement, audit relaxation) are never hidden
+- Write-once persistence: `SimulationRunStore` has no UPDATE paths; historical simulations remain reconstructable
+- Idempotent POST: `derive_simulation_id(...)` checked against store before running; returns stored result on match
+- Seam comments placed for: `longitudinal_simulation_seam`, `sovereignty_simulation_seam`, `autonomous_systems_seam`, `signed_attestation_seam`, `capability_governance_seam`, `multi_agent_governance_seam`
+
+**New routes (control-plane scoped, `control-plane:read`):**
+- `POST /control-plane/readiness/simulation/runs` (`api/readiness_simulation_manager.py`)
+- `GET /control-plane/readiness/simulation/runs` (`api/readiness_simulation_manager.py`)
+- `GET /control-plane/readiness/simulation/runs/{run_id}` (`api/readiness_simulation_manager.py`)
+
+**DB schema changes:**
+1 new table appended to `Base.metadata` via `api/db_models_simulation.py`:
+- `readiness_simulation_runs` — write-once simulation run records with projection_json
+
+No existing tables modified. Schema change called out explicitly per repo rules.
+
+**Compliance posture:**
+Route inventory, plane registry snapshot, contract routes, and topology hash regenerated to reflect 3 new endpoints. All endpoints are `control-plane:read` scoped. Tenant isolation enforced on all reads. 71 total tests pass. `make fg-fast` passes with no gate failures.
+
+---
+
+## 2026-05-18 — PR 95 design fix: scope, RLS migration, actor attribution, hash integrity, param validation
+
+**Classification:** Design correction to existing PR 95 (simulation engine). No new tables; column additions to existing new table + new Postgres migration. Scope reclassification for POST route.
+
+**SOC review:**
+- POST `/control-plane/readiness/simulation/runs` reclassified from `control-plane:read` to `control-plane:write` — simulations create stored records; write scope is correct; read scope was an error
+- `migrations/postgres/0006_readiness_simulation_runs.sql` added: full DDL for `readiness_simulation_runs`, all indexes, and `ENABLE ROW LEVEL SECURITY` + tenant isolation policy using `current_setting('app.tenant_id', true)`
+- 8 new columns added to `readiness_simulation_runs` ORM + DB model: actor attribution (`created_by_actor_id`, `actor_type`, `request_id`, `trace_id`, `auth_scope_snapshot`) and replay/hash integrity (`input_hash`, `projection_hash`, `contract_hash`)
+- Actor attribution resolves from auth context only — never from request body; `key_prefix`/`subject` for actor_id; `request.state.request_id` for request_id; `X-Trace-Id` header for trace_id
+- Hash integrity: `input_hash` = SHA-256 of canonical scenario input JSON; `projection_hash` = SHA-256 of serialized projection; `contract_hash` = SHA-256 of version pins — regulator-grade replay evidence
+- Parameter validation added: max 20 keys, key ≤ 128 chars, value ≤ 256 chars; all bounds enforced before simulation runs
+- `SimulationRunRecord` domain model extended with 8 new fields; `_to_domain()` uses `getattr(row, field, None)` for backward compatibility
+- 4 new parameter validation tests added: too-many-keys, key-too-long, value-too-long, write-scope-required; 75 total tests pass
+
+**DB schema changes:**
+8 new nullable/defaulted columns on `readiness_simulation_runs` (no breaking changes). Postgres migration `0006_readiness_simulation_runs.sql` covers full table creation + RLS. Schema change called out explicitly.
+
+**Compliance posture:**
+Route inventory regenerated to reflect POST scope change (`control-plane:read` → `control-plane:write`). Contract authority markers refreshed. 75 tests pass. `make fg-fast` passes with no gate failures.
