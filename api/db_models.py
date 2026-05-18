@@ -1906,6 +1906,31 @@ class ReportRecord(Base):
     content: Mapped[Any] = mapped_column(JSON, nullable=True)
     error_message: Mapped[Any] = mapped_column(Text, nullable=True)
     pdf_storage_key: Mapped[Any] = mapped_column(Text, nullable=True)
+    manifest_hash: Mapped[Any] = mapped_column(Text, nullable=True, index=True)
+    manifest_version: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="governance-export-manifest-v1"
+    )
+    export_version: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="governance-export-v1"
+    )
+    report_version: Mapped[Any] = mapped_column(Integer, nullable=False, default=1)
+    reviewer_ref: Mapped[Any] = mapped_column(Text, nullable=True)
+    approval_status: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="unapproved"
+    )
+    finalized_at: Mapped[Any] = mapped_column(DateTime(timezone=True), nullable=True)
+    finalized_manifest_hash: Mapped[Any] = mapped_column(Text, nullable=True)
+    previous_report_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    superseded_by_report_id: Mapped[Any] = mapped_column(Text, nullable=True)
+    evidence_snapshot_version: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="evidence-snapshot-v1"
+    )
+    scoring_contract_version: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="assessment-scoring-v1"
+    )
+    framework_mapping_version: Mapped[Any] = mapped_column(
+        Text, nullable=False, default="framework-mapping-v1"
+    )
     created_at: Mapped[Any] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )

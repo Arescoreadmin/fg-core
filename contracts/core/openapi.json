@@ -4738,6 +4738,20 @@
         "title": "FeedLiveResponse",
         "type": "object"
       },
+      "FinalizeReportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reviewer_ref": {
+            "title": "Reviewer Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reviewer_ref"
+        ],
+        "title": "FinalizeReportRequest",
+        "type": "object"
+      },
       "FindingCreateItem": {
         "additionalProperties": false,
         "properties": {
@@ -5302,6 +5316,7 @@
         "type": "object"
       },
       "GenerateReportRequest": {
+        "additionalProperties": false,
         "properties": {
           "assessment_id": {
             "title": "Assessment Id",
@@ -7811,6 +7826,29 @@
         ],
         "title": "RecoveryType",
         "type": "string"
+      },
+      "RegenerateReportResponse": {
+        "properties": {
+          "previous_report_id": {
+            "title": "Previous Report Id",
+            "type": "string"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_id",
+          "previous_report_id",
+          "status"
+        ],
+        "title": "RegenerateReportResponse",
+        "type": "object"
       },
       "RegisterSecretGovernanceRequest": {
         "additionalProperties": false,
@@ -26801,6 +26839,408 @@
           }
         },
         "summary": "Download Report",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/ingest/assessment/reports/{report_id}/exports/{export_format}": {
+      "get": {
+        "description": "Return deterministic PDF or HTML governance artifact bytes.",
+        "operationId": "export_report_artifact_ingest_assessment_reports__report_id__exports__export_format__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "export_format",
+            "required": true,
+            "schema": {
+              "title": "Export Format",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Assessment-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Assessment-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Report Artifact",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/ingest/assessment/reports/{report_id}/finalize": {
+      "post": {
+        "description": "Preserve reviewer approval and freeze the current canonical manifest hash.",
+        "operationId": "finalize_report_ingest_assessment_reports__report_id__finalize_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Assessment-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Assessment-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinalizeReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Finalize Report",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/ingest/assessment/reports/{report_id}/manifest": {
+      "get": {
+        "description": "Return the canonical governance export manifest and SHA-256 hash.",
+        "operationId": "get_report_manifest_ingest_assessment_reports__report_id__manifest_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Assessment-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Assessment-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Report Manifest",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/ingest/assessment/reports/{report_id}/regenerate": {
+      "post": {
+        "description": "Create a new report version instead of mutating a finalized artifact.",
+        "operationId": "regenerate_report_ingest_assessment_reports__report_id__regenerate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Assessment-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Assessment-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegenerateReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Regenerate Report",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/ingest/assessment/reports/{report_id}/replay-verify": {
+      "post": {
+        "description": "Rebuild the canonical manifest and verify the report hash deterministically.",
+        "operationId": "replay_verify_report_ingest_assessment_reports__report_id__replay_verify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_manifest_hash",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expected Manifest Hash"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Assessment-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Assessment-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replay Verify Report",
         "tags": [
           "reports"
         ]

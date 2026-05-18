@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 280,
+    "contract_count": 287,
     "contract_only": [],
-    "runtime_count": 386,
+    "runtime_count": 391,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -54,8 +54,6 @@
       "GET /admin/tenants/{tenant_id}",
       "GET /admin/tenants/{tenant_id}/usage",
       "GET /admin/usage/all",
-      "GET /control-plane/readiness/simulation/runs/{run_id}/events",
-      "GET /control-plane/readiness/simulation/runs/{run_id}/replay",
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
@@ -143,7 +141,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "8e2479688b3e6d45cd927edd59464f1e929b9a034876806b012347d10856fd23",
+  "governance_fingerprint": "591b34be264ec445db70e92348b70d29399b622a2fb5603a48abfe1785103d00",
   "planes": [
     {
       "compat": {
@@ -578,6 +576,8 @@
       "GET /feed/stream",
       "GET /ingest/assessment/reports/{report_id}",
       "GET /ingest/assessment/reports/{report_id}/download",
+      "GET /ingest/assessment/reports/{report_id}/exports/{export_format}",
+      "GET /ingest/assessment/reports/{report_id}/manifest",
       "GET /ingest/assessment/{assessment_id}",
       "GET /ingest/assessment/{assessment_id}/questions",
       "GET /stats",
@@ -602,6 +602,9 @@
       "POST /ingest",
       "POST /ingest/assessment/orgs",
       "POST /ingest/assessment/reports/generate",
+      "POST /ingest/assessment/reports/{report_id}/finalize",
+      "POST /ingest/assessment/reports/{report_id}/regenerate",
+      "POST /ingest/assessment/reports/{report_id}/replay-verify",
       "POST /ingest/assessment/webhooks/stripe",
       "POST /ingest/assessment/{assessment_id}/checkout",
       "POST /ingest/assessment/{assessment_id}/submit"

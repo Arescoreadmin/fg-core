@@ -1122,3 +1122,30 @@ All minted API keys share `api_keys.prefix = "fgk"`. The original RBAC implement
 **Tests:** `tests/test_readiness_monitoring.py` — covers identity determinism, severity rank ordering, all 9 evaluator functions, deduplication (fingerprint grouping + highest-severity wins), MonitoringEngine (empty inputs, evaluator failure visibility, domains_evaluated, critical_or_blocking_count), serialization round-trip, API surface (POST idempotency, 403 no-tenant, 404 bad assessment, list + assessment_id filter, GET + tenant isolation), security invariants (no secrets in response, snapshot_json not exposed, run_id hex format, tenant isolation across tenants).
 
 **Validation:** `make fg-fast` PASS.
+
+---
+
+## PR 94 — Enterprise Governance Export System
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH-002 (contract and route inventory regeneration)
+
+**New export subsystem:** `api/report_exports.py` adds canonical manifest generation, deterministic SHA-256 hashing, deterministic PDF/HTML rendering, replay verification helpers, evidence appendix ordering, lineage metadata, reviewer/finalization metadata, and export audit reason codes. Manifest serialization uses sorted-key compact JSON and fails closed on missing required sections, invalid evidence links, or unserializable data.
+
+**API surface:** `api/reports_engine.py` adds governance export routes for manifest retrieval, PDF/HTML artifact retrieval, reviewer finalization, replay verification, and finalized-report regeneration. Existing report tenant predicates are reused through auth-derived tenant context; ID-only retrieval remains forbidden. Finalized report regeneration creates a new report version with prior/following lineage instead of mutating finalized artifacts.
+
+**DB model and migration:** `api/db_models.py` and `migrations/postgres/0055_governance_report_exports.sql` add manifest hash, manifest/export versions, report version, reviewer reference, approval status, finalized timestamp/hash, prior/following lineage, evidence snapshot version, scoring contract version, and framework mapping version.
+
+**Security invariants:**
+- Export hashes derive from canonical manifests, never rendered PDF/HTML bytes.
+- PDF/HTML exports derive from the same deterministic manifest state.
+- Required findings, evidence, framework mappings, remediations, and confidence metadata fail closed when absent.
+- Evidence appendix ordering is deterministic and evidence/finding links are validated.
+- AI narrative is isolated as advisory-only and cannot alter deterministic manifest sections.
+- Reviewer finalization requires an explicit reviewer reference and preserves approval timestamp/state.
+- Replay verification rebuilds the manifest and fails on hash mismatch.
+- Export routes remain tenant-scoped via existing report ownership predicates.
+- Export audit events exclude prompts, model outputs, evidence bodies, and report content.
+
+**Tools/CI changes:** `contracts/core/openapi.json`, `schemas/api/openapi.json`, `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, and `tools/ci/topology.sha256` regenerated for five new report export routes.
+
+**Tests:** `tests/test_governance_report_exports.py` covers stable canonical hashes, deterministic PDF/HTML exports, evidence appendix ordering, fail-closed missing sections, replay mismatch detection, reviewer/finalization lineage metadata, and AI narrative containment.
