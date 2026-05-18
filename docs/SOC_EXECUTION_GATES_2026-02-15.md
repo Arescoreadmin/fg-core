@@ -3396,3 +3396,46 @@ None. All changes are behavioral hardening of existing PR 90 endpoints.
 ### Compliance posture
 
 All 4 routes are read-only (`GET`), gated behind `control-plane:read` scope, and tenant-isolated. No new write paths, no schema changes, no new auth surfaces. The route inventory, plane registry snapshot, contract routes, and topology hash have been regenerated to reflect current state. `make fg-contract` passes with no stale artifacts.
+
+---
+
+## 2026-05-18 — PR 94: Enterprise Readiness Alerting & Governance Escalation Engine
+
+**Classification:** New feature — alerting service layer + 5 new DB tables + 7 new API endpoints.
+
+**SOC review:**
+- All domain models are frozen dataclasses — immutable after construction; no shared mutable state
+- Alert instances are write-once; `lifecycle_state` is the only mutable field after creation
+- Alert run records are write-once; `alert_run_output_json` stored internally but NEVER exposed in API responses
+- Tenant isolation enforced on ALL reads; cross-tenant access returns 404, never 403
+- CRITICAL and BLOCKING alerts cannot be suppressed — `InvalidAlertTransition` raised before any DB write
+- Deduplication burst ceiling explicitly skips CRITICAL/BLOCKING — no suppression-by-volume possible
+- SHA-256 deterministic identity derivation ensures idempotent alerting across replay
+- Fail-closed engine: any exception produces an explicit `MONITORING_VISIBILITY_DEGRADATION` alert
+- All 7 endpoints use `auth_ctx_db_session` dependency and `require_scopes()` for scope enforcement
+- Write paths use `control-plane:write` scope; read paths use `control-plane:read` scope
+
+### Routes added to inventory
+
+- `POST /control-plane/readiness/alerting/runs` (`api/readiness_alerting_manager.py`)
+- `GET /control-plane/readiness/alerting/runs` (`api/readiness_alerting_manager.py`)
+- `GET /control-plane/readiness/alerting/runs/{run_id}` (`api/readiness_alerting_manager.py`)
+- `GET /control-plane/readiness/alerting/alerts` (`api/readiness_alerting_manager.py`)
+- `GET /control-plane/readiness/alerting/alerts/{alert_instance_id}` (`api/readiness_alerting_manager.py`)
+- `POST /control-plane/readiness/alerting/alerts/{alert_instance_id}/lifecycle` (`api/readiness_alerting_manager.py`)
+- `POST /control-plane/readiness/alerting/alerts/{alert_instance_id}/suppress` (`api/readiness_alerting_manager.py`)
+
+### DB schema changes
+
+5 new tables appended to `Base.metadata` via `api/db_models_alerting.py`:
+- `readiness_alert_runs` — write-once alert run records
+- `readiness_alert_instances` — alert instances with mutable `lifecycle_state`
+- `readiness_alert_transitions` — append-only lifecycle transition history
+- `readiness_alert_suppressions` — append-only suppression history
+- `readiness_alert_escalations` — append-only escalation history
+
+No existing tables modified. Schema change called out explicitly per repo rules.
+
+### Compliance posture
+
+Route inventory, plane registry snapshot, contract routes, and topology hash regenerated to reflect 7 new endpoints. All write endpoints are gated behind `control-plane:write` scope. Tenant isolation tested via `TestTenantIsolation` (12 tests). 79 total tests pass. `make fg-fast` passes with no gate failures.

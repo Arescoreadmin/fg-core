@@ -806,6 +806,48 @@
     },
     {
       "method": "GET",
+      "path": "/control-plane/readiness/alerting/alerts",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/alerting/alerts/{alert_instance_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/control-plane/readiness/alerting/alerts/{alert_instance_id}/lifecycle",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/control-plane/readiness/alerting/alerts/{alert_instance_id}/suppress",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/alerting/runs",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/control-plane/readiness/alerting/runs",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/alerting/runs/{run_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/control-plane/readiness/assessments",
       "scopes": [],
       "source": "contract"
@@ -1621,7 +1663,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-18T08:56:45.263204+00:00",
+  "generated_at": "2026-05-18T11:42:00.287099+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

@@ -477,6 +477,313 @@
         "title": "AgentRotateResponse",
         "type": "object"
       },
+      "AlertInstanceResponse": {
+        "properties": {
+          "affected_control_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Control Ids",
+            "type": "array"
+          },
+          "affected_evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Evidence Ids",
+            "type": "array"
+          },
+          "affected_framework_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Framework Ids",
+            "type": "array"
+          },
+          "affected_scope": {
+            "title": "Affected Scope",
+            "type": "string"
+          },
+          "alert_detail": {
+            "title": "Alert Detail",
+            "type": "string"
+          },
+          "alert_fingerprint": {
+            "title": "Alert Fingerprint",
+            "type": "string"
+          },
+          "alert_generation_version": {
+            "title": "Alert Generation Version",
+            "type": "string"
+          },
+          "alert_instance_id": {
+            "title": "Alert Instance Id",
+            "type": "string"
+          },
+          "alert_rule_class": {
+            "title": "Alert Rule Class",
+            "type": "string"
+          },
+          "alert_rule_id": {
+            "title": "Alert Rule Id",
+            "type": "string"
+          },
+          "assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Id"
+          },
+          "certainty": {
+            "title": "Certainty",
+            "type": "string"
+          },
+          "escalation_policy_version": {
+            "title": "Escalation Policy Version",
+            "type": "string"
+          },
+          "evaluation_window_end_iso": {
+            "title": "Evaluation Window End Iso",
+            "type": "string"
+          },
+          "evaluation_window_start_iso": {
+            "title": "Evaluation Window Start Iso",
+            "type": "string"
+          },
+          "generated_at_iso": {
+            "title": "Generated At Iso",
+            "type": "string"
+          },
+          "lifecycle_state": {
+            "title": "Lifecycle State",
+            "type": "string"
+          },
+          "replay_contract_metadata": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Replay Contract Metadata",
+            "type": "object"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "source_drift_event_fingerprint": {
+            "title": "Source Drift Event Fingerprint",
+            "type": "string"
+          },
+          "source_drift_snapshot_id": {
+            "title": "Source Drift Snapshot Id",
+            "type": "string"
+          },
+          "source_monitoring_run_id": {
+            "title": "Source Monitoring Run Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alert_instance_id",
+          "alert_fingerprint",
+          "alert_rule_id",
+          "alert_rule_class",
+          "source_monitoring_run_id",
+          "source_drift_event_fingerprint",
+          "source_drift_snapshot_id",
+          "tenant_id",
+          "assessment_id",
+          "severity",
+          "certainty",
+          "lifecycle_state",
+          "affected_scope",
+          "affected_control_ids",
+          "affected_evidence_ids",
+          "affected_framework_ids",
+          "alert_detail",
+          "generated_at_iso",
+          "evaluation_window_start_iso",
+          "evaluation_window_end_iso",
+          "alert_generation_version",
+          "escalation_policy_version",
+          "replay_contract_metadata"
+        ],
+        "title": "AlertInstanceResponse",
+        "type": "object"
+      },
+      "AlertRunResponse": {
+        "properties": {
+          "alert_generation_version": {
+            "title": "Alert Generation Version",
+            "type": "string"
+          },
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/AlertInstanceResponse"
+            },
+            "title": "Alerts",
+            "type": "array"
+          },
+          "assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Id"
+          },
+          "completed": {
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "created_at_iso": {
+            "title": "Created At Iso",
+            "type": "string"
+          },
+          "error_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Summary"
+          },
+          "escalation_policy_version": {
+            "title": "Escalation Policy Version",
+            "type": "string"
+          },
+          "generation_timestamp_iso": {
+            "title": "Generation Timestamp Iso",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "source_monitoring_run_id": {
+            "title": "Source Monitoring Run Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_alerts_deduplicated": {
+            "title": "Total Alerts Deduplicated",
+            "type": "integer"
+          },
+          "total_alerts_generated": {
+            "title": "Total Alerts Generated",
+            "type": "integer"
+          },
+          "total_alerts_suppressed": {
+            "title": "Total Alerts Suppressed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "run_id",
+          "tenant_id",
+          "source_monitoring_run_id",
+          "assessment_id",
+          "alert_generation_version",
+          "escalation_policy_version",
+          "total_alerts_generated",
+          "total_alerts_deduplicated",
+          "total_alerts_suppressed",
+          "generation_timestamp_iso",
+          "completed",
+          "error_summary",
+          "created_at_iso",
+          "alerts"
+        ],
+        "title": "AlertRunResponse",
+        "type": "object"
+      },
+      "AlertRunSummaryResponse": {
+        "properties": {
+          "alert_generation_version": {
+            "title": "Alert Generation Version",
+            "type": "string"
+          },
+          "assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Id"
+          },
+          "completed": {
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "created_at_iso": {
+            "title": "Created At Iso",
+            "type": "string"
+          },
+          "escalation_policy_version": {
+            "title": "Escalation Policy Version",
+            "type": "string"
+          },
+          "generation_timestamp_iso": {
+            "title": "Generation Timestamp Iso",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "source_monitoring_run_id": {
+            "title": "Source Monitoring Run Id",
+            "type": "string"
+          },
+          "total_alerts_deduplicated": {
+            "title": "Total Alerts Deduplicated",
+            "type": "integer"
+          },
+          "total_alerts_generated": {
+            "title": "Total Alerts Generated",
+            "type": "integer"
+          },
+          "total_alerts_suppressed": {
+            "title": "Total Alerts Suppressed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "run_id",
+          "source_monitoring_run_id",
+          "assessment_id",
+          "alert_generation_version",
+          "escalation_policy_version",
+          "total_alerts_generated",
+          "total_alerts_deduplicated",
+          "total_alerts_suppressed",
+          "generation_timestamp_iso",
+          "completed",
+          "created_at_iso"
+        ],
+        "title": "AlertRunSummaryResponse",
+        "type": "object"
+      },
       "ApprovalCreateRequest": {
         "properties": {
           "action": {
@@ -1757,6 +2064,21 @@
           "policy_hash"
         ],
         "title": "CoverageChangeRequest",
+        "type": "object"
+      },
+      "CreateAlertRunRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "monitoring_run_id": {
+            "description": "The monitoring run_id to generate alerts from.",
+            "title": "Monitoring Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "monitoring_run_id"
+        ],
+        "title": "CreateAlertRunRequest",
         "type": "object"
       },
       "CreateAssessmentRequest": {
@@ -5737,6 +6059,33 @@
         "title": "KeyInfo",
         "type": "object"
       },
+      "LifecycleTransitionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "description": "Actor applying the transition.",
+            "title": "Actor",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason for the transition.",
+            "title": "Reason",
+            "type": "string"
+          },
+          "to_state": {
+            "description": "Target lifecycle state.",
+            "title": "To State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "to_state",
+          "actor",
+          "reason"
+        ],
+        "title": "LifecycleTransitionRequest",
+        "type": "object"
+      },
       "ListKeysResponse": {
         "description": "Response containing list of API keys.",
         "properties": {
@@ -8841,6 +9190,45 @@
           "headline"
         ],
         "title": "StatsSummaryResponse",
+        "type": "object"
+      },
+      "SuppressAlertRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "description": "Actor creating the suppression.",
+            "title": "Actor",
+            "type": "string"
+          },
+          "expires_at_iso": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ISO 8601 expiration timestamp. None = policy-driven no-expiration.",
+            "title": "Expires At Iso"
+          },
+          "reason": {
+            "description": "Reason for suppression.",
+            "title": "Reason",
+            "type": "string"
+          },
+          "source": {
+            "default": "operator",
+            "description": "Source of suppression (operator, policy_engine, automation).",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "actor"
+        ],
+        "title": "SuppressAlertRequest",
         "type": "object"
       },
       "SuspendOrgRequest": {
@@ -18484,6 +18872,534 @@
         "summary": "Retry Workflow",
         "tags": [
           "provisioning"
+        ]
+      }
+    },
+    "/control-plane/readiness/alerting/alerts": {
+      "get": {
+        "description": "List alerts for the authenticated tenant.\n\nSupports filtering by lifecycle_state, severity, and assessment_id.",
+        "operationId": "list_alerts_control_plane_readiness_alerting_alerts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lifecycle_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lifecycle State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "in": "query",
+            "name": "assessment_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assessment Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AlertInstanceResponse"
+                  },
+                  "title": "Response List Alerts Control Plane Readiness Alerting Alerts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Alerts",
+        "tags": [
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/alerting/alerts/{alert_instance_id}": {
+      "get": {
+        "description": "Get a single alert by its deterministic alert_instance_id.",
+        "operationId": "get_alert_control_plane_readiness_alerting_alerts__alert_instance_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "alert_instance_id",
+            "required": true,
+            "schema": {
+              "title": "Alert Instance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertInstanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Alert",
+        "tags": [
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/alerting/alerts/{alert_instance_id}/lifecycle": {
+      "post": {
+        "description": "Apply a lifecycle transition to an alert.\n\nReturns the transition record. Raises 422 for invalid transitions.\nCross-tenant access returns 404.\n\n# escalation_routing_seam: ESCALATED transitions dispatch to SOC/Jira/ServiceNow\n# at the store boundary.",
+        "operationId": "apply_alert_lifecycle_transition_control_plane_readiness_alerting_alerts__alert_instance_id__lifecycle_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "alert_instance_id",
+            "required": true,
+            "schema": {
+              "title": "Alert Instance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LifecycleTransitionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Apply Alert Lifecycle Transition Control Plane Readiness Alerting Alerts  Alert Instance Id  Lifecycle Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Apply Alert Lifecycle Transition",
+        "tags": [
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/alerting/alerts/{alert_instance_id}/suppress": {
+      "post": {
+        "description": "Create a suppression record for an alert.\n\nCRITICAL and BLOCKING alerts cannot be suppressed \u2014 returns 422.\nReturns the suppression record.\n\n# signed_attestation_seam: suppression records can be cryptographically signed\n# for regulator-grade governance attestation at this boundary.",
+        "operationId": "suppress_alert_control_plane_readiness_alerting_alerts__alert_instance_id__suppress_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "alert_instance_id",
+            "required": true,
+            "schema": {
+              "title": "Alert Instance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuppressAlertRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Suppress Alert Control Plane Readiness Alerting Alerts  Alert Instance Id  Suppress Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Suppress Alert",
+        "tags": [
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/alerting/runs": {
+      "get": {
+        "description": "List alert runs for the authenticated tenant.",
+        "operationId": "list_alert_runs_control_plane_readiness_alerting_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "assessment_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assessment Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AlertRunSummaryResponse"
+                  },
+                  "title": "Response List Alert Runs Control Plane Readiness Alerting Runs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Alert Runs",
+        "tags": [
+          "readiness"
+        ]
+      },
+      "post": {
+        "description": "Trigger alert generation from an existing monitoring run.\n\nIdempotent: submitting the same monitoring_run_id twice returns the\nstored result rather than re-generating alerts.\n\n# siem_seam: on successful alert run creation, alerts can be dispatched to\n# SIEM systems at the store boundary. Payload is already export-safe.",
+        "operationId": "create_alert_run_control_plane_readiness_alerting_runs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAlertRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Alert Run",
+        "tags": [
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/alerting/runs/{run_id}": {
+      "get": {
+        "description": "Get a single alert run by its deterministic run_id.",
+        "operationId": "get_alert_run_control_plane_readiness_alerting_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Alert Run",
+        "tags": [
+          "readiness"
         ]
       }
     },
