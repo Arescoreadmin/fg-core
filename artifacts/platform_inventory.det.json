@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 270,
+    "contract_count": 277,
     "contract_only": [],
-    "runtime_count": 374,
+    "runtime_count": 381,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -141,7 +141,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "aaea44f86f9e8b45caea2dbdedc679bd0bcecbc51137c5b0e78ec0a86f7b1c3e",
+  "governance_fingerprint": "030da7a1e1082bf9ad31460fb33b1de79eeb0bca9c10b943bff4b30eadc4d729",
   "planes": [
     {
       "compat": {
@@ -395,6 +395,10 @@
       "GET /control-plane/provisioning/organizations/{org_id}/onboarding",
       "GET /control-plane/provisioning/workflows",
       "GET /control-plane/provisioning/workflows/{provisioning_id}",
+      "GET /control-plane/readiness/alerting/alerts",
+      "GET /control-plane/readiness/alerting/alerts/{alert_instance_id}",
+      "GET /control-plane/readiness/alerting/runs",
+      "GET /control-plane/readiness/alerting/runs/{run_id}",
       "GET /control-plane/readiness/assessments",
       "GET /control-plane/readiness/assessments/{assessment_id}",
       "GET /control-plane/readiness/assessments/{assessment_id}/evidence",
@@ -510,6 +514,9 @@
       "POST /control-plane/provisioning/workflows/{provisioning_id}/complete",
       "POST /control-plane/provisioning/workflows/{provisioning_id}/fail",
       "POST /control-plane/provisioning/workflows/{provisioning_id}/retry",
+      "POST /control-plane/readiness/alerting/alerts/{alert_instance_id}/lifecycle",
+      "POST /control-plane/readiness/alerting/alerts/{alert_instance_id}/suppress",
+      "POST /control-plane/readiness/alerting/runs",
       "POST /control-plane/readiness/assessments",
       "POST /control-plane/readiness/assessments/{assessment_id}/evidence",
       "POST /control-plane/readiness/assessments/{assessment_id}/results",
