@@ -9014,6 +9014,218 @@
         "title": "SetLegalHoldRequest",
         "type": "object"
       },
+      "SimulationRunRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Scope simulation to a specific assessment.",
+            "title": "Assessment Id"
+          },
+          "framework_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Scope simulation to a specific framework.",
+            "title": "Framework Id"
+          },
+          "scenario_parameters": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Scenario-specific parameters as key-value string pairs.",
+            "title": "Scenario Parameters",
+            "type": "object"
+          },
+          "scenario_type": {
+            "description": "Scenario type to simulate.",
+            "title": "Scenario Type",
+            "type": "string"
+          },
+          "simulation_contract_version": {
+            "default": "1.0",
+            "description": "Contract version for replay compatibility.",
+            "title": "Simulation Contract Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scenario_type"
+        ],
+        "title": "SimulationRunRequest",
+        "type": "object"
+      },
+      "SimulationRunResponse": {
+        "properties": {
+          "assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Id"
+          },
+          "framework_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework Id"
+          },
+          "projection": {
+            "title": "Projection",
+            "type": "object"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "scenario_type": {
+            "title": "Scenario Type",
+            "type": "string"
+          },
+          "simulated_at_iso": {
+            "title": "Simulated At Iso",
+            "type": "string"
+          },
+          "simulation_contract_version": {
+            "title": "Simulation Contract Version",
+            "type": "string"
+          },
+          "simulation_engine_version": {
+            "title": "Simulation Engine Version",
+            "type": "string"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_critical_warnings": {
+            "title": "Total Critical Warnings",
+            "type": "integer"
+          },
+          "total_impacts": {
+            "title": "Total Impacts",
+            "type": "integer"
+          },
+          "total_warnings": {
+            "title": "Total Warnings",
+            "type": "integer"
+          },
+          "uncertainty": {
+            "title": "Uncertainty",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "tenant_id",
+          "assessment_id",
+          "framework_id",
+          "scenario_type",
+          "simulation_contract_version",
+          "simulation_engine_version",
+          "snapshot_id",
+          "uncertainty",
+          "total_warnings",
+          "total_impacts",
+          "total_critical_warnings",
+          "simulated_at_iso",
+          "projection"
+        ],
+        "title": "SimulationRunResponse",
+        "type": "object"
+      },
+      "SimulationRunSummaryResponse": {
+        "properties": {
+          "assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Id"
+          },
+          "framework_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework Id"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "scenario_type": {
+            "title": "Scenario Type",
+            "type": "string"
+          },
+          "simulated_at_iso": {
+            "title": "Simulated At Iso",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_critical_warnings": {
+            "title": "Total Critical Warnings",
+            "type": "integer"
+          },
+          "total_warnings": {
+            "title": "Total Warnings",
+            "type": "integer"
+          },
+          "uncertainty": {
+            "title": "Uncertainty",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "tenant_id",
+          "scenario_type",
+          "uncertainty",
+          "total_warnings",
+          "total_critical_warnings",
+          "simulated_at_iso",
+          "assessment_id",
+          "framework_id"
+        ],
+        "title": "SimulationRunSummaryResponse",
+        "type": "object"
+      },
       "StartProvisioningRequest": {
         "additionalProperties": false,
         "properties": {
@@ -21597,6 +21809,229 @@
         "summary": "Get Scoring Contract",
         "tags": [
           "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/simulation/runs": {
+      "get": {
+        "description": "List simulation runs for the authenticated tenant.",
+        "operationId": "list_simulation_runs_control_plane_readiness_simulation_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scenario_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scenario Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "assessment_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assessment Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SimulationRunSummaryResponse"
+                  },
+                  "title": "Response List Simulation Runs Control Plane Readiness Simulation Runs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Simulation Runs",
+        "tags": [
+          "readiness"
+        ]
+      },
+      "post": {
+        "description": "Submit a deterministic governance simulation scenario.\n\nIdempotent: submitting the same scenario inputs twice returns the stored\nresult rather than re-evaluating.\n\nsimulation_id is derived deterministically from governance inputs and IS\nthe run_id stored in the DB.",
+        "operationId": "create_simulation_run_control_plane_readiness_simulation_runs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulationRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Simulation Run",
+        "tags": [
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/simulation/runs/{run_id}": {
+      "get": {
+        "description": "Retrieve a simulation run by its deterministic run_id.",
+        "operationId": "get_simulation_run_control_plane_readiness_simulation_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Simulation Run",
+        "tags": [
           "readiness"
         ]
       }

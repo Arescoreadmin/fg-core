@@ -3439,3 +3439,38 @@ No existing tables modified. Schema change called out explicitly per repo rules.
 ### Compliance posture
 
 Route inventory, plane registry snapshot, contract routes, and topology hash regenerated to reflect 7 new endpoints. All write endpoints are gated behind `control-plane:write` scope. Tenant isolation tested via `TestTenantIsolation` (12 tests). 79 total tests pass. `make fg-fast` passes with no gate failures.
+
+---
+
+## 2026-05-18 — PR 95: Enterprise Governance Simulation, Readiness Impact Projection & Autonomous Systems Governance Modeling Engine
+
+**Classification:** New feature — pure Python service layer + 3 new API routes + 1 new DB table. Infrastructure changes called out.
+
+**SOC review:**
+- All simulation types are frozen dataclasses — immutable after construction; no I/O, no mutations
+- `SimulationEngine.simulate()` is stateless and deterministic — identical inputs → identical `SimulationProjection`
+- Simulations are side-effect free: no live governance state is read or mutated; all computation is from `SimulationInput` parameters alone
+- Scenario evaluators are pure functions — no DB, HTTP, or file I/O; exception → explicit `DEGRADED_VISIBILITY` projection
+- Tenant isolation enforced on all store reads; cross-tenant access raises `SimulationRunTenantIsolationError` → 404 (no disclosure)
+- `projection_json` stored internally in DB; never exposed in API responses — API returns deserialized export-safe dict only
+- No secrets, vectors, embeddings, prompts, PHI, or internal topology in any serialized output field
+- Deterministic SHA-256 IDs: `derive_simulation_id` ([:32]) and `derive_simulation_snapshot_id` ([:32]); replay-equivalent inputs → replay-equivalent IDs
+- `SimulationUncertainty` states are explicit — unknown/unverifiable projections never collapse into optimistic results
+- CRITICAL/BLOCKING warnings for unsafe relaxations (capability expansion, provenance disablement, audit relaxation) are never hidden
+- Write-once persistence: `SimulationRunStore` has no UPDATE paths; historical simulations remain reconstructable
+- Idempotent POST: `derive_simulation_id(...)` checked against store before running; returns stored result on match
+- Seam comments placed for: `longitudinal_simulation_seam`, `sovereignty_simulation_seam`, `autonomous_systems_seam`, `signed_attestation_seam`, `capability_governance_seam`, `multi_agent_governance_seam`
+
+**New routes (control-plane scoped, `control-plane:read`):**
+- `POST /control-plane/readiness/simulation/runs` (`api/readiness_simulation_manager.py`)
+- `GET /control-plane/readiness/simulation/runs` (`api/readiness_simulation_manager.py`)
+- `GET /control-plane/readiness/simulation/runs/{run_id}` (`api/readiness_simulation_manager.py`)
+
+**DB schema changes:**
+1 new table appended to `Base.metadata` via `api/db_models_simulation.py`:
+- `readiness_simulation_runs` — write-once simulation run records with projection_json
+
+No existing tables modified. Schema change called out explicitly per repo rules.
+
+**Compliance posture:**
+Route inventory, plane registry snapshot, contract routes, and topology hash regenerated to reflect 3 new endpoints. All endpoints are `control-plane:read` scoped. Tenant isolation enforced on all reads. 71 total tests pass. `make fg-fast` passes with no gate failures.

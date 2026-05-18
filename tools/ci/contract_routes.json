@@ -1034,6 +1034,24 @@
     },
     {
       "method": "GET",
+      "path": "/control-plane/readiness/simulation/runs",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/control-plane/readiness/simulation/runs",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/simulation/runs/{run_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/control-plane/v2/ai/namespace",
       "scopes": [],
       "source": "contract"
@@ -1663,7 +1681,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-18T11:42:00.287099+00:00",
+  "generated_at": "2026-05-18T13:51:33.815494+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

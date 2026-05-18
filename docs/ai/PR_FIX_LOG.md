@@ -10266,3 +10266,50 @@ Implements the deterministic `ReadinessScoreEngine`: pure Python, no I/O, no LLM
 - `ruff check` + `ruff format`: all passed
 - `make fg-fast`: all gates passed (363 passed, 2 skipped in full suite)
 - `bash codex_gates.sh`: all gates passed
+
+---
+
+### 2026-05-18 — PR 95: Enterprise Governance Simulation, Readiness Impact Projection & Autonomous Systems Governance Modeling Engine
+
+**Branch:** `feat/governance-simulation-projection-engine`
+
+**Area:** Readiness; governance simulation; impact projection; autonomous-systems governance readiness.
+
+**Root cause:** No implementation — new deterministic governance simulation layer that accepts a `SimulationInput` (scenario_type + scenario_parameters) and produces an immutable `SimulationProjection` covering projected readiness scores, risk changes, compliance impact, blast radius, diff records, warnings, and capability governance projections; side-effect free and replay-safe.
+
+**Files changed:**
+- `services/readiness/simulation/models.py` (new) — 4 enums, 14 frozen dataclasses: `SimulationConstraint`, `SimulationWarning`, `SimulationInput`, `SimulationReadinessProjection`, `SimulationRiskProjection`, `SimulationComplianceProjection`, `SimulationImpactRecord`, `SimulationDiffRecord`, `SimulationBlastRadius`, `SimulationCapabilityProjection`, `SimulationGovernanceTrajectory`, `SimulationProjection`, `SimulationRunRecord`
+- `services/readiness/simulation/identity.py` (new) — `derive_simulation_id` (SHA-256[:32]), `derive_simulation_snapshot_id`, `derive_impact_id`, `derive_diff_id`, `derive_warning_id`
+- `services/readiness/simulation/scenarios.py` (new) — 8 deterministic scenario evaluators covering all `SimulationScenarioType` values; pure functions, no I/O; exception → `UNSUPPORTED_BOUNDARY` uncertainty
+- `services/readiness/simulation/engine.py` (new) — `SimulationEngine.simulate()` fail-closed orchestrator; exception → explicit `DEGRADED_VISIBILITY` projection; all version pins in `replay_contract_metadata`
+- `services/readiness/simulation/serialization.py` (new) — `projection_to_json` with `sort_keys=True`; `signed_attestation_seam` and `sovereignty_simulation_seam` comments; no secrets/vectors/PHI
+- `services/readiness/simulation/store.py` (new) — write-once `SimulationRunStore`; tenant isolation on all reads; `longitudinal_simulation_seam` comment
+- `services/readiness/simulation/__init__.py` (new) — full public API surface
+- `api/db_models_simulation.py` (new) — `SimulationRunModel(Base)`, table `readiness_simulation_runs`, 2 composite indexes
+- `api/db.py` (modified — infrastructure) — `importlib.import_module("api.db_models_simulation")` added
+- `api/main.py` (modified — infrastructure) — `readiness_simulation_router` registered in `build_app()` and `build_contract_app()`
+- `api/readiness_simulation_manager.py` (new) — 3 endpoints; `_sim_engine` instance (not `_engine`); `longitudinal_simulation_seam`, `sovereignty_simulation_seam`, `autonomous_systems_seam` comments
+- `tests/test_readiness_simulation.py` (new) — 71 tests across 15 classes
+
+**Design invariants:**
+- Side-effect free: scenario evaluators are pure functions; no DB, HTTP, or I/O
+- Deterministic: identical `SimulationInput` → identical `SimulationProjection`
+- Uncertainty-explicit: `SimulationUncertainty` never collapses to optimistic on unknown/unverifiable state
+- Fail-closed: engine exception → `DEGRADED_VISIBILITY` projection, never silent success
+- Write-once persistence: no UPDATE paths in store
+- `projection_json` never in API responses — stored internally, deserialized dict exposed
+
+**Seam comments placed:**
+- `longitudinal_simulation_seam` (engine.py, store.py, manager)
+- `sovereignty_simulation_seam` (serialization.py, manager)
+- `autonomous_systems_seam` (manager)
+- `signed_attestation_seam` (serialization.py)
+- `capability_governance_seam` (engine.py)
+- `multi_agent_governance_seam` (engine.py)
+
+**Validation:**
+- `pytest tests/test_readiness_simulation.py`: 71 passed
+- `mypy`: 0 errors
+- `ruff check` + `ruff format`: all passed
+- `make fg-fast`: 382 passed, 2 skipped — all gates passed
+- `bash codex_gates.sh`: all gates passed
