@@ -456,6 +456,14 @@ test('provenance page calls listEvidence', () => {
   assert.match(page, /listEvidence/);
 });
 
+test('provenance page paginates through all evidence pages until short page', () => {
+  const page = read('app/dashboard/provenance/page.tsx');
+  assert.match(page, /MAX_PAGES/);
+  assert.match(page, /PAGE_SIZE/);
+  assert.match(page, /result\.data\.length < PAGE_SIZE/);
+  assert.match(page, /page \* PAGE_SIZE/);
+});
+
 test('provenance page has cancelled-flag cleanup in useEffect', () => {
   const page = read('app/dashboard/provenance/page.tsx');
   assert.match(page, /cancelled = false/);

@@ -37,16 +37,29 @@ export default function ProvenancePage() {
     let cancelled = false;
     setLoading(true);
     setFetchError(null);
+    setAllItems([]);
 
-    listEvidence(assessmentId, 200, 0).then((result) => {
-      if (cancelled) return;
-      if (!result.ok) {
-        setFetchError(result.error);
-      } else {
-        setAllItems(result.data);
+    const PAGE_SIZE = 200;
+    const MAX_PAGES = 25; // safety cap: 5 000 items
+
+    (async () => {
+      const accumulated: EvidenceReference[] = [];
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const result = await listEvidence(assessmentId, PAGE_SIZE, page * PAGE_SIZE);
+        if (cancelled) return;
+        if (!result.ok) {
+          setFetchError(result.error);
+          setLoading(false);
+          return;
+        }
+        accumulated.push(...result.data);
+        if (result.data.length < PAGE_SIZE) break;
       }
-      setLoading(false);
-    });
+      if (!cancelled) {
+        setAllItems(accumulated);
+        setLoading(false);
+      }
+    })();
 
     return () => {
       cancelled = true;
