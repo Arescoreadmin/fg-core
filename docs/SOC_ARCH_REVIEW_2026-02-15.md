@@ -1,3 +1,29 @@
+## 2026-05-18 — SOC-HIGH-002 — PR 98: Deterministic governance report routes added to route inventory
+
+**Reviewer:** EmpireOverloard | **Classification:** SOC-HIGH-002 (tools/ci route inventory update)
+
+**Files changed:**
+- `tools/ci/route_inventory.json` — regenerated via `make route-inventory-generate` to include 5 new `/ingest/assessment/{assessment_id}/governance-report/...` routes.
+- `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256` — regenerated as part of the same inventory refresh.
+
+**New routes (all under `/ingest/assessment` prefix, scope `ingest:assessment`):**
+- `POST /ingest/assessment/{assessment_id}/governance-report` — generate governance report (tenant-scoped)
+- `GET  /ingest/assessment/{assessment_id}/governance-report/{report_id}` — retrieve report
+- `GET  /ingest/assessment/{assessment_id}/governance-report/{report_id}/replay` — replay verification
+- `GET  /ingest/assessment/{assessment_id}/governance-report/{report_id}/export/html` — HTML export
+- `GET  /ingest/assessment/{assessment_id}/governance-report/{report_id}/export/manifest` — manifest JSON
+
+**Security posture:**
+- All routes require `ingest:assessment` scope (same as existing assessment/reports routes).
+- Tenant isolation: `tenant_id` resolved from auth context only — never from request body.
+- Pre-tenant callers use lead-namespace isolation (same as existing assessment routes).
+- No AI prose in any deterministic field; manifest hash provides tamper evidence.
+- No new auth logic changes. No new scopes. No schema changes beyond `governance_reports` table.
+
+**No auth logic change beyond existing `ingest:assessment` scope. 52 governance report tests pass.**
+
+---
+
 ## 2026-05-15 — SOC-HIGH-002 — Enterprise observability middleware and route inventory
 
 **Reviewer:** EmpireOverloard | **Classification:** SOC-HIGH-002 (api/middleware changes)

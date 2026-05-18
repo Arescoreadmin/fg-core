@@ -1471,6 +1471,36 @@
       "source": "contract"
     },
     {
+      "method": "POST",
+      "path": "/ingest/assessment/{assessment_id}/governance-report",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}/governance-report/{report_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}/governance-report/{report_id}/export/html",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}/governance-report/{report_id}/export/manifest",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}/governance-report/{report_id}/replay",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "GET",
       "path": "/ingest/assessment/{assessment_id}/questions",
       "scopes": [],
