@@ -6,6 +6,35 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-18 — PR 98: Deterministic Governance Report Core
+
+**Branch:** `feat/deterministic-governance-report-core-pr98`
+
+**Area:** Governance report generation; evidence linkage; framework mappings; replay verification; AI narrative containment.
+
+**Root cause:** No implementation — new deterministic report engine built from scratch to replace AI-generated prose with evidence-backed, replayable governance artifacts.
+
+**Files changed:**
+- `services/governance/__init__.py` (new) — package init
+- `services/governance/report/__init__.py` (new) — exports all public types and engine
+- `services/governance/report/models.py` (new) — frozen dataclasses: GovernanceFinding, FrameworkMapping, RemediationEntry, EvidenceRef, ConfidenceScore, GovernanceReport, ReplayContract; ValidationState enum
+- `services/governance/report/identity.py` (new) — derive_finding_id, derive_remediation_id, derive_evidence_id, derive_manifest_hash, derive_canonical_inputs_hash, derive_findings_hash; pure Python, no I/O, no randomness
+- `services/governance/report/confidence.py` (new) — calculate_confidence; weighted 4-component scoring; fails closed on empty evidence
+- `services/governance/report/framework_mappings.py` (new) — FRAMEWORK_CONTROL_MAP hardcoded registry; get_framework_mappings, get_supported_frameworks; NIST AI RMF, SOC2, HIPAA; no LLM inference
+- `services/governance/report/engine.py` (new) — GovernanceReportEngine with generate() and replay(); GovernanceReportError fail-closed sentinel; deterministic finding/remediation/confidence construction
+- `services/governance/report/serialization.py` (new) — serialize_report, serialize_for_manifest, deserialize_report, export_html, export_pdf_bytes (reportlab); ExportUnavailableError
+- `api/governance_report_manager.py` (new) — FastAPI router: POST generate, GET retrieve, GET replay, GET export/html, GET export/manifest; tenant-scoped, fail-closed
+- `api/db_models_governance_report.py` (new) — GovernanceReportRecord ORM model for governance_reports table
+- `api/db.py` — added db_models_governance_report import in _ensure_models_imported()
+- `api/main.py` — registered governance_report_router in both create_app() calls
+- `migrations/postgres/0055_governance_reports.sql` (new) — CREATE TABLE, indexes, RLS policy
+- `tests/test_governance_report.py` (new) — 50+ tests across 8 classes: deterministic IDs, confidence scoring, framework mappings, engine behavior, replay verification, AI narrative containment, evidence appendix, HTML export
+- `docs/governance/deterministic_reporting.md` (new) — doctrine, finding ID semantics, confidence methodology, evidence linkage, framework mapping semantics, replay guarantees, manifest hash guarantees, AI narrative containment rules
+
+**Verification:** All governance report tests pass; 0 skips.
+
+---
+
 ### 2026-05-18 — PR 97: Enterprise Tenant Isolation & Assessment Boundary Hardening
 
 **Branch:** `feat/simulation-governance-extensions-pr96`

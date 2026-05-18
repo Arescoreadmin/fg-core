@@ -4131,6 +4131,57 @@
         "title": "EvidenceFreshnessRecordResponse",
         "type": "object"
       },
+      "EvidenceRefInput": {
+        "additionalProperties": false,
+        "properties": {
+          "classification": {
+            "default": "internal",
+            "title": "Classification",
+            "type": "string"
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "freshness_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Days"
+          },
+          "provenance": {
+            "default": "",
+            "title": "Provenance",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "validation_state": {
+            "default": "pending",
+            "title": "Validation State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "title": "EvidenceRefInput",
+        "type": "object"
+      },
       "EvidenceReferenceResponse": {
         "properties": {
           "assessment_id": {
@@ -5301,6 +5352,26 @@
         "title": "GapReplayContractResponse",
         "type": "object"
       },
+      "GenerateGovernanceReportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_refs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefInput"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "reviewer_validated": {
+            "default": false,
+            "title": "Reviewer Validated",
+            "type": "boolean"
+          }
+        },
+        "title": "GenerateGovernanceReportRequest",
+        "type": "object"
+      },
       "GenerateReportRequest": {
         "properties": {
           "assessment_id": {
@@ -5383,6 +5454,94 @@
           "approved_at"
         ],
         "title": "GovernanceOverrideResponse",
+        "type": "object"
+      },
+      "GovernanceReportResponse": {
+        "properties": {
+          "assessment_id": {
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "object"
+          },
+          "evidence_appendix": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Evidence Appendix",
+            "type": "array"
+          },
+          "findings": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "framework_summary": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Framework Summary",
+            "type": "object"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "is_finalized": {
+            "title": "Is Finalized",
+            "type": "boolean"
+          },
+          "manifest_hash": {
+            "title": "Manifest Hash",
+            "type": "string"
+          },
+          "remediations": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Remediations",
+            "type": "array"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "report_id",
+          "assessment_id",
+          "tenant_id",
+          "version",
+          "schema_version",
+          "generated_at",
+          "manifest_hash",
+          "findings",
+          "remediations",
+          "evidence_appendix",
+          "framework_summary",
+          "confidence",
+          "is_finalized"
+        ],
+        "title": "GovernanceReportResponse",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -8040,6 +8199,34 @@
           "compensating_control_ids"
         ],
         "title": "RemediationRecommendationResponse",
+        "type": "object"
+      },
+      "ReplayResponse": {
+        "properties": {
+          "hash_matches": {
+            "title": "Hash Matches",
+            "type": "boolean"
+          },
+          "original_manifest_hash": {
+            "title": "Original Manifest Hash",
+            "type": "string"
+          },
+          "replayed_manifest_hash": {
+            "title": "Replayed Manifest Hash",
+            "type": "string"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_id",
+          "hash_matches",
+          "original_manifest_hash",
+          "replayed_manifest_hash"
+        ],
+        "title": "ReplayResponse",
         "type": "object"
       },
       "ReproduceRequest": {
@@ -26934,6 +27121,346 @@
         "summary": "Create Checkout Session",
         "tags": [
           "assessment"
+        ]
+      }
+    },
+    "/ingest/assessment/{assessment_id}/governance-report": {
+      "post": {
+        "description": "Generate a deterministic governance report for a scored assessment.\n\nFails closed if the assessment is not yet scored or does not belong to\nthe calling tenant.",
+        "operationId": "generate_governance_report_ingest_assessment__assessment_id__governance_report_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateGovernanceReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate Governance Report",
+        "tags": [
+          "governance-reports"
+        ]
+      }
+    },
+    "/ingest/assessment/{assessment_id}/governance-report/{report_id}": {
+      "get": {
+        "description": "Retrieve a governance report with full deterministic payload.",
+        "operationId": "get_governance_report_ingest_assessment__assessment_id__governance_report__report_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Governance Report",
+        "tags": [
+          "governance-reports"
+        ]
+      }
+    },
+    "/ingest/assessment/{assessment_id}/governance-report/{report_id}/export/html": {
+      "get": {
+        "description": "Export governance report as deterministic HTML artifact.",
+        "operationId": "export_governance_report_html_ingest_assessment__assessment_id__governance_report__report_id__export_html_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Governance Report Html",
+        "tags": [
+          "governance-reports"
+        ]
+      }
+    },
+    "/ingest/assessment/{assessment_id}/governance-report/{report_id}/export/manifest": {
+      "get": {
+        "description": "Export manifest JSON for the governance report.\n\nReturns report_id, manifest_hash, schema_version, generated_at, finding_ids.",
+        "operationId": "export_governance_report_manifest_ingest_assessment__assessment_id__governance_report__report_id__export_manifest_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Export Governance Report Manifest Ingest Assessment  Assessment Id  Governance Report  Report Id  Export Manifest Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Governance Report Manifest",
+        "tags": [
+          "governance-reports"
+        ]
+      }
+    },
+    "/ingest/assessment/{assessment_id}/governance-report/{report_id}/replay": {
+      "get": {
+        "description": "Replay verification: re-generate the report and compare manifest hashes.\n\nReturns hash_matches=True if the report is replay-equivalent (not tampered).",
+        "operationId": "replay_governance_report_ingest_assessment__assessment_id__governance_report__report_id__replay_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replay Governance Report",
+        "tags": [
+          "governance-reports"
         ]
       }
     },

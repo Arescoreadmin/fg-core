@@ -5048,6 +5048,86 @@
       "dependency_categories": [
         "auth"
       ],
+      "file": "api/governance_report_manager.py",
+      "method": "POST",
+      "path": "/ingest/assessment/{assessment_id}/governance-report",
+      "plane": "data",
+      "plane_id": "data",
+      "scoped": true,
+      "scopes": [
+        "ingest:assessment"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_report_manager.py",
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}/governance-report/{report_id}",
+      "plane": "data",
+      "plane_id": "data",
+      "scoped": true,
+      "scopes": [
+        "ingest:assessment"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_report_manager.py",
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}/governance-report/{report_id}/export/html",
+      "plane": "data",
+      "plane_id": "data",
+      "scoped": true,
+      "scopes": [
+        "ingest:assessment"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_report_manager.py",
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}/governance-report/{report_id}/export/manifest",
+      "plane": "data",
+      "plane_id": "data",
+      "scoped": true,
+      "scopes": [
+        "ingest:assessment"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_report_manager.py",
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}/governance-report/{report_id}/replay",
+      "plane": "data",
+      "plane_id": "data",
+      "scoped": true,
+      "scopes": [
+        "ingest:assessment"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
       "file": "api/assessments.py",
       "method": "GET",
       "path": "/ingest/assessment/{assessment_id}/questions",
@@ -6582,7 +6662,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-05-18T14:58:17.681224+00:00",
+  "generated_at": "2026-05-18T20:12:19.782365+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
