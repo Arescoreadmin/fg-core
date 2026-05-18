@@ -218,6 +218,12 @@ class MonitoringEngine:
 
         dedup = deduplicate_drift_events(events)
 
+        # correlation_seam: cross-run drift trend analysis, historical decay curves, and
+        # recurring governance degradation detection plug in here. At this point dedup.events
+        # is the canonical event set for this run; a correlation engine would query prior runs
+        # by (tenant_id, assessment_id) and annotate events with recurrence counts and trend
+        # direction before the snapshot is assembled.
+
         critical_or_blocking = sum(
             1
             for e in dedup.events
@@ -249,9 +255,7 @@ class MonitoringEngine:
             severity_classification_version=ctx.severity_classification_version,
             events=dedup.events,
             tenant_id=ctx.tenant_id,
-            assessment_id=engine_input.framework_inputs[0].assessment_id
-            if engine_input.framework_inputs
-            else None,
+            assessment_id=ctx.assessment_id,
             framework_ids=framework_ids,
             eval_window_start_iso=ctx.evaluation_window_start_iso,
             eval_window_end_iso=ctx.evaluation_window_end_iso,

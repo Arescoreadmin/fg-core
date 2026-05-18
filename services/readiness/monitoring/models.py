@@ -133,6 +133,10 @@ class MonitoringEvaluationContext:
 
     All temporal boundaries are ISO 8601 strings to avoid TZ ambiguity.
     All version fields are required for replay reconstruction.
+
+    assessment_id is required for replay fidelity: the snapshot must carry the
+    evaluation scope even when evaluator inputs are empty (e.g. an assessment
+    with no controls yet). Without it the embedded snapshot_json loses scope.
     """
 
     tenant_id: str
@@ -147,6 +151,10 @@ class MonitoringEvaluationContext:
     evaluation_engine_version: str
     drift_classification_version: str
     severity_classification_version: str
+    assessment_id: Optional[str] = None
+    # sovereignty_seam: residency_region: Optional[str] = None  — for residency-aware
+    # monitoring, prohibited-region detection, and export boundary governance (EU, govcon).
+    # Add as a typed field when sovereign deployment policy enforcement is introduced.
 
 
 # ---------------------------------------------------------------------------

@@ -87,6 +87,12 @@ class MonitoringRunStore:
         )
         db.add(row)
         db.flush()
+        # alert_routing_seam: escalation routing, SOC workflow handoff, and compliance
+        # incident creation dispatch here after flush (pre-commit so routing failure
+        # can still abort the transaction). Payload: run_id, tenant_id, critical_or_blocking_count.
+        # siem_seam: Splunk/Sentinel/Chronicle/Elastic dispatch here. DriftSnapshot JSON is
+        # already export-safe and canonically serialized — no transformation required before
+        # forwarding to a SIEM event bus.
         return self._to_domain(row)
 
     def get_run(

@@ -502,6 +502,7 @@ def create_monitoring_run(
 
     context = MonitoringEvaluationContext(
         tenant_id=tenant_id,
+        assessment_id=assessment_id,
         evaluation_window_start_iso=eval_window_start_iso,
         evaluation_window_end_iso=eval_window_end_iso,
         evidence_freshness_window_days=body.evidence_freshness_window_days,
@@ -643,3 +644,15 @@ def get_monitoring_run(
         )
 
     return MonitoringRunResponse.from_record(record)
+
+
+# replay_investigation_seam: GET /control-plane/readiness/monitoring/runs/{run_id}/replay
+# Forensic timeline reconstruction and comparative replay go here. The endpoint would
+# deserialize snapshot_json, reconstruct the governance state at eval_window boundaries,
+# and return a structured replay trace for operator investigation. All inputs needed for
+# reconstruction are already present in the stored snapshot.
+
+# monitoring_dashboard_seam: GET /control-plane/readiness/monitoring/stream
+# Real-time drift feed (SSE or WebSocket) for live operational surfaces, operator triage
+# flows, and escalation UX. The event shape is already defined by DriftEventResponse;
+# streaming requires only a push mechanism, not new governance contracts.

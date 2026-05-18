@@ -62,6 +62,11 @@ def serialize_snapshot(snapshot: DriftSnapshot) -> dict:
 
 
 def snapshot_to_json(snapshot: DriftSnapshot) -> str:
+    # attestation_seam: cryptographic signing of the canonical JSON goes here.
+    # The output of json.dumps(..., sort_keys=True) is the canonical byte sequence
+    # to sign. A detached signature record (key_id, algorithm, signature_b64)
+    # stored alongside snapshot_json enables regulator/auditor/legal attestation
+    # without modifying the snapshot payload itself.
     return json.dumps(serialize_snapshot(snapshot), sort_keys=True)
 
 

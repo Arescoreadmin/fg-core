@@ -946,6 +946,48 @@ class TestMonitoringEngine:
         )
         assert snap.critical_or_blocking_count == blocking_or_crit
 
+    def test_assessment_id_in_snapshot_comes_from_context_not_framework_inputs(self):
+        """Bug fix: assessment_id must survive in snapshot even when framework_inputs=()."""
+        from services.readiness.monitoring.engine import MonitoringEngine
+        from services.readiness.monitoring.models import (
+            MonitoringEngineInput,
+            MonitoringEvaluationContext,
+        )
+        from datetime import datetime, timedelta, timezone
+
+        now = datetime.now(timezone.utc)
+        ctx = MonitoringEvaluationContext(
+            tenant_id="tenant-fix",
+            assessment_id="assessment-replay-test",
+            evaluation_window_start_iso=(now - timedelta(hours=24)).isoformat(),
+            evaluation_window_end_iso=now.isoformat(),
+            evidence_freshness_window_days=30,
+            retrieval_degradation_window_hours=24,
+            policy_drift_comparison_window_hours=24,
+            audit_continuity_window_hours=24,
+            runtime_governance_window_hours=24,
+            monitoring_contract_version="1.0",
+            evaluation_engine_version="1.0",
+            drift_classification_version="1.0",
+            severity_classification_version="1.0",
+        )
+        engine_input = MonitoringEngineInput(
+            context=ctx,
+            policy_inputs=(),
+            provenance_inputs=(),
+            provider_inputs=(),
+            retrieval_inputs=(),
+            evidence_inputs=(),
+            audit_inputs=(),
+            regression_input=None,
+            runtime_inputs=(),
+            framework_inputs=(),  # deliberately empty
+        )
+        engine = MonitoringEngine()
+        result = engine.evaluate("run-fix-1", engine_input)
+        # snapshot must carry assessment_id even though framework_inputs is empty
+        assert result.snapshot.assessment_id == "assessment-replay-test"
+
 
 # ---------------------------------------------------------------------------
 # Pure unit tests — serialization

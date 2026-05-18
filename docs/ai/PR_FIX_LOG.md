@@ -10147,4 +10147,58 @@ Implements the deterministic `ReadinessScoreEngine`: pure Python, no I/O, no LLM
 - `ruff check` + `ruff format --check`: PASS
 - `mypy api/readiness_gap_analysis_manager.py api/readiness_manager.py tests/test_readiness_gap_analysis_manager.py --ignore-missing-imports`: 0 errors
 - `pytest tests/test_readiness_gap_analysis_manager.py`: 31 passed (7 new tests added)
+
+---
+
+### 2026-05-18 — PR 93: Enterprise Continuous Readiness Monitoring Foundation
+
+**Branch:** `main`
+
+**Area:** Readiness; continuous monitoring; drift detection; audit; persistence.
+
+**Root cause:** No implementation — new deterministic continuous monitoring layer that evaluates governance state across 9 domains (policy drift, provenance enforcement, provider governance, retrieval degradation, evidence freshness, audit integrity, readiness regression, framework compliance, runtime governance), produces immutable `DriftSnapshot` records, and exposes 3 REST endpoints for scheduling, listing, and retrieving monitoring runs.
+
+**Files changed:**
+- `services/readiness/monitoring/models.py` (new + modified) — 3 enums (`DriftSeverity`, `DriftType`, `DriftCertainty`), 12 frozen dataclasses; `assessment_id` added to `MonitoringEvaluationContext` for replay fidelity; sovereignty seam comment added
+- `services/readiness/monitoring/engine.py` (new + modified) — `MonitoringEngine.evaluate()` 9-evaluator pipeline; deterministic SHA-256 IDs; bounded evaluation (MAX_EVIDENCE_ITEMS=200, MAX_POLICY_ITEMS=50); bug fix: engine now reads `assessment_id` from `ctx.assessment_id` instead of `framework_inputs[0]`; correlation seam comment added
+- `services/readiness/monitoring/evaluators.py` (new) — 9 evaluators, each fail-closed: exception → `MONITORING_VISIBILITY_DEGRADATION` event with `MONITORING_SOURCE_FAILURE` certainty
+- `services/readiness/monitoring/deduplication.py` (new) — `deduplicate_drift_events`: highest-severity per event_fingerprint wins; fingerprint = `SHA256(drift_type + affected_scope + run_id + sorted_control_ids)[:24]`
+- `services/readiness/monitoring/serialization.py` (new + modified) — `snapshot_to_json` with `sort_keys=True`; `snapshot_from_json`; attestation seam comment added; unused imports cleaned
+- `services/readiness/monitoring/store.py` (new + modified) — `MonitoringRunStore`: write-once create/get/list; tenant isolation enforced on get/list; alert_routing_seam and siem_seam comments added
+- `services/readiness/monitoring/__init__.py` (new) — public API surface
+- `api/db_models_monitoring.py` (new) — `MonitoringRunModel(Base)`, table `readiness_monitoring_runs`, 2 composite indexes
+- `api/db.py` (modified — infrastructure) — `importlib.import_module("api.db_models_monitoring")` added to `_ensure_models_imported()`
+- `api/readiness_monitoring_manager.py` (new) — 3 endpoints: `POST /control-plane/readiness/monitoring/runs` (schedule/idempotent), `GET /control-plane/readiness/monitoring/runs` (list), `GET /control-plane/readiness/monitoring/runs/{run_id}` (retrieve); replay_investigation_seam and monitoring_dashboard_seam comments added
+- `api/main.py` (modified — infrastructure) — router registered in `build_app()` and `build_contract_app()`
+- `tests/test_readiness_monitoring.py` (new) — 82 tests covering deterministic ID derivation, all 9 evaluators, deduplication, engine invariants, serialization, and all 3 API endpoints including tenant isolation and security invariants
+
+**Bug fixed: replay contract breach — `assessment_id` lost when `framework_inputs=()` (GAP 2)**
+- Root cause: `MonitoringEngine` derived `assessment_id` for the snapshot from `framework_inputs[0].assessment_id`; when a run was scoped to an assessment with no controls yet, `framework_inputs` was empty and the snapshot stored `assessment_id=None`, losing evaluation scope for forensic replay
+- Fix: Added `assessment_id: Optional[str] = None` field to `MonitoringEvaluationContext`; engine now reads `ctx.assessment_id`; `readiness_monitoring_manager.py` passes `assessment_id=assessment_id` to the context constructor
+- Regression test: `test_assessment_id_in_snapshot_comes_from_context_not_framework_inputs` (added to `TestMonitoringEngine`)
+
+**Architectural seam comments added (GAPs 1–7):**
+- GAP 1 — `engine.py`: `correlation_seam` — cross-run drift trend analysis and recurring degradation detection
+- GAP 3 — `store.py`: `alert_routing_seam` — SOC escalation and compliance incident dispatch post-flush
+- GAP 3 — `store.py`: `siem_seam` — Splunk/Sentinel/Chronicle/Elastic export of canonical snapshot JSON
+- GAP 4 — `readiness_monitoring_manager.py`: `replay_investigation_seam` — future `GET .../runs/{run_id}/replay` endpoint
+- GAP 5 — `readiness_monitoring_manager.py`: `monitoring_dashboard_seam` — future `GET .../monitoring/stream` SSE endpoint
+- GAP 6 — `serialization.py`: `attestation_seam` — cryptographic signing of canonical JSON byte sequence
+- GAP 7 — `models.py`: `sovereignty_seam` — residency_region field for prohibited-region detection and export boundary governance
+
+**Design invariants:**
+- Deterministic IDs: `SHA256(...)` — identical inputs → identical run_id, snapshot_id, event_fingerprint
+- Immutable domain objects: all dataclasses `frozen=True`
+- Fail-closed evaluators: exception → explicit visibility degradation event, never silent healthy
+- Write-once persistence: `MonitoringRunStore` has no UPDATE paths
+- Idempotent scheduling: POST with existing run_id returns stored result
+- Export-safe: no secrets, vectors, prompts, PHI, or internal topology in any serialized field
+- Tenant isolation: get/list always filter by tenant_id; cross-tenant access raises isolation error
+
+**Validation:**
+- `pytest tests/test_readiness_monitoring.py`: 82 passed
+- `mypy`: 0 errors
+- `ruff check` + `ruff format`: all passed
+- `bash codex_gates.sh`: all gates passed
+- `docker compose config`: valid
 - `make fg-contract`: PASS (contract authority refreshed; no schema drift)
