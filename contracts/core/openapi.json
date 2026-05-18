@@ -3482,6 +3482,96 @@
         "title": "DomainScoreResponse",
         "type": "object"
       },
+      "DriftEventResponse": {
+        "properties": {
+          "affected_control_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Control Ids",
+            "type": "array"
+          },
+          "affected_evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Evidence Ids",
+            "type": "array"
+          },
+          "affected_framework_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Framework Ids",
+            "type": "array"
+          },
+          "affected_scope": {
+            "title": "Affected Scope",
+            "type": "string"
+          },
+          "certainty": {
+            "title": "Certainty",
+            "type": "string"
+          },
+          "drift_detail": {
+            "title": "Drift Detail",
+            "type": "string"
+          },
+          "drift_type": {
+            "title": "Drift Type",
+            "type": "string"
+          },
+          "evaluation_timestamp_iso": {
+            "title": "Evaluation Timestamp Iso",
+            "type": "string"
+          },
+          "event_fingerprint": {
+            "title": "Event Fingerprint",
+            "type": "string"
+          },
+          "monitoring_source": {
+            "title": "Monitoring Source",
+            "type": "string"
+          },
+          "provenance_metadata": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Provenance Metadata",
+            "type": "object"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "temporal_boundary_end": {
+            "title": "Temporal Boundary End",
+            "type": "string"
+          },
+          "temporal_boundary_start": {
+            "title": "Temporal Boundary Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_fingerprint",
+          "drift_type",
+          "severity",
+          "certainty",
+          "affected_scope",
+          "affected_control_ids",
+          "affected_evidence_ids",
+          "affected_framework_ids",
+          "drift_detail",
+          "monitoring_source",
+          "evaluation_timestamp_iso",
+          "temporal_boundary_start",
+          "temporal_boundary_end",
+          "provenance_metadata"
+        ],
+        "title": "DriftEventResponse",
+        "type": "object"
+      },
       "EnrollmentTokenCreateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -6081,6 +6171,289 @@
           "build_id"
         ],
         "title": "ModuleRegistrationRequest",
+        "type": "object"
+      },
+      "MonitoringRunRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Scope to a specific assessment.",
+            "title": "Assessment Id"
+          },
+          "audit_continuity_window_hours": {
+            "default": 24,
+            "maximum": 720.0,
+            "minimum": 1.0,
+            "title": "Audit Continuity Window Hours",
+            "type": "integer"
+          },
+          "eval_window_hours": {
+            "default": 24,
+            "description": "Evaluation window in hours.",
+            "maximum": 720.0,
+            "minimum": 1.0,
+            "title": "Eval Window Hours",
+            "type": "integer"
+          },
+          "evidence_freshness_window_days": {
+            "default": 30,
+            "description": "Days after which evidence is considered stale.",
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "title": "Evidence Freshness Window Days",
+            "type": "integer"
+          },
+          "policy_drift_comparison_window_hours": {
+            "default": 24,
+            "maximum": 720.0,
+            "minimum": 1.0,
+            "title": "Policy Drift Comparison Window Hours",
+            "type": "integer"
+          },
+          "regression_threshold": {
+            "default": 0.05,
+            "description": "Fractional completion drop that triggers regression detection.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Regression Threshold",
+            "type": "number"
+          },
+          "retrieval_degradation_window_hours": {
+            "default": 24,
+            "maximum": 720.0,
+            "minimum": 1.0,
+            "title": "Retrieval Degradation Window Hours",
+            "type": "integer"
+          },
+          "runtime_governance_window_hours": {
+            "default": 24,
+            "maximum": 720.0,
+            "minimum": 1.0,
+            "title": "Runtime Governance Window Hours",
+            "type": "integer"
+          }
+        },
+        "title": "MonitoringRunRequest",
+        "type": "object"
+      },
+      "MonitoringRunResponse": {
+        "properties": {
+          "assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Id"
+          },
+          "completed_at_iso": {
+            "title": "Completed At Iso",
+            "type": "string"
+          },
+          "created_at_iso": {
+            "title": "Created At Iso",
+            "type": "string"
+          },
+          "critical_or_blocking_count": {
+            "title": "Critical Or Blocking Count",
+            "type": "integer"
+          },
+          "domains_evaluated": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Domains Evaluated",
+            "type": "array"
+          },
+          "drift_classification_version": {
+            "title": "Drift Classification Version",
+            "type": "string"
+          },
+          "error_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Summary"
+          },
+          "eval_window_end_iso": {
+            "title": "Eval Window End Iso",
+            "type": "string"
+          },
+          "eval_window_start_iso": {
+            "title": "Eval Window Start Iso",
+            "type": "string"
+          },
+          "evaluation_engine_version": {
+            "title": "Evaluation Engine Version",
+            "type": "string"
+          },
+          "evaluation_success": {
+            "title": "Evaluation Success",
+            "type": "boolean"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/DriftEventResponse"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "evidence_freshness_window_days": {
+            "title": "Evidence Freshness Window Days",
+            "type": "integer"
+          },
+          "framework_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Framework Ids",
+            "type": "array"
+          },
+          "monitoring_contract_version": {
+            "title": "Monitoring Contract Version",
+            "type": "string"
+          },
+          "replay_contract_metadata": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Replay Contract Metadata",
+            "type": "object"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "severity_classification_version": {
+            "title": "Severity Classification Version",
+            "type": "string"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_drift_events": {
+            "title": "Total Drift Events",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "run_id",
+          "tenant_id",
+          "assessment_id",
+          "snapshot_id",
+          "monitoring_contract_version",
+          "evaluation_engine_version",
+          "drift_classification_version",
+          "severity_classification_version",
+          "eval_window_start_iso",
+          "eval_window_end_iso",
+          "evidence_freshness_window_days",
+          "framework_ids",
+          "domains_evaluated",
+          "total_drift_events",
+          "critical_or_blocking_count",
+          "evaluation_success",
+          "error_summary",
+          "completed_at_iso",
+          "created_at_iso",
+          "events",
+          "replay_contract_metadata"
+        ],
+        "title": "MonitoringRunResponse",
+        "type": "object"
+      },
+      "MonitoringRunSummaryResponse": {
+        "properties": {
+          "assessment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Id"
+          },
+          "completed_at_iso": {
+            "title": "Completed At Iso",
+            "type": "string"
+          },
+          "created_at_iso": {
+            "title": "Created At Iso",
+            "type": "string"
+          },
+          "critical_or_blocking_count": {
+            "title": "Critical Or Blocking Count",
+            "type": "integer"
+          },
+          "domains_evaluated": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Domains Evaluated",
+            "type": "array"
+          },
+          "evaluation_engine_version": {
+            "title": "Evaluation Engine Version",
+            "type": "string"
+          },
+          "evaluation_success": {
+            "title": "Evaluation Success",
+            "type": "boolean"
+          },
+          "monitoring_contract_version": {
+            "title": "Monitoring Contract Version",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "total_drift_events": {
+            "title": "Total Drift Events",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "run_id",
+          "assessment_id",
+          "snapshot_id",
+          "monitoring_contract_version",
+          "evaluation_engine_version",
+          "total_drift_events",
+          "critical_or_blocking_count",
+          "evaluation_success",
+          "domains_evaluated",
+          "completed_at_iso",
+          "created_at_iso"
+        ],
+        "title": "MonitoringRunSummaryResponse",
         "type": "object"
       },
       "OrgCreateRequest": {
@@ -19980,6 +20353,215 @@
         "summary": "Get Maturity Tier",
         "tags": [
           "readiness",
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/monitoring/run": {
+      "post": {
+        "description": "Execute a deterministic readiness monitoring evaluation.\n\nIdempotent: submitting the same evaluation scope and window twice returns\nthe stored result rather than re-evaluating.",
+        "operationId": "create_monitoring_run_control_plane_readiness_monitoring_run_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MonitoringRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonitoringRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Monitoring Run",
+        "tags": [
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/monitoring/runs": {
+      "get": {
+        "description": "List monitoring runs for the authenticated tenant.",
+        "operationId": "list_monitoring_runs_control_plane_readiness_monitoring_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "assessment_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assessment Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MonitoringRunSummaryResponse"
+                  },
+                  "title": "Response List Monitoring Runs Control Plane Readiness Monitoring Runs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Monitoring Runs",
+        "tags": [
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/monitoring/runs/{run_id}": {
+      "get": {
+        "description": "Retrieve a monitoring run by its deterministic run_id.",
+        "operationId": "get_monitoring_run_control_plane_readiness_monitoring_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonitoringRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Monitoring Run",
+        "tags": [
           "readiness"
         ]
       }

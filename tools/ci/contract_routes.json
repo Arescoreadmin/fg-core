@@ -962,6 +962,24 @@
     },
     {
       "method": "POST",
+      "path": "/control-plane/readiness/monitoring/run",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/monitoring/runs",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/monitoring/runs/{run_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
       "path": "/control-plane/readiness/scoring-contracts",
       "scopes": [],
       "source": "contract"
@@ -1603,7 +1621,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-17T20:53:22.308987+00:00",
+  "generated_at": "2026-05-18T08:56:45.263204+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

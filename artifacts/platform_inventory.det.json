@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 267,
+    "contract_count": 270,
     "contract_only": [],
-    "runtime_count": 371,
+    "runtime_count": 374,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -141,7 +141,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "3833d0d33095f4527f96867f6ce6e4f5c1d7052adeb6f295a62901a219280006",
+  "governance_fingerprint": "aaea44f86f9e8b45caea2dbdedc679bd0bcecbc51137c5b0e78ec0a86f7b1c3e",
   "planes": [
     {
       "compat": {
@@ -411,6 +411,8 @@
       "GET /control-plane/readiness/frameworks/{framework_id}/scoring-contracts",
       "GET /control-plane/readiness/frameworks/{framework_id}/versions",
       "GET /control-plane/readiness/maturity-tiers/{tier_id}",
+      "GET /control-plane/readiness/monitoring/runs",
+      "GET /control-plane/readiness/monitoring/runs/{run_id}",
       "GET /control-plane/readiness/scoring-contracts/{contract_id}",
       "GET /control-plane/v2/ai/namespace",
       "GET /control-plane/v2/commands",
@@ -518,6 +520,7 @@
       "POST /control-plane/readiness/frameworks/{framework_id}/transition",
       "POST /control-plane/readiness/frameworks/{framework_id}/versions",
       "POST /control-plane/readiness/maturity-tiers",
+      "POST /control-plane/readiness/monitoring/run",
       "POST /control-plane/readiness/scoring-contracts",
       "POST /control-plane/v2/commands",
       "POST /control-plane/v2/commands/{command_id}/cancel",
