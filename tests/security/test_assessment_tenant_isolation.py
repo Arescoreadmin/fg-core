@@ -71,9 +71,11 @@ def _force_scored(assessment_id: str) -> None:
 
     SessionLocal = get_sessionmaker()
     with SessionLocal() as db:
-        rec = db.query(AssessmentRecord).filter(
-            AssessmentRecord.id == assessment_id
-        ).first()
+        rec = (
+            db.query(AssessmentRecord)
+            .filter(AssessmentRecord.id == assessment_id)
+            .first()
+        )
         if rec:
             rec.status = "scored"
             rec.overall_score = 72.5

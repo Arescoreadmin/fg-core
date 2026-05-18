@@ -306,9 +306,10 @@ def _get_assessment_or_404(
     return rec
 
 
-
 @router.post("/orgs", response_model=OrgCreateResponse, status_code=201)
-def create_org(body: OrgCreateRequest, request: Request, db: Session = Depends(_get_db)):
+def create_org(
+    body: OrgCreateRequest, request: Request, db: Session = Depends(_get_db)
+):
     caller_tenant = _resolve_caller_tenant(request)
     profile_type = classify_profile(
         industry=body.industry,
@@ -381,7 +382,9 @@ def get_questions(assessment_id: str, request: Request, db: Session = Depends(_g
 
 
 @router.get("/{assessment_id}")
-def get_assessment(assessment_id: str, request: Request, db: Session = Depends(_get_db)):
+def get_assessment(
+    assessment_id: str, request: Request, db: Session = Depends(_get_db)
+):
     caller_tenant = _resolve_caller_tenant(request)
     rec = _get_assessment_or_404(assessment_id, caller_tenant, db)
     return {
@@ -425,7 +428,9 @@ def save_responses(
 
 
 @router.post("/{assessment_id}/checkout")
-def create_checkout_session(assessment_id: str, request: Request, db: Session = Depends(_get_db)):
+def create_checkout_session(
+    assessment_id: str, request: Request, db: Session = Depends(_get_db)
+):
     caller_tenant = _resolve_caller_tenant(request)
     rec = _get_assessment_or_404(assessment_id, caller_tenant, db)
 
@@ -505,7 +510,9 @@ def create_checkout_session(assessment_id: str, request: Request, db: Session = 
 
 
 @router.post("/{assessment_id}/submit")
-def submit_assessment(assessment_id: str, request: Request, db: Session = Depends(_get_db)):
+def submit_assessment(
+    assessment_id: str, request: Request, db: Session = Depends(_get_db)
+):
     caller_tenant = _resolve_caller_tenant(request)
     rec = _get_assessment_or_404(assessment_id, caller_tenant, db)
 
