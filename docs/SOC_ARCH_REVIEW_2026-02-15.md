@@ -1085,3 +1085,40 @@ All minted API keys share `api_keys.prefix = "fgk"`. The original RBAC implement
 **Tests:** 66 tests in `tests/test_ops_governance_manager.py` — all pass. Covers state machine for all 7 domains, environment lifecycle (including validation token gate), secret governance (no values ever stored/returned), key rotation scheduling and outcome, legal hold enforcement, export FSM, backup/restore record creation, recovery FSM, tenant isolation, audit hash chain integrity, optimistic locking, idempotency tenant scoping, serialization safety, API surface (31 routes), invalid input rejection.
 
 **Validation:** `make fg-fast` PASS. 66 ops governance tests PASS.
+
+---
+
+## PR 93 — Enterprise Continuous Readiness Monitoring & Drift Detection Engine
+
+**Reviewer:** EmpireOverloard | **Classification:** SOC-HIGH-002 (tools/ci changes from route inventory regeneration)
+
+**New subsystem:** `services/readiness/monitoring/` package — `models.py` (pure Python domain models; frozen dataclasses; DriftSeverity × 6, DriftType × 20, DriftCertainty × 8; no I/O, no randomness), `identity.py` (deterministic SHA-256 identities: `derive_monitoring_run_id`, `derive_snapshot_id`, `derive_event_fingerprint`; replay-equivalent inputs → replay-equivalent IDs; never timestamps alone), `evaluators.py` (9 pure evaluator functions: policy, provenance, provider, retrieval, evidence freshness, audit integrity, readiness regression, runtime governance, framework compliance; bounded by `_MAX_EVIDENCE_ITEMS=200`, `_MAX_POLICY_ITEMS=50`, `_MAX_PROVIDER_ITEMS=50`, `_MAX_CONTROL_ITEMS=200`), `deduplication.py` (fingerprint-based dedup; highest-severity per fingerprint wins), `engine.py` (MonitoringEngine — evaluator failure → explicit MONITORING_VISIBILITY_DEGRADATION event, never silent healthy), `serialization.py` (export-safe, deterministic JSON with `sort_keys=True`; no secrets, vectors, or raw evidence bodies), `store.py` (write-once; no UPDATE paths).
+
+**DB model (flagged — schema change):** `api/db_models_monitoring.py` — new ORM class `MonitoringRunModel`, table `readiness_monitoring_runs`. 15 columns. Indexes: `ix_monitoring_runs_tenant_created` (tenant_id, created_at) and `ix_monitoring_runs_tenant_assessment` (tenant_id, assessment_id). No migration file — table created via `init_db()` / `Base.metadata.create_all()`.
+
+**`api/db.py` change (flagged — infrastructure):** `_ensure_models_imported()` extended with `importlib.import_module("api.db_models_monitoring")` so `init_db()` picks up the new table.
+
+**New API router:** `api/readiness_monitoring_manager.py` — 3 routes under `/control-plane/readiness/monitoring/`. All routes protected by `control-plane:read` scope. `extra="forbid"` on `MonitoringRunRequest`. `tenant_id` always resolved from auth context — never from request body or query string.
+
+**Router registration:** `api/main.py` — `readiness_monitoring_router` added to both `build_app` and `build_contract_app` after `readiness_gap_analysis_router`.
+
+**Security invariants:**
+- `tenant_id` always resolved from auth context via `_tenant_from_auth(request)`, never from body or query.
+- `snapshot_json` (raw internal blob) never exposed in API responses; deserialized export-safe dict returned instead.
+- All evaluator inputs contain only export-safe governance metadata — no secrets, credentials, vectors, embeddings, raw evidence bodies, PHI, or provider payloads.
+- Evaluator failures never collapse into "healthy" state; always produce `MONITORING_VISIBILITY_DEGRADATION` events with `MONITORING_SOURCE_FAILURE` certainty.
+- `MonitoringRunStore` is write-once — no UPDATE paths exist.
+- Cross-tenant access returns 404 (no disclosure) via `MonitoringRunTenantIsolationError`.
+- Run IDs are deterministic SHA-256 hex (32 chars), never random UUIDs or timestamp-only identifiers.
+- `snapshot_to_json` uses `sort_keys=True` for deterministic serialization; no unpredictable field ordering.
+- POST is idempotent: if `run_id` already exists for tenant, returns stored result (no re-evaluation, no duplicate records).
+
+**No new auth logic.** No changes to auth middleware, auth gates, or credential handling.
+
+**Tools/CI changes:** `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json`, `tools/ci/topology.sha256`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/contract_routes.json` — regenerated. 3 new monitoring routes added, all `tenant_bound: true`, `scoped: true`.
+
+**Contract update:** `contracts/core/openapi.json` regenerated. `BLUEPRINT_STAGED.md` and `CONTRACT.md` authority markers updated to `6d376b2f342ff4f04f2ef5a05ee67c5a108cc7ae4397e1a6251c2ccfed77d12c`.
+
+**Tests:** `tests/test_readiness_monitoring.py` — covers identity determinism, severity rank ordering, all 9 evaluator functions, deduplication (fingerprint grouping + highest-severity wins), MonitoringEngine (empty inputs, evaluator failure visibility, domains_evaluated, critical_or_blocking_count), serialization round-trip, API surface (POST idempotency, 403 no-tenant, 404 bad assessment, list + assessment_id filter, GET + tenant isolation), security invariants (no secrets in response, snapshot_json not exposed, run_id hex format, tenant isolation across tenants).
+
+**Validation:** `make fg-fast` PASS.
