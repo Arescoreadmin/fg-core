@@ -144,6 +144,36 @@ def derive_canonical_inputs_hash(
     return _sha256_hex(payload)
 
 
+def derive_report_id(
+    assessment_id: str,
+    tenant_id: str,
+    scores: dict[str, float],
+    evidence_refs: list,
+    framework_ids: list[str],
+) -> str:
+    """Derive a stable, collision-free report ID from all material inputs.
+
+    Includes tenant_id and scores so that two reports for the same assessment
+    with different score states produce different IDs and never collide on the
+    primary key.  Returns 'gr-' + SHA-256 hex[:24].
+    """
+    evidence_ids = sorted(
+        getattr(ref, "evidence_id", str(ref)) for ref in evidence_refs
+    )
+    payload = json.dumps(
+        {
+            "assessment_id": assessment_id,
+            "tenant_id": tenant_id,
+            "scores": dict(sorted(scores.items())),
+            "evidence_ids": evidence_ids,
+            "framework_ids": sorted(framework_ids),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"gr-{_sha256_hex(payload)[:24]}"
+
+
 def derive_findings_hash(finding_ids: list[str]) -> str:
     """Derive a deterministic hash of finding IDs (sorted).
 

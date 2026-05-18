@@ -39,6 +39,7 @@ from .identity import (
     derive_finding_id,
     derive_manifest_hash,
     derive_remediation_id,
+    derive_report_id,
 )
 from .models import (
     ConfidenceScore,
@@ -174,14 +175,17 @@ class GovernanceReportEngine:
         if scores is None:
             raise GovernanceReportError("scores dict is required")
 
-        # Derive stable report_id if not provided
+        # Derive stable report_id if not provided.
+        # Includes tenant_id + scores so two reports for the same assessment
+        # with different score states produce different IDs (no PK collision).
         if not report_id:
-            canonical_inputs = derive_canonical_inputs_hash(
+            report_id = derive_report_id(
                 assessment_id=assessment_id,
+                tenant_id=tenant_id,
+                scores=scores,
                 evidence_refs=evidence_refs,
                 framework_ids=["NIST_AI_RMF", "SOC2", "HIPAA"],
             )
-            report_id = f"gr-{canonical_inputs[:24]}"
 
         # Build evidence index
         evidence_by_domain: dict[str, list[EvidenceRef]] = {}
@@ -207,7 +211,7 @@ class GovernanceReportEngine:
             evidence_ids = tuple(ref.evidence_id for ref in domain_evidence)
 
             if evidence_refs and not domain_evidence:
-                log.warning(
+                logger.warning(
                     "governance_report.evidence_domain_unmatched "
                     "domain=%s evidence_refs_provided=%d matched=0 "
                     "— evidence lineage for this domain is empty; "

@@ -14,6 +14,7 @@ from .identity import (
     derive_findings_hash,
     derive_manifest_hash,
     derive_remediation_id,
+    derive_report_id,
 )
 from .models import (
     ConfidenceScore,
@@ -54,6 +55,7 @@ __all__ = [
     "derive_findings_hash",
     "derive_manifest_hash",
     "derive_remediation_id",
+    "derive_report_id",
     # Confidence
     "calculate_confidence",
     # Framework mappings

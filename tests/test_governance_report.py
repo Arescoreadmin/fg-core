@@ -22,6 +22,7 @@ from services.governance.report.identity import (
     derive_evidence_id,
     derive_finding_id,
     derive_remediation_id,
+    derive_report_id,
 )
 from services.governance.report.models import (
     ConfidenceScore,
@@ -150,6 +151,23 @@ class TestDeterministicFindingIds:
             "tenant-b", "NIST_AI_RMF", "data_governance", "gap", "abc123"
         )
         assert fid_a != fid_b
+
+    def test_report_id_deterministic(self):
+        rid1 = derive_report_id("a1", "t1", {"sec": 30.0}, [], ["NIST_AI_RMF"])
+        rid2 = derive_report_id("a1", "t1", {"sec": 30.0}, [], ["NIST_AI_RMF"])
+        assert rid1 == rid2
+        assert rid1.startswith("gr-")
+
+    def test_report_id_differs_when_scores_differ(self):
+        # P1 fix: same assessment + evidence but different scores must produce different IDs.
+        rid_low = derive_report_id("a1", "t1", {"sec": 20.0}, [], ["NIST_AI_RMF"])
+        rid_high = derive_report_id("a1", "t1", {"sec": 80.0}, [], ["NIST_AI_RMF"])
+        assert rid_low != rid_high
+
+    def test_report_id_differs_across_tenants(self):
+        rid_a = derive_report_id("a1", "tenant-a", {"sec": 30.0}, [], ["NIST_AI_RMF"])
+        rid_b = derive_report_id("a1", "tenant-b", {"sec": 30.0}, [], ["NIST_AI_RMF"])
+        assert rid_a != rid_b
 
     def test_remediation_id_deterministic(self):
         r1 = derive_remediation_id("tenant-1", "security_posture", "high", "high")

@@ -305,6 +305,35 @@ def generate_governance_report(
             detail=api_error("GOVERNANCE_REPORT_GENERATION_FAILED", str(exc)),
         ) from exc
 
+    # Idempotency: if a record with this ID already exists return it directly.
+    # Same inputs → same report_id (derive_report_id covers scores + evidence),
+    # so this is a genuine re-submission and not a collision.
+    existing = (
+        db.query(GovernanceReportRecord)
+        .filter(
+            GovernanceReportRecord.id == report.report_id,
+            GovernanceReportRecord.tenant_id == tenant_id,
+        )
+        .first()
+    )
+    if existing:
+        existing_dict = existing.report_json
+        return GovernanceReportResponse(
+            report_id=existing.id,
+            assessment_id=existing.assessment_id,
+            tenant_id=existing.tenant_id,
+            version=existing.version,
+            schema_version=existing.schema_version,
+            generated_at=existing.generated_at,
+            manifest_hash=existing.manifest_hash,
+            findings=existing_dict.get("findings", []),
+            remediations=existing_dict.get("remediations", []),
+            evidence_appendix=existing_dict.get("evidence_appendix", []),
+            framework_summary=existing_dict.get("framework_summary", {}),
+            confidence=existing_dict.get("confidence", {}),
+            is_finalized=existing.is_finalized,
+        )
+
     # Persist to DB
     report_dict = serialize_report(report)
     record = GovernanceReportRecord(

@@ -68,6 +68,27 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-18 — PR 98 P1 fix: report_id includes scores in derivation + idempotent generate handler
+
+**Branch:** `feat/deterministic-governance-report-core-pr98`
+
+**Area:** Governance report engine, report ID derivation, POST generate handler.
+
+**Root cause (2 issues):**
+1. **P1 — ID collision on score change**: `report_id` was derived from `derive_canonical_inputs_hash(assessment_id, evidence_refs, framework_ids)` only. Two generate calls for the same assessment with different scores produced the same `report_id`, causing a primary key constraint violation on the second `db.add()`.
+2. **P1 — No collision guard**: The POST handler called `db.add(record)` unconditionally. Any PK collision surfaced as a 500 server error instead of a clean idempotent or versioned result.
+
+**Files changed:**
+- `services/governance/report/identity.py` — new `derive_report_id(assessment_id, tenant_id, scores, evidence_refs, framework_ids)` covering all material inputs; returns `gr-{sha256[:24]}`
+- `services/governance/report/engine.py` — `generate()` now calls `derive_report_id` instead of `derive_canonical_inputs_hash`; also fixed `log` → `logger` NameError in SF-1 warning
+- `services/governance/report/__init__.py` — `derive_report_id` exported
+- `api/governance_report_manager.py` — pre-insert existence check: if record with same `report_id` + `tenant_id` exists, return it directly (idempotent); only insert on first generation
+- `tests/test_governance_report.py` — 3 new tests: `test_report_id_deterministic`, `test_report_id_differs_when_scores_differ`, `test_report_id_differs_across_tenants`
+
+**Verification:** 56 governance tests pass; all fg-fast gates pass.
+
+---
+
 ### 2026-05-18 — PR 97: Enterprise Tenant Isolation & Assessment Boundary Hardening
 
 **Branch:** `feat/simulation-governance-extensions-pr96`
