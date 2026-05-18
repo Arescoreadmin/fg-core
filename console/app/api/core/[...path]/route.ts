@@ -54,6 +54,11 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'control-plane/readiness/domains', methods: new Set(['GET', 'HEAD']) },
   { prefix: 'control-plane/readiness/controls', methods: new Set(['GET', 'HEAD']) },
   { prefix: 'control-plane/readiness/maturity-tiers', methods: new Set(['GET', 'HEAD']) },
+  // UI audit dashboard — tenant-scoped, ui:read gated (PR 92)
+  // Read-only: exposes audit ledger summary, chain integrity, and status counts.
+  { prefix: 'ui/audit/overview', methods: new Set(['GET', 'HEAD']) },
+  { prefix: 'ui/audit/status', methods: new Set(['GET', 'HEAD']) },
+  { prefix: 'ui/audit/chain-integrity', methods: new Set(['GET', 'HEAD']) },
 ];
 
 function getRequestId(request: NextRequest): string {

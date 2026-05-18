@@ -188,8 +188,8 @@ test('placeholder pages display not-configured state', () => {
   const placeholders = [
     // corpus graduated to full implementation in PR 50 — no longer a placeholder
     // readiness graduated to full implementation in PR 91 — no longer a placeholder
+    // provenance graduated to full implementation in PR 92 — no longer a placeholder
     'app/dashboard/retrieval/page.tsx',
-    'app/dashboard/provenance/page.tsx',
     'app/dashboard/policies/page.tsx',
     'app/dashboard/providers/page.tsx',
     'app/dashboard/settings/page.tsx',
@@ -205,8 +205,8 @@ test('placeholder pages do not fetch live data or use client-side effects', () =
   const placeholders = [
     // corpus graduated to full implementation in PR 50 — no longer a placeholder
     // readiness graduated to full implementation in PR 91 — no longer a placeholder
+    // provenance graduated to full implementation in PR 92 — no longer a placeholder
     'app/dashboard/retrieval/page.tsx',
-    'app/dashboard/provenance/page.tsx',
     'app/dashboard/policies/page.tsx',
     'app/dashboard/providers/page.tsx',
     'app/dashboard/settings/page.tsx',
@@ -236,12 +236,21 @@ test('readiness page is implemented and no longer a placeholder', () => {
   assert.doesNotMatch(content, /module-not-configured/);
 });
 
+test('provenance page is implemented and no longer a placeholder', () => {
+  const content = read('app/dashboard/provenance/page.tsx');
+  assert.match(content, /EvidenceTimeline/);
+  assert.match(content, /AuditChainPanel/);
+  assert.match(content, /listEvidence/);
+  assert.doesNotMatch(content, /not yet configured/);
+  assert.doesNotMatch(content, /module-not-configured/);
+});
+
 test('placeholder pages do not render fake operational data', () => {
   const placeholders = [
     // corpus graduated to full implementation in PR 50 — no longer a placeholder
     // readiness graduated to full implementation in PR 91 — no longer a placeholder
+    // provenance graduated to full implementation in PR 92 — no longer a placeholder
     'app/dashboard/retrieval/page.tsx',
-    'app/dashboard/provenance/page.tsx',
     'app/dashboard/policies/page.tsx',
     'app/dashboard/providers/page.tsx',
     'app/dashboard/settings/page.tsx',
