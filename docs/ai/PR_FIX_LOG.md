@@ -6,6 +6,31 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-18 — PR 96: Simulation Governance Extensions
+
+**Branch:** `feat/simulation-governance-extensions-pr96`
+
+**Area:** Readiness simulation; governance events; classification; timeline; replay; capability constraints.
+
+**Root cause:** No implementation — new governance extensions layer built on top of PR 95's simulation engine.
+
+**Files changed:**
+- `services/readiness/simulation/models.py` — added `SimulationClassification` (5 values), `SimulationEventType` (7 values), `SimulationGovernanceEvent`, `SimulationTimelineEntry`, `SimulationBoundedAuthorityModel`, `SimulationMultiAgentCascadeProjection` frozen dataclasses; extended `SimulationCapabilityProjection` with `bounded_authority_model` and `multi_agent_cascade_projection` optional fields; added `classification` field (default "internal") to `SimulationRunRecord`
+- `services/readiness/simulation/events.py` (new) — `_derive_event_id`, `build_simulation_created_event`, `build_simulation_replayed_event`, `build_capability_expansion_event`, `build_policy_relaxation_event`, `build_replay_reconstructed_event`
+- `services/readiness/simulation/timeline.py` (new) — `build_timeline_entry` with `governance_timeline_seam` comment; `_build_summary` for human-readable projection summaries
+- `services/readiness/simulation/store.py` — added `classification` param to `create_run`; `SimulationEventStore` with `record_event` and `list_events_for_run`; updated `_to_domain` to include `classification`
+- `services/readiness/simulation/engine.py` — added `_build_bounded_authority_model` and `_build_multi_agent_cascade` to `SimulationEngine`; imported `SimulationBoundedAuthorityModel` and `SimulationMultiAgentCascadeProjection`
+- `services/readiness/simulation/serialization.py` — added `_serialize_bounded_authority_model`, `_serialize_multi_agent_cascade`; extended `_serialize_capability_projection`
+- `services/readiness/simulation/__init__.py` — exported all new types and `SimulationEventStore`
+- `api/db_models_simulation.py` — added `classification` column to `SimulationRunModel`; added `SimulationEventModel` ORM class for `readiness_simulation_events` table
+- `api/readiness_simulation_manager.py` — added `classification` to request/response models; added `SimulationEventResponse` and `SimulationReplayResponse`; new routes: `GET .../runs/{run_id}/replay` and `GET .../runs/{run_id}/events`; event emission in `_emit_simulation_events`; timeline seam via `build_timeline_entry`
+- `migrations/postgres/0053_simulation_governance_extensions.sql` (new) — ALTER TABLE + CREATE TABLE + RLS
+- `tests/test_readiness_simulation.py` — 18 new tests in 5 classes (Classification, EventEmission, ReplayEndpoint, CapabilityGovernanceConstraints, GovernanceTimeline)
+
+**Verification:** 93 tests passed; all fg-fast gates passed.
+
+---
+
 ### 2026-05-17 — PR 89: Enterprise Gap Analysis & Remediation Prioritization Engine
 
 **Branch:** `feat/gap-analysis-remediation-prioritization`
@@ -10348,3 +10373,28 @@ Implements the deterministic `ReadinessScoreEngine`: pure Python, no I/O, no LLM
 - `pytest tests/test_readiness_simulation.py`: 75 passed
 - `ruff format`: 0 changes needed
 - `make fg-fast`: 386 passed, 2 skipped — all gates passed
+
+---
+
+### 2026-05-18 — PR 96 fix: replay classification mismatch + restrict cascade false positive
+
+**Branch:** feat/simulation-governance-extensions-pr96
+
+**Area:** `api/readiness_simulation_manager.py`, `services/readiness/simulation/engine.py`
+
+**Root cause (2 bugs):**
+1. **Replay event classification mismatch** — idempotency hit emitted `SIMULATION_REPLAYED` using `body.classification` (the caller's new request) instead of `existing.classification` (the immutable stored run). A caller could resubmit with a different classification and poison the event log with a mismatched classification, misleading downstream audit/SIEM consumers.
+2. **Restrict cascade false positive** — `_build_multi_agent_cascade()` always emitted `cascade_severity=CRITICAL` and `propagation_risk=DEGRADED` regardless of `authority_change`. A `restrict` scenario with an agent scope would surface critical multi-agent risk even though the evaluator projected improvement and the bounded authority model reported `containment_state="contained"`.
+
+**Files changed:**
+- `api/readiness_simulation_manager.py`: `build_simulation_replayed_event` now uses `SimulationClassification(existing.classification)` instead of `body.classification`
+- `services/readiness/simulation/engine.py`: `_build_multi_agent_cascade` branches `cascade_severity` and `propagation_risk` on `is_expansion`; restrict → `INFORMATIONAL` severity + `IMPROVED` propagation
+
+**Design invariants:**
+- Simulation runs are immutable after creation; replay events must faithfully reflect the stored run's classification
+- Cascade severity must agree with the bounded authority model and scenario evaluator direction
+
+**Validation:**
+- `pytest tests/test_readiness_simulation.py`: 93 passed
+- `ruff format`: 0 changes needed
+- `make fg-fast`: all gates passed

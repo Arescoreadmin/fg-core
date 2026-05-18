@@ -9014,6 +9014,151 @@
         "title": "SetLegalHoldRequest",
         "type": "object"
       },
+      "SimulationClassification": {
+        "description": "Audience classification for simulation run outputs.\n\nControls who may receive the simulation output and under what conditions.\nINTERNAL: Default \u2014 internal governance review only.\nREGULATOR: Suitable for regulatory submission or auditor disclosure.\nLEGAL: Legal-hold / e-discovery qualified output.\nCUSTOMER_SHAREABLE: Safe for customer-facing disclosure.\nSOVEREIGN_RESTRICTED: Sovereign / govcon boundary; restricted distribution.",
+        "enum": [
+          "internal",
+          "regulator",
+          "legal",
+          "customer_shareable",
+          "sovereign_restricted"
+        ],
+        "title": "SimulationClassification",
+        "type": "string"
+      },
+      "SimulationEventResponse": {
+        "properties": {
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "classification": {
+            "title": "Classification",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "occurred_at_iso": {
+            "title": "Occurred At Iso",
+            "type": "string"
+          },
+          "scenario_type": {
+            "title": "Scenario Type",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "simulation_id": {
+            "title": "Simulation Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "event_type",
+          "simulation_id",
+          "tenant_id",
+          "classification",
+          "scenario_type",
+          "severity",
+          "occurred_at_iso",
+          "actor_id"
+        ],
+        "title": "SimulationEventResponse",
+        "type": "object"
+      },
+      "SimulationReplayResponse": {
+        "properties": {
+          "canonical_scenario_inputs": {
+            "title": "Canonical Scenario Inputs",
+            "type": "object"
+          },
+          "classification": {
+            "title": "Classification",
+            "type": "string"
+          },
+          "contract_hash": {
+            "title": "Contract Hash",
+            "type": "string"
+          },
+          "input_hash": {
+            "title": "Input Hash",
+            "type": "string"
+          },
+          "projection_hash": {
+            "title": "Projection Hash",
+            "type": "string"
+          },
+          "reconstruction_basis": {
+            "title": "Reconstruction Basis",
+            "type": "string"
+          },
+          "replay_contract_metadata": {
+            "title": "Replay Contract Metadata",
+            "type": "object"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "scenario_type": {
+            "title": "Scenario Type",
+            "type": "string"
+          },
+          "simulated_at_iso": {
+            "title": "Simulated At Iso",
+            "type": "string"
+          },
+          "simulation_contract_version": {
+            "title": "Simulation Contract Version",
+            "type": "string"
+          },
+          "simulation_engine_version": {
+            "title": "Simulation Engine Version",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "tenant_id",
+          "scenario_type",
+          "classification",
+          "simulation_contract_version",
+          "simulation_engine_version",
+          "simulated_at_iso",
+          "input_hash",
+          "projection_hash",
+          "contract_hash",
+          "replay_contract_metadata",
+          "canonical_scenario_inputs",
+          "reconstruction_basis"
+        ],
+        "title": "SimulationReplayResponse",
+        "type": "object"
+      },
       "SimulationRunRequest": {
         "additionalProperties": false,
         "properties": {
@@ -9028,6 +9173,11 @@
             ],
             "description": "Scope simulation to a specific assessment.",
             "title": "Assessment Id"
+          },
+          "classification": {
+            "$ref": "#/components/schemas/SimulationClassification",
+            "default": "internal",
+            "description": "Audience classification for this simulation output."
           },
           "framework_id": {
             "anyOf": [
@@ -9079,6 +9229,11 @@
               }
             ],
             "title": "Assessment Id"
+          },
+          "classification": {
+            "default": "internal",
+            "title": "Classification",
+            "type": "string"
           },
           "framework_id": {
             "anyOf": [
@@ -9171,6 +9326,11 @@
               }
             ],
             "title": "Assessment Id"
+          },
+          "classification": {
+            "default": "internal",
+            "title": "Classification",
+            "type": "string"
           },
           "framework_id": {
             "anyOf": [
@@ -22031,6 +22191,128 @@
           }
         },
         "summary": "Get Simulation Run",
+        "tags": [
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/simulation/runs/{run_id}/events": {
+      "get": {
+        "description": "List governance events for a simulation run (tenant-scoped).",
+        "operationId": "list_simulation_events_control_plane_readiness_simulation_runs__run_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SimulationEventResponse"
+                  },
+                  "title": "Response List Simulation Events Control Plane Readiness Simulation Runs  Run Id  Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Simulation Events",
+        "tags": [
+          "readiness"
+        ]
+      }
+    },
+    "/control-plane/readiness/simulation/runs/{run_id}/replay": {
+      "get": {
+        "description": "Retrieve replay reconstruction metadata for a simulation run.\n\nDoes NOT re-execute the simulation. Returns hash fields and canonical\nscenario parameters from the stored projection JSON for forensic replay.\nEmits SIMULATION_REPLAY_RECONSTRUCTED event.",
+        "operationId": "get_simulation_replay_control_plane_readiness_simulation_runs__run_id__replay_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationReplayResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Simulation Replay",
         "tags": [
           "readiness"
         ]

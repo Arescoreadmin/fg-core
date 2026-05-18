@@ -23,11 +23,13 @@ from datetime import datetime, timezone
 from .identity import derive_simulation_snapshot_id
 from .models import (
     SimulationBlastRadius,
+    SimulationBoundedAuthorityModel,
     SimulationCapabilityProjection,
     SimulationComplianceProjection,
     SimulationGovernanceTrajectory,
     SimulationImpactRecord,
     SimulationInput,
+    SimulationMultiAgentCascadeProjection,
     SimulationProjection,
     SimulationReadinessProjection,
     SimulationRiskDirection,
@@ -203,7 +205,10 @@ class SimulationEngine:
             uncertainty = self._aggregate_uncertainty(all_uncertainties)
 
             replay_meta = (
-                ("simulation_contract_version", engine_input.simulation_contract_version),
+                (
+                    "simulation_contract_version",
+                    engine_input.simulation_contract_version,
+                ),
                 ("simulation_engine_version", engine_input.simulation_engine_version),
                 ("scenario_type", engine_input.scenario_type.value),
                 ("simulated_at", simulated_at_iso),
@@ -290,7 +295,10 @@ class SimulationEngine:
 
         For other scenarios, returns None (seam for future extension).
         """
-        if engine_input.scenario_type != SimulationScenarioType.CAPABILITY_GOVERNANCE_CHANGE:
+        if (
+            engine_input.scenario_type
+            != SimulationScenarioType.CAPABILITY_GOVERNANCE_CHANGE
+        ):
             return None
 
         params = dict(engine_input.scenario_parameters)
@@ -313,6 +321,16 @@ class SimulationEngine:
             else "Unknown authority change direction."
         )
 
+        # Feature 5: Bounded authority model
+        bounded_authority_model = self._build_bounded_authority_model(
+            capability_scope, authority_change, uncertainty
+        )
+
+        # Feature 5: Multi-agent cascade projection
+        multi_agent_cascade = self._build_multi_agent_cascade(
+            simulation_id, capability_scope, authority_change, uncertainty
+        )
+
         return SimulationCapabilityProjection(
             capability_scope=capability_scope,
             authority_degradation=authority_degradation,
@@ -321,6 +339,74 @@ class SimulationEngine:
             bounded_authority_degradation=bounded_authority_degradation,
             uncertainty=uncertainty,
             basis=basis,
+            bounded_authority_model=bounded_authority_model,
+            multi_agent_cascade_projection=multi_agent_cascade,
+        )
+
+    def _build_bounded_authority_model(
+        self,
+        capability_scope: str,
+        authority_change: str,
+        uncertainty: SimulationUncertainty,
+    ) -> SimulationBoundedAuthorityModel | None:
+        """Build a bounded authority model for capability governance changes."""
+        if authority_change == "expand":
+            return SimulationBoundedAuthorityModel(
+                authority_scope=capability_scope,
+                max_delegation_depth=3,
+                current_delegation_depth=4,
+                delegation_depth_exceeded=True,
+                authority_boundary_violated=True,
+                execution_envelope_breached=True,
+                containment_state="degraded",
+                uncertainty=SimulationUncertainty.PARTIAL_CONFIDENCE,
+            )
+        elif authority_change == "restrict":
+            return SimulationBoundedAuthorityModel(
+                authority_scope=capability_scope,
+                max_delegation_depth=3,
+                current_delegation_depth=1,
+                delegation_depth_exceeded=False,
+                authority_boundary_violated=False,
+                execution_envelope_breached=False,
+                containment_state="contained",
+                uncertainty=SimulationUncertainty.CONFIRMED,
+            )
+        return None
+
+    def _build_multi_agent_cascade(
+        self,
+        simulation_id: str,
+        capability_scope: str,
+        authority_change: str,
+        uncertainty: SimulationUncertainty,
+    ) -> SimulationMultiAgentCascadeProjection | None:
+        """Build a multi-agent cascade projection when scope implies agent involvement."""
+        import hashlib as _hashlib
+
+        is_agent_scope = (
+            "agent:" in capability_scope or "multi-agent" in capability_scope
+        )
+        if not is_agent_scope:
+            return None
+
+        cascade_id = _hashlib.sha256(
+            f"{simulation_id}:{capability_scope}:{authority_change}".encode()
+        ).hexdigest()[:16]
+
+        is_expansion = authority_change == "expand"
+        return SimulationMultiAgentCascadeProjection(
+            cascade_id=cascade_id,
+            affected_agent_count=3,
+            cascade_severity=SimulationSeverity.CRITICAL
+            if is_expansion
+            else SimulationSeverity.INFORMATIONAL,
+            propagation_risk=SimulationRiskDirection.DEGRADED
+            if is_expansion
+            else SimulationRiskDirection.IMPROVED,
+            isolation_failure_projected=is_expansion,
+            uncertainty=SimulationUncertainty.PARTIAL_CONFIDENCE,
+            basis=f"Multi-agent capability scope {capability_scope}; authority {'expanded — cascade risk elevated' if is_expansion else 'restricted — cascade risk contained'}.",
         )
 
     def _build_governance_trajectory(
@@ -337,9 +423,7 @@ class SimulationEngine:
         # governance degradation detection when historical runs are available.
         """
         critical_warnings = sum(
-            1
-            for w in warning_list
-            if w.severity.value in ("critical", "blocking")
+            1 for w in warning_list if w.severity.value in ("critical", "blocking")
         )
         projected_drift = len(warning_list) * 2
         projected_critical = critical_warnings * 3

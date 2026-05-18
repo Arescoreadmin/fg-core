@@ -29,11 +29,13 @@ import json
 
 from .models import (
     SimulationBlastRadius,
+    SimulationBoundedAuthorityModel,
     SimulationCapabilityProjection,
     SimulationComplianceProjection,
     SimulationDiffRecord,
     SimulationGovernanceTrajectory,
     SimulationImpactRecord,
+    SimulationMultiAgentCascadeProjection,
     SimulationProjection,
     SimulationReadinessProjection,
     SimulationRiskProjection,
@@ -129,7 +131,42 @@ def _serialize_warning(w: SimulationWarning) -> dict:
     }
 
 
-def _serialize_capability_projection(c: SimulationCapabilityProjection | None) -> dict | None:
+def _serialize_bounded_authority_model(
+    b: SimulationBoundedAuthorityModel | None,
+) -> dict | None:
+    if b is None:
+        return None
+    return {
+        "authority_scope": b.authority_scope,
+        "max_delegation_depth": b.max_delegation_depth,
+        "current_delegation_depth": b.current_delegation_depth,
+        "delegation_depth_exceeded": b.delegation_depth_exceeded,
+        "authority_boundary_violated": b.authority_boundary_violated,
+        "execution_envelope_breached": b.execution_envelope_breached,
+        "containment_state": b.containment_state,
+        "uncertainty": b.uncertainty.value,
+    }
+
+
+def _serialize_multi_agent_cascade(
+    m: SimulationMultiAgentCascadeProjection | None,
+) -> dict | None:
+    if m is None:
+        return None
+    return {
+        "cascade_id": m.cascade_id,
+        "affected_agent_count": m.affected_agent_count,
+        "cascade_severity": m.cascade_severity.value,
+        "propagation_risk": m.propagation_risk.value,
+        "isolation_failure_projected": m.isolation_failure_projected,
+        "uncertainty": m.uncertainty.value,
+        "basis": m.basis,
+    }
+
+
+def _serialize_capability_projection(
+    c: SimulationCapabilityProjection | None,
+) -> dict | None:
     if c is None:
         return None
     return {
@@ -140,10 +177,18 @@ def _serialize_capability_projection(c: SimulationCapabilityProjection | None) -
         "bounded_authority_degradation": c.bounded_authority_degradation,
         "uncertainty": c.uncertainty.value,
         "basis": c.basis,
+        "bounded_authority_model": _serialize_bounded_authority_model(
+            c.bounded_authority_model
+        ),
+        "multi_agent_cascade_projection": _serialize_multi_agent_cascade(
+            c.multi_agent_cascade_projection
+        ),
     }
 
 
-def _serialize_governance_trajectory(t: SimulationGovernanceTrajectory | None) -> dict | None:
+def _serialize_governance_trajectory(
+    t: SimulationGovernanceTrajectory | None,
+) -> dict | None:
     if t is None:
         return None
     return {
@@ -170,11 +215,17 @@ def serialize_projection(projection: SimulationProjection) -> dict:
         "assessment_id": projection.assessment_id,
         "framework_id": projection.framework_id,
         "scenario_type": projection.scenario_type.value,
-        "readiness_projection": _serialize_readiness_projection(projection.readiness_projection),
+        "readiness_projection": _serialize_readiness_projection(
+            projection.readiness_projection
+        ),
         "risk_projection": _serialize_risk_projection(projection.risk_projection),
-        "compliance_projection": _serialize_compliance_projection(projection.compliance_projection),
+        "compliance_projection": _serialize_compliance_projection(
+            projection.compliance_projection
+        ),
         "blast_radius": _serialize_blast_radius(projection.blast_radius),
-        "impact_records": [_serialize_impact_record(i) for i in projection.impact_records],
+        "impact_records": [
+            _serialize_impact_record(i) for i in projection.impact_records
+        ],
         "diff_records": [_serialize_diff_record(d) for d in projection.diff_records],
         "warnings": [_serialize_warning(w) for w in projection.warnings],
         "constraints": [
@@ -187,14 +238,20 @@ def serialize_projection(projection: SimulationProjection) -> dict:
             }
             for c in projection.constraints
         ],
-        "capability_projection": _serialize_capability_projection(projection.capability_projection),
-        "governance_trajectory": _serialize_governance_trajectory(projection.governance_trajectory),
+        "capability_projection": _serialize_capability_projection(
+            projection.capability_projection
+        ),
+        "governance_trajectory": _serialize_governance_trajectory(
+            projection.governance_trajectory
+        ),
         "simulation_contract_version": projection.simulation_contract_version,
         "simulation_engine_version": projection.simulation_engine_version,
         "framework_version_tag": projection.framework_version_tag,
         "simulated_at_iso": projection.simulated_at_iso,
         "uncertainty": projection.uncertainty.value,
-        "replay_contract_metadata": {k: v for k, v in projection.replay_contract_metadata},
+        "replay_contract_metadata": {
+            k: v for k, v in projection.replay_contract_metadata
+        },
     }
 
 
