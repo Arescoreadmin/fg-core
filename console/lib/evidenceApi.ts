@@ -251,10 +251,10 @@ export function applyEvidenceFilters(
 }
 
 export function collectFilterOptions(items: EvidenceReference[]) {
-  const evidenceTypes = [...new Set(items.map((e) => e.evidence_type))].sort();
-  const classifications = [
-    ...new Set(items.map((e) => e.evidence_classification).filter(Boolean)),
-  ].sort() as string[];
+  const evidenceTypes = Array.from(new Set(items.map((e) => e.evidence_type))).sort();
+  const classifications = Array.from(
+    new Set(items.map((e) => e.evidence_classification).filter(Boolean)),
+  ).sort() as string[];
   return { evidenceTypes, classifications };
 }
 
