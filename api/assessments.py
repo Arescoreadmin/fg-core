@@ -23,7 +23,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -270,17 +270,46 @@ def _load_questions(db: Session) -> list[dict[str, Any]]:
     return questions or []
 
 
-def _get_assessment_or_404(assessment_id: str, db: Session) -> AssessmentRecord:
-    rec = (
-        db.query(AssessmentRecord).filter(AssessmentRecord.id == assessment_id).first()
-    )
+def _resolve_caller_tenant(request: Request) -> str | None:
+    """Extract tenant_id from the authenticated API key on request.state.auth.
+
+    Returns None for unbound (pre-tenant) callers; never returns "public".
+    """
+    auth = getattr(getattr(request, "state", None), "auth", None)
+    t = getattr(auth, "tenant_id", None)
+    if not t:
+        return None
+    s = str(t).strip()
+    return s if s and s != "public" else None
+
+
+def _get_assessment_or_404(
+    assessment_id: str,
+    caller_tenant: str | None,
+    db: Session,
+) -> AssessmentRecord:
+    """Tenant-bound assessment lookup. Fails closed on missing or mismatched tenant.
+
+    Tenant-bound callers → strict tenant_id predicate.
+    Pre-tenant (unbound) callers → lead-namespace predicate (UUID ownership proof).
+    """
+    q = db.query(AssessmentRecord).filter(AssessmentRecord.id == assessment_id)
+    if caller_tenant:
+        q = q.filter(AssessmentRecord.tenant_id == caller_tenant)
+    else:
+        # Pre-tenant lead: tenant namespace is derived from the assessment UUID itself.
+        # Caller proves ownership by knowing the exact UUID.
+        q = q.filter(AssessmentRecord.tenant_id == f"lead:{assessment_id}")
+    rec = q.first()
     if rec is None:
         raise HTTPException(status_code=404, detail="Assessment not found")
     return rec
 
 
+
 @router.post("/orgs", response_model=OrgCreateResponse, status_code=201)
-def create_org(body: OrgCreateRequest, db: Session = Depends(_get_db)):
+def create_org(body: OrgCreateRequest, request: Request, db: Session = Depends(_get_db)):
+    caller_tenant = _resolve_caller_tenant(request)
     profile_type = classify_profile(
         industry=body.industry,
         employee_count=body.employee_count,
@@ -291,9 +320,14 @@ def create_org(body: OrgCreateRequest, db: Session = Depends(_get_db)):
     )
 
     org_id = str(uuid.uuid4())
+    assessment_id = str(uuid.uuid4())
+    # Tenant-bound callers use their real tenant; pre-tenant leads get an isolated
+    # lead namespace keyed by the assessment UUID so no two leads share a namespace.
+    effective_tenant = caller_tenant or f"lead:{assessment_id}"
+
     org = OrgProfile(
         org_id=org_id,
-        tenant_id="public",
+        tenant_id=effective_tenant,
         org_name=body.name,
         industry=body.industry,
         employee_count=body.employee_count,
@@ -308,10 +342,9 @@ def create_org(body: OrgCreateRequest, db: Session = Depends(_get_db)):
     db.add(org)
     db.flush()
 
-    assessment_id = str(uuid.uuid4())
     assessment = AssessmentRecord(
         id=assessment_id,
-        tenant_id="public",
+        tenant_id=effective_tenant,
         org_profile_id=org.id,
         org_id=org_id,
         schema_version="v2025.1-base",
@@ -325,10 +358,11 @@ def create_org(body: OrgCreateRequest, db: Session = Depends(_get_db)):
     db.commit()
 
     log.info(
-        "assessment.org_created org_id=%s profile=%s assessment_id=%s",
+        "assessment.org_created org_id=%s profile=%s assessment_id=%s tenant=%s",
         org_id,
         profile_type,
         assessment_id,
+        effective_tenant,
     )
 
     return OrgCreateResponse(
@@ -340,14 +374,16 @@ def create_org(body: OrgCreateRequest, db: Session = Depends(_get_db)):
 
 
 @router.get("/{assessment_id}/questions")
-def get_questions(assessment_id: str, db: Session = Depends(_get_db)):
-    _get_assessment_or_404(assessment_id, db)
+def get_questions(assessment_id: str, request: Request, db: Session = Depends(_get_db)):
+    caller_tenant = _resolve_caller_tenant(request)
+    _get_assessment_or_404(assessment_id, caller_tenant, db)
     return _load_questions(db)
 
 
 @router.get("/{assessment_id}")
-def get_assessment(assessment_id: str, db: Session = Depends(_get_db)):
-    rec = _get_assessment_or_404(assessment_id, db)
+def get_assessment(assessment_id: str, request: Request, db: Session = Depends(_get_db)):
+    caller_tenant = _resolve_caller_tenant(request)
+    rec = _get_assessment_or_404(assessment_id, caller_tenant, db)
     return {
         "id": rec.id,
         "org_id": rec.org_id,
@@ -369,9 +405,11 @@ def get_assessment(assessment_id: str, db: Session = Depends(_get_db)):
 def save_responses(
     assessment_id: str,
     body: SaveResponsesRequest,
+    request: Request,
     db: Session = Depends(_get_db),
 ):
-    rec = _get_assessment_or_404(assessment_id, db)
+    caller_tenant = _resolve_caller_tenant(request)
+    rec = _get_assessment_or_404(assessment_id, caller_tenant, db)
     if rec.status in ("submitted", "scored"):
         raise HTTPException(status_code=409, detail="Assessment already submitted")
 
@@ -387,8 +425,9 @@ def save_responses(
 
 
 @router.post("/{assessment_id}/checkout")
-def create_checkout_session(assessment_id: str, db: Session = Depends(_get_db)):
-    rec = _get_assessment_or_404(assessment_id, db)
+def create_checkout_session(assessment_id: str, request: Request, db: Session = Depends(_get_db)):
+    caller_tenant = _resolve_caller_tenant(request)
+    rec = _get_assessment_or_404(assessment_id, caller_tenant, db)
 
     stripe_key = os.environ.get("STRIPE_SECRET_KEY", "")
     if not stripe_key:
@@ -466,8 +505,9 @@ def create_checkout_session(assessment_id: str, db: Session = Depends(_get_db)):
 
 
 @router.post("/{assessment_id}/submit")
-def submit_assessment(assessment_id: str, db: Session = Depends(_get_db)):
-    rec = _get_assessment_or_404(assessment_id, db)
+def submit_assessment(assessment_id: str, request: Request, db: Session = Depends(_get_db)):
+    caller_tenant = _resolve_caller_tenant(request)
+    rec = _get_assessment_or_404(assessment_id, caller_tenant, db)
 
     if os.environ.get("STRIPE_SECRET_KEY") and rec.payment_status != "paid":
         raise HTTPException(

@@ -465,12 +465,14 @@ class TestReportJobTenantIsolation:
         from fastapi import HTTPException
         import api.reports_engine as engine_mod
 
-        report = _make_report_record("r-iso-1", tenant_id="tenant-A")
+        # Wrong-tenant predicate returns nothing.
         fake_db = MagicMock()
-        fake_db.query.return_value.filter.return_value.first.return_value = report
+        fake_db.query.return_value.filter.return_value.filter.return_value.first.return_value = None
 
+        fake_auth = MagicMock()
+        fake_auth.tenant_id = "tenant-B"
         fake_request = MagicMock()
-        fake_request.state.tenant_id = "tenant-B"
+        fake_request.state.auth = fake_auth
 
         with pytest.raises(HTTPException) as exc_info:
             engine_mod.get_report(
@@ -488,13 +490,16 @@ class TestReportJobTenantIsolation:
         assessment = _make_assessment_record("assessment-1")
 
         fake_db = MagicMock()
+        fake_db.query.return_value.filter.return_value.filter.return_value.first.return_value = report
+        # Second query for assessment lookup returns the assessment.
         fake_db.query.return_value.filter.return_value.first.side_effect = [
-            report,
             assessment,
         ]
 
+        fake_auth = MagicMock()
+        fake_auth.tenant_id = "tenant-A"
         fake_request = MagicMock()
-        fake_request.state.tenant_id = "tenant-A"
+        fake_request.state.auth = fake_auth
 
         result = engine_mod.get_report(
             report_id="r-iso-2",
@@ -503,29 +508,29 @@ class TestReportJobTenantIsolation:
         )
         assert result["id"] == "r-iso-2"
 
-    def test_no_tenant_in_request_state_does_not_block(self) -> None:
-        """If caller has no tenant_id in state, isolation check is skipped."""
+    def test_no_tenant_unbound_caller_requires_assessment_id_header(self) -> None:
+        """Unbound caller (no auth tenant) must supply X-Assessment-Id to prove
+        pre-tenant lead ownership. Without the header the endpoint fails closed."""
+        import pytest
+        from fastapi import HTTPException
         import api.reports_engine as engine_mod
 
-        report = _make_report_record("r-iso-3", tenant_id="tenant-A")
-        assessment = _make_assessment_record("assessment-1")
-
+        # No matching record returned because no valid ownership proof.
         fake_db = MagicMock()
-        fake_db.query.return_value.filter.return_value.first.side_effect = [
-            report,
-            assessment,
-        ]
+        fake_db.query.return_value.filter.return_value.filter.return_value.first.return_value = None
 
-        # state has no tenant_id attribute at all
-        fake_request = MagicMock(spec=[])
+        # state has no auth attribute — unbound caller.
+        fake_request = MagicMock()
         fake_request.state = MagicMock(spec=[])
+        fake_request.headers.get = MagicMock(return_value=None)
 
-        result = engine_mod.get_report(
-            report_id="r-iso-3",
-            request=fake_request,
-            db=fake_db,
-        )
-        assert result["id"] == "r-iso-3"
+        with pytest.raises(HTTPException) as exc_info:
+            engine_mod.get_report(
+                report_id="r-iso-3",
+                request=fake_request,
+                db=fake_db,
+            )
+        assert exc_info.value.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -542,12 +547,14 @@ class TestGenerateReportEndpoint:
         report_record = _make_report_record(report_id, tenant_id=tenant_id)
 
         fake_db = MagicMock()
-        fake_db.query.return_value.filter.return_value.first.return_value = assessment
+        # generate_report does filter(id).filter(tenant_id).first()
+        fake_db.query.return_value.filter.return_value.filter.return_value.first.return_value = assessment
 
         auditor = _MockAuditor()
         fake_bg = MagicMock()
         fake_request = MagicMock()
-        fake_request.state.tenant_id = tenant_id
+        # Tenant is resolved from request.state.auth.tenant_id by _resolve_caller_tenant.
+        fake_request.state.auth.tenant_id = tenant_id
 
         with (
             patch.object(engine_mod, "get_auditor", return_value=auditor),
