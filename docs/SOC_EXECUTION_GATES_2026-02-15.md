@@ -1,3 +1,22 @@
+## 2026-05-18 — PR 98: Deterministic Governance Report Core
+
+**Classification:** New service + API routes + DB schema migration. Touches: `services/governance/report/`, `api/governance_report_manager.py`, `api/db_models_governance_report.py`, `migrations/postgres/0055_governance_reports.sql`, `tools/ci/route_inventory.json`. No CI changes. No auth logic changes. No existing route modifications.
+
+**SOC review:**
+- New `governance_reports` table: tenant-scoped, RLS policy enabled, no `DEFAULT 'public'` on tenant_id
+- `is_finalized=True` records are immutable — enforced at manager layer (no DB trigger needed for portability)
+- All governance report models use `frozen=True` dataclasses — AI prose cannot mutate any deterministic field
+- `manifest_hash` is SHA-256 of canonical JSON (excluding `manifest_hash` and `generated_at`) — tamper-evident
+- All finding IDs, remediation IDs, evidence IDs derived deterministically via SHA-256 — no random UUIDs
+- Framework mappings are hardcoded dict lookups — no LLM inference, no external calls
+- Replay endpoint re-generates from stored evidence appendix + current scores and compares manifest hashes
+- All 5 new routes require `ingest:assessment` scope; tenant resolved from auth context only
+- Route inventory regenerated via `make route-inventory-generate`; SOC_ARCH_REVIEW_2026-02-15.md updated
+
+**52 governance report tests pass. No auth logic change. No contract change.**
+
+---
+
 ## 2026-05-18 — PR 96: Simulation Governance Extensions (Event Emission, Classification, Timeline, Replay, Capability Constraints)
 
 **Classification:** Feature extension — service layer + API routes + DB schema migration. Touches: `services/readiness/simulation/`, `api/readiness_simulation_manager.py`, `api/db_models_simulation.py`, `migrations/postgres/0053_simulation_governance_extensions.sql`. No CI, no auth changes, no infra.
@@ -3524,3 +3543,21 @@ Route inventory, plane registry snapshot, contract routes, and topology hash reg
 
 **Compliance posture:**
 Route inventory regenerated to reflect POST scope change (`control-plane:read` → `control-plane:write`). Contract authority markers refreshed. 75 tests pass. `make fg-fast` passes with no gate failures.
+
+---
+
+## 2026-05-18 — PR 98 review fixes: route inventory security tooling + RLS enforcement
+
+**Classification:** Security tooling fix + DB hardening. No new routes. No new endpoints.
+
+**SOC review:**
+- `tools/ci/route_checks.py` — SF-7 fix: AST scanner pattern list extended with `_resolve_caller_tenant`. All 5 governance report routes (`POST /ingest/assessment/{id}/governance-report`, `GET .../governance-report/{id}`, `GET .../replay`, `GET .../export/html`, `GET .../export/manifest`) were incorrectly showing `tenant_bound: false` in the security inventory because the scanner didn't recognize `_resolve_caller_tenant` as a tenant-binding pattern. After the fix, all 5 routes show `tenant_bound: true`.
+- `tools/ci/route_inventory.json` + `tools/ci/route_inventory_summary.json` + `tools/ci/topology.sha256` — regenerated after scanner fix. All governance routes now confirmed tenant-bound in the authoritative security inventory.
+- `tools/ci/plane_registry_snapshot.json` — regenerated to include new governance report routes in plane registry.
+- `migrations/postgres/0055_governance_reports.sql` — `FORCE ROW LEVEL SECURITY` added; ensures table owners and superusers are also subject to RLS policies, eliminating a privilege bypass vector.
+
+**DB schema changes:**
+`FORCE ROW LEVEL SECURITY` added to `governance_reports` table (no column or schema changes). Existing `ENABLE ROW LEVEL SECURITY` and tenant isolation policy unchanged.
+
+**Compliance posture:**
+Route inventory now correctly reflects tenant isolation for all governance report endpoints. 398 tests pass, 2 skipped. `make fg-fast` passes with no gate failures.

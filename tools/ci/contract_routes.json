@@ -1052,6 +1052,18 @@
     },
     {
       "method": "GET",
+      "path": "/control-plane/readiness/simulation/runs/{run_id}/events",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/control-plane/readiness/simulation/runs/{run_id}/replay",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/control-plane/v2/ai/namespace",
       "scopes": [],
       "source": "contract"
@@ -1429,6 +1441,36 @@
       "source": "contract"
     },
     {
+      "method": "POST",
+      "path": "/ingest/assessment/{assessment_id}/governance-report",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}/governance-report/{report_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}/governance-report/{report_id}/export/html",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}/governance-report/{report_id}/export/manifest",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ingest/assessment/{assessment_id}/governance-report/{report_id}/replay",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "GET",
       "path": "/ingest/assessment/{assessment_id}/questions",
       "scopes": [],
@@ -1681,7 +1723,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-18T13:51:33.815494+00:00",
+  "generated_at": "2026-05-18T20:12:19.791069+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

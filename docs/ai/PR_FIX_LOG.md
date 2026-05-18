@@ -6,6 +6,89 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-18 — PR 98: Deterministic Governance Report Core
+
+**Branch:** `feat/deterministic-governance-report-core-pr98`
+
+**Area:** Governance report generation; evidence linkage; framework mappings; replay verification; AI narrative containment.
+
+**Root cause:** No implementation — new deterministic report engine built from scratch to replace AI-generated prose with evidence-backed, replayable governance artifacts.
+
+**Files changed:**
+- `services/governance/__init__.py` (new) — package init
+- `services/governance/report/__init__.py` (new) — exports all public types and engine
+- `services/governance/report/models.py` (new) — frozen dataclasses: GovernanceFinding, FrameworkMapping, RemediationEntry, EvidenceRef, ConfidenceScore, GovernanceReport, ReplayContract; ValidationState enum
+- `services/governance/report/identity.py` (new) — derive_finding_id, derive_remediation_id, derive_evidence_id, derive_manifest_hash, derive_canonical_inputs_hash, derive_findings_hash; pure Python, no I/O, no randomness
+- `services/governance/report/confidence.py` (new) — calculate_confidence; weighted 4-component scoring; fails closed on empty evidence
+- `services/governance/report/framework_mappings.py` (new) — FRAMEWORK_CONTROL_MAP hardcoded registry; get_framework_mappings, get_supported_frameworks; NIST AI RMF, SOC2, HIPAA; no LLM inference
+- `services/governance/report/engine.py` (new) — GovernanceReportEngine with generate() and replay(); GovernanceReportError fail-closed sentinel; deterministic finding/remediation/confidence construction
+- `services/governance/report/serialization.py` (new) — serialize_report, serialize_for_manifest, deserialize_report, export_html, export_pdf_bytes (reportlab); ExportUnavailableError
+- `api/governance_report_manager.py` (new) — FastAPI router: POST generate, GET retrieve, GET replay, GET export/html, GET export/manifest; tenant-scoped, fail-closed
+- `api/db_models_governance_report.py` (new) — GovernanceReportRecord ORM model for governance_reports table
+- `api/db.py` — added db_models_governance_report import in _ensure_models_imported()
+- `api/main.py` — registered governance_report_router in both create_app() calls
+- `migrations/postgres/0055_governance_reports.sql` (new) — CREATE TABLE, indexes, RLS policy
+- `tests/test_governance_report.py` (new) — 50+ tests across 8 classes: deterministic IDs, confidence scoring, framework mappings, engine behavior, replay verification, AI narrative containment, evidence appendix, HTML export
+- `docs/governance/deterministic_reporting.md` (new) — doctrine, finding ID semantics, confidence methodology, evidence linkage, framework mapping semantics, replay guarantees, manifest hash guarantees, AI narrative containment rules
+
+**Verification:** All governance report tests pass; 0 skips.
+
+---
+
+### 2026-05-18 — PR 98 review fixes: SF-1–SF-8 coverage gaps, MF-1 double replay, MF-2 RLS enforcement
+
+**Branch:** `feat/deterministic-governance-report-core-pr98`
+
+**Area:** Governance report engine, confidence scoring, framework mappings, replay API, route security tooling, migration.
+
+**Root cause (8 issues):**
+1. **SF-1** — Engine emitted no warning when evidence_refs were provided but none matched a finding's domain.
+2. **SF-2** — `EvidenceRefInput.validation_state` typed as `str`; silent `except ValueError` coerced invalid states to PENDING instead of rejecting them.
+3. **SF-4** — `control_coverage` and `evidence_completeness` computed identically (`validated_count / total`); the semantic distinction between quality and breadth was absent from the formula.
+4. **SF-5** — `FRAMEWORK_CONTROL_MAP` exported as a plain mutable dict; callers could mutate the registry at runtime.
+5. **SF-6** — No dedicated test for the cross-tenant finding ID security invariant.
+6. **SF-7** — AST scanner didn't recognize `_resolve_caller_tenant`; all 5 governance routes showed `tenant_bound: false` in the security tooling.
+7. **SF-8** — Replay response had no structured `replay_contract` field; callers couldn't access `findings_hash`, `canonical_inputs_hash`, or `schema_version`.
+8. **MF-1** — `replay()` called twice in handler; `hash_matches` from first call, `replayed_manifest_hash` from second — potentially inconsistent.
+9. **MF-2** — Migration `0055` lacked `FORCE ROW LEVEL SECURITY`; table owners could bypass RLS.
+
+**Files changed:**
+- `services/governance/report/engine.py` — SF-1: warning log when domain evidence is empty
+- `services/governance/report/confidence.py` — SF-4: `control_coverage = non_missing_count / total_count`
+- `services/governance/report/framework_mappings.py` — SF-5: `_FRAMEWORK_CONTROL_MAP_RAW` (private mutable) + `FRAMEWORK_CONTROL_MAP: MappingProxyType` (public immutable)
+- `api/governance_report_manager.py` — SF-2: `validation_state: Literal[...]`; MF-1: single `replay()` call; SF-8: `ReplayContractResponse` + `replay_contract` field in `ReplayResponse`
+- `tools/ci/route_checks.py` — SF-7: `_resolve_caller_tenant` added to AST scanner's tenant-binding patterns
+- `tools/ci/route_inventory.json` — regenerated; all 5 governance routes now `tenant_bound: true`
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `migrations/postgres/0055_governance_reports.sql` — MF-2: `FORCE ROW LEVEL SECURITY`
+- `tests/test_governance_report.py` — SF-6: `test_cross_tenant_finding_ids_are_unique`
+- `docs/governance/deterministic_reporting.md` — SF-1 doctrine: evidence domain matching fallback documented
+
+**Verification:** 398+ tests pass, 2 skipped; all fg-fast gates pass; sql-migration-percent-guard OK.
+
+---
+
+### 2026-05-18 — PR 98 P1 fix: report_id includes scores in derivation + idempotent generate handler
+
+**Branch:** `feat/deterministic-governance-report-core-pr98`
+
+**Area:** Governance report engine, report ID derivation, POST generate handler.
+
+**Root cause (2 issues):**
+1. **P1 — ID collision on score change**: `report_id` was derived from `derive_canonical_inputs_hash(assessment_id, evidence_refs, framework_ids)` only. Two generate calls for the same assessment with different scores produced the same `report_id`, causing a primary key constraint violation on the second `db.add()`.
+2. **P1 — No collision guard**: The POST handler called `db.add(record)` unconditionally. Any PK collision surfaced as a 500 server error instead of a clean idempotent or versioned result.
+
+**Files changed:**
+- `services/governance/report/identity.py` — new `derive_report_id(assessment_id, tenant_id, scores, evidence_refs, framework_ids)` covering all material inputs; returns `gr-{sha256[:24]}`
+- `services/governance/report/engine.py` — `generate()` now calls `derive_report_id` instead of `derive_canonical_inputs_hash`; also fixed `log` → `logger` NameError in SF-1 warning
+- `services/governance/report/__init__.py` — `derive_report_id` exported
+- `api/governance_report_manager.py` — pre-insert existence check: if record with same `report_id` + `tenant_id` exists, return it directly (idempotent); only insert on first generation
+- `tests/test_governance_report.py` — 3 new tests: `test_report_id_deterministic`, `test_report_id_differs_when_scores_differ`, `test_report_id_differs_across_tenants`
+
+**Verification:** 56 governance tests pass; all fg-fast gates pass.
+
+---
+
 ### 2026-05-18 — PR 97: Enterprise Tenant Isolation & Assessment Boundary Hardening
 
 **Branch:** `feat/simulation-governance-extensions-pr96`

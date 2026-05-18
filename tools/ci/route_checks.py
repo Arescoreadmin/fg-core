@@ -359,6 +359,7 @@ def _function_has_tenant_binding(
                 or name.endswith("_tenant_id_from_request_optional")
                 or name.endswith("_locker_command")
                 or name.endswith("_resolve_msp_tenant")
+                or name.endswith("_resolve_caller_tenant")
             ):
                 return True
 

@@ -170,6 +170,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module("api.db_models_monitoring")  # PR 93: monitoring run table
     importlib.import_module("api.db_models_alerting")  # PR 94: alerting tables
     importlib.import_module("api.db_models_simulation")  # PR 95: simulation run table
+    importlib.import_module(
+        "api.db_models_governance_report"
+    )  # PR 98: governance reports
 
 
 def _get_base():
