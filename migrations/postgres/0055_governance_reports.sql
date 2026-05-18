@@ -16,6 +16,7 @@ CREATE INDEX IF NOT EXISTS ix_governance_reports_assessment ON governance_report
 CREATE INDEX IF NOT EXISTS ix_governance_reports_tenant ON governance_reports (tenant_id);
 
 ALTER TABLE governance_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE governance_reports FORCE ROW LEVEL SECURITY;
 
 CREATE POLICY governance_reports_tenant_isolation
     ON governance_reports

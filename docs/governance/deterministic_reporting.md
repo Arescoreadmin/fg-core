@@ -91,6 +91,13 @@ The evidence appendix in `GovernanceReport` carries the full `EvidenceRef` list 
 derivation.  Changes to evidence (new refs, validation state changes) propagate to
 new finding IDs, preserving lineage integrity.
 
+**Evidence domain matching fallback:** If `evidence_refs` are provided but none match the
+finding's domain, the engine logs a warning (`governance_report.evidence_domain_unmatched`)
+and proceeds with an empty `evidence_ids` for that finding.  The finding is still generated —
+confidence degrades to reflect absent evidence.  This is intentional fail-open behavior: missing
+evidence linkage surfaces as low confidence rather than a hard error, so partial-evidence
+assessments still produce actionable reports.
+
 ---
 
 ## Framework Mapping Semantics

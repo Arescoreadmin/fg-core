@@ -35,6 +35,39 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-18 — PR 98 review fixes: SF-1–SF-8 coverage gaps, MF-1 double replay, MF-2 RLS enforcement
+
+**Branch:** `feat/deterministic-governance-report-core-pr98`
+
+**Area:** Governance report engine, confidence scoring, framework mappings, replay API, route security tooling, migration.
+
+**Root cause (8 issues):**
+1. **SF-1** — Engine emitted no warning when evidence_refs were provided but none matched a finding's domain.
+2. **SF-2** — `EvidenceRefInput.validation_state` typed as `str`; silent `except ValueError` coerced invalid states to PENDING instead of rejecting them.
+3. **SF-4** — `control_coverage` and `evidence_completeness` computed identically (`validated_count / total`); the semantic distinction between quality and breadth was absent from the formula.
+4. **SF-5** — `FRAMEWORK_CONTROL_MAP` exported as a plain mutable dict; callers could mutate the registry at runtime.
+5. **SF-6** — No dedicated test for the cross-tenant finding ID security invariant.
+6. **SF-7** — AST scanner didn't recognize `_resolve_caller_tenant`; all 5 governance routes showed `tenant_bound: false` in the security tooling.
+7. **SF-8** — Replay response had no structured `replay_contract` field; callers couldn't access `findings_hash`, `canonical_inputs_hash`, or `schema_version`.
+8. **MF-1** — `replay()` called twice in handler; `hash_matches` from first call, `replayed_manifest_hash` from second — potentially inconsistent.
+9. **MF-2** — Migration `0055` lacked `FORCE ROW LEVEL SECURITY`; table owners could bypass RLS.
+
+**Files changed:**
+- `services/governance/report/engine.py` — SF-1: warning log when domain evidence is empty
+- `services/governance/report/confidence.py` — SF-4: `control_coverage = non_missing_count / total_count`
+- `services/governance/report/framework_mappings.py` — SF-5: `_FRAMEWORK_CONTROL_MAP_RAW` (private mutable) + `FRAMEWORK_CONTROL_MAP: MappingProxyType` (public immutable)
+- `api/governance_report_manager.py` — SF-2: `validation_state: Literal[...]`; MF-1: single `replay()` call; SF-8: `ReplayContractResponse` + `replay_contract` field in `ReplayResponse`
+- `tools/ci/route_checks.py` — SF-7: `_resolve_caller_tenant` added to AST scanner's tenant-binding patterns
+- `tools/ci/route_inventory.json` — regenerated; all 5 governance routes now `tenant_bound: true`
+- `tools/ci/route_inventory_summary.json` — regenerated
+- `migrations/postgres/0055_governance_reports.sql` — MF-2: `FORCE ROW LEVEL SECURITY`
+- `tests/test_governance_report.py` — SF-6: `test_cross_tenant_finding_ids_are_unique`
+- `docs/governance/deterministic_reporting.md` — SF-1 doctrine: evidence domain matching fallback documented
+
+**Verification:** 398+ tests pass, 2 skipped; all fg-fast gates pass; sql-migration-percent-guard OK.
+
+---
+
 ### 2026-05-18 — PR 97: Enterprise Tenant Isolation & Assessment Boundary Hardening
 
 **Branch:** `feat/simulation-governance-extensions-pr96`

@@ -3543,3 +3543,21 @@ Route inventory, plane registry snapshot, contract routes, and topology hash reg
 
 **Compliance posture:**
 Route inventory regenerated to reflect POST scope change (`control-plane:read` → `control-plane:write`). Contract authority markers refreshed. 75 tests pass. `make fg-fast` passes with no gate failures.
+
+---
+
+## 2026-05-18 — PR 98 review fixes: route inventory security tooling + RLS enforcement
+
+**Classification:** Security tooling fix + DB hardening. No new routes. No new endpoints.
+
+**SOC review:**
+- `tools/ci/route_checks.py` — SF-7 fix: AST scanner pattern list extended with `_resolve_caller_tenant`. All 5 governance report routes (`POST /ingest/assessment/{id}/governance-report`, `GET .../governance-report/{id}`, `GET .../replay`, `GET .../export/html`, `GET .../export/manifest`) were incorrectly showing `tenant_bound: false` in the security inventory because the scanner didn't recognize `_resolve_caller_tenant` as a tenant-binding pattern. After the fix, all 5 routes show `tenant_bound: true`.
+- `tools/ci/route_inventory.json` + `tools/ci/route_inventory_summary.json` + `tools/ci/topology.sha256` — regenerated after scanner fix. All governance routes now confirmed tenant-bound in the authoritative security inventory.
+- `tools/ci/plane_registry_snapshot.json` — regenerated to include new governance report routes in plane registry.
+- `migrations/postgres/0055_governance_reports.sql` — `FORCE ROW LEVEL SECURITY` added; ensures table owners and superusers are also subject to RLS policies, eliminating a privilege bypass vector.
+
+**DB schema changes:**
+`FORCE ROW LEVEL SECURITY` added to `governance_reports` table (no column or schema changes). Existing `ENABLE ROW LEVEL SECURITY` and tenant isolation policy unchanged.
+
+**Compliance posture:**
+Route inventory now correctly reflects tenant isolation for all governance report endpoints. 398 tests pass, 2 skipped. `make fg-fast` passes with no gate failures.

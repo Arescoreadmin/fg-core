@@ -206,6 +206,16 @@ class GovernanceReportEngine:
             domain_evidence = evidence_by_domain.get(domain, [])
             evidence_ids = tuple(ref.evidence_id for ref in domain_evidence)
 
+            if evidence_refs and not domain_evidence:
+                log.warning(
+                    "governance_report.evidence_domain_unmatched "
+                    "domain=%s evidence_refs_provided=%d matched=0 "
+                    "— evidence lineage for this domain is empty; "
+                    "confidence and framework mappings will reflect no evidence",
+                    domain,
+                    len(evidence_refs),
+                )
+
             # Deterministic finding ID
             ev_hash = _evidence_state_hash(list(evidence_ids))
             finding_id = derive_finding_id(

@@ -22,6 +22,8 @@ HIPAA safeguard categories:
 
 from __future__ import annotations
 
+from types import MappingProxyType
+
 from .models import FrameworkMapping
 
 # ---------------------------------------------------------------------------
@@ -30,7 +32,7 @@ from .models import FrameworkMapping
 # Structure: { framework_key: { domain_or_control_id: [control_refs] } }
 # ---------------------------------------------------------------------------
 
-FRAMEWORK_CONTROL_MAP: dict[str, dict[str, list[str]]] = {
+_FRAMEWORK_CONTROL_MAP_RAW: dict[str, dict[str, list[str]]] = {
     "NIST_AI_RMF": {
         "data_governance": ["GOVERN 1.1", "GOVERN 1.2", "MAP 1.5", "MEASURE 2.5"],
         "security_posture": ["GOVERN 2.2", "MANAGE 1.3", "MANAGE 2.4", "MEASURE 2.8"],
@@ -119,6 +121,9 @@ FRAMEWORK_CONTROL_MAP: dict[str, dict[str, list[str]]] = {
     },
 }
 
+# Public immutable view — prevents callers from mutating the registry at runtime.
+FRAMEWORK_CONTROL_MAP: MappingProxyType = MappingProxyType(_FRAMEWORK_CONTROL_MAP_RAW)
+
 # Confidence tiers for explicit vs inferred mappings
 _DIRECT_DOMAIN_CONFIDENCE = 0.9
 _CONTROL_LEVEL_CONFIDENCE = 0.95
@@ -135,7 +140,7 @@ def get_framework_mappings(control_id: str, domain: str) -> list[FrameworkMappin
     """
     mappings: list[FrameworkMapping] = []
 
-    for framework, control_map in sorted(FRAMEWORK_CONTROL_MAP.items()):
+    for framework, control_map in sorted(_FRAMEWORK_CONTROL_MAP_RAW.items()):
         # Prefer control-level lookup
         if control_id in control_map:
             refs = control_map[control_id]
@@ -160,4 +165,4 @@ def get_framework_mappings(control_id: str, domain: str) -> list[FrameworkMappin
 
 def get_supported_frameworks() -> list[str]:
     """Return the sorted list of supported framework keys."""
-    return sorted(FRAMEWORK_CONTROL_MAP.keys())
+    return sorted(_FRAMEWORK_CONTROL_MAP_RAW.keys())

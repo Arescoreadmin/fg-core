@@ -5,7 +5,7 @@ All functions are pure Python: no I/O, no randomness, no timestamps.
 Scoring contract:
   evidence_completeness = validated_count / total_count   (0.0 if no evidence)
   evidence_freshness    = mean(1 - min(days/90, 1))      (0.0 if all freshness unknown)
-  control_coverage      = validated_count / max(total_count, 1)
+  control_coverage      = non_missing_count / total_count   (0.0 if no evidence)
 
   overall = (
       0.4 * evidence_completeness
@@ -82,8 +82,13 @@ def calculate_confidence(
         sum(freshness_values) / len(freshness_values) if freshness_values else 0.0
     )
 
-    # control_coverage
-    control_coverage = validated_count / max(total_count, 1)
+    # control_coverage: breadth — fraction of evidence that is at least claimed
+    # (VALIDATED or PENDING, not MISSING). Differs from evidence_completeness:
+    # a control can be covered (pending evidence) without being complete (validated).
+    non_missing_count = sum(
+        1 for r in evidence_refs if r.validation_state != ValidationState.MISSING
+    )
+    control_coverage = non_missing_count / total_count
 
     # reviewer weight
     reviewer_weight = 1.0 if reviewer_validated else 0.0

@@ -141,6 +141,16 @@ class TestDeterministicFindingIds:
         assert len(fid) == 16
         assert all(c in "0123456789abcdef" for c in fid)
 
+    def test_cross_tenant_finding_ids_are_unique(self):
+        # Security invariant: identical inputs from different tenants must produce different IDs.
+        fid_a = derive_finding_id(
+            "tenant-a", "NIST_AI_RMF", "data_governance", "gap", "abc123"
+        )
+        fid_b = derive_finding_id(
+            "tenant-b", "NIST_AI_RMF", "data_governance", "gap", "abc123"
+        )
+        assert fid_a != fid_b
+
     def test_remediation_id_deterministic(self):
         r1 = derive_remediation_id("tenant-1", "security_posture", "high", "high")
         r2 = derive_remediation_id("tenant-1", "security_posture", "high", "high")

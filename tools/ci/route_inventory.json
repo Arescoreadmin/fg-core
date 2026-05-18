@@ -4938,7 +4938,8 @@
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/assessments.py",
       "method": "POST",
@@ -4950,11 +4951,12 @@
         "ingest:assessment"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/reports_engine.py",
       "method": "POST",
@@ -4966,11 +4968,12 @@
         "ingest:assessment"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/reports_engine.py",
       "method": "GET",
@@ -4982,11 +4985,12 @@
         "ingest:assessment"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/reports_engine.py",
       "method": "GET",
@@ -4998,7 +5002,7 @@
         "ingest:assessment"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [],
@@ -5014,7 +5018,8 @@
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/assessments.py",
       "method": "GET",
@@ -5026,11 +5031,12 @@
         "ingest:assessment"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/assessments.py",
       "method": "POST",
@@ -5042,11 +5048,12 @@
         "ingest:assessment"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_report_manager.py",
       "method": "POST",
@@ -5058,11 +5065,12 @@
         "ingest:assessment"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_report_manager.py",
       "method": "GET",
@@ -5074,11 +5082,12 @@
         "ingest:assessment"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_report_manager.py",
       "method": "GET",
@@ -5090,11 +5099,12 @@
         "ingest:assessment"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_report_manager.py",
       "method": "GET",
@@ -5106,11 +5116,12 @@
         "ingest:assessment"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_report_manager.py",
       "method": "GET",
@@ -5122,11 +5133,12 @@
         "ingest:assessment"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/assessments.py",
       "method": "GET",
@@ -5138,11 +5150,12 @@
         "ingest:assessment"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/assessments.py",
       "method": "PATCH",
@@ -5154,11 +5167,12 @@
         "ingest:assessment"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/assessments.py",
       "method": "POST",
@@ -5170,7 +5184,7 @@
         "ingest:assessment"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
@@ -6662,7 +6676,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-05-18T20:12:19.782365+00:00",
+  "generated_at": "2026-05-18T21:14:25.363837+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

@@ -4171,7 +4171,12 @@
             "type": "string"
           },
           "validation_state": {
-            "default": "pending",
+            "default": "PENDING",
+            "enum": [
+              "VALIDATED",
+              "PENDING",
+              "MISSING"
+            ],
             "title": "Validation State",
             "type": "string"
           }
@@ -8201,6 +8206,44 @@
         "title": "RemediationRecommendationResponse",
         "type": "object"
       },
+      "ReplayContractResponse": {
+        "properties": {
+          "canonical_inputs_hash": {
+            "title": "Canonical Inputs Hash",
+            "type": "string"
+          },
+          "findings_hash": {
+            "title": "Findings Hash",
+            "type": "string"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "manifest_hash": {
+            "title": "Manifest Hash",
+            "type": "string"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_id",
+          "canonical_inputs_hash",
+          "findings_hash",
+          "manifest_hash",
+          "generated_at",
+          "schema_version"
+        ],
+        "title": "ReplayContractResponse",
+        "type": "object"
+      },
       "ReplayResponse": {
         "properties": {
           "hash_matches": {
@@ -8210,6 +8253,9 @@
           "original_manifest_hash": {
             "title": "Original Manifest Hash",
             "type": "string"
+          },
+          "replay_contract": {
+            "$ref": "#/components/schemas/ReplayContractResponse"
           },
           "replayed_manifest_hash": {
             "title": "Replayed Manifest Hash",
@@ -8224,7 +8270,8 @@
           "report_id",
           "hash_matches",
           "original_manifest_hash",
-          "replayed_manifest_hash"
+          "replayed_manifest_hash",
+          "replay_contract"
         ],
         "title": "ReplayResponse",
         "type": "object"

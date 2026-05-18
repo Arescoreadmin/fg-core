@@ -30,7 +30,7 @@ Security invariants:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict
@@ -87,7 +87,7 @@ class EvidenceRefInput(BaseModel):
 
     evidence_id: str | None = None
     source: str
-    validation_state: str = "pending"
+    validation_state: Literal["VALIDATED", "PENDING", "MISSING"] = "PENDING"
     classification: str = "internal"
     provenance: str = ""
     freshness_days: int | None = None
@@ -138,11 +138,21 @@ class GovernanceReportResponse(BaseModel):
     is_finalized: bool
 
 
+class ReplayContractResponse(BaseModel):
+    report_id: str
+    canonical_inputs_hash: str
+    findings_hash: str
+    manifest_hash: str
+    generated_at: str
+    schema_version: str
+
+
 class ReplayResponse(BaseModel):
     report_id: str
     hash_matches: bool
     original_manifest_hash: str
     replayed_manifest_hash: str
+    replay_contract: ReplayContractResponse
 
 
 # ---------------------------------------------------------------------------
@@ -151,10 +161,7 @@ class ReplayResponse(BaseModel):
 
 
 def _parse_validation_state(s: str) -> ValidationState:
-    try:
-        return ValidationState(s.lower())
-    except ValueError:
-        return ValidationState.PENDING
+    return ValidationState(s.upper())
 
 
 def _build_evidence_refs(inputs: list[EvidenceRefInput]) -> list[EvidenceRef]:
@@ -427,7 +434,7 @@ def replay_governance_report(
     evidence_refs = list(stored_report.evidence_appendix)
 
     try:
-        _, hash_matches = _engine.replay(
+        replayed_report, hash_matches = _engine.replay(
             report=stored_report,
             assessment_id=assessment_id,
             tenant_id=tenant_id,
@@ -442,22 +449,20 @@ def replay_governance_report(
             detail=api_error("GOVERNANCE_REPORT_REPLAY_FAILED", str(exc)),
         ) from exc
 
-    replayed_manifest = stored_report.manifest_hash  # replay re-derives it
-    # Get the replayed hash from a fresh generation
-    try:
-        replayed_report = _engine.generate(
-            assessment_id=assessment_id,
-            tenant_id=tenant_id,
-            scores=dict(rec.scores or {}),
-            responses=dict(rec.responses or {}),
-            evidence_refs=evidence_refs,
-            reviewer_validated=stored_report.confidence.reviewer_validated,
-            report_id=report_id,
-            version=stored_report.version,
-        )
-        replayed_manifest = replayed_report.manifest_hash
-    except GovernanceReportError:
-        pass
+    from services.governance.report.identity import (
+        derive_findings_hash,
+        derive_canonical_inputs_hash,
+    )
+
+    replayed_manifest = replayed_report.manifest_hash
+    findings_hash = derive_findings_hash(
+        [f.finding_id for f in replayed_report.findings]
+    )
+    canonical_inputs_hash = derive_canonical_inputs_hash(
+        assessment_id=assessment_id,
+        evidence_refs=evidence_refs,
+        framework_ids=["NIST_AI_RMF", "SOC2", "HIPAA"],
+    )
 
     _emit_audit(
         "governance_report_replayed",
@@ -476,6 +481,14 @@ def replay_governance_report(
         hash_matches=hash_matches,
         original_manifest_hash=record.manifest_hash,
         replayed_manifest_hash=replayed_manifest,
+        replay_contract=ReplayContractResponse(
+            report_id=replayed_report.report_id,
+            canonical_inputs_hash=canonical_inputs_hash,
+            findings_hash=findings_hash,
+            manifest_hash=replayed_manifest,
+            generated_at=replayed_report.generated_at,
+            schema_version=replayed_report.schema_version,
+        ),
     )
 
 
