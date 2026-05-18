@@ -49,6 +49,16 @@ class SimulationRunModel(Base):
     simulated_at_iso: Mapped[str] = mapped_column(String(64), nullable=False)
     completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     error_summary: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Actor attribution: who submitted this simulation (for audit/replay lineage)
+    created_by_actor_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    actor_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    request_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    auth_scope_snapshot: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Replay/hash integrity: input, output, and contract hashes for regulator-grade evidence
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    projection_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    contract_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )

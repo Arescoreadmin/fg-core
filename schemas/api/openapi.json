@@ -21919,7 +21919,7 @@
         ]
       },
       "post": {
-        "description": "Submit a deterministic governance simulation scenario.\n\nIdempotent: submitting the same scenario inputs twice returns the stored\nresult rather than re-evaluating.\n\nsimulation_id is derived deterministically from governance inputs and IS\nthe run_id stored in the DB.",
+        "description": "Submit a deterministic governance simulation scenario.\n\nRequires control-plane:write \u2014 simulations create stored records.\nIdempotent: submitting the same scenario inputs returns the stored result.\nsimulation_id is derived deterministically from governance inputs and IS\nthe run_id stored in the DB.",
         "operationId": "create_simulation_run_control_plane_readiness_simulation_runs_post",
         "parameters": [
           {

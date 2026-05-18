@@ -61,6 +61,14 @@ class SimulationRunStore:
         simulated_at_iso: str,
         completed: bool,
         error_summary: Optional[str],
+        created_by_actor_id: Optional[str] = None,
+        actor_type: Optional[str] = None,
+        request_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        auth_scope_snapshot: Optional[str] = None,
+        input_hash: str = "",
+        projection_hash: str = "",
+        contract_hash: str = "",
     ) -> SimulationRunRecord:
         from api.db_models_simulation import SimulationRunModel
 
@@ -82,6 +90,14 @@ class SimulationRunStore:
             simulated_at_iso=simulated_at_iso,
             completed=completed,
             error_summary=error_summary,
+            created_by_actor_id=created_by_actor_id,
+            actor_type=actor_type,
+            request_id=request_id,
+            trace_id=trace_id,
+            auth_scope_snapshot=auth_scope_snapshot,
+            input_hash=input_hash,
+            projection_hash=projection_hash,
+            contract_hash=contract_hash,
             created_at=now,
         )
         db.add(row)
@@ -148,5 +164,13 @@ class SimulationRunStore:
             simulated_at_iso=row.simulated_at_iso,
             completed=row.completed,
             error_summary=row.error_summary,
+            created_by_actor_id=getattr(row, "created_by_actor_id", None),
+            actor_type=getattr(row, "actor_type", None),
+            request_id=getattr(row, "request_id", None),
+            trace_id=getattr(row, "trace_id", None),
+            auth_scope_snapshot=getattr(row, "auth_scope_snapshot", None),
+            input_hash=getattr(row, "input_hash", "") or "",
+            projection_hash=getattr(row, "projection_hash", "") or "",
+            contract_hash=getattr(row, "contract_hash", "") or "",
             created_at_iso=row.created_at.isoformat() if row.created_at else "",
         )

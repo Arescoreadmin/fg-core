@@ -10313,3 +10313,38 @@ Implements the deterministic `ReadinessScoreEngine`: pure Python, no I/O, no LLM
 - `ruff check` + `ruff format`: all passed
 - `make fg-fast`: 382 passed, 2 skipped — all gates passed
 - `bash codex_gates.sh`: all gates passed
+
+---
+
+### 2026-05-18 — PR 95 design fixes: scope, migration, actor attribution, hash integrity, param validation, concurrent dedup
+
+**Branch:** feat/readiness-simulation-pr95
+
+**Area:** `api/readiness_simulation_manager.py`, `api/db_models_simulation.py`, `services/readiness/simulation/models.py`, `services/readiness/simulation/store.py`, `migrations/postgres/0052_readiness_simulation_runs.sql`, `tests/test_readiness_simulation.py`
+
+**Root cause (6 issues):**
+1. POST route scoped `control-plane:read` — should be `control-plane:write` since simulations create stored records
+2. No Postgres migration file for the simulation table; Postgres deployments use `assert_migrations_applied()` not ORM `create_all()`
+3. No actor attribution — no record of who called the endpoint for audit/replay lineage
+4. No hash integrity fields — no regulator-grade replay evidence chain
+5. Parameter validation absent — unbounded key/value sizes accepted
+6. Concurrent duplicate insert on idempotent POST — two concurrent identical POSTs could both miss the pre-read and hit a PK constraint on `flush()`, returning 500 instead of the stored result
+
+**Files changed:**
+- `api/readiness_simulation_manager.py`: scope `control-plane:read` → `control-plane:write`; added `_extract_actor()`, `_compute_hashes()`, `IntegrityError` rollback+re-read path, parameter validation (20 keys, 128 key len, 256 value len)
+- `api/db_models_simulation.py`: 8 new columns (actor attribution + hash integrity)
+- `services/readiness/simulation/models.py`: 8 new `SimulationRunRecord` fields
+- `services/readiness/simulation/store.py`: `create_run()` signature + `_to_domain()` backward-compatible getattr
+- `migrations/postgres/0052_readiness_simulation_runs.sql`: full DDL + 3 indexes + RLS + tenant isolation policy; renamed from erroneous `0006_*` to avoid duplicate version collision
+- `tests/test_readiness_simulation.py`: 4 new param validation tests + `read_only_tenant_client` fixture; 75 tests total
+
+**Design invariants:**
+- Actor attribution from auth context only — never request body
+- CRITICAL/BLOCKING hash integrity fields default to `""` for backward compat
+- `IntegrityError` → rollback → re-read ensures idempotent 201 on concurrent duplicates
+- Migration numbered `0052` (highest in sequence); `0006` number was already taken
+
+**Validation:**
+- `pytest tests/test_readiness_simulation.py`: 75 passed
+- `ruff format`: 0 changes needed
+- `make fg-fast`: 386 passed, 2 skipped — all gates passed

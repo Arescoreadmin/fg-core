@@ -809,7 +809,10 @@ def tenant_client(tmp_path, monkeypatch):
 
     app = build_app(auth_enabled=True)
     key = mint_key(
-        "control-plane:read", "control-plane:admin", tenant_id="tenant-sim-alpha"
+        "control-plane:read",
+        "control-plane:write",
+        "control-plane:admin",
+        tenant_id="tenant-sim-alpha",
     )
     return TestClient(app, raise_server_exceptions=False, headers={"X-API-Key": key})
 
@@ -823,7 +826,10 @@ def other_tenant_client(tmp_path, monkeypatch, tenant_client):
 
     app = build_app(auth_enabled=True)
     key = mint_key(
-        "control-plane:read", "control-plane:admin", tenant_id="tenant-sim-beta"
+        "control-plane:read",
+        "control-plane:write",
+        "control-plane:admin",
+        tenant_id="tenant-sim-beta",
     )
     return TestClient(app, raise_server_exceptions=False, headers={"X-API-Key": key})
 
@@ -843,6 +849,25 @@ def no_auth_client(tmp_path, monkeypatch):
 
     app = build_app(auth_enabled=False)
     return TestClient(app, raise_server_exceptions=False)
+
+
+@pytest.fixture()
+def read_only_tenant_client(tmp_path, monkeypatch):
+    from api.auth_scopes import mint_key
+    from api.db import reset_engine_cache
+    from api.main import build_app
+
+    db_path = tmp_path / "simulation_readonly_test.db"
+    monkeypatch.setenv("FG_SQLITE_PATH", str(db_path))
+    monkeypatch.setenv("FG_ENV", "test")
+    monkeypatch.setenv("FG_KEY_PEPPER", "ci-test-pepper")
+    reset_engine_cache()
+
+    from fastapi.testclient import TestClient
+
+    app = build_app(auth_enabled=True)
+    key = mint_key("control-plane:read", tenant_id="tenant-sim-readonly")
+    return TestClient(app, raise_server_exceptions=False, headers={"X-API-Key": key})
 
 
 _VALID_REQUEST = {
@@ -942,6 +967,46 @@ class TestCreateSimulationRun:
         assert "readiness_projection" in proj
         assert "risk_projection" in proj
         assert "blast_radius" in proj
+
+    def test_400_too_many_parameters(self, tenant_client):
+        many_params = {f"key_{i}": "val" for i in range(21)}
+        resp = tenant_client.post(
+            "/control-plane/readiness/simulation/runs",
+            json={
+                "scenario_type": "provider_change",
+                "scenario_parameters": many_params,
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_400_parameter_key_too_long(self, tenant_client):
+        long_key = "k" * 129
+        resp = tenant_client.post(
+            "/control-plane/readiness/simulation/runs",
+            json={
+                "scenario_type": "provider_change",
+                "scenario_parameters": {long_key: "value"},
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_400_parameter_value_too_long(self, tenant_client):
+        long_val = "v" * 257
+        resp = tenant_client.post(
+            "/control-plane/readiness/simulation/runs",
+            json={
+                "scenario_type": "provider_change",
+                "scenario_parameters": {"provider_id": long_val},
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_write_scope_required(self, read_only_tenant_client):
+        resp = read_only_tenant_client.post(
+            "/control-plane/readiness/simulation/runs",
+            json=_VALID_REQUEST,
+        )
+        assert resp.status_code == 403
 
 
 # ---------------------------------------------------------------------------

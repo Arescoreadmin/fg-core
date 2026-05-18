@@ -1,17 +1,21 @@
 """Readiness Simulation API — deterministic governance scenario simulation endpoints.
 
-All routes require control-plane:read scope.
+Scope contract:
+  POST /control-plane/readiness/simulation/runs requires control-plane:write
+      (simulations create stored records — that is a write, not a read).
+  GET  routes require control-plane:read.
+
 Tenant isolation: tenant_id is always resolved from auth context, never from request body.
 
 Routes:
-  POST /control-plane/readiness/simulation/runs
+  POST /control-plane/readiness/simulation/runs  [control-plane:write]
       Submit a simulation scenario (idempotent by simulation_id).
       Request body: SimulationRunRequest with scenario_type, scenario_parameters, etc.
 
-  GET  /control-plane/readiness/simulation/runs
+  GET  /control-plane/readiness/simulation/runs  [control-plane:read]
       List simulation runs for the authenticated tenant. Supports scenario_type filter.
 
-  GET  /control-plane/readiness/simulation/runs/{run_id}
+  GET  /control-plane/readiness/simulation/runs/{run_id}  [control-plane:read]
       Retrieve a single simulation run by its deterministic run_id.
 
 Security invariants:
@@ -20,10 +24,13 @@ Security invariants:
   - All simulation runs are tenant-scoped; cross-tenant access returns 404.
   - projection_json stored internally; API exposes deserialized export-safe dict.
   - simulation_id IS the run_id stored in the DB (idempotency key).
+  - Actor identity (created_by_actor_id, request_id, trace_id) persisted for audit lineage.
+  - input_hash, projection_hash, contract_hash persisted for regulator-grade replay evidence.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from datetime import datetime, timezone
@@ -31,6 +38,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.auth_scopes import require_scopes
@@ -135,9 +143,64 @@ class SimulationRunSummaryResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+_MAX_PARAM_KEYS = 20
+_MAX_KEY_LEN = 128
+_MAX_VALUE_LEN = 256
+
+
+def _extract_actor(request: Request) -> dict:
+    """Extract audit attribution fields from request auth context."""
+    auth_ctx = getattr(getattr(request, "state", None), "auth", None) or getattr(
+        getattr(request, "state", None), "api_key", None
+    )
+    actor_id = getattr(auth_ctx, "key_prefix", None) or getattr(
+        auth_ctx, "subject", None
+    )
+    scopes = sorted(getattr(auth_ctx, "scopes", set()) or [])
+    req_id = getattr(getattr(request, "state", None), "request_id", None)
+    trace_id = request.headers.get("X-Trace-Id") or request.headers.get("X-Request-Id")
+    return {
+        "created_by_actor_id": str(actor_id)[:255] if actor_id else None,
+        "actor_type": "api_key" if actor_id else "unknown",
+        "request_id": str(req_id)[:128] if req_id else None,
+        "trace_id": str(trace_id)[:128] if trace_id else None,
+        "auth_scope_snapshot": json.dumps(scopes)[:512] if scopes else None,
+    }
+
+
+def _compute_hashes(
+    scenario_parameters_json: str,
+    scenario_type: str,
+    contract_version: str,
+    engine_version: str,
+    projection_json: str,
+) -> tuple[str, str, str]:
+    """Return (input_hash, projection_hash, contract_hash) as SHA-256 hex strings."""
+    input_payload = json.dumps(
+        {
+            "scenario_type": scenario_type,
+            "scenario_parameters": scenario_parameters_json,
+            "simulation_contract_version": contract_version,
+        },
+        sort_keys=True,
+    )
+    contract_payload = json.dumps(
+        {
+            "simulation_contract_version": contract_version,
+            "simulation_engine_version": engine_version,
+        },
+        sort_keys=True,
+    )
+    return (
+        hashlib.sha256(input_payload.encode()).hexdigest(),
+        hashlib.sha256(projection_json.encode()).hexdigest(),
+        hashlib.sha256(contract_payload.encode()).hexdigest(),
+    )
+
+
 @router.post(
     "/control-plane/readiness/simulation/runs",
-    dependencies=[Depends(require_scopes("control-plane:read"))],
+    dependencies=[Depends(require_scopes("control-plane:write"))],
     response_model=SimulationRunResponse,
     status_code=201,
 )
@@ -148,9 +211,8 @@ def create_simulation_run(
 ) -> SimulationRunResponse:
     """Submit a deterministic governance simulation scenario.
 
-    Idempotent: submitting the same scenario inputs twice returns the stored
-    result rather than re-evaluating.
-
+    Requires control-plane:write — simulations create stored records.
+    Idempotent: submitting the same scenario inputs returns the stored result.
     simulation_id is derived deterministically from governance inputs and IS
     the run_id stored in the DB.
     """
@@ -176,6 +238,34 @@ def create_simulation_run(
                 f"Valid types: {[t.value for t in SimulationScenarioType]}",
             ),
         )
+
+    # Validate and bound scenario_parameters
+    params = body.scenario_parameters
+    if len(params) > _MAX_PARAM_KEYS:
+        raise HTTPException(
+            status_code=400,
+            detail=api_error(
+                "SIMULATION_PARAMS_TOO_MANY_KEYS",
+                f"scenario_parameters exceeds maximum of {_MAX_PARAM_KEYS} keys.",
+            ),
+        )
+    for k, v in params.items():
+        if len(k) > _MAX_KEY_LEN:
+            raise HTTPException(
+                status_code=400,
+                detail=api_error(
+                    "SIMULATION_PARAM_KEY_TOO_LONG",
+                    f"Parameter key '{k[:32]}...' exceeds maximum length of {_MAX_KEY_LEN}.",
+                ),
+            )
+        if len(v) > _MAX_VALUE_LEN:
+            raise HTTPException(
+                status_code=400,
+                detail=api_error(
+                    "SIMULATION_PARAM_VALUE_TOO_LONG",
+                    f"Value for parameter '{k}' exceeds maximum length of {_MAX_VALUE_LEN}.",
+                ),
+            )
 
     # Convert scenario_parameters dict to sorted tuple of pairs
     scenario_parameters_sorted = tuple(sorted(body.scenario_parameters.items()))
@@ -226,26 +316,49 @@ def create_simulation_run(
         1 for w in projection.warnings if w.severity.value in ("critical", "blocking")
     )
 
-    record = _simulation_store.create_run(
-        db,
-        run_id=simulation_id,
-        tenant_id=tenant_id,
-        assessment_id=body.assessment_id,
-        framework_id=body.framework_id,
+    # Compute replay/hash integrity fields
+    input_hash, projection_hash, contract_hash = _compute_hashes(
+        scenario_parameters_json=scenario_parameters_json,
         scenario_type=scenario_type_enum.value,
-        simulation_contract_version=body.simulation_contract_version,
-        simulation_engine_version=SIMULATION_ENGINE_VERSION,
-        snapshot_id=projection.simulation_snapshot_id,
+        contract_version=body.simulation_contract_version,
+        engine_version=SIMULATION_ENGINE_VERSION,
         projection_json=proj_json,
-        uncertainty=projection.uncertainty.value,
-        total_warnings=total_warnings,
-        total_impacts=total_impacts,
-        total_critical_warnings=total_critical_warnings,
-        simulated_at_iso=projection.simulated_at_iso,
-        completed=True,
-        error_summary=None,
     )
-    db.commit()
+
+    # Extract actor attribution
+    actor_attrs = _extract_actor(request)
+
+    try:
+        record = _simulation_store.create_run(
+            db,
+            run_id=simulation_id,
+            tenant_id=tenant_id,
+            assessment_id=body.assessment_id,
+            framework_id=body.framework_id,
+            scenario_type=scenario_type_enum.value,
+            simulation_contract_version=body.simulation_contract_version,
+            simulation_engine_version=SIMULATION_ENGINE_VERSION,
+            snapshot_id=projection.simulation_snapshot_id,
+            projection_json=proj_json,
+            uncertainty=projection.uncertainty.value,
+            total_warnings=total_warnings,
+            total_impacts=total_impacts,
+            total_critical_warnings=total_critical_warnings,
+            simulated_at_iso=projection.simulated_at_iso,
+            completed=True,
+            error_summary=None,
+            input_hash=input_hash,
+            projection_hash=projection_hash,
+            contract_hash=contract_hash,
+            **actor_attrs,
+        )
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = _simulation_store.get_run(
+            db, run_id=simulation_id, tenant_id=tenant_id
+        )
+        return _record_to_response(existing)
 
     logger.info(
         "simulation_run_created run_id=%s tenant=%s scenario=%s "

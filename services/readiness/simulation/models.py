@@ -386,4 +386,14 @@ class SimulationRunRecord:
     simulated_at_iso: str
     completed: bool
     error_summary: Optional[str]
+    # Actor attribution
+    created_by_actor_id: Optional[str]
+    actor_type: Optional[str]
+    request_id: Optional[str]
+    trace_id: Optional[str]
+    auth_scope_snapshot: Optional[str]
+    # Replay/hash integrity
+    input_hash: str
+    projection_hash: str
+    contract_hash: str
     created_at_iso: str
