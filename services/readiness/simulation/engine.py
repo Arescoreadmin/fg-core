@@ -394,15 +394,19 @@ class SimulationEngine:
             f"{simulation_id}:{capability_scope}:{authority_change}".encode()
         ).hexdigest()[:16]
 
-        isolation_failure = authority_change == "expand"
+        is_expansion = authority_change == "expand"
         return SimulationMultiAgentCascadeProjection(
             cascade_id=cascade_id,
             affected_agent_count=3,
-            cascade_severity=SimulationSeverity.CRITICAL,
-            propagation_risk=SimulationRiskDirection.DEGRADED,
-            isolation_failure_projected=isolation_failure,
+            cascade_severity=SimulationSeverity.CRITICAL
+            if is_expansion
+            else SimulationSeverity.INFORMATIONAL,
+            propagation_risk=SimulationRiskDirection.DEGRADED
+            if is_expansion
+            else SimulationRiskDirection.IMPROVED,
+            isolation_failure_projected=is_expansion,
             uncertainty=SimulationUncertainty.PARTIAL_CONFIDENCE,
-            basis=f"Multi-agent capability scope {capability_scope}; authority {'expanded' if isolation_failure else 'restricted'}.",
+            basis=f"Multi-agent capability scope {capability_scope}; authority {'expanded — cascade risk elevated' if is_expansion else 'restricted — cascade risk contained'}.",
         )
 
     def _build_governance_trajectory(

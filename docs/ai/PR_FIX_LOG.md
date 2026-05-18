@@ -10373,3 +10373,28 @@ Implements the deterministic `ReadinessScoreEngine`: pure Python, no I/O, no LLM
 - `pytest tests/test_readiness_simulation.py`: 75 passed
 - `ruff format`: 0 changes needed
 - `make fg-fast`: 386 passed, 2 skipped — all gates passed
+
+---
+
+### 2026-05-18 — PR 96 fix: replay classification mismatch + restrict cascade false positive
+
+**Branch:** feat/simulation-governance-extensions-pr96
+
+**Area:** `api/readiness_simulation_manager.py`, `services/readiness/simulation/engine.py`
+
+**Root cause (2 bugs):**
+1. **Replay event classification mismatch** — idempotency hit emitted `SIMULATION_REPLAYED` using `body.classification` (the caller's new request) instead of `existing.classification` (the immutable stored run). A caller could resubmit with a different classification and poison the event log with a mismatched classification, misleading downstream audit/SIEM consumers.
+2. **Restrict cascade false positive** — `_build_multi_agent_cascade()` always emitted `cascade_severity=CRITICAL` and `propagation_risk=DEGRADED` regardless of `authority_change`. A `restrict` scenario with an agent scope would surface critical multi-agent risk even though the evaluator projected improvement and the bounded authority model reported `containment_state="contained"`.
+
+**Files changed:**
+- `api/readiness_simulation_manager.py`: `build_simulation_replayed_event` now uses `SimulationClassification(existing.classification)` instead of `body.classification`
+- `services/readiness/simulation/engine.py`: `_build_multi_agent_cascade` branches `cascade_severity` and `propagation_risk` on `is_expansion`; restrict → `INFORMATIONAL` severity + `IMPROVED` propagation
+
+**Design invariants:**
+- Simulation runs are immutable after creation; replay events must faithfully reflect the stored run's classification
+- Cascade severity must agree with the bounded authority model and scenario evaluator direction
+
+**Validation:**
+- `pytest tests/test_readiness_simulation.py`: 93 passed
+- `ruff format`: 0 changes needed
+- `make fg-fast`: all gates passed

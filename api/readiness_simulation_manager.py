@@ -347,7 +347,7 @@ def create_simulation_run(
             replayed_evt = build_simulation_replayed_event(
                 simulation_id=simulation_id,
                 tenant_id=tenant_id,
-                classification=body.classification,
+                classification=SimulationClassification(existing.classification),
                 scenario_type=scenario_type_enum,
                 severity=SimulationSeverity(existing.uncertainty)
                 if existing.uncertainty in [s.value for s in SimulationSeverity]
