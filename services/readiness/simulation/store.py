@@ -21,7 +21,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from .models import SimulationRunRecord
+from .models import SimulationGovernanceEvent, SimulationRunRecord
 
 logger = logging.getLogger("frostgate.readiness.simulation.store")
 
@@ -69,6 +69,7 @@ class SimulationRunStore:
         input_hash: str = "",
         projection_hash: str = "",
         contract_hash: str = "",
+        classification: str = "internal",
     ) -> SimulationRunRecord:
         from api.db_models_simulation import SimulationRunModel
 
@@ -98,6 +99,7 @@ class SimulationRunStore:
             input_hash=input_hash,
             projection_hash=projection_hash,
             contract_hash=contract_hash,
+            classification=classification,
             created_at=now,
         )
         db.add(row)
@@ -173,4 +175,78 @@ class SimulationRunStore:
             projection_hash=getattr(row, "projection_hash", "") or "",
             contract_hash=getattr(row, "contract_hash", "") or "",
             created_at_iso=row.created_at.isoformat() if row.created_at else "",
+            classification=getattr(row, "classification", None) or "internal",
         )
+
+
+class SimulationEventStore:
+    """Append-only persistence for immutable governance events."""
+
+    def record_event(self, db: Session, event: SimulationGovernanceEvent) -> None:
+        """Persist a governance event. Fire-and-forget: errors are logged, not raised."""
+        from api.db_models_simulation import SimulationEventModel
+
+        import json as _json
+
+        metadata_json = _json.dumps(dict(event.metadata)) if event.metadata else None
+        row = SimulationEventModel(
+            event_id=event.event_id,
+            event_type=event.event_type.value,
+            simulation_id=event.simulation_id,
+            tenant_id=event.tenant_id,
+            classification=event.classification.value,
+            scenario_type=event.scenario_type.value,
+            severity=event.severity.value,
+            occurred_at_iso=event.occurred_at_iso,
+            actor_id=event.actor_id,
+            metadata_json=metadata_json,
+        )
+        db.add(row)
+
+    def list_events_for_run(
+        self, db: Session, *, run_id: str, tenant_id: str
+    ) -> list[SimulationGovernanceEvent]:
+        """List all governance events for a simulation run, tenant-scoped."""
+        from api.db_models_simulation import SimulationEventModel
+
+        import json as _json
+
+        from .models import (
+            SimulationClassification,
+            SimulationEventType,
+            SimulationScenarioType,
+            SimulationSeverity,
+        )
+
+        rows = (
+            db.query(SimulationEventModel)
+            .filter_by(simulation_id=run_id, tenant_id=tenant_id)
+            .order_by(SimulationEventModel.created_at.asc())
+            .all()
+        )
+        results = []
+        for row in rows:
+            metadata_pairs: tuple[tuple[str, str], ...]
+            if row.metadata_json:
+                try:
+                    raw = _json.loads(row.metadata_json)
+                    metadata_pairs = tuple((str(k), str(v)) for k, v in raw.items())
+                except Exception:
+                    metadata_pairs = ()
+            else:
+                metadata_pairs = ()
+            results.append(
+                SimulationGovernanceEvent(
+                    event_id=row.event_id,
+                    event_type=SimulationEventType(row.event_type),
+                    simulation_id=row.simulation_id,
+                    tenant_id=row.tenant_id,
+                    classification=SimulationClassification(row.classification),
+                    scenario_type=SimulationScenarioType(row.scenario_type),
+                    severity=SimulationSeverity(row.severity),
+                    occurred_at_iso=row.occurred_at_iso,
+                    actor_id=row.actor_id,
+                    metadata=metadata_pairs,
+                )
+            )
+        return results

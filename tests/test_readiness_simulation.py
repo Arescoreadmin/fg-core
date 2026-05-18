@@ -1184,3 +1184,327 @@ class TestSecurityInvariants:
         assert isinstance(data.get("projection"), dict), (
             "projection must be a deserialized dict"
         )
+
+
+# ---------------------------------------------------------------------------
+# TestSimulationClassification (4 tests) — PR 96
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+class TestSimulationClassification:
+    def test_default_classification_is_internal(self, tenant_client):
+        resp = tenant_client.post(
+            "/control-plane/readiness/simulation/runs",
+            json=_VALID_REQUEST,
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["classification"] == "internal"
+
+    def test_regulator_classification_stored(self, tenant_client):
+        resp = tenant_client.post(
+            "/control-plane/readiness/simulation/runs",
+            json={
+                "scenario_type": "policy_change",
+                "scenario_parameters": {"policy_id": "p-reg-1", "new_enabled": "true"},
+                "classification": "regulator",
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["classification"] == "regulator"
+
+    def test_invalid_classification_rejected(self, tenant_client):
+        resp = tenant_client.post(
+            "/control-plane/readiness/simulation/runs",
+            json={
+                "scenario_type": "provider_change",
+                "scenario_parameters": {"provider_id": "p2", "new_status": "blocked"},
+                "classification": "not_valid",
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_classification_in_list_response(self, tenant_client):
+        # Create run with legal classification
+        tenant_client.post(
+            "/control-plane/readiness/simulation/runs",
+            json={
+                "scenario_type": "framework_upgrade",
+                "scenario_parameters": {"framework_id": "fw-list-cls"},
+                "classification": "legal",
+            },
+        )
+        resp = tenant_client.get("/control-plane/readiness/simulation/runs")
+        assert resp.status_code == 200
+        items = resp.json()
+        assert len(items) >= 1
+        for item in items:
+            assert "classification" in item
+
+
+# ---------------------------------------------------------------------------
+# TestGovernanceEventEmission (4 tests) — PR 96
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+class TestGovernanceEventEmission:
+    def test_simulation_created_event_exists(self, tenant_client):
+        resp = tenant_client.post(
+            "/control-plane/readiness/simulation/runs",
+            json={
+                "scenario_type": "provider_change",
+                "scenario_parameters": {
+                    "provider_id": "p-evt-1",
+                    "new_status": "blocked",
+                },
+            },
+        )
+        assert resp.status_code == 201
+        run_id = resp.json()["run_id"]
+
+        events_resp = tenant_client.get(
+            f"/control-plane/readiness/simulation/runs/{run_id}/events"
+        )
+        assert events_resp.status_code == 200
+        event_types = [e["event_type"] for e in events_resp.json()]
+        assert "SIMULATION_CREATED" in event_types
+
+    def test_simulation_replayed_event_on_idempotent_post(self, tenant_client):
+        payload = {
+            "scenario_type": "provider_change",
+            "scenario_parameters": {
+                "provider_id": "p-idempotent-replay",
+                "new_status": "blocked",
+            },
+        }
+        resp1 = tenant_client.post(
+            "/control-plane/readiness/simulation/runs",
+            json=payload,
+        )
+        assert resp1.status_code == 201
+        run_id = resp1.json()["run_id"]
+
+        # Second POST — idempotency hit
+        resp2 = tenant_client.post(
+            "/control-plane/readiness/simulation/runs",
+            json=payload,
+        )
+        assert resp2.status_code == 201
+        assert resp2.json()["run_id"] == run_id
+
+        events_resp = tenant_client.get(
+            f"/control-plane/readiness/simulation/runs/{run_id}/events"
+        )
+        assert events_resp.status_code == 200
+        event_types = [e["event_type"] for e in events_resp.json()]
+        assert "SIMULATION_CREATED" in event_types
+        assert "SIMULATION_REPLAYED" in event_types
+
+    def test_capability_expansion_emits_critical_event(self, tenant_client):
+        resp = tenant_client.post(
+            "/control-plane/readiness/simulation/runs",
+            json={
+                "scenario_type": "capability_governance_change",
+                "scenario_parameters": {
+                    "capability_scope": "tool:network-access",
+                    "authority_change": "expand",
+                },
+            },
+        )
+        assert resp.status_code == 201
+        run_id = resp.json()["run_id"]
+
+        events_resp = tenant_client.get(
+            f"/control-plane/readiness/simulation/runs/{run_id}/events"
+        )
+        assert events_resp.status_code == 200
+        event_types = [e["event_type"] for e in events_resp.json()]
+        assert "CAPABILITY_BOUNDARY_EXPANSION_PROJECTED" in event_types
+
+    def test_events_tenant_isolated(self, tenant_client, other_tenant_client):
+        resp = tenant_client.post(
+            "/control-plane/readiness/simulation/runs",
+            json={
+                "scenario_type": "provider_change",
+                "scenario_parameters": {
+                    "provider_id": "p-iso-evt",
+                    "new_status": "blocked",
+                },
+            },
+        )
+        assert resp.status_code == 201
+        run_id = resp.json()["run_id"]
+
+        other_resp = other_tenant_client.get(
+            f"/control-plane/readiness/simulation/runs/{run_id}/events"
+        )
+        assert other_resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# TestSimulationReplayEndpoint (4 tests) — PR 96
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.contract
+class TestSimulationReplayEndpoint:
+    def test_replay_returns_200(self, tenant_client):
+        resp = tenant_client.post(
+            "/control-plane/readiness/simulation/runs",
+            json=_VALID_REQUEST,
+        )
+        assert resp.status_code == 201
+        run_id = resp.json()["run_id"]
+
+        replay_resp = tenant_client.get(
+            f"/control-plane/readiness/simulation/runs/{run_id}/replay"
+        )
+        assert replay_resp.status_code == 200
+
+    def test_replay_has_hash_fields(self, tenant_client):
+        resp = tenant_client.post(
+            "/control-plane/readiness/simulation/runs",
+            json={
+                "scenario_type": "governance_enforcement_change",
+                "scenario_parameters": {"enforcement_mode": "permissive"},
+            },
+        )
+        assert resp.status_code == 201
+        run_id = resp.json()["run_id"]
+
+        replay_resp = tenant_client.get(
+            f"/control-plane/readiness/simulation/runs/{run_id}/replay"
+        )
+        assert replay_resp.status_code == 200
+        data = replay_resp.json()
+        assert "input_hash" in data
+        assert "projection_hash" in data
+        assert "contract_hash" in data
+        assert data["input_hash"] != ""
+        assert data["projection_hash"] != ""
+        assert data["contract_hash"] != ""
+
+    def test_replay_cross_tenant_returns_404(self, tenant_client, other_tenant_client):
+        resp = tenant_client.post(
+            "/control-plane/readiness/simulation/runs",
+            json=_VALID_REQUEST,
+        )
+        assert resp.status_code == 201
+        run_id = resp.json()["run_id"]
+
+        other_resp = other_tenant_client.get(
+            f"/control-plane/readiness/simulation/runs/{run_id}/replay"
+        )
+        assert other_resp.status_code == 404
+
+    def test_replay_missing_run_returns_404(self, tenant_client):
+        resp = tenant_client.get(
+            "/control-plane/readiness/simulation/runs/nonexistent-id/replay"
+        )
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# TestCapabilityGovernanceConstraints (4 tests) — PR 96
+# ---------------------------------------------------------------------------
+
+
+class TestCapabilityGovernanceConstraints:
+    def _make_cap_input(
+        self, authority_change: str, capability_scope: str = "tool:file-read"
+    ):
+        from datetime import datetime, timezone
+
+        from services.readiness.simulation.models import (
+            SimulationInput,
+            SimulationScenarioType,
+        )
+
+        return SimulationInput(
+            scenario_type=SimulationScenarioType.CAPABILITY_GOVERNANCE_CHANGE,
+            scenario_parameters=(
+                ("authority_change", authority_change),
+                ("capability_scope", capability_scope),
+            ),
+            tenant_id="tenant-cap-test",
+            assessment_id=None,
+            framework_id=None,
+            simulation_contract_version="1.0",
+            simulation_engine_version="1.0",
+            requested_at_iso=datetime.now(timezone.utc).isoformat(),
+        )
+
+    def test_expand_populates_bounded_authority_model(self):
+        from services.readiness.simulation.engine import SimulationEngine
+
+        engine = SimulationEngine()
+        inp = self._make_cap_input("expand")
+        proj = engine.simulate("cap-test-expand-1", inp)
+        assert proj.capability_projection is not None
+        assert proj.capability_projection.bounded_authority_model is not None
+
+    def test_expand_bounded_authority_violation_true(self):
+        from services.readiness.simulation.engine import SimulationEngine
+
+        engine = SimulationEngine()
+        inp = self._make_cap_input("expand")
+        proj = engine.simulate("cap-test-expand-2", inp)
+        assert proj.capability_projection is not None
+        bam = proj.capability_projection.bounded_authority_model
+        assert bam is not None
+        assert bam.authority_boundary_violated is True
+
+    def test_restrict_containment_state_contained(self):
+        from services.readiness.simulation.engine import SimulationEngine
+
+        engine = SimulationEngine()
+        inp = self._make_cap_input("restrict")
+        proj = engine.simulate("cap-test-restrict-1", inp)
+        assert proj.capability_projection is not None
+        bam = proj.capability_projection.bounded_authority_model
+        assert bam is not None
+        assert bam.containment_state == "contained"
+
+    def test_agent_scope_populates_cascade_projection(self):
+        from services.readiness.simulation.engine import SimulationEngine
+
+        engine = SimulationEngine()
+        inp = self._make_cap_input("expand", capability_scope="agent:network-access")
+        proj = engine.simulate("cap-test-agent-1", inp)
+        assert proj.capability_projection is not None
+        assert proj.capability_projection.multi_agent_cascade_projection is not None
+
+
+# ---------------------------------------------------------------------------
+# TestGovernanceTimeline (2 tests) — PR 96
+# ---------------------------------------------------------------------------
+
+
+class TestGovernanceTimeline:
+    def _make_projection(self, scenario_type: str = "provider_change"):
+        from services.readiness.simulation.engine import SimulationEngine
+
+        engine = SimulationEngine()
+        inp = _make_input(
+            scenario_type, {"provider_id": "p-tl-1", "new_status": "blocked"}
+        )
+        return engine.simulate("tl-sim-1", inp)
+
+    def test_timeline_entry_built_from_projection(self):
+        from services.readiness.simulation.models import SimulationClassification
+        from services.readiness.simulation.timeline import build_timeline_entry
+
+        proj = self._make_projection()
+        entry = build_timeline_entry(proj, SimulationClassification.INTERNAL)
+        assert entry.simulation_id == proj.simulation_id
+        assert entry.timeline_summary != ""
+        assert len(entry.timeline_summary) > 0
+
+    def test_timeline_entry_has_risk_direction(self):
+        from services.readiness.simulation.models import SimulationClassification
+        from services.readiness.simulation.timeline import build_timeline_entry
+
+        proj = self._make_projection()
+        entry = build_timeline_entry(proj, SimulationClassification.INTERNAL)
+        assert entry.risk_direction == proj.readiness_projection.direction

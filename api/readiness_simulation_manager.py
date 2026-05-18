@@ -51,11 +51,25 @@ from services.readiness.simulation import (
     SimulationRunTenantIsolationError,
     derive_simulation_id,
 )
-from services.readiness.simulation.models import SimulationInput, SimulationScenarioType
+from services.readiness.simulation.events import (
+    build_capability_expansion_event,
+    build_policy_relaxation_event,
+    build_replay_reconstructed_event,
+    build_simulation_created_event,
+    build_simulation_replayed_event,
+)
+from services.readiness.simulation.models import (
+    SimulationClassification,
+    SimulationInput,
+    SimulationScenarioType,
+    SimulationSeverity,
+)
 from services.readiness.simulation.serialization import (
     projection_from_json,
     projection_to_json,
 )
+from services.readiness.simulation.store import SimulationEventStore
+from services.readiness.simulation.timeline import build_timeline_entry
 
 logger = logging.getLogger("frostgate.api.readiness_simulation")
 
@@ -63,6 +77,7 @@ router = APIRouter(tags=["readiness"])
 
 _sim_engine = SimulationEngine()
 _simulation_store = SimulationRunStore()
+_event_store = SimulationEventStore()
 
 SIMULATION_CONTRACT_VERSION = "1.0"
 SIMULATION_ENGINE_VERSION = "1.0"
@@ -103,6 +118,10 @@ class SimulationRunRequest(BaseModel):
     simulation_contract_version: str = Field(
         "1.0", description="Contract version for replay compatibility."
     )
+    classification: SimulationClassification = Field(
+        SimulationClassification.INTERNAL,
+        description="Audience classification for this simulation output.",
+    )
 
 
 class SimulationRunResponse(BaseModel):
@@ -122,6 +141,7 @@ class SimulationRunResponse(BaseModel):
     total_critical_warnings: int
     simulated_at_iso: str
     projection: dict
+    classification: str = "internal"
 
 
 class SimulationRunSummaryResponse(BaseModel):
@@ -136,6 +156,39 @@ class SimulationRunSummaryResponse(BaseModel):
     simulated_at_iso: str
     assessment_id: Optional[str]
     framework_id: Optional[str]
+    classification: str = "internal"
+
+
+class SimulationEventResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    event_id: str
+    event_type: str
+    simulation_id: str
+    tenant_id: str
+    classification: str
+    scenario_type: str
+    severity: str
+    occurred_at_iso: str
+    actor_id: Optional[str]
+
+
+class SimulationReplayResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    run_id: str
+    tenant_id: str
+    scenario_type: str
+    classification: str
+    simulation_contract_version: str
+    simulation_engine_version: str
+    simulated_at_iso: str
+    input_hash: str
+    projection_hash: str
+    contract_hash: str
+    replay_contract_metadata: dict
+    canonical_scenario_inputs: dict
+    reconstruction_basis: str
 
 
 # ---------------------------------------------------------------------------
@@ -288,6 +341,26 @@ def create_simulation_run(
         existing = _simulation_store.get_run(
             db, run_id=simulation_id, tenant_id=tenant_id
         )
+        # Emit SIMULATION_REPLAYED event for idempotency hit
+        actor_info = _extract_actor(request)
+        try:
+            replayed_evt = build_simulation_replayed_event(
+                simulation_id=simulation_id,
+                tenant_id=tenant_id,
+                classification=body.classification,
+                scenario_type=scenario_type_enum,
+                severity=SimulationSeverity(existing.uncertainty)
+                if existing.uncertainty in [s.value for s in SimulationSeverity]
+                else SimulationSeverity.INFORMATIONAL,
+                actor_id=actor_info.get("created_by_actor_id"),
+            )
+            _event_store.record_event(db, replayed_evt)
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.warning(
+                "Failed to emit SIMULATION_REPLAYED event for run_id=%s", simulation_id
+            )
         return _record_to_response(existing)
     except SimulationRunNotFound:
         pass
@@ -350,8 +423,38 @@ def create_simulation_run(
             input_hash=input_hash,
             projection_hash=projection_hash,
             contract_hash=contract_hash,
+            classification=body.classification.value,
             **actor_attrs,
         )
+
+        # Emit governance events
+        _emit_simulation_events(
+            db=db,
+            simulation_id=simulation_id,
+            tenant_id=tenant_id,
+            classification=body.classification,
+            scenario_type=scenario_type_enum,
+            projection=projection,
+            total_critical_warnings=total_critical_warnings,
+            actor_id=actor_attrs.get("created_by_actor_id"),
+        )
+
+        # governance_timeline_seam: timeline entry built here; timeline persistence
+        # plugs in between build_timeline_entry() and db.commit() below.
+        try:
+            _timeline_entry = build_timeline_entry(projection, body.classification)
+            logger.debug(
+                "timeline_entry_built run_id=%s entry_id=%s summary=%s",
+                simulation_id,
+                _timeline_entry.entry_id,
+                _timeline_entry.timeline_summary[:80],
+            )
+            # governance_timeline_seam: push _timeline_entry to timeline store here.
+        except Exception:
+            logger.warning(
+                "Failed to build timeline entry for run_id=%s", simulation_id
+            )
+
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -362,7 +465,7 @@ def create_simulation_run(
 
     logger.info(
         "simulation_run_created run_id=%s tenant=%s scenario=%s "
-        "warnings=%d impacts=%d critical=%d uncertainty=%s",
+        "warnings=%d impacts=%d critical=%d uncertainty=%s classification=%s",
         simulation_id,
         tenant_id,
         scenario_type_enum.value,
@@ -370,6 +473,7 @@ def create_simulation_run(
         total_impacts,
         total_critical_warnings,
         projection.uncertainty.value,
+        body.classification.value,
     )
 
     return _record_to_response(record)
@@ -414,8 +518,139 @@ def list_simulation_runs(
             simulated_at_iso=r.simulated_at_iso,
             assessment_id=r.assessment_id,
             framework_id=r.framework_id,
+            classification=r.classification,
         )
         for r in records
+    ]
+
+
+@router.get(
+    "/control-plane/readiness/simulation/runs/{run_id}/replay",
+    dependencies=[Depends(require_scopes("control-plane:read"))],
+    response_model=SimulationReplayResponse,
+)
+def get_simulation_replay(
+    run_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> SimulationReplayResponse:
+    """Retrieve replay reconstruction metadata for a simulation run.
+
+    Does NOT re-execute the simulation. Returns hash fields and canonical
+    scenario parameters from the stored projection JSON for forensic replay.
+    Emits SIMULATION_REPLAY_RECONSTRUCTED event.
+    """
+    tenant_id = _tenant_from_auth(request)
+    if not tenant_id:
+        raise HTTPException(
+            status_code=403,
+            detail=api_error("SIMULATION_NO_TENANT", "Tenant context required."),
+        )
+
+    try:
+        record = _simulation_store.get_run(db, run_id=run_id, tenant_id=tenant_id)
+    except SimulationRunNotFound:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("SIMULATION_RUN_NOT_FOUND", "Simulation run not found."),
+        )
+    except SimulationRunTenantIsolationError:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("SIMULATION_RUN_NOT_FOUND", "Simulation run not found."),
+        )
+
+    projection_dict = projection_from_json(record.projection_json)
+    replay_meta = projection_dict.get("replay_contract_metadata", {})
+    canonical_inputs = {
+        "scenario_type": record.scenario_type,
+        "simulation_contract_version": record.simulation_contract_version,
+        "simulation_engine_version": record.simulation_engine_version,
+        "assessment_id": record.assessment_id,
+        "framework_id": record.framework_id,
+    }
+
+    # Emit SIMULATION_REPLAY_RECONSTRUCTED event
+    actor_attrs = _extract_actor(request)
+    try:
+        scenario_type_enum = SimulationScenarioType(record.scenario_type)
+        replay_evt = build_replay_reconstructed_event(
+            simulation_id=run_id,
+            tenant_id=tenant_id,
+            classification=SimulationClassification(record.classification),
+            scenario_type=scenario_type_enum,
+            actor_id=actor_attrs.get("created_by_actor_id"),
+        )
+        _event_store.record_event(db, replay_evt)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.warning(
+            "Failed to emit SIMULATION_REPLAY_RECONSTRUCTED event for run_id=%s", run_id
+        )
+
+    return SimulationReplayResponse(
+        run_id=record.run_id,
+        tenant_id=record.tenant_id,
+        scenario_type=record.scenario_type,
+        classification=record.classification,
+        simulation_contract_version=record.simulation_contract_version,
+        simulation_engine_version=record.simulation_engine_version,
+        simulated_at_iso=record.simulated_at_iso,
+        input_hash=record.input_hash,
+        projection_hash=record.projection_hash,
+        contract_hash=record.contract_hash,
+        replay_contract_metadata=replay_meta if isinstance(replay_meta, dict) else {},
+        canonical_scenario_inputs=canonical_inputs,
+        reconstruction_basis="Projection JSON deserialized from stored record; no re-execution performed.",
+    )
+
+
+@router.get(
+    "/control-plane/readiness/simulation/runs/{run_id}/events",
+    dependencies=[Depends(require_scopes("control-plane:read"))],
+)
+def list_simulation_events(
+    run_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> list[SimulationEventResponse]:
+    """List governance events for a simulation run (tenant-scoped)."""
+    tenant_id = _tenant_from_auth(request)
+    if not tenant_id:
+        raise HTTPException(
+            status_code=403,
+            detail=api_error("SIMULATION_NO_TENANT", "Tenant context required."),
+        )
+
+    # Verify run exists and belongs to this tenant (404 on isolation violation)
+    try:
+        _simulation_store.get_run(db, run_id=run_id, tenant_id=tenant_id)
+    except SimulationRunNotFound:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("SIMULATION_RUN_NOT_FOUND", "Simulation run not found."),
+        )
+    except SimulationRunTenantIsolationError:
+        raise HTTPException(
+            status_code=404,
+            detail=api_error("SIMULATION_RUN_NOT_FOUND", "Simulation run not found."),
+        )
+
+    events = _event_store.list_events_for_run(db, run_id=run_id, tenant_id=tenant_id)
+    return [
+        SimulationEventResponse(
+            event_id=e.event_id,
+            event_type=e.event_type.value,
+            simulation_id=e.simulation_id,
+            tenant_id=e.tenant_id,
+            classification=e.classification.value,
+            scenario_type=e.scenario_type.value,
+            severity=e.severity.value,
+            occurred_at_iso=e.occurred_at_iso,
+            actor_id=e.actor_id,
+        )
+        for e in events
     ]
 
 
@@ -474,7 +709,76 @@ def _record_to_response(record) -> SimulationRunResponse:  # type: ignore[no-unt
         total_critical_warnings=record.total_critical_warnings,
         simulated_at_iso=record.simulated_at_iso,
         projection=projection_dict,
+        classification=record.classification,
     )
+
+
+def _emit_simulation_events(
+    db: Session,
+    simulation_id: str,
+    tenant_id: str,
+    classification: SimulationClassification,
+    scenario_type: SimulationScenarioType,
+    projection,  # type: ignore[no-untyped-def]
+    total_critical_warnings: int,
+    actor_id: Optional[str],
+) -> None:
+    """Emit governance events for a newly-created simulation run.
+
+    Always emits SIMULATION_CREATED.
+    Conditionally emits CAPABILITY_BOUNDARY_EXPANSION_PROJECTED and
+    GOVERNANCE_POLICY_RELAXATION_PROJECTED based on scenario and projection state.
+    """
+    # Determine severity from projection uncertainty
+    try:
+        severity = SimulationSeverity(projection.uncertainty.value)
+    except ValueError:
+        severity = SimulationSeverity.INFORMATIONAL
+
+    # Always emit SIMULATION_CREATED
+    created_evt = build_simulation_created_event(
+        simulation_id=simulation_id,
+        tenant_id=tenant_id,
+        classification=classification,
+        scenario_type=scenario_type,
+        severity=severity,
+        actor_id=actor_id,
+    )
+    _event_store.record_event(db, created_evt)
+
+    # Conditionally emit CAPABILITY_BOUNDARY_EXPANSION_PROJECTED
+    is_cap_expansion = (
+        scenario_type == SimulationScenarioType.CAPABILITY_GOVERNANCE_CHANGE
+        and total_critical_warnings > 0
+    )
+    if is_cap_expansion:
+        cap_evt = build_capability_expansion_event(
+            simulation_id=simulation_id,
+            tenant_id=tenant_id,
+            classification=classification,
+            scenario_type=scenario_type,
+            actor_id=actor_id,
+        )
+        _event_store.record_event(db, cap_evt)
+
+    # Conditionally emit GOVERNANCE_POLICY_RELAXATION_PROJECTED
+    is_policy_relaxation = (
+        scenario_type
+        in (
+            SimulationScenarioType.TENANT_POLICY_RELAXATION,
+            SimulationScenarioType.POLICY_CHANGE,
+        )
+        and projection.readiness_projection.direction.value == "degraded"
+    )
+    if is_policy_relaxation:
+        relax_evt = build_policy_relaxation_event(
+            simulation_id=simulation_id,
+            tenant_id=tenant_id,
+            classification=classification,
+            scenario_type=scenario_type,
+            actor_id=actor_id,
+        )
+        _event_store.record_event(db, relax_evt)
 
 
 # longitudinal_simulation_seam: GET /control-plane/readiness/simulation/runs/{run_id}/trajectory

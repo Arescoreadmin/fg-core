@@ -59,6 +59,10 @@ class SimulationRunModel(Base):
     input_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     projection_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     contract_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    # Classification — audience scope for this simulation output
+    classification: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="internal"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
@@ -66,4 +70,44 @@ class SimulationRunModel(Base):
     __table_args__ = (
         Index("ix_simulation_runs_tenant_created", "tenant_id", "created_at"),
         Index("ix_simulation_runs_tenant_assessment", "tenant_id", "assessment_id"),
+    )
+
+
+class SimulationEventModel(Base):
+    """Append-only governance event record for simulation lifecycle telemetry.
+
+    Events feed the SIEM forwarding surface, replay backbone, analytics pipeline,
+    and governance timeline integration.
+    Table: readiness_simulation_events
+    """
+
+    __tablename__ = "readiness_simulation_events"
+
+    event_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    simulation_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    classification: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="internal"
+    )
+    scenario_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    severity: Mapped[str] = mapped_column(String(32), nullable=False)
+    occurred_at_iso: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_simulation_events_tenant_simulation",
+            "tenant_id",
+            "simulation_id",
+        ),
+        Index(
+            "ix_simulation_events_tenant_event_type",
+            "tenant_id",
+            "event_type",
+        ),
     )

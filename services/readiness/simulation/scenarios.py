@@ -81,7 +81,9 @@ def _degraded_readiness(
         SimulationRiskDirection.DEGRADED
         if delta < 0
         else (
-            SimulationRiskDirection.IMPROVED if delta > 0 else SimulationRiskDirection.UNCHANGED
+            SimulationRiskDirection.IMPROVED
+            if delta > 0
+            else SimulationRiskDirection.UNCHANGED
         )
     )
     return SimulationReadinessProjection(
@@ -104,7 +106,11 @@ def _improved_readiness(
     basis: str,
 ) -> SimulationReadinessProjection:
     projected = min(1.0, _BASELINE_COMPLETION + delta)
-    direction = SimulationRiskDirection.IMPROVED if delta > 0 else SimulationRiskDirection.UNCHANGED
+    direction = (
+        SimulationRiskDirection.IMPROVED
+        if delta > 0
+        else SimulationRiskDirection.UNCHANGED
+    )
     return SimulationReadinessProjection(
         baseline_completion_pct=_BASELINE_COMPLETION,
         projected_completion_pct=projected,
@@ -118,7 +124,9 @@ def _improved_readiness(
     )
 
 
-def _unchanged_readiness(uncertainty: SimulationUncertainty, basis: str) -> SimulationReadinessProjection:
+def _unchanged_readiness(
+    uncertainty: SimulationUncertainty, basis: str
+) -> SimulationReadinessProjection:
     return SimulationReadinessProjection(
         baseline_completion_pct=_BASELINE_COMPLETION,
         projected_completion_pct=_BASELINE_COMPLETION,
@@ -286,10 +294,19 @@ def evaluate_provider_change(
 
     if not provider_id or not new_status:
         uncertainty = SimulationUncertainty.UNSUPPORTED_BOUNDARY
-        readiness = _unchanged_readiness(uncertainty, "Missing provider_id or new_status parameters.")
+        readiness = _unchanged_readiness(
+            uncertainty, "Missing provider_id or new_status parameters."
+        )
         risk = _risk_projection(0.0, SimulationRiskDirection.UNKNOWN, (), uncertainty)
-        compliance = _compliance_projection(0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty)
-        blast = _blast_radius(0, SimulationSeverity.INFORMATIONAL, "Insufficient parameters to compute blast radius.", uncertainty)
+        compliance = _compliance_projection(
+            0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty
+        )
+        blast = _blast_radius(
+            0,
+            SimulationSeverity.INFORMATIONAL,
+            "Insufficient parameters to compute blast radius.",
+            uncertainty,
+        )
         return readiness, risk, compliance, [], [], [], blast
 
     if new_status == "blocked":
@@ -306,8 +323,14 @@ def evaluate_provider_change(
             0.20,
             SimulationRiskDirection.DEGRADED,
             (
-                ("provider_blocked", f"Provider {provider_id} moved to blocked status."),
-                ("compliance_coverage_loss", "Provider-dependent controls lose evidence."),
+                (
+                    "provider_blocked",
+                    f"Provider {provider_id} moved to blocked status.",
+                ),
+                (
+                    "compliance_coverage_loss",
+                    "Provider-dependent controls lose evidence.",
+                ),
             ),
             uncertainty,
         )
@@ -484,9 +507,13 @@ def evaluate_provider_change(
     else:
         # Unknown status
         uncertainty = SimulationUncertainty.UNSUPPORTED_BOUNDARY
-        readiness = _unchanged_readiness(uncertainty, f"Unknown provider status '{new_status}'.")
+        readiness = _unchanged_readiness(
+            uncertainty, f"Unknown provider status '{new_status}'."
+        )
         risk = _risk_projection(0.0, SimulationRiskDirection.UNKNOWN, (), uncertainty)
-        compliance = _compliance_projection(0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty)
+        compliance = _compliance_projection(
+            0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty
+        )
         warnings = [
             _make_warning(
                 simulation_id,
@@ -497,7 +524,12 @@ def evaluate_provider_change(
                 uncertainty,
             )
         ]
-        blast = _blast_radius(0, SimulationSeverity.INFORMATIONAL, "Unknown status; blast radius uncomputable.", uncertainty)
+        blast = _blast_radius(
+            0,
+            SimulationSeverity.INFORMATIONAL,
+            "Unknown status; blast radius uncomputable.",
+            uncertainty,
+        )
         return readiness, risk, compliance, [], [], warnings, blast
 
 
@@ -521,8 +553,12 @@ def evaluate_policy_change(
         uncertainty = SimulationUncertainty.UNSUPPORTED_BOUNDARY
         readiness = _unchanged_readiness(uncertainty, "Missing policy_id parameter.")
         risk = _risk_projection(0.0, SimulationRiskDirection.UNKNOWN, (), uncertainty)
-        compliance = _compliance_projection(0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty)
-        blast = _blast_radius(0, SimulationSeverity.INFORMATIONAL, "Insufficient parameters.", uncertainty)
+        compliance = _compliance_projection(
+            0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty
+        )
+        blast = _blast_radius(
+            0, SimulationSeverity.INFORMATIONAL, "Insufficient parameters.", uncertainty
+        )
         return readiness, risk, compliance, [], [], [], blast
 
     new_enabled = new_enabled_raw.lower() != "false" if new_enabled_raw else True
@@ -545,7 +581,10 @@ def evaluate_policy_change(
                 0.25,
                 SimulationRiskDirection.DEGRADED,
                 (
-                    ("provenance_enforcement_disabled", f"Policy {policy_id} disabled."),
+                    (
+                        "provenance_enforcement_disabled",
+                        f"Policy {policy_id} disabled.",
+                    ),
                     ("attestation_gap", "Provenance attestation no longer enforced."),
                 ),
                 uncertainty,
@@ -746,7 +785,12 @@ def evaluate_policy_change(
             risk = _risk_projection(
                 -0.08,
                 SimulationRiskDirection.IMPROVED,
-                (("strict_enforcement", f"Policy {policy_id} strict enforcement active."),),
+                (
+                    (
+                        "strict_enforcement",
+                        f"Policy {policy_id} strict enforcement active.",
+                    ),
+                ),
                 uncertainty,
             )
             compliance = _compliance_projection(
@@ -768,11 +812,18 @@ def evaluate_policy_change(
 
         elif new_enforcement == "permissive":
             uncertainty = SimulationUncertainty.PARTIAL_CONFIDENCE
-            readiness = _unchanged_readiness(uncertainty, f"Policy {policy_id} enabled permissive; minimal change.")
+            readiness = _unchanged_readiness(
+                uncertainty, f"Policy {policy_id} enabled permissive; minimal change."
+            )
             risk = _risk_projection(
                 0.03,
                 SimulationRiskDirection.DEGRADED,
-                (("permissive_enforcement", f"Policy {policy_id} permissive mode reduces enforcement strength."),),
+                (
+                    (
+                        "permissive_enforcement",
+                        f"Policy {policy_id} permissive mode reduces enforcement strength.",
+                    ),
+                ),
                 uncertainty,
             )
             compliance = _compliance_projection(
@@ -795,9 +846,22 @@ def evaluate_policy_change(
         elif new_enforcement == "disabled":
             # Enforcement mode disabled even though enabled=true is unusual
             uncertainty = SimulationUncertainty.UNSUPPORTED_BOUNDARY
-            readiness = _unchanged_readiness(uncertainty, f"Policy {policy_id} enabled but enforcement disabled — unusual state.")
-            risk = _risk_projection(0.05, SimulationRiskDirection.DEGRADED, (), uncertainty)
-            compliance = _compliance_projection(-0.05, SimulationRiskDirection.DEGRADED, (), (), False, True, uncertainty)
+            readiness = _unchanged_readiness(
+                uncertainty,
+                f"Policy {policy_id} enabled but enforcement disabled — unusual state.",
+            )
+            risk = _risk_projection(
+                0.05, SimulationRiskDirection.DEGRADED, (), uncertainty
+            )
+            compliance = _compliance_projection(
+                -0.05,
+                SimulationRiskDirection.DEGRADED,
+                (),
+                (),
+                False,
+                True,
+                uncertainty,
+            )
             warnings = [
                 _make_warning(
                     simulation_id,
@@ -818,17 +882,34 @@ def evaluate_policy_change(
 
         elif not new_enforcement:
             uncertainty = SimulationUncertainty.UNSUPPORTED_BOUNDARY
-            readiness = _unchanged_readiness(uncertainty, f"Policy {policy_id} enabled; enforcement mode unknown.")
-            risk = _risk_projection(0.0, SimulationRiskDirection.UNKNOWN, (), uncertainty)
-            compliance = _compliance_projection(0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty)
-            blast = _blast_radius(0, SimulationSeverity.INFORMATIONAL, "Unknown enforcement mode.", uncertainty)
+            readiness = _unchanged_readiness(
+                uncertainty, f"Policy {policy_id} enabled; enforcement mode unknown."
+            )
+            risk = _risk_projection(
+                0.0, SimulationRiskDirection.UNKNOWN, (), uncertainty
+            )
+            compliance = _compliance_projection(
+                0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty
+            )
+            blast = _blast_radius(
+                0,
+                SimulationSeverity.INFORMATIONAL,
+                "Unknown enforcement mode.",
+                uncertainty,
+            )
             return readiness, risk, compliance, [], [], [], blast
 
         else:
             uncertainty = SimulationUncertainty.UNSUPPORTED_BOUNDARY
-            readiness = _unchanged_readiness(uncertainty, f"Unknown enforcement mode '{new_enforcement}'.")
-            risk = _risk_projection(0.0, SimulationRiskDirection.UNKNOWN, (), uncertainty)
-            compliance = _compliance_projection(0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty)
+            readiness = _unchanged_readiness(
+                uncertainty, f"Unknown enforcement mode '{new_enforcement}'."
+            )
+            risk = _risk_projection(
+                0.0, SimulationRiskDirection.UNKNOWN, (), uncertainty
+            )
+            compliance = _compliance_projection(
+                0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty
+            )
             warnings = [
                 _make_warning(
                     simulation_id,
@@ -839,7 +920,12 @@ def evaluate_policy_change(
                     uncertainty,
                 )
             ]
-            blast = _blast_radius(0, SimulationSeverity.INFORMATIONAL, "Unknown enforcement mode.", uncertainty)
+            blast = _blast_radius(
+                0,
+                SimulationSeverity.INFORMATIONAL,
+                "Unknown enforcement mode.",
+                uncertainty,
+            )
             return readiness, risk, compliance, [], [], warnings, blast
 
 
@@ -861,10 +947,16 @@ def evaluate_retrieval_strategy_change(
 
     if not policy_id:
         uncertainty = SimulationUncertainty.UNSUPPORTED_BOUNDARY
-        readiness = _unchanged_readiness(uncertainty, "Missing policy_id for retrieval strategy.")
+        readiness = _unchanged_readiness(
+            uncertainty, "Missing policy_id for retrieval strategy."
+        )
         risk = _risk_projection(0.0, SimulationRiskDirection.UNKNOWN, (), uncertainty)
-        compliance = _compliance_projection(0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty)
-        blast = _blast_radius(0, SimulationSeverity.INFORMATIONAL, "Missing policy_id.", uncertainty)
+        compliance = _compliance_projection(
+            0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty
+        )
+        blast = _blast_radius(
+            0, SimulationSeverity.INFORMATIONAL, "Missing policy_id.", uncertainty
+        )
         return readiness, risk, compliance, [], [], [], blast
 
     new_enabled = new_enabled_raw.lower() != "false" if new_enabled_raw else True
@@ -883,7 +975,10 @@ def evaluate_retrieval_strategy_change(
             0.15,
             SimulationRiskDirection.DEGRADED,
             (
-                ("retrieval_policy_disabled", f"Retrieval policy {policy_id} disabled."),
+                (
+                    "retrieval_policy_disabled",
+                    f"Retrieval policy {policy_id} disabled.",
+                ),
                 ("evidence_gap", "Evidence retrieval governance coverage reduced."),
             ),
             uncertainty,
@@ -952,7 +1047,12 @@ def evaluate_retrieval_strategy_change(
         risk = _risk_projection(
             0.06,
             SimulationRiskDirection.DEGRADED,
-            (("reranker_disabled", f"Reranker for {policy_id} disabled; quality degraded."),),
+            (
+                (
+                    "reranker_disabled",
+                    f"Reranker for {policy_id} disabled; quality degraded.",
+                ),
+            ),
             uncertainty,
         )
         compliance = _compliance_projection(
@@ -993,7 +1093,12 @@ def evaluate_retrieval_strategy_change(
         risk = _risk_projection(
             -0.06,
             SimulationRiskDirection.IMPROVED,
-            (("retrieval_active", f"Retrieval policy {policy_id} active with reranker."),),
+            (
+                (
+                    "retrieval_active",
+                    f"Retrieval policy {policy_id} active with reranker.",
+                ),
+            ),
             uncertainty,
         )
         compliance = _compliance_projection(
@@ -1015,7 +1120,9 @@ def evaluate_retrieval_strategy_change(
 
     elif reranker_state == "degraded":
         uncertainty = SimulationUncertainty.PARTIAL_CONFIDENCE
-        readiness = _unchanged_readiness(uncertainty, f"Retrieval policy {policy_id} enabled; reranker degraded.")
+        readiness = _unchanged_readiness(
+            uncertainty, f"Retrieval policy {policy_id} enabled; reranker degraded."
+        )
         risk = _risk_projection(
             0.04,
             SimulationRiskDirection.DEGRADED,
@@ -1041,10 +1148,16 @@ def evaluate_retrieval_strategy_change(
 
     else:
         uncertainty = SimulationUncertainty.UNSUPPORTED_BOUNDARY
-        readiness = _unchanged_readiness(uncertainty, f"Unknown reranker state '{reranker_state}'.")
+        readiness = _unchanged_readiness(
+            uncertainty, f"Unknown reranker state '{reranker_state}'."
+        )
         risk = _risk_projection(0.0, SimulationRiskDirection.UNKNOWN, (), uncertainty)
-        compliance = _compliance_projection(0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty)
-        blast = _blast_radius(0, SimulationSeverity.INFORMATIONAL, "Unknown reranker state.", uncertainty)
+        compliance = _compliance_projection(
+            0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty
+        )
+        blast = _blast_radius(
+            0, SimulationSeverity.INFORMATIONAL, "Unknown reranker state.", uncertainty
+        )
         return readiness, risk, compliance, [], [], [], blast
 
 
@@ -1066,10 +1179,16 @@ def evaluate_tenant_policy_relaxation(
 
     if not relaxation_type:
         uncertainty = SimulationUncertainty.UNSUPPORTED_BOUNDARY
-        readiness = _unchanged_readiness(uncertainty, "Missing relaxation_type parameter.")
+        readiness = _unchanged_readiness(
+            uncertainty, "Missing relaxation_type parameter."
+        )
         risk = _risk_projection(0.0, SimulationRiskDirection.UNKNOWN, (), uncertainty)
-        compliance = _compliance_projection(0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty)
-        blast = _blast_radius(0, SimulationSeverity.INFORMATIONAL, "Missing relaxation_type.", uncertainty)
+        compliance = _compliance_projection(
+            0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty
+        )
+        blast = _blast_radius(
+            0, SimulationSeverity.INFORMATIONAL, "Missing relaxation_type.", uncertainty
+        )
         return readiness, risk, compliance, [], [], [], blast
 
     is_provenance = relaxation_type == "provenance"
@@ -1109,8 +1228,14 @@ def evaluate_tenant_policy_relaxation(
         delta_risk,
         SimulationRiskDirection.DEGRADED,
         (
-            ("policy_relaxation", f"Tenant {relaxation_type} policy relaxed to {new_threshold}."),
-            ("governance_exposure", "Relaxed policy increases governance risk exposure."),
+            (
+                "policy_relaxation",
+                f"Tenant {relaxation_type} policy relaxed to {new_threshold}.",
+            ),
+            (
+                "governance_exposure",
+                "Relaxed policy increases governance risk exposure.",
+            ),
         ),
         uncertainty,
     )
@@ -1196,9 +1321,13 @@ def evaluate_framework_upgrade(
 
     if net == 0 and added == 0:
         uncertainty = SimulationUncertainty.CONFIRMED
-        readiness = _unchanged_readiness(uncertainty, f"Framework upgrade to {version_tag}; no control delta.")
+        readiness = _unchanged_readiness(
+            uncertainty, f"Framework upgrade to {version_tag}; no control delta."
+        )
         risk = _risk_projection(0.0, SimulationRiskDirection.UNCHANGED, (), uncertainty)
-        compliance = _compliance_projection(0.0, SimulationRiskDirection.UNCHANGED, (), (), False, False, uncertainty)
+        compliance = _compliance_projection(
+            0.0, SimulationRiskDirection.UNCHANGED, (), (), False, False, uncertainty
+        )
         blast = _blast_radius(
             0,
             SimulationSeverity.INFORMATIONAL,
@@ -1228,7 +1357,10 @@ def evaluate_framework_upgrade(
             SimulationRiskDirection.DEGRADED,
             (
                 ("new_controls_unevidenced", f"{added} new controls require evidence."),
-                ("framework_upgrade_gap", f"Framework version gap: upgrading to {version_tag}."),
+                (
+                    "framework_upgrade_gap",
+                    f"Framework version gap: upgrading to {version_tag}.",
+                ),
             ),
             uncertainty,
         )
@@ -1304,7 +1436,12 @@ def evaluate_framework_upgrade(
         risk = _risk_projection(
             -removed * 0.005,
             SimulationRiskDirection.IMPROVED,
-            (("controls_removed", f"{removed} controls removed from framework {version_tag}."),),
+            (
+                (
+                    "controls_removed",
+                    f"{removed} controls removed from framework {version_tag}.",
+                ),
+            ),
             uncertainty,
         )
         compliance = _compliance_projection(
@@ -1339,10 +1476,19 @@ def evaluate_governance_enforcement_change(
 
     if not enforcement_mode:
         uncertainty = SimulationUncertainty.UNSUPPORTED_BOUNDARY
-        readiness = _unchanged_readiness(uncertainty, "Missing enforcement_mode parameter.")
+        readiness = _unchanged_readiness(
+            uncertainty, "Missing enforcement_mode parameter."
+        )
         risk = _risk_projection(0.0, SimulationRiskDirection.UNKNOWN, (), uncertainty)
-        compliance = _compliance_projection(0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty)
-        blast = _blast_radius(0, SimulationSeverity.INFORMATIONAL, "Missing enforcement_mode.", uncertainty)
+        compliance = _compliance_projection(
+            0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty
+        )
+        blast = _blast_radius(
+            0,
+            SimulationSeverity.INFORMATIONAL,
+            "Missing enforcement_mode.",
+            uncertainty,
+        )
         return readiness, risk, compliance, [], [], [], blast
 
     if enforcement_mode == "disabled":
@@ -1360,8 +1506,14 @@ def evaluate_governance_enforcement_change(
             SimulationRiskDirection.DEGRADED,
             (
                 ("enforcement_disabled", "Global governance enforcement disabled."),
-                ("controls_ineffective", "All enforcement-dependent controls become ineffective."),
-                ("compliance_exposure", "Full governance compliance exposure introduced."),
+                (
+                    "controls_ineffective",
+                    "All enforcement-dependent controls become ineffective.",
+                ),
+                (
+                    "compliance_exposure",
+                    "Full governance compliance exposure introduced.",
+                ),
             ),
             uncertainty,
         )
@@ -1516,9 +1668,13 @@ def evaluate_governance_enforcement_change(
 
     else:
         uncertainty = SimulationUncertainty.UNSUPPORTED_BOUNDARY
-        readiness = _unchanged_readiness(uncertainty, f"Unknown enforcement mode '{enforcement_mode}'.")
+        readiness = _unchanged_readiness(
+            uncertainty, f"Unknown enforcement mode '{enforcement_mode}'."
+        )
         risk = _risk_projection(0.0, SimulationRiskDirection.UNKNOWN, (), uncertainty)
-        compliance = _compliance_projection(0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty)
+        compliance = _compliance_projection(
+            0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty
+        )
         warnings = [
             _make_warning(
                 simulation_id,
@@ -1529,7 +1685,12 @@ def evaluate_governance_enforcement_change(
                 uncertainty,
             )
         ]
-        blast = _blast_radius(0, SimulationSeverity.INFORMATIONAL, "Unknown enforcement mode.", uncertainty)
+        blast = _blast_radius(
+            0,
+            SimulationSeverity.INFORMATIONAL,
+            "Unknown enforcement mode.",
+            uncertainty,
+        )
         return readiness, risk, compliance, [], [], warnings, blast
 
 
@@ -1554,10 +1715,16 @@ def evaluate_capability_governance_change(
 
     if not capability_scope or not authority_change:
         uncertainty = SimulationUncertainty.UNSUPPORTED_BOUNDARY
-        readiness = _unchanged_readiness(uncertainty, "Missing capability_scope or authority_change.")
+        readiness = _unchanged_readiness(
+            uncertainty, "Missing capability_scope or authority_change."
+        )
         risk = _risk_projection(0.0, SimulationRiskDirection.UNKNOWN, (), uncertainty)
-        compliance = _compliance_projection(0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty)
-        blast = _blast_radius(0, SimulationSeverity.INFORMATIONAL, "Missing parameters.", uncertainty)
+        compliance = _compliance_projection(
+            0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty
+        )
+        blast = _blast_radius(
+            0, SimulationSeverity.INFORMATIONAL, "Missing parameters.", uncertainty
+        )
         return readiness, risk, compliance, [], [], [], blast
 
     if authority_change == "expand":
@@ -1574,9 +1741,18 @@ def evaluate_capability_governance_change(
             0.20,
             SimulationRiskDirection.DEGRADED,
             (
-                ("authority_expansion", f"Capability {capability_scope} authority expanded."),
-                ("escalation_risk", "Expanded authority increases uncontrolled escalation risk."),
-                ("bounded_authority_violation", "Principle of least privilege potentially violated."),
+                (
+                    "authority_expansion",
+                    f"Capability {capability_scope} authority expanded.",
+                ),
+                (
+                    "escalation_risk",
+                    "Expanded authority increases uncontrolled escalation risk.",
+                ),
+                (
+                    "bounded_authority_violation",
+                    "Principle of least privilege potentially violated.",
+                ),
             ),
             uncertainty,
         )
@@ -1646,7 +1822,10 @@ def evaluate_capability_governance_change(
             SimulationRiskDirection.IMPROVED,
             (
                 ("authority_restriction", f"Capability {capability_scope} restricted."),
-                ("bounded_authority_improved", "Principle of least privilege enforced."),
+                (
+                    "bounded_authority_improved",
+                    "Principle of least privilege enforced.",
+                ),
             ),
             uncertainty,
         )
@@ -1669,9 +1848,13 @@ def evaluate_capability_governance_change(
 
     else:
         uncertainty = SimulationUncertainty.UNSUPPORTED_BOUNDARY
-        readiness = _unchanged_readiness(uncertainty, f"Unknown authority_change '{authority_change}'.")
+        readiness = _unchanged_readiness(
+            uncertainty, f"Unknown authority_change '{authority_change}'."
+        )
         risk = _risk_projection(0.0, SimulationRiskDirection.UNKNOWN, (), uncertainty)
-        compliance = _compliance_projection(0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty)
+        compliance = _compliance_projection(
+            0.0, SimulationRiskDirection.UNKNOWN, (), (), False, False, uncertainty
+        )
         warnings = [
             _make_warning(
                 simulation_id,
@@ -1682,7 +1865,12 @@ def evaluate_capability_governance_change(
                 uncertainty,
             )
         ]
-        blast = _blast_radius(0, SimulationSeverity.INFORMATIONAL, "Unknown authority change.", uncertainty)
+        blast = _blast_radius(
+            0,
+            SimulationSeverity.INFORMATIONAL,
+            "Unknown authority change.",
+            uncertainty,
+        )
         return readiness, risk, compliance, [], [], warnings, blast
 
 
@@ -1706,7 +1894,11 @@ def evaluate_operational_governance_change(
 
     if enforcement_mode == "disabled" or failure_rate >= 0.5:
         uncertainty = SimulationUncertainty.CONFIRMED
-        severity = SimulationSeverity.CRITICAL if failure_rate >= 0.5 else SimulationSeverity.HIGH
+        severity = (
+            SimulationSeverity.CRITICAL
+            if failure_rate >= 0.5
+            else SimulationSeverity.HIGH
+        )
         readiness = _degraded_readiness(
             simulation_id,
             delta=-0.12 - (failure_rate * 0.10),
@@ -1719,7 +1911,10 @@ def evaluate_operational_governance_change(
             0.20 + failure_rate * 0.15,
             SimulationRiskDirection.DEGRADED,
             (
-                ("operational_governance_degraded", f"Failure rate {failure_rate:.2f}; mode {enforcement_mode}."),
+                (
+                    "operational_governance_degraded",
+                    f"Failure rate {failure_rate:.2f}; mode {enforcement_mode}.",
+                ),
                 ("signal_failure", "Governance signals failing at elevated rate."),
             ),
             uncertainty,
@@ -1787,7 +1982,12 @@ def evaluate_operational_governance_change(
         risk = _risk_projection(
             0.08,
             SimulationRiskDirection.DEGRADED,
-            (("operational_governance_permissive", f"Mode {enforcement_mode}; rate {failure_rate:.2f}."),),
+            (
+                (
+                    "operational_governance_permissive",
+                    f"Mode {enforcement_mode}; rate {failure_rate:.2f}.",
+                ),
+            ),
             uncertainty,
         )
         compliance = _compliance_projection(
@@ -1809,8 +2009,17 @@ def evaluate_operational_governance_change(
 
     else:
         uncertainty = SimulationUncertainty.CONFIRMED
-        readiness = _unchanged_readiness(uncertainty, f"Operational governance strict with 0 failures.")
+        readiness = _unchanged_readiness(
+            uncertainty, f"Operational governance strict with 0 failures."
+        )
         risk = _risk_projection(0.0, SimulationRiskDirection.UNCHANGED, (), uncertainty)
-        compliance = _compliance_projection(0.0, SimulationRiskDirection.UNCHANGED, (), (), False, False, uncertainty)
-        blast = _blast_radius(0, SimulationSeverity.INFORMATIONAL, "Strict governance; no blast radius.", uncertainty)
+        compliance = _compliance_projection(
+            0.0, SimulationRiskDirection.UNCHANGED, (), (), False, False, uncertainty
+        )
+        blast = _blast_radius(
+            0,
+            SimulationSeverity.INFORMATIONAL,
+            "Strict governance; no blast radius.",
+            uncertainty,
+        )
         return readiness, risk, compliance, [], [], [], blast

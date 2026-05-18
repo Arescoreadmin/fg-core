@@ -38,7 +38,7 @@ Longitudinal governance seam:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
@@ -103,6 +103,94 @@ class SimulationRiskDirection(str, Enum):
     UNCHANGED = "unchanged"
     DEGRADED = "degraded"
     UNKNOWN = "unknown"
+
+
+class SimulationClassification(str, Enum):
+    """Audience classification for simulation run outputs.
+
+    Controls who may receive the simulation output and under what conditions.
+    INTERNAL: Default — internal governance review only.
+    REGULATOR: Suitable for regulatory submission or auditor disclosure.
+    LEGAL: Legal-hold / e-discovery qualified output.
+    CUSTOMER_SHAREABLE: Safe for customer-facing disclosure.
+    SOVEREIGN_RESTRICTED: Sovereign / govcon boundary; restricted distribution.
+    """
+
+    INTERNAL = "internal"
+    REGULATOR = "regulator"
+    LEGAL = "legal"
+    CUSTOMER_SHAREABLE = "customer_shareable"
+    SOVEREIGN_RESTRICTED = "sovereign_restricted"
+
+
+class SimulationEventType(str, Enum):
+    """Governance event types emitted by the simulation engine.
+
+    Forms the telemetry backbone, replay backbone, analytics surface,
+    and SIEM forwarding surface for simulation governance.
+    """
+
+    SIMULATION_CREATED = "SIMULATION_CREATED"
+    SIMULATION_REPLAYED = "SIMULATION_REPLAYED"
+    SIMULATION_EXPORT_GENERATED = "SIMULATION_EXPORT_GENERATED"
+    GOVERNANCE_POLICY_RELAXATION_PROJECTED = "GOVERNANCE_POLICY_RELAXATION_PROJECTED"
+    CAPABILITY_BOUNDARY_EXPANSION_PROJECTED = "CAPABILITY_BOUNDARY_EXPANSION_PROJECTED"
+    SIMULATION_REPLAY_RECONSTRUCTED = "SIMULATION_REPLAY_RECONSTRUCTED"
+    SIMULATION_TIMELINE_ENTRY_CREATED = "SIMULATION_TIMELINE_ENTRY_CREATED"
+
+
+# ---------------------------------------------------------------------------
+# Governance event + timeline domain objects
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SimulationGovernanceEvent:
+    """Immutable governance event emitted by the simulation engine.
+
+    event_id is a deterministic SHA-256[:24] of (event_type, simulation_id, occurred_at_iso).
+    Feeds the telemetry backbone, replay backbone, analytics pipeline, and SIEM surface.
+    """
+
+    event_id: str
+    event_type: SimulationEventType
+    simulation_id: str
+    tenant_id: str
+    classification: SimulationClassification
+    scenario_type: SimulationScenarioType
+    severity: SimulationSeverity
+    occurred_at_iso: str
+    actor_id: Optional[str]
+    metadata: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class SimulationTimelineEntry:
+    """Immutable governance timeline entry derived from a simulation projection.
+
+    entry_id is a deterministic SHA-256[:24] of (simulation_id, event_type, occurred_at_iso).
+    Feeds the governance timeline API (GET /control-plane/governance/timeline).
+
+    # governance_timeline_seam: SimulationTimelineEntry objects feed into the governance
+    # timeline API (GET /control-plane/governance/timeline). The timeline API aggregates
+    # simulation runs, monitoring drift events, and alert lifecycle transitions into a
+    # unified governance event stream. Integration: after build_timeline_entry(), push to
+    # timeline store before committing the simulation transaction.
+    """
+
+    entry_id: str
+    simulation_id: str
+    tenant_id: str
+    classification: SimulationClassification
+    scenario_type: SimulationScenarioType
+    uncertainty: SimulationUncertainty
+    risk_direction: SimulationRiskDirection
+    total_warnings: int
+    total_critical_warnings: int
+    simulated_at_iso: str
+    assessment_id: Optional[str]
+    framework_id: Optional[str]
+    timeline_summary: str
 
 
 # ---------------------------------------------------------------------------
@@ -265,6 +353,41 @@ class SimulationBlastRadius:
 
 
 @dataclass(frozen=True)
+class SimulationBoundedAuthorityModel:
+    """Models bounded-authority state for a capability governance scenario.
+
+    Tracks delegation depth, authority boundary, execution envelope, and
+    containment state for autonomous-systems governance.
+    """
+
+    authority_scope: str
+    max_delegation_depth: int
+    current_delegation_depth: int
+    delegation_depth_exceeded: bool
+    authority_boundary_violated: bool
+    execution_envelope_breached: bool
+    containment_state: str  # "contained" | "degraded" | "escaped" | "unknown"
+    uncertainty: SimulationUncertainty
+
+
+@dataclass(frozen=True)
+class SimulationMultiAgentCascadeProjection:
+    """Projected cascade impact across a multi-agent system.
+
+    cascade_id is a deterministic SHA-256[:16] of cascade context.
+    Models propagation risk and isolation failure for multi-agent deployments.
+    """
+
+    cascade_id: str
+    affected_agent_count: int
+    cascade_severity: SimulationSeverity
+    propagation_risk: SimulationRiskDirection
+    isolation_failure_projected: bool
+    uncertainty: SimulationUncertainty
+    basis: str
+
+
+@dataclass(frozen=True)
 class SimulationCapabilityProjection:
     """Projected capability governance state — seam for autonomous-systems governance.
 
@@ -288,6 +411,12 @@ class SimulationCapabilityProjection:
     bounded_authority_degradation: bool
     uncertainty: SimulationUncertainty
     basis: str
+    bounded_authority_model: Optional[SimulationBoundedAuthorityModel] = field(
+        default=None
+    )
+    multi_agent_cascade_projection: Optional[SimulationMultiAgentCascadeProjection] = (
+        field(default=None)
+    )
 
 
 @dataclass(frozen=True)
@@ -397,3 +526,5 @@ class SimulationRunRecord:
     projection_hash: str
     contract_hash: str
     created_at_iso: str
+    # Classification — default "internal" so existing rows still work
+    classification: str = "internal"

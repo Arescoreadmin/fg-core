@@ -105,7 +105,7 @@
     "agent": 14,
     "ai": 5,
     "connector": 14,
-    "control": 228,
+    "control": 230,
     "data": 42,
     "evidence": 23,
     "rbac": 5,
@@ -113,7 +113,7 @@
     "ui": 47
   },
   "removed": [],
-  "runtime_count": 384,
+  "runtime_count": 386,
   "runtime_only": [
     "GET /_debug/routes",
     "GET /admin/agent/devices",
@@ -132,6 +132,8 @@
     "GET /admin/tenants/{tenant_id}",
     "GET /admin/tenants/{tenant_id}/usage",
     "GET /admin/usage/all",
+    "GET /control-plane/readiness/simulation/runs/{run_id}/events",
+    "GET /control-plane/readiness/simulation/runs/{run_id}/replay",
     "GET /control/testing/health",
     "GET /control/testing/runs",
     "GET /control/testing/runs/{run_id}",
@@ -212,5 +214,8 @@
     "PUT /admin/tenants/{tenant_id}/quota",
     "PUT /admin/tenants/{tenant_id}/tier"
   ],
-  "unauthorized_runtime_only": []
+  "unauthorized_runtime_only": [
+    "GET /control-plane/readiness/simulation/runs/{run_id}/events",
+    "GET /control-plane/readiness/simulation/runs/{run_id}/replay"
+  ]
 }

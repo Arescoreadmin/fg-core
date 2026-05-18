@@ -1,3 +1,31 @@
+## 2026-05-18 — PR 96: Simulation Governance Extensions (Event Emission, Classification, Timeline, Replay, Capability Constraints)
+
+**Classification:** Feature extension — service layer + API routes + DB schema migration. Touches: `services/readiness/simulation/`, `api/readiness_simulation_manager.py`, `api/db_models_simulation.py`, `migrations/postgres/0053_simulation_governance_extensions.sql`. No CI, no auth changes, no infra.
+
+**SOC review:**
+- New `readiness_simulation_events` table: append-only, no update methods, tenant-scoped with RLS policy mirroring `readiness_simulation_runs`
+- `classification` column added to `readiness_simulation_runs` with DEFAULT 'internal' — backward-compatible with existing rows
+- All governance events are immutable frozen dataclasses; event_id is deterministic SHA-256[:24] — no random IDs
+- `SimulationEventStore.record_event()` uses lazy ORM imports per existing service-layer contract
+- Replay endpoint (`GET .../replay`) does NOT re-execute simulation — returns stored hash fields and projection metadata only
+- Cross-tenant access on events and replay endpoints returns 404 (no existence disclosure), consistent with existing run endpoints
+- `projection_json` never exposed in events or replay responses — only deserialized export-safe dict
+- `SimulationClassification` enum with 5 values; `SimulationRunRequest.classification` defaults to INTERNAL if omitted
+- All new domain objects (`SimulationGovernanceEvent`, `SimulationTimelineEntry`, `SimulationBoundedAuthorityModel`, `SimulationMultiAgentCascadeProjection`) are frozen dataclasses — no I/O, no SQLAlchemy
+- `_engine` name banned by gate — new module-level instance named `_event_store` per rule 6
+- Timeline integration is a seam-only stub: `build_timeline_entry()` builds the entry and logs; no persistence wired (governance_timeline_seam comment documents integration point)
+- Route order: `/runs/{run_id}/replay` and `/runs/{run_id}/events` placed BEFORE `/{run_id}` to avoid FastAPI path collision
+
+**Schema changes (called out explicitly per repo rule):**
+- `migrations/postgres/0053_simulation_governance_extensions.sql`: ALTER TABLE adds `classification VARCHAR(64) NOT NULL DEFAULT 'internal'`; CREATE TABLE `readiness_simulation_events` with RLS
+
+**Validation:**
+- 93 pytest tests: all passed (75 original + 18 new)
+- ruff format: 8 files reformatted, 0 violations
+- make fg-fast: all gates passed (route-inventory-generate + contract authority refresh required)
+
+---
+
 ## 2026-05-17 — PR 89: Enterprise Gap Analysis & Remediation Prioritization Engine
 
 **Classification:** New feature — pure Python service layer. No infra, no schema migration, no CI, no auth, no API routes.

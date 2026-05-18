@@ -6,6 +6,31 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-18 — PR 96: Simulation Governance Extensions
+
+**Branch:** `feat/simulation-governance-extensions-pr96`
+
+**Area:** Readiness simulation; governance events; classification; timeline; replay; capability constraints.
+
+**Root cause:** No implementation — new governance extensions layer built on top of PR 95's simulation engine.
+
+**Files changed:**
+- `services/readiness/simulation/models.py` — added `SimulationClassification` (5 values), `SimulationEventType` (7 values), `SimulationGovernanceEvent`, `SimulationTimelineEntry`, `SimulationBoundedAuthorityModel`, `SimulationMultiAgentCascadeProjection` frozen dataclasses; extended `SimulationCapabilityProjection` with `bounded_authority_model` and `multi_agent_cascade_projection` optional fields; added `classification` field (default "internal") to `SimulationRunRecord`
+- `services/readiness/simulation/events.py` (new) — `_derive_event_id`, `build_simulation_created_event`, `build_simulation_replayed_event`, `build_capability_expansion_event`, `build_policy_relaxation_event`, `build_replay_reconstructed_event`
+- `services/readiness/simulation/timeline.py` (new) — `build_timeline_entry` with `governance_timeline_seam` comment; `_build_summary` for human-readable projection summaries
+- `services/readiness/simulation/store.py` — added `classification` param to `create_run`; `SimulationEventStore` with `record_event` and `list_events_for_run`; updated `_to_domain` to include `classification`
+- `services/readiness/simulation/engine.py` — added `_build_bounded_authority_model` and `_build_multi_agent_cascade` to `SimulationEngine`; imported `SimulationBoundedAuthorityModel` and `SimulationMultiAgentCascadeProjection`
+- `services/readiness/simulation/serialization.py` — added `_serialize_bounded_authority_model`, `_serialize_multi_agent_cascade`; extended `_serialize_capability_projection`
+- `services/readiness/simulation/__init__.py` — exported all new types and `SimulationEventStore`
+- `api/db_models_simulation.py` — added `classification` column to `SimulationRunModel`; added `SimulationEventModel` ORM class for `readiness_simulation_events` table
+- `api/readiness_simulation_manager.py` — added `classification` to request/response models; added `SimulationEventResponse` and `SimulationReplayResponse`; new routes: `GET .../runs/{run_id}/replay` and `GET .../runs/{run_id}/events`; event emission in `_emit_simulation_events`; timeline seam via `build_timeline_entry`
+- `migrations/postgres/0053_simulation_governance_extensions.sql` (new) — ALTER TABLE + CREATE TABLE + RLS
+- `tests/test_readiness_simulation.py` — 18 new tests in 5 classes (Classification, EventEmission, ReplayEndpoint, CapabilityGovernanceConstraints, GovernanceTimeline)
+
+**Verification:** 93 tests passed; all fg-fast gates passed.
+
+---
+
 ### 2026-05-17 — PR 89: Enterprise Gap Analysis & Remediation Prioritization Engine
 
 **Branch:** `feat/gap-analysis-remediation-prioritization`
