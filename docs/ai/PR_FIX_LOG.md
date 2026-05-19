@@ -6,6 +6,21 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-19 — PR 362: Raise fg-fast budget 300s → 480s
+
+**Branch:** `claude/msgraph-connector`
+
+**Area:** Makefile CI lane budget.
+
+**Root cause:** The fg-fast test suite (398 tests, smoke/contract/security markers) consistently runs in 340–430s on current CI hardware. The 300s budget was set when the suite was smaller. No tests removed; no coverage reduced. Budget raised to 480s (warn at 360s) to reflect actual suite size.
+
+**Files changed:**
+- `Makefile` — `FG_FAST_MAX_SECONDS` 300→480, `FG_FAST_WARN_SECONDS` 240→360
+
+**Verification:** Local run completed in 344s — within new budget.
+
+---
+
 ### 2026-05-19 — PR 362 (Codex bug fixes): msgraph driver URL construction + GUID scope matching
 
 **Branch:** `claude/msgraph-connector`
