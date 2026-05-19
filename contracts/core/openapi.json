@@ -1191,6 +1191,18 @@
         "title": "AssessmentTransitionRequest",
         "type": "object"
       },
+      "AssessmentType": {
+        "enum": [
+          "ai_governance",
+          "cmmc",
+          "hipaa",
+          "soc2",
+          "iso27001",
+          "comprehensive"
+        ],
+        "title": "AssessmentType",
+        "type": "string"
+      },
       "AssignEnvironmentRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1409,6 +1421,57 @@
           "reason"
         ],
         "title": "CancelCommandRequest",
+        "type": "object"
+      },
+      "CaptureObservationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "domain": {
+            "$ref": "#/components/schemas/ObservationDomain"
+          },
+          "interview_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interview Role"
+          },
+          "linked_finding_ids": {
+            "items": {},
+            "title": "Linked Finding Ids",
+            "type": "array"
+          },
+          "observation_type": {
+            "$ref": "#/components/schemas/ObservationType"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/ObservationSeverity"
+          },
+          "structured_evidence": {
+            "title": "Structured Evidence",
+            "type": "object"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "observation_type",
+          "severity",
+          "title",
+          "description"
+        ],
+        "title": "CaptureObservationRequest",
         "type": "object"
       },
       "CertEnrollRequest": {
@@ -2325,6 +2388,87 @@
           "domain_slug"
         ],
         "title": "CreateDomainRequest",
+        "type": "object"
+      },
+      "CreateEngagementRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment_type": {
+            "$ref": "#/components/schemas/AssessmentType"
+          },
+          "assessor_id": {
+            "title": "Assessor Id",
+            "type": "string"
+          },
+          "client_domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Domain"
+          },
+          "client_name": {
+            "title": "Client Name",
+            "type": "string"
+          },
+          "engagement_metadata": {
+            "title": "Engagement Metadata",
+            "type": "object"
+          },
+          "scheduled_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Date"
+          }
+        },
+        "required": [
+          "client_name",
+          "assessor_id",
+          "assessment_type"
+        ],
+        "title": "CreateEngagementRequest",
+        "type": "object"
+      },
+      "CreateEvidenceLinkRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_entity_id": {
+            "title": "Evidence Entity Id",
+            "type": "string"
+          },
+          "evidence_entity_type": {
+            "$ref": "#/components/schemas/EvidenceLinkType"
+          },
+          "link_metadata": {
+            "title": "Link Metadata",
+            "type": "object"
+          },
+          "source_entity_id": {
+            "title": "Source Entity Id",
+            "type": "string"
+          },
+          "source_entity_type": {
+            "title": "Source Entity Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_entity_type",
+          "source_entity_id",
+          "evidence_entity_type",
+          "evidence_entity_id"
+        ],
+        "title": "CreateEvidenceLinkRequest",
         "type": "object"
       },
       "CreateExportRequest": {
@@ -3659,6 +3803,140 @@
         "title": "DisputeResolveRequest",
         "type": "object"
       },
+      "DocumentAnalysisResponse": {
+        "properties": {
+          "analysis_findings": {
+            "items": {},
+            "title": "Analysis Findings",
+            "type": "array"
+          },
+          "approval_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Date"
+          },
+          "approved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "document_classification": {
+            "title": "Document Classification",
+            "type": "string"
+          },
+          "document_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Hash"
+          },
+          "document_name": {
+            "title": "Document Name",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "freshness_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Date"
+          },
+          "gaps_identified": {
+            "items": {},
+            "title": "Gaps Identified",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Label"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "engagement_id",
+          "document_name",
+          "document_classification",
+          "document_hash",
+          "version_label",
+          "approved_by",
+          "approval_date",
+          "freshness_date",
+          "analysis_findings",
+          "gaps_identified",
+          "schema_version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DocumentAnalysisResponse",
+        "type": "object"
+      },
+      "DocumentClassification": {
+        "enum": [
+          "ai_policy",
+          "data_governance",
+          "incident_response",
+          "vendor_risk",
+          "access_control",
+          "training_records",
+          "audit_reports",
+          "other"
+        ],
+        "title": "DocumentClassification",
+        "type": "string"
+      },
       "DomainResponse": {
         "properties": {
           "created_at": {
@@ -3892,6 +4170,187 @@
           "provenance_metadata"
         ],
         "title": "DriftEventResponse",
+        "type": "object"
+      },
+      "EngagementListResponse": {
+        "properties": {
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EngagementResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total_count": {
+            "title": "Total Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "cursor",
+          "total_count"
+        ],
+        "title": "EngagementListResponse",
+        "type": "object"
+      },
+      "EngagementResponse": {
+        "properties": {
+          "assessment_type": {
+            "title": "Assessment Type",
+            "type": "string"
+          },
+          "assessor_id": {
+            "title": "Assessor Id",
+            "type": "string"
+          },
+          "client_domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Domain"
+          },
+          "client_name": {
+            "title": "Client Name",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "engagement_metadata": {
+            "title": "Engagement Metadata",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "scheduled_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Date"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "client_name",
+          "client_domain",
+          "assessor_id",
+          "assessment_type",
+          "status",
+          "scheduled_date",
+          "engagement_metadata",
+          "schema_version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "EngagementResponse",
+        "type": "object"
+      },
+      "EngagementSummaryResponse": {
+        "properties": {
+          "client_name": {
+            "title": "Client Name",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "findings_by_severity": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Findings By Severity",
+            "type": "object"
+          },
+          "open_findings_count": {
+            "title": "Open Findings Count",
+            "type": "integer"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "total_document_analyses": {
+            "title": "Total Document Analyses",
+            "type": "integer"
+          },
+          "total_findings": {
+            "title": "Total Findings",
+            "type": "integer"
+          },
+          "total_observations": {
+            "title": "Total Observations",
+            "type": "integer"
+          },
+          "total_scan_results": {
+            "title": "Total Scan Results",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "engagement_id",
+          "tenant_id",
+          "client_name",
+          "status",
+          "total_scan_results",
+          "total_document_analyses",
+          "total_observations",
+          "total_findings",
+          "findings_by_severity",
+          "open_findings_count",
+          "schema_version"
+        ],
+        "title": "EngagementSummaryResponse",
         "type": "object"
       },
       "EnrollmentTokenCreateRequest": {
@@ -4130,6 +4589,74 @@
         ],
         "title": "EvidenceFreshnessRecordResponse",
         "type": "object"
+      },
+      "EvidenceLinkResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "evidence_entity_id": {
+            "title": "Evidence Entity Id",
+            "type": "string"
+          },
+          "evidence_entity_type": {
+            "title": "Evidence Entity Type",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "link_metadata": {
+            "title": "Link Metadata",
+            "type": "object"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_entity_id": {
+            "title": "Source Entity Id",
+            "type": "string"
+          },
+          "source_entity_type": {
+            "title": "Source Entity Type",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "engagement_id",
+          "source_entity_type",
+          "source_entity_id",
+          "evidence_entity_type",
+          "evidence_entity_id",
+          "link_metadata",
+          "created_at",
+          "schema_version"
+        ],
+        "title": "EvidenceLinkResponse",
+        "type": "object"
+      },
+      "EvidenceLinkType": {
+        "enum": [
+          "scan_result",
+          "document_analysis",
+          "field_observation",
+          "attestation"
+        ],
+        "title": "EvidenceLinkType",
+        "type": "string"
       },
       "EvidenceRefInput": {
         "additionalProperties": false,
@@ -4903,6 +5430,135 @@
           "findings"
         ],
         "title": "FindingCreateRequest",
+        "type": "object"
+      },
+      "FindingListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FindingResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total_count": {
+            "title": "Total Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total_count"
+        ],
+        "title": "FindingListResponse",
+        "type": "object"
+      },
+      "FindingResponse": {
+        "properties": {
+          "confidence_score": {
+            "title": "Confidence Score",
+            "type": "integer"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "evidence_ref_ids": {
+            "items": {},
+            "title": "Evidence Ref Ids",
+            "type": "array"
+          },
+          "finding_type": {
+            "title": "Finding Type",
+            "type": "string"
+          },
+          "findings_hash": {
+            "title": "Findings Hash",
+            "type": "string"
+          },
+          "framework_mappings": {
+            "items": {},
+            "title": "Framework Mappings",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "nist_ai_rmf_mappings": {
+            "items": {},
+            "title": "Nist Ai Rmf Mappings",
+            "type": "array"
+          },
+          "remediation_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remediation Hint"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "source_attribution": {
+            "title": "Source Attribution",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "engagement_id",
+          "finding_type",
+          "findings_hash",
+          "severity",
+          "status",
+          "title",
+          "description",
+          "source_attribution",
+          "confidence_score",
+          "framework_mappings",
+          "nist_ai_rmf_mappings",
+          "evidence_ref_ids",
+          "remediation_hint",
+          "schema_version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FindingResponse",
         "type": "object"
       },
       "FrameworkResponse": {
@@ -5866,6 +6522,62 @@
           "config_hash"
         ],
         "title": "IngestResponse",
+        "type": "object"
+      },
+      "IngestScanResultRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "collected_at": {
+            "title": "Collected At",
+            "type": "string"
+          },
+          "expected_evidence_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Evidence Hash"
+          },
+          "normalized_payload": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Normalized Payload"
+          },
+          "object_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Object Count",
+            "type": "integer"
+          },
+          "raw_payload": {
+            "title": "Raw Payload",
+            "type": "object"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_type": {
+            "$ref": "#/components/schemas/ScanSourceType"
+          }
+        },
+        "required": [
+          "source_type",
+          "schema_version",
+          "collected_at",
+          "raw_payload"
+        ],
+        "title": "IngestScanResultRequest",
         "type": "object"
       },
       "InitiateBackupRequest": {
@@ -6984,6 +7696,128 @@
         "title": "MonitoringRunSummaryResponse",
         "type": "object"
       },
+      "ObservationDomain": {
+        "enum": [
+          "ai_governance",
+          "data_security",
+          "access_management",
+          "operational_security",
+          "compliance",
+          "vendor_management",
+          "incident_response",
+          "training"
+        ],
+        "title": "ObservationDomain",
+        "type": "string"
+      },
+      "ObservationResponse": {
+        "properties": {
+          "assessor_id": {
+            "title": "Assessor Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "interview_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interview Role"
+          },
+          "linked_finding_ids": {
+            "items": {},
+            "title": "Linked Finding Ids",
+            "type": "array"
+          },
+          "observation_type": {
+            "title": "Observation Type",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "structured_evidence": {
+            "title": "Structured Evidence",
+            "type": "object"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "engagement_id",
+          "domain",
+          "observation_type",
+          "severity",
+          "title",
+          "description",
+          "interview_role",
+          "structured_evidence",
+          "linked_finding_ids",
+          "assessor_id",
+          "schema_version",
+          "created_at"
+        ],
+        "title": "ObservationResponse",
+        "type": "object"
+      },
+      "ObservationSeverity": {
+        "enum": [
+          "critical",
+          "high",
+          "medium",
+          "low",
+          "info"
+        ],
+        "title": "ObservationSeverity",
+        "type": "string"
+      },
+      "ObservationType": {
+        "enum": [
+          "gap",
+          "strength",
+          "concern",
+          "finding",
+          "note"
+        ],
+        "title": "ObservationType",
+        "type": "string"
+      },
       "OrgCreateRequest": {
         "properties": {
           "email": {
@@ -8014,6 +8848,89 @@
         "title": "RegenerateReportResponse",
         "type": "object"
       },
+      "RegisterDocumentAnalysisRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "analysis_findings": {
+            "items": {},
+            "title": "Analysis Findings",
+            "type": "array"
+          },
+          "approval_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Date"
+          },
+          "approved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By"
+          },
+          "document_classification": {
+            "$ref": "#/components/schemas/DocumentClassification"
+          },
+          "document_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Hash"
+          },
+          "document_name": {
+            "title": "Document Name",
+            "type": "string"
+          },
+          "freshness_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness Date"
+          },
+          "gaps_identified": {
+            "items": {},
+            "title": "Gaps Identified",
+            "type": "array"
+          },
+          "version_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Label"
+          }
+        },
+        "required": [
+          "document_name",
+          "document_classification"
+        ],
+        "title": "RegisterDocumentAnalysisRequest",
+        "type": "object"
+      },
       "RegisterSecretGovernanceRequest": {
         "additionalProperties": false,
         "properties": {
@@ -8899,6 +9816,90 @@
         ],
         "title": "SaveResponsesRequest",
         "type": "object"
+      },
+      "ScanResultResponse": {
+        "properties": {
+          "collected_at": {
+            "title": "Collected At",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "evidence_hash": {
+            "title": "Evidence Hash",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "normalized_payload": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Normalized Payload"
+          },
+          "object_count": {
+            "title": "Object Count",
+            "type": "integer"
+          },
+          "raw_payload": {
+            "title": "Raw Payload",
+            "type": "object"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "engagement_id",
+          "source_type",
+          "schema_version",
+          "collected_at",
+          "evidence_hash",
+          "raw_payload",
+          "normalized_payload",
+          "object_count",
+          "created_at"
+        ],
+        "title": "ScanResultResponse",
+        "type": "object"
+      },
+      "ScanSourceType": {
+        "enum": [
+          "microsoft_graph",
+          "google_workspace",
+          "aws",
+          "azure",
+          "gcp",
+          "network_scan",
+          "endpoint_inventory",
+          "oauth_inventory"
+        ],
+        "title": "ScanSourceType",
+        "type": "string"
       },
       "ScheduleRotationRequest": {
         "additionalProperties": false,
@@ -10362,6 +11363,26 @@
           "count"
         ],
         "title": "TopItem",
+        "type": "object"
+      },
+      "TransitionEngagementRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "new_status": {
+            "title": "New Status",
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "new_status",
+          "reason"
+        ],
+        "title": "TransitionEngagementRequest",
         "type": "object"
       },
       "TransitionEnvironmentRequest": {
@@ -26211,6 +27232,1085 @@
         "summary": "Feed Stream Head",
         "tags": [
           "feed"
+        ]
+      }
+    },
+    "/field-assessment/engagements": {
+      "get": {
+        "operationId": "list_engagements_route_field_assessment_engagements_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EngagementListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Engagements Route",
+        "tags": [
+          "field-assessment"
+        ]
+      },
+      "post": {
+        "operationId": "create_engagement_route_field_assessment_engagements_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEngagementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EngagementResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Engagement Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}": {
+      "get": {
+        "operationId": "get_engagement_route_field_assessment_engagements__engagement_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EngagementResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Engagement Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/document-analyses": {
+      "get": {
+        "operationId": "list_document_analyses_route_field_assessment_engagements__engagement_id__document_analyses_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentAnalysisResponse"
+                  },
+                  "title": "Response List Document Analyses Route Field Assessment Engagements  Engagement Id  Document Analyses Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Document Analyses Route",
+        "tags": [
+          "field-assessment"
+        ]
+      },
+      "post": {
+        "operationId": "register_document_analysis_route_field_assessment_engagements__engagement_id__document_analyses_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDocumentAnalysisRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentAnalysisResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register Document Analysis Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/evidence-links": {
+      "get": {
+        "operationId": "list_evidence_links_route_field_assessment_engagements__engagement_id__evidence_links_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source_entity_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Entity Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EvidenceLinkResponse"
+                  },
+                  "title": "Response List Evidence Links Route Field Assessment Engagements  Engagement Id  Evidence Links Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Evidence Links Route",
+        "tags": [
+          "field-assessment"
+        ]
+      },
+      "post": {
+        "operationId": "create_evidence_link_route_field_assessment_engagements__engagement_id__evidence_links_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEvidenceLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceLinkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Evidence Link Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/findings": {
+      "get": {
+        "operationId": "list_findings_route_field_assessment_engagements__engagement_id__findings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Findings Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/findings/{finding_id}": {
+      "get": {
+        "operationId": "get_finding_route_field_assessment_engagements__engagement_id__findings__finding_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "finding_id",
+            "required": true,
+            "schema": {
+              "title": "Finding Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Finding Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/observations": {
+      "get": {
+        "operationId": "list_observations_route_field_assessment_engagements__engagement_id__observations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ObservationResponse"
+                  },
+                  "title": "Response List Observations Route Field Assessment Engagements  Engagement Id  Observations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Observations Route",
+        "tags": [
+          "field-assessment"
+        ]
+      },
+      "post": {
+        "operationId": "capture_observation_route_field_assessment_engagements__engagement_id__observations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaptureObservationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObservationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capture Observation Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/scan-results": {
+      "get": {
+        "operationId": "list_scan_results_route_field_assessment_engagements__engagement_id__scan_results_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ScanResultResponse"
+                  },
+                  "title": "Response List Scan Results Route Field Assessment Engagements  Engagement Id  Scan Results Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Scan Results Route",
+        "tags": [
+          "field-assessment"
+        ]
+      },
+      "post": {
+        "operationId": "ingest_scan_result_route_field_assessment_engagements__engagement_id__scan_results_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestScanResultRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanResultResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ingest Scan Result Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/status": {
+      "patch": {
+        "operationId": "transition_engagement_route_field_assessment_engagements__engagement_id__status_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransitionEngagementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EngagementResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transition Engagement Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/summary": {
+      "get": {
+        "operationId": "get_engagement_summary_route_field_assessment_engagements__engagement_id__summary_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EngagementSummaryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Engagement Summary Route",
+        "tags": [
+          "field-assessment"
         ]
       }
     },
