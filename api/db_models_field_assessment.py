@@ -83,6 +83,12 @@ class FaScanResult(Base):
     created_at: Mapped[str] = mapped_column(String(64), nullable=False)
 
     __table_args__ = (
+        UniqueConstraint(
+            "engagement_id",
+            "tenant_id",
+            "evidence_hash",
+            name="uq_fa_scan_evidence",
+        ),
         Index("ix_fa_scan_results_engagement_tenant", "engagement_id", "tenant_id"),
         Index("ix_fa_scan_results_tenant_source", "tenant_id", "source_type"),
     )

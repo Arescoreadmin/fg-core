@@ -10695,3 +10695,32 @@ Existing report downloads were presentation-level placeholders. They did not pro
 
 **Files changed:**
 - `api/reports_engine.py`: `from api.db import get_sessionmaker, set_tenant_context`; `set_tenant_context(db, report.tenant_id)` added as first line in both timeline emit try blocks
+
+---
+
+### 2026-05-19 — PR 103 hardening: governance spine hardening for field assessment substrate
+
+**Branch:** `feat/timeline-export-replay-adapters-pr102`
+
+**Area:** `api/field_assessment.py`, `services/field_assessment/`, `api/db_models_field_assessment.py`, `services/governance/timeline/models.py`
+
+**Root cause:** PR 103 field assessment substrate was a workflow island — `fa_engagement_audit_events` did not feed `governance_timeline_events`. Six additional gaps: no scan deduplication, no `collected_at` ISO 8601 validation, `raw_payload` exposed in list responses, no single-record GET for scan results, no orphan validation on evidence links.
+
+**Fix:**
+- `services/governance/timeline/models.py`: Added `SourceType.FIELD_ASSESSMENT = "FIELD_ASSESSMENT"`.
+- `services/field_assessment/timeline.py` (new): `emit_fa_timeline_event()` bridges field assessment lifecycle into governance timeline. Idempotent via deterministic event_id.
+- `api/field_assessment.py`: Timeline emission wired into `create_engagement_route`, `transition_engagement_route`, `ingest_scan_result_route`, `create_evidence_link_route`. `collected_at` ISO 8601 validator added (uses `PydanticCustomError` to avoid ctx serialization issue). `ScanResultSummaryResponse` added for list responses (raw_payload excluded). `GET .../scan-results/{scan_result_id}` route added for replay access. Orphan validation added for evidence links.
+- `api/db_models_field_assessment.py`: `UniqueConstraint("engagement_id", "tenant_id", "evidence_hash", name="uq_fa_scan_evidence")` added to `FaScanResult`.
+- `services/field_assessment/store.py`: `create_scan_result()` made idempotent; `get_scan_result()` added; `ScanResultNotFound` imported.
+- `services/field_assessment/models.py`: `ScanResultNotFound` exception added.
+
+**Files changed:**
+- `services/governance/timeline/models.py`
+- `services/field_assessment/timeline.py` (new)
+- `services/field_assessment/models.py`
+- `services/field_assessment/store.py`
+- `api/db_models_field_assessment.py`
+- `api/field_assessment.py`
+- `tests/test_field_assessment.py`
+- `tools/ci/route_inventory.json` (regenerated)
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md`

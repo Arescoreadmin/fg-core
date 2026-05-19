@@ -3634,3 +3634,24 @@ Both fixes are defence-in-depth: the SQLAlchemy tenant_id predicates already fil
 
 **Compliance posture:**
 All 15 routes tenant-bound and scope-gated; plane registry updated.  `_resolve_caller_tenant` recognized by route inventory AST checker — all routes show `tenant_bound: true`, `scoped: true`, `plane: control`.  32 field assessment tests pass (10 unit, 22 integration).  `ruff check` clean.  `mypy` clean (6 files, 0 errors).  `make fg-contract` passes.  Route inventory, contract authority, plane registry snapshot, and topology hash regenerated.
+
+## 2026-05-19 — PR 103 addendum: Field Assessment Governance Spine Hardening
+
+**Classification:** Feature hardening — no new tables, no auth changes, no infra changes. Surgical changes to existing PR 103 substrate.
+
+**SOC review:**
+- `services/governance/timeline/models.py` — `SourceType.FIELD_ASSESSMENT = "FIELD_ASSESSMENT"` added. Enum extension only; no existing values modified.
+- `services/field_assessment/timeline.py` (new) — `emit_fa_timeline_event()` helper bridges field assessment lifecycle events into `governance_timeline_events` via `TimelineStore.record()`. Emission is idempotent: duplicate `(tenant_id, source_type, source_id, event_type, occurred_at)` tuples produce the same deterministic `event_id` and are silently skipped. No raw payloads in timeline events.
+- Timeline events now emitted for: `field_assessment.engagement.created`, `field_assessment.engagement.transitioned`, `field_assessment.scan.ingested` (`replay_eligible=True`), `field_assessment.evidence.linked`. Field assessment is no longer a workflow island.
+- `api/db_models_field_assessment.py` — `UniqueConstraint("engagement_id", "tenant_id", "evidence_hash", name="uq_fa_scan_evidence")` added to `FaScanResult`. DB-level deduplication safeguard.
+- `services/field_assessment/store.py` — `create_scan_result()` made idempotent: checks for existing record matching `(engagement_id, tenant_id, evidence_hash)` before insert; returns existing on match (mirrors `create_finding` pattern). `get_scan_result()` added for single-record access.
+- `api/field_assessment.py` — `collected_at` ISO 8601 validation added via `PydanticCustomError` (not `ValueError`) to avoid ctx serialization issue in app validation error handler. `ScanResultSummaryResponse` added (no `raw_payload`) for list endpoints — protects against accidental raw payload exposure in list responses. `ScanResultResponse` (full, with `raw_payload`) retained for POST ingest and single GET.
+- `GET /field-assessment/engagements/{engagement_id}/scan-results/{scan_result_id}` added — single-record replay-access route. Required for governance replay and forensic evidence access. Scope-gated `governance:read`; tenant-isolated; 404 on cross-tenant access.
+- `create_evidence_link_route` — orphan validation added for `scan_result`, `document_analysis`, `field_observation` evidence types: verifies `evidence_entity_id` exists in the same `engagement_id` + `tenant_id` before creating link. Returns 422 `EVIDENCE_ENTITY_NOT_FOUND` on missing entity. Prevents dangling evidence graph edges.
+- Route inventory regenerated to include new `GET .../scan-results/{scan_result_id}` route. Contract authority refreshed.
+
+**DB schema changes:**
+No new tables. `uq_fa_scan_evidence` constraint added to existing `fa_scan_results` table (safe migration — existing rows must have unique hashes by construction since hash is computed server-side from payload).
+
+**Compliance posture:**
+All 39 field assessment tests pass (10 unit, 29 integration). New tests cover: single scan result GET, scan deduplication, `collected_at` validation (valid + invalid), list payload exclusion, orphan link rejection. Route inventory regenerated. Contract authority refreshed. `make fg-fast` passes.

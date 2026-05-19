@@ -25,6 +25,7 @@ from services.field_assessment.models import (
     EvidenceLinkDuplicate,
     FindingNotFound,
     InvalidEngagementTransition,
+    ScanResultNotFound,
 )
 
 MAX_PAGE_SIZE = 100
@@ -163,7 +164,18 @@ def create_scan_result(
     normalized_payload: dict[str, Any] | None,
     object_count: int,
 ) -> FaScanResult:
+    """Idempotent via uq_fa_scan_evidence — returns existing record on duplicate payload."""
     evidence_hash = compute_evidence_hash(raw_payload)
+
+    existing_stmt = select(FaScanResult).where(
+        FaScanResult.engagement_id == engagement_id,
+        FaScanResult.tenant_id == tenant_id,
+        FaScanResult.evidence_hash == evidence_hash,
+    )
+    existing = db.execute(existing_stmt).scalar_one_or_none()
+    if existing is not None:
+        return existing
+
     now = utc_iso8601_z_now()
     result = FaScanResult(
         id=_new_id(),
@@ -181,6 +193,24 @@ def create_scan_result(
     db.add(result)
     db.flush()
     return result
+
+
+def get_scan_result(
+    db: Session,
+    *,
+    scan_result_id: str,
+    engagement_id: str,
+    tenant_id: str,
+) -> FaScanResult:
+    stmt = select(FaScanResult).where(
+        FaScanResult.id == scan_result_id,
+        FaScanResult.engagement_id == engagement_id,
+        FaScanResult.tenant_id == tenant_id,
+    )
+    row = db.execute(stmt).scalar_one_or_none()
+    if row is None:
+        raise ScanResultNotFound(f"scan result {scan_result_id!r} not found")
+    return row
 
 
 def list_scan_results(

@@ -9818,6 +9818,7 @@
         "type": "object"
       },
       "ScanResultResponse": {
+        "description": "Full detail view returned by single-record GET and POST ingest.",
         "properties": {
           "collected_at": {
             "title": "Collected At",
@@ -9885,6 +9886,60 @@
           "created_at"
         ],
         "title": "ScanResultResponse",
+        "type": "object"
+      },
+      "ScanResultSummaryResponse": {
+        "description": "Metadata-only view returned by list endpoints \u2014 raw_payload excluded.",
+        "properties": {
+          "collected_at": {
+            "title": "Collected At",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "evidence_hash": {
+            "title": "Evidence Hash",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "object_count": {
+            "title": "Object Count",
+            "type": "integer"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tenant_id",
+          "engagement_id",
+          "source_type",
+          "schema_version",
+          "collected_at",
+          "evidence_hash",
+          "object_count",
+          "created_at"
+        ],
+        "title": "ScanResultSummaryResponse",
         "type": "object"
       },
       "ScanSourceType": {
@@ -28096,7 +28151,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/ScanResultResponse"
+                    "$ref": "#/components/schemas/ScanResultSummaryResponse"
                   },
                   "title": "Response List Scan Results Route Field Assessment Engagements  Engagement Id  Scan Results Get",
                   "type": "array"
@@ -28183,6 +28238,73 @@
           }
         },
         "summary": "Ingest Scan Result Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/scan-results/{scan_result_id}": {
+      "get": {
+        "operationId": "get_scan_result_route_field_assessment_engagements__engagement_id__scan_results__scan_result_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "scan_result_id",
+            "required": true,
+            "schema": {
+              "title": "Scan Result Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanResultResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Scan Result Route",
         "tags": [
           "field-assessment"
         ]

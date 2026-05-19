@@ -374,11 +374,19 @@ def test_evidence_link_creation(client: TestClient) -> None:
     created = _create_engagement(client)
     eng_id = created["id"]
 
+    # Create a real scan result to use as the evidence entity
+    scan_resp = client.post(
+        f"/field-assessment/engagements/{eng_id}/scan-results",
+        json=_SCAN_RESULT_BODY,
+    )
+    assert scan_resp.status_code == 201
+    scan_id = scan_resp.json()["id"]
+
     link_body = {
-        "source_entity_type": "fa_normalized_finding",
-        "source_entity_id": "finding-aaa",
+        "source_entity_type": "fa_engagement",
+        "source_entity_id": eng_id,
         "evidence_entity_type": "scan_result",
-        "evidence_entity_id": "scan-bbb",
+        "evidence_entity_id": scan_id,
     }
 
     resp = client.post(
@@ -387,19 +395,27 @@ def test_evidence_link_creation(client: TestClient) -> None:
     )
     assert resp.status_code == 201
     data = resp.json()
-    assert data["source_entity_id"] == "finding-aaa"
+    assert data["source_entity_id"] == eng_id
     assert data["evidence_entity_type"] == "scan_result"
+    assert data["evidence_entity_id"] == scan_id
 
 
 def test_evidence_link_duplicate_rejected(client: TestClient) -> None:
     created = _create_engagement(client)
     eng_id = created["id"]
 
+    scan_resp = client.post(
+        f"/field-assessment/engagements/{eng_id}/scan-results",
+        json=_SCAN_RESULT_BODY,
+    )
+    assert scan_resp.status_code == 201
+    scan_id = scan_resp.json()["id"]
+
     link_body = {
-        "source_entity_type": "fa_normalized_finding",
-        "source_entity_id": "finding-dup",
+        "source_entity_type": "fa_engagement",
+        "source_entity_id": eng_id,
         "evidence_entity_type": "scan_result",
-        "evidence_entity_id": "scan-dup",
+        "evidence_entity_id": scan_id,
     }
 
     resp1 = client.post(
@@ -413,6 +429,24 @@ def test_evidence_link_duplicate_rejected(client: TestClient) -> None:
         json=link_body,
     )
     assert resp2.status_code == 409
+
+
+def test_evidence_link_orphan_rejected(client: TestClient) -> None:
+    created = _create_engagement(client)
+    eng_id = created["id"]
+
+    link_body = {
+        "source_entity_type": "fa_engagement",
+        "source_entity_id": eng_id,
+        "evidence_entity_type": "scan_result",
+        "evidence_entity_id": "nonexistent-scan-id",
+    }
+
+    resp = client.post(
+        f"/field-assessment/engagements/{eng_id}/evidence-links",
+        json=link_body,
+    )
+    assert resp.status_code == 422
 
 
 # ---------------------------------------------------------------------------
@@ -451,6 +485,113 @@ def test_engagement_summary(client: TestClient) -> None:
 def test_engagement_summary_not_found(client: TestClient) -> None:
     resp = client.get("/field-assessment/engagements/does-not-exist/summary")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# API tests — Single scan result GET (replay access)
+# ---------------------------------------------------------------------------
+
+
+def test_get_scan_result_by_id(client: TestClient) -> None:
+    created = _create_engagement(client)
+    eng_id = created["id"]
+
+    post_resp = client.post(
+        f"/field-assessment/engagements/{eng_id}/scan-results",
+        json=_SCAN_RESULT_BODY,
+    )
+    assert post_resp.status_code == 201
+    scan_id = post_resp.json()["id"]
+
+    resp = client.get(f"/field-assessment/engagements/{eng_id}/scan-results/{scan_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == scan_id
+    assert data["engagement_id"] == eng_id
+    assert "raw_payload" in data  # full detail response
+
+
+def test_get_scan_result_not_found(client: TestClient) -> None:
+    created = _create_engagement(client)
+    eng_id = created["id"]
+    resp = client.get(
+        f"/field-assessment/engagements/{eng_id}/scan-results/nonexistent-id"
+    )
+    assert resp.status_code == 404
+
+
+def test_list_scan_results_excludes_raw_payload(client: TestClient) -> None:
+    created = _create_engagement(client)
+    eng_id = created["id"]
+    client.post(
+        f"/field-assessment/engagements/{eng_id}/scan-results",
+        json=_SCAN_RESULT_BODY,
+    )
+    resp = client.get(f"/field-assessment/engagements/{eng_id}/scan-results")
+    assert resp.status_code == 200
+    items = resp.json()
+    assert len(items) >= 1
+    assert "raw_payload" not in items[0]
+
+
+# ---------------------------------------------------------------------------
+# API tests — Scan deduplication
+# ---------------------------------------------------------------------------
+
+
+def test_scan_result_deduplication(client: TestClient) -> None:
+    created = _create_engagement(client)
+    eng_id = created["id"]
+
+    resp1 = client.post(
+        f"/field-assessment/engagements/{eng_id}/scan-results",
+        json=_SCAN_RESULT_BODY,
+    )
+    assert resp1.status_code == 201
+    id1 = resp1.json()["id"]
+
+    resp2 = client.post(
+        f"/field-assessment/engagements/{eng_id}/scan-results",
+        json=_SCAN_RESULT_BODY,
+    )
+    assert resp2.status_code == 201
+    id2 = resp2.json()["id"]
+
+    assert id1 == id2  # idempotent — same evidence hash returns same record
+
+
+# ---------------------------------------------------------------------------
+# API tests — collected_at validation
+# ---------------------------------------------------------------------------
+
+
+def test_collected_at_invalid_rejected(client: TestClient) -> None:
+    created = _create_engagement(client)
+    eng_id = created["id"]
+
+    body = dict(_SCAN_RESULT_BODY)
+    body["collected_at"] = "not-a-date"
+
+    resp = client.post(
+        f"/field-assessment/engagements/{eng_id}/scan-results",
+        json=body,
+    )
+    assert resp.status_code == 422
+
+
+def test_collected_at_valid_iso8601(client: TestClient) -> None:
+    created = _create_engagement(client)
+    eng_id = created["id"]
+
+    body = dict(_SCAN_RESULT_BODY)
+    body["collected_at"] = "2026-05-19T12:34:56+00:00"
+    body["raw_payload"] = {"users": ["alice"]}  # different payload to avoid dedup
+
+    resp = client.post(
+        f"/field-assessment/engagements/{eng_id}/scan-results",
+        json=body,
+    )
+    assert resp.status_code == 201
 
 
 # ---------------------------------------------------------------------------

@@ -36,6 +36,7 @@ from services.field_assessment.models import (
     ObservationDomain,
     ObservationSeverity,
     ObservationType,
+    ScanResultNotFound,
     ScanSourceType,
 )
 from services.field_assessment.store import (
@@ -47,6 +48,7 @@ from services.field_assessment.store import (
     create_scan_result,
     get_engagement,
     get_finding,
+    get_scan_result,
     list_document_analyses,
     list_engagements,
     list_evidence_links,
@@ -55,6 +57,7 @@ from services.field_assessment.store import (
     list_scan_results,
     transition_engagement,
 )
+from services.field_assessment.timeline import emit_fa_timeline_event
 from api.db_models_field_assessment import (
     FaDocumentAnalysis,
     FaEngagement,
@@ -130,6 +133,22 @@ class IngestScanResultRequest(BaseModel):
     object_count: int = Field(default=0, ge=0)
     expected_evidence_hash: str | None = None
 
+    @field_validator("collected_at")
+    @classmethod
+    def _validate_collected_at(cls, v: str) -> str:
+        from datetime import datetime
+
+        from pydantic_core import PydanticCustomError
+
+        try:
+            datetime.fromisoformat(v.replace("Z", "+00:00"))
+        except ValueError:
+            raise PydanticCustomError(
+                "iso8601_datetime",
+                "collected_at must be a valid ISO 8601 datetime",
+            ) from None
+        return v
+
     @field_validator("raw_payload")
     @classmethod
     def _validate_payload_size(cls, v: dict[str, Any]) -> dict[str, Any]:
@@ -203,7 +222,23 @@ class EngagementListResponse(BaseModel):
     total_count: int
 
 
+class ScanResultSummaryResponse(BaseModel):
+    """Metadata-only view returned by list endpoints — raw_payload excluded."""
+
+    id: str
+    tenant_id: str
+    engagement_id: str
+    source_type: str
+    schema_version: str
+    collected_at: str
+    evidence_hash: str
+    object_count: int
+    created_at: str
+
+
 class ScanResultResponse(BaseModel):
+    """Full detail view returned by single-record GET and POST ingest."""
+
     id: str
     tenant_id: str
     engagement_id: str
@@ -324,6 +359,20 @@ def _engagement_to_response(eng: FaEngagement) -> EngagementResponse:
         schema_version=eng.schema_version,
         created_at=eng.created_at,
         updated_at=eng.updated_at,
+    )
+
+
+def _scan_result_to_summary(r: FaScanResult) -> ScanResultSummaryResponse:
+    return ScanResultSummaryResponse(
+        id=r.id,
+        tenant_id=r.tenant_id,
+        engagement_id=r.engagement_id,
+        source_type=r.source_type,
+        schema_version=r.schema_version,
+        collected_at=r.collected_at,
+        evidence_hash=r.evidence_hash,
+        object_count=r.object_count,
+        created_at=r.created_at,
     )
 
 
@@ -480,6 +529,11 @@ def create_engagement_route(
         engagement_metadata=body.engagement_metadata,
         actor=actor,
     )
+    audit_payload = {
+        "client_name": body.client_name,
+        "assessment_type": body.assessment_type.value,
+        "assessor_id": body.assessor_id,
+    }
     emit_engagement_audit_event(
         db,
         tenant_id=tenant_id,
@@ -487,11 +541,15 @@ def create_engagement_route(
         event_type="engagement.created",
         actor=actor,
         reason_code="ENGAGEMENT_CREATED",
-        payload={
-            "client_name": body.client_name,
-            "assessment_type": body.assessment_type.value,
-            "assessor_id": body.assessor_id,
-        },
+        payload=audit_payload,
+    )
+    emit_fa_timeline_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=eng.id,
+        event_type="field_assessment.engagement.created",
+        occurred_at=eng.created_at,
+        payload=audit_payload,
     )
     db.commit()
     db.refresh(eng)
@@ -548,6 +606,7 @@ def transition_engagement_route(
             status_code=409,
             detail=api_error("INVALID_ENGAGEMENT_TRANSITION", exc.message),
         )
+    transition_payload = {"new_status": body.new_status, "reason": body.reason}
     emit_engagement_audit_event(
         db,
         tenant_id=tenant_id,
@@ -555,7 +614,15 @@ def transition_engagement_route(
         event_type="engagement.status_transitioned",
         actor=actor,
         reason_code="ENGAGEMENT_STATUS_TRANSITIONED",
-        payload={"new_status": body.new_status, "reason": body.reason},
+        payload=transition_payload,
+    )
+    emit_fa_timeline_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="field_assessment.engagement.transitioned",
+        occurred_at=eng.updated_at,
+        payload=transition_payload,
     )
     db.commit()
     db.refresh(eng)
@@ -611,6 +678,12 @@ def ingest_scan_result_route(
         normalized_payload=body.normalized_payload,
         object_count=body.object_count,
     )
+    scan_audit_payload = {
+        "scan_result_id": result.id,
+        "source_type": body.source_type.value,
+        "object_count": body.object_count,
+        "evidence_hash": result.evidence_hash,
+    }
     emit_engagement_audit_event(
         db,
         tenant_id=tenant_id,
@@ -618,11 +691,16 @@ def ingest_scan_result_route(
         event_type="scan_result.ingested",
         actor=actor,
         reason_code="SCAN_RESULT_INGESTED",
-        payload={
-            "scan_result_id": result.id,
-            "source_type": body.source_type.value,
-            "object_count": body.object_count,
-        },
+        payload=scan_audit_payload,
+    )
+    emit_fa_timeline_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="field_assessment.scan.ingested",
+        occurred_at=result.created_at,
+        payload=scan_audit_payload,
+        replay_eligible=True,
     )
     db.commit()
     db.refresh(result)
@@ -631,7 +709,7 @@ def ingest_scan_result_route(
 
 @router.get(
     "/engagements/{engagement_id}/scan-results",
-    response_model=list[ScanResultResponse],
+    response_model=list[ScanResultSummaryResponse],
     dependencies=[Depends(require_scopes("governance:read"))],
 )
 def list_scan_results_route(
@@ -639,7 +717,7 @@ def list_scan_results_route(
     request: Request,
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(auth_ctx_db_session),
-) -> list[ScanResultResponse]:
+) -> list[ScanResultSummaryResponse]:
     tenant_id = _resolve_caller_tenant(request)
     try:
         get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
@@ -650,7 +728,39 @@ def list_scan_results_route(
     rows = list_scan_results(
         db, engagement_id=engagement_id, tenant_id=tenant_id, limit=limit
     )
-    return [_scan_result_to_response(r) for r in rows]
+    return [_scan_result_to_summary(r) for r in rows]
+
+
+@router.get(
+    "/engagements/{engagement_id}/scan-results/{scan_result_id}",
+    response_model=ScanResultResponse,
+    dependencies=[Depends(require_scopes("governance:read"))],
+)
+def get_scan_result_route(
+    engagement_id: str,
+    scan_result_id: str,
+    request: Request,
+    db: Session = Depends(auth_ctx_db_session),
+) -> ScanResultResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    try:
+        result = get_scan_result(
+            db,
+            scan_result_id=scan_result_id,
+            engagement_id=engagement_id,
+            tenant_id=tenant_id,
+        )
+    except ScanResultNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("SCAN_RESULT_NOT_FOUND", exc.message)
+        )
+    return _scan_result_to_response(result)
 
 
 # ---------------------------------------------------------------------------
@@ -917,6 +1027,30 @@ def create_evidence_link_route(
         raise HTTPException(
             status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
         )
+    # Orphan prevention: verify evidence entity exists in this engagement
+    _EVIDENCE_ENTITY_TABLES: dict[str, type] = {
+        "scan_result": FaScanResult,
+        "document_analysis": FaDocumentAnalysis,
+        "field_observation": FaFieldObservation,
+    }
+    evidence_model = _EVIDENCE_ENTITY_TABLES.get(body.evidence_entity_type.value)
+    if evidence_model is not None:
+        exists = db.execute(
+            select(evidence_model.id).where(  # type: ignore[attr-defined]
+                evidence_model.id == body.evidence_entity_id,  # type: ignore[attr-defined]
+                evidence_model.engagement_id == engagement_id,  # type: ignore[attr-defined]
+                evidence_model.tenant_id == tenant_id,  # type: ignore[attr-defined]
+            )
+        ).scalar_one_or_none()
+        if exists is None:
+            raise HTTPException(
+                status_code=422,
+                detail=api_error(
+                    "EVIDENCE_ENTITY_NOT_FOUND",
+                    f"evidence entity {body.evidence_entity_id!r} not found in engagement",
+                ),
+            )
+
     try:
         link = create_evidence_link(
             db,
@@ -933,6 +1067,13 @@ def create_evidence_link_route(
             status_code=409,
             detail=api_error("EVIDENCE_LINK_DUPLICATE", "evidence link already exists"),
         )
+    link_audit_payload = {
+        "link_id": link.id,
+        "source_entity_type": body.source_entity_type,
+        "source_entity_id": body.source_entity_id,
+        "evidence_entity_type": body.evidence_entity_type.value,
+        "evidence_entity_id": body.evidence_entity_id,
+    }
     emit_engagement_audit_event(
         db,
         tenant_id=tenant_id,
@@ -940,12 +1081,15 @@ def create_evidence_link_route(
         event_type="evidence_link.created",
         actor=actor,
         reason_code="EVIDENCE_LINK_CREATED",
-        payload={
-            "link_id": link.id,
-            "source_entity_type": body.source_entity_type,
-            "source_entity_id": body.source_entity_id,
-            "evidence_entity_type": body.evidence_entity_type.value,
-        },
+        payload=link_audit_payload,
+    )
+    emit_fa_timeline_event(
+        db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        event_type="field_assessment.evidence.linked",
+        occurred_at=link.created_at,
+        payload=link_audit_payload,
     )
     db.commit()
     db.refresh(link)
