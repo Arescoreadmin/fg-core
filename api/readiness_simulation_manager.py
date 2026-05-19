@@ -70,6 +70,8 @@ from services.readiness.simulation.serialization import (
 )
 from services.readiness.simulation.store import SimulationEventStore
 from services.readiness.simulation.timeline import build_timeline_entry
+from services.governance.timeline import TimelineStore
+from services.governance.timeline.adapters import simulation_entry_to_timeline_event
 
 logger = logging.getLogger("frostgate.api.readiness_simulation")
 
@@ -78,6 +80,7 @@ router = APIRouter(tags=["readiness"])
 _sim_engine = SimulationEngine()
 _simulation_store = SimulationRunStore()
 _event_store = SimulationEventStore()
+_timeline_store = TimelineStore()
 
 SIMULATION_CONTRACT_VERSION = "1.0"
 SIMULATION_ENGINE_VERSION = "1.0"
@@ -439,20 +442,18 @@ def create_simulation_run(
             actor_id=actor_attrs.get("created_by_actor_id"),
         )
 
-        # governance_timeline_seam: timeline entry built here; timeline persistence
-        # plugs in between build_timeline_entry() and db.commit() below.
         try:
             _timeline_entry = build_timeline_entry(projection, body.classification)
+            _timeline_event = simulation_entry_to_timeline_event(_timeline_entry)
+            _timeline_store.record(db, _timeline_event)
             logger.debug(
-                "timeline_entry_built run_id=%s entry_id=%s summary=%s",
+                "timeline_event_recorded run_id=%s event_id=%s",
                 simulation_id,
-                _timeline_entry.entry_id,
-                _timeline_entry.timeline_summary[:80],
+                _timeline_event.event_id,
             )
-            # governance_timeline_seam: push _timeline_entry to timeline store here.
         except Exception:
             logger.warning(
-                "Failed to build timeline entry for run_id=%s", simulation_id
+                "Failed to record timeline event for run_id=%s", simulation_id
             )
 
         db.commit()
