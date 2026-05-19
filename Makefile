@@ -1085,9 +1085,11 @@ ci-admin: admin-venv admin-lint admin-test
 # Console (Next.js)
 # =============================================================================
 
-CONSOLE_DIR := console
+CONSOLE_DIR := apps/console
+PORTAL_DIR  := apps/portal
 
-.PHONY: console-deps console-dev console-build console-lint console-test ci-console
+.PHONY: console-deps console-dev console-build console-lint console-test ci-console \
+        portal-deps portal-dev portal-build portal-lint ci-portal
 
 console-deps:
 	@cd $(CONSOLE_DIR) && npm ci --prefer-offline 2>/dev/null || npm install
@@ -1106,6 +1108,21 @@ console-test: console-deps
 	@cd $(CONSOLE_DIR) && npm run test
 
 ci-console: console-lint console-test
+
+portal-deps:
+	@cd $(PORTAL_DIR) && npm ci --prefer-offline 2>/dev/null || npm install
+
+portal-dev: portal-deps
+	@echo "Starting portal on http://localhost:3001..."
+	@cd $(PORTAL_DIR) && npm run dev
+
+portal-build: portal-deps
+	@cd $(PORTAL_DIR) && npm run build
+
+portal-lint: portal-deps
+	@cd $(PORTAL_DIR) && npm run lint
+
+ci-portal: portal-lint
 
 # =============================================================================
 # Repo guards

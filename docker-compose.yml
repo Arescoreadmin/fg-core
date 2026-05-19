@@ -386,7 +386,7 @@ services:
   console:
     profiles: ["admin"]
     build:
-      context: ./console
+      context: ./apps/console
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: http://127.0.0.1:18080
