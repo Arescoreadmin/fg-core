@@ -10242,6 +10242,10 @@
             "title": "Event Type",
             "type": "string"
           },
+          "event_version": {
+            "title": "Event Version",
+            "type": "string"
+          },
           "manifest_hash": {
             "anyOf": [
               {
@@ -10298,6 +10302,7 @@
           "manifest_hash",
           "replay_eligible",
           "schema_version",
+          "event_version",
           "payload"
         ],
         "title": "TimelineEventResponse",

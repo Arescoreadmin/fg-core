@@ -40,6 +40,8 @@ from api.assessments import _resolve_caller_tenant, _get_assessment_or_404
 from api.auth_scopes.resolution import require_scopes
 from api.db_models_governance_report import GovernanceReportRecord
 from api.deps import auth_ctx_db_session
+from services.governance.timeline import TimelineStore
+from services.governance.timeline.adapters import governance_report_to_timeline_event
 from api.error_contracts import api_error
 from api.security_audit import AuditEvent, EventType, get_auditor
 from services.governance.report import (
@@ -61,6 +63,7 @@ router = APIRouter(
 )
 
 _engine = GovernanceReportEngine()
+_timeline_store = TimelineStore()
 
 
 # ---------------------------------------------------------------------------
@@ -335,6 +338,15 @@ def generate_governance_report(
     )
     db.add(record)
     db.commit()
+
+    try:
+        _tl_event = governance_report_to_timeline_event(report)
+        _timeline_store.record(db, _tl_event)
+        db.commit()
+    except Exception:
+        logger.warning(
+            "governance_report.timeline_emit_failed report_id=%s", report.report_id
+        )
 
     _emit_audit(
         "governance_report_generated",
