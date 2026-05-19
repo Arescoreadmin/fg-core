@@ -1,0 +1,17 @@
+{
+  "id": "msgraph",
+  "display_name": "Microsoft Graph (M365 AI Governance Scan)",
+  "provider": "microsoft",
+  "capabilities": ["read", "ingest"],
+  "required_scopes": [
+    "https://graph.microsoft.com/Application.Read.All",
+    "https://graph.microsoft.com/Directory.Read.All",
+    "https://graph.microsoft.com/Policy.Read.All",
+    "https://graph.microsoft.com/Reports.Read.All",
+    "https://graph.microsoft.com/User.Read.All",
+    "https://graph.microsoft.com/AuditLog.Read.All"
+  ],
+  "allowed_auth_modes": ["oauth2", "service_account"],
+  "webhook_support": false,
+  "version": "1.0.0"
+}

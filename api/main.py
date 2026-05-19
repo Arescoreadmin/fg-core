@@ -73,6 +73,7 @@ from api.agent_phase2 import admin_router as agent_phase2_admin_router
 from api.agent_phase2 import router as agent_phase2_router
 from api.agent_tokens import router as agent_tokens_router
 from api.assessments import router as assessments_router
+from api.assessment_scan import router as assessment_scan_router
 from api.rag_retrieval_policy import router as rag_retrieval_policy_router
 from api.rag_corpus_console import router as rag_corpus_console_router
 from api.rag_corpus_ingestion import router as rag_corpus_ingestion_router
@@ -590,6 +591,7 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(agent_tokens_router)
     app.include_router(agent_phase2_router)
     app.include_router(assessments_router)
+    app.include_router(assessment_scan_router)
     app.include_router(reports_engine_router)
     app.include_router(governance_report_router)
     app.include_router(governance_timeline_router)
@@ -909,6 +911,7 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(agent_tokens_router)
     app.include_router(agent_phase2_router)
     app.include_router(assessments_router)
+    app.include_router(assessment_scan_router)
     app.include_router(reports_engine_router)
     app.include_router(governance_report_router)
     app.include_router(governance_timeline_router)

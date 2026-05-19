@@ -139,6 +139,52 @@
         "title": "AIPolicyUpsertRequest",
         "type": "object"
       },
+      "AcknowledgeRequest": {
+        "properties": {
+          "acknowledgment_token": {
+            "title": "Acknowledgment Token",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "acknowledgment_token"
+        ],
+        "title": "AcknowledgeRequest",
+        "type": "object"
+      },
+      "AcknowledgeResponse": {
+        "properties": {
+          "acknowledged_at": {
+            "title": "Acknowledged At",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "status",
+          "acknowledged_at",
+          "message"
+        ],
+        "title": "AcknowledgeResponse",
+        "type": "object"
+      },
       "AgentConfigResponse": {
         "properties": {
           "action": {
@@ -4488,6 +4534,73 @@
           "expires_at_utc"
         ],
         "title": "ExceptionRequestCreate",
+        "type": "object"
+      },
+      "ExecuteRequest": {
+        "properties": {
+          "graph_access_token": {
+            "description": "Short-lived Microsoft Graph access token with the scopes listed in the manifest. This token is used to call Graph APIs and is NEVER stored \u2014 only the HMAC-chained audit log of actions is persisted.",
+            "title": "Graph Access Token",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "graph_access_token"
+        ],
+        "title": "ExecuteRequest",
+        "type": "object"
+      },
+      "ExecuteResponse": {
+        "properties": {
+          "actions_error": {
+            "title": "Actions Error",
+            "type": "integer"
+          },
+          "actions_executed": {
+            "title": "Actions Executed",
+            "type": "integer"
+          },
+          "actions_ok": {
+            "title": "Actions Ok",
+            "type": "integer"
+          },
+          "completed_at": {
+            "title": "Completed At",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "total_findings": {
+            "title": "Total Findings",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_id",
+          "status",
+          "actions_executed",
+          "actions_ok",
+          "actions_error",
+          "total_findings",
+          "completed_at",
+          "message"
+        ],
+        "title": "ExecuteResponse",
         "type": "object"
       },
       "ExportClassification": {
@@ -8898,6 +9011,156 @@
           "responses"
         ],
         "title": "SaveResponsesRequest",
+        "type": "object"
+      },
+      "ScanManifestRequest": {
+        "properties": {
+          "action_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Specific action IDs to include. Omit for all available actions.",
+            "title": "Action Ids"
+          }
+        },
+        "title": "ScanManifestRequest",
+        "type": "object"
+      },
+      "ScanManifestResponse": {
+        "properties": {
+          "acknowledgment_token": {
+            "title": "Acknowledgment Token",
+            "type": "string"
+          },
+          "actions": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "instructions": {
+            "title": "Instructions",
+            "type": "string"
+          },
+          "manifest_id": {
+            "title": "Manifest Id",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "total_scopes_required": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Total Scopes Required",
+            "type": "array"
+          }
+        },
+        "required": [
+          "session_id",
+          "manifest_id",
+          "acknowledgment_token",
+          "generated_at",
+          "actions",
+          "total_scopes_required",
+          "instructions"
+        ],
+        "title": "ScanManifestResponse",
+        "type": "object"
+      },
+      "ScanResultResponse": {
+        "properties": {
+          "action_log": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Action Log",
+            "type": "array"
+          },
+          "assessment_id": {
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "error_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Detail"
+          },
+          "findings": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "manifest_id": {
+            "title": "Manifest Id",
+            "type": "string"
+          },
+          "methodology_statement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Methodology Statement"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "assessment_id",
+          "status",
+          "manifest_id",
+          "findings",
+          "action_log",
+          "methodology_statement",
+          "completed_at",
+          "error_detail"
+        ],
+        "title": "ScanResultResponse",
         "type": "object"
       },
       "ScheduleRotationRequest": {
@@ -28402,6 +28665,281 @@
         "summary": "Save Responses",
         "tags": [
           "assessment"
+        ]
+      }
+    },
+    "/ingest/assessment/{assessment_id}/scan/acknowledge": {
+      "post": {
+        "description": "Authorise scan execution by submitting the acknowledgment token.\n\nThis records that the client has reviewed the manifest and consents to\nthe listed Graph API calls being executed against their tenant.",
+        "operationId": "acknowledge_scan_ingest_assessment__assessment_id__scan_acknowledge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcknowledgeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcknowledgeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Acknowledge Scan",
+        "tags": [
+          "assessment-scan"
+        ]
+      }
+    },
+    "/ingest/assessment/{assessment_id}/scan/execute": {
+      "post": {
+        "description": "Execute the acknowledged scan against the client's M365 tenant.\n\nProvide a short-lived Microsoft Graph access token with the scopes listed\nin the manifest. The token is used to call Graph APIs and is NEVER stored.\nOnly the HMAC-chained action log and structured findings are persisted.",
+        "operationId": "execute_scan_ingest_assessment__assessment_id__scan_execute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecuteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Execute Scan",
+        "tags": [
+          "assessment-scan"
+        ]
+      }
+    },
+    "/ingest/assessment/{assessment_id}/scan/manifest": {
+      "post": {
+        "description": "Generate a pre-execution manifest of all Graph API calls that will be made.\n\nThe manifest lists every endpoint, OAuth scope, and business reason.\nReview it, then POST to /acknowledge with the returned acknowledgment_token.",
+        "operationId": "create_scan_manifest_ingest_assessment__assessment_id__scan_manifest_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanManifestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanManifestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Scan Manifest",
+        "tags": [
+          "assessment-scan"
+        ]
+      }
+    },
+    "/ingest/assessment/{assessment_id}/scan/{session_id}": {
+      "get": {
+        "description": "Retrieve scan session results, findings, and methodology statement.",
+        "operationId": "get_scan_results_ingest_assessment__assessment_id__scan__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assessment_id",
+            "required": true,
+            "schema": {
+              "title": "Assessment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanResultResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Scan Results",
+        "tags": [
+          "assessment-scan"
         ]
       }
     },

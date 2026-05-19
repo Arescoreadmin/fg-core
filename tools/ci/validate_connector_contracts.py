@@ -23,10 +23,20 @@ FORBIDDEN_FIELDS = {
 SEMVER_RE = re.compile(
     r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
 )
-KNOWN_PROVIDERS = {"slack", "google"}
+KNOWN_PROVIDERS = {"slack", "google", "microsoft"}
 SCOPE_ALLOWLIST = {
     "slack": {"channels:history", "users:read"},
     "google": {"https://www.googleapis.com/auth/drive.readonly"},
+    # Microsoft Graph — read-only delegated/application scopes permitted for assessment scans.
+    # All are .Read or .Read.All — no write, send, or privileged-admin scopes allowed.
+    "microsoft": {
+        "https://graph.microsoft.com/Application.Read.All",
+        "https://graph.microsoft.com/Directory.Read.All",
+        "https://graph.microsoft.com/Policy.Read.All",
+        "https://graph.microsoft.com/Reports.Read.All",
+        "https://graph.microsoft.com/User.Read.All",
+        "https://graph.microsoft.com/AuditLog.Read.All",
+    },
 }
 
 

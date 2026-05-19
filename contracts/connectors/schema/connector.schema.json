@@ -15,7 +15,7 @@
   "properties": {
     "id": {"type": "string", "pattern": "^[a-z0-9_\\-]+$"},
     "display_name": {"type": "string", "minLength": 1, "maxLength": 120},
-    "provider": {"type": "string", "enum": ["slack", "google"]},
+    "provider": {"type": "string", "enum": ["slack", "google", "microsoft"]},
     "capabilities": {
       "type": "array",
       "items": {"type": "string", "enum": ["read", "ingest", "write"]},

@@ -6,6 +6,39 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-19 — Microsoft Graph Connector (AI Governance Field Assessment)
+
+**Branch:** `claude/msgraph-connector`
+
+**Area:** New connector — Microsoft Graph field assessment scan; connector contract schema; assessment scan API.
+
+**Root cause:** No implementation — new feature. Builds the M365/Microsoft Graph connector that drives on-site AI governance assessments ("Trust but verify" design).
+
+**Files changed:**
+- `contracts/connectors/schema/connector.schema.json` — added `"microsoft"` to provider enum
+- `tools/ci/validate_connector_contracts.py` — added `microsoft` to `KNOWN_PROVIDERS`; added Graph read-only scopes to `SCOPE_ALLOWLIST`
+- `contracts/connectors/connectors/msgraph.json` (new) — connector manifest (6 read-only Graph scopes, oauth2 + service_account auth)
+- `contracts/connectors/policies/msgraph_assessment.json` (new) — assessment-scoped policy (10 allowed resources, 90-day retention, strict redaction)
+- `services/connectors/drivers/__init__.py` (new) — drivers package
+- `services/connectors/drivers/msgraph.py` (new) — Graph connector driver: 7 scan actions (OAuth app inventory, MFA status, conditional access, privileged roles, Copilot licenses, sign-in risk); pre-execution manifest; HMAC-chained session audit log; per-action analysis; methodology statement generator
+- `api/db_models_assessment_scan.py` (new) — ORM model for `assessment_scan_sessions` table
+- `api/assessment_scan.py` (new) — 4 endpoints: POST manifest, POST acknowledge, POST execute, GET results
+- `api/db.py` — registered `api.db_models_assessment_scan` in `_ensure_models_imported()`
+- `api/main.py` — registered `assessment_scan_router`
+- `migrations/postgres/0060_msgraph_connector.sql` (new) — `assessment_scan_sessions` table with tenant RLS
+
+**Design invariants:**
+- No raw Graph API responses stored — only record counts, summaries, and structured findings.
+- Graph access token is held in memory only during scan execution; never logged or persisted.
+- Client must review and acknowledge the manifest before execution (HMAC token gating).
+- Every scan action is HMAC-chained in the audit log — forgery detectable after the fact.
+- All Graph scopes are read-only: Application.Read.All, Directory.Read.All, Policy.Read.All, Reports.Read.All, User.Read.All, AuditLog.Read.All.
+- Tenant isolation enforced: all DB queries include `tenant_id` predicate; Postgres RLS enabled.
+
+**Verification:** `make validate-connector-contracts` passes; router + ORM model import cleanly; `build_scan_manifest()` returns 7 actions and 5 unique scopes; `acknowledgment_token()` is deterministic and HMAC-bound to tenant.
+
+---
+
 ### 2026-05-19 — PR 360 (addendum): Fix pre-existing opentelemetry DeprecationWarning breaking fg-fast
 
 **Branch:** `claude/audit-ai-platform-dZCwv`
