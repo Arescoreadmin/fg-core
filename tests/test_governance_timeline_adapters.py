@@ -19,9 +19,10 @@ All tests are pure-unit: no DB, no network, no fixtures.
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
+from typing import Any
 
 os.environ.setdefault("FG_ENV", "test")
-
 
 from services.governance.timeline.adapters import (
     TIMELINE_ADAPTERS,
@@ -35,6 +36,38 @@ from services.governance.timeline.models import SourceType
 # ---------------------------------------------------------------------------
 # Stub helpers
 # ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class _Entry:
+    tenant_id: str
+    simulation_id: str
+    scenario_type: Any
+    uncertainty: Any
+    risk_direction: Any
+    classification: Any
+    total_warnings: int
+    total_critical_warnings: int
+    simulated_at_iso: str
+    assessment_id: str | None
+    framework_id: str | None
+    timeline_summary: str
+
+
+@dataclass(slots=True)
+class _Finding:
+    pass
+
+
+@dataclass(slots=True)
+class _Report:
+    report_id: str
+    assessment_id: str
+    tenant_id: str
+    manifest_hash: str
+    generated_at: str
+    schema_version: str
+    findings: list[_Finding]
 
 
 def _make_simulation_entry(
@@ -56,25 +89,20 @@ def _make_simulation_entry(
             obj.value = v
             return obj
 
-    class _Entry:
-        pass
-
-    e = _Entry()
-    e.tenant_id = tenant_id
-    e.simulation_id = simulation_id
-    e.scenario_type = _FakeEnum(scenario_type_value)
-    e.uncertainty = _FakeEnum(uncertainty_value)
-    e.risk_direction = _FakeEnum(risk_direction_value)
-    e.classification = _FakeEnum(classification_value)
-    e.total_warnings = total_warnings
-    e.total_critical_warnings = total_critical_warnings
-    e.simulated_at_iso = simulated_at_iso
-    e.assessment_id = assessment_id
-    e.framework_id = framework_id
-    e.timeline_summary = (
-        "Readiness direction: degraded. 2 warning(s) (1 critical/blocking)."
+    return _Entry(
+        tenant_id=tenant_id,
+        simulation_id=simulation_id,
+        scenario_type=_FakeEnum(scenario_type_value),
+        uncertainty=_FakeEnum(uncertainty_value),
+        risk_direction=_FakeEnum(risk_direction_value),
+        classification=_FakeEnum(classification_value),
+        total_warnings=total_warnings,
+        total_critical_warnings=total_critical_warnings,
+        simulated_at_iso=simulated_at_iso,
+        assessment_id=assessment_id,
+        framework_id=framework_id,
+        timeline_summary="Readiness direction: degraded. 2 warning(s) (1 critical/blocking).",
     )
-    return e
 
 
 def _make_report(
@@ -86,21 +114,15 @@ def _make_report(
     schema_version: str = "1.0",
     findings_count: int = 3,
 ):
-    class _Finding:
-        pass
-
-    class _Report:
-        pass
-
-    r = _Report()
-    r.report_id = report_id
-    r.assessment_id = assessment_id
-    r.tenant_id = tenant_id
-    r.manifest_hash = manifest_hash
-    r.generated_at = generated_at
-    r.schema_version = schema_version
-    r.findings = [_Finding() for _ in range(findings_count)]
-    return r
+    return _Report(
+        report_id=report_id,
+        assessment_id=assessment_id,
+        tenant_id=tenant_id,
+        manifest_hash=manifest_hash,
+        generated_at=generated_at,
+        schema_version=schema_version,
+        findings=[_Finding() for _ in range(findings_count)],
+    )
 
 
 # ---------------------------------------------------------------------------
