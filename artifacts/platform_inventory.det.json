@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 292,
+    "contract_count": 294,
     "contract_only": [],
-    "runtime_count": 396,
+    "runtime_count": 398,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -141,7 +141,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "358f4f4812cb173b64927e0e3e1840693533d539d5b3d02827b3ee7976c97ccb",
+  "governance_fingerprint": "d7101d07faa43295cf7badf53bbe95f5a06ccbfc27248051774e6a04d7fc8a58",
   "planes": [
     {
       "compat": {
@@ -442,6 +442,8 @@
       "GET /enterprise-controls/crosswalk",
       "GET /enterprise-controls/frameworks",
       "GET /governance/changes",
+      "GET /governance/timeline",
+      "GET /governance/timeline/{event_id}",
       "GET /health",
       "GET /health/detailed",
       "GET /health/live",

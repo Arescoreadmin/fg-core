@@ -26690,7 +26690,6 @@
     },
     "/governance/timeline": {
       "get": {
-        "description": "List governance timeline events for the caller's tenant.\n\nResults are ordered newest-first.  Use the returned cursor to fetch the\nnext page.  A null cursor means there are no more results.",
         "operationId": "list_timeline_events_governance_timeline_get",
         "parameters": [
           {
@@ -26730,7 +26729,6 @@
             }
           },
           {
-            "description": "ISO 8601 lower bound on occurred_at (inclusive)",
             "in": "query",
             "name": "from",
             "required": false,
@@ -26743,12 +26741,10 @@
                   "type": "null"
                 }
               ],
-              "description": "ISO 8601 lower bound on occurred_at (inclusive)",
               "title": "From"
             }
           },
           {
-            "description": "ISO 8601 upper bound on occurred_at (exclusive)",
             "in": "query",
             "name": "to",
             "required": false,
@@ -26761,12 +26757,10 @@
                   "type": "null"
                 }
               ],
-              "description": "ISO 8601 upper bound on occurred_at (exclusive)",
               "title": "To"
             }
           },
           {
-            "description": "Pagination cursor from previous response",
             "in": "query",
             "name": "cursor",
             "required": false,
@@ -26779,18 +26773,15 @@
                   "type": "null"
                 }
               ],
-              "description": "Pagination cursor from previous response",
               "title": "Cursor"
             }
           },
           {
-            "description": "Results per page (max 100)",
             "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
               "default": 50,
-              "description": "Results per page (max 100)",
               "maximum": 100,
               "minimum": 1,
               "title": "Limit",
@@ -26844,7 +26835,6 @@
     },
     "/governance/timeline/{event_id}": {
       "get": {
-        "description": "Retrieve a single timeline event by ID.",
         "operationId": "get_timeline_event_governance_timeline__event_id__get",
         "parameters": [
           {

@@ -360,6 +360,7 @@ def _function_has_tenant_binding(
                 or name.endswith("_locker_command")
                 or name.endswith("_resolve_msp_tenant")
                 or name.endswith("_resolve_caller_tenant")
+                or name.endswith("_missing_tenant")
             ):
                 return True
 
@@ -429,6 +430,7 @@ def _is_tenant_binding_dependency(node: ast.AST) -> bool:
     if (
         dep_name.endswith("bind_tenant_id")
         or dep_name.endswith("require_bound_tenant")
+        or dep_name.endswith("require_tenant_context")
         or dep_name.endswith("tenant_db_required")
         or dep_name.endswith("tenant_db_optional")
     ):
@@ -438,6 +440,7 @@ def _is_tenant_binding_dependency(node: ast.AST) -> bool:
         return (
             nested_name.endswith("bind_tenant_id")
             or nested_name.endswith("require_bound_tenant")
+            or nested_name.endswith("require_tenant_context")
             or nested_name.endswith("tenant_db_required")
             or nested_name.endswith("tenant_db_optional")
         )
