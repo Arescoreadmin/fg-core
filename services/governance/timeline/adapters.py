@@ -13,7 +13,6 @@ Design invariants:
 
 Adapter registry:
   TIMELINE_ADAPTERS maps SourceType → adapter callable.
-  PR 102 adds EXPORT, REPLAY entries.
 
 Covered sources:
   simulation  — SimulationTimelineEntry  → SourceType.SIMULATION
@@ -21,6 +20,8 @@ Covered sources:
   monitoring  — MonitoringRunRecord      → SourceType.MONITORING
   alert       — AlertRunRecord           → SourceType.ALERT
   evidence    — EvidenceReference        → SourceType.EVIDENCE
+  export      — ExportTimelineEntry      → SourceType.EXPORT
+  replay      — ReplayTimelineEntry      → SourceType.REPLAY
 """
 
 from __future__ import annotations
@@ -353,8 +354,110 @@ def evidence_submitted_to_timeline_event(
     )
 
 
+def export_to_timeline_event(
+    entry,
+    *,
+    parent_event_id: str | None = None,
+    causation_id: str | None = None,
+    correlation_id: str | None = None,
+) -> TimelineEvent:
+    """Convert an ExportTimelineEntry to a TimelineEvent.
+
+    event_type is "export.completed".
+    manifest_hash is set on the envelope for downstream hash verification.
+    replay_eligible=True because the manifest_hash enables deterministic re-verification.
+    classification="confidential" because governance export artifacts carry regulated content.
+    """
+    occurred_at = _normalize_iso(entry.exported_at_iso)
+    event_id = derive_event_id(
+        tenant_id=entry.tenant_id,
+        source_type=SourceType.EXPORT.value,
+        source_id=entry.export_id,
+        event_type="export.completed",
+        occurred_at=occurred_at,
+    )
+    payload: dict[str, Any] = {
+        "schema_version": _EVENT_VERSION,
+        "event_origin": "live",
+        "report_id": entry.report_id,
+        "export_format": entry.export_format,
+        "export_version": entry.export_version,
+    }
+    if entry.assessment_id:
+        payload["assessment_id"] = entry.assessment_id
+
+    payload.update(_lineage(parent_event_id, causation_id, correlation_id))
+
+    return TimelineEvent(
+        event_id=event_id,
+        tenant_id=entry.tenant_id,
+        source_type=SourceType.EXPORT,
+        source_id=entry.export_id,
+        event_type="export.completed",
+        occurred_at=occurred_at,
+        recorded_at=_now_iso(),
+        payload=_sorted_payload(payload),
+        classification="confidential",
+        manifest_hash=entry.manifest_hash,
+        replay_eligible=True,
+        event_version=_EVENT_VERSION,
+    )
+
+
+def replay_verify_to_timeline_event(
+    entry,
+    *,
+    parent_event_id: str | None = None,
+    causation_id: str | None = None,
+    correlation_id: str | None = None,
+) -> TimelineEvent:
+    """Convert a ReplayTimelineEntry to a TimelineEvent.
+
+    event_type is "replay.verified".
+    manifest_hash is set to the actual hash computed during verification.
+    replay_eligible=False — replay verification is a point-in-time check;
+    re-running it constitutes a new verification, not a reconstruction of this one.
+    """
+    occurred_at = _normalize_iso(entry.replayed_at_iso)
+    event_id = derive_event_id(
+        tenant_id=entry.tenant_id,
+        source_type=SourceType.REPLAY.value,
+        source_id=entry.replay_id,
+        event_type="replay.verified",
+        occurred_at=occurred_at,
+    )
+    payload: dict[str, Any] = {
+        "schema_version": _EVENT_VERSION,
+        "event_origin": "live",
+        "report_id": entry.report_id,
+        "verified": entry.verified,
+        "replay_contract_version": entry.replay_contract_version,
+    }
+    if entry.assessment_id:
+        payload["assessment_id"] = entry.assessment_id
+    if entry.expected_manifest_hash:
+        payload["expected_manifest_hash"] = entry.expected_manifest_hash
+
+    payload.update(_lineage(parent_event_id, causation_id, correlation_id))
+
+    return TimelineEvent(
+        event_id=event_id,
+        tenant_id=entry.tenant_id,
+        source_type=SourceType.REPLAY,
+        source_id=entry.replay_id,
+        event_type="replay.verified",
+        occurred_at=occurred_at,
+        recorded_at=_now_iso(),
+        payload=_sorted_payload(payload),
+        classification="internal",
+        manifest_hash=entry.actual_manifest_hash,
+        replay_eligible=False,
+        event_version=_EVENT_VERSION,
+    )
+
+
 # ---------------------------------------------------------------------------
-# Adapter registry — dispatch table for PR 102+ sources
+# Adapter registry
 # ---------------------------------------------------------------------------
 
 TIMELINE_ADAPTERS: dict[SourceType, Callable[..., TimelineEvent]] = {
@@ -363,5 +466,6 @@ TIMELINE_ADAPTERS: dict[SourceType, Callable[..., TimelineEvent]] = {
     SourceType.MONITORING: monitoring_run_to_timeline_event,
     SourceType.ALERT: alert_run_to_timeline_event,
     SourceType.EVIDENCE: evidence_submitted_to_timeline_event,
-    # PR 102: EXPORT, REPLAY
+    SourceType.EXPORT: export_to_timeline_event,
+    SourceType.REPLAY: replay_verify_to_timeline_event,
 }
