@@ -19,6 +19,7 @@ All tests are pure-unit: no DB, no network, no fixtures.
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 
 os.environ.setdefault("FG_ENV", "test")
 
@@ -569,7 +570,6 @@ def _make_evidence_reference(
     control_ids: list | None = None,
     submitted_at_iso: str = "2026-05-19T09:00:00.000Z",
 ):
-    from datetime import datetime
 
     class _FakeEnum(str):
         def __new__(cls, v):
@@ -1040,8 +1040,6 @@ class TestEvidenceAdapter:
         int(evt.event_id, 16)
 
     def test_naive_datetime_treated_as_utc(self):
-        from datetime import datetime
-
         class _EvidenceRef:
             evidence_id = "ev-naive"
             assessment_id = "asmt-001"

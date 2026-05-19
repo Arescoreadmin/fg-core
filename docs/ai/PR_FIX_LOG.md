@@ -10582,3 +10582,21 @@ Existing report downloads were presentation-level placeholders. They did not pro
 **Verification:**
 - `FG_ENV=test .venv/bin/python -m pytest tests/test_governance_timeline_adapters.py tests/test_governance_timeline.py tests/test_governance_report.py -q`: 138 passed
 - `make fg-fast`: all gates pass
+
+### 2026-05-19 — PR 101: monitoring, alert, and evidence timeline adapters + P1/P2 fixes
+
+**Branch:** `feat/timeline-monitoring-alert-evidence-adapters-pr101`
+
+**Area:** Governance timeline adapters; RLS session context; savepoint isolation.
+
+**Files changed:**
+- `services/governance/timeline/adapters.py` — three new adapters: `monitoring_run_to_timeline_event`, `alert_run_to_timeline_event`, `evidence_submitted_to_timeline_event`; removed deferred `from datetime import` inside function body (module-level import already present); `TIMELINE_ADAPTERS` registry now covers all five source types
+- `api/readiness_monitoring_manager.py` — wire monitoring adapter before `db.commit()`
+- `api/readiness_alerting_manager.py` — wire alert run adapter before `db.commit()`
+- `api/readiness_manager.py` — wire evidence adapter before `db.commit()`
+- `api/governance_report_manager.py` — P1: move timeline emit before `db.commit()` (RLS `set_config` is transaction-local; post-commit emit was rejected silently); add `db.flush()` before savepoint so report INSERT isn't flushed inside the timeline savepoint scope (prevents IntegrityError on report record being swallowed by savepoint's `except IntegrityError`)
+- `tests/test_governance_timeline_adapters.py` — 83 new tests; added top-level `from datetime import datetime, timezone`; removed deferred imports in stub helpers and test methods
+
+**Verification:**
+- `FG_ENV=test .venv/bin/python -m pytest tests/test_governance_timeline_adapters.py tests/test_governance_timeline.py -q`: 175 passed
+- `make fg-fast`: all gates pass

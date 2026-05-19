@@ -305,13 +305,11 @@ def evidence_submitted_to_timeline_event(
     replay_eligible=False — evidence submission involves external state that
     cannot be deterministically reconstructed from governance metadata alone.
     """
-    from datetime import datetime, timezone as _tz
-
     submitted_at = evidence.submitted_at
     if isinstance(submitted_at, datetime):
         if submitted_at.tzinfo is None:
-            submitted_at = submitted_at.replace(tzinfo=_tz.utc)
-        submitted_at_iso = submitted_at.astimezone(_tz.utc).isoformat()
+            submitted_at = submitted_at.replace(tzinfo=timezone.utc)
+        submitted_at_iso = submitted_at.astimezone(timezone.utc).isoformat()
     else:
         submitted_at_iso = str(submitted_at)
 
