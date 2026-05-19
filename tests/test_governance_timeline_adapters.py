@@ -19,7 +19,7 @@ All tests are pure-unit: no DB, no network, no fixtures.
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import datetime
 
 os.environ.setdefault("FG_ENV", "test")
 
