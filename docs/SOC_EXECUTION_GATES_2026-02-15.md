@@ -3583,3 +3583,16 @@ Route inventory now correctly reflects tenant isolation for all governance repor
 
 **Compliance posture:**
 Both new routes are tenant-bound and scope-gated.  Route inventory, plane registry snapshot, contract routes, and topology hash regenerated.  26 new timeline tests pass.  `make fg-fast` passes with no gate failures.
+
+## 2026-05-18 — PR 99 addendum: P1 tenant RLS fix + governance:read scope correction
+
+**Classification:** Security fix + scope policy correction.  No schema changes.
+
+**SOC review:**
+- `api/governance_report_manager.py` — replaced bare `_get_db()` (no tenant binding) with `auth_ctx_db_session` from `api/deps.py`.  This dependency calls `set_tenant_context(db, tenant_id)` before any handler runs, ensuring `app.tenant_id` is set on the Postgres session so `FORCE ROW LEVEL SECURITY` policies on `governance_reports` are effective.
+- `api/governance_timeline_manager.py` — same `_get_db()` → `auth_ctx_db_session` fix for `governance_timeline_events`.  Additionally: scope corrected from `ingest:assessment` to `governance:read`.  The `/governance/` prefix routes are assigned to the `control` plane by the plane registry; `ingest:` prefix scopes are only valid on the `data` plane.  `governance:read` satisfies the `control` plane's `required_scope_prefixes` policy.
+- Route inventory, plane registry snapshot, contract authority, and topology hash regenerated to reflect the scope change.
+- No routes added or removed; no DB schema changes; no auth paths changed.
+
+**Compliance posture:**
+Both fixes are defence-in-depth: the SQLAlchemy tenant_id predicates already filter rows, but FORCE RLS now also applies at the DB layer.  82 governance tests pass (56 report + 26 timeline).  `make fg-fast` passes.

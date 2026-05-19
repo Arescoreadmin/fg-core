@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from api.assessments import _resolve_caller_tenant
 from api.auth_scopes.resolution import require_scopes
-from api.db import get_sessionmaker
+from api.deps import auth_ctx_db_session
 from services.governance.timeline import TimelineStore
 
 logger = logging.getLogger("frostgate.api.governance_timeline")
@@ -34,24 +34,10 @@ logger = logging.getLogger("frostgate.api.governance_timeline")
 router = APIRouter(
     prefix="/governance/timeline",
     tags=["governance-timeline"],
-    dependencies=[Depends(require_scopes("ingest:assessment"))],
+    dependencies=[Depends(require_scopes("governance:read"))],
 )
 
 _store = TimelineStore()
-
-
-# ---------------------------------------------------------------------------
-# DB session dependency
-# ---------------------------------------------------------------------------
-
-
-def _get_db():
-    SessionLocal = get_sessionmaker()
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +113,7 @@ def list_timeline_events(
         None, description="Pagination cursor from previous response"
     ),
     limit: int = Query(50, ge=1, le=100, description="Results per page (max 100)"),
-    db: Session = Depends(_get_db),
+    db: Session = Depends(auth_ctx_db_session),
 ) -> TimelinePageResponse:
     """List governance timeline events for the caller's tenant.
 
@@ -166,7 +152,7 @@ def list_timeline_events(
 def get_timeline_event(
     event_id: str,
     request: Request,
-    db: Session = Depends(_get_db),
+    db: Session = Depends(auth_ctx_db_session),
 ) -> TimelineEventResponse:
     """Retrieve a single timeline event by ID."""
     tenant_id = _resolve_caller_tenant(request)

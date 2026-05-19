@@ -38,8 +38,8 @@ from sqlalchemy.orm import Session
 
 from api.assessments import _resolve_caller_tenant, _get_assessment_or_404
 from api.auth_scopes.resolution import require_scopes
-from api.db import get_sessionmaker
 from api.db_models_governance_report import GovernanceReportRecord
+from api.deps import auth_ctx_db_session
 from api.error_contracts import api_error
 from api.security_audit import AuditEvent, EventType, get_auditor
 from services.governance.report import (
@@ -61,20 +61,6 @@ router = APIRouter(
 )
 
 _engine = GovernanceReportEngine()
-
-
-# ---------------------------------------------------------------------------
-# DB session dependency
-# ---------------------------------------------------------------------------
-
-
-def _get_db():
-    SessionLocal = get_sessionmaker()
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -253,7 +239,7 @@ def generate_governance_report(
     assessment_id: str,
     body: GenerateGovernanceReportRequest,
     request: Request,
-    db: Session = Depends(_get_db),
+    db: Session = Depends(auth_ctx_db_session),
 ) -> GovernanceReportResponse:
     """Generate a deterministic governance report for a scored assessment.
 
@@ -395,7 +381,7 @@ def get_governance_report(
     assessment_id: str,
     report_id: str,
     request: Request,
-    db: Session = Depends(_get_db),
+    db: Session = Depends(auth_ctx_db_session),
 ) -> GovernanceReportResponse:
     """Retrieve a governance report with full deterministic payload."""
     caller_tenant = _resolve_caller_tenant(request)
@@ -430,7 +416,7 @@ def replay_governance_report(
     assessment_id: str,
     report_id: str,
     request: Request,
-    db: Session = Depends(_get_db),
+    db: Session = Depends(auth_ctx_db_session),
 ) -> ReplayResponse:
     """Replay verification: re-generate the report and compare manifest hashes.
 
@@ -528,7 +514,7 @@ def export_governance_report_html(
     assessment_id: str,
     report_id: str,
     request: Request,
-    db: Session = Depends(_get_db),
+    db: Session = Depends(auth_ctx_db_session),
 ) -> Response:
     """Export governance report as deterministic HTML artifact."""
     caller_tenant = _resolve_caller_tenant(request)
@@ -574,7 +560,7 @@ def export_governance_report_manifest(
     assessment_id: str,
     report_id: str,
     request: Request,
-    db: Session = Depends(_get_db),
+    db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
     """Export manifest JSON for the governance report.
 
