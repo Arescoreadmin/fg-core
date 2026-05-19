@@ -59,15 +59,20 @@ class TimelineStore:
             schema_version=event.schema_version,
             event_version=event.event_version,
         )
+        sp = db.begin_nested()
         try:
             db.add(record)
             db.flush()
+            sp.commit()
         except IntegrityError:
-            db.rollback()
+            sp.rollback()
             logger.debug(
                 "timeline.record_duplicate event_id=%s — already exists, skipped",
                 event.event_id,
             )
+        except Exception:
+            sp.rollback()
+            raise
 
     def get(
         self,

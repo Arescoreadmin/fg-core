@@ -25,6 +25,7 @@ os.environ.setdefault("FG_ENV", "test")
 
 from services.governance.timeline.adapters import (
     TIMELINE_ADAPTERS,
+    _normalize_iso,
     governance_report_to_timeline_event,
     simulation_entry_to_timeline_event,
 )
@@ -421,3 +422,61 @@ class TestAdapterRegistry:
 
     def test_evidence_not_yet_registered(self):
         assert SourceType.EVIDENCE not in TIMELINE_ADAPTERS
+
+
+# ---------------------------------------------------------------------------
+# TestNormalizeIso
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeIso:
+    def test_z_suffix_passthrough(self):
+        assert _normalize_iso("2026-05-19T12:00:00.000Z") == "2026-05-19T12:00:00.000Z"
+
+    def test_plus_offset_converted_to_z(self):
+        result = _normalize_iso("2026-05-19T12:00:00.000000+00:00")
+        assert result.endswith("Z")
+        assert "+" not in result
+
+    def test_microseconds_truncated_to_millis(self):
+        result = _normalize_iso("2026-05-19T12:00:00.123456+00:00")
+        assert result == "2026-05-19T12:00:00.123Z"
+
+    def test_canonical_format_yyyy_mm_ddthhmmss_mmmz(self):
+        result = _normalize_iso("2026-05-19T00:00:00.000000+00:00")
+        assert result == "2026-05-19T00:00:00.000Z"
+
+    def test_same_instant_different_format_produces_same_string(self):
+        a = _normalize_iso("2026-05-19T12:34:56.789Z")
+        b = _normalize_iso("2026-05-19T12:34:56.789000+00:00")
+        assert a == b
+
+    def test_simulation_adapter_normalizes_plus_offset_timestamp(self):
+        entry = _make_simulation_entry(
+            simulated_at_iso="2026-05-19T00:00:00.000000+00:00"
+        )
+        evt = simulation_entry_to_timeline_event(entry)
+        assert evt.occurred_at == "2026-05-19T00:00:00.000Z"
+
+    def test_simulation_event_id_stable_across_timestamp_formats(self):
+        e_z = simulation_entry_to_timeline_event(
+            _make_simulation_entry(simulated_at_iso="2026-05-19T00:00:00.000Z")
+        )
+        e_plus = simulation_entry_to_timeline_event(
+            _make_simulation_entry(simulated_at_iso="2026-05-19T00:00:00.000000+00:00")
+        )
+        assert e_z.event_id == e_plus.event_id
+
+    def test_report_adapter_normalizes_plus_offset_timestamp(self):
+        report = _make_report(generated_at="2026-05-19T08:00:00.000000+00:00")
+        evt = governance_report_to_timeline_event(report)
+        assert evt.occurred_at == "2026-05-19T08:00:00.000Z"
+
+    def test_report_event_id_stable_across_timestamp_formats(self):
+        e_z = governance_report_to_timeline_event(
+            _make_report(generated_at="2026-05-19T08:00:00.000Z")
+        )
+        e_plus = governance_report_to_timeline_event(
+            _make_report(generated_at="2026-05-19T08:00:00.000000+00:00")
+        )
+        assert e_z.event_id == e_plus.event_id

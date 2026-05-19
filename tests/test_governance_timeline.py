@@ -239,6 +239,37 @@ class TestTimelineStore:
         )
         assert count == 1
 
+    def test_duplicate_record_does_not_roll_back_outer_transaction(self):
+        """Savepoint isolation: duplicate timeline insert must not invalidate
+        previously staged work in the same session transaction."""
+        db = _make_db()
+        store = TimelineStore()
+        event = _make_event(source_id="gr-original")
+        store.record(db, event)
+        db.commit()
+
+        # Stage a second event (different ID) — simulates caller work-in-progress
+        pending = _make_event(
+            source_id="gr-pending",
+            occurred_at="2026-05-18T21:00:00.000Z",
+        )
+        store.record(db, pending)  # not yet committed
+
+        # Duplicate of the first event — must NOT blow up the session
+        store.record(db, event)
+
+        # The pending event must survive the duplicate attempt
+        db.commit()
+
+        from api.db_models_timeline import TimelineEventRecord
+
+        count = (
+            db.query(TimelineEventRecord)
+            .filter(TimelineEventRecord.id == pending.event_id)
+            .count()
+        )
+        assert count == 1
+
     def test_get_wrong_tenant_returns_none(self):
         db = _make_db()
         store = TimelineStore()

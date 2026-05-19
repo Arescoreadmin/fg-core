@@ -35,6 +35,25 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
+def _normalize_iso(ts: str) -> str:
+    """Normalize any ISO 8601 UTC timestamp to canonical millisecond+Z form.
+
+    Producers (simulation engine, report engine) use datetime.isoformat() which
+    emits microseconds and a +00:00 suffix — e.g. 2026-05-19T00:00:00.123456+00:00.
+    The timeline store orders events lexicographically on occurred_at; mixing
+    +00:00 and Z formats within the same second breaks sort order and cursor math.
+
+    All adapters MUST normalize occurred_at through this function so every event
+    in the store uses the same format: YYYY-MM-DDTHH:MM:SS.mmmZ.
+    """
+    ts = ts.strip()
+    if ts.endswith("Z"):
+        dt = datetime.fromisoformat(ts[:-1] + "+00:00")
+    else:
+        dt = datetime.fromisoformat(ts).astimezone(timezone.utc)
+    return dt.strftime("%Y-%m-%dT%H:%M:%S.") + f"{dt.microsecond // 1000:03d}Z"
+
+
 def _sorted_payload(d: dict[str, Any]) -> dict[str, Any]:
     """Return a new dict with top-level keys in sorted order.
 
@@ -75,12 +94,13 @@ def simulation_entry_to_timeline_event(
     projection finishes, so "completed" is the accurate lifecycle moment.
     replay_eligible=True because simulation projections are deterministic.
     """
+    occurred_at = _normalize_iso(entry.simulated_at_iso)
     event_id = derive_event_id(
         tenant_id=entry.tenant_id,
         source_type=SourceType.SIMULATION.value,
         source_id=entry.simulation_id,
         event_type="simulation.completed",
-        occurred_at=entry.simulated_at_iso,
+        occurred_at=occurred_at,
     )
     payload: dict[str, Any] = {
         "schema_version": _EVENT_VERSION,
@@ -105,7 +125,7 @@ def simulation_entry_to_timeline_event(
         source_type=SourceType.SIMULATION,
         source_id=entry.simulation_id,
         event_type="simulation.completed",
-        occurred_at=entry.simulated_at_iso,
+        occurred_at=occurred_at,
         recorded_at=_now_iso(),
         payload=_sorted_payload(payload),
         classification=entry.classification.value,
@@ -127,12 +147,13 @@ def governance_report_to_timeline_event(
     manifest_hash is set so downstream consumers can verify determinism.
     replay_eligible=True because reports are deterministic from their inputs.
     """
+    occurred_at = _normalize_iso(report.generated_at)
     event_id = derive_event_id(
         tenant_id=report.tenant_id,
         source_type=SourceType.GOVERNANCE_REPORT.value,
         source_id=report.report_id,
         event_type="report.generated",
-        occurred_at=report.generated_at,
+        occurred_at=occurred_at,
     )
     payload: dict[str, Any] = {
         "schema_version": _EVENT_VERSION,
@@ -149,7 +170,7 @@ def governance_report_to_timeline_event(
         source_type=SourceType.GOVERNANCE_REPORT,
         source_id=report.report_id,
         event_type="report.generated",
-        occurred_at=report.generated_at,
+        occurred_at=occurred_at,
         recorded_at=_now_iso(),
         payload=_sorted_payload(payload),
         classification="internal",
