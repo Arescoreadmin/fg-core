@@ -39,7 +39,7 @@ from sqlalchemy.orm import Session
 
 from api.assessments import _resolve_caller_tenant
 from api.auth_scopes.resolution import require_bound_tenant, require_scopes
-from api.db import get_sessionmaker
+from api.db import get_sessionmaker, set_tenant_context
 from api.db_models import AssessmentRecord, OrgProfile, PromptVersion, ReportRecord
 from api.report_jobs import (
     REPORT_GENERATION_FAILED,
@@ -763,6 +763,7 @@ def export_report_artifact(
     digest = hashed["manifest_hash"]
     report.manifest_hash = digest
     try:
+        set_tenant_context(db, report.tenant_id)
         _tl_entry = ExportTimelineEntry(
             tenant_id=report.tenant_id,
             export_id=f"export-{digest[:16]}",
@@ -899,6 +900,7 @@ def replay_verify_report(
         raise HTTPException(status_code=409, detail="Manifest hash mismatch")
     report.manifest_hash = actual
     try:
+        set_tenant_context(db, report.tenant_id)
         _tl_replay = ReplayTimelineEntry(
             tenant_id=report.tenant_id,
             replay_id=f"replay-{actual[:16]}",

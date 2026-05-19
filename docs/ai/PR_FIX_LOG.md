@@ -10627,3 +10627,18 @@ Existing report downloads were presentation-level placeholders. They did not pro
 **Verification:**
 - `FG_ENV=test .venv/bin/python -m pytest tests/test_governance_timeline_adapters.py tests/test_governance_timeline.py tests/test_governance_report_exports.py -q`: 236 passed
 - `make fg-fast`: 152s, all gates pass
+
+---
+
+### 2026-05-19 — PR 102 P1 fix: bind tenant context before timeline writes in reports_engine
+
+**Branch:** `feat/timeline-export-replay-adapters-pr102`
+
+**Area:** `api/reports_engine.py` — RLS session context; governance timeline export/replay inserts.
+
+**Root cause:** `reports_engine.py` uses its own `_get_db()` dependency (never calls `set_tenant_context`), unlike the monitoring/alerting/readiness managers which use `auth_ctx_db_session`. The `governance_timeline_events` table enforces `FORCE ROW LEVEL SECURITY` keyed on `current_setting('app.tenant_id', true)`. Without a prior `set_config` call on the session, both the export and replay timeline inserts were rejected by RLS, swallowed by the `except Exception` guard, and no EXPORT/REPLAY events were persisted in production.
+
+**Fix:** Added `set_tenant_context(db, report.tenant_id)` as the first call inside each `try` block — before constructing `ExportTimelineEntry`/`ReplayTimelineEntry` and calling `_timeline_store.record()`. `set_tenant_context` is a safe no-op for SQLite (used in tests); only fires `set_config('app.tenant_id', :tid, true)` on Postgres sessions.
+
+**Files changed:**
+- `api/reports_engine.py`: `from api.db import get_sessionmaker, set_tenant_context`; `set_tenant_context(db, report.tenant_id)` added as first line in both timeline emit try blocks
