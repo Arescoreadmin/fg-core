@@ -35,7 +35,6 @@ from typing import Any
 from .confidence import calculate_confidence
 from .framework_mappings import get_framework_mappings
 from .identity import (
-    derive_canonical_inputs_hash,
     derive_finding_id,
     derive_manifest_hash,
     derive_remediation_id,
