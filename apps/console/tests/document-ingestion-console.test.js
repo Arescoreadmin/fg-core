@@ -48,7 +48,7 @@ const INGESTION_API = 'lib/ingestionApi.ts';
 const INDEX = 'components/governance/index.ts';
 const INGESTION_PAGE = 'app/dashboard/ingestion/page.tsx';
 const BFF_ROUTE = 'app/api/core/[...path]/route.ts';
-const ROUTE_INVENTORY = '../../tools/ci/route_inventory.json';
+const ROUTE_INVENTORY = '../../../tools/ci/route_inventory.json';
 
 // ─── File existence ───────────────────────────────────────────────────────────
 

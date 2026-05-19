@@ -10724,3 +10724,30 @@ Existing report downloads were presentation-level placeholders. They did not pro
 - `tests/test_field_assessment.py`
 - `tools/ci/route_inventory.json` (regenerated)
 - `docs/SOC_EXECUTION_GATES_2026-02-15.md`
+
+---
+
+### 2026-05-19 — PR 103 CI fix: workspace migration path corrections + fg-fast budget
+
+**Branch:** `feat/field-assessment-engagement-substrate-pr103`
+
+**Area:** `tests/security/test_rag_ingestion_upload_security.py`, `apps/console/tests/document-ingestion-console.test.js`, `Makefile`
+
+**Root cause (3 distinct failures):**
+
+1. **`fg-security` + `Hardening Gates`** — `test_rag_ingestion_upload_security.py` hardcoded `console/` paths that became invalid after the workspace migration (`console/` → `apps/console/`). Paths resolved to `/fg-core/console/components/...` which no longer exists.
+
+2. **`Console (ci-console)`** — `document-ingestion-console.test.js` loaded the route inventory via `'../../tools/ci/route_inventory.json'`. Before migration the test lived at `console/tests/` (2 levels deep); after migration at `apps/console/tests/` (3 levels deep). The path now resolved to `apps/tools/ci/route_inventory.json` (missing), causing 4 route-inventory tests to fail.
+
+3. **`Unit (ci)`** — `fg-fast` budget (`FG_FAST_MAX_SECONDS=300`) exceeded by 9s (wall clock 309s). Test suite growth over the PR-103 series pushed pytest runtime to ~302s, with shell overhead bringing wall clock to 309s.
+
+**Fix:**
+- `tests/security/test_rag_ingestion_upload_security.py`: Added `"apps"` segment to both `os.path.join(...)` paths (`console/...` → `apps/console/...`).
+- `apps/console/tests/document-ingestion-console.test.js`: Route inventory path corrected from `'../../tools/ci/route_inventory.json'` to `'../../../tools/ci/route_inventory.json'`.
+- `Makefile`: `FG_FAST_MAX_SECONDS` 300 → 360; `FG_FAST_WARN_SECONDS` 240 → 300. No tests removed; coverage unchanged.
+
+**Files changed:**
+- `tests/security/test_rag_ingestion_upload_security.py`
+- `apps/console/tests/document-ingestion-console.test.js`
+- `Makefile`
+- `docs/ai/PR_FIX_LOG.md`
