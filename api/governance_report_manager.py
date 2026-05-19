@@ -337,16 +337,14 @@ def generate_governance_report(
         is_finalized=False,
     )
     db.add(record)
-    db.commit()
-
     try:
         _tl_event = governance_report_to_timeline_event(report)
         _timeline_store.record(db, _tl_event)
-        db.commit()
     except Exception:
         logger.warning(
             "governance_report.timeline_emit_failed report_id=%s", report.report_id
         )
+    db.commit()
 
     _emit_audit(
         "governance_report_generated",
