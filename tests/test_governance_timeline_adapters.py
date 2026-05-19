@@ -5,13 +5,17 @@ Covers:
     payload contents, replay_eligible, classification passthrough
   - governance_report_to_timeline_event: field mapping, manifest_hash,
     findings_count, event_id determinism
+  - export_to_timeline_event: field mapping, classification=confidential,
+    manifest_hash on envelope, replay_eligible, optional assessment_id
+  - replay_verify_to_timeline_event: field mapping, verified flag,
+    expected_manifest_hash optional, replay_eligible=False
   - Payload schema_version, event_version, event_origin in every event
   - Causal lineage fields present (parent_event_id, causation_id, correlation_id)
   - Lineage passthrough when caller provides values
   - Deterministic payload key ordering
   - event_version on envelope matches payload schema_version
   - Cross-tenant event ID isolation
-  - TIMELINE_ADAPTERS registry completeness
+  - TIMELINE_ADAPTERS registry completeness (all 7 source types)
 
 All tests are pure-unit: no DB, no network, no fixtures.
 """
@@ -30,11 +34,17 @@ from services.governance.timeline.adapters import (
     _normalize_iso,
     alert_run_to_timeline_event,
     evidence_submitted_to_timeline_event,
+    export_to_timeline_event,
     governance_report_to_timeline_event,
     monitoring_run_to_timeline_event,
+    replay_verify_to_timeline_event,
     simulation_entry_to_timeline_event,
 )
 from services.governance.timeline.models import SourceType
+from services.governance.timeline.records import (
+    ExportTimelineEntry,
+    ReplayTimelineEntry,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -1043,6 +1053,311 @@ class TestEvidenceAdapter:
 
 
 # ---------------------------------------------------------------------------
+# Stub helpers for PR 102
+# ---------------------------------------------------------------------------
+
+
+def _make_export_entry(
+    tenant_id: str = "tenant-a",
+    export_id: str = "export-deadbeef01234567",
+    report_id: str = "gr-abc001",
+    assessment_id: str | None = "asmt-001",
+    export_format: str = "pdf",
+    manifest_hash: str = "cafebabe12345678abcdef0123456789",
+    export_version: str = "governance-export-v1",
+    exported_at_iso: str = "2026-05-19T10:00:00.000Z",
+) -> ExportTimelineEntry:
+    return ExportTimelineEntry(
+        tenant_id=tenant_id,
+        export_id=export_id,
+        report_id=report_id,
+        assessment_id=assessment_id,
+        export_format=export_format,
+        manifest_hash=manifest_hash,
+        export_version=export_version,
+        exported_at_iso=exported_at_iso,
+    )
+
+
+def _make_replay_entry(
+    tenant_id: str = "tenant-a",
+    replay_id: str = "replay-cafebabe01234567",
+    report_id: str = "gr-abc001",
+    assessment_id: str | None = "asmt-001",
+    actual_manifest_hash: str = "cafebabe12345678abcdef0123456789",
+    expected_manifest_hash: str | None = "cafebabe12345678abcdef0123456789",
+    verified: bool = True,
+    replayed_at_iso: str = "2026-05-19T11:00:00.000Z",
+    replay_contract_version: str = "governance-export-v1",
+) -> ReplayTimelineEntry:
+    return ReplayTimelineEntry(
+        tenant_id=tenant_id,
+        replay_id=replay_id,
+        report_id=report_id,
+        assessment_id=assessment_id,
+        actual_manifest_hash=actual_manifest_hash,
+        expected_manifest_hash=expected_manifest_hash,
+        verified=verified,
+        replayed_at_iso=replayed_at_iso,
+        replay_contract_version=replay_contract_version,
+    )
+
+
+# ---------------------------------------------------------------------------
+# TestExportAdapter
+# ---------------------------------------------------------------------------
+
+
+class TestExportAdapter:
+    def test_source_type_is_export(self):
+        evt = export_to_timeline_event(_make_export_entry())
+        assert evt.source_type == SourceType.EXPORT
+
+    def test_source_id_is_export_id(self):
+        evt = export_to_timeline_event(_make_export_entry(export_id="export-xyz"))
+        assert evt.source_id == "export-xyz"
+
+    def test_event_type_is_export_completed(self):
+        evt = export_to_timeline_event(_make_export_entry())
+        assert evt.event_type == "export.completed"
+
+    def test_tenant_id_passthrough(self):
+        evt = export_to_timeline_event(_make_export_entry(tenant_id="tenant-b"))
+        assert evt.tenant_id == "tenant-b"
+
+    def test_occurred_at_normalized(self):
+        evt = export_to_timeline_event(
+            _make_export_entry(exported_at_iso="2026-05-19T10:00:00.000Z")
+        )
+        assert evt.occurred_at == "2026-05-19T10:00:00.000Z"
+
+    def test_occurred_at_normalizes_plus00(self):
+        evt = export_to_timeline_event(
+            _make_export_entry(exported_at_iso="2026-05-19T10:00:00.123456+00:00")
+        )
+        assert evt.occurred_at == "2026-05-19T10:00:00.123Z"
+
+    def test_classification_is_confidential(self):
+        evt = export_to_timeline_event(_make_export_entry())
+        assert evt.classification == "confidential"
+
+    def test_manifest_hash_on_envelope(self):
+        evt = export_to_timeline_event(_make_export_entry(manifest_hash="abc123def456"))
+        assert evt.manifest_hash == "abc123def456"
+
+    def test_replay_eligible_true(self):
+        evt = export_to_timeline_event(_make_export_entry())
+        assert evt.replay_eligible is True
+
+    def test_envelope_event_version(self):
+        evt = export_to_timeline_event(_make_export_entry())
+        assert evt.event_version == "1.0"
+
+    # --- Payload contract ---
+
+    def test_payload_schema_version(self):
+        evt = export_to_timeline_event(_make_export_entry())
+        assert evt.payload["schema_version"] == "1.0"
+
+    def test_payload_event_origin_is_live(self):
+        evt = export_to_timeline_event(_make_export_entry())
+        assert evt.payload["event_origin"] == "live"
+
+    def test_payload_report_id(self):
+        evt = export_to_timeline_event(_make_export_entry(report_id="gr-xyz"))
+        assert evt.payload["report_id"] == "gr-xyz"
+
+    def test_payload_export_format(self):
+        evt = export_to_timeline_event(_make_export_entry(export_format="html"))
+        assert evt.payload["export_format"] == "html"
+
+    def test_payload_export_version(self):
+        evt = export_to_timeline_event(
+            _make_export_entry(export_version="governance-export-v1")
+        )
+        assert evt.payload["export_version"] == "governance-export-v1"
+
+    def test_payload_assessment_id_present(self):
+        evt = export_to_timeline_event(_make_export_entry(assessment_id="asmt-007"))
+        assert evt.payload["assessment_id"] == "asmt-007"
+
+    def test_payload_omits_assessment_id_when_none(self):
+        evt = export_to_timeline_event(_make_export_entry(assessment_id=None))
+        assert "assessment_id" not in evt.payload
+
+    def test_payload_lineage_keys_present(self):
+        evt = export_to_timeline_event(_make_export_entry())
+        for key in ("parent_event_id", "causation_id", "correlation_id"):
+            assert key in evt.payload
+
+    def test_payload_lineage_defaults_to_none(self):
+        evt = export_to_timeline_event(_make_export_entry())
+        assert evt.payload["parent_event_id"] is None
+        assert evt.payload["causation_id"] is None
+        assert evt.payload["correlation_id"] is None
+
+    def test_lineage_passthrough(self):
+        evt = export_to_timeline_event(
+            _make_export_entry(),
+            parent_event_id="p-001",
+            causation_id="c-001",
+            correlation_id="r-001",
+        )
+        assert evt.payload["parent_event_id"] == "p-001"
+        assert evt.payload["causation_id"] == "c-001"
+        assert evt.payload["correlation_id"] == "r-001"
+
+    def test_payload_keys_sorted(self):
+        evt = export_to_timeline_event(_make_export_entry())
+        keys = list(evt.payload.keys())
+        assert keys == sorted(keys)
+
+    def test_event_id_determinism(self):
+        entry = _make_export_entry()
+        evt1 = export_to_timeline_event(entry)
+        evt2 = export_to_timeline_event(entry)
+        assert evt1.event_id == evt2.event_id
+
+    def test_event_id_changes_with_tenant(self):
+        evt_a = export_to_timeline_event(_make_export_entry(tenant_id="tenant-a"))
+        evt_b = export_to_timeline_event(_make_export_entry(tenant_id="tenant-b"))
+        assert evt_a.event_id != evt_b.event_id
+
+
+# ---------------------------------------------------------------------------
+# TestReplayAdapter
+# ---------------------------------------------------------------------------
+
+
+class TestReplayAdapter:
+    def test_source_type_is_replay(self):
+        evt = replay_verify_to_timeline_event(_make_replay_entry())
+        assert evt.source_type == SourceType.REPLAY
+
+    def test_source_id_is_replay_id(self):
+        evt = replay_verify_to_timeline_event(
+            _make_replay_entry(replay_id="replay-xyz")
+        )
+        assert evt.source_id == "replay-xyz"
+
+    def test_event_type_is_replay_verified(self):
+        evt = replay_verify_to_timeline_event(_make_replay_entry())
+        assert evt.event_type == "replay.verified"
+
+    def test_tenant_id_passthrough(self):
+        evt = replay_verify_to_timeline_event(_make_replay_entry(tenant_id="tenant-b"))
+        assert evt.tenant_id == "tenant-b"
+
+    def test_occurred_at_normalized(self):
+        evt = replay_verify_to_timeline_event(
+            _make_replay_entry(replayed_at_iso="2026-05-19T11:00:00.000Z")
+        )
+        assert evt.occurred_at == "2026-05-19T11:00:00.000Z"
+
+    def test_classification_is_internal(self):
+        evt = replay_verify_to_timeline_event(_make_replay_entry())
+        assert evt.classification == "internal"
+
+    def test_manifest_hash_is_actual_hash(self):
+        evt = replay_verify_to_timeline_event(
+            _make_replay_entry(actual_manifest_hash="actual-hash-001")
+        )
+        assert evt.manifest_hash == "actual-hash-001"
+
+    def test_replay_eligible_false(self):
+        evt = replay_verify_to_timeline_event(_make_replay_entry())
+        assert evt.replay_eligible is False
+
+    def test_envelope_event_version(self):
+        evt = replay_verify_to_timeline_event(_make_replay_entry())
+        assert evt.event_version == "1.0"
+
+    # --- Payload contract ---
+
+    def test_payload_schema_version(self):
+        evt = replay_verify_to_timeline_event(_make_replay_entry())
+        assert evt.payload["schema_version"] == "1.0"
+
+    def test_payload_event_origin_is_live(self):
+        evt = replay_verify_to_timeline_event(_make_replay_entry())
+        assert evt.payload["event_origin"] == "live"
+
+    def test_payload_report_id(self):
+        evt = replay_verify_to_timeline_event(_make_replay_entry(report_id="gr-xyz"))
+        assert evt.payload["report_id"] == "gr-xyz"
+
+    def test_payload_verified_true(self):
+        evt = replay_verify_to_timeline_event(_make_replay_entry(verified=True))
+        assert evt.payload["verified"] is True
+
+    def test_payload_verified_false(self):
+        evt = replay_verify_to_timeline_event(_make_replay_entry(verified=False))
+        assert evt.payload["verified"] is False
+
+    def test_payload_replay_contract_version(self):
+        evt = replay_verify_to_timeline_event(
+            _make_replay_entry(replay_contract_version="governance-export-v1")
+        )
+        assert evt.payload["replay_contract_version"] == "governance-export-v1"
+
+    def test_payload_assessment_id_present(self):
+        evt = replay_verify_to_timeline_event(
+            _make_replay_entry(assessment_id="asmt-007")
+        )
+        assert evt.payload["assessment_id"] == "asmt-007"
+
+    def test_payload_omits_assessment_id_when_none(self):
+        evt = replay_verify_to_timeline_event(_make_replay_entry(assessment_id=None))
+        assert "assessment_id" not in evt.payload
+
+    def test_payload_expected_hash_present_when_set(self):
+        evt = replay_verify_to_timeline_event(
+            _make_replay_entry(expected_manifest_hash="expected-abc")
+        )
+        assert evt.payload["expected_manifest_hash"] == "expected-abc"
+
+    def test_payload_omits_expected_hash_when_none(self):
+        evt = replay_verify_to_timeline_event(
+            _make_replay_entry(expected_manifest_hash=None)
+        )
+        assert "expected_manifest_hash" not in evt.payload
+
+    def test_payload_lineage_keys_present(self):
+        evt = replay_verify_to_timeline_event(_make_replay_entry())
+        for key in ("parent_event_id", "causation_id", "correlation_id"):
+            assert key in evt.payload
+
+    def test_lineage_passthrough(self):
+        evt = replay_verify_to_timeline_event(
+            _make_replay_entry(),
+            parent_event_id="p-002",
+            causation_id="c-002",
+            correlation_id="r-002",
+        )
+        assert evt.payload["parent_event_id"] == "p-002"
+
+    def test_payload_keys_sorted(self):
+        evt = replay_verify_to_timeline_event(_make_replay_entry())
+        keys = list(evt.payload.keys())
+        assert keys == sorted(keys)
+
+    def test_event_id_determinism(self):
+        entry = _make_replay_entry()
+        evt1 = replay_verify_to_timeline_event(entry)
+        evt2 = replay_verify_to_timeline_event(entry)
+        assert evt1.event_id == evt2.event_id
+
+    def test_event_id_changes_with_tenant(self):
+        evt_a = replay_verify_to_timeline_event(
+            _make_replay_entry(tenant_id="tenant-a")
+        )
+        evt_b = replay_verify_to_timeline_event(
+            _make_replay_entry(tenant_id="tenant-b")
+        )
+        assert evt_a.event_id != evt_b.event_id
+
+
+# ---------------------------------------------------------------------------
 # TestAdapterRegistry — updated for PR 101
 # ---------------------------------------------------------------------------
 
@@ -1071,3 +1386,30 @@ class TestAdapterRegistryPR101:
         adapter = TIMELINE_ADAPTERS[SourceType.EVIDENCE]
         evt = adapter(_make_evidence_reference())
         assert evt.source_type == SourceType.EVIDENCE
+
+
+# ---------------------------------------------------------------------------
+# TestAdapterRegistryPR102 — all 7 source types covered
+# ---------------------------------------------------------------------------
+
+
+class TestAdapterRegistryPR102:
+    def test_export_registered(self):
+        assert SourceType.EXPORT in TIMELINE_ADAPTERS
+
+    def test_replay_registered(self):
+        assert SourceType.REPLAY in TIMELINE_ADAPTERS
+
+    def test_export_adapter_callable(self):
+        adapter = TIMELINE_ADAPTERS[SourceType.EXPORT]
+        evt = adapter(_make_export_entry())
+        assert evt.source_type == SourceType.EXPORT
+
+    def test_replay_adapter_callable(self):
+        adapter = TIMELINE_ADAPTERS[SourceType.REPLAY]
+        evt = adapter(_make_replay_entry())
+        assert evt.source_type == SourceType.REPLAY
+
+    def test_all_seven_source_types_registered(self):
+        for source_type in SourceType:
+            assert source_type in TIMELINE_ADAPTERS, f"{source_type} not in registry"

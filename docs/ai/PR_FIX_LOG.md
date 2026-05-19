@@ -10600,3 +10600,30 @@ Existing report downloads were presentation-level placeholders. They did not pro
 **Verification:**
 - `FG_ENV=test .venv/bin/python -m pytest tests/test_governance_timeline_adapters.py tests/test_governance_timeline.py -q`: 175 passed
 - `make fg-fast`: all gates pass
+
+---
+
+### 2026-05-19 — PR 102: EXPORT and REPLAY timeline adapters
+
+**Branch:** `feat/timeline-export-replay-adapters-pr102`
+
+**Area:** Governance timeline adapters; governance report export and replay-verify wiring.
+
+**Root cause:** No implementation — `SourceType.EXPORT` and `SourceType.REPLAY` were defined in the models but had no adapters and were absent from `TIMELINE_ADAPTERS`. Governance report exports and replay-verification runs produced no timeline events.
+
+**Files changed:**
+- `services/governance/timeline/records.py` (new) — `ExportTimelineEntry` and `ReplayTimelineEntry` frozen dataclasses; carry only what adapters need
+- `services/governance/timeline/adapters.py` — `export_to_timeline_event`: event_type="export.completed", classification="confidential", manifest_hash on envelope, replay_eligible=True; `replay_verify_to_timeline_event`: event_type="replay.verified", manifest_hash=actual_hash, replay_eligible=False; updated docstring and TIMELINE_ADAPTERS to cover all 7 source types
+- `services/governance/timeline/__init__.py` — exports `ExportTimelineEntry`, `ReplayTimelineEntry`
+- `api/reports_engine.py` — timeline imports + `_timeline_store = TimelineStore()`; wired `export_to_timeline_event` in `export_report_artifact()` before `db.commit()`; wired `replay_verify_to_timeline_event` in `replay_verify_report()` before `db.commit()`; both wrapped in try/except with warning log so timeline failure never aborts the export response
+- `tests/test_governance_timeline_adapters.py` — `_make_export_entry` and `_make_replay_entry` stub helpers; `TestExportAdapter` (22 tests) and `TestReplayAdapter` (22 tests); `TestAdapterRegistryPR102` (5 tests, including `test_all_seven_source_types_registered`)
+
+**Design invariants:**
+- EXPORT events: classification="confidential" (regulated export content); manifest_hash on envelope enables downstream hash verification; replay_eligible=True because the manifest_hash is the verification input
+- REPLAY events: classification="internal" (operational check); replay_eligible=False — a past verification is not itself re-runnable from governance metadata
+- Both wiring sites follow the RLS-safe pattern: timeline emit before `db.commit()`, wrapped in try/except
+- TIMELINE_ADAPTERS now covers all 7 SourceType values
+
+**Verification:**
+- `FG_ENV=test .venv/bin/python -m pytest tests/test_governance_timeline_adapters.py tests/test_governance_timeline.py tests/test_governance_report_exports.py -q`: 236 passed
+- `make fg-fast`: 152s, all gates pass

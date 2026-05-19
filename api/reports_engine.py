@@ -68,8 +68,18 @@ from api.report_exports import (
     render_pdf_export,
 )
 from api.security_audit import AuditEvent, EventType, get_auditor
+from services.governance.timeline import TimelineStore
+from services.governance.timeline.adapters import (
+    export_to_timeline_event,
+    replay_verify_to_timeline_event,
+)
+from services.governance.timeline.records import (
+    ExportTimelineEntry,
+    ReplayTimelineEntry,
+)
 
 log = logging.getLogger("frostgate.reports")
+_timeline_store = TimelineStore()
 
 # Configurable generation timeout in seconds (default 300 s = 5 min).
 _REPORT_GENERATION_TIMEOUT_S = int(os.getenv("FG_REPORT_GENERATION_TIMEOUT_S", "300"))
@@ -752,6 +762,21 @@ def export_report_artifact(
     manifest = hashed["manifest"]
     digest = hashed["manifest_hash"]
     report.manifest_hash = digest
+    try:
+        _tl_entry = ExportTimelineEntry(
+            tenant_id=report.tenant_id,
+            export_id=f"export-{digest[:16]}",
+            report_id=report.id,
+            assessment_id=report.assessment_id,
+            export_format=export_format,
+            manifest_hash=digest,
+            export_version=getattr(report, "export_version", None)
+            or "governance-export-v1",
+            exported_at_iso=datetime.now(timezone.utc).isoformat(),
+        )
+        _timeline_store.record(db, export_to_timeline_event(_tl_entry))
+    except Exception:
+        log.warning("export.timeline_emit_failed report_id=%s", report.id)
     db.commit()
     emit_export_event(
         EXPORT_AUDIT_DOWNLOADED,
@@ -873,6 +898,21 @@ def replay_verify_report(
         )
         raise HTTPException(status_code=409, detail="Manifest hash mismatch")
     report.manifest_hash = actual
+    try:
+        _tl_replay = ReplayTimelineEntry(
+            tenant_id=report.tenant_id,
+            replay_id=f"replay-{actual[:16]}",
+            report_id=report.id,
+            assessment_id=report.assessment_id,
+            actual_manifest_hash=actual,
+            expected_manifest_hash=expected,
+            verified=True,
+            replayed_at_iso=datetime.now(timezone.utc).isoformat(),
+            replay_contract_version="governance-export-v1",
+        )
+        _timeline_store.record(db, replay_verify_to_timeline_event(_tl_replay))
+    except Exception:
+        log.warning("replay.timeline_emit_failed report_id=%s", report.id)
     db.commit()
     emit_export_event(
         EXPORT_AUDIT_HASH_VERIFIED,
