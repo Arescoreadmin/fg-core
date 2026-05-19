@@ -1435,6 +1435,36 @@
       "source": "contract"
     },
     {
+      "method": "GET",
+      "path": "/ingest/assessment/reports/{report_id}/exports/{export_format}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/ingest/assessment/reports/{report_id}/finalize",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/ingest/assessment/reports/{report_id}/manifest",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/ingest/assessment/reports/{report_id}/regenerate",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/ingest/assessment/reports/{report_id}/replay-verify",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
       "method": "POST",
       "path": "/ingest/assessment/webhooks/stripe",
       "scopes": [],

@@ -5039,6 +5039,91 @@
       "tenant_bound": true
     },
     {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/reports_engine.py",
+      "method": "GET",
+      "path": "/ingest/assessment/reports/{report_id}/exports/{export_format}",
+      "plane": "data",
+      "plane_id": "data",
+      "scoped": true,
+      "scopes": [
+        "ingest:assessment"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/reports_engine.py",
+      "method": "POST",
+      "path": "/ingest/assessment/reports/{report_id}/finalize",
+      "plane": "data",
+      "plane_id": "data",
+      "scoped": true,
+      "scopes": [
+        "ingest:assessment"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/reports_engine.py",
+      "method": "GET",
+      "path": "/ingest/assessment/reports/{report_id}/manifest",
+      "plane": "data",
+      "plane_id": "data",
+      "scoped": true,
+      "scopes": [
+        "ingest:assessment"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/reports_engine.py",
+      "method": "POST",
+      "path": "/ingest/assessment/reports/{report_id}/regenerate",
+      "plane": "data",
+      "plane_id": "data",
+      "scoped": true,
+      "scopes": [
+        "ingest:assessment"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/reports_engine.py",
+      "method": "POST",
+      "path": "/ingest/assessment/reports/{report_id}/replay-verify",
+      "plane": "data",
+      "plane_id": "data",
+      "scoped": true,
+      "scopes": [
+        "ingest:assessment"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
       "dependency_categories": [],
       "file": "api/stripe_webhooks.py",
       "method": "POST",

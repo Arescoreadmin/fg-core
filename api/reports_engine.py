@@ -24,18 +24,48 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
-from pydantic import BaseModel
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+)
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from api.assessments import _resolve_caller_tenant
-from api.auth_scopes.resolution import require_scopes
+from api.auth_scopes.resolution import require_bound_tenant, require_scopes
 from api.db import get_sessionmaker
 from api.db_models import AssessmentRecord, OrgProfile, PromptVersion, ReportRecord
 from api.report_jobs import (
     REPORT_GENERATION_FAILED,
     REPORT_GENERATION_TIMEOUT,
     ReportJobState,
+)
+from api.report_exports import (
+    EXPORT_AUDIT_DOWNLOADED,
+    EXPORT_AUDIT_FINALIZED,
+    EXPORT_AUDIT_GENERATED,
+    EXPORT_AUDIT_HASH_FAILED,
+    EXPORT_AUDIT_HASH_VERIFIED,
+    EXPORT_AUDIT_REGENERATED,
+    EXPORT_AUDIT_REPLAY_COMPLETED,
+    EXPORT_AUDIT_REPLAY_MISMATCH,
+    EXPORT_AUDIT_REPLAY_REQUESTED,
+    EXPORT_AUDIT_REVIEWER_ASSIGNED,
+    EXPORT_AUDIT_SUPERSEDED,
+    ExportValidationError,
+    build_hashed_manifest,
+    emit_export_event,
+    load_assessment,
+    load_report_for_export,
+    populate_deterministic_export_sections,
+    render_html_export,
+    render_pdf_export,
 )
 from api.security_audit import AuditEvent, EventType, get_auditor
 
@@ -217,7 +247,7 @@ def _validate_report_content(content: dict[str, Any]) -> dict[str, Any]:
     content["key_strengths"] = content["key_strengths"][:3]
     content["critical_gaps"] = content["critical_gaps"][:5]
 
-    return content
+    return populate_deterministic_export_sections(content)
 
 
 def _emit_report_event(
@@ -515,12 +545,26 @@ def _generate_report_sync(report_id: str) -> None:
 
 
 class GenerateReportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     assessment_id: str
     prompt_type: str = "executive"
 
 
 class GenerateReportResponse(BaseModel):
     report_id: str
+    status: str
+
+
+class FinalizeReportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reviewer_ref: str
+
+
+class RegenerateReportResponse(BaseModel):
+    report_id: str
+    previous_report_id: str
     status: str
 
 
@@ -656,6 +700,250 @@ def get_report(
         if report.completed_at
         else None,
     }
+
+
+@router.get("/reports/{report_id}/manifest")
+def get_report_manifest(
+    report_id: str,
+    request: Request,
+    db: Session = Depends(_get_db),
+    x_assessment_id: str | None = Header(default=None, alias="X-Assessment-Id"),
+):
+    """Return the canonical governance export manifest and SHA-256 hash."""
+    require_bound_tenant(request)
+    report = load_report_for_export(
+        db, request, report_id, x_assessment_id=x_assessment_id
+    )
+    try:
+        hashed = build_hashed_manifest(report, load_assessment(db, report))
+    except ExportValidationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    report.manifest_hash = hashed["manifest_hash"]
+    db.commit()
+    emit_export_event(
+        EXPORT_AUDIT_GENERATED,
+        report.tenant_id,
+        report.id,
+        report.assessment_id,
+        manifest_hash_value=hashed["manifest_hash"],
+    )
+    return hashed
+
+
+@router.get("/reports/{report_id}/exports/{export_format}")
+def export_report_artifact(
+    report_id: str,
+    export_format: str,
+    request: Request,
+    db: Session = Depends(_get_db),
+    x_assessment_id: str | None = Header(default=None, alias="X-Assessment-Id"),
+):
+    """Return deterministic PDF or HTML governance artifact bytes."""
+    require_bound_tenant(request)
+    if export_format not in {"pdf", "html"}:
+        raise HTTPException(status_code=400, detail="export_format must be pdf or html")
+    report = load_report_for_export(
+        db, request, report_id, x_assessment_id=x_assessment_id
+    )
+    try:
+        hashed = build_hashed_manifest(report, load_assessment(db, report))
+    except ExportValidationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    manifest = hashed["manifest"]
+    digest = hashed["manifest_hash"]
+    report.manifest_hash = digest
+    db.commit()
+    emit_export_event(
+        EXPORT_AUDIT_DOWNLOADED,
+        report.tenant_id,
+        report.id,
+        report.assessment_id,
+        manifest_hash_value=digest,
+    )
+    if export_format == "html":
+        return Response(
+            content=render_html_export(manifest, digest),
+            media_type="text/html; charset=utf-8",
+            headers={"X-FrostGate-Manifest-Hash": digest},
+        )
+    return Response(
+        content=render_pdf_export(manifest, digest),
+        media_type="application/pdf",
+        headers={"X-FrostGate-Manifest-Hash": digest},
+    )
+
+
+@router.post("/reports/{report_id}/finalize")
+def finalize_report(
+    report_id: str,
+    body: FinalizeReportRequest,
+    request: Request,
+    db: Session = Depends(_get_db),
+    x_assessment_id: str | None = Header(default=None, alias="X-Assessment-Id"),
+):
+    """Preserve reviewer approval and freeze the current canonical manifest hash."""
+    require_bound_tenant(request)
+    reviewer_ref = body.reviewer_ref.strip()
+    if not reviewer_ref:
+        raise HTTPException(status_code=400, detail="reviewer_ref is required")
+    report = load_report_for_export(
+        db, request, report_id, x_assessment_id=x_assessment_id
+    )
+    if report.finalized_at is not None:
+        raise HTTPException(status_code=409, detail="Report already finalized")
+    report.reviewer_ref = reviewer_ref
+    report.approval_status = "finalized"
+    report.finalized_at = datetime.now(timezone.utc)
+    try:
+        hashed = build_hashed_manifest(report, load_assessment(db, report))
+    except ExportValidationError as exc:
+        report.reviewer_ref = None
+        report.approval_status = "unapproved"
+        report.finalized_at = None
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    report.manifest_hash = hashed["manifest_hash"]
+    report.finalized_manifest_hash = hashed["manifest_hash"]
+    db.commit()
+    emit_export_event(
+        EXPORT_AUDIT_REVIEWER_ASSIGNED,
+        report.tenant_id,
+        report.id,
+        report.assessment_id,
+        manifest_hash_value=hashed["manifest_hash"],
+    )
+    emit_export_event(
+        EXPORT_AUDIT_FINALIZED,
+        report.tenant_id,
+        report.id,
+        report.assessment_id,
+        manifest_hash_value=hashed["manifest_hash"],
+    )
+    return {
+        "report_id": report.id,
+        "approval_status": report.approval_status,
+        "reviewer_ref": report.reviewer_ref,
+        "finalized_at": report.finalized_at.isoformat(),
+        "manifest_hash": hashed["manifest_hash"],
+    }
+
+
+@router.post("/reports/{report_id}/replay-verify")
+def replay_verify_report(
+    report_id: str,
+    request: Request,
+    db: Session = Depends(_get_db),
+    expected_manifest_hash: str | None = Query(default=None),
+    x_assessment_id: str | None = Header(default=None, alias="X-Assessment-Id"),
+):
+    """Rebuild the canonical manifest and verify the report hash deterministically."""
+    require_bound_tenant(request)
+    report = load_report_for_export(
+        db, request, report_id, x_assessment_id=x_assessment_id
+    )
+    emit_export_event(
+        EXPORT_AUDIT_REPLAY_REQUESTED,
+        report.tenant_id,
+        report.id,
+        report.assessment_id,
+    )
+    try:
+        hashed = build_hashed_manifest(report, load_assessment(db, report))
+    except ExportValidationError as exc:
+        emit_export_event(
+            EXPORT_AUDIT_HASH_FAILED,
+            report.tenant_id,
+            report.id,
+            report.assessment_id,
+            state=ReportJobState.FAILED,
+            reason_code=str(exc),
+        )
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    actual = hashed["manifest_hash"]
+    expected = (
+        expected_manifest_hash or report.finalized_manifest_hash or report.manifest_hash
+    )
+    if expected and actual != expected:
+        emit_export_event(
+            EXPORT_AUDIT_REPLAY_MISMATCH,
+            report.tenant_id,
+            report.id,
+            report.assessment_id,
+            state=ReportJobState.FAILED,
+            manifest_hash_value=actual,
+        )
+        raise HTTPException(status_code=409, detail="Manifest hash mismatch")
+    report.manifest_hash = actual
+    db.commit()
+    emit_export_event(
+        EXPORT_AUDIT_HASH_VERIFIED,
+        report.tenant_id,
+        report.id,
+        report.assessment_id,
+        manifest_hash_value=actual,
+    )
+    emit_export_event(
+        EXPORT_AUDIT_REPLAY_COMPLETED,
+        report.tenant_id,
+        report.id,
+        report.assessment_id,
+        manifest_hash_value=actual,
+    )
+    return {"report_id": report.id, "manifest_hash": actual, "verified": True}
+
+
+@router.post(
+    "/reports/{report_id}/regenerate",
+    response_model=RegenerateReportResponse,
+    status_code=202,
+)
+def regenerate_report(
+    report_id: str,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    db: Session = Depends(_get_db),
+    x_assessment_id: str | None = Header(default=None, alias="X-Assessment-Id"),
+):
+    """Create a new report version instead of mutating a finalized artifact."""
+    require_bound_tenant(request)
+    report = load_report_for_export(
+        db, request, report_id, x_assessment_id=x_assessment_id
+    )
+    if report.finalized_at is None:
+        raise HTTPException(status_code=409, detail="Report is not finalized")
+    new_report_id = str(uuid.uuid4())
+    new_report = ReportRecord(
+        id=new_report_id,
+        tenant_id=report.tenant_id,
+        assessment_id=report.assessment_id,
+        org_id=report.org_id,
+        org_profile_id=report.org_profile_id,
+        status="pending",
+        prompt_type=report.prompt_type,
+        previous_report_id=report.id,
+        report_version=(report.report_version or 1) + 1,
+    )
+    report.superseded_by_report_id = new_report_id
+    db.add(new_report)
+    db.commit()
+    emit_export_event(
+        EXPORT_AUDIT_SUPERSEDED,
+        report.tenant_id,
+        report.id,
+        report.assessment_id,
+        manifest_hash_value=report.finalized_manifest_hash,
+    )
+    emit_export_event(
+        EXPORT_AUDIT_REGENERATED,
+        new_report.tenant_id,
+        new_report.id,
+        new_report.assessment_id,
+    )
+    background_tasks.add_task(_generate_report_sync, new_report_id)
+    return RegenerateReportResponse(
+        report_id=new_report_id,
+        previous_report_id=report.id,
+        status="pending",
+    )
 
 
 @router.get("/reports/{report_id}/download")

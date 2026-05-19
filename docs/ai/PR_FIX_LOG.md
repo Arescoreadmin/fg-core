@@ -10526,3 +10526,39 @@ Implements the deterministic `ReadinessScoreEngine`: pure Python, no I/O, no LLM
 - `pytest tests/test_readiness_simulation.py`: 93 passed
 - `ruff format`: 0 changes needed
 - `make fg-fast`: all gates passed
+
+---
+
+### 2026-05-18 — PR 97 feature: enterprise governance export system
+
+**Branch:** enterprise-governance-export-system
+
+**Area:** `api/report_exports.py`, `api/reports_engine.py`, `api/db_models.py`, `migrations/postgres/0055_governance_report_exports.sql`, `tests/test_governance_report_exports.py`, `docs/governance_export_system.md`
+
+**Root cause:**
+Existing report downloads were presentation-level placeholders. They did not produce canonical manifests, deterministic export hashes, reviewer finalization metadata, replay verification, immutable version lineage, or evidence-backed appendices suitable for regulated enterprise review.
+
+**Files changed:**
+- `api/report_exports.py`: new deterministic manifest, canonical JSON, SHA-256 hashing, PDF/HTML renderers, evidence appendix validation, replay helpers, and export audit reason codes
+- `api/reports_engine.py`: added manifest, PDF/HTML export, reviewer finalization, replay verification, and finalized-report regeneration endpoints
+- `api/db_models.py`: added report export metadata, reviewer/finalization fields, manifest hash, and lineage fields
+- `migrations/postgres/0055_governance_report_exports.sql`: Postgres schema extension for governance export metadata
+- `tests/test_governance_report_exports.py`: deterministic hash/export, evidence ordering, fail-closed, replay mismatch, reviewer metadata, and AI narrative containment tests
+- `docs/governance_export_system.md`: export doctrine, manifest semantics, hashing, replay, immutability, evidence appendix, audit, tenant isolation, and AI containment documentation
+- Contract and route inventory artifacts regenerated for the new report export routes
+- `docs/SOC_ARCH_REVIEW_2026-02-15.md`: SOC sync entry for critical route/contract inventory changes
+
+**Design invariants:**
+- Manifest canonical JSON is the only authoritative hash input
+- Rendered PDF/HTML bytes are deterministic delivery formats, not hash authority
+- Missing required export sections fail closed
+- Evidence/finding links are validated and appendix ordering is stable
+- Reviewer finalization preserves approval metadata and finalized hash
+- Post-finalization regeneration creates a new report version with lineage
+- Replay verification rebuilds the manifest and fails on hash mismatch
+- AI narrative is advisory-only and isolated from deterministic sections
+- Export retrieval remains tenant-scoped; ID-only access is forbidden
+
+**Validation:**
+- `.venv/bin/pytest -q tests/test_governance_report_exports.py tests/test_report_jobs.py tests/test_report_hardening.py tests/security/test_export_path_tenant_isolation.py`: 63 passed
+- `.venv/bin/ruff check api/report_exports.py api/reports_engine.py api/db_models.py tests/test_governance_report_exports.py`: passed
