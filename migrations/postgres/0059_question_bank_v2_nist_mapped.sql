@@ -262,8 +262,8 @@ VALUES (
       "domain": "ai_trustworthiness",
       "text": "What level of human oversight exists when AI systems inform high-stakes decisions (hiring, lending, medical, or legal outcomes)?",
       "type": "select",
-      "options": ["AI is used with no required human review", "Human can override but review is optional", "Human review is required before any action is taken", "AI is advisory only — humans make all final decisions", "AI is not used in high-stakes decisions"],
-      "na_option": "AI is not used in high-stakes decisions",
+      "options": ["AI is used with no required human review", "Human can override but review is optional", "Human review is required before any action is taken", "AI is advisory only — humans make all final decisions", "No AI use or no human oversight controls are documented for high-stakes decisions"],
+      "na_option": "No AI use or no human oversight controls are documented for high-stakes decisions",
       "weight": 1.5,
       "nist_control_id": "GOVERN 4.1"
     },

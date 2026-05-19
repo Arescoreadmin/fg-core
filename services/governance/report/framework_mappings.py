@@ -303,13 +303,66 @@ QUESTION_NIST_CONTROL_MAP: dict[str, str] = {
 
 _FRAMEWORK_CONTROL_MAP_RAW: dict[str, dict[str, list[str]]] = {
     "NIST_AI_RMF": {
-        "data_governance": ["GOVERN 1.1", "GOVERN 1.2", "MAP 1.5", "MAP 2.3", "MAP 3.1", "MEASURE 2.5", "MEASURE 2.10"],
-        "security_posture": ["GOVERN 2.2", "MANAGE 1.3", "MANAGE 2.4", "MEASURE 1.1", "MEASURE 2.3", "MEASURE 2.8", "MEASURE 2.9"],
-        "ai_maturity": ["GOVERN 1.1", "GOVERN 1.2", "GOVERN 1.5", "GOVERN 1.7", "MAP 2.2", "MAP 3.5", "MANAGE 3.3"],
-        "ai_trustworthiness": ["GOVERN 4.1", "MAP 5.2", "MEASURE 1.3", "MEASURE 2.4", "MEASURE 2.6", "MEASURE 2.10", "MEASURE 3.1"],
-        "infra_readiness": ["GOVERN 3.1", "MANAGE 1.3", "MANAGE 3.1", "MANAGE 3.2", "MANAGE 4.1", "MEASURE 3.1"],
-        "compliance_awareness": ["GOVERN 1.7", "GOVERN 4.2", "GOVERN 5.1", "MANAGE 1.2", "MAP 4.2", "MAP 5.1", "MAP 5.2"],
-        "automation_potential": ["GOVERN 3.2", "MAP 3.1", "MAP 4.1", "MANAGE 2.2", "MANAGE 4.1"],
+        "data_governance": [
+            "GOVERN 1.1",
+            "GOVERN 1.2",
+            "MAP 1.5",
+            "MAP 2.3",
+            "MAP 3.1",
+            "MEASURE 2.5",
+            "MEASURE 2.10",
+        ],
+        "security_posture": [
+            "GOVERN 2.2",
+            "MANAGE 1.3",
+            "MANAGE 2.4",
+            "MEASURE 1.1",
+            "MEASURE 2.3",
+            "MEASURE 2.8",
+            "MEASURE 2.9",
+        ],
+        "ai_maturity": [
+            "GOVERN 1.1",
+            "GOVERN 1.2",
+            "GOVERN 1.5",
+            "GOVERN 1.7",
+            "MAP 2.2",
+            "MAP 3.5",
+            "MANAGE 3.3",
+        ],
+        "ai_trustworthiness": [
+            "GOVERN 4.1",
+            "MAP 5.2",
+            "MEASURE 1.3",
+            "MEASURE 2.4",
+            "MEASURE 2.6",
+            "MEASURE 2.10",
+            "MEASURE 3.1",
+        ],
+        "infra_readiness": [
+            "GOVERN 3.1",
+            "MANAGE 1.3",
+            "MANAGE 3.1",
+            "MANAGE 3.2",
+            "MANAGE 4.1",
+            "MEASURE 3.1",
+        ],
+        "compliance_awareness": [
+            "GOVERN 1.7",
+            "GOVERN 4.2",
+            "GOVERN 5.1",
+            "MANAGE 1.2",
+            "MAP 4.2",
+            "MAP 5.1",
+            "MAP 5.2",
+        ],
+        "automation_potential": [
+            "GOVERN 3.2",
+            "MAP 3.1",
+            "MAP 4.1",
+            "MANAGE 2.2",
+            "MANAGE 4.1",
+        ],
         # Control-level mappings
         "access_control": ["GOVERN 2.2", "MANAGE 1.3"],
         "audit_logging": ["GOVERN 1.2", "MEASURE 2.8"],
@@ -453,7 +506,9 @@ def build_nist_control_matrix(
     control_question_ids: dict[str, list[str]] = {}
 
     for q in questions:
-        control_id = q.get("nist_control_id") or QUESTION_NIST_CONTROL_MAP.get(q.get("id", ""))
+        control_id = q.get("nist_control_id") or QUESTION_NIST_CONTROL_MAP.get(
+            q.get("id", "")
+        )
         if not control_id:
             continue
 
@@ -486,15 +541,17 @@ def build_nist_control_matrix(
             else:
                 status = "gap"
 
-        matrix.append({
-            "control_id": control_id,
-            "function": ctrl_info.get("function", control_id.split(" ")[0]),
-            "title": ctrl_info.get("title", control_id),
-            "description": ctrl_info.get("description", ""),
-            "status": status,
-            "score": avg_score,
-            "question_ids": control_question_ids[control_id],
-        })
+        matrix.append(
+            {
+                "control_id": control_id,
+                "function": ctrl_info.get("function", control_id.split(" ")[0]),
+                "title": ctrl_info.get("title", control_id),
+                "description": ctrl_info.get("description", ""),
+                "status": status,
+                "score": avg_score,
+                "question_ids": control_question_ids[control_id],
+            }
+        )
 
     return matrix
 
@@ -506,7 +563,12 @@ def nist_coverage_text(matrix: list[dict]) -> str:
     each control with its status symbol and score so Claude can reference
     specific gaps in its narrative.
     """
-    status_symbol = {"met": "✓ MET    ", "partial": "~ PARTIAL", "gap": "✗ GAP    ", "not_assessed": "  N/A    "}
+    status_symbol = {
+        "met": "✓ MET    ",
+        "partial": "~ PARTIAL",
+        "gap": "✗ GAP    ",
+        "not_assessed": "  N/A    ",
+    }
     function_labels = {
         "GOVERN": "GOVERN (Accountability & Culture)",
         "MAP": "MAP (Risk Identification & Context)",
@@ -528,10 +590,18 @@ def nist_coverage_text(matrix: list[dict]) -> str:
         gaps = [e for e in assessed if e["status"] == "gap"]
         partials = [e for e in assessed if e["status"] == "partial"]
         label = function_labels.get(fn, fn)
-        lines.append(f"\n{label}: {len(assessed)}/{len(entries)} controls assessed, {len(gaps)} gaps, {len(partials)} partial")
+        lines.append(
+            f"\n{label}: {len(assessed)}/{len(entries)} controls assessed, {len(gaps)} gaps, {len(partials)} partial"
+        )
         for entry in entries:
             sym = status_symbol.get(entry["status"], "  ?      ")
-            score_str = f"(score: {entry['score']})" if entry["score"] is not None else "(not assessed)"
-            lines.append(f"  {sym} {entry['control_id']} — {entry['title']} {score_str}")
+            score_str = (
+                f"(score: {entry['score']})"
+                if entry["score"] is not None
+                else "(not assessed)"
+            )
+            lines.append(
+                f"  {sym} {entry['control_id']} — {entry['title']} {score_str}"
+            )
 
     return "\n".join(lines) if lines else "No NIST control data available."

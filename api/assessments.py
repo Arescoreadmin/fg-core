@@ -357,7 +357,9 @@ def create_org(
     current_schema = (
         db.query(AssessmentSchema).filter(AssessmentSchema.is_current.is_(True)).first()
     )
-    schema_version = current_schema.schema_version if current_schema else "v2025.2-nist-mapped"
+    schema_version = (
+        current_schema.schema_version if current_schema else "v2025.2-nist-mapped"
+    )
 
     assessment = AssessmentRecord(
         id=assessment_id,

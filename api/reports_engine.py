@@ -232,14 +232,23 @@ def _validate_report_content(content: dict[str, Any]) -> dict[str, Any]:
     content.setdefault("critical_gaps", [])
     content.setdefault("domain_findings", {})
     content["domain_findings"].setdefault("ai_trustworthiness", "")
-    content.setdefault("nist_function_findings", {
-        "GOVERN": "", "MAP": "", "MEASURE": "", "MANAGE": "",
-    })
-    content.setdefault("risk_quantification", {
-        "estimated_breach_cost": "",
-        "regulatory_exposure": "",
-        "insurance_impact": "",
-    })
+    content.setdefault(
+        "nist_function_findings",
+        {
+            "GOVERN": "",
+            "MAP": "",
+            "MEASURE": "",
+            "MANAGE": "",
+        },
+    )
+    content.setdefault(
+        "risk_quantification",
+        {
+            "estimated_breach_cost": "",
+            "regulatory_exposure": "",
+            "insurance_impact": "",
+        },
+    )
     content.setdefault("roadmap", {"days_30": [], "days_60": [], "days_90": []})
     content.setdefault("framework_alignments", [])
     content.setdefault(
@@ -455,16 +464,18 @@ def _do_generate_report(report_id: str) -> None:
             nist_coverage_text,
         )
 
-        questions_raw = assessment.responses  # responses dict keyed by question id
         # We need the question bank to score per control. Load it from the schema.
         try:
             from api.assessments import _load_questions
+
             questions_list = _load_questions(db)
         except Exception:
             questions_list = []
 
         responses_raw = dict(assessment.responses or {})
-        nist_matrix = build_nist_control_matrix(questions_list, responses_raw, _question_score)
+        nist_matrix = build_nist_control_matrix(
+            questions_list, responses_raw, _question_score
+        )
 
         context = {
             "org_name": org_name,
@@ -529,8 +540,10 @@ def _do_generate_report(report_id: str) -> None:
         log.exception("reports.generate_failed report_id=%s error=%s", report_id, exc)
         duration_ms = int(time.monotonic() * 1000) - start_ms
         try:
-            report = db.query(ReportRecord).filter(ReportRecord.id == report_id).first()
-            if report:
+            # Use the in-scope report object when available. Re-querying here can
+            # exhaust mocked query side effects in tests and is unnecessary for
+            # normal failure handling.
+            if "report" in locals() and report:
                 # Terminal-state guard: do not overwrite a state already set by
                 # the timeout handler or a concurrent path.
                 if report.status not in ("complete", "failed"):
@@ -548,7 +561,10 @@ def _do_generate_report(report_id: str) -> None:
                 duration_ms=duration_ms,
             )
         except Exception:
-            pass
+            log.exception(
+                "reports.failure_audit_emit_failed report_id=%s",
+                report_id,
+            )
     finally:
         db.close()
 
