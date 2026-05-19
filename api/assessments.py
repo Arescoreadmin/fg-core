@@ -85,21 +85,24 @@ def classify_profile(
 
 
 _BASE_WEIGHTS: dict[str, float] = {
-    "data_governance": 0.25,
-    "security_posture": 0.20,
-    "ai_maturity": 0.20,
-    "infra_readiness": 0.15,
+    "data_governance": 0.20,
+    "security_posture": 0.18,
+    "ai_maturity": 0.18,
+    "ai_trustworthiness": 0.15,
+    "infra_readiness": 0.12,
     "compliance_awareness": 0.12,
-    "automation_potential": 0.08,
+    "automation_potential": 0.05,
 }
 
 _PROFILE_MULTIPLIERS: dict[str, dict[str, float]] = {
     "smb_basic": {
         "compliance_awareness": 0.50,
         "automation_potential": 0.50,
+        "ai_trustworthiness": 0.50,
     },
     "smb_growth": {
         "compliance_awareness": 0.75,
+        "ai_trustworthiness": 0.75,
     },
     "midmarket": {},
     "enterprise": {},
@@ -107,12 +110,14 @@ _PROFILE_MULTIPLIERS: dict[str, dict[str, float]] = {
         "data_governance": 1.30,
         "security_posture": 1.15,
         "compliance_awareness": 1.25,
+        "ai_trustworthiness": 1.50,
     },
     "govcon": {
         "data_governance": 1.40,
         "security_posture": 1.30,
         "compliance_awareness": 1.50,
         "infra_readiness": 1.20,
+        "ai_trustworthiness": 1.60,
     },
 }
 
@@ -343,12 +348,17 @@ def create_org(
     db.add(org)
     db.flush()
 
+    current_schema = (
+        db.query(AssessmentSchema).filter(AssessmentSchema.is_current.is_(True)).first()
+    )
+    schema_version = current_schema.schema_version if current_schema else "v2025.2-nist-mapped"
+
     assessment = AssessmentRecord(
         id=assessment_id,
         tenant_id=effective_tenant,
         org_profile_id=org.id,
         org_id=org_id,
-        schema_version="v2025.1-base",
+        schema_version=schema_version,
         profile_type=profile_type,
         status="draft",
         responses={},

@@ -37,7 +37,7 @@ from fastapi import (
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from api.assessments import _resolve_caller_tenant
+from api.assessments import _resolve_caller_tenant, _question_score
 from api.auth_scopes.resolution import require_bound_tenant, require_scopes
 from api.db import get_sessionmaker
 from api.db_models import AssessmentRecord, OrgProfile, PromptVersion, ReportRecord
@@ -165,13 +165,16 @@ def _domain_scores_text(scores: dict[str, float]) -> str:
         "data_governance": "Data Governance",
         "security_posture": "Security Posture",
         "ai_maturity": "AI Maturity",
+        "ai_trustworthiness": "AI Trustworthiness (Bias/Fairness/Explainability)",
         "infra_readiness": "Infrastructure Readiness",
         "compliance_awareness": "Compliance Awareness",
         "automation_potential": "Automation Potential",
     }
     lines = []
     for key, label in labels.items():
-        score = scores.get(key, 0.0)
+        score = scores.get(key)
+        if score is None:
+            continue
         if score < 25:
             band = "Critical"
         elif score < 50:
@@ -219,8 +222,8 @@ def _extract_json(text: str) -> dict[str, Any]:
 
 
 def _validate_report_content(content: dict[str, Any]) -> dict[str, Any]:
-    """
-    Ensure required fields are present and values are sane.
+    """Ensure required fields are present and values are sane.
+
     Fills defaults rather than raising — we never want to lose a generated report
     over a minor schema mismatch.
     """
@@ -228,24 +231,41 @@ def _validate_report_content(content: dict[str, Any]) -> dict[str, Any]:
     content.setdefault("key_strengths", [])
     content.setdefault("critical_gaps", [])
     content.setdefault("domain_findings", {})
+    content["domain_findings"].setdefault("ai_trustworthiness", "")
+    content.setdefault("nist_function_findings", {
+        "GOVERN": "", "MAP": "", "MEASURE": "", "MANAGE": "",
+    })
+    content.setdefault("risk_quantification", {
+        "estimated_breach_cost": "",
+        "regulatory_exposure": "",
+        "insurance_impact": "",
+    })
     content.setdefault("roadmap", {"days_30": [], "days_60": [], "days_90": []})
     content.setdefault("framework_alignments", [])
     content.setdefault(
         "disclaimer",
         "This report reflects alignment with, not certification to, referenced frameworks. "
-        "It is intended as an advisory tool to support internal risk management decisions.",
+        "It is intended as an advisory tool to support internal risk management decisions. "
+        "FrostGate AI Governance Assessment.",
     )
+    # nist_control_matrix is injected deterministically by the caller — do not default it here.
 
-    # Enforce AIEG language discipline: never say "certified"
+    # Enforce language discipline: never say "certified"
     exec_summary = content["executive_summary"]
     if "certified" in exec_summary.lower():
         content["executive_summary"] = re.sub(
             r"\bcertified\b", "aligned with", exec_summary, flags=re.IGNORECASE
         )
 
-    # Cap strengths and gaps per AIEG spec
+    # Cap strengths and gaps
     content["key_strengths"] = content["key_strengths"][:3]
     content["critical_gaps"] = content["critical_gaps"][:5]
+
+    # Normalize roadmap items — ensure estimated_cost and owner exist
+    for phase in ("days_30", "days_60", "days_90"):
+        for item in content["roadmap"].get(phase, []):
+            item.setdefault("estimated_cost", "")
+            item.setdefault("owner", "")
 
     return populate_deterministic_export_sections(content)
 
@@ -427,6 +447,25 @@ def _do_generate_report(report_id: str) -> None:
             raise ValueError("No active prompt template found — run database seeds")
 
         domain_scores = assessment.scores or {}
+
+        # Build deterministic NIST AI RMF control matrix from assessment data.
+        # Import here to avoid a circular import at module load time.
+        from services.governance.report.framework_mappings import (
+            build_nist_control_matrix,
+            nist_coverage_text,
+        )
+
+        questions_raw = assessment.responses  # responses dict keyed by question id
+        # We need the question bank to score per control. Load it from the schema.
+        try:
+            from api.assessments import _load_questions
+            questions_list = _load_questions(db)
+        except Exception:
+            questions_list = []
+
+        responses_raw = dict(assessment.responses or {})
+        nist_matrix = build_nist_control_matrix(questions_list, responses_raw, _question_score)
+
         context = {
             "org_name": org_name,
             "industry": industry,
@@ -436,6 +475,7 @@ def _do_generate_report(report_id: str) -> None:
             else "0",
             "risk_band": (assessment.risk_band or "unknown").title(),
             "domain_scores": _domain_scores_text(domain_scores),
+            "nist_coverage": nist_coverage_text(nist_matrix),
         }
 
         user_prompt = _render_prompt(prompt_rec.user_prompt_template, context)
@@ -459,6 +499,9 @@ def _do_generate_report(report_id: str) -> None:
 
         content = _extract_json(raw_text)
         content = _validate_report_content(content)
+
+        # Inject deterministic NIST control matrix — authoritative, not AI-generated.
+        content["nist_control_matrix"] = nist_matrix
 
         report.content = content
         report.status = "complete"
