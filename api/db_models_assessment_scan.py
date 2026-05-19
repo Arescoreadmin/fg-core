@@ -25,7 +25,9 @@ class AssessmentScanSession(Base):
     id: Mapped[str] = mapped_column(Text, primary_key=True)
     assessment_id: Mapped[str] = mapped_column(Text, nullable=False)
     tenant_id: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending_acknowledgment")
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, default="pending_acknowledgment"
+    )
     manifest_id: Mapped[str] = mapped_column(Text, nullable=False)
     manifest_json: Mapped[str] = mapped_column(Text, nullable=False)
     ack_token: Mapped[str | None] = mapped_column(Text, nullable=True)

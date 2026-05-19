@@ -26,9 +26,7 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import uuid
-from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Any
 
@@ -48,7 +46,6 @@ from services.connectors.drivers.msgraph import (
     build_scan_manifest,
     execute_action,
     generate_methodology_statement,
-    verify_acknowledgment,
 )
 
 log = logging.getLogger("frostgate.assessment_scan")
