@@ -6,6 +6,30 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-18 — PR 99: Unified Governance Timeline Infrastructure (Foundation)
+
+**Branch:** `feat/unified-governance-timeline-pr99`
+
+**Area:** Governance timeline; append-only event storage; deterministic event IDs; cursor pagination; tenant isolation.
+
+**Root cause:** No implementation — new timeline foundation layer. Convergence point for all governance events across simulations, monitoring, alerting, report generation, exports, replay, and evidence lineage.
+
+**Files changed:**
+- `services/governance/timeline/__init__.py` (new) — public exports
+- `services/governance/timeline/models.py` (new) — `TimelineEvent` frozen dataclass, `SourceType` enum (7 values), `TimelineEventDisplay`
+- `services/governance/timeline/identity.py` (new) — `derive_event_id` (SHA-256[:16]), `encode_cursor`, `decode_cursor`
+- `services/governance/timeline/store.py` (new) — `TimelineStore`: `record()` (idempotent), `get()` (tenant-scoped), `list()` (cursor pagination, filter by source_type/event_type/from/to)
+- `api/db_models_timeline.py` (new) — `TimelineEventRecord` ORM; 12 columns, 3 composite indexes
+- `api/governance_timeline_manager.py` (new) — `GET /governance/timeline` (paginated list), `GET /governance/timeline/{event_id}` (single event); both tenant-scoped via `_resolve_caller_tenant`; `display: null` placeholder for PR 103
+- `api/db.py` — added `api.db_models_timeline` import in `_ensure_models_imported()`
+- `api/main.py` — registered `governance_timeline_router` in both `create_app()` paths
+- `migrations/postgres/0056_governance_timeline.sql` (new) — `governance_timeline_events` table, 4 indexes, `ENABLE`+`FORCE` RLS, tenant isolation policy
+- `tests/test_governance_timeline.py` (new) — 26 tests across 4 classes: event ID determinism, cursor encoding, store operations (idempotency/pagination/filtering/isolation), model immutability
+
+**Verification:** 26 new tests pass; all fg-fast gates pass; both timeline routes show `tenant_bound: true` in route inventory.
+
+---
+
 ### 2026-05-18 — PR 98: Deterministic Governance Report Core
 
 **Branch:** `feat/deterministic-governance-report-core-pr98`

@@ -1370,6 +1370,18 @@
     },
     {
       "method": "GET",
+      "path": "/governance/timeline",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/timeline/{event_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/health",
       "scopes": [],
       "source": "contract"
@@ -1753,7 +1765,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-18T22:59:15.847940+00:00",
+  "generated_at": "2026-05-18T22:28:25.171349+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }
