@@ -958,12 +958,15 @@ def list_findings_route(
         status_filter=finding_status,
         limit=limit,
     )
-    total = db.execute(
-        select(func.count(FaNormalizedFinding.id)).where(
-            FaNormalizedFinding.engagement_id == engagement_id,
-            FaNormalizedFinding.tenant_id == tenant_id,
-        )
-    ).scalar_one()
+    count_stmt = select(func.count(FaNormalizedFinding.id)).where(
+        FaNormalizedFinding.engagement_id == engagement_id,
+        FaNormalizedFinding.tenant_id == tenant_id,
+    )
+    if severity:
+        count_stmt = count_stmt.where(FaNormalizedFinding.severity == severity)
+    if finding_status:
+        count_stmt = count_stmt.where(FaNormalizedFinding.status == finding_status)
+    total = db.execute(count_stmt).scalar_one()
     return FindingListResponse(
         items=[_finding_to_response(r) for r in rows],
         total_count=total,

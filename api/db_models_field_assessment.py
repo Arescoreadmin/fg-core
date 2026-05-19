@@ -209,6 +209,7 @@ class FaEvidenceLink(Base):
     __table_args__ = (
         UniqueConstraint(
             "tenant_id",
+            "engagement_id",
             "source_entity_id",
             "source_entity_type",
             "evidence_entity_id",
