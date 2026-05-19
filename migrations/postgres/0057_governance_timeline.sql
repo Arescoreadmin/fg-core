@@ -1,4 +1,4 @@
--- Migration: 0056_governance_timeline
+-- Migration: 0057_governance_timeline
 -- Creates the append-only governance_timeline_events table.
 --
 -- Purpose:
