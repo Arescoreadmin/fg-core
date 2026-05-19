@@ -3596,3 +3596,62 @@ Both new routes are tenant-bound and scope-gated.  Route inventory, plane regist
 
 **Compliance posture:**
 Both fixes are defence-in-depth: the SQLAlchemy tenant_id predicates already filter rows, but FORCE RLS now also applies at the DB layer.  82 governance tests pass (56 report + 26 timeline).  `make fg-fast` passes.
+
+## 2026-05-19 — PR 103: Field Assessment Engagement Substrate
+
+**Classification:** New API surface + 7 new DB tables.  No changes to existing tables, auth paths, or middleware.
+
+**SOC review:**
+- `api/field_assessment.py` — 15 new routes under `/field-assessment` prefix.  All routes scope-gated (`governance:read` for reads, `governance:write` for writes).  Tenant resolved exclusively from auth context via `_resolve_caller_tenant`; fails closed with HTTP 401 on missing tenant.  No tenant param accepted from request body.
+- `GET /field-assessment/engagements` — tenant-scoped list, page-capped at 100 rows.  Returns `EngagementListResponse` with cursor.
+- `POST /field-assessment/engagements` — creates engagement; emits `engagement.created` audit event.  No cross-tenant data in response.
+- `GET /field-assessment/engagements/{engagement_id}` — tenant-isolated lookup; 404 on mismatch (never 403 which would leak existence).
+- `PATCH /field-assessment/engagements/{engagement_id}/status` — validated against `VALID_ENGAGEMENT_TRANSITIONS` state machine; rejects invalid transitions with 409.  Emits `engagement.status_transitioned` audit event.
+- `POST /field-assessment/engagements/{engagement_id}/scan-results` — raw_payload capped at 5MB via Pydantic field_validator.  Optional `expected_evidence_hash` verified before insert (SHA-256 of canonical JSON); mismatch → 422.  `evidence_hash` computed server-side and stored; never from client.  Emits `scan_result.ingested` audit event.
+- `POST /field-assessment/engagements/{engagement_id}/document-analyses` — structured classification only; no freeform blob.  Emits `document_analysis.registered` audit event.
+- `POST /field-assessment/engagements/{engagement_id}/observations` — requires `domain` + `observation_type` + `severity`; all enum-validated.  Emits `observation.captured` audit event.
+- `GET /field-assessment/engagements/{engagement_id}/findings` — filter by severity/status; page-capped at 100.
+- `POST /field-assessment/engagements/{engagement_id}/evidence-links` — idempotent via UniqueConstraint; duplicate returns 409 (not silent swallow).  Emits `evidence_link.created` audit event.
+- `GET /field-assessment/engagements/{engagement_id}/summary` — dashboard aggregate; counts only, no raw payloads.
+- All write routes emit deterministic audit events to `fa_engagement_audit_events` (append-only; no UPDATE/DELETE).  Audit payload contains only non-sensitive metadata.
+- `api/db_models_field_assessment.py` — 7 new ORM tables.  All tenant-scoped tables have `(tenant_id, ...)` compound indexes.  `fa_normalized_findings` has `UniqueConstraint(tenant_id, findings_hash)` preventing duplicate finding insertion.  `fa_evidence_links` has `UniqueConstraint` preventing duplicate evidence relationships.
+- `api/db.py` — `_ensure_models_imported()` extended with `api.db_models_field_assessment`.
+- `api/main.py` — `field_assessment_router` registered in both `build_app()` and `build_contract_app()` call paths.
+- `tools/ci/route_inventory.json` regenerated — all 15 routes show `tenant_bound: true`, `scoped: true`.
+- Finding IDs are deterministic: SHA-256(`finding_type|engagement_id|source_ref`)[:16].  Same input always produces the same ID; structurally replay-safe.
+- Evidence hash computed server-side as SHA-256 of canonical JSON payload; never trusted from client.
+
+**New DB tables (SQLite dev / PostgreSQL prod — RLS migration pending next PR):**
+1. `fa_engagements` — 13 columns, 2 compound indexes, PK String(64)
+2. `fa_scan_results` — 10 columns, 2 compound indexes
+3. `fa_document_analyses` — 14 columns, 1 compound index
+4. `fa_field_observations` — 13 columns, 2 compound indexes
+5. `fa_normalized_findings` — 17 columns, 3 compound indexes, UniqueConstraint(tenant_id, findings_hash)
+6. `fa_evidence_links` — 9 columns, 3 compound indexes, UniqueConstraint(5-column evidence identity)
+7. `fa_engagement_audit_events` — 9 columns, 2 compound indexes, append-only
+
+- `services/plane_registry/registry.py` — `/field-assessment` prefix added to `control` plane `route_prefixes` tuple.  Uses `governance:` scope prefix already declared in the control plane `auth_class`.  Plane registry snapshot, route inventory, and topology hash regenerated.
+
+**Compliance posture:**
+All 15 routes tenant-bound and scope-gated; plane registry updated.  `_resolve_caller_tenant` recognized by route inventory AST checker — all routes show `tenant_bound: true`, `scoped: true`, `plane: control`.  32 field assessment tests pass (10 unit, 22 integration).  `ruff check` clean.  `mypy` clean (6 files, 0 errors).  `make fg-contract` passes.  Route inventory, contract authority, plane registry snapshot, and topology hash regenerated.
+
+## 2026-05-19 — PR 103 addendum: Field Assessment Governance Spine Hardening
+
+**Classification:** Feature hardening — no new tables, no auth changes, no infra changes. Surgical changes to existing PR 103 substrate.
+
+**SOC review:**
+- `services/governance/timeline/models.py` — `SourceType.FIELD_ASSESSMENT = "FIELD_ASSESSMENT"` added. Enum extension only; no existing values modified.
+- `services/field_assessment/timeline.py` (new) — `emit_fa_timeline_event()` helper bridges field assessment lifecycle events into `governance_timeline_events` via `TimelineStore.record()`. Emission is idempotent: duplicate `(tenant_id, source_type, source_id, event_type, occurred_at)` tuples produce the same deterministic `event_id` and are silently skipped. No raw payloads in timeline events.
+- Timeline events now emitted for: `field_assessment.engagement.created`, `field_assessment.engagement.transitioned`, `field_assessment.scan.ingested` (`replay_eligible=True`), `field_assessment.evidence.linked`. Field assessment is no longer a workflow island.
+- `api/db_models_field_assessment.py` — `UniqueConstraint("engagement_id", "tenant_id", "evidence_hash", name="uq_fa_scan_evidence")` added to `FaScanResult`. DB-level deduplication safeguard.
+- `services/field_assessment/store.py` — `create_scan_result()` made idempotent: checks for existing record matching `(engagement_id, tenant_id, evidence_hash)` before insert; returns existing on match (mirrors `create_finding` pattern). `get_scan_result()` added for single-record access.
+- `api/field_assessment.py` — `collected_at` ISO 8601 validation added via `PydanticCustomError` (not `ValueError`) to avoid ctx serialization issue in app validation error handler. `ScanResultSummaryResponse` added (no `raw_payload`) for list endpoints — protects against accidental raw payload exposure in list responses. `ScanResultResponse` (full, with `raw_payload`) retained for POST ingest and single GET.
+- `GET /field-assessment/engagements/{engagement_id}/scan-results/{scan_result_id}` added — single-record replay-access route. Required for governance replay and forensic evidence access. Scope-gated `governance:read`; tenant-isolated; 404 on cross-tenant access.
+- `create_evidence_link_route` — orphan validation added for `scan_result`, `document_analysis`, `field_observation` evidence types: verifies `evidence_entity_id` exists in the same `engagement_id` + `tenant_id` before creating link. Returns 422 `EVIDENCE_ENTITY_NOT_FOUND` on missing entity. Prevents dangling evidence graph edges.
+- Route inventory regenerated to include new `GET .../scan-results/{scan_result_id}` route. Contract authority refreshed.
+
+**DB schema changes:**
+No new tables. `uq_fa_scan_evidence` constraint added to existing `fa_scan_results` table (safe migration — existing rows must have unique hashes by construction since hash is computed server-side from payload).
+
+**Compliance posture:**
+All 39 field assessment tests pass (10 unit, 29 integration). New tests cover: single scan result GET, scan deduplication, `collected_at` validation (valid + invalid), list payload exclusion, orphan link rejection. Route inventory regenerated. Contract authority refreshed. `make fg-fast` passes.

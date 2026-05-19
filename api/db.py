@@ -174,6 +174,9 @@ def _ensure_models_imported() -> None:
         "api.db_models_governance_report"
     )  # PR 98: governance reports
     importlib.import_module("api.db_models_timeline")  # PR 99: governance timeline
+    importlib.import_module(
+        "api.db_models_field_assessment"
+    )  # PR 103: field assessment substrate
 
 
 def _get_base():

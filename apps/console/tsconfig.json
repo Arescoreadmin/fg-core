@@ -22,9 +22,9 @@
       }
     ],
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"],
+      "@fg/ui": ["../../packages/ui/src/index.ts"],
+      "@fg/ui/*": ["../../packages/ui/src/*"]
     },
     "baseUrl": "."
   },

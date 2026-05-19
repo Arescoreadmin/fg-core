@@ -23,6 +23,7 @@ class SourceType(str, Enum):
     REPLAY = "REPLAY"
     EXPORT = "EXPORT"
     EVIDENCE = "EVIDENCE"
+    FIELD_ASSESSMENT = "FIELD_ASSESSMENT"
 
 
 # ---------------------------------------------------------------------------

@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 294,
+    "contract_count": 309,
     "contract_only": [],
-    "runtime_count": 398,
+    "runtime_count": 413,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -141,7 +141,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "d7101d07faa43295cf7badf53bbe95f5a06ccbfc27248051774e6a04d7fc8a58",
+  "governance_fingerprint": "5c65dd5a87d3d7f8bd7790d18bc72c92f51738bf4bc94abd8bad3bf78c332753",
   "planes": [
     {
       "compat": {
@@ -207,6 +207,7 @@
         "/dev",
         "/enterprise-controls",
         "/exceptions",
+        "/field-assessment",
         "/governance",
         "/health",
         "/internal",
@@ -441,6 +442,15 @@
       "GET /enterprise-controls/catalog",
       "GET /enterprise-controls/crosswalk",
       "GET /enterprise-controls/frameworks",
+      "GET /field-assessment/engagements",
+      "GET /field-assessment/engagements/{engagement_id}",
+      "GET /field-assessment/engagements/{engagement_id}/document-analyses",
+      "GET /field-assessment/engagements/{engagement_id}/evidence-links",
+      "GET /field-assessment/engagements/{engagement_id}/findings",
+      "GET /field-assessment/engagements/{engagement_id}/findings/{finding_id}",
+      "GET /field-assessment/engagements/{engagement_id}/observations",
+      "GET /field-assessment/engagements/{engagement_id}/scan-results",
+      "GET /field-assessment/engagements/{engagement_id}/summary",
       "GET /governance/changes",
       "GET /governance/timeline",
       "GET /governance/timeline/{event_id}",
@@ -458,6 +468,7 @@
       "GET /rag/retrieval-policy",
       "GET /rag/uploads",
       "GET /status",
+      "PATCH /field-assessment/engagements/{engagement_id}/status",
       "POST /admin/agent/commands/issue",
       "POST /admin/agent/devices/{device_id}/disable",
       "POST /admin/agent/devices/{device_id}/enable",
@@ -553,6 +564,11 @@
       "POST /enterprise-controls/tenant-state",
       "POST /exceptions/requests",
       "POST /exceptions/requests/{request_id}/approve",
+      "POST /field-assessment/engagements",
+      "POST /field-assessment/engagements/{engagement_id}/document-analyses",
+      "POST /field-assessment/engagements/{engagement_id}/evidence-links",
+      "POST /field-assessment/engagements/{engagement_id}/observations",
+      "POST /field-assessment/engagements/{engagement_id}/scan-results",
       "POST /governance/changes",
       "POST /governance/changes/{change_id}/approve",
       "POST /internal/connectors/{connector_id}/ingest",
