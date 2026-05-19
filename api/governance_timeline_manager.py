@@ -37,6 +37,7 @@ class TimelineEventResponse(BaseModel):
     manifest_hash: str | None
     replay_eligible: bool
     schema_version: str
+    event_version: str
     payload: dict[str, Any]
     display: dict[str, Any] | None = None
 
@@ -61,6 +62,7 @@ def _record_to_response(rec) -> TimelineEventResponse:
         manifest_hash=rec.manifest_hash,
         replay_eligible=rec.replay_eligible,
         schema_version=rec.schema_version,
+        event_version=getattr(rec, "event_version", "1.0"),
         payload=rec.payload or {},
         display=None,
     )

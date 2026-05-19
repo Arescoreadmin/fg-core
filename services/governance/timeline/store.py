@@ -57,6 +57,7 @@ class TimelineStore:
             manifest_hash=event.manifest_hash,
             replay_eligible=event.replay_eligible,
             schema_version=event.schema_version,
+            event_version=event.event_version,
         )
         try:
             db.add(record)

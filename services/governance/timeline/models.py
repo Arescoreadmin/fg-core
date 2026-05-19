@@ -67,3 +67,4 @@ class TimelineEvent:
     manifest_hash: str | None = None
     replay_eligible: bool = False
     schema_version: str = "1.0"
+    event_version: str = "1.0"  # event-type contract version — evolves independently of schema_version

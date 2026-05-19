@@ -416,6 +416,10 @@ class TestTimelineEventModel:
         event = _make_event()
         assert event.schema_version == "1.0"
 
+    def test_default_event_version(self):
+        event = _make_event()
+        assert event.event_version == "1.0"
+
     def test_replay_eligible_false_by_default(self):
         event = _make_event()
         assert event.replay_eligible is False

@@ -26,7 +26,8 @@ Schema:
     classification TEXT NOT NULL DEFAULT 'internal',
     manifest_hash TEXT,
     replay_eligible BOOLEAN DEFAULT FALSE,
-    schema_version TEXT DEFAULT '1.0'
+    schema_version TEXT DEFAULT '1.0',
+    event_version TEXT DEFAULT '1.0'
   )
 """
 
@@ -64,6 +65,9 @@ class TimelineEventRecord(Base):
         Boolean, nullable=False, default=False
     )
     schema_version: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="1.0"
+    )
+    event_version: Mapped[str] = mapped_column(
         String(16), nullable=False, default="1.0"
     )
 

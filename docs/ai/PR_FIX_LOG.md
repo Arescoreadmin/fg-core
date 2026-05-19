@@ -10562,3 +10562,23 @@ Existing report downloads were presentation-level placeholders. They did not pro
 **Validation:**
 - `.venv/bin/pytest -q tests/test_governance_report_exports.py tests/test_report_jobs.py tests/test_report_hardening.py tests/security/test_export_path_tenant_isolation.py`: 63 passed
 - `.venv/bin/ruff check api/report_exports.py api/reports_engine.py api/db_models.py tests/test_governance_report_exports.py`: passed
+
+### 2026-05-19 — PR 100 addendum: adapter hardening — event_version envelope field, payload schema_version, lineage, deterministic ordering, event_origin, adapter registry
+
+**Branch:** `feat/unified-governance-timeline-adapters-pr100`
+
+**Area:** Governance timeline adapters; event contract evolution; causal lineage infrastructure.
+
+**Files changed:**
+- `services/governance/timeline/models.py` — added `event_version: str = "1.0"` to `TimelineEvent` (independent of `schema_version` — versions the event-type payload contract, not the envelope)
+- `services/governance/timeline/store.py` — persists `event_version` in `record()`
+- `api/db_models_timeline.py` — added `event_version` column (NOT NULL DEFAULT '1.0')
+- `migrations/postgres/0058_governance_timeline_event_version.sql` — `ALTER TABLE … ADD COLUMN IF NOT EXISTS event_version TEXT NOT NULL DEFAULT '1.0'`
+- `api/governance_timeline_manager.py` — added `event_version` to `TimelineEventResponse` and `_record_to_response()`
+- `services/governance/timeline/adapters.py` — full hardening: `schema_version` + `event_origin="live"` + causal lineage (`parent_event_id`, `causation_id`, `correlation_id` always present) + `_sorted_payload()` deterministic key ordering + `event_version="1.0"` on envelope + `TIMELINE_ADAPTERS` registry dict
+- `tests/test_governance_timeline_adapters.py` — expanded from 32 to 55 tests covering all new fields and registry
+- `tests/test_governance_timeline.py` — added `test_default_event_version`
+
+**Verification:**
+- `FG_ENV=test .venv/bin/python -m pytest tests/test_governance_timeline_adapters.py tests/test_governance_timeline.py tests/test_governance_report.py -q`: 138 passed
+- `make fg-fast`: all gates pass
