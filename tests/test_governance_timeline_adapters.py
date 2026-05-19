@@ -19,6 +19,7 @@ All tests are pure-unit: no DB, no network, no fixtures.
 from __future__ import annotations
 
 import os
+from types import SimpleNamespace
 from datetime import datetime
 
 os.environ.setdefault("FG_ENV", "test")
@@ -60,10 +61,7 @@ def _make_simulation_entry(
             obj.value = v
             return obj
 
-    class _Entry:
-        pass
-
-    e = _Entry()
+    e = SimpleNamespace()
     e.tenant_id = tenant_id
     e.simulation_id = simulation_id
     e.scenario_type = _FakeEnum(scenario_type_value)
@@ -93,10 +91,7 @@ def _make_report(
     class _Finding:
         pass
 
-    class _Report:
-        pass
-
-    r = _Report()
+    r = SimpleNamespace()
     r.report_id = report_id
     r.assessment_id = assessment_id
     r.tenant_id = tenant_id
@@ -506,10 +501,7 @@ def _make_monitoring_record(
     completed_at_iso: str = "2026-05-19T10:00:00.000Z",
     error_summary: str | None = None,
 ):
-    class _Record:
-        pass
-
-    r = _Record()
+    r = SimpleNamespace()
     r.run_id = run_id
     r.tenant_id = tenant_id
     r.assessment_id = assessment_id
@@ -541,10 +533,7 @@ def _make_alert_run_record(
     completed: bool = True,
     error_summary: str | None = None,
 ):
-    class _Record:
-        pass
-
-    r = _Record()
+    r = SimpleNamespace()
     r.run_id = run_id
     r.tenant_id = tenant_id
     r.source_monitoring_run_id = source_monitoring_run_id
@@ -577,10 +566,7 @@ def _make_evidence_reference(
             obj.value = v
             return obj
 
-    class _EvidenceRef:
-        pass
-
-    e = _EvidenceRef()
+    e = SimpleNamespace()
     e.evidence_id = evidence_id
     e.assessment_id = assessment_id
     e.tenant_id = tenant_id
