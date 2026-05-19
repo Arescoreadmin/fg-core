@@ -6,6 +6,32 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-19 — PR 360: NIST AI RMF Question Bank v2, ai_trustworthiness Domain, Bug Fixes
+
+**Branch:** `claude/audit-ai-platform-dZCwv`
+
+**Area:** Assessment schema (migration); question scoring (api/assessments.py); framework mappings; report engine prompt templates.
+
+**Root cause (Bug 1 — Codex review):** `POST /orgs` response returned hardcoded `"v2025.1-base"` as `schema_version` even though the handler dynamically queries the active schema into a local `schema_version` variable.
+
+**Root cause (Bug 2 — Codex review):** `at_004` select question placed "AI is not used in high-stakes decisions" at index 0, causing it to score 0/100. Organisations not using AI for high-stakes decisions were incorrectly penalised for a control that does not apply to them.
+
+**Files changed:**
+- `migrations/postgres/0059_question_bank_v2_nist_mapped.sql` (new migration) — retires v2025.1-base (35 q, 6 domains); inserts v2025.2-nist-mapped (55 q, 7 domains, NIST control IDs, ai_trustworthiness domain, v2.0 prompt templates); fixes at_004 option order + adds `na_option` field
+- `api/assessments.py` — updated `_BASE_WEIGHTS` for 7 domains; updated `_PROFILE_MULTIPLIERS` with ai_trustworthiness per profile; dynamic schema_version query in `create_org`; `_question_score` now honours `na_option` (returns `None` instead of 0); **Bug 1 fix:** `OrgCreateResponse` now returns dynamic `schema_version` variable
+- `services/governance/report/framework_mappings.py` — added `NIST_AI_RMF_CONTROLS` (37 controls), `QUESTION_NIST_CONTROL_MAP` (55 questions), `build_nist_control_matrix()`, `nist_coverage_text()`; extended `_FRAMEWORK_CONTROL_MAP_RAW` with ai_trustworthiness
+- `api/reports_engine.py` — builds NIST matrix, injects `{{nist_coverage}}` into prompts, injects deterministic `nist_control_matrix` into report content, updated `_validate_report_content()` for new v2.0 fields
+
+**Design invariants:**
+- `build_nist_control_matrix()` is deterministic — no AI inference; identical inputs → identical matrix.
+- `na_option` never scores as 0; returns `None` so the question is excluded from domain average.
+- `OrgCreateResponse.schema_version` always reflects the active DB schema, not a hardcoded literal.
+- Migration is append-only: retires old schema version via `is_current = FALSE`; does not drop rows.
+
+**Verification:** `_question_score` na_option branch returns `None` for matching value and correct index score otherwise; `create_org` response schema_version matches active DB record; at_004 index 0 now scores the worst applicable option ("AI is used with no required human review" → 0/100).
+
+---
+
 ### 2026-05-18 — PR 99: Unified Governance Timeline Infrastructure (Foundation)
 
 **Branch:** `feat/unified-governance-timeline-pr99`

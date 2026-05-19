@@ -153,6 +153,12 @@ def _question_score(q: dict[str, Any], raw_value: Any) -> float | None:
         options = q.get("options", [])
         if not options:
             return None
+        # na_option marks one choice as "not applicable" — excluded from scoring
+        # rather than scored as 0, so it doesn't penalise orgs for which the
+        # control is genuinely irrelevant (e.g. "AI not used in high-stakes decisions").
+        na_option = q.get("na_option")
+        if na_option and str(raw_value) == na_option:
+            return None
         try:
             index = options.index(raw_value)
             return (index / (len(options) - 1)) * 100.0
@@ -380,7 +386,7 @@ def create_org(
         org_id=org_id,
         assessment_id=assessment_id,
         profile_type=profile_type,
-        schema_version="v2025.1-base",
+        schema_version=schema_version,
     )
 
 
