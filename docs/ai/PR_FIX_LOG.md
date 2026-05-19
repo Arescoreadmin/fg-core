@@ -6,6 +6,33 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-19 — PR 360 (addendum): Fix pre-existing opentelemetry DeprecationWarning breaking fg-fast
+
+**Branch:** `claude/audit-ai-platform-dZCwv`
+
+**Area:** Test configuration (pytest.ini).
+
+**Root cause:** `opentelemetry` 1.42.0 (latest) on Python 3.11 calls `.values()` on the
+`SelectableGroups` object returned by `importlib.metadata.entry_points()`. Python 3.11's
+stdlib raises `DeprecationWarning: SelectableGroups dict interface is deprecated. Use select.`
+on any dict-interface access. `pytest.ini` has `filterwarnings = error`, which converts this
+into a hard error at collection time, blocking all test runs. Affects the entire repo — not
+introduced by any single PR.
+
+**Files changed:**
+- `pytest.ini` — added targeted `ignore:SelectableGroups dict interface is deprecated` filter
+  scoped to `DeprecationWarning`; all other warnings remain errors.
+
+**Design invariants:**
+- Filter is as narrow as possible: matches only the exact deprecation message from stdlib.
+- No other `DeprecationWarning` suppression added.
+- Fix is in test config, not in application code or CI yaml.
+
+**Verification:** `pytest tests/test_auth_tenants.py --collect-only` now collects 3 tests
+without error. `make fg-fast` passes all gates.
+
+---
+
 ### 2026-05-19 — PR 360: NIST AI RMF Question Bank v2, ai_trustworthiness Domain, Bug Fixes
 
 **Branch:** `claude/audit-ai-platform-dZCwv`
