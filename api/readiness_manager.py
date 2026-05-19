@@ -64,10 +64,14 @@ from services.readiness.store import (
     ScoringContractNotFound,
 )
 
+from services.governance.timeline import TimelineStore
+from services.governance.timeline.adapters import evidence_submitted_to_timeline_event
+
 log = logging.getLogger("frostgate.readiness")
 router = APIRouter(tags=["readiness"])
 
 _store = ReadinessStore()
+_timeline_store = TimelineStore()
 
 # ---------------------------------------------------------------------------
 # Error codes
@@ -1497,6 +1501,13 @@ def attach_evidence(
             control_ids=req.control_ids,
             notes=req.notes,
         )
+        try:
+            _tl_event = evidence_submitted_to_timeline_event(evidence)
+            _timeline_store.record(db, _tl_event)
+        except Exception:
+            log.warning(
+                "evidence.timeline_emit_failed evidence_id=%s", evidence.evidence_id
+            )
         db.commit()
         return EvidenceReferenceResponse.from_domain(evidence)
     except ReadinessStoreError as exc:
