@@ -200,6 +200,11 @@ class _LiveGraphClient:
 
         import urllib.request
 
+        # graph_endpoint strings carry the HTTP verb (e.g. "GET /applications").
+        # Strip it so we concatenate only the path onto self._base.
+        if " " in path:
+            path = path.split(" ", 1)[1]
+
         # Build the URL — path may already contain query params
         separator = "&" if "?" in path else "?"
         params: list[str] = []

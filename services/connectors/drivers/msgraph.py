@@ -447,17 +447,26 @@ def execute_action(
 # Per-action analysis — structured findings, no raw PII stored
 # ---------------------------------------------------------------------------
 
-# AI-related permission scopes commonly seen on OAuth apps
-_AI_SCOPES = {
-    "Mail.Read",
-    "Mail.ReadWrite",
-    "Files.Read.All",
-    "Files.ReadWrite.All",
-    "Chat.Read",
-    "Chat.ReadWrite",
-    "ChannelMessage.Read.All",
-    "Calendars.ReadWrite",
-    "Contacts.Read",
+# Microsoft Graph permission GUIDs for broad/sensitive data access.
+# requiredResourceAccess.resourceAccess.id is always a GUID — never the
+# human-readable scope name — so we must match on GUIDs here.
+# Microsoft Graph resourceAppId: 00000003-0000-0000-c000-000000000000
+_BROAD_SCOPE_GUIDS: dict[str, str] = {
+    # Delegated
+    "e1fe6dd8-ba31-4d61-89e7-88639da4683d": "Mail.Read",
+    "024d486e-b451-40bb-833d-3e66d98c5c73": "Mail.ReadWrite",
+    "df85f4d6-205c-4ac5-a5ea-6bf408dba283": "Files.Read.All",
+    "75359482-378d-4052-8f01-80520e7db3cd": "Files.ReadWrite.All",
+    "f501c180-9344-439a-bca0-6cbf209fd270": "Chat.Read",
+    "9ff7295e-131b-4d94-90e1-69fde507ac11": "Chat.ReadWrite",
+    "7b2449af-6ccd-4f98-a5ac-c105e629b9bb": "ChannelMessage.Read.All",
+    "1ec239c2-d7c9-4623-a91a-a9775856bb36": "Calendars.ReadWrite",
+    "ff74d97f-43af-4b68-9f2a-b4db0b4f26f2": "Contacts.Read",
+    # Application
+    "810c84a8-4a9e-49e6-bf7d-12d183f40d01": "Mail.Read (app)",
+    "e2a3a72e-5f79-4c64-b1b1-878b674786c9": "Mail.ReadWrite (app)",
+    "01d4889c-1287-42c6-ac1f-5d1e02578ef6": "Files.Read.All (app)",
+    "6b7d71aa-70aa-4810-a8d9-5d9fb2830017": "Chat.Read.All (app)",
 }
 
 _AI_APP_KEYWORDS = {
@@ -528,9 +537,11 @@ def _analyse_oauth_apps(records: list[dict]) -> list[dict]:
         broad_scopes = []
         for rra_entry in rra:
             for ra in rra_entry.get("resourceAccess", []):
-                rid = ra.get("id", "")
-                if rid in _AI_SCOPES:
-                    broad_scopes.append(rid)
+                # resourceAccess.id is a GUID — match against the GUID map
+                rid = (ra.get("id") or "").lower()
+                scope_name = _BROAD_SCOPE_GUIDS.get(rid)
+                if scope_name:
+                    broad_scopes.append(scope_name)
         if broad_scopes:
             broad_permission_apps.append({
                 "name": name,

@@ -6,6 +6,30 @@ This log records **completed, intentional fixes**.
 
 ---
 
+### 2026-05-19 — PR 362 (Codex bug fixes): msgraph driver URL construction + GUID scope matching
+
+**Branch:** `claude/msgraph-connector`
+
+**Area:** `services/connectors/drivers/msgraph.py`, `api/assessment_scan.py`, route inventory.
+
+**Root cause (P1 — URL construction):** `graph_endpoint` values include the HTTP verb (e.g. `"GET /applications"`). `_LiveGraphClient.get()` built the request URL as `self._base + path`, producing malformed URLs like `https://graph.microsoft.com/v1.0GET /applications`. Every scan action would fail at runtime. Fix: strip the leading `"VERB "` prefix before concatenating.
+
+**Root cause (P2 — scope GUID matching):** `_AI_SCOPES` used human-readable permission names (`Mail.Read`) but `requiredResourceAccess.resourceAccess.id` in the Graph API response is always a GUID. The broad-scope finding (`broad_data_scope_apps`) would never fire. Fix: replaced `_AI_SCOPES` with `_BROAD_SCOPE_GUIDS` (a dict mapping known dangerous permission GUIDs to their names).
+
+**Root cause (route inventory):** Four new scan endpoints were not registered in `tools/ci/route_inventory.json`. Fix: regenerated via `make route-inventory-generate`.
+
+**Files changed:**
+- `services/connectors/drivers/msgraph.py` — replaced `_AI_SCOPES` set with `_BROAD_SCOPE_GUIDS` dict (GUIDs → names); updated `_analyse_oauth_apps` to match on lowercase GUIDs
+- `api/assessment_scan.py` — strip HTTP verb from `graph_endpoint` path before URL construction
+- `tools/ci/route_inventory.json` — regenerated to include 4 new scan routes
+- `BLUEPRINT_STAGED.md`, `CONTRACT.md`, `contracts/core/openapi.json`, `schemas/api/openapi.json` — contract authority refresh
+
+**Design invariants:** No functional behaviour changed beyond the bug fixes.
+
+**Verification:** `make route-inventory-audit` passes; `make fg-contract` passes; URL construction now produces `https://graph.microsoft.com/v1.0/applications`; GUID matching correctly identifies known dangerous permissions.
+
+---
+
 ### 2026-05-19 — Microsoft Graph Connector (AI Governance Field Assessment)
 
 **Branch:** `claude/msgraph-connector`
