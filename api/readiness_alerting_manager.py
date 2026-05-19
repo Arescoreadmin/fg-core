@@ -77,6 +77,8 @@ from services.readiness.monitoring import (
     MonitoringRunTenantIsolationError,
 )
 from services.readiness.monitoring.models import MonitoringEvaluationContext
+from services.governance.timeline import TimelineStore
+from services.governance.timeline.adapters import alert_run_to_timeline_event
 
 logger = logging.getLogger("frostgate.api.readiness_alerting")
 
@@ -85,6 +87,7 @@ router = APIRouter(tags=["readiness"])
 _alerting_store = AlertingStore()
 _alert_engine = AlertingEngine()
 _monitoring_store = MonitoringRunStore()
+_timeline_store = TimelineStore()
 
 ALERT_GENERATION_VERSION = "1.0"
 ESCALATION_POLICY_VERSION = "1.0"
@@ -516,6 +519,11 @@ def create_alert_run(
         alert_run_id=alert_run_id,
     )
 
+    try:
+        _tl_event = alert_run_to_timeline_event(record)
+        _timeline_store.record(db, _tl_event)
+    except Exception:
+        logger.warning("alerting.timeline_emit_failed run_id=%s", alert_run_id)
     db.commit()
 
     logger.info(

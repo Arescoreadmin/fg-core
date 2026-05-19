@@ -13,11 +13,14 @@ Design invariants:
 
 Adapter registry:
   TIMELINE_ADAPTERS maps SourceType → adapter callable.
-  PR 101 adds MONITORING, ALERT, EVIDENCE entries.
+  PR 102 adds EXPORT, REPLAY entries.
 
 Covered sources:
   simulation  — SimulationTimelineEntry  → SourceType.SIMULATION
   report      — GovernanceReport         → SourceType.GOVERNANCE_REPORT
+  monitoring  — MonitoringRunRecord      → SourceType.MONITORING
+  alert       — AlertRunRecord           → SourceType.ALERT
+  evidence    — EvidenceReference        → SourceType.EVIDENCE
 """
 
 from __future__ import annotations
@@ -180,13 +183,187 @@ def governance_report_to_timeline_event(
     )
 
 
+def monitoring_run_to_timeline_event(
+    record,
+    *,
+    parent_event_id: str | None = None,
+    causation_id: str | None = None,
+    correlation_id: str | None = None,
+) -> TimelineEvent:
+    """Convert a MonitoringRunRecord to a TimelineEvent.
+
+    event_type is "monitoring.completed".
+    replay_eligible=True because snapshots are deterministically reconstructable.
+    """
+    occurred_at = _normalize_iso(record.completed_at_iso)
+    event_id = derive_event_id(
+        tenant_id=record.tenant_id,
+        source_type=SourceType.MONITORING.value,
+        source_id=record.run_id,
+        event_type="monitoring.completed",
+        occurred_at=occurred_at,
+    )
+    payload: dict[str, Any] = {
+        "schema_version": _EVENT_VERSION,
+        "event_origin": "live",
+        "snapshot_id": record.snapshot_id,
+        "domains_evaluated": list(record.domains_evaluated),
+        "total_drift_events": record.total_drift_events,
+        "critical_or_blocking_count": record.critical_or_blocking_count,
+        "evaluation_success": record.evaluation_success,
+        "monitoring_contract_version": record.monitoring_contract_version,
+        "evaluation_engine_version": record.evaluation_engine_version,
+    }
+    if record.assessment_id:
+        payload["assessment_id"] = record.assessment_id
+    if record.framework_ids:
+        payload["framework_ids"] = list(record.framework_ids)
+    if record.error_summary:
+        payload["error_summary"] = record.error_summary
+
+    payload.update(_lineage(parent_event_id, causation_id, correlation_id))
+
+    return TimelineEvent(
+        event_id=event_id,
+        tenant_id=record.tenant_id,
+        source_type=SourceType.MONITORING,
+        source_id=record.run_id,
+        event_type="monitoring.completed",
+        occurred_at=occurred_at,
+        recorded_at=_now_iso(),
+        payload=_sorted_payload(payload),
+        classification="internal",
+        replay_eligible=True,
+        event_version=_EVENT_VERSION,
+    )
+
+
+def alert_run_to_timeline_event(
+    record,
+    *,
+    parent_event_id: str | None = None,
+    causation_id: str | None = None,
+    correlation_id: str | None = None,
+) -> TimelineEvent:
+    """Convert an AlertRunRecord to a TimelineEvent.
+
+    event_type is "alert.run_completed".
+    source_monitoring_run_id is included in payload as causal linkage.
+    replay_eligible=True because alert generation is deterministic from its snapshot.
+    """
+    occurred_at = _normalize_iso(record.generation_timestamp_iso)
+    event_id = derive_event_id(
+        tenant_id=record.tenant_id,
+        source_type=SourceType.ALERT.value,
+        source_id=record.run_id,
+        event_type="alert.run_completed",
+        occurred_at=occurred_at,
+    )
+    payload: dict[str, Any] = {
+        "schema_version": _EVENT_VERSION,
+        "event_origin": "live",
+        "source_monitoring_run_id": record.source_monitoring_run_id,
+        "total_alerts_generated": record.total_alerts_generated,
+        "total_alerts_deduplicated": record.total_alerts_deduplicated,
+        "total_alerts_suppressed": record.total_alerts_suppressed,
+        "alert_generation_version": record.alert_generation_version,
+        "escalation_policy_version": record.escalation_policy_version,
+        "completed": record.completed,
+    }
+    if record.assessment_id:
+        payload["assessment_id"] = record.assessment_id
+    if record.error_summary:
+        payload["error_summary"] = record.error_summary
+
+    payload.update(_lineage(parent_event_id, causation_id, correlation_id))
+
+    return TimelineEvent(
+        event_id=event_id,
+        tenant_id=record.tenant_id,
+        source_type=SourceType.ALERT,
+        source_id=record.run_id,
+        event_type="alert.run_completed",
+        occurred_at=occurred_at,
+        recorded_at=_now_iso(),
+        payload=_sorted_payload(payload),
+        classification="internal",
+        replay_eligible=True,
+        event_version=_EVENT_VERSION,
+    )
+
+
+def evidence_submitted_to_timeline_event(
+    evidence,
+    *,
+    parent_event_id: str | None = None,
+    causation_id: str | None = None,
+    correlation_id: str | None = None,
+) -> TimelineEvent:
+    """Convert an EvidenceReference to a TimelineEvent.
+
+    event_type is "evidence.submitted".
+    replay_eligible=False — evidence submission involves external state that
+    cannot be deterministically reconstructed from governance metadata alone.
+    """
+    from datetime import datetime, timezone as _tz
+
+    submitted_at = evidence.submitted_at
+    if isinstance(submitted_at, datetime):
+        if submitted_at.tzinfo is None:
+            submitted_at = submitted_at.replace(tzinfo=_tz.utc)
+        submitted_at_iso = submitted_at.astimezone(_tz.utc).isoformat()
+    else:
+        submitted_at_iso = str(submitted_at)
+
+    occurred_at = _normalize_iso(submitted_at_iso)
+    event_id = derive_event_id(
+        tenant_id=evidence.tenant_id,
+        source_type=SourceType.EVIDENCE.value,
+        source_id=evidence.evidence_id,
+        event_type="evidence.submitted",
+        occurred_at=occurred_at,
+    )
+    payload: dict[str, Any] = {
+        "schema_version": _EVENT_VERSION,
+        "event_origin": "live",
+        "assessment_id": evidence.assessment_id,
+        "evidence_type": evidence.evidence_type.value
+        if hasattr(evidence.evidence_type, "value")
+        else str(evidence.evidence_type),
+    }
+    if evidence.evidence_classification:
+        payload["evidence_classification"] = evidence.evidence_classification
+    if evidence.control_ids:
+        payload["control_ids"] = list(evidence.control_ids)
+
+    payload.update(_lineage(parent_event_id, causation_id, correlation_id))
+
+    classification = evidence.evidence_classification or "internal"
+
+    return TimelineEvent(
+        event_id=event_id,
+        tenant_id=evidence.tenant_id,
+        source_type=SourceType.EVIDENCE,
+        source_id=evidence.evidence_id,
+        event_type="evidence.submitted",
+        occurred_at=occurred_at,
+        recorded_at=_now_iso(),
+        payload=_sorted_payload(payload),
+        classification=classification,
+        replay_eligible=False,
+        event_version=_EVENT_VERSION,
+    )
+
+
 # ---------------------------------------------------------------------------
-# Adapter registry — dispatch table for PR 101+ sources
+# Adapter registry — dispatch table for PR 102+ sources
 # ---------------------------------------------------------------------------
 
 TIMELINE_ADAPTERS: dict[SourceType, Callable[..., TimelineEvent]] = {
     SourceType.SIMULATION: simulation_entry_to_timeline_event,
     SourceType.GOVERNANCE_REPORT: governance_report_to_timeline_event,
-    # PR 101: MONITORING, ALERT, EVIDENCE
+    SourceType.MONITORING: monitoring_run_to_timeline_event,
+    SourceType.ALERT: alert_run_to_timeline_event,
+    SourceType.EVIDENCE: evidence_submitted_to_timeline_event,
     # PR 102: EXPORT, REPLAY
 }

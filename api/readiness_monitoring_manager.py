@@ -58,6 +58,8 @@ from services.readiness.monitoring import (
     derive_monitoring_run_id,
 )
 from services.readiness.monitoring.serialization import snapshot_from_json
+from services.governance.timeline import TimelineStore
+from services.governance.timeline.adapters import monitoring_run_to_timeline_event
 
 logger = logging.getLogger("frostgate.api.readiness_monitoring")
 
@@ -66,6 +68,7 @@ router = APIRouter(tags=["readiness"])
 _readiness_store = ReadinessStore()
 _monitoring_store = MonitoringRunStore()
 _monitor = MonitoringEngine()
+_timeline_store = TimelineStore()
 
 MONITORING_CONTRACT_VERSION = "1.0"
 EVALUATION_ENGINE_VERSION = "1.0"
@@ -578,6 +581,11 @@ def create_monitoring_run(
         evaluation_success=result.evaluation_success,
         error_summary=result.error_summary,
     )
+    try:
+        _tl_event = monitoring_run_to_timeline_event(record)
+        _timeline_store.record(db, _tl_event)
+    except Exception:
+        logger.warning("monitoring.timeline_emit_failed run_id=%s", run_id)
     db.commit()
 
     logger.info(
