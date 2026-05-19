@@ -83,6 +83,7 @@ class ObservationType(str, Enum):
     CONCERN = "concern"
     FINDING = "finding"
     NOTE = "note"
+    INTERVIEW = "interview"
 
 
 class ObservationSeverity(str, Enum):

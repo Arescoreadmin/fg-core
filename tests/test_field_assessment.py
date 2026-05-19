@@ -281,7 +281,7 @@ def test_ingest_scan_result_hash_correct_accepted(client: TestClient) -> None:
     created = _create_engagement(client)
     eng_id = created["id"]
 
-    raw_payload = {"users": []}
+    raw_payload: dict[str, object] = {"users": []}
     correct_hash = compute_evidence_hash(raw_payload)
     body = dict(_SCAN_RESULT_BODY)
     body["expected_evidence_hash"] = correct_hash
@@ -640,3 +640,48 @@ def test_get_engagement_wrong_tenant_returns_404(client: TestClient) -> None:
     # With auth_enabled=False, tenant is not set — EngagementNotFound → 404
     resp = client.get("/field-assessment/engagements/unknown-tenant-eng")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# API tests — ObservationType.INTERVIEW
+# ---------------------------------------------------------------------------
+
+
+def test_capture_interview_observation(client: TestClient) -> None:
+    """INTERVIEW observation_type stores correctly and is retrievable."""
+    created = _create_engagement(client)
+    eng_id = created["id"]
+    body = {
+        "domain": "ai_governance",
+        "observation_type": "interview",
+        "severity": "info",
+        "title": "CTO interview — AI usage patterns",
+        "description": "Interviewed CTO regarding AI tooling adoption.",
+        "interview_role": "CTO",
+    }
+    resp = client.post(
+        f"/field-assessment/engagements/{eng_id}/observations", json=body
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["observation_type"] == "interview"
+    assert data["interview_role"] == "CTO"
+
+
+def test_interview_observation_appears_in_list(client: TestClient) -> None:
+    """INTERVIEW observations are returned by the list endpoint."""
+    created = _create_engagement(client)
+    eng_id = created["id"]
+    body = {
+        "domain": "compliance",
+        "observation_type": "interview",
+        "severity": "low",
+        "title": "Legal counsel interview",
+        "description": "Policy awareness check.",
+        "interview_role": "General Counsel",
+    }
+    client.post(f"/field-assessment/engagements/{eng_id}/observations", json=body)
+    resp = client.get(f"/field-assessment/engagements/{eng_id}/observations")
+    assert resp.status_code == 200
+    types = [o["observation_type"] for o in resp.json()]
+    assert "interview" in types
