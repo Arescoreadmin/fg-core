@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 287,
+    "contract_count": 292,
     "contract_only": [],
-    "runtime_count": 391,
+    "runtime_count": 396,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -141,7 +141,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "591b34be264ec445db70e92348b70d29399b622a2fb5603a48abfe1785103d00",
+  "governance_fingerprint": "358f4f4812cb173b64927e0e3e1840693533d539d5b3d02827b3ee7976c97ccb",
   "planes": [
     {
       "compat": {
@@ -579,6 +579,10 @@
       "GET /ingest/assessment/reports/{report_id}/exports/{export_format}",
       "GET /ingest/assessment/reports/{report_id}/manifest",
       "GET /ingest/assessment/{assessment_id}",
+      "GET /ingest/assessment/{assessment_id}/governance-report/{report_id}",
+      "GET /ingest/assessment/{assessment_id}/governance-report/{report_id}/export/html",
+      "GET /ingest/assessment/{assessment_id}/governance-report/{report_id}/export/manifest",
+      "GET /ingest/assessment/{assessment_id}/governance-report/{report_id}/replay",
       "GET /ingest/assessment/{assessment_id}/questions",
       "GET /stats",
       "GET /stats/debug",
@@ -607,6 +611,7 @@
       "POST /ingest/assessment/reports/{report_id}/replay-verify",
       "POST /ingest/assessment/webhooks/stripe",
       "POST /ingest/assessment/{assessment_id}/checkout",
+      "POST /ingest/assessment/{assessment_id}/governance-report",
       "POST /ingest/assessment/{assessment_id}/submit"
     ],
     "evidence": [

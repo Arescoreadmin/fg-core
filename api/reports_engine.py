@@ -63,6 +63,7 @@ from api.report_exports import (
     emit_export_event,
     load_assessment,
     load_report_for_export,
+    populate_deterministic_export_sections,
     render_html_export,
     render_pdf_export,
 )
@@ -246,7 +247,7 @@ def _validate_report_content(content: dict[str, Any]) -> dict[str, Any]:
     content["key_strengths"] = content["key_strengths"][:3]
     content["critical_gaps"] = content["critical_gaps"][:5]
 
-    return content
+    return populate_deterministic_export_sections(content)
 
 
 def _emit_report_event(
@@ -921,7 +922,6 @@ def regenerate_report(
         previous_report_id=report.id,
         report_version=(report.report_version or 1) + 1,
     )
-    report.approval_status = "superseded"
     report.superseded_by_report_id = new_report_id
     db.add(new_report)
     db.commit()

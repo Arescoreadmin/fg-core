@@ -167,9 +167,43 @@ def test_evidence_appendix_ordering_is_deterministic() -> None:
 def test_missing_required_sections_fail_closed() -> None:
     content = _content()
     content.pop("evidence")
+    content.pop("critical_gaps", None)
+    content.pop("domain_findings", None)
+    content.pop("key_strengths", None)
+    content.pop("roadmap", None)
+    content.pop("framework_alignments", None)
 
     with pytest.raises(ExportValidationError, match="missing required sections"):
         build_hashed_manifest(_report(content=content), _assessment())
+
+
+def test_legacy_generated_report_shape_maps_to_deterministic_sections() -> None:
+    legacy_content = {
+        "executive_summary": "Legacy advisory report.",
+        "key_strengths": ["Documented access policy"],
+        "critical_gaps": ["Access reviews are not evidenced"],
+        "domain_findings": {"security_posture": ["Logging coverage is incomplete"]},
+        "roadmap": {"days_30": ["Collect IAM review evidence"]},
+        "framework_alignments": [
+            {"framework": "SOC2", "control": "CC6.3"},
+            {"framework": "SOC2", "control": "CC7.2"},
+        ],
+    }
+
+    manifest = build_hashed_manifest(_report(content=legacy_content), _assessment())[
+        "manifest"
+    ]
+
+    assert manifest["findings"][0]["id"].startswith("finding-")
+    assert manifest["evidence"][0]["lineage"] == (
+        "report_generation:legacy_schema_mapping"
+    )
+    assert {item["framework"] for item in manifest["framework_mappings"]} == {"SOC2"}
+    assert {item["control"] for item in manifest["framework_mappings"]} == {
+        "CC6.3",
+        "CC7.2",
+    }
+    assert manifest["confidence"]["method"] == "deterministic-legacy-report-mapping"
 
 
 def test_replay_mismatch_detection_uses_canonical_hash() -> None:
@@ -201,6 +235,25 @@ def test_finalized_lineage_and_reviewer_metadata_are_preserved() -> None:
     assert manifest["lineage"]["prior_report_id"] == "report-0"
     assert manifest["lineage"]["following_report_id"] == "report-2"
     assert manifest["report"]["report_version"] == 2
+
+
+def test_finalized_manifest_hash_survives_supersession_mutations() -> None:
+    finalized_at = datetime(2026, 5, 2, 9, 30, tzinfo=timezone.utc)
+    report = _report(
+        reviewer_ref="user:reviewer-1",
+        approval_status="finalized",
+        finalized_at=finalized_at,
+    )
+    finalized_hash = build_hashed_manifest(report, _assessment())["manifest_hash"]
+
+    report.finalized_manifest_hash = finalized_hash
+    report.approval_status = "superseded"
+    report.superseded_by_report_id = "report-2"
+    replay = build_hashed_manifest(report, _assessment())
+
+    assert replay["manifest_hash"] == finalized_hash
+    assert replay["manifest"]["reviewer"]["approval_status"] == "finalized"
+    assert replay["manifest"]["lineage"]["following_report_id"] is None
 
 
 def test_ai_narrative_is_advisory_and_separate_from_deterministic_sections() -> None:
