@@ -337,6 +337,7 @@ def generate_governance_report(
         is_finalized=False,
     )
     db.add(record)
+    db.flush()  # send report INSERT before timeline savepoint; IntegrityError surfaces here
     try:
         _tl_event = governance_report_to_timeline_event(report)
         _timeline_store.record(db, _tl_event)
