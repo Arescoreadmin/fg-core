@@ -23,18 +23,14 @@ from services.connectors.msgraph.manifest import (
 from services.connectors.msgraph.schema.scan_result import AcknowledgmentReceipt
 
 _ENV_KEY = "FG_ACKNOWLEDGMENT_KEY"
-_FALLBACK_KEY_FOR_TEST = "test-only-not-for-production"
 
 
 def _master_key() -> bytes:
     val = os.environ.get(_ENV_KEY, "")
     if not val:
-        import logging
-
-        logging.getLogger("frostgate.connectors.msgraph.acknowledgment").warning(
-            "FG_ACKNOWLEDGMENT_KEY not set — using test-only fallback key"
+        raise AcknowledgmentVerificationError(
+            "FG_ACKNOWLEDGMENT_KEY is required for operator acknowledgment signing"
         )
-        val = _FALLBACK_KEY_FOR_TEST
     return val.encode("utf-8")
 
 

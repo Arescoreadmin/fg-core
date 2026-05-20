@@ -8,11 +8,13 @@ import os
 from typing import Any
 
 os.environ.setdefault("FG_ENV", "test")
+os.environ.setdefault("FG_ACKNOWLEDGMENT_KEY", "test-key-32-bytes-exactly-padded!!")
 
 import pytest
 from fastapi.testclient import TestClient
 
 from services.canonical import canonical_json_bytes
+from services.connectors.msgraph.integrity import build_content_hashes
 from services.connectors.msgraph.acknowledgment import generate_receipt
 from services.connectors.msgraph.findings.derivation import (
     derive_finding_id,
@@ -49,7 +51,11 @@ def _create_engagement(client: TestClient) -> dict[str, Any]:
     return resp.json()
 
 
-def _manifest(*, tampered: bool = False) -> dict[str, Any]:
+def _manifest(
+    *,
+    content_hashes: dict[str, str],
+    tampered: bool = False,
+) -> dict[str, Any]:
     signed_at = "2026-05-20T12:00:00+00:00"
     payload: dict[str, Any] = {
         "manifest_id": "manifest-msgraph-001",
@@ -66,6 +72,7 @@ def _manifest(*, tampered: bool = False) -> dict[str, Any]:
             "/oauth2PermissionGrants": "a" * 64,
             "/servicePrincipals": "b" * 64,
         },
+        "content_hashes": content_hashes,
         "signed_at": signed_at,
     }
     canonical = {
@@ -80,6 +87,9 @@ def _manifest(*, tampered: bool = False) -> dict[str, Any]:
         "response_structure_hashes": {
             k: payload["response_structure_hashes"][k]
             for k in sorted(payload["response_structure_hashes"])
+        },
+        "content_hashes": {
+            k: payload["content_hashes"][k] for k in sorted(payload["content_hashes"])
         },
         "signed_at": signed_at,
     }
@@ -131,6 +141,19 @@ def _scan_result(
         remediation_owner="IT",
         evidence_refs=[evidence.ref_id],
     )
+    analyzer_outputs = {
+        "oauth_consent": {"score_3_critical": 1, "score_2_high": 0},
+        "enterprise_apps": {"unverified_publisher_high_priv": 1, "new_apps_30d": 0},
+        "ai_signals": {"shadow_ai_apps": 1, "unapproved_ai_apps": 1},
+        "privileged_roles": {"permanent_assignments": 0},
+        "guest_exposure": {"privileged_role_guests": 0},
+        "dlp_exposure": {"critical_count": 1, "high_count": 0, "profiles": []},
+    }
+    content_hashes = build_content_hashes(
+        findings=[finding],
+        evidence_refs=[evidence],
+        analyzer_outputs=analyzer_outputs,
+    )
     scan = ScanResult(
         scan_id="msgraph-run-001",
         tenant_id_hash=hash_tenant_id(tenant_id),
@@ -146,15 +169,11 @@ def _scan_result(
         endpoints_called=["/oauth2PermissionGrants", "/servicePrincipals"],
         findings=[finding],
         evidence_references=[evidence],
-        analyzer_outputs={
-            "oauth_consent": {"score_3_critical": 1, "score_2_high": 0},
-            "enterprise_apps": {"unverified_publisher_high_priv": 1, "new_apps_30d": 0},
-            "ai_signals": {"shadow_ai_apps": 1, "unapproved_ai_apps": 1},
-            "privileged_roles": {"permanent_assignments": 0},
-            "guest_exposure": {"privileged_role_guests": 0},
-            "dlp_exposure": {"critical_count": 1, "high_count": 0, "profiles": []},
-        },
-        integrity_manifest=_manifest(tampered=tampered_manifest),
+        analyzer_outputs=analyzer_outputs,
+        integrity_manifest=_manifest(
+            content_hashes=content_hashes,
+            tampered=tampered_manifest,
+        ),
     )
     return scan.model_dump(mode="json")
 
@@ -297,6 +316,44 @@ def test_msgraph_import_tampered_manifest_fails_closed(client: TestClient) -> No
 
     assert resp.status_code == 422
     assert resp.json()["detail"]["code"] == "CONNECTOR_MANIFEST_UNVERIFIED"
+
+
+def test_msgraph_import_tampered_finding_content_fails_closed(
+    client: TestClient,
+) -> None:
+    engagement = _create_engagement(client)
+    scan_result = _scan_result(tenant_id=_TENANT_ID, engagement_id=engagement["id"])
+    scan_result["findings"][0]["severity"] = "low"
+    scan_result["findings"][0]["title"] = "Downgraded finding content"
+
+    resp = client.post(
+        f"/field-assessment/engagements/{engagement['id']}/connector-runs/msgraph/import",
+        json=_import_payload(scan_result),
+    )
+
+    assert resp.status_code == 422
+    assert resp.json()["detail"]["code"] == "CONNECTOR_MANIFEST_UNVERIFIED"
+
+
+def test_msgraph_import_malformed_scan_payload_returns_422(
+    client: TestClient,
+) -> None:
+    engagement = _create_engagement(client)
+
+    resp = client.post(
+        f"/field-assessment/engagements/{engagement['id']}/connector-runs/msgraph/import",
+        json={
+            "connector_type": "microsoft_graph",
+            "connector_run_id": "broken-run",
+            "scan_result": {
+                "scan_id": "broken-run",
+                "schema_version": "1.0",
+            },
+        },
+    )
+
+    assert resp.status_code == 422
+    assert resp.json()["detail"]["code"] == "CONNECTOR_PAYLOAD_INVALID"
 
 
 def test_msgraph_import_audit_events_are_safe(client: TestClient) -> None:

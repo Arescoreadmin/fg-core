@@ -19,7 +19,7 @@ from api.db_models_field_assessment import FaEvidenceLink, FaScanResult
 from services.canonical import canonical_json_bytes, utc_iso8601_z_now
 from services.connectors.msgraph.acknowledgment import verify_receipt
 from services.connectors.msgraph.findings.derivation import hash_tenant_id
-from services.connectors.msgraph.integrity import verify_manifest
+from services.connectors.msgraph.integrity import build_content_hashes, verify_manifest
 from services.connectors.msgraph.manifest import (
     AcknowledgmentVerificationError,
     SCHEMA_VERSION as MSGRAPH_SCHEMA_VERSION,
@@ -121,8 +121,9 @@ def import_msgraph_scan_result(
 
     _verify_acknowledgment(scan)
     manifest = _verified_manifest(scan)
+    _verify_manifest_content(scan, manifest)
     manifest_hash = _sha256(scan.integrity_manifest)
-    integrity_hash = _sha256(scan.model_dump(mode="json", exclude={"findings"}))
+    integrity_hash = _sha256(scan.model_dump(mode="json"))
     if (
         envelope.connector_manifest_hash
         and envelope.connector_manifest_hash != manifest_hash
@@ -269,6 +270,22 @@ def _verified_manifest(scan: ScanResult) -> SignedManifest:
     if not verify_manifest(manifest):
         raise ConnectorManifestUnverified("Microsoft Graph manifest HMAC failed")
     return manifest
+
+
+def _verify_manifest_content(scan: ScanResult, manifest: SignedManifest) -> None:
+    expected = build_content_hashes(
+        findings=list(scan.findings),
+        evidence_refs=list(scan.evidence_references),
+        analyzer_outputs=dict(scan.analyzer_outputs),
+    )
+    if not manifest.content_hashes:
+        raise ConnectorManifestUnverified(
+            "Microsoft Graph manifest is missing signed content hashes"
+        )
+    if manifest.content_hashes != expected:
+        raise ConnectorManifestUnverified(
+            "Microsoft Graph signed content hashes do not match scan content"
+        )
 
 
 def _normalized_payload(

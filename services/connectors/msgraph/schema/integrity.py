@@ -17,5 +17,6 @@ class SignedManifest(BaseModel):
     response_structure_hashes: dict[str, str] = Field(
         default_factory=dict
     )  # sha256(sorted keys)
+    content_hashes: dict[str, str] = Field(default_factory=dict)
     manifest_hmac: str  # HMAC-SHA256 of entire manifest
     signed_at: str  # ISO 8601

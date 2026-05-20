@@ -11129,15 +11129,24 @@ Existing report downloads were presentation-level placeholders. They did not pro
 
 10. **Gate policy alignment** (`codex_gates.sh`) — dependency audit now delegates to the Makefile `pip-audit` target when present so codex gates and the canonical audit lane use the same tool bootstrap and advisory exception policy.
 
+11. **PR review integrity hardening** — Microsoft Graph manifests now bind signed content hashes for findings, evidence refs, and analyzer outputs; the bridge recomputes those hashes and rejects tampered finding content before import.
+
+12. **Acknowledgment fail-closed behavior** — missing `FG_ACKNOWLEDGMENT_KEY` now fails receipt generation/verification instead of falling back to a predictable test key.
+
+13. **Malformed import payload handling** — malformed `scan_result` payloads now return a deterministic 422 `CONNECTOR_PAYLOAD_INVALID` response and emit a safe integrity-failure audit event instead of surfacing as server errors.
+
 **Security impact:**
 - Wrong-tenant connector output fails closed.
 - Manifest tampering fails closed.
+- Signed finding/evidence/analyzer content tampering fails closed.
 - Operator acknowledgment failure fails closed.
+- Missing acknowledgment signing key fails closed.
 - Responses and execution-state exclude raw Graph API payloads, access tokens, client secrets, and credentials.
 - Imports are idempotent by tenant, engagement, connector run, and manifest hash.
 
 **Tests added/updated:**
 - `tests/test_field_assessment_msgraph_bridge.py`
+- `tests/connectors/msgraph/test_acknowledgment.py`
 - `apps/console/tests/field-assessment-workspace.test.js`
 
 **Known deferred follow-ups:**

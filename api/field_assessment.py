@@ -17,7 +17,7 @@ import logging
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -1559,6 +1559,27 @@ def import_msgraph_connector_run_route(
             envelope=envelope,
             actor=actor,
         )
+    except ValidationError as exc:
+        emit_engagement_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="connector.msgraph.import_integrity_failed",
+            actor=actor,
+            reason_code="CONNECTOR_PAYLOAD_INVALID",
+            payload={
+                "connector_type": body.connector_type,
+                "connector_run_id": body.connector_run_id,
+            },
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=422,
+            detail=api_error(
+                "CONNECTOR_PAYLOAD_INVALID",
+                "connector scan_result payload failed schema validation",
+            ),
+        ) from exc
     except ConnectorTenantMismatch as exc:
         emit_engagement_audit_event(
             db,

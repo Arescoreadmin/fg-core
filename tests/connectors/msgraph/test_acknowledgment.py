@@ -48,6 +48,12 @@ def test_tampered_hmac_fails_verification():
         verify_receipt(tampered)
 
 
+def test_missing_acknowledgment_key_fails_closed(monkeypatch):
+    monkeypatch.delenv("FG_ACKNOWLEDGMENT_KEY", raising=False)
+    with pytest.raises(Exception, match="FG_ACKNOWLEDGMENT_KEY is required"):
+        generate_receipt(**_base_params())
+
+
 def test_receipt_is_frozen():
     receipt = generate_receipt(**_base_params())
     with pytest.raises(Exception):

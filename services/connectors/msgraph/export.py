@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime, timezone
 
 from services.connectors.msgraph.findings.derivation import hash_tenant_id
+from services.connectors.msgraph.integrity import bind_manifest_content
 from services.connectors.msgraph.schema.analyzer_outputs import AnalyzerOutputs
 from services.connectors.msgraph.schema.integrity import SignedManifest
 from services.connectors.msgraph.schema.scan_result import (
@@ -84,6 +85,13 @@ def build_scan_result(
     findings = all_findings
     if baseline_scan_id and baseline_finding_ids is not None:
         findings = _apply_delta(findings, baseline_finding_ids, baseline_scan_id)
+    analyzer_payload = analyzer_outputs.model_dump()
+    manifest = bind_manifest_content(
+        manifest,
+        findings=findings,
+        evidence_refs=all_evidence,
+        analyzer_outputs=analyzer_payload,
+    )
 
     return ScanResult(
         scan_id=uuid.uuid4().hex,
@@ -100,7 +108,7 @@ def build_scan_result(
         endpoints_called=endpoints_called,
         findings=findings,
         evidence_references=all_evidence,
-        analyzer_outputs=analyzer_outputs.model_dump(),
+        analyzer_outputs=analyzer_payload,
         integrity_manifest=manifest.model_dump(),
         baseline_scan_id=baseline_scan_id,
     )
