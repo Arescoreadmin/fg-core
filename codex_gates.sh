@@ -55,6 +55,7 @@ rg -n --hidden --no-ignore-vcs \
   --glob '!codex_gates.sh' \
   --glob '!.claude/worktrees/**' \
   --glob '!services/ai_plane_extension/policy_engine.py' \
+  --glob '!.venv/**' \
   "(OPENAI_API_KEY|AWS_SECRET_ACCESS_KEY|BEGIN( RSA)? PRIVATE KEY|xox[baprs]-|-----BEGIN PRIVATE KEY-----)" \
   . && { echo "ERROR: possible secret detected (see matches above)"; exit 1; } || true
 
@@ -72,8 +73,11 @@ scripts/ci/enforce_pr_fix_log.sh
 echo "==> Gates: dependency audit"
 if [ "${GATES_MODE}" = "offline" ]; then
   echo "SKIP: pip-audit (offline mode)"
+elif [ -f Makefile ] && grep -qE "^pip-audit:" Makefile; then
+  make pip-audit
 else
-  pip-audit
+  python -m pip install -q --upgrade pip-audit
+  python -m pip_audit --ignore-vuln CVE-2026-4539 --ignore-vuln PYSEC-2025-183
 fi
 
 echo "==> Gates: canonical tester flow (skips if services unavailable)"

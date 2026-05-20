@@ -11014,3 +11014,143 @@ Existing report downloads were presentation-level placeholders. They did not pro
 - Backend status transition enforcement using readiness blockers.
 - Governance Asset Registry candidate creation workflow.
 - Dedicated review queue persistence for escalations.
+
+### 2026-05-20 — PR 368: Microsoft Graph Field Assessment Connector
+
+**Branch:** `feat/msgraph-connector-field-assessment`
+
+**Area:** Field Assessment connectors; Microsoft Graph governance discovery; deterministic connector analysis.
+
+**Purpose:** Add Microsoft Graph connector support for Field Assessment ingestion and governance discovery workflows. This connector extends the Field Assessment Engagement Substrate with deterministic Microsoft 365 / Entra / Graph-derived governance signals without trusting request-body tenant identity or exporting credentials.
+
+**Files changed:**
+- `services/connectors/msgraph/` — new Microsoft Graph connector package
+- `services/connectors/msgraph/analyzers/` — analyzer modules for OAuth consent, MFA posture, Conditional Access, enterprise applications, DLP scoring, guest exposure, privileged roles, and AI signals
+- `services/connectors/msgraph/findings/` — deterministic finding derivation and registry
+- `services/connectors/msgraph/schema/` — typed connector schemas for scan results, analyzer outputs, and integrity records
+- `services/connectors/msgraph/acknowledgment.py` — connector acknowledgment enforcement
+- `services/connectors/msgraph/client.py` — Graph client boundary
+- `services/connectors/msgraph/credential.py` — credential handling boundary
+- `services/connectors/msgraph/export.py` — export-safe connector output
+- `services/connectors/msgraph/integrity.py` — deterministic integrity hashing and verification
+- `services/connectors/msgraph/manifest.py` — connector manifest generation
+- `services/connectors/msgraph/runner.py` — connector execution orchestration
+- `services/connectors/msgraph/tenant.py` — tenant lock validation
+- `tests/connectors/msgraph/` — connector unit and analyzer tests
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Capabilities added:**
+- OAuth consent analysis
+- MFA posture analysis
+- Conditional Access analysis
+- Enterprise application analysis
+- DLP scoring
+- Guest exposure analysis
+- Privileged role analysis
+- AI signal discovery
+- Deterministic finding derivation
+- Export-safe manifest generation
+- Integrity verification
+- Tenant-scoped execution enforcement
+
+**Security impact:**
+- Tenant isolation enforced through connector tenant lock validation
+- No request-body tenant trust introduced
+- Credential handling isolated from export artifacts
+- Export-safe responses preserve IDs, counts, findings, and metadata without raw credentials
+- Deterministic integrity hashing added for connector outputs
+- Connector acknowledgment enforcement added before trusted use
+- No raw Graph credentials, bearer tokens, auth headers, secrets, or provider payloads are exported
+
+**Determinism proof:**
+- Analyzer outputs are schema-bound and deterministic for identical inputs
+- Finding derivation is registry-driven, not AI-authored
+- Manifest and integrity outputs are hash-based and replay-verifiable
+- Export filtering is deterministic
+
+**Tests added/updated:**
+- Connector acknowledgment tests
+- Tenant lock tests
+- Integrity tests
+- Export tests
+- Manifest tests
+- Finding derivation tests
+- OAuth consent analyzer tests
+- Conditional Access analyzer tests
+- MFA analyzer tests
+- DLP scoring analyzer tests
+- Enterprise applications analyzer tests
+
+**Validation results:**
+- `ruff check .` — PASS
+- `ruff format --check .` — PASS
+- `mypy` — PASS
+- `pytest` — PASS, 5528 passed, 29 skipped
+- `pip check` — PASS
+- `make fg-contract` / contract authority checks — PASS
+- AI contracts validation — PASS
+- Connector contracts validation — PASS
+- Artifact schema validation — PASS
+
+**Known follow-ups:**
+- Continuous Microsoft Graph synchronization
+- Governance Asset Registry auto-linking
+- Drift detection from repeated Graph scans
+- Attestation continuity from discovered Microsoft 365 / Entra assets
+- Governance topology enrichment
+
+---
+
+### 2026-05-20 — PR 368.5: Microsoft Graph Connector to Guided Execution Bridge
+
+**Branch:** `pr-368-5-msgraph-field-assessment-bridge`
+
+**Area:** Field Assessment connector import bridge.
+
+**What was built:**
+
+1. **Verified import envelope** (`services/field_assessment/connectors/msgraph_bridge.py`) — `ConnectorImportEnvelope` accepts Microsoft Graph connector output through a stable bridge contract instead of loose connector payloads.
+
+2. **Trust-but-verify bridge validation** — imports verify tenant lock, operator acknowledgment receipt, schema version, signed manifest HMAC, supplied manifest hash, and export-safe contract before any Field Assessment state is created.
+
+3. **Microsoft Graph scan import API** (`POST /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/import`) — tenant-scoped, `governance:write`, auth-context tenant only, no request-body tenant trust.
+
+4. **Field Assessment scan_result conversion** — verified Graph runs create idempotent `source_type=microsoft_graph` scan results using manifest hash as evidence hash and export-safe raw/normalized payloads only.
+
+5. **Normalized finding import** — Graph-derived connector findings become deterministic Field Assessment normalized findings with framework mappings, confidence, remediation hints, source attribution, and scan evidence refs.
+
+6. **Evidence lineage links** — bridge creates finding-to-scan `evidence_links` with connector run ID, import ID, manifest hash, bridge version, and replay-safe evidence refs.
+
+7. **Asset candidate enrichment** — execution-state now reads connector-provided `asset_candidates` from scan normalized payload and surfaces specific Microsoft Graph OAuth/app/AI/DLP/role candidate actions.
+
+8. **Replay metadata** — scan normalized payload stores connector run ID, manifest hash, bridge version, finding derivation version, and verification hash for future replay reconstruction.
+
+9. **Audit events** — safe audit events record import requested, manifest verified, import completed, import denied, and integrity failure paths without raw Graph payloads or credentials.
+
+10. **Gate policy alignment** (`codex_gates.sh`) — dependency audit now delegates to the Makefile `pip-audit` target when present so codex gates and the canonical audit lane use the same tool bootstrap and advisory exception policy.
+
+11. **PR review integrity hardening** — Microsoft Graph manifests now bind signed content hashes for findings, evidence refs, and analyzer outputs; the bridge recomputes those hashes and rejects tampered finding content before import.
+
+12. **Acknowledgment fail-closed behavior** — missing `FG_ACKNOWLEDGMENT_KEY` now fails receipt generation/verification instead of falling back to a predictable test key.
+
+13. **Malformed import payload handling** — malformed `scan_result` payloads now return a deterministic 422 `CONNECTOR_PAYLOAD_INVALID` response and emit a safe integrity-failure audit event instead of surfacing as server errors.
+
+**Security impact:**
+- Wrong-tenant connector output fails closed.
+- Manifest tampering fails closed.
+- Signed finding/evidence/analyzer content tampering fails closed.
+- Operator acknowledgment failure fails closed.
+- Missing acknowledgment signing key fails closed.
+- Responses and execution-state exclude raw Graph API payloads, access tokens, client secrets, and credentials.
+- Imports are idempotent by tenant, engagement, connector run, and manifest hash.
+
+**Tests added/updated:**
+- `tests/test_field_assessment_msgraph_bridge.py`
+- `tests/connectors/msgraph/test_acknowledgment.py`
+- `apps/console/tests/field-assessment-workspace.test.js`
+
+**Known deferred follow-ups:**
+- Persistent connector import registry table.
+- Automatic connector completion ingestion when an engagement binding is attached.
+- Asset Registry candidate promotion workflow.
+- Continuous Graph drift/reassessment scheduling.

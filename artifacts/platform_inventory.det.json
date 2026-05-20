@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 333,
+    "contract_count": 334,
     "contract_only": [],
-    "runtime_count": 438,
+    "runtime_count": 439,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -57,7 +57,6 @@
       "GET /control/testing/health",
       "GET /control/testing/runs",
       "GET /control/testing/runs/{run_id}",
-      "GET /field-assessment/engagements/{engagement_id}/execution-state",
       "GET /metrics",
       "GET /ui/ai",
       "GET /ui/ai/experience",
@@ -127,6 +126,7 @@
       "POST /control/testing/runs/register",
       "POST /dev/emit",
       "POST /dev/seed",
+      "POST /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/import",
       "POST /ui/ai/chat",
       "POST /ui/audit/packet",
       "POST /ui/devices/{device_id}/disable",
@@ -142,7 +142,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "d88a9dcc5ab90c80c851d254d886704c66b7f59be08cd7137a23e1fda14900a1",
+  "governance_fingerprint": "a810b82279c77262684b2030a055f385f566f6bf4c7bf42303cf15d92b43f814",
   "planes": [
     {
       "compat": {
@@ -584,6 +584,7 @@
       "POST /exceptions/requests",
       "POST /exceptions/requests/{request_id}/approve",
       "POST /field-assessment/engagements",
+      "POST /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/import",
       "POST /field-assessment/engagements/{engagement_id}/document-analyses",
       "POST /field-assessment/engagements/{engagement_id}/evidence-links",
       "POST /field-assessment/engagements/{engagement_id}/observations",

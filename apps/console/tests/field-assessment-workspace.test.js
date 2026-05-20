@@ -198,6 +198,13 @@ test('API client covers execution-state endpoint', () => {
   assert.ok(src.includes('ExecutionState'), 'Must type execution-state response');
 });
 
+test('API client covers Microsoft Graph connector import endpoint', () => {
+  const src = read('lib/fieldAssessmentApi.ts');
+  assert.ok(src.includes('importMicrosoftGraphRun'), 'Must export importMicrosoftGraphRun');
+  assert.ok(src.includes('/connector-runs/msgraph/import'), 'Must target msgraph import endpoint');
+  assert.ok(src.includes('ConnectorImportPayload'), 'Must type connector import payload');
+});
+
 // ─── Security — tenant_id never in request body ───────────────────────────────
 
 test('API client never sends tenant_id in request body', () => {

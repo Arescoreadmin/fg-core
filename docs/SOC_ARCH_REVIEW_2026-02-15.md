@@ -1,3 +1,24 @@
+## 2026-05-20 — SOC-HIGH-002 — PR 368.5: Microsoft Graph Field Assessment bridge route
+
+**Reviewer:** Codex | **Classification:** SOC-HIGH-002 (tools/ci route inventory update)
+
+**Files changed:**
+- `tools/ci/route_inventory.json`, `tools/ci/route_inventory_summary.json` — regenerated via `make route-inventory-generate` after adding the verified Microsoft Graph connector import route.
+- `tools/ci/contract_routes.json`, `tools/ci/plane_registry_snapshot.json`, `tools/ci/topology.sha256` — regenerated as part of the same route/OpenAPI refresh.
+- `BLUEPRINT_STAGED.md` and mirrored contract authority metadata — refreshed via `make contract-authority-refresh`.
+
+**New route:**
+- `POST /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/import` — tenant-scoped verified import bridge from Microsoft Graph connector output into Field Assessment scan results, normalized findings, evidence links, and guided execution state.
+
+**Security posture:**
+- Route requires `governance:write`.
+- Tenant binding remains auth-context-only and validates connector tenant lock before state creation.
+- Manifest HMAC, manifest hash, schema version, operator acknowledgment, and export-safe bridge contract are verified before import.
+- Wrong-tenant imports return 404; tampered manifests and unsafe connector envelopes fail closed with stable error codes.
+- Audit payloads contain stable connector IDs, hashes, and counts only; raw Graph payloads and credentials are not logged or exposed.
+
+---
+
 ## 2026-05-20 — SOC-HIGH-002 — Field Assessment execution-state route inventory update
 
 **Reviewer:** Codex | **Classification:** SOC-HIGH-002 (tools/ci route inventory update)

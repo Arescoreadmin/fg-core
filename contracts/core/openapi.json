@@ -1209,6 +1209,21 @@
             "title": "Candidate Action Id",
             "type": "string"
           },
+          "candidate_type": {
+            "title": "Candidate Type",
+            "type": "string"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "integer"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
           "instruction": {
             "title": "Instruction",
             "type": "string"
@@ -1219,6 +1234,14 @@
             },
             "title": "Lineage Refs",
             "type": "array"
+          },
+          "promotion_state": {
+            "title": "Promotion State",
+            "type": "string"
+          },
+          "risk_signal": {
+            "title": "Risk Signal",
+            "type": "string"
           },
           "source_entity_id": {
             "title": "Source Entity Id",
@@ -1244,6 +1267,11 @@
           "title",
           "instruction",
           "lineage_refs",
+          "candidate_type",
+          "risk_signal",
+          "confidence",
+          "evidence_refs",
+          "promotion_state",
           "target_ui_section"
         ],
         "title": "AssetCandidateActionResponse",
@@ -2364,6 +2392,131 @@
           }
         },
         "title": "ConfigWriteRequest",
+        "type": "object"
+      },
+      "ConnectorImportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "connector_manifest_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connector Manifest Hash"
+          },
+          "connector_run_id": {
+            "title": "Connector Run Id",
+            "type": "string"
+          },
+          "connector_type": {
+            "const": "microsoft_graph",
+            "enum": [
+              "microsoft_graph"
+            ],
+            "title": "Connector Type",
+            "type": "string"
+          },
+          "import_review_status": {
+            "default": "imported",
+            "title": "Import Review Status",
+            "type": "string"
+          },
+          "scan_result": {
+            "title": "Scan Result",
+            "type": "object"
+          }
+        },
+        "required": [
+          "connector_type",
+          "connector_run_id",
+          "scan_result"
+        ],
+        "title": "ConnectorImportRequest",
+        "type": "object"
+      },
+      "ConnectorImportResponse": {
+        "properties": {
+          "asset_candidates_detected": {
+            "title": "Asset Candidates Detected",
+            "type": "integer"
+          },
+          "connector_import_id": {
+            "title": "Connector Import Id",
+            "type": "string"
+          },
+          "connector_run_id": {
+            "title": "Connector Run Id",
+            "type": "string"
+          },
+          "connector_type": {
+            "title": "Connector Type",
+            "type": "string"
+          },
+          "engagement_id": {
+            "title": "Engagement Id",
+            "type": "string"
+          },
+          "evidence_links_imported": {
+            "title": "Evidence Links Imported",
+            "type": "integer"
+          },
+          "findings_imported": {
+            "title": "Findings Imported",
+            "type": "integer"
+          },
+          "import_status": {
+            "title": "Import Status",
+            "type": "string"
+          },
+          "integrity_hash": {
+            "title": "Integrity Hash",
+            "type": "string"
+          },
+          "manifest_hash": {
+            "title": "Manifest Hash",
+            "type": "string"
+          },
+          "scan_result_id": {
+            "title": "Scan Result Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "verification_checks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Verification Checks",
+            "type": "array"
+          },
+          "verification_status": {
+            "title": "Verification Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "engagement_id",
+          "scan_result_id",
+          "connector_type",
+          "connector_run_id",
+          "connector_import_id",
+          "manifest_hash",
+          "integrity_hash",
+          "verification_status",
+          "verification_checks",
+          "findings_imported",
+          "evidence_links_imported",
+          "asset_candidates_detected",
+          "import_status",
+          "schema_version"
+        ],
+        "title": "ConnectorImportResponse",
         "type": "object"
       },
       "ConnectorIngestRequest": {
@@ -28960,6 +29113,74 @@
           }
         },
         "summary": "List Audit Events Route",
+        "tags": [
+          "field-assessment"
+        ]
+      }
+    },
+    "/field-assessment/engagements/{engagement_id}/connector-runs/msgraph/import": {
+      "post": {
+        "operationId": "import_msgraph_connector_run_route_field_assessment_engagements__engagement_id__connector_runs_msgraph_import_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engagement_id",
+            "required": true,
+            "schema": {
+              "title": "Engagement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectorImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorImportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Msgraph Connector Run Route",
         "tags": [
           "field-assessment"
         ]
