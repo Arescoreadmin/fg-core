@@ -32,6 +32,8 @@ from typing import Any, Callable
 from services.governance.timeline.identity import derive_event_id
 from services.governance.timeline.models import SourceType, TimelineEvent
 
+from services.canonical import utc_iso8601_z_now
+
 _EVENT_VERSION = "1.0"
 
 
@@ -460,6 +462,38 @@ def replay_verify_to_timeline_event(
 # Adapter registry
 # ---------------------------------------------------------------------------
 
+
+def field_assessment_to_timeline_event(
+    *,
+    tenant_id: str,
+    engagement_id: str,
+    event_type: str,
+    occurred_at: str | None = None,
+    payload: dict[str, object] | None = None,
+    replay_eligible: bool = False,
+) -> TimelineEvent:
+    """Convert field assessment lifecycle activity into TimelineEvent."""
+    now = occurred_at or utc_iso8601_z_now()
+
+    return TimelineEvent(
+        event_id=derive_event_id(
+            tenant_id=tenant_id,
+            source_type=SourceType.FIELD_ASSESSMENT.value,
+            source_id=engagement_id,
+            event_type=event_type,
+            occurred_at=now,
+        ),
+        tenant_id=tenant_id,
+        source_type=SourceType.FIELD_ASSESSMENT,
+        source_id=engagement_id,
+        event_type=event_type,
+        occurred_at=now,
+        recorded_at=utc_iso8601_z_now(),
+        payload=payload or {},
+        replay_eligible=replay_eligible,
+    )
+
+
 TIMELINE_ADAPTERS: dict[SourceType, Callable[..., TimelineEvent]] = {
     SourceType.SIMULATION: simulation_entry_to_timeline_event,
     SourceType.GOVERNANCE_REPORT: governance_report_to_timeline_event,
@@ -468,4 +502,5 @@ TIMELINE_ADAPTERS: dict[SourceType, Callable[..., TimelineEvent]] = {
     SourceType.EVIDENCE: evidence_submitted_to_timeline_event,
     SourceType.EXPORT: export_to_timeline_event,
     SourceType.REPLAY: replay_verify_to_timeline_event,
+    SourceType.FIELD_ASSESSMENT: field_assessment_to_timeline_event,
 }

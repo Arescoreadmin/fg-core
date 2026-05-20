@@ -386,8 +386,8 @@ services:
   console:
     profiles: ["admin"]
     build:
-      context: ./apps/console
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/console/Dockerfile
       args:
         NEXT_PUBLIC_API_URL: http://127.0.0.1:18080
     image: frostgate-console:latest

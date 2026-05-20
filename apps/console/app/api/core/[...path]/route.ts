@@ -59,6 +59,10 @@ const PROXY_RULES: Array<{ prefix: string; methods: ReadonlySet<string> }> = [
   { prefix: 'ui/audit/overview', methods: new Set(['GET', 'HEAD']) },
   { prefix: 'ui/audit/status', methods: new Set(['GET', 'HEAD']) },
   { prefix: 'ui/audit/chain-integrity', methods: new Set(['GET', 'HEAD']) },
+  // Field Assessment Engagement Substrate — operator console (PR 2)
+  // governance:write required for mutations; governance:read for queries.
+  // tenant_id injected server-side from CORE_TENANT_ID — never from request body.
+  { prefix: 'field-assessment/engagements', methods: new Set(['GET', 'POST', 'PATCH', 'HEAD']) },
 ];
 
 function getRequestId(request: NextRequest): string {

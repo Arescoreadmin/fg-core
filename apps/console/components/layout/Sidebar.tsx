@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   ShieldCheck,
   ClipboardList,
+  ClipboardCheck,
   Database,
   GitBranch,
   FlaskConical,
@@ -57,9 +58,10 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Governance',
     items: [
-      { label: 'Policies',        href: '/dashboard/policies',      icon: ShieldCheck },
-      { label: 'Providers',       href: '/dashboard/providers',     icon: Package },
-      { label: 'Readiness',       href: '/dashboard/readiness',     icon: Activity },
+      { label: 'Policies',           href: '/dashboard/policies',    icon: ShieldCheck },
+      { label: 'Providers',          href: '/dashboard/providers',   icon: Package },
+      { label: 'Readiness',          href: '/dashboard/readiness',   icon: Activity },
+      { label: 'Field Assessments',  href: '/field-assessment',      icon: ClipboardCheck },
     ],
   },
   {

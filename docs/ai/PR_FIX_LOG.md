@@ -10751,3 +10751,121 @@ Existing report downloads were presentation-level placeholders. They did not pro
 - `apps/console/tests/document-ingestion-console.test.js`
 - `Makefile`
 - `docs/ai/PR_FIX_LOG.md`
+
+---
+
+### 2026-05-19 — PR 2: Field Data Collector UI
+
+**Branch:** `feat/field-assessment-data-collector-ui-pr2`
+
+**Area:** `apps/console/`, `packages/ui/`, `services/field_assessment/models.py`, `api/field_assessment.py` (enum propagation), `apps/console/app/api/core/[...path]/route.ts` (BFF — calling out)
+
+**Not standalone:** This subsystem is NOT standalone. It is a tenant-scoped component of the Field Assessment Engagement Substrate.
+
+**Surfaces added:**
+- `apps/console/app/field-assessment/page.tsx` — engagement list with create form, status filter, loading/empty/error states
+- `apps/console/app/field-assessment/[engagementId]/page.tsx` — 7-tab workspace hub: overview, scans, documents, observations, interviews, evidence links, findings
+- `apps/console/components/field-assessment/StatusBadge.tsx` — status + severity badge components with color semantics
+- `apps/console/components/field-assessment/StatusTransitionBar.tsx` — state machine UX; only allowed transitions offered; backend remains authoritative
+- `apps/console/components/field-assessment/ProgressChecklist.tsx` — readiness checklist derived from summary endpoint, not local state
+- `apps/console/components/field-assessment/ScanImportPanel.tsx` — JSON paste import; live parse validation; metadata preview only; evidence hash displayed from API response
+- `apps/console/components/field-assessment/DocumentRegistrationPanel.tsx` — governance document registration with classification, version, approval fields
+- `apps/console/components/field-assessment/ObservationForm.tsx` — structured observation capture (gap/strength/concern/finding/note); all fields required validated before submit
+- `apps/console/components/field-assessment/InterviewForm.tsx` — interview capture backed by observations endpoint (type=interview, interview_role required); PII avoidance noted in UI
+- `apps/console/components/field-assessment/EvidenceLinkPanel.tsx` — evidence linkage with UI-side duplicate prevention; lists existing links
+- `apps/console/components/field-assessment/FindingPreviewPanel.tsx` — read-only finding list from substrate; no client-side finding creation
+- `apps/console/components/field-assessment/EngagementSummaryPanel.tsx` — aggregate count display from summary endpoint
+
+**Shared UI components added to packages/ui:**
+- `packages/ui/src/textarea.tsx` — Textarea with consistent Tailwind tokens
+- `packages/ui/src/alert.tsx` — Alert/AlertTitle/AlertDescription with variant support (info/warning/destructive/success)
+- `packages/ui/src/table.tsx` — Table/TableHeader/TableBody/TableRow/TableHead/TableCell/TableCaption
+- `packages/ui/src/tabs.tsx` — Tabs/TabsList/TabsTrigger/TabsContent (controlled + uncontrolled)
+
+**Backend change (calling out):**
+- `services/field_assessment/models.py`: Added `INTERVIEW = "interview"` to `ObservationType` enum. Semantically correct — interview observations are a distinct governance evidence type. No schema migration required (stored as string).
+- `tests/test_field_assessment.py`: Two new tests for INTERVIEW observation_type.
+
+**BFF change (calling out — security-sensitive file):**
+- `apps/console/app/api/core/[...path]/route.ts`: Added `field-assessment/engagements` to `PROXY_RULES` with methods `GET, POST, PATCH, HEAD`. Without this entry all frontend API calls returned 403. Tenant ID injected server-side via `CORE_TENANT_ID` env → `X-Tenant-ID` header; never from request body.
+
+**Security controls preserved:**
+- `tenant_id` never sent in request body — BFF injects from `CORE_TENANT_ID`
+- Raw scan payloads shown as metadata preview only (key count, size, schema version, top-level keys)
+- `dangerouslySetInnerHTML` not used in any field assessment component
+- `localStorage`/`sessionStorage` not used for governance state
+- No mock APIs or demo data in production code
+- Findings are read-only — substrate-normalized, never created in UI
+- Evidence linkage duplicate prevention at UI level; backend is authoritative
+
+**Substrate integration proof:**
+- All API calls route to existing PR 103 backend routes via BFF
+- `VALID_TRANSITIONS` mirrors `VALID_ENGAGEMENT_TRANSITIONS` in `services/field_assessment/models.py`
+- Progress checklist derives exclusively from `GET /field-assessment/engagements/{id}/summary`
+- Scan evidence hashes displayed from API response, not computed client-side
+- Interview form POSTs to `/observations` with `observation_type=interview` and `interview_role` — no separate entity created
+
+**Files changed:**
+- `services/field_assessment/models.py` (INTERVIEW enum value)
+- `tests/test_field_assessment.py` (+2 INTERVIEW tests)
+- `apps/console/app/api/core/[...path]/route.ts` (BFF field-assessment proxy rule)
+- `packages/ui/src/textarea.tsx` (new)
+- `packages/ui/src/alert.tsx` (new)
+- `packages/ui/src/table.tsx` (new)
+- `packages/ui/src/tabs.tsx` (new)
+- `packages/ui/src/index.ts` (updated)
+- `apps/console/lib/fieldAssessmentApi.ts` (new)
+- `apps/console/app/field-assessment/page.tsx` (new)
+- `apps/console/app/field-assessment/[engagementId]/page.tsx` (new)
+- `apps/console/components/field-assessment/` (11 new components)
+- `apps/console/tests/field-assessment-workspace.test.js` (new)
+- `apps/console/tailwind.config.ts` (packages/ui content scan)
+- `apps/console/package.json` (typecheck script)
+- `docs/ai/PR_FIX_LOG.md` (this entry)
+
+**Known deferred items:**
+- Report generation UI — deferred to later PR
+- Client-facing remediation/attestation/portal workflows — deferred (apps/portal)
+- Evidence file upload — JSON paste only in PR 2; file upload deferred
+- Finding creation UI — findings are substrate-normalized only
+- Autonomous governance recommendations — deferred
+- Navigation link from main console sidebar to /field-assessment — requires separate shell PR
+
+---
+
+### 2026-05-19 — PR 2 (improvements): 8 enhancements to Field Data Collector UI
+
+**Branch:** feat/field-assessment-data-collector-ui-pr2
+
+**Changes implemented:**
+
+1. **Console nav link** — `ClipboardCheck` / "Field Assessments" added to Governance group in `Sidebar.tsx`
+
+2. **Structured evidence KV editor** — ObservationForm.tsx: dynamic key-value pair builder; assembles into `structured_evidence` on submit
+
+3. **Backend observation type filter** — `list_observations()` in store.py + `?observation_type=` query param in `list_observations_route`
+
+4. **Audit trail tab** — `list_audit_events()` store function + `AuditEventResponse` Pydantic model + `GET /audit-events` route + `listAuditEvents` API client method + "History" tab in workspace page (lazy-loaded)
+
+5. **Finding detail drill-down** — FindingPreviewPanel.tsx: click-to-expand showing full evidence refs, NIST AI RMF mappings, framework mappings, finding ID, type, confidence
+
+6. **Observation expand/collapse** — Workspace page observation list rows expand on click to show domain, assessor, linked findings, structured evidence
+
+7. **Offline draft queue** — `fieldAssessmentDrafts.ts` (IndexedDB, no localStorage); integrated into ScanImportPanel and ObservationForm with auto-save + restore + clear-on-submit
+
+8. **Evidence lineage SVG** — Inline SVG directed graph in EvidenceLinkPanel.tsx; no external npm deps; cubic bezier edges between source and evidence nodes
+
+**Files touched (16):**
+- `services/field_assessment/store.py`
+- `api/field_assessment.py`
+- `apps/console/components/layout/Sidebar.tsx`
+- `apps/console/lib/fieldAssessmentApi.ts`
+- `apps/console/lib/fieldAssessmentDrafts.ts` (new)
+- `apps/console/components/field-assessment/ObservationForm.tsx`
+- `apps/console/components/field-assessment/ScanImportPanel.tsx`
+- `apps/console/components/field-assessment/FindingPreviewPanel.tsx`
+- `apps/console/components/field-assessment/EvidenceLinkPanel.tsx`
+- `apps/console/app/field-assessment/[engagementId]/page.tsx`
+- `apps/console/tests/field-assessment-workspace.test.js`
+- `tests/test_field_assessment.py`
+- `docs/ai/PR_FIX_LOG.md` (this entry)

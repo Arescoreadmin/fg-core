@@ -1,25 +1,28 @@
 # Console Dockerfile (production-ready)
-# - Multi-stage build
+# - Multi-stage build: build context is monorepo root so packages/ui is reachable
 # - Full deps available for build stage
 # - Non-root runtime
 # - Standalone output
 
 FROM node:20-alpine AS deps
-WORKDIR /app
+WORKDIR /app/apps/console
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Install all deps needed to build, including devDependencies
-COPY package.json package-lock.json* ./
+COPY apps/console/package.json apps/console/package-lock.json* ./
 RUN npm ci
 
 FROM node:20-alpine AS builder
-WORKDIR /app
+WORKDIR /app/apps/console
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY --from=deps /app/apps/console/node_modules ./node_modules
+# Copy console source
+COPY apps/console/ .
+# Copy packages/ui so tsconfig @fg/ui alias (../../packages/ui/src) resolves correctly
+COPY packages/ /app/packages/
 
 # Build-time public API base
 ARG NEXT_PUBLIC_API_BASE=/api
@@ -31,7 +34,7 @@ ENV NODE_ENV=production
 RUN npm run build
 
 FROM node:20-alpine AS runner
-WORKDIR /app
+WORKDIR /app/apps/console
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -42,9 +45,9 @@ ENV NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE}
 RUN addgroup --system --gid 1001 nodejs \
  && adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder /app/apps/console/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/apps/console/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/console/.next/static ./.next/static
 
 USER nextjs
 

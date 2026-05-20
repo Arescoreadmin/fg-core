@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 309,
+    "contract_count": 310,
     "contract_only": [],
-    "runtime_count": 413,
+    "runtime_count": 414,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -141,7 +141,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "5c65dd5a87d3d7f8bd7790d18bc72c92f51738bf4bc94abd8bad3bf78c332753",
+  "governance_fingerprint": "786376f2f9472691c6a5a84a0c41e0cf865d8d6d7633f1eb43e449697f408f78",
   "planes": [
     {
       "compat": {
@@ -450,6 +450,7 @@
       "GET /field-assessment/engagements/{engagement_id}/findings/{finding_id}",
       "GET /field-assessment/engagements/{engagement_id}/observations",
       "GET /field-assessment/engagements/{engagement_id}/scan-results",
+      "GET /field-assessment/engagements/{engagement_id}/scan-results/{scan_result_id}",
       "GET /field-assessment/engagements/{engagement_id}/summary",
       "GET /governance/changes",
       "GET /governance/timeline",

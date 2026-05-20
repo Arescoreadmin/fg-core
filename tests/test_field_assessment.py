@@ -281,7 +281,7 @@ def test_ingest_scan_result_hash_correct_accepted(client: TestClient) -> None:
     created = _create_engagement(client)
     eng_id = created["id"]
 
-    raw_payload = {"users": []}
+    raw_payload: dict[str, object] = {"users": []}
     correct_hash = compute_evidence_hash(raw_payload)
     body = dict(_SCAN_RESULT_BODY)
     body["expected_evidence_hash"] = correct_hash
@@ -639,4 +639,169 @@ def test_get_engagement_wrong_tenant_returns_404(client: TestClient) -> None:
     """Requests with a tenant that doesn't own the engagement get 404, not 403."""
     # With auth_enabled=False, tenant is not set — EngagementNotFound → 404
     resp = client.get("/field-assessment/engagements/unknown-tenant-eng")
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# API tests — ObservationType.INTERVIEW
+# ---------------------------------------------------------------------------
+
+
+def test_capture_interview_observation(client: TestClient) -> None:
+    """INTERVIEW observation_type stores correctly and is retrievable."""
+    created = _create_engagement(client)
+    eng_id = created["id"]
+    body = {
+        "domain": "ai_governance",
+        "observation_type": "interview",
+        "severity": "info",
+        "title": "CTO interview — AI usage patterns",
+        "description": "Interviewed CTO regarding AI tooling adoption.",
+        "interview_role": "CTO",
+    }
+    resp = client.post(
+        f"/field-assessment/engagements/{eng_id}/observations", json=body
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["observation_type"] == "interview"
+    assert data["interview_role"] == "CTO"
+
+
+def test_interview_observation_appears_in_list(client: TestClient) -> None:
+    """INTERVIEW observations are returned by the list endpoint."""
+    created = _create_engagement(client)
+    eng_id = created["id"]
+    body = {
+        "domain": "compliance",
+        "observation_type": "interview",
+        "severity": "low",
+        "title": "Legal counsel interview",
+        "description": "Policy awareness check.",
+        "interview_role": "General Counsel",
+    }
+    client.post(f"/field-assessment/engagements/{eng_id}/observations", json=body)
+    resp = client.get(f"/field-assessment/engagements/{eng_id}/observations")
+    assert resp.status_code == 200
+    types = [o["observation_type"] for o in resp.json()]
+    assert "interview" in types
+
+
+# ---------------------------------------------------------------------------
+# API tests — Observation type filter
+# ---------------------------------------------------------------------------
+
+
+def test_observation_type_filter_interview(client: TestClient) -> None:
+    """?observation_type=interview returns only interview observations."""
+    created = _create_engagement(client)
+    eng_id = created["id"]
+
+    # Add a gap observation
+    client.post(
+        f"/field-assessment/engagements/{eng_id}/observations",
+        json=_OBSERVATION_BODY,
+    )
+    # Add an interview observation
+    client.post(
+        f"/field-assessment/engagements/{eng_id}/observations",
+        json={
+            "domain": "ai_governance",
+            "observation_type": "interview",
+            "severity": "info",
+            "title": "CEO interview",
+            "description": "Strategy discussion.",
+            "interview_role": "CEO",
+        },
+    )
+
+    resp = client.get(
+        f"/field-assessment/engagements/{eng_id}/observations",
+        params={"observation_type": "interview"},
+    )
+    assert resp.status_code == 200
+    items = resp.json()
+    assert all(o["observation_type"] == "interview" for o in items)
+    assert len(items) >= 1
+
+
+def test_observation_type_filter_gap(client: TestClient) -> None:
+    """?observation_type=gap excludes interview observations."""
+    created = _create_engagement(client)
+    eng_id = created["id"]
+
+    client.post(
+        f"/field-assessment/engagements/{eng_id}/observations",
+        json=_OBSERVATION_BODY,  # observation_type=gap
+    )
+    client.post(
+        f"/field-assessment/engagements/{eng_id}/observations",
+        json={
+            "domain": "ai_governance",
+            "observation_type": "interview",
+            "severity": "info",
+            "title": "CFO interview",
+            "description": "Budget context.",
+            "interview_role": "CFO",
+        },
+    )
+
+    resp = client.get(
+        f"/field-assessment/engagements/{eng_id}/observations",
+        params={"observation_type": "gap"},
+    )
+    assert resp.status_code == 200
+    items = resp.json()
+    assert all(o["observation_type"] == "gap" for o in items)
+
+
+# ---------------------------------------------------------------------------
+# API tests — Audit events
+# ---------------------------------------------------------------------------
+
+
+def test_audit_events_route_exists(client: TestClient) -> None:
+    """GET /audit-events returns 200 for a valid engagement."""
+    created = _create_engagement(client)
+    eng_id = created["id"]
+    resp = client.get(f"/field-assessment/engagements/{eng_id}/audit-events")
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+def test_audit_events_populated_after_mutation(client: TestClient) -> None:
+    """Creating an engagement emits at least one audit event."""
+    created = _create_engagement(client)
+    eng_id = created["id"]
+    resp = client.get(f"/field-assessment/engagements/{eng_id}/audit-events")
+    assert resp.status_code == 200
+    events = resp.json()
+    assert len(events) >= 1
+    # Validate shape
+    ev = events[0]
+    assert "id" in ev
+    assert "event_type" in ev
+    assert "actor" in ev
+    assert "reason_code" in ev
+    assert "payload" in ev
+    assert "schema_version" in ev
+    assert "created_at" in ev
+
+
+def test_audit_events_tenant_scoped(client: TestClient) -> None:
+    """Audit events from one engagement are not visible via another engagement ID."""
+    eng1 = _create_engagement(client)["id"]
+    eng2 = _create_engagement(client)["id"]
+
+    resp1 = client.get(f"/field-assessment/engagements/{eng1}/audit-events")
+    resp2 = client.get(f"/field-assessment/engagements/{eng2}/audit-events")
+    assert resp1.status_code == 200
+    assert resp2.status_code == 200
+    ids1 = {ev["id"] for ev in resp1.json()}
+    ids2 = {ev["id"] for ev in resp2.json()}
+    assert ids1.isdisjoint(ids2)
+
+
+def test_audit_events_not_found(client: TestClient) -> None:
+    resp = client.get("/field-assessment/engagements/nonexistent-id/audit-events")
     assert resp.status_code == 404
