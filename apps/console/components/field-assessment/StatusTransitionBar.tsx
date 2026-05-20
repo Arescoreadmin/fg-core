@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Button } from '@fg/ui';
+import { Button, Input } from '@fg/ui';
 import { Alert, AlertDescription } from '@fg/ui';
 import { VALID_TRANSITIONS, type EngagementStatus } from '@/lib/fieldAssessmentApi';
 import { StatusBadge } from './StatusBadge';
@@ -21,11 +21,13 @@ const STATUS_LABELS: Record<EngagementStatus, string> = {
 
 interface Props {
   currentStatus: EngagementStatus;
-  onTransition: (newStatus: EngagementStatus, reason?: string) => Promise<void>;
+  onTransition: (newStatus: EngagementStatus, reason: string) => Promise<void>;
 }
 
 export function StatusTransitionBar({ currentStatus, onTransition }: Props) {
-  const [pending, setPending] = useState<EngagementStatus | null>(null);
+  const [selected, setSelected] = useState<EngagementStatus | null>(null);
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const allowed = VALID_TRANSITIONS[currentStatus];
 
@@ -39,15 +41,30 @@ export function StatusTransitionBar({ currentStatus, onTransition }: Props) {
     );
   }
 
-  async function handleTransition(next: EngagementStatus) {
-    setPending(next);
+  function selectTransition(next: EngagementStatus) {
+    setSelected(next);
+    setReason('');
+    setError(null);
+  }
+
+  function cancel() {
+    setSelected(null);
+    setReason('');
+    setError(null);
+  }
+
+  async function confirm() {
+    if (!selected || reason.trim() === '' || submitting) return;
+    setSubmitting(true);
     setError(null);
     try {
-      await onTransition(next);
+      await onTransition(selected, reason.trim());
+      setSelected(null);
+      setReason('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Transition failed');
     } finally {
-      setPending(null);
+      setSubmitting(false);
     }
   }
 
@@ -56,34 +73,76 @@ export function StatusTransitionBar({ currentStatus, onTransition }: Props) {
       <div className="flex flex-wrap items-center gap-3 p-3 rounded border border-border bg-surface-2">
         <span className="text-xs text-muted">Status:</span>
         <StatusBadge status={currentStatus} />
-        <span className="text-xs text-muted">→ Advance to:</span>
-        {allowed
-          .filter((s) => s !== 'cancelled')
-          .map((next) => (
-            <Button
-              key={next}
-              size="sm"
-              variant="outline"
-              disabled={pending !== null}
-              onClick={() => handleTransition(next)}
-              aria-label={`Transition to ${STATUS_LABELS[next]}`}
-            >
-              {pending === next ? 'Advancing…' : STATUS_LABELS[next]}
-            </Button>
-          ))}
-        {allowed.includes('cancelled') && (
+        {!selected && (
+          <>
+            <span className="text-xs text-muted">→ Advance to:</span>
+            {allowed
+              .filter((s) => s !== 'cancelled')
+              .map((next) => (
+                <Button
+                  key={next}
+                  size="sm"
+                  variant="outline"
+                  onClick={() => selectTransition(next)}
+                  aria-label={`Transition to ${STATUS_LABELS[next]}`}
+                >
+                  {STATUS_LABELS[next]}
+                </Button>
+              ))}
+            {allowed.includes('cancelled') && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-danger hover:text-danger ml-auto"
+                onClick={() => selectTransition('cancelled')}
+                aria-label="Cancel engagement"
+              >
+                Cancel engagement
+              </Button>
+            )}
+          </>
+        )}
+        {selected && (
+          <span className="text-xs text-muted ml-auto">
+            → <span className="font-medium text-foreground">{STATUS_LABELS[selected]}</span>
+          </span>
+        )}
+      </div>
+
+      {selected && (
+        <div className="flex flex-wrap items-center gap-2 p-3 rounded border border-border bg-surface-2"
+          aria-label="transition-reason-form">
+          <span className="text-xs text-muted shrink-0">Reason *</span>
+          <Input
+            className="flex-1 h-8 text-xs min-w-[200px]"
+            placeholder={`Reason for advancing to ${STATUS_LABELS[selected]}…`}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && confirm()}
+            aria-label="Transition reason"
+            aria-required="true"
+            autoFocus
+          />
+          <Button
+            size="sm"
+            disabled={reason.trim() === '' || submitting}
+            onClick={confirm}
+            aria-label="Confirm transition"
+          >
+            {submitting ? 'Advancing…' : 'Confirm'}
+          </Button>
           <Button
             size="sm"
             variant="ghost"
-            className="text-danger hover:text-danger ml-auto"
-            disabled={pending !== null}
-            onClick={() => handleTransition('cancelled')}
-            aria-label="Cancel engagement"
+            disabled={submitting}
+            onClick={cancel}
+            aria-label="Cancel transition"
           >
-            Cancel
+            Back
           </Button>
-        )}
-      </div>
+        </div>
+      )}
+
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>

@@ -4,18 +4,22 @@ import { CheckCircle2, Circle, Clock } from 'lucide-react';
 import { Progress } from '@fg/ui';
 import type { EngagementSummary } from '@/lib/fieldAssessmentApi';
 
+type NumericSummaryKey = {
+  [K in keyof EngagementSummary]: EngagementSummary[K] extends number ? K : never;
+}[keyof EngagementSummary];
+
 interface ChecklistItem {
-  key: keyof EngagementSummary;
+  key: NumericSummaryKey;
   label: string;
   description: string;
 }
 
 const ITEMS: ChecklistItem[] = [
-  { key: 'scan_results_count', label: 'Scans Imported', description: 'Structured scan data ingested' },
-  { key: 'document_analyses_count', label: 'Documents Registered', description: 'Governance documents catalogued' },
-  { key: 'observations_count', label: 'Observations Captured', description: 'Field observations recorded' },
-  { key: 'evidence_links_count', label: 'Evidence Linked', description: 'Evidence edges created' },
-  { key: 'findings_count', label: 'Findings Present', description: 'Normalized findings from substrate' },
+  { key: 'total_scan_results', label: 'Scans Imported', description: 'Structured scan data ingested' },
+  { key: 'total_document_analyses', label: 'Documents Registered', description: 'Governance documents catalogued' },
+  { key: 'total_observations', label: 'Observations Captured', description: 'Field observations recorded' },
+  { key: 'total_evidence_links', label: 'Evidence Linked', description: 'Evidence edges created' },
+  { key: 'total_findings', label: 'Findings Present', description: 'Normalized findings from substrate' },
 ];
 
 interface Props {

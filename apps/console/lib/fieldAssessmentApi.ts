@@ -200,11 +200,12 @@ export interface EvidenceLink {
 export interface EngagementSummary {
   engagement_id: string;
   status: EngagementStatus;
-  scan_results_count: number;
-  document_analyses_count: number;
-  observations_count: number;
-  findings_count: number;
-  evidence_links_count: number;
+  total_scan_results: number;
+  total_document_analyses: number;
+  total_observations: number;
+  total_findings: number;
+  total_evidence_links: number;
+  findings_by_severity: Record<string, number>;
   open_findings_count: number;
   critical_findings_count: number;
 }
@@ -235,7 +236,7 @@ export interface CreateEngagementPayload {
 
 export interface TransitionEngagementPayload {
   new_status: EngagementStatus;
-  reason?: string;
+  reason: string;
 }
 
 export interface IngestScanPayload {

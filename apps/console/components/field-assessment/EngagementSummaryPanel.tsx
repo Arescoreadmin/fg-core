@@ -48,11 +48,11 @@ export function EngagementSummaryPanel({ summary, loading, error }: Props) {
   return (
     <div className="space-y-4" aria-label="engagement-summary-panel">
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <StatCard label="Scans Imported" value={summary.scan_results_count} />
-        <StatCard label="Documents Registered" value={summary.document_analyses_count} />
-        <StatCard label="Observations" value={summary.observations_count} />
-        <StatCard label="Findings" value={summary.findings_count} />
-        <StatCard label="Evidence Links" value={summary.evidence_links_count} />
+        <StatCard label="Scans Imported" value={summary.total_scan_results} />
+        <StatCard label="Documents Registered" value={summary.total_document_analyses} />
+        <StatCard label="Observations" value={summary.total_observations} />
+        <StatCard label="Findings" value={summary.total_findings} />
+        <StatCard label="Evidence Links" value={summary.total_evidence_links} />
         <StatCard label="Open Findings" value={summary.open_findings_count} accent={summary.open_findings_count > 0} />
       </div>
       {summary.critical_findings_count > 0 && (

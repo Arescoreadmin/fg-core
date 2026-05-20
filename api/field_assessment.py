@@ -336,8 +336,10 @@ class EngagementSummaryResponse(BaseModel):
     total_document_analyses: int
     total_observations: int
     total_findings: int
+    total_evidence_links: int
     findings_by_severity: dict[str, int]
     open_findings_count: int
+    critical_findings_count: int
     schema_version: str
 
 
@@ -1215,6 +1217,13 @@ def get_engagement_summary_route(
         )
     ).scalar_one()
 
+    total_evidence_links = db.execute(
+        select(func.count(FaEvidenceLink.id)).where(
+            FaEvidenceLink.engagement_id == engagement_id,
+            FaEvidenceLink.tenant_id == tenant_id,
+        )
+    ).scalar_one()
+
     return EngagementSummaryResponse(
         engagement_id=engagement_id,
         tenant_id=tenant_id,
@@ -1224,8 +1233,10 @@ def get_engagement_summary_route(
         total_document_analyses=total_document_analyses,
         total_observations=total_observations,
         total_findings=total_findings,
+        total_evidence_links=total_evidence_links,
         findings_by_severity=findings_by_severity,
         open_findings_count=open_findings_count,
+        critical_findings_count=findings_by_severity.get("critical", 0),
         schema_version="1.0",
     )
 

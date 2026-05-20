@@ -29,11 +29,11 @@ import {
 } from '@/lib/fieldAssessmentApi';
 
 const TAB_SECTIONS: Record<string, string> = {
-  scan_results_count: 'scans',
-  document_analyses_count: 'documents',
-  observations_count: 'observations',
-  evidence_links_count: 'evidence',
-  findings_count: 'findings',
+  total_scan_results: 'scans',
+  total_document_analyses: 'documents',
+  total_observations: 'observations',
+  total_evidence_links: 'evidence',
+  total_findings: 'findings',
 };
 
 function formatDate(iso: string) {
@@ -144,8 +144,8 @@ export default function EngagementWorkspacePage() {
     if (activeTab === 'history') loadAuditEvents();
   }, [activeTab, loadFindings, loadAuditEvents]);
 
-  async function handleTransition(newStatus: EngagementStatus) {
-    const updated = await fieldAssessmentApi.transitionEngagement(engagementId, { new_status: newStatus });
+  async function handleTransition(newStatus: EngagementStatus, reason: string) {
+    const updated = await fieldAssessmentApi.transitionEngagement(engagementId, { new_status: newStatus, reason });
     setEngagement(updated);
     loadSummary();
   }
