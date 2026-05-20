@@ -5063,6 +5063,358 @@
     },
     {
       "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "GET",
+      "path": "/governance/assets",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "POST",
+      "path": "/governance/assets",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "GET",
+      "path": "/governance/assets/shadow",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "GET",
+      "path": "/governance/assets/summary",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "PATCH",
+      "path": "/governance/assets/{asset_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/attestations",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "POST",
+      "path": "/governance/assets/{asset_id}/attestations",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/blast-radius",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "POST",
+      "path": "/governance/assets/{asset_id}/decommission",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/owners",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "POST",
+      "path": "/governance/assets/{asset_id}/owners",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "DELETE",
+      "path": "/governance/assets/{asset_id}/owners/{ownership_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/policies",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "POST",
+      "path": "/governance/assets/{asset_id}/policies",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/relationships",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "POST",
+      "path": "/governance/assets/{asset_id}/relationships",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/risk",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "POST",
+      "path": "/governance/assets/{asset_id}/risk/recompute",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/versions",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/versions/{version_hash}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
+        "auth"
+      ],
+      "file": "api/governance_assets.py",
+      "method": "GET",
+      "path": "/governance/audit/chain/verify",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:admin"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": false
+    },
+    {
+      "dependency_categories": [
         "auth",
         "tenant"
       ],
@@ -7084,7 +7436,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-05-20T10:36:35.805029+00:00",
+  "generated_at": "2026-05-20T12:34:24.697687+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

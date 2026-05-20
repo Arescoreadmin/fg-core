@@ -3677,3 +3677,61 @@ All 39 field assessment tests pass (10 unit, 29 integration). New tests cover: s
 
 **Compliance posture:**
 77 field assessment tests pass (expanded from 41). New tests cover: compound-key redaction (Bug 1), false-positive guard (hex hashes not redacted), JSON-in-JSON redaction, extended secret patterns, field-type validation, per-source quarantine thresholds, `_field_count` list-item counting (Bug 2), quarantine audit trail, deprecation infrastructure. Route inventory regenerated and audited. Contract authority refreshed. pip-audit passes (PYSEC-2025-183 documented and acknowledged as disputed). `make fg-fast` passes locally.
+
+## 2026-05-20 — PR 3.5: Governance Asset Registry
+
+**Classification:** SOC-HIGH-001 (new subsystem — new ORM tables, new API router). No auth logic changes. No infra changes. No migration files (ORM-managed via `create_all`).
+
+**SOC review:**
+
+**New ORM tables (api/db_models_governance_assets.py):**
+- `governance_assets` — tenant-scoped asset catalogue; asset_type discriminator (single-table); compound indexes on tenant_id+asset_type, tenant_id+status, tenant_id+risk_tier, tenant_id+discovery_source, external_id
+- `governance_asset_versions` — append-only; version_hash=canonical_hash(payload); parent_hash chain (Ed25519 signed); UniqueConstraint(tenant_id, version_hash)
+- `governance_asset_owners` — owner→asset assignment; attestation TTL fields; UniqueConstraint(asset_id, tenant_id, owner_email)
+- `governance_asset_attestations` — append-only; attestation_hash=canonical_hash(payload); Ed25519 signed
+- `governance_asset_relationships` — asset→asset edges; data_classification + transfer_volume_tier; UniqueConstraint(tenant_id, source, target, relationship_type)
+- `governance_asset_risk_scores` — immutable score history; is_current flag; factors_json for full reproducibility
+- `governance_asset_policy_bindings` — policy→asset linkage; supersedes pattern (old binding set to "superseded" on new bind)
+- `governance_asset_audit_events` — tamper-evident append-only chain; chain_id=f"ga-{tenant_id}"; entry_hash+chain_hash+Ed25519 signature; UniqueConstraints on (chain_id, seq) and (chain_id, entry_hash)
+
+**API router (api/governance_assets.py):**
+- 22 routes under `/governance/assets` and `/governance/audit`
+- Scope enforcement: `governance:read` (list/get/versions/owners/attestations/risk/blast-radius), `governance:write` (create/update/decommission/assign-owner/remove-owner/attest/relationships/policies/risk-recompute), `governance:admin` (audit chain verify)
+- Tenant resolution: `request.state.auth.tenant_id` → `request.state.tenant_id` — never from request body
+- Actor resolution: `request.state.auth.subject` or `request.state.auth.key_prefix` — never from request body
+- All mutations committed in route handler; service layer uses `db.flush()` (no implicit commit)
+- Static routes `/summary` and `/shadow` declared before `/{asset_id}` to prevent route shadowing
+
+**Trust but Verify controls:**
+- Every asset state stored as immutable Ed25519-signed version snapshot (parent_hash chain — same pattern as ConfigVersion)
+- Every mutation appends a tamper-evident audit event (chain_hash construction — same as SecurityAuditLog)
+- Risk scoring is a pure deterministic function; full factor breakdown stored for reproducibility and dispute resolution
+- Attestation TTL enforced: never-attested assets are immediately overdue; +2 risk points/day capped at 100
+- Shadow asset detection cross-references fa_scan_results vs governance_assets.external_id — undeclared AI surfaces with +50 risk penalty
+- Blast radius BFS traversal enables "what breaks if this is compromised" queries for vendor offboarding and incident response
+- `GET /governance/audit/chain/verify` replays entire tenant audit chain, recomputing entry_hash + chain_hash + Ed25519 at every step
+
+**Regulatory alignment:**
+EU AI Act Art. 9 (risk management), SOC 2 CC6/CC9 (change mgmt, vendor risk), NIST AI RMF (govern/map), ISO 42001, GDPR Art. 30 (records of processing).
+
+**DB schema changes:**
+8 new tables auto-created by `init_db()` → `create_all()`. No SQL migration files. No existing table modifications.
+
+**Files touched:**
+- `api/db_models_governance_assets.py` (new)
+- `services/governance_asset_registry/__init__.py` (new)
+- `services/governance_asset_registry/models.py` (new)
+- `services/governance_asset_registry/risk_engine.py` (new)
+- `services/governance_asset_registry/audit.py` (new)
+- `services/governance_asset_registry/attestation.py` (new)
+- `services/governance_asset_registry/graph.py` (new)
+- `services/governance_asset_registry/shadow_detector.py` (new)
+- `services/governance_asset_registry/registry.py` (new)
+- `api/governance_assets.py` (new — 22 routes)
+- `api/db.py` (added db_models_governance_assets import)
+- `api/main.py` (registered governance_assets_router + governance_assets_audit_router)
+- `docs/ai/PR_FIX_LOG.md` (PR 3.5 entry)
+- `docs/SOC_EXECUTION_GATES_2026-02-15.md` (this entry)
+
+**Compliance posture:**
+Router scope-gated and tenant-isolated throughout. Ed25519 signing infrastructure reused from existing `api/signed_artifacts.py` (no new signing code). No secrets stored in any new table. Raw scan payloads never copied into governance tables — only external_id references. Route inventory and contract authority regeneration pending (CI gates).
