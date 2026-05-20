@@ -848,7 +848,9 @@ class TestQuarantineAuditTrail:
         quarantine_events = [
             e for e in events if e["event_type"] == "scan_result.quarantined"
         ]
-        assert quarantine_events, "expected a scan_result.quarantined audit event for validation failure"
+        assert quarantine_events, (
+            "expected a scan_result.quarantined audit event for validation failure"
+        )
 
 
 class TestDeprecationNoticeInfrastructure:
@@ -870,4 +872,6 @@ class TestDeprecationNoticeInfrastructure:
             non_deprecated = versions - set(deprecated_for_source.keys())
             for v in non_deprecated:
                 notice = validate_schema_version(source_type, v)
-                assert notice is None, f"{source_type}@{v} unexpectedly has a deprecation notice"
+                assert notice is None, (
+                    f"{source_type}@{v} unexpectedly has a deprecation notice"
+                )
