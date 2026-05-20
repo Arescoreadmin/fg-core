@@ -1203,6 +1203,199 @@
         "title": "AssessmentType",
         "type": "string"
       },
+      "AssetResponse": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "asset_type": {
+            "title": "Asset Type",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_email": {
+            "title": "Created By Email",
+            "type": "string"
+          },
+          "current_version_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Version Hash"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "discovery_source": {
+            "title": "Discovery Source",
+            "type": "string"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Id"
+          },
+          "metadata": {
+            "title": "Metadata",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "risk_score": {
+            "title": "Risk Score",
+            "type": "integer"
+          },
+          "risk_tier": {
+            "title": "Risk Tier",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id",
+          "tenant_id",
+          "asset_type",
+          "name",
+          "description",
+          "status",
+          "risk_tier",
+          "risk_score",
+          "discovery_source",
+          "external_id",
+          "metadata",
+          "current_version_hash",
+          "schema_version",
+          "created_at",
+          "updated_at",
+          "created_by_email"
+        ],
+        "title": "AssetResponse",
+        "type": "object"
+      },
+      "AssetVersionResponse": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "chain_signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chain Signature"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_email": {
+            "title": "Created By Email",
+            "type": "string"
+          },
+          "key_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Id"
+          },
+          "parent_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Hash"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "version_hash": {
+            "title": "Version Hash",
+            "type": "string"
+          },
+          "version_id": {
+            "title": "Version Id",
+            "type": "string"
+          },
+          "version_payload": {
+            "title": "Version Payload",
+            "type": "object"
+          },
+          "version_seq": {
+            "title": "Version Seq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version_id",
+          "asset_id",
+          "tenant_id",
+          "version_seq",
+          "version_hash",
+          "parent_hash",
+          "version_payload",
+          "created_at",
+          "created_by_email",
+          "chain_signature",
+          "key_id"
+        ],
+        "title": "AssetVersionResponse",
+        "type": "object"
+      },
       "AssignEnvironmentRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1217,6 +1410,28 @@
           "env_assignment_id"
         ],
         "title": "AssignEnvironmentRequest",
+        "type": "object"
+      },
+      "AssignOwnerRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "owner_email": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Owner Email",
+            "type": "string"
+          },
+          "owner_role": {
+            "default": "primary",
+            "description": "primary|secondary|delegate",
+            "title": "Owner Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "owner_email"
+        ],
+        "title": "AssignOwnerRequest",
         "type": "object"
       },
       "AssignRoleRequest": {
@@ -1299,6 +1514,117 @@
           "evidence_title"
         ],
         "title": "AttachEvidenceRequest",
+        "type": "object"
+      },
+      "AttestationResponse": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "attestation_hash": {
+            "title": "Attestation Hash",
+            "type": "string"
+          },
+          "attestation_id": {
+            "title": "Attestation Id",
+            "type": "string"
+          },
+          "attestation_type": {
+            "title": "Attestation Type",
+            "type": "string"
+          },
+          "attested_version_hash": {
+            "title": "Attested Version Hash",
+            "type": "string"
+          },
+          "chain_signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chain Signature"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "owner_email": {
+            "title": "Owner Email",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "statement": {
+            "title": "Statement",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attestation_id",
+          "asset_id",
+          "tenant_id",
+          "owner_email",
+          "attestation_type",
+          "attested_version_hash",
+          "statement",
+          "attestation_hash",
+          "chain_signature",
+          "status",
+          "due_at",
+          "completed_at",
+          "notes",
+          "schema_version",
+          "created_at"
+        ],
+        "title": "AttestationResponse",
         "type": "object"
       },
       "AuditEventResponse": {
@@ -1410,6 +1736,52 @@
           "period_end"
         ],
         "title": "BillingRunCreateRequest",
+        "type": "object"
+      },
+      "BindPolicyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "effective_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From"
+          },
+          "effective_until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Until"
+          },
+          "policy_ref": {
+            "title": "Policy Ref",
+            "type": "string"
+          },
+          "policy_type": {
+            "title": "Policy Type",
+            "type": "string"
+          },
+          "policy_version_hash": {
+            "title": "Policy Version Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "policy_type",
+          "policy_ref",
+          "policy_version_hash"
+        ],
+        "title": "BindPolicyRequest",
         "type": "object"
       },
       "Body_upload_document_rag_upload_post": {
@@ -2250,6 +2622,60 @@
         "title": "CreateAssessmentRequest",
         "type": "object"
       },
+      "CreateAssetRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_type": {
+            "description": "ai_system|ai_vendor|model|oauth_app|agent|copilot|automation|data_flow",
+            "title": "Asset Type",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "discovery_source": {
+            "default": "declared",
+            "description": "declared|discovered|inferred",
+            "title": "Discovery Source",
+            "type": "string"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Id"
+          },
+          "metadata": {
+            "title": "Metadata",
+            "type": "object"
+          },
+          "name": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_type",
+          "name"
+        ],
+        "title": "CreateAssetRequest",
+        "type": "object"
+      },
       "CreateControlRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2866,6 +3292,47 @@
         "title": "CreateOrgRequest",
         "type": "object"
       },
+      "CreateRelationshipRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "data_classification": {
+            "default": "unknown",
+            "description": "pii|phi|financial|confidential|internal|public|unknown",
+            "title": "Data Classification",
+            "type": "string"
+          },
+          "is_declared": {
+            "default": true,
+            "title": "Is Declared",
+            "type": "boolean"
+          },
+          "metadata": {
+            "title": "Metadata",
+            "type": "object"
+          },
+          "relationship_type": {
+            "description": "data_flow|depends_on|manages|monitors|delegates_to|trained_on",
+            "title": "Relationship Type",
+            "type": "string"
+          },
+          "target_asset_id": {
+            "title": "Target Asset Id",
+            "type": "string"
+          },
+          "transfer_volume_tier": {
+            "default": "unknown",
+            "description": "high|medium|low|unknown",
+            "title": "Transfer Volume Tier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_asset_id",
+          "relationship_type"
+        ],
+        "title": "CreateRelationshipRequest",
+        "type": "object"
+      },
       "CreateRetentionPolicyRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3284,6 +3751,21 @@
           "total"
         ],
         "title": "DecisionsPage",
+        "type": "object"
+      },
+      "DecommissionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "DecommissionRequest",
         "type": "object"
       },
       "DefendResponse": {
@@ -7970,6 +8452,78 @@
         "title": "OrgLifecycleStatus",
         "type": "string"
       },
+      "OwnerResponse": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "assigned_at": {
+            "title": "Assigned At",
+            "type": "string"
+          },
+          "assigned_by_email": {
+            "title": "Assigned By Email",
+            "type": "string"
+          },
+          "attestation_interval_days": {
+            "title": "Attestation Interval Days",
+            "type": "integer"
+          },
+          "last_attested_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Attested At"
+          },
+          "next_attestation_due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Attestation Due At"
+          },
+          "owner_email": {
+            "title": "Owner Email",
+            "type": "string"
+          },
+          "owner_role": {
+            "title": "Owner Role",
+            "type": "string"
+          },
+          "ownership_id": {
+            "title": "Ownership Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ownership_id",
+          "asset_id",
+          "tenant_id",
+          "owner_email",
+          "owner_role",
+          "attestation_interval_days",
+          "last_attested_at",
+          "next_attestation_due_at",
+          "assigned_at",
+          "assigned_by_email"
+        ],
+        "title": "OwnerResponse",
+        "type": "object"
+      },
       "PlaybookTriggerRequest": {
         "additionalProperties": false,
         "properties": {
@@ -8039,6 +8593,83 @@
           "approver"
         ],
         "title": "PolicyApprovalRequest",
+        "type": "object"
+      },
+      "PolicyBindingResponse": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "binding_id": {
+            "title": "Binding Id",
+            "type": "string"
+          },
+          "bound_at": {
+            "title": "Bound At",
+            "type": "string"
+          },
+          "bound_by_email": {
+            "title": "Bound By Email",
+            "type": "string"
+          },
+          "effective_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From"
+          },
+          "effective_until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Until"
+          },
+          "policy_ref": {
+            "title": "Policy Ref",
+            "type": "string"
+          },
+          "policy_type": {
+            "title": "Policy Type",
+            "type": "string"
+          },
+          "policy_version_hash": {
+            "title": "Policy Version Hash",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "binding_id",
+          "asset_id",
+          "tenant_id",
+          "policy_type",
+          "policy_ref",
+          "policy_version_hash",
+          "status",
+          "bound_at",
+          "bound_by_email",
+          "effective_from",
+          "effective_until"
+        ],
+        "title": "PolicyBindingResponse",
         "type": "object"
       },
       "PolicyChangeCreate": {
@@ -9106,6 +9737,69 @@
         "title": "RegisterSecretGovernanceRequest",
         "type": "object"
       },
+      "RelationshipResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_email": {
+            "title": "Created By Email",
+            "type": "string"
+          },
+          "data_classification": {
+            "title": "Data Classification",
+            "type": "string"
+          },
+          "is_declared": {
+            "title": "Is Declared",
+            "type": "boolean"
+          },
+          "metadata": {
+            "title": "Metadata",
+            "type": "object"
+          },
+          "relationship_id": {
+            "title": "Relationship Id",
+            "type": "string"
+          },
+          "relationship_type": {
+            "title": "Relationship Type",
+            "type": "string"
+          },
+          "source_asset_id": {
+            "title": "Source Asset Id",
+            "type": "string"
+          },
+          "target_asset_id": {
+            "title": "Target Asset Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "transfer_volume_tier": {
+            "title": "Transfer Volume Tier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "relationship_id",
+          "tenant_id",
+          "source_asset_id",
+          "target_asset_id",
+          "relationship_type",
+          "data_classification",
+          "transfer_volume_tier",
+          "is_declared",
+          "metadata",
+          "created_at",
+          "created_by_email"
+        ],
+        "title": "RelationshipResponse",
+        "type": "object"
+      },
       "RemediationFactorResponse": {
         "properties": {
           "description": {
@@ -9738,6 +10432,59 @@
           "policy"
         ],
         "title": "RingRouteResponse",
+        "type": "object"
+      },
+      "RiskScoreResponse": {
+        "properties": {
+          "asset_id": {
+            "title": "Asset Id",
+            "type": "string"
+          },
+          "computed_at": {
+            "title": "Computed At",
+            "type": "string"
+          },
+          "factors": {
+            "title": "Factors",
+            "type": "object"
+          },
+          "is_current": {
+            "title": "Is Current",
+            "type": "boolean"
+          },
+          "score": {
+            "title": "Score",
+            "type": "integer"
+          },
+          "score_id": {
+            "title": "Score Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "tier": {
+            "title": "Tier",
+            "type": "string"
+          },
+          "trigger_event": {
+            "title": "Trigger Event",
+            "type": "string"
+          }
+        },
+        "required": [
+          "score_id",
+          "asset_id",
+          "tenant_id",
+          "score",
+          "tier",
+          "factors",
+          "trigger_event",
+          "is_current",
+          "computed_at"
+        ],
+        "title": "RiskScoreResponse",
         "type": "object"
       },
       "RoleDetail": {
@@ -10951,6 +11698,45 @@
         "title": "StatsSummaryResponse",
         "type": "object"
       },
+      "SubmitAttestationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "attestation_type": {
+            "description": "ownership|accuracy|risk_review|access_review",
+            "title": "Attestation Type",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "owner_email": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Owner Email",
+            "type": "string"
+          },
+          "statement": {
+            "minLength": 1,
+            "title": "Statement",
+            "type": "string"
+          }
+        },
+        "required": [
+          "owner_email",
+          "attestation_type",
+          "statement"
+        ],
+        "title": "SubmitAttestationRequest",
+        "type": "object"
+      },
       "SuppressAlertRequest": {
         "additionalProperties": false,
         "properties": {
@@ -11644,6 +12430,68 @@
           "to_state"
         ],
         "title": "TransitionStateRequest",
+        "type": "object"
+      },
+      "UpdateAssetRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Id"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "UpdateAssetRequest",
         "type": "object"
       },
       "UpdateReportRequest": {
@@ -28810,6 +29658,1445 @@
         "summary": "Snapshot",
         "tags": [
           "forensics"
+        ]
+      }
+    },
+    "/governance/assets": {
+      "get": {
+        "operationId": "list_assets_governance_assets_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "asset_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Asset Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "risk_tier",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Risk Tier"
+            }
+          },
+          {
+            "in": "query",
+            "name": "discovery_source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Discovery Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AssetResponse"
+                  },
+                  "title": "Response List Assets Governance Assets Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Assets",
+        "tags": [
+          "governance-assets"
+        ]
+      },
+      "post": {
+        "operationId": "create_asset_governance_assets_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAssetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Asset",
+        "tags": [
+          "governance-assets"
+        ]
+      }
+    },
+    "/governance/assets/shadow": {
+      "get": {
+        "operationId": "list_shadow_assets_governance_assets_shadow_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response List Shadow Assets Governance Assets Shadow Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Shadow Assets",
+        "tags": [
+          "governance-assets"
+        ]
+      }
+    },
+    "/governance/assets/summary": {
+      "get": {
+        "operationId": "get_registry_summary_governance_assets_summary_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Registry Summary Governance Assets Summary Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Registry Summary",
+        "tags": [
+          "governance-assets"
+        ]
+      }
+    },
+    "/governance/assets/{asset_id}": {
+      "get": {
+        "operationId": "get_asset_governance_assets__asset_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Asset",
+        "tags": [
+          "governance-assets"
+        ]
+      },
+      "patch": {
+        "operationId": "update_asset_governance_assets__asset_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAssetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Asset",
+        "tags": [
+          "governance-assets"
+        ]
+      }
+    },
+    "/governance/assets/{asset_id}/attestations": {
+      "get": {
+        "operationId": "list_attestations_governance_assets__asset_id__attestations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AttestationResponse"
+                  },
+                  "title": "Response List Attestations Governance Assets  Asset Id  Attestations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Attestations",
+        "tags": [
+          "governance-assets"
+        ]
+      },
+      "post": {
+        "operationId": "submit_attestation_governance_assets__asset_id__attestations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitAttestationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttestationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Attestation",
+        "tags": [
+          "governance-assets"
+        ]
+      }
+    },
+    "/governance/assets/{asset_id}/blast-radius": {
+      "get": {
+        "operationId": "get_blast_radius_governance_assets__asset_id__blast_radius_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_depth",
+            "required": false,
+            "schema": {
+              "default": 3,
+              "maximum": 6,
+              "minimum": 1,
+              "title": "Max Depth",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Get Blast Radius Governance Assets  Asset Id  Blast Radius Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Blast Radius",
+        "tags": [
+          "governance-assets"
+        ]
+      }
+    },
+    "/governance/assets/{asset_id}/decommission": {
+      "post": {
+        "operationId": "decommission_asset_governance_assets__asset_id__decommission_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecommissionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decommission Asset",
+        "tags": [
+          "governance-assets"
+        ]
+      }
+    },
+    "/governance/assets/{asset_id}/owners": {
+      "get": {
+        "operationId": "list_owners_governance_assets__asset_id__owners_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OwnerResponse"
+                  },
+                  "title": "Response List Owners Governance Assets  Asset Id  Owners Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Owners",
+        "tags": [
+          "governance-assets"
+        ]
+      },
+      "post": {
+        "operationId": "assign_owner_governance_assets__asset_id__owners_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignOwnerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign Owner",
+        "tags": [
+          "governance-assets"
+        ]
+      }
+    },
+    "/governance/assets/{asset_id}/owners/{ownership_id}": {
+      "delete": {
+        "operationId": "remove_owner_governance_assets__asset_id__owners__ownership_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ownership_id",
+            "required": true,
+            "schema": {
+              "title": "Ownership Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Owner",
+        "tags": [
+          "governance-assets"
+        ]
+      }
+    },
+    "/governance/assets/{asset_id}/policies": {
+      "get": {
+        "operationId": "list_policy_bindings_governance_assets__asset_id__policies_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PolicyBindingResponse"
+                  },
+                  "title": "Response List Policy Bindings Governance Assets  Asset Id  Policies Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Policy Bindings",
+        "tags": [
+          "governance-assets"
+        ]
+      },
+      "post": {
+        "operationId": "bind_policy_governance_assets__asset_id__policies_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyBindingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bind Policy",
+        "tags": [
+          "governance-assets"
+        ]
+      }
+    },
+    "/governance/assets/{asset_id}/relationships": {
+      "get": {
+        "operationId": "list_relationships_governance_assets__asset_id__relationships_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RelationshipResponse"
+                  },
+                  "title": "Response List Relationships Governance Assets  Asset Id  Relationships Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Relationships",
+        "tags": [
+          "governance-assets"
+        ]
+      },
+      "post": {
+        "operationId": "create_relationship_governance_assets__asset_id__relationships_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRelationshipRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelationshipResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Relationship",
+        "tags": [
+          "governance-assets"
+        ]
+      }
+    },
+    "/governance/assets/{asset_id}/risk": {
+      "get": {
+        "operationId": "get_risk_score_governance_assets__asset_id__risk_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskScoreResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Risk Score",
+        "tags": [
+          "governance-assets"
+        ]
+      }
+    },
+    "/governance/assets/{asset_id}/risk/recompute": {
+      "post": {
+        "operationId": "recompute_risk_governance_assets__asset_id__risk_recompute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskScoreResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recompute Risk",
+        "tags": [
+          "governance-assets"
+        ]
+      }
+    },
+    "/governance/assets/{asset_id}/versions": {
+      "get": {
+        "operationId": "list_versions_governance_assets__asset_id__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AssetVersionResponse"
+                  },
+                  "title": "Response List Versions Governance Assets  Asset Id  Versions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Versions",
+        "tags": [
+          "governance-assets"
+        ]
+      }
+    },
+    "/governance/assets/{asset_id}/versions/{version_hash}": {
+      "get": {
+        "operationId": "get_version_governance_assets__asset_id__versions__version_hash__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version_hash",
+            "required": true,
+            "schema": {
+              "title": "Version Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetVersionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Version",
+        "tags": [
+          "governance-assets"
+        ]
+      }
+    },
+    "/governance/audit/chain/verify": {
+      "get": {
+        "operationId": "verify_audit_chain_governance_audit_chain_verify_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Verify Audit Chain Governance Audit Chain Verify Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Audit Chain",
+        "tags": [
+          "governance-audit"
         ]
       }
     },

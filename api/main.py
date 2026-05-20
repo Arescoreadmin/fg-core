@@ -78,6 +78,8 @@ from api.rag_corpus_console import router as rag_corpus_console_router
 from api.rag_corpus_ingestion import router as rag_corpus_ingestion_router
 from api.governance_report_manager import router as governance_report_router
 from api.governance_timeline_manager import router as governance_timeline_router
+from api.governance_assets import audit_router as governance_assets_audit_router
+from api.governance_assets import router as governance_assets_router
 from api.field_assessment import router as field_assessment_router
 from api.reports_engine import router as reports_engine_router
 from api.stripe_webhooks import router as stripe_webhooks_router
@@ -594,6 +596,8 @@ def build_app(auth_enabled: Optional[bool] = None) -> FastAPI:
     app.include_router(reports_engine_router)
     app.include_router(governance_report_router)
     app.include_router(governance_timeline_router)
+    app.include_router(governance_assets_router)
+    app.include_router(governance_assets_audit_router)
     app.include_router(field_assessment_router)
     app.include_router(rag_retrieval_policy_router)
     app.include_router(rag_corpus_console_router)
@@ -914,6 +918,8 @@ def build_contract_app(settings: ContractSettingsLike | None = None) -> FastAPI:
     app.include_router(reports_engine_router)
     app.include_router(governance_report_router)
     app.include_router(governance_timeline_router)
+    app.include_router(governance_assets_router)
+    app.include_router(governance_assets_audit_router)
     app.include_router(field_assessment_router)
     app.include_router(rag_retrieval_policy_router)
     app.include_router(rag_corpus_console_router)

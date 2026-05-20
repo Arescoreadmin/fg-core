@@ -10926,3 +10926,47 @@ Existing report downloads were presentation-level placeholders. They did not pro
 - `packages/ui/src/alert.tsx`
 - `tests/test_scan_import.py` (expanded)
 - `docs/ai/PR_FIX_LOG.md` (this entry)
+- `docs/ai/PR_FIX_LOG.md` (this entry)
+
+---
+
+### 2026-05-20 — PR 3.5: Governance Asset Registry
+
+**Branch:** `feat/governance-asset-registry-pr35`
+
+**Area:** New subsystem — Governance Asset Registry.
+
+**What was built:**
+
+1. **ORM schema** (`api/db_models_governance_assets.py`) — 8 tables: governance_assets, governance_asset_versions, governance_asset_owners, governance_asset_attestations, governance_asset_relationships, governance_asset_risk_scores, governance_asset_policy_bindings, governance_asset_audit_events
+
+2. **Enums + value objects** (`services/governance_asset_registry/models.py`) — AssetType, AssetStatus, RiskTier, OwnerRole, RelationshipType, DataClassification, TransferVolumeTier, DiscoverySource, AttestationType, AttestationStatus, PolicyType, PolicyBindingStatus; RiskFactors and RiskScore frozen dataclasses; ATTESTATION_INTERVAL_BY_TIER
+
+3. **Deterministic risk scoring engine** (`services/governance_asset_registry/risk_engine.py`) — pure function, no I/O, 0–1000 scale, factors: asset_type_base, vendor_risk, data_sensitivity, change_velocity, open_findings_weight, attestation_staleness, discovery_penalty
+
+4. **Tamper-evident audit chain** (`services/governance_asset_registry/audit.py`) — chain_hash(prev_hash, entry_hash) construction; Ed25519 signing (best-effort); full replay verification; one chain per tenant (ga-{tenant_id})
+
+5. **Attestation TTL management** (`services/governance_asset_registry/attestation.py`) — 30/60/90-day intervals by risk tier; never-attested assets are already overdue; +2 risk points/day overdue (capped 100)
+
+6. **Blast radius BFS traversal** (`services/governance_asset_registry/graph.py`) — BFS from any asset through GaAssetRelationship edges; returns hops[], affected_asset_count, highest_data_classification
+
+7. **Shadow asset detection** (`services/governance_asset_registry/shadow_detector.py`) — cross-references fa_scan_results vs governance_assets.external_id; source-type inference for asset categories; +50 discovery penalty
+
+8. **Core CRUD + versioning** (`services/governance_asset_registry/registry.py`) — create/get/list/update/decommission; immutable GaAssetVersion chain with Ed25519 signatures; atomic risk score recomputation on every mutation
+
+9. **FastAPI router** (`api/governance_assets.py`) — 22 routes under /governance/assets and /governance/audit; governance:read / governance:write / governance:admin scope enforcement; actor email resolved from auth context
+
+**Files touched:**
+- `api/db_models_governance_assets.py` (new — 8 ORM tables)
+- `services/governance_asset_registry/__init__.py` (new)
+- `services/governance_asset_registry/models.py` (new)
+- `services/governance_asset_registry/risk_engine.py` (new)
+- `services/governance_asset_registry/audit.py` (new)
+- `services/governance_asset_registry/attestation.py` (new)
+- `services/governance_asset_registry/graph.py` (new)
+- `services/governance_asset_registry/shadow_detector.py` (new)
+- `services/governance_asset_registry/registry.py` (new)
+- `api/governance_assets.py` (new — FastAPI router)
+- `api/db.py` (added db_models_governance_assets import)
+- `api/main.py` (registered governance_assets_router + governance_assets_audit_router)
+- `docs/ai/PR_FIX_LOG.md` (this entry)

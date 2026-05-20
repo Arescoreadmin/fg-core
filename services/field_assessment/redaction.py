@@ -42,12 +42,12 @@ _SENSITIVE_KEY_RE = re.compile(
     r"|encryption[_\-]?key|signing[_\-]?key"
     r"|hmac[_\-]?secret|jwt[_\-]?secret"
     # Cloud / infra specific
-    r"|role[_\-]?arn"         # AWS assumed-role ARN
-    r"|external[_\-]?id"      # AWS cross-account external ID
-    r"|kms[_\-]?key"          # AWS / GCP KMS
-    r"|connection[_\-]?string"# Azure / DB connection strings
-    r"|sas[_\-]?token"        # Azure SAS tokens
-    r"|storage[_\-]?key"      # Azure / GCP storage
+    r"|role[_\-]?arn"  # AWS assumed-role ARN
+    r"|external[_\-]?id"  # AWS cross-account external ID
+    r"|kms[_\-]?key"  # AWS / GCP KMS
+    r"|connection[_\-]?string"  # Azure / DB connection strings
+    r"|sas[_\-]?token"  # Azure SAS tokens
+    r"|storage[_\-]?key"  # Azure / GCP storage
     r"|service[_\-]?account[_\-]?key"  # GCP SA JSON key
     r"|pem|pkcs|x509"
     r"|cert(?:ificate)?[_\-]?key"
@@ -62,25 +62,25 @@ _SECRET_VALUE_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"(?i)^bearer\s+[A-Za-z0-9\-._~+/]+=*$"),
     re.compile(r"(?i)^basic\s+[A-Za-z0-9+/]+=*$"),
     # AWS
-    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),                           # AWS Access Key ID
-    re.compile(r"\bASIA[0-9A-Z]{16}\b"),                           # AWS STS token
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),  # AWS Access Key ID
+    re.compile(r"\bASIA[0-9A-Z]{16}\b"),  # AWS STS token
     # GitHub
-    re.compile(r"ghp_[A-Za-z0-9]{36}"),                            # GitHub PAT
-    re.compile(r"ghs_[A-Za-z0-9]{36}"),                            # GitHub app token
-    re.compile(r"gho_[A-Za-z0-9]{36}"),                            # GitHub OAuth
+    re.compile(r"ghp_[A-Za-z0-9]{36}"),  # GitHub PAT
+    re.compile(r"ghs_[A-Za-z0-9]{36}"),  # GitHub app token
+    re.compile(r"gho_[A-Za-z0-9]{36}"),  # GitHub OAuth
     # OpenAI / Anthropic
-    re.compile(r"sk-[A-Za-z0-9]{48}"),                             # OpenAI
-    re.compile(r"sk-ant-[A-Za-z0-9\-]{40,}"),                      # Anthropic
+    re.compile(r"sk-[A-Za-z0-9]{48}"),  # OpenAI
+    re.compile(r"sk-ant-[A-Za-z0-9\-]{40,}"),  # Anthropic
     # Stripe
-    re.compile(r"sk_live_[A-Za-z0-9]{24,}"),                       # Stripe live secret
-    re.compile(r"rk_live_[A-Za-z0-9]{24,}"),                       # Stripe restricted key
+    re.compile(r"sk_live_[A-Za-z0-9]{24,}"),  # Stripe live secret
+    re.compile(r"rk_live_[A-Za-z0-9]{24,}"),  # Stripe restricted key
     # Databricks
-    re.compile(r"dapi[a-f0-9]{32}"),                                # Databricks token
+    re.compile(r"dapi[a-f0-9]{32}"),  # Databricks token
     # HashiCorp Vault
-    re.compile(r"s\.[A-Za-z0-9]{20,}"),                            # Vault token
+    re.compile(r"s\.[A-Za-z0-9]{20,}"),  # Vault token
     # Database / connection URIs
     re.compile(r"(?i)(postgres|mysql|redis|mongodb(?:\+srv)?)://[^:]+:[^@]+@"),
-    re.compile(r"DefaultEndpointProtocol=https;AccountName="),       # Azure storage
+    re.compile(r"DefaultEndpointProtocol=https;AccountName="),  # Azure storage
     # PEM / certificate headers
     re.compile(r"-----BEGIN [A-Z ]+(?:KEY|CERTIFICATE|PRIVATE)-----"),
     # JWT: header.payload.signature — middle segment starts with eyJ (base64 of "{")
@@ -165,6 +165,7 @@ def _walk_dict(
                 parsed = _try_parse_json(v)
                 if parsed is not None:
                     before = len(paths)
+                    walked: Any
                     if isinstance(parsed, dict):
                         walked = _walk_dict(parsed, paths, path, depth + 1)
                     else:
@@ -204,6 +205,7 @@ def _walk_list(
                 parsed = _try_parse_json(item)
                 if parsed is not None:
                     before = len(paths)
+                    walked: Any
                     if isinstance(parsed, dict):
                         walked = _walk_dict(parsed, paths, path, depth + 1)
                     else:
