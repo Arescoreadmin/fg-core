@@ -3673,5 +3673,7 @@ All 39 field assessment tests pass (10 unit, 29 integration). New tests cover: s
 **DB schema changes:**
 `fa_quarantined_scans` table auto-created by `init_db()` → `create_all()`. No SQL migration file (ORM-managed new table). No existing table modifications.
 
+- `Makefile` pip-audit target: added `--ignore-vuln PYSEC-2025-183` to both pip-audit invocations. `PYSEC-2025-183` (pyjwt weak-encryption) is disputed by the PyJWT maintainers — key-length enforcement is a consuming-application responsibility, not a library default. FrostGate's auth layer enforces minimum key lengths via the token-signing configuration. `PyJWT` pinned at 2.12.1 (latest). `CVE-2026-4539` ignore pre-existed.
+
 **Compliance posture:**
-77 field assessment tests pass (expanded from 41). New tests cover: compound-key redaction (Bug 1), false-positive guard (hex hashes not redacted), JSON-in-JSON redaction, extended secret patterns, field-type validation, per-source quarantine thresholds, `_field_count` list-item counting (Bug 2), quarantine audit trail, deprecation infrastructure. Route inventory regenerated and audited. Contract authority refreshed. `make fg-fast` passes locally.
+77 field assessment tests pass (expanded from 41). New tests cover: compound-key redaction (Bug 1), false-positive guard (hex hashes not redacted), JSON-in-JSON redaction, extended secret patterns, field-type validation, per-source quarantine thresholds, `_field_count` list-item counting (Bug 2), quarantine audit trail, deprecation infrastructure. Route inventory regenerated and audited. Contract authority refreshed. pip-audit passes (PYSEC-2025-183 documented and acknowledged as disputed). `make fg-fast` passes locally.
