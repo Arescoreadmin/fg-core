@@ -11014,3 +11014,87 @@ Existing report downloads were presentation-level placeholders. They did not pro
 - Backend status transition enforcement using readiness blockers.
 - Governance Asset Registry candidate creation workflow.
 - Dedicated review queue persistence for escalations.
+
+### 2026-05-20 — PR 368: Microsoft Graph Field Assessment Connector
+
+**Branch:** `feat/msgraph-connector-field-assessment`
+
+**Area:** Field Assessment connectors; Microsoft Graph governance discovery; deterministic connector analysis.
+
+**Purpose:** Add Microsoft Graph connector support for Field Assessment ingestion and governance discovery workflows. This connector extends the Field Assessment Engagement Substrate with deterministic Microsoft 365 / Entra / Graph-derived governance signals without trusting request-body tenant identity or exporting credentials.
+
+**Files changed:**
+- `services/connectors/msgraph/` — new Microsoft Graph connector package
+- `services/connectors/msgraph/analyzers/` — analyzer modules for OAuth consent, MFA posture, Conditional Access, enterprise applications, DLP scoring, guest exposure, privileged roles, and AI signals
+- `services/connectors/msgraph/findings/` — deterministic finding derivation and registry
+- `services/connectors/msgraph/schema/` — typed connector schemas for scan results, analyzer outputs, and integrity records
+- `services/connectors/msgraph/acknowledgment.py` — connector acknowledgment enforcement
+- `services/connectors/msgraph/client.py` — Graph client boundary
+- `services/connectors/msgraph/credential.py` — credential handling boundary
+- `services/connectors/msgraph/export.py` — export-safe connector output
+- `services/connectors/msgraph/integrity.py` — deterministic integrity hashing and verification
+- `services/connectors/msgraph/manifest.py` — connector manifest generation
+- `services/connectors/msgraph/runner.py` — connector execution orchestration
+- `services/connectors/msgraph/tenant.py` — tenant lock validation
+- `tests/connectors/msgraph/` — connector unit and analyzer tests
+- `docs/ai/PR_FIX_LOG.md` — this entry
+
+**Capabilities added:**
+- OAuth consent analysis
+- MFA posture analysis
+- Conditional Access analysis
+- Enterprise application analysis
+- DLP scoring
+- Guest exposure analysis
+- Privileged role analysis
+- AI signal discovery
+- Deterministic finding derivation
+- Export-safe manifest generation
+- Integrity verification
+- Tenant-scoped execution enforcement
+
+**Security impact:**
+- Tenant isolation enforced through connector tenant lock validation
+- No request-body tenant trust introduced
+- Credential handling isolated from export artifacts
+- Export-safe responses preserve IDs, counts, findings, and metadata without raw credentials
+- Deterministic integrity hashing added for connector outputs
+- Connector acknowledgment enforcement added before trusted use
+- No raw Graph credentials, bearer tokens, auth headers, secrets, or provider payloads are exported
+
+**Determinism proof:**
+- Analyzer outputs are schema-bound and deterministic for identical inputs
+- Finding derivation is registry-driven, not AI-authored
+- Manifest and integrity outputs are hash-based and replay-verifiable
+- Export filtering is deterministic
+
+**Tests added/updated:**
+- Connector acknowledgment tests
+- Tenant lock tests
+- Integrity tests
+- Export tests
+- Manifest tests
+- Finding derivation tests
+- OAuth consent analyzer tests
+- Conditional Access analyzer tests
+- MFA analyzer tests
+- DLP scoring analyzer tests
+- Enterprise applications analyzer tests
+
+**Validation results:**
+- `ruff check .` — PASS
+- `ruff format --check .` — PASS
+- `mypy` — PASS
+- `pytest` — PASS, 5528 passed, 29 skipped
+- `pip check` — PASS
+- `make fg-contract` / contract authority checks — PASS
+- AI contracts validation — PASS
+- Connector contracts validation — PASS
+- Artifact schema validation — PASS
+
+**Known follow-ups:**
+- Continuous Microsoft Graph synchronization
+- Governance Asset Registry auto-linking
+- Drift detection from repeated Graph scans
+- Attestation continuity from discovered Microsoft 365 / Entra assets
+- Governance topology enrichment
