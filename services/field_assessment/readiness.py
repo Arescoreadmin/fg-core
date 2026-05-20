@@ -83,6 +83,11 @@ class AssetCandidateAction:
     title: str
     instruction: str
     lineage_refs: list[str]
+    candidate_type: str = "scan_source"
+    risk_signal: str = "review_required"
+    confidence: int = 70
+    evidence_refs: list[str] = field(default_factory=list)
+    promotion_state: str = "candidate_only"
     target_ui_section: str = "evidence"
 
 
@@ -995,6 +1000,50 @@ class _ReadinessBuilder:
             source = _str(scan, "source_type")
             if source not in self.playbook.required_asset_candidate_sources:
                 continue
+            normalized_payload = _value(scan, "normalized_payload") or {}
+            if isinstance(normalized_payload, dict):
+                for candidate in normalized_payload.get("asset_candidates", []) or []:
+                    if not isinstance(candidate, dict):
+                        continue
+                    scan_id = _str(scan, "id")
+                    candidate_id = str(
+                        candidate.get("candidate_id")
+                        or f"{source}.{scan_id}.{len(self.asset_actions)}"
+                    )
+                    candidate_type = str(candidate.get("candidate_type") or source)
+                    risk_signal = str(candidate.get("risk_signal") or "review_required")
+                    self.asset_actions.append(
+                        AssetCandidateAction(
+                            candidate_action_id=(
+                                f"asset_candidate.review.{source}.{candidate_id}"
+                            ),
+                            source_type=source,
+                            source_entity_id=scan_id,
+                            title=f"Review {_label(source)} {_label(candidate_type)} candidate",
+                            instruction=(
+                                f"Review the {_label(candidate_type)} candidate "
+                                f"flagged by {_label(source)} for {risk_signal} "
+                                "before promotion into the Governance Asset Registry."
+                            ),
+                            lineage_refs=[
+                                scan_id,
+                                str(candidate.get("source_ref", "")),
+                            ],
+                            candidate_type=candidate_type,
+                            risk_signal=risk_signal,
+                            confidence=int(candidate.get("confidence") or 70),
+                            evidence_refs=[
+                                str(ref)
+                                for ref in candidate.get("evidence_refs", [])
+                                if ref
+                            ],
+                            promotion_state=str(
+                                candidate.get("promotion_state") or "candidate_only"
+                            ),
+                        )
+                    )
+                if normalized_payload.get("asset_candidates"):
+                    continue
             if int(_value(scan, "object_count") or 0) <= 0:
                 continue
             scan_id = _str(scan, "id")

@@ -14,7 +14,7 @@ Security invariants:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -25,6 +25,16 @@ from api.auth_scopes import require_scopes
 from api.deps import auth_ctx_db_session
 from api.error_contracts import api_error
 from services.field_assessment.audit import emit_engagement_audit_event
+from services.field_assessment.connectors.msgraph_bridge import (
+    ConnectorAcknowledgmentRequired,
+    ConnectorBridgeError,
+    ConnectorExportUnsafe,
+    ConnectorImportEnvelope,
+    ConnectorManifestUnverified,
+    ConnectorSchemaUnsupported,
+    ConnectorTenantMismatch,
+    import_msgraph_scan_result,
+)
 from services.field_assessment.models import (
     AssessmentType,
     DocumentClassification,
@@ -203,6 +213,16 @@ class CreateEvidenceLinkRequest(BaseModel):
     evidence_entity_type: EvidenceLinkType
     evidence_entity_id: str
     link_metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ConnectorImportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    connector_type: Literal["microsoft_graph"]
+    connector_run_id: str
+    connector_manifest_hash: str | None = None
+    import_review_status: str = "imported"
+    scan_result: dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
@@ -424,6 +444,11 @@ class AssetCandidateActionResponse(BaseModel):
     title: str
     instruction: str
     lineage_refs: list[str]
+    candidate_type: str
+    risk_signal: str
+    confidence: int
+    evidence_refs: list[str]
+    promotion_state: str
     target_ui_section: str
 
 
@@ -454,6 +479,23 @@ class ExecutionStateResponse(BaseModel):
     continuity_opportunities: list[ContinuityOpportunityResponse]
     readiness_categories: dict[str, str]
     generated_at: str
+    schema_version: str
+
+
+class ConnectorImportResponse(BaseModel):
+    engagement_id: str
+    scan_result_id: str
+    connector_type: str
+    connector_run_id: str
+    connector_import_id: str
+    manifest_hash: str
+    integrity_hash: str
+    verification_status: str
+    verification_checks: list[str]
+    findings_imported: int
+    evidence_links_imported: int
+    asset_candidates_detected: int
+    import_status: str
     schema_version: str
 
 
@@ -1482,6 +1524,99 @@ def get_engagement_execution_state_route(
         generated_at=utc_iso8601_z_now(),
     )
     return ExecutionStateResponse(**execution_state.to_dict())
+
+
+# ---------------------------------------------------------------------------
+# Route — Verified connector imports
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/engagements/{engagement_id}/connector-runs/msgraph/import",
+    response_model=ConnectorImportResponse,
+    dependencies=[Depends(require_scopes("governance:write"))],
+)
+def import_msgraph_connector_run_route(
+    engagement_id: str,
+    request: Request,
+    body: ConnectorImportRequest,
+    db: Session = Depends(auth_ctx_db_session),
+) -> ConnectorImportResponse:
+    tenant_id = _resolve_caller_tenant(request)
+    actor = _actor_from_request(request)
+    try:
+        get_engagement(db, engagement_id=engagement_id, tenant_id=tenant_id)
+    except EngagementNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=api_error("ENGAGEMENT_NOT_FOUND", exc.message)
+        )
+    try:
+        envelope = ConnectorImportEnvelope.model_validate(body.model_dump())
+        result = import_msgraph_scan_result(
+            db=db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            envelope=envelope,
+            actor=actor,
+        )
+    except ConnectorTenantMismatch as exc:
+        emit_engagement_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="connector.msgraph.import_denied",
+            actor=actor,
+            reason_code=exc.code,
+            payload={
+                "connector_type": body.connector_type,
+                "connector_run_id": body.connector_run_id,
+            },
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=404, detail=api_error(exc.code, exc.message)
+        ) from exc
+    except (
+        ConnectorManifestUnverified,
+        ConnectorSchemaUnsupported,
+        ConnectorAcknowledgmentRequired,
+        ConnectorExportUnsafe,
+    ) as exc:
+        emit_engagement_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="connector.msgraph.import_integrity_failed",
+            actor=actor,
+            reason_code=exc.code,
+            payload={
+                "connector_type": body.connector_type,
+                "connector_run_id": body.connector_run_id,
+            },
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=422, detail=api_error(exc.code, exc.message)
+        ) from exc
+    except ConnectorBridgeError as exc:
+        emit_engagement_audit_event(
+            db,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            event_type="connector.msgraph.import_denied",
+            actor=actor,
+            reason_code=exc.code,
+            payload={
+                "connector_type": body.connector_type,
+                "connector_run_id": body.connector_run_id,
+            },
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=422, detail=api_error(exc.code, exc.message)
+        ) from exc
+    db.commit()
+    return ConnectorImportResponse(**result.to_dict())
 
 
 # ---------------------------------------------------------------------------

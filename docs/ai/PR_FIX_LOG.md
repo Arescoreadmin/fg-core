@@ -11098,3 +11098,48 @@ Existing report downloads were presentation-level placeholders. They did not pro
 - Drift detection from repeated Graph scans
 - Attestation continuity from discovered Microsoft 365 / Entra assets
 - Governance topology enrichment
+
+---
+
+### 2026-05-20 — PR 368.5: Microsoft Graph Connector to Guided Execution Bridge
+
+**Branch:** `pr-368-5-msgraph-field-assessment-bridge`
+
+**Area:** Field Assessment connector import bridge.
+
+**What was built:**
+
+1. **Verified import envelope** (`services/field_assessment/connectors/msgraph_bridge.py`) — `ConnectorImportEnvelope` accepts Microsoft Graph connector output through a stable bridge contract instead of loose connector payloads.
+
+2. **Trust-but-verify bridge validation** — imports verify tenant lock, operator acknowledgment receipt, schema version, signed manifest HMAC, supplied manifest hash, and export-safe contract before any Field Assessment state is created.
+
+3. **Microsoft Graph scan import API** (`POST /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/import`) — tenant-scoped, `governance:write`, auth-context tenant only, no request-body tenant trust.
+
+4. **Field Assessment scan_result conversion** — verified Graph runs create idempotent `source_type=microsoft_graph` scan results using manifest hash as evidence hash and export-safe raw/normalized payloads only.
+
+5. **Normalized finding import** — Graph-derived connector findings become deterministic Field Assessment normalized findings with framework mappings, confidence, remediation hints, source attribution, and scan evidence refs.
+
+6. **Evidence lineage links** — bridge creates finding-to-scan `evidence_links` with connector run ID, import ID, manifest hash, bridge version, and replay-safe evidence refs.
+
+7. **Asset candidate enrichment** — execution-state now reads connector-provided `asset_candidates` from scan normalized payload and surfaces specific Microsoft Graph OAuth/app/AI/DLP/role candidate actions.
+
+8. **Replay metadata** — scan normalized payload stores connector run ID, manifest hash, bridge version, finding derivation version, and verification hash for future replay reconstruction.
+
+9. **Audit events** — safe audit events record import requested, manifest verified, import completed, import denied, and integrity failure paths without raw Graph payloads or credentials.
+
+**Security impact:**
+- Wrong-tenant connector output fails closed.
+- Manifest tampering fails closed.
+- Operator acknowledgment failure fails closed.
+- Responses and execution-state exclude raw Graph API payloads, access tokens, client secrets, and credentials.
+- Imports are idempotent by tenant, engagement, connector run, and manifest hash.
+
+**Tests added/updated:**
+- `tests/test_field_assessment_msgraph_bridge.py`
+- `apps/console/tests/field-assessment-workspace.test.js`
+
+**Known deferred follow-ups:**
+- Persistent connector import registry table.
+- Automatic connector completion ingestion when an engagement binding is attached.
+- Asset Registry candidate promotion workflow.
+- Continuous Graph drift/reassessment scheduling.

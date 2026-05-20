@@ -1382,6 +1382,12 @@
     },
     {
       "method": "GET",
+      "path": "/field-assessment/engagements/{engagement_id}/execution-state",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/field-assessment/engagements/{engagement_id}/findings",
       "scopes": [],
       "source": "contract"
@@ -1999,7 +2005,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-20T13:46:59.745788+00:00",
+  "generated_at": "2026-05-20T19:25:48.383422+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

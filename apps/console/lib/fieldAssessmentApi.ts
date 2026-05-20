@@ -283,7 +283,37 @@ export interface AssetCandidateAction {
   title: string;
   instruction: string;
   lineage_refs: string[];
+  candidate_type: string;
+  risk_signal: string;
+  confidence: number;
+  evidence_refs: string[];
+  promotion_state: string;
   target_ui_section: string;
+}
+
+export interface ConnectorImportPayload {
+  connector_type: 'microsoft_graph';
+  connector_run_id: string;
+  connector_manifest_hash?: string;
+  import_review_status?: 'imported' | 'needs_review' | 'reviewed';
+  scan_result: Record<string, unknown>;
+}
+
+export interface ConnectorImportResult {
+  engagement_id: string;
+  scan_result_id: string;
+  connector_type: string;
+  connector_run_id: string;
+  connector_import_id: string;
+  manifest_hash: string;
+  integrity_hash: string;
+  verification_status: string;
+  verification_checks: string[];
+  findings_imported: number;
+  evidence_links_imported: number;
+  asset_candidates_detected: number;
+  import_status: string;
+  schema_version: string;
 }
 
 export interface ContinuityOpportunity {
@@ -515,6 +545,13 @@ export const fieldAssessmentApi = {
   // Deterministic guided execution state (server-authored readiness)
   getExecutionState(engagementId: string): Promise<ExecutionState> {
     return request(`/engagements/${engagementId}/execution-state`);
+  },
+
+  importMicrosoftGraphRun(engagementId: string, payload: ConnectorImportPayload): Promise<ConnectorImportResult> {
+    return request(`/engagements/${engagementId}/connector-runs/msgraph/import`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
 
   // Audit events (read-only — append-only server-side)
