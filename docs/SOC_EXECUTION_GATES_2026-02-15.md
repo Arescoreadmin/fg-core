@@ -3764,3 +3764,44 @@ hashed tenant_id already embedded in the report the client holds.
 - `api/field_assessment.py` — ConnectorImportResponse.report_id field added
 - `api/main.py` — connectors_msgraph_report_router registered
 - `docs/ai/PR_FIX_LOG.md` (PR 4 entry)
+
+## PR 4.5 — Asset Promotion + Attestation Continuity (2026-05-20)
+
+**Change:** New DB table `ga_asset_candidates`, new column `asset_id` on `fa_normalized_findings`,
+new API router `/governance/candidates`, finding-to-asset linkage, and open_findings_weight
+wired into the risk engine.
+
+**Reason:** Persistent candidate staging between connector detection and GaAsset promotion,
+with idempotent promotion preserving owner assignments and attestation history. Auto-promotion
+at confidence ≥ 88 prevents operator inbox overload for clear-cut signals. open_findings_weight
+was a dormant risk factor; PR 4.5 activates it via linked FaNormalizedFinding counts.
+
+**Security assessment:**
+- All candidate routes are auth-gated: reads require `governance:read`, mutations require
+  `governance:write`. No new public paths introduced.
+- `ga_asset_candidates` contains no PII beyond tenant_id (already in every governance table).
+- The candidate_id is a SHA-256 of the identity key — no raw signal data exposed in IDs.
+- Promotion is idempotent (external_id lookup before create_asset): no duplicate assets
+  can be created from re-scans or re-promotions.
+- `auto_promote_if_eligible()` is best-effort and fail-closed: exceptions are swallowed at
+  the bridge layer so import always succeeds; auto-promotion failure does not block ingestion.
+
+**DB schema changes:**
+- NEW table: `ga_asset_candidates` — candidate_id (PK SHA-256), tenant_id, source_type,
+  candidate_type, risk_signal, status, detection_count, confidence, peak_confidence,
+  promoted_asset_id, evidence_ref_ids, lifecycle timestamps.
+- NEW column: `fa_normalized_findings.asset_id` (TEXT nullable, indexed) — links findings
+  to governing GaAsset for risk scoring.
+
+**Files touched:**
+- `api/db_models_governance_asset_candidates.py` (new — GaAssetCandidate ORM model)
+- `api/db_models_field_assessment.py` — asset_id column added to FaNormalizedFinding
+- `api/db.py` — GaAssetCandidate registered in _ensure_models_imported()
+- `services/governance_asset_registry/candidates.py` (new — upsert/lifecycle service)
+- `services/governance_asset_registry/promotion.py` (new — idempotent promotion engine)
+- `services/governance_asset_registry/registry.py` — open_findings_weight wired into _recompute_and_store_risk
+- `services/field_assessment/connectors/msgraph_bridge.py` — _persist_candidates() wired at import
+- `api/governance_asset_candidates.py` (new — REST router for candidates inbox + mutations)
+- `api/main.py` — governance_candidates_router registered
+- `tests/governance/test_candidates.py` (new — 22 tests)
+- `tests/governance/test_promotion.py` (new — 14 tests)

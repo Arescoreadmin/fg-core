@@ -11176,3 +11176,29 @@ Existing report downloads were presentation-level placeholders. They did not pro
 - Automatic connector completion ingestion when an engagement binding is attached.
 - Asset Registry candidate promotion workflow.
 - Continuous Graph drift/reassessment scheduling.
+
+---
+
+### 2026-05-20 — PR 4.5: Asset Promotion + Attestation Continuity
+
+**What was built:**
+
+Persistent governance asset candidate staging between connector detection and GaAsset promotion. Key layers:
+
+1. **`ga_asset_candidates` table** — stable candidate row keyed by `SHA-256(tenant:source:type:signal)`. Re-scans update `detection_count`/`last_detected_at` in-place; no duplicates. Status lifecycle: `detected → under_review → promoted/rejected/superseded`.
+
+2. **`fa_normalized_findings.asset_id`** — new nullable column that links findings to their governing GaAsset. Feeds `open_findings_weight` into the risk engine (previously always 0).
+
+3. **Idempotent promotion engine** (`promotion.py`) — `promote_candidate_to_asset()` checks for existing GaAsset via `external_id = f"{source_type}:{risk_signal}"` before calling `create_asset()`. Returning to an existing asset preserves owner assignments and attestation TTL.
+
+4. **Auto-promotion** — confidence ≥ 88 (`AUTO_PROMOTE_CONFIDENCE_THRESHOLD`) triggers automatic promotion at import time. Signals below threshold land in operator inbox.
+
+5. **Operator inbox API** (`/governance/candidates`) — 7 routes: list, inbox, get, review, promote, reject, promote-batch. All auth-gated.
+
+6. **`open_findings_weight` activated** — `_recompute_and_store_risk()` now queries linked open `FaNormalizedFinding` rows and computes severity-weighted score (critical=30, high=15, medium=5, low=1, capped at 150). Previously this risk factor was always 0.
+
+7. **Bridge wiring** — `_persist_candidates()` added to `msgraph_bridge.py`. Called after every import, best-effort (failures swallowed).
+
+**Tests:** 22 candidate unit tests + 14 promotion unit tests.
+
+**Gates passed:** route-inventory-generate, refresh_contract_authority, test_ci_soc_invariants, test_ci_security_guards, test_ci_route_lints, test_main_integrity, test_field_assessment_msgraph_bridge.

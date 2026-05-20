@@ -180,6 +180,9 @@ def _ensure_models_imported() -> None:
     importlib.import_module(
         "api.db_models_governance_assets"
     )  # PR 3.5: governance asset registry
+    importlib.import_module(
+        "api.db_models_governance_asset_candidates"
+    )  # PR 4.5: asset candidates
 
 
 def _get_base():

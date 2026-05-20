@@ -57,6 +57,16 @@ from services.governance_asset_registry.risk_engine import (
     compute_risk_score,
 )
 
+
+# Imported lazily to avoid circular dependency with promotion.py
+def _compute_open_findings_weight(db: Session, *, tenant_id: str, asset_id: str) -> int:
+    from services.governance_asset_registry.promotion import (
+        compute_open_findings_weight,
+    )
+
+    return compute_open_findings_weight(db, tenant_id=tenant_id, asset_id=asset_id)
+
+
 log = logging.getLogger("frostgate.governance_assets.registry")
 
 
@@ -178,11 +188,16 @@ def _recompute_and_store_risk(
         (days_overdue(o.next_attestation_due_at) for o in owners), default=0
     )
 
+    open_findings_weight = _compute_open_findings_weight(
+        db, tenant_id=asset.tenant_id, asset_id=asset.asset_id
+    )
+
     factors = build_factors(
         asset_type=asset.asset_type,
         discovery_source=asset.discovery_source,
         days_attestation_overdue=worst_overdue,
         max_data_classification=worst_cls,
+        open_findings_weight=open_findings_weight,
     )
     result = compute_risk_score(factors)
 

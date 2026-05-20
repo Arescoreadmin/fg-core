@@ -175,6 +175,7 @@ class FaNormalizedFinding(Base):
     )
     evidence_ref_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     remediation_hint: Mapped[str | None] = mapped_column(Text, nullable=True)
+    asset_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     schema_version: Mapped[str] = mapped_column(
         String(16), nullable=False, default="1.0"
     )
@@ -186,6 +187,7 @@ class FaNormalizedFinding(Base):
         Index("ix_fa_findings_engagement_tenant", "engagement_id", "tenant_id"),
         Index("ix_fa_findings_tenant_severity", "tenant_id", "severity"),
         Index("ix_fa_findings_tenant_status", "tenant_id", "status"),
+        Index("ix_fa_findings_asset", "asset_id"),
     )
 
 

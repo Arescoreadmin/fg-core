@@ -30,12 +30,19 @@
       "plane": "rbac",
       "suggested_fix": "Add SOC gate mapping entry for plane.",
       "type": "missing_soc_gate_reference"
+    },
+    {
+      "details": [
+        "/verify/{report_hash}"
+      ],
+      "suggested_fix": "Map route prefixes to a plane or explicitly exempt in inventory governance.",
+      "type": "unexpected_route_prefixes"
     }
   ],
   "governance": {
-    "contract_count": 334,
+    "contract_count": 337,
     "contract_only": [],
-    "runtime_count": 439,
+    "runtime_count": 441,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -126,7 +133,6 @@
       "POST /control/testing/runs/register",
       "POST /dev/emit",
       "POST /dev/seed",
-      "POST /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/import",
       "POST /ui/ai/chat",
       "POST /ui/audit/packet",
       "POST /ui/devices/{device_id}/disable",
@@ -142,7 +148,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "a810b82279c77262684b2030a055f385f566f6bf4c7bf42303cf15d92b43f814",
+  "governance_fingerprint": "853aaa317d8e076cff936dec4fa823f33eb9ef1f76d35f0c5af3c2a2b02e4375",
   "planes": [
     {
       "compat": {
@@ -447,6 +453,7 @@
       "GET /field-assessment/engagements",
       "GET /field-assessment/engagements/{engagement_id}",
       "GET /field-assessment/engagements/{engagement_id}/audit-events",
+      "GET /field-assessment/engagements/{engagement_id}/connector-runs/msgraph/reports/{report_id}",
       "GET /field-assessment/engagements/{engagement_id}/document-analyses",
       "GET /field-assessment/engagements/{engagement_id}/evidence-links",
       "GET /field-assessment/engagements/{engagement_id}/execution-state",

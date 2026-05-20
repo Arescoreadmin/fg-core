@@ -5491,6 +5491,125 @@
         "auth",
         "tenant"
       ],
+      "file": "api/governance_asset_candidates.py",
+      "method": "GET",
+      "path": "/governance/candidates",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_asset_candidates.py",
+      "method": "GET",
+      "path": "/governance/candidates/inbox",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_asset_candidates.py",
+      "method": "POST",
+      "path": "/governance/candidates/promote-batch",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_asset_candidates.py",
+      "method": "GET",
+      "path": "/governance/candidates/{candidate_id}",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:read"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_asset_candidates.py",
+      "method": "POST",
+      "path": "/governance/candidates/{candidate_id}/promote",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_asset_candidates.py",
+      "method": "POST",
+      "path": "/governance/candidates/{candidate_id}/reject",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
+      "file": "api/governance_asset_candidates.py",
+      "method": "POST",
+      "path": "/governance/candidates/{candidate_id}/review",
+      "plane": "control",
+      "plane_id": "control",
+      "scoped": true,
+      "scopes": [
+        "governance:write"
+      ],
+      "source": "runtime-ast",
+      "tenant_bound": true
+    },
+    {
+      "dependency_categories": [
+        "auth",
+        "tenant"
+      ],
       "file": "api/governance.py",
       "method": "GET",
       "path": "/governance/changes",
@@ -7521,7 +7640,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-05-20T22:23:52.070227+00:00",
+  "generated_at": "2026-05-20T23:17:30.846794+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

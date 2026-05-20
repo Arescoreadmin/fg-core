@@ -17,6 +17,8 @@ from sqlalchemy import select
 
 from api.db_models_field_assessment import FaEvidenceLink, FaScanResult
 from api.db_models_governance_report import GovernanceReportRecord
+from services.governance_asset_registry.candidates import upsert_candidate
+from services.governance_asset_registry.promotion import auto_promote_if_eligible
 from services.canonical import canonical_json_bytes, utc_iso8601_z_now
 from services.connectors.msgraph.acknowledgment import verify_receipt
 from services.connectors.msgraph.findings.derivation import hash_tenant_id
@@ -232,6 +234,16 @@ def import_msgraph_scan_result(
         scan_result_id=scan_record.id,
     )
 
+    _persist_candidates(
+        db=db,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        scan_result_id=scan_record.id,
+        report_id=report_id,
+        candidates_payload=normalized_payload["asset_candidates"],
+        manifest_hash=manifest_hash,
+    )
+
     _audit(
         db,
         tenant_id,
@@ -344,6 +356,42 @@ def _verify_manifest_content(scan: ScanResult, manifest: SignedManifest) -> None
         )
 
 
+def _persist_candidates(
+    *,
+    db: Any,
+    tenant_id: str,
+    engagement_id: str,
+    scan_result_id: str,
+    report_id: str | None,
+    candidates_payload: list[dict[str, Any]],
+    manifest_hash: str,
+) -> None:
+    """Upsert detected candidates into ga_asset_candidates and auto-promote if eligible.
+
+    Best-effort: individual failures are swallowed so the import always succeeds.
+    """
+    for raw in candidates_payload:
+        try:
+            candidate, _ = upsert_candidate(
+                db,
+                tenant_id=tenant_id,
+                source_type=CONNECTOR_TYPE,
+                candidate_type=raw["candidate_type"],
+                risk_signal=raw["risk_signal"],
+                suggested_name=raw.get("suggested_name", raw["risk_signal"]),
+                suggested_asset_type=raw.get("suggested_asset_type", raw["candidate_type"]),
+                confidence=raw["confidence"],
+                manifest_hash=manifest_hash,
+                evidence_ref_ids=raw.get("evidence_refs", []),
+                engagement_id=engagement_id,
+                scan_result_id=scan_result_id,
+                report_id=report_id,
+            )
+            auto_promote_if_eligible(db, candidate=candidate)
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def _normalized_payload(
     *,
     scan: ScanResult,
@@ -450,16 +498,31 @@ def _asset_candidates(
 ) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
 
+    _SIGNAL_NAMES: dict[str, str] = {
+        "unverified_high_privilege": "Unverified High-Privilege App",
+        "new_application_review": "New Application (30d)",
+        "critical_risky_scopes": "Critical Risky OAuth Scopes",
+        "high_risky_scopes": "High-Risk OAuth Scopes",
+        "shadow_ai": "Shadow AI Application",
+        "unapproved_ai": "Unapproved AI Application",
+        "permanent_assignment": "Permanent Privileged Role Assignment",
+        "privileged_guest_exposure": "Privileged Guest Identity Exposure",
+        "critical_dlp_profile": "Critical DLP Exposure Profile",
+    }
+
     def add(kind: str, risk_signal: str, count: int, confidence: int) -> None:
         if count <= 0:
             return
         source_ref = f"{kind}:{risk_signal}:{count}:{manifest_hash[:16]}"
+        signal_label = _SIGNAL_NAMES.get(risk_signal, risk_signal.replace("_", " ").title())
         candidates.append(
             {
                 "candidate_id": hashlib.sha256(source_ref.encode("utf-8")).hexdigest()[
                     :24
                 ],
                 "candidate_type": kind,
+                "suggested_name": f"{signal_label} — {CONNECTOR_TYPE}",
+                "suggested_asset_type": kind,
                 "source": CONNECTOR_TYPE,
                 "source_ref": source_ref,
                 "risk_signal": risk_signal,
