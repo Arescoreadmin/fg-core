@@ -5063,7 +5063,8 @@
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "GET",
@@ -5075,11 +5076,12 @@
         "governance:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "POST",
@@ -5091,11 +5093,12 @@
         "governance:write"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "GET",
@@ -5107,11 +5110,12 @@
         "governance:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "GET",
@@ -5123,11 +5127,12 @@
         "governance:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "GET",
@@ -5139,11 +5144,12 @@
         "governance:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "PATCH",
@@ -5155,11 +5161,12 @@
         "governance:write"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "GET",
@@ -5171,11 +5178,12 @@
         "governance:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "POST",
@@ -5187,11 +5195,12 @@
         "governance:write"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "GET",
@@ -5203,11 +5212,12 @@
         "governance:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "POST",
@@ -5219,11 +5229,12 @@
         "governance:write"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "GET",
@@ -5235,11 +5246,12 @@
         "governance:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "POST",
@@ -5251,11 +5263,12 @@
         "governance:write"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "DELETE",
@@ -5267,11 +5280,12 @@
         "governance:write"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "GET",
@@ -5283,11 +5297,12 @@
         "governance:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "POST",
@@ -5299,11 +5314,12 @@
         "governance:write"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "GET",
@@ -5315,11 +5331,12 @@
         "governance:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "POST",
@@ -5331,11 +5348,12 @@
         "governance:write"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "GET",
@@ -5347,11 +5365,12 @@
         "governance:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "POST",
@@ -5363,11 +5382,12 @@
         "governance:write"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "GET",
@@ -5379,11 +5399,12 @@
         "governance:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "GET",
@@ -5395,11 +5416,12 @@
         "governance:read"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
-        "auth"
+        "auth",
+        "tenant"
       ],
       "file": "api/governance_assets.py",
       "method": "GET",
@@ -5411,7 +5433,7 @@
         "governance:admin"
       ],
       "source": "runtime-ast",
-      "tenant_bound": false
+      "tenant_bound": true
     },
     {
       "dependency_categories": [
@@ -7436,7 +7458,7 @@
       "tenant_bound": false
     }
   ],
-  "generated_at": "2026-05-20T12:34:24.697687+00:00",
+  "generated_at": "2026-05-20T13:46:59.737619+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

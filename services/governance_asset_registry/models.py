@@ -122,20 +122,20 @@ class RiskFactors:
     Keeping the breakdown allows any score to be reproduced and explained.
     """
 
-    asset_type_base: int = 0       # 0-200: model > agent > ai_system > copilot …
-    vendor_risk: int = 0           # 0-200: inherited from GaAsset(asset_type=ai_vendor)
-    data_sensitivity: int = 0      # 0-200: driven by relationship data_classification
-    change_velocity: int = 0       # 0-100: >5 version changes / 7 days
+    asset_type_base: int = 0  # 0-200: model > agent > ai_system > copilot …
+    vendor_risk: int = 0  # 0-200: inherited from GaAsset(asset_type=ai_vendor)
+    data_sensitivity: int = 0  # 0-200: driven by relationship data_classification
+    change_velocity: int = 0  # 0-100: >5 version changes / 7 days
     open_findings_weight: int = 0  # 0-150: from fa_normalized_findings (future join)
-    attestation_staleness: int = 0 # 0-100: +2 pts/day overdue, capped at 100
-    discovery_penalty: int = 0     # 0-50:  discovered/inferred vs declared
+    attestation_staleness: int = 0  # 0-100: +2 pts/day overdue, capped at 100
+    discovery_penalty: int = 0  # 0-50:  discovered/inferred vs declared
 
 
 @dataclass(frozen=True)
 class RiskScore:
     """Computed risk score with full factor breakdown."""
 
-    score: int         # 0-1000
+    score: int  # 0-1000
     tier: RiskTier
     factors: RiskFactors
-    computed_at: str   # ISO8601Z
+    computed_at: str  # ISO8601Z

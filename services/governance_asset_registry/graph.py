@@ -53,8 +53,13 @@ def blast_radius(
     queue.append((asset_id, 0, "", "", "unknown"))
 
     data_cls_severity = {
-        "phi": 7, "pii": 6, "financial": 5, "confidential": 4,
-        "internal": 3, "unknown": 2, "public": 1,
+        "phi": 7,
+        "pii": 6,
+        "financial": 5,
+        "confidential": 4,
+        "internal": 3,
+        "unknown": 2,
+        "public": 1,
     }
     highest_cls = "unknown"
 
@@ -63,12 +68,9 @@ def blast_radius(
         if depth >= max_depth:
             continue
 
-        stmt = (
-            select(GaAssetRelationship)
-            .where(
-                GaAssetRelationship.tenant_id == tenant_id,
-                GaAssetRelationship.source_asset_id == current_id,
-            )
+        stmt = select(GaAssetRelationship).where(
+            GaAssetRelationship.tenant_id == tenant_id,
+            GaAssetRelationship.source_asset_id == current_id,
         )
         rels = db.execute(stmt).scalars().all()
 
@@ -88,20 +90,30 @@ def blast_radius(
             asset_type = target_asset.asset_type if target_asset else "unknown"
             name = target_asset.name if target_asset else target
 
-            if data_cls_severity.get(rel.data_classification, 0) > data_cls_severity.get(highest_cls, 0):
+            if data_cls_severity.get(
+                rel.data_classification, 0
+            ) > data_cls_severity.get(highest_cls, 0):
                 highest_cls = rel.data_classification
 
-            hops.append({
-                "hop": depth + 1,
-                "asset_id": target,
-                "asset_type": asset_type,
-                "name": name,
-                "relationship_type": rel.relationship_type,
-                "data_classification": rel.data_classification,
-                "via_asset_id": current_id,
-            })
+            hops.append(
+                {
+                    "hop": depth + 1,
+                    "asset_id": target,
+                    "asset_type": asset_type,
+                    "name": name,
+                    "relationship_type": rel.relationship_type,
+                    "data_classification": rel.data_classification,
+                    "via_asset_id": current_id,
+                }
+            )
             queue.append(
-                (target, depth + 1, current_id, rel.relationship_type, rel.data_classification)
+                (
+                    target,
+                    depth + 1,
+                    current_id,
+                    rel.relationship_type,
+                    rel.data_classification,
+                )
             )
 
     unique_types = sorted({h["asset_type"] for h in hops})

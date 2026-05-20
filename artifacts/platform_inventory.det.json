@@ -33,9 +33,9 @@
     }
   ],
   "governance": {
-    "contract_count": 311,
+    "contract_count": 333,
     "contract_only": [],
-    "runtime_count": 415,
+    "runtime_count": 437,
     "runtime_only": [
       "GET /_debug/routes",
       "GET /admin/agent/devices",
@@ -141,7 +141,7 @@
       "route_inventory": "v1"
     }
   },
-  "governance_fingerprint": "a4c97aabebde1c79e4e3e1e17fccaf1918b475f381d6ef264f85db46c87e4adc",
+  "governance_fingerprint": "9642510e014d6dbd6a343fb559021b1671754407d09a1f217053fb6f71e1d1e7",
   "planes": [
     {
       "compat": {
@@ -338,6 +338,7 @@
     ],
     "control": [
       "DELETE /control-plane/v2/delegation/{delegation_id}",
+      "DELETE /governance/assets/{asset_id}/owners/{ownership_id}",
       "GET /_debug/routes",
       "GET /admin/agent/devices",
       "GET /admin/agent/devices/{device_id}/status",
@@ -453,6 +454,19 @@
       "GET /field-assessment/engagements/{engagement_id}/scan-results",
       "GET /field-assessment/engagements/{engagement_id}/scan-results/{scan_result_id}",
       "GET /field-assessment/engagements/{engagement_id}/summary",
+      "GET /governance/assets",
+      "GET /governance/assets/shadow",
+      "GET /governance/assets/summary",
+      "GET /governance/assets/{asset_id}",
+      "GET /governance/assets/{asset_id}/attestations",
+      "GET /governance/assets/{asset_id}/blast-radius",
+      "GET /governance/assets/{asset_id}/owners",
+      "GET /governance/assets/{asset_id}/policies",
+      "GET /governance/assets/{asset_id}/relationships",
+      "GET /governance/assets/{asset_id}/risk",
+      "GET /governance/assets/{asset_id}/versions",
+      "GET /governance/assets/{asset_id}/versions/{version_hash}",
+      "GET /governance/audit/chain/verify",
       "GET /governance/changes",
       "GET /governance/timeline",
       "GET /governance/timeline/{event_id}",
@@ -471,6 +485,7 @@
       "GET /rag/uploads",
       "GET /status",
       "PATCH /field-assessment/engagements/{engagement_id}/status",
+      "PATCH /governance/assets/{asset_id}",
       "POST /admin/agent/commands/issue",
       "POST /admin/agent/devices/{device_id}/disable",
       "POST /admin/agent/devices/{device_id}/enable",
@@ -571,6 +586,13 @@
       "POST /field-assessment/engagements/{engagement_id}/evidence-links",
       "POST /field-assessment/engagements/{engagement_id}/observations",
       "POST /field-assessment/engagements/{engagement_id}/scan-results",
+      "POST /governance/assets",
+      "POST /governance/assets/{asset_id}/attestations",
+      "POST /governance/assets/{asset_id}/decommission",
+      "POST /governance/assets/{asset_id}/owners",
+      "POST /governance/assets/{asset_id}/policies",
+      "POST /governance/assets/{asset_id}/relationships",
+      "POST /governance/assets/{asset_id}/risk/recompute",
       "POST /governance/changes",
       "POST /governance/changes/{change_id}/approve",
       "POST /internal/connectors/{connector_id}/ingest",

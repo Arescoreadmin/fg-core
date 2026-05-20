@@ -80,7 +80,11 @@ def detect_shadow_assets(
 
         for item in items:
             ext_id = item.get("external_id", "")
-            if not ext_id or ext_id in registered_external_ids or ext_id in seen_external_ids:
+            if (
+                not ext_id
+                or ext_id in registered_external_ids
+                or ext_id in seen_external_ids
+            ):
                 continue
             seen_external_ids.add(ext_id)
             shadow_candidates.append(
@@ -129,7 +133,9 @@ def _extract_identifiable_items(
                         ext_id = svc.get("serviceArn") or svc.get("id") or ""
                         name = svc.get("serviceName") or svc.get("name") or ext_id
                         if ext_id:
-                            items.append({"external_id": str(ext_id), "name": str(name)})
+                            items.append(
+                                {"external_id": str(ext_id), "name": str(name)}
+                            )
 
     # crowdstrike: typically {users: [...], endpoints: [...]}
     elif source_type == "crowdstrike":

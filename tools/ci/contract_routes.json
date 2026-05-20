@@ -1454,6 +1454,138 @@
     },
     {
       "method": "GET",
+      "path": "/governance/assets",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/assets",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/shadow",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/summary",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "PATCH",
+      "path": "/governance/assets/{asset_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/attestations",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/assets/{asset_id}/attestations",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/blast-radius",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/assets/{asset_id}/decommission",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/owners",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/assets/{asset_id}/owners",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "DELETE",
+      "path": "/governance/assets/{asset_id}/owners/{ownership_id}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/policies",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/assets/{asset_id}/policies",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/relationships",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/assets/{asset_id}/relationships",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/risk",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "POST",
+      "path": "/governance/assets/{asset_id}/risk/recompute",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/versions",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/assets/{asset_id}/versions/{version_hash}",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
+      "path": "/governance/audit/chain/verify",
+      "scopes": [],
+      "source": "contract"
+    },
+    {
+      "method": "GET",
       "path": "/governance/changes",
       "scopes": [],
       "source": "contract"
@@ -1867,7 +1999,7 @@
       "source": "contract"
     }
   ],
-  "generated_at": "2026-05-20T10:36:35.812630+00:00",
+  "generated_at": "2026-05-20T13:46:59.745788+00:00",
   "generated_by": "tools/ci/check_route_inventory.py",
   "schema_version": "v1"
 }

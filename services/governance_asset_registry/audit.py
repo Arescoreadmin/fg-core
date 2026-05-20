@@ -20,7 +20,7 @@ import logging
 import uuid
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.db_models_governance_assets import GaAssetAuditEvent
@@ -109,9 +109,7 @@ def emit_asset_audit_event(
     return audit_id
 
 
-def verify_asset_audit_chain(
-    db: Session, *, tenant_id: str
-) -> dict[str, Any]:
+def verify_asset_audit_chain(db: Session, *, tenant_id: str) -> dict[str, Any]:
     """Replay the entire tenant audit chain and verify integrity.
 
     Returns:

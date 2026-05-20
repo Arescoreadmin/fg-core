@@ -344,7 +344,6 @@ class GaAssetAuditEvent(Base):
 
     __table_args__ = (
         UniqueConstraint("chain_id", "seq", name="uq_ga_audit_chain_seq"),
-        UniqueConstraint("chain_id", "entry_hash", name="uq_ga_audit_chain_entry"),
         Index("ix_ga_audit_events_asset_tenant", "asset_id", "tenant_id"),
         Index("ix_ga_audit_events_tenant_type", "tenant_id", "event_type"),
         Index("ix_ga_audit_events_chain_seq", "chain_id", "seq"),

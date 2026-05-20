@@ -42,7 +42,7 @@ router = APIRouter(
 # ---------------------------------------------------------------------------
 
 
-def _tenant_id(request: Request) -> str:
+def _resolve_caller_tenant(request: Request) -> str:
     auth = getattr(getattr(request, "state", None), "auth", None)
     tid = getattr(getattr(request, "state", None), "tenant_id", None) or getattr(
         auth, "tenant_id", None
@@ -384,7 +384,7 @@ def get_registry_summary(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     return registry.registry_summary(db, tenant_id=tenant_id)
 
 
@@ -397,7 +397,7 @@ def list_shadow_assets(
     limit: int = Query(100, ge=1, le=200),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     candidates = detect_shadow_assets(db, tenant_id=tenant_id, limit=limit)
     return {
         "tenant_id": tenant_id,
@@ -422,7 +422,7 @@ def create_asset(
     body: CreateAssetRequest,
     db: Session = Depends(auth_ctx_db_session),
 ) -> AssetResponse:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     actor = _actor(request)
     try:
         asset = registry.create_asset(
@@ -459,7 +459,7 @@ def list_assets(
     offset: int = Query(0, ge=0),
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[AssetResponse]:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     assets = registry.list_assets(
         db,
         tenant_id=tenant_id,
@@ -483,7 +483,7 @@ def get_asset(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
 ) -> AssetResponse:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     asset = registry.get_asset(db, tenant_id=tenant_id, asset_id=asset_id)
     if asset is None:
         raise HTTPException(
@@ -503,7 +503,7 @@ def update_asset(
     body: UpdateAssetRequest,
     db: Session = Depends(auth_ctx_db_session),
 ) -> AssetResponse:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     actor = _actor(request)
     try:
         asset = registry.update_asset(
@@ -536,7 +536,7 @@ def decommission_asset(
     body: DecommissionRequest,
     db: Session = Depends(auth_ctx_db_session),
 ) -> AssetResponse:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     actor = _actor(request)
     try:
         asset = registry.decommission_asset(
@@ -569,7 +569,7 @@ def list_versions(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[AssetVersionResponse]:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     versions = registry.list_versions(db, tenant_id=tenant_id, asset_id=asset_id)
     return [_version_out(v) for v in versions]
 
@@ -585,7 +585,7 @@ def get_version(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
 ) -> AssetVersionResponse:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     version = registry.get_version_by_hash(
         db, tenant_id=tenant_id, version_hash=version_hash
     )
@@ -613,7 +613,7 @@ def assign_owner(
     body: AssignOwnerRequest,
     db: Session = Depends(auth_ctx_db_session),
 ) -> OwnerResponse:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     actor = _actor(request)
     try:
         owner = registry.assign_owner(
@@ -643,7 +643,7 @@ def remove_owner(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
 ) -> None:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     actor = _actor(request)
     try:
         registry.remove_owner(
@@ -670,7 +670,7 @@ def list_owners(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[OwnerResponse]:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     owners = registry.list_owners(db, tenant_id=tenant_id, asset_id=asset_id)
     return [_owner_out(o) for o in owners]
 
@@ -692,7 +692,7 @@ def submit_attestation(
     body: SubmitAttestationRequest,
     db: Session = Depends(auth_ctx_db_session),
 ) -> AttestationResponse:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     actor = _actor(request)
     try:
         attestation = registry.submit_attestation(
@@ -723,7 +723,7 @@ def list_attestations(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[AttestationResponse]:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     attestations = registry.list_attestations(
         db, tenant_id=tenant_id, asset_id=asset_id
     )
@@ -747,7 +747,7 @@ def create_relationship(
     body: CreateRelationshipRequest,
     db: Session = Depends(auth_ctx_db_session),
 ) -> RelationshipResponse:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     actor = _actor(request)
     try:
         rel = registry.create_relationship(
@@ -780,7 +780,7 @@ def list_relationships(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[RelationshipResponse]:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     rels = registry.list_relationships(db, tenant_id=tenant_id, asset_id=asset_id)
     return [_rel_out(r) for r in rels]
 
@@ -800,7 +800,7 @@ def get_risk_score(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
 ) -> RiskScoreResponse:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     score = registry.get_current_risk_score(db, tenant_id=tenant_id, asset_id=asset_id)
     if score is None:
         raise HTTPException(
@@ -819,7 +819,7 @@ def recompute_risk(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
 ) -> RiskScoreResponse:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     asset = registry.get_asset(db, tenant_id=tenant_id, asset_id=asset_id)
     if asset is None:
         raise HTTPException(
@@ -850,7 +850,7 @@ def bind_policy(
     body: BindPolicyRequest,
     db: Session = Depends(auth_ctx_db_session),
 ) -> PolicyBindingResponse:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     actor = _actor(request)
     try:
         binding = registry.bind_policy(
@@ -882,7 +882,7 @@ def list_policy_bindings(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
 ) -> list[PolicyBindingResponse]:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     bindings = registry.list_policy_bindings(db, tenant_id=tenant_id, asset_id=asset_id)
     return [_policy_out(b) for b in bindings]
 
@@ -902,7 +902,7 @@ def get_blast_radius(
     max_depth: int = Query(3, ge=1, le=6),
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     if registry.get_asset(db, tenant_id=tenant_id, asset_id=asset_id) is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="asset not found"
@@ -928,5 +928,5 @@ def verify_audit_chain(
     request: Request,
     db: Session = Depends(auth_ctx_db_session),
 ) -> dict[str, Any]:
-    tenant_id = _tenant_id(request)
+    tenant_id = _resolve_caller_tenant(request)
     return verify_asset_audit_chain(db, tenant_id=tenant_id)

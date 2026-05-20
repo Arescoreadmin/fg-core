@@ -26,7 +26,6 @@ from sqlalchemy.orm import Session
 from api.db_models_governance_assets import (
     GaAsset,
     GaAssetAttestation,
-    GaAssetAuditEvent,
     GaAssetOwner,
     GaAssetPolicyBinding,
     GaAssetRelationship,
@@ -149,17 +148,19 @@ def _recompute_and_store_risk(
 ) -> GaAssetRiskScore:
     """Atomically retire old current score and insert new one."""
     # Determine worst data classification across relationships
-    stmt = (
-        select(GaAssetRelationship.data_classification)
-        .where(
-            GaAssetRelationship.tenant_id == asset.tenant_id,
-            GaAssetRelationship.source_asset_id == asset.asset_id,
-        )
+    stmt = select(GaAssetRelationship.data_classification).where(
+        GaAssetRelationship.tenant_id == asset.tenant_id,
+        GaAssetRelationship.source_asset_id == asset.asset_id,
     )
     data_classes = [r for (r,) in db.execute(stmt).all()]
     cls_severity = {
-        "phi": 7, "pii": 6, "financial": 5, "confidential": 4,
-        "internal": 3, "unknown": 2, "public": 1,
+        "phi": 7,
+        "pii": 6,
+        "financial": 5,
+        "confidential": 4,
+        "internal": 3,
+        "unknown": 2,
+        "public": 1,
     }
     worst_cls = max(
         data_classes,
@@ -496,6 +497,10 @@ def remove_owner(
     db.delete(owner)
     db.flush()
 
+    asset = get_asset(db, tenant_id=tenant_id, asset_id=asset_id)
+    if asset:
+        _recompute_and_store_risk(db, asset=asset, trigger_event="owner.removed")
+
     emit_asset_audit_event(
         db,
         tenant_id=tenant_id,
@@ -506,9 +511,7 @@ def remove_owner(
     )
 
 
-def list_owners(
-    db: Session, *, tenant_id: str, asset_id: str
-) -> list[GaAssetOwner]:
+def list_owners(db: Session, *, tenant_id: str, asset_id: str) -> list[GaAssetOwner]:
     stmt = select(GaAssetOwner).where(
         GaAssetOwner.asset_id == asset_id,
         GaAssetOwner.tenant_id == tenant_id,
@@ -537,6 +540,16 @@ def submit_attestation(
         raise ValueError(f"asset not found: {asset_id}")
     if not asset.current_version_hash:
         raise ValueError("asset has no version yet — cannot attest")
+
+    owner_check = db.execute(
+        select(GaAssetOwner).where(
+            GaAssetOwner.asset_id == asset_id,
+            GaAssetOwner.tenant_id == tenant_id,
+            GaAssetOwner.owner_email == owner_email,
+        )
+    ).scalar_one_or_none()
+    if owner_check is None:
+        raise ValueError(f"owner not assigned to this asset: {owner_email}")
 
     now = utc_iso8601_z_now()
     due_at = compute_next_due_at(asset.risk_tier, None)  # was due before now
